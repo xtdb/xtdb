@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType == 'fusion' && 'Fusion' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -20,6 +20,7 @@ on:
           - patch
           - products
           - ts-devices
+          - fusion
       status:
         description: 'Status of the benchmark'
         required: true
@@ -527,6 +528,7 @@ jobs:
             patch) bench_friendly="Patch" ;;
             products) bench_friendly="Products" ;;
             ts-devices) bench_friendly="TS Devices" ;;
+            fusion) bench_friendly="Fusion" ;;
             *) bench_friendly="$bench" ;;
           esac
 
@@ -597,6 +599,7 @@ jobs:
           [ "$type" = "patch" ] && type="Patch"
           [ "$type" = "products" ] && type="Products"
           [ "$type" = "ts-devices" ] && type="TS Devices"
+          [ "$type" = "fusion" ] && type="Fusion"
 
           status="${{ steps.derive.outputs.bench_status || inputs.status }}"
           if [ "$status" = "success" ]; then
@@ -723,6 +726,7 @@ jobs:
             patch) FRIENDLY_NAME="Patch" ;;
             products) FRIENDLY_NAME="Products" ;;
             ts-devices) FRIENDLY_NAME="TS Devices" ;;
+            fusion) FRIENDLY_NAME="Fusion" ;;
             *) FRIENDLY_NAME="$BENCH_TYPE" ;;
           esac
 

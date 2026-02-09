@@ -1,0 +1,54 @@
+name: Nightly Benchmark Fusion
+run-name: "Fusion (Devices: ${{ inputs.fusion_device_count || '10000' }}, Duration: ${{ inputs.fusion_duration || 'PT30M' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      fusion_device_count:
+        description: 'Device Count'
+        required: false
+        default: '10000'
+        type: string
+      fusion_reading_count:
+        description: 'Reading Count'
+        required: false
+        default: '1000'
+        type: string
+      fusion_duration:
+        description: 'OLTP phase duration (ISO-8601)'
+        required: false
+        default: 'PT30M'
+        type: string
+      fusion_threads:
+        description: 'OLTP thread count'
+        required: false
+        default: '4'
+        type: string
+  schedule:
+    - cron: '0 5 * * *'
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-fusion
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: fusion
+      job_display_name: Fusion
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      benchmark_timeout: PT2H
+      fusion_device_count: ${{ inputs.fusion_device_count || '10000' }}
+      fusion_reading_count: ${{ inputs.fusion_reading_count || '1000' }}
+      fusion_duration: ${{ inputs.fusion_duration || 'PT30M' }}
+      fusion_threads: ${{ inputs.fusion_threads || '4' }}
+    secrets: inherit

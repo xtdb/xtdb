@@ -34,6 +34,12 @@ clickbench:
   # Name of k8s secret containing AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
   awsSecretName: "xtdb-aws-datasets-secret"
 
+fusion:
+  devices: 10000
+  readings: 1000
+  duration: "PT30M"
+  threads: 4
+
 ingestTxOverhead:
   docCount: 100000
   batchSizes: "1000,100,10,1"

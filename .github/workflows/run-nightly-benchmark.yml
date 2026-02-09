@@ -121,6 +121,26 @@ on:
         required: false
         default: ''
         type: string
+      fusion_device_count:
+        description: 'Device count for fusion benchmark'
+        required: false
+        default: ''
+        type: string
+      fusion_reading_count:
+        description: 'Reading count for fusion benchmark'
+        required: false
+        default: ''
+        type: string
+      fusion_duration:
+        description: 'OLTP phase duration for fusion benchmark'
+        required: false
+        default: ''
+        type: string
+      fusion_threads:
+        description: 'OLTP thread count for fusion benchmark'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -301,6 +321,10 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
+          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
+          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
+          FUSION_DURATION: ${{ inputs.fusion_duration }}
+          FUSION_THREADS: ${{ inputs.fusion_threads }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -378,6 +402,18 @@ jobs:
           fi
           if [ -n "$TS_DEVICES_SIZE" ]; then
             HELM_ARGS+=(--set "ts-devices.size=${TS_DEVICES_SIZE}")
+          fi
+          if [ -n "$FUSION_DEVICE_COUNT" ]; then
+            HELM_ARGS+=(--set "fusion.devices=${FUSION_DEVICE_COUNT}")
+          fi
+          if [ -n "$FUSION_READING_COUNT" ]; then
+            HELM_ARGS+=(--set "fusion.readings=${FUSION_READING_COUNT}")
+          fi
+          if [ -n "$FUSION_DURATION" ]; then
+            HELM_ARGS+=(--set "fusion.duration=${FUSION_DURATION}")
+          fi
+          if [ -n "$FUSION_THREADS" ]; then
+            HELM_ARGS+=(--set "fusion.threads=${FUSION_THREADS}")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"
@@ -485,6 +521,10 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
+          FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
+          FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
+          FUSION_DURATION: ${{ inputs.fusion_duration }}
+          FUSION_THREADS: ${{ inputs.fusion_threads }}
           GIT_SHA: ${{ github.sha }}
           GIT_BRANCH: ${{ inputs.branch }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -514,6 +554,10 @@ jobs:
           [ -n "$PATCH_PATCH_COUNT" ] && CONFIG_PARTS+=("Patches: ${PATCH_PATCH_COUNT}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
+          [ -n "$FUSION_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${FUSION_DEVICE_COUNT}")
+          [ -n "$FUSION_READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${FUSION_READING_COUNT}")
+          [ -n "$FUSION_DURATION" ] && CONFIG_PARTS+=("Duration: ${FUSION_DURATION}")
+          [ -n "$FUSION_THREADS" ] && CONFIG_PARTS+=("Threads: ${FUSION_THREADS}")
           # Join with " | "
           CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
           CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "

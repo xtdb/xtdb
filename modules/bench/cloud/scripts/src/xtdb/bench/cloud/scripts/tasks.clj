@@ -57,7 +57,8 @@
                                   {:benchmark-type "patch"
                                    :log-file log-file-path})))
         "products" nil
-        "ts-devices" nil)
+        "ts-devices" nil
+        "fusion" nil)
       (summary/render-summary parsed-summary {:format format}))))
 
 (defn plot-benchmark-timeseries
@@ -86,8 +87,8 @@
    Usage: bb check-immediate-failure [--namespace NS] [--attempts N] [--sleep-seconds N] [--required-running-seconds N]"
   [args]
   (let [{:keys [opts]} (cli/parse-args args {:coerce {:attempts :int
-                                                       :sleep-seconds :int
-                                                       :required-running-seconds :int}})
+                                                      :sleep-seconds :int
+                                                      :required-running-seconds :int}})
         params (cond-> {}
                  (:namespace opts) (assoc :namespace (:namespace opts))
                  (:attempts opts) (assoc :attempts (:attempts opts))
@@ -161,7 +162,7 @@
   (println "  plot-benchmark-timeseries [options] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
   (println "      Options: --scale-factor SF, --repo owner/repo, --branch branch")
-  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices")
+  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices, fusion")
   (println)
   (println "Kubernetes Commands (output JSON):")
   (println "  inspect-deployment [--namespace NS]")

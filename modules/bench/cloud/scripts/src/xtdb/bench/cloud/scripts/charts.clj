@@ -93,6 +93,11 @@
                  :filter-param nil
                  :filter-value nil
                  :filter-is-string false}
+   "fusion"     {:benchmark-name "Fusion benchmark"
+                 :title "Fusion Benchmark Performance"
+                 :filter-param "devices"
+                 :filter-value 10000
+                 :filter-is-string false}
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
                  :filter-param "devices"

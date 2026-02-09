@@ -1,0 +1,143 @@
+{{- if eq .Values.benchType "fusion" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fusion
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: xtdb
+    app.kubernetes.io/component: benchmark
+  annotations:
+    {{- if .Values.git.sha }}
+    xtdb.com/git-sha: {{ .Values.git.sha | quote }}
+    {{- end }}
+    {{- if .Values.git.branch }}
+    xtdb.com/git-branch: {{ .Values.git.branch | quote }}
+    {{- end }}
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 0
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
+  template:
+    metadata:
+      labels:
+        {{- $user := .Values.providerConfig.podLabels | default (dict) -}}
+        {{- $base := dict "app.kubernetes.io/name" "xtdb" "app.kubernetes.io/component" "benchmark" -}}
+        {{- $labels := merge (dict) $user $base -}}
+        {{- toYaml $labels | nindent 8 }}
+      annotations:
+        "helm.sh/hook": pre-install,pre-upgrade
+        "helm.sh/hook-delete-policy": before-hook-creation
+    spec:
+      shareProcessNamespace: true
+      nodeSelector:
+        {{- toYaml .Values.providerConfig.nodeSelector | nindent 8 }}
+      serviceAccountName: xtdb-service-account
+      restartPolicy: Never
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: xtdb-yaml-config
+          configMap:
+            name: xtdb-yaml-config
+        - name: local-disk-cache
+          emptyDir:
+            sizeLimit: {{ .Values.xtdbConfig.localDiskCache.sizeLimit }}
+        - name: dumps
+          emptyDir:
+            sizeLimit: {{ .Values.dumpUpload.volumeSizeLimit }}
+        - name: dump-upload-scripts
+          configMap:
+            name: dump-upload-scripts
+            defaultMode: 0755
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox
+        command: ['sh', '-c', 'until nc -z -w 2 {{ include "xtdb.kafka.host" .Values.xtdbConfig.kafkaBootstrapServers }} {{ include "xtdb.kafka.port" .Values.xtdbConfig.kafkaBootstrapServers }}; do echo waiting for kafka; sleep 5; done;']
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "256Mi"
+      containers:
+        - name: xtdb-node
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - mountPath: /var/lib/xtdb-config/xtdbconfig.yaml
+              name: xtdb-yaml-config
+              subPath: xtdbconfig.yaml
+            - name: local-disk-cache
+              mountPath: /var/lib/xtdb/buffers/
+            - name: dumps
+              mountPath: /dumps
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: xtdb-env-config
+            {{- if .Values.providerConfig.existingSecret }}
+            - secretRef:
+                name: {{ .Values.providerConfig.existingSecret }}
+            {{- end }}
+          env:
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if .Values.git.sha }}
+            - name: GIT_SHA
+              value: {{ .Values.git.sha | quote }}
+            {{- end }}
+            {{- if .Values.git.branch }}
+            - name: GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            {{- end }}
+            - name: GITHUB_REPOSITORY
+              value: {{ .Values.git.repo | default "xtdb/xtdb" | quote }}
+            - name: GITHUB_RUN_ID
+              value: {{ .Values.git.runId | default "" | quote }}
+          args:
+            - fusion
+            - -f
+            - "/var/lib/xtdb-config/xtdbconfig.yaml"
+            - --devices
+            - {{ .Values.fusion.devices | quote }}
+            - --readings
+            - {{ .Values.fusion.readings | quote }}
+            - --duration
+            - {{ .Values.fusion.duration | quote }}
+            - --threads
+            - {{ .Values.fusion.threads | quote }}
+            {{- if .Values.timeout }}
+            - --timeout
+            - {{ .Values.timeout | quote }}
+            {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+        - name: dump-uploader
+          image: mcr.microsoft.com/azure-cli:latest
+          command: ["/bin/bash", "/scripts/upload-dumps.sh"]
+          volumeMounts:
+            - name: dumps
+              mountPath: /dumps
+            - name: dump-upload-scripts
+              mountPath: /scripts
+          resources:
+            {{- toYaml .Values.dumpUpload.resources | nindent 12 }}
+          env:
+            - name: AZURE_STORAGE_ACCOUNT
+              value: {{ .Values.providerConfig.env.AZURE_STORAGE_ACCOUNT | default "" | quote }}
+            - name: AZURE_STORAGE_CONTAINER
+              value: {{ .Values.providerConfig.env.AZURE_STORAGE_CONTAINER | default "" | quote }}
+            - name: AZURE_DUMPS_CONTAINER
+              value: {{ .Values.providerConfig.env.AZURE_DUMPS_CONTAINER | default "" | quote }}
+            - name: XTDB_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+{{- end }}
