@@ -261,8 +261,6 @@ interface Log : AutoCloseable {
     )
 
     interface Subscriber {
-        val latestProcessedMsgId: MessageId
-        val latestSubmittedMsgId: MessageId
         fun processRecords(records: List<Record>)
     }
 }

@@ -86,7 +86,7 @@ class LogProcessor(
     private val liveIndex = dbState.liveIndex
 
     @Volatile
-    override var latestProcessedMsgId: MessageId =
+    var latestProcessedMsgId: MessageId =
         blockCatalog.latestProcessedMsgId?.let {
             // used if the epoch is incremented so that we seek to the start of the new log
             if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
@@ -97,7 +97,7 @@ class LogProcessor(
         if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
     } ?: -1
 
-    override val latestSubmittedMsgId: MessageId
+    val latestSubmittedMsgId: MessageId
         get() = offsetToMsgId(epoch, log.latestSubmittedOffset)
 
     private val watchers = Watchers(latestProcessedMsgId)

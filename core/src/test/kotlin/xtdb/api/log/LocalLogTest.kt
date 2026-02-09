@@ -25,8 +25,6 @@ class LocalLogTest {
         val records = mutableListOf<Record>()
         val subscription = log.tailAll(
             object : Log.Subscriber {
-                override val latestProcessedMsgId: Long = -1
-                override val latestSubmittedMsgId: Long = -1
                 override fun processRecords(recs: List<Record>) {
                     recs.forEach { records.add(it) }
                 }

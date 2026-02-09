@@ -47,7 +47,6 @@ class KafkaClusterTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestProcessedMsgId } returns -1
         }
 
         fun trieDetails(key: String, size: Long) =

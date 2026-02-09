@@ -43,7 +43,6 @@ class KafkaAtomicProducerTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestProcessedMsgId } returns -1
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
@@ -86,7 +85,6 @@ class KafkaAtomicProducerTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestProcessedMsgId } returns -1
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
@@ -135,7 +133,6 @@ class KafkaAtomicProducerTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestProcessedMsgId } returns -1
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
@@ -185,7 +182,6 @@ class KafkaAtomicProducerTest {
 
         val subscriber = mockk<Subscriber> {
             every { processRecords(capture(msgs)) } returns Unit
-            every { latestProcessedMsgId } returns -1
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)

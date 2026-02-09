@@ -18,8 +18,6 @@ class InMemoryLogSubscribeTest {
         val assignedPartitions = AtomicReference<Collection<Int>>(null)
 
         val subscriber = object : GroupSubscriber {
-            override val latestProcessedMsgId get() = -1L
-            override val latestSubmittedMsgId get() = -1L
             override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 assignedPartitions.set(partitions)
@@ -41,8 +39,6 @@ class InMemoryLogSubscribeTest {
         val receivedRecords = Collections.synchronizedList(mutableListOf<Record>())
 
         val subscriber = object : GroupSubscriber {
-            override val latestProcessedMsgId get() = -1L
-            override val latestSubmittedMsgId get() = -1L
             override fun processRecords(records: List<Record>) {
                 receivedRecords.addAll(records)
             }
@@ -75,8 +71,6 @@ class InMemoryLogSubscribeTest {
         val revokedPartitions = AtomicReference<Collection<Int>>(null)
 
         val subscriber = object : GroupSubscriber {
-            override val latestProcessedMsgId get() = -1L
-            override val latestSubmittedMsgId get() = -1L
             override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 return emptyMap()
