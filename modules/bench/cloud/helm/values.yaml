@@ -52,6 +52,9 @@ ts-devices:
 
 tsbs-iot:
   devices: 2000
+  queryIterations: 20
+  workers: 4
+  burnIn: 5
   timestampStart: "2020-01-01T00:00:00Z"
   timestampEnd: "2020-01-07T00:00:00Z"
 

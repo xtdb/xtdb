@@ -110,6 +110,12 @@ spec:
             - {{ index .Values "tsbs-iot" "timestampStart" | quote }}
             - --timestamp-end
             - {{ index .Values "tsbs-iot" "timestampEnd" | quote }}
+            - --query-iterations
+            - {{ index .Values "tsbs-iot" "queryIterations" | default 100 | quote }}
+            - --workers
+            - {{ index .Values "tsbs-iot" "workers" | default 1 | quote }}
+            - --burn-in
+            - {{ index .Values "tsbs-iot" "burnIn" | default 0 | quote }}
             {{- if .Values.timeout }}
             - --timeout
             - {{ .Values.timeout | quote }}
