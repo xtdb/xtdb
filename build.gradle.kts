@@ -1,4 +1,7 @@
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
+import org.gradle.jvm.toolchain.JavaInstallationMetadata
+import org.gradle.jvm.toolchain.JavaLauncher
+import org.gradle.jvm.toolchain.JavaToolchainService
 import org.jetbrains.dokka.base.DokkaBase
 import org.jetbrains.dokka.base.DokkaBaseConfiguration
 import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
@@ -84,6 +87,11 @@ layout.buildDirectory.set(
 )
 
 val rootProj = project
+
+val jlinkBuild = gradle.includedBuild("jlink")
+val buildCustomJre = jlinkBuild.task(":buildCustomJre")
+val customJreDir = jlinkBuild.projectDir.resolve("build/custom-jre")
+val useCustomJre = !rootProj.hasProperty("fullJdk")
 
 allprojects {
     val proj = this
@@ -172,6 +180,25 @@ allprojects {
             }
         }
 
+        // Use custom JRE for all Test and JavaExec tasks (skip with -PfullJdk)
+        tasks.withType<Test> {
+            dependsOn(buildCustomJre)
+            if (useCustomJre) {
+                executable = customJreDir.resolve("bin/java").absolutePath
+            }
+        }
+
+        val jreExcludedTasks = setOf("build-codox")
+
+        tasks.withType<JavaExec> {
+            if (name !in jreExcludedTasks) {
+                dependsOn(buildCustomJre)
+                if (useCustomJre) {
+                    executable = customJreDir.resolve("bin/java").absolutePath
+                }
+            }
+        }
+
         dependencies {
             testRuntimeOnly(libs.logback.classic)
             testRuntimeOnly(libs.logback.classic)
@@ -206,6 +233,21 @@ allprojects {
             }
 
             tasks.clojureRepl {
+                dependsOn(buildCustomJre)
+
+                // ClojureNRepl uses javaLauncher, not forkOptions.executable
+                if (useCustomJre) {
+                    val toolchainLauncher = proj.extensions.getByType(JavaToolchainService::class.java)
+                        .launcherFor(java.toolchain)
+                    javaLauncher.set(toolchainLauncher.map { existing ->
+                        object : JavaLauncher {
+                            override fun getExecutablePath() =
+                                layout.projectDirectory.file(customJreDir.resolve("bin/java").absolutePath)
+                            override fun getMetadata(): JavaInstallationMetadata = existing.metadata
+                        }
+                    })
+                }
+
                 doFirst {
                     project.ext.set("buildEnv", "repl")
                 }

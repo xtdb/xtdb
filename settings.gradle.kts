@@ -1,5 +1,7 @@
 rootProject.name = "xtdb"
 
+includeBuild("build-logic/jlink")
+
 include("api", "core", "main")
 project(":api").name = "xtdb-api"
 project(":core").name = "xtdb-core"
