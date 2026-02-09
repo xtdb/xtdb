@@ -1,7 +1,5 @@
 package xtdb.api.log
 
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
@@ -19,12 +17,10 @@ class InMemoryLogSubscribeTest {
     fun `assignment callback fires immediately`() = runTest(timeout = 10.seconds) {
         val assignedPartitions = AtomicReference<Collection<Int>>(null)
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } returns Unit
-            every { latestProcessedMsgId } returns -1
-        }
-
-        val listener = object : AssignmentListener {
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 assignedPartitions.set(partitions)
                 return emptyMap()
@@ -33,7 +29,7 @@ class InMemoryLogSubscribeTest {
         }
 
         InMemoryLog.Factory().openLog(emptyMap()).use { log ->
-            log.subscribe(subscriber, listener).use {
+            log.subscribe(subscriber).use {
                 // Assignment should be immediate (synchronous)
                 assertEquals(listOf(0), assignedPartitions.get()?.toList())
             }
@@ -44,11 +40,16 @@ class InMemoryLogSubscribeTest {
     fun `returned offset determines start position`() = runTest(timeout = 10.seconds) {
         val receivedRecords = Collections.synchronizedList(mutableListOf<Record>())
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } answers {
-                receivedRecords.addAll(firstArg())
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {
+                receivedRecords.addAll(records)
             }
-            every { latestProcessedMsgId } returns -1
+            override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
+                return mapOf(0 to 2L)
+            }
+            override fun onPartitionsRevoked(partitions: Collection<Int>) {}
         }
 
         InMemoryLog.Factory().openLog(emptyMap()).use { log ->
@@ -57,15 +58,7 @@ class InMemoryLogSubscribeTest {
             log.appendMessage(txMessage(1)).get()
             log.appendMessage(txMessage(2)).get()
 
-            // Subscribe starting at offset 2 (skip first two messages)
-            val listener = object : AssignmentListener {
-                override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
-                    return mapOf(0 to 2L)
-                }
-                override fun onPartitionsRevoked(partitions: Collection<Int>) {}
-            }
-
-            log.subscribe(subscriber, listener).use {
+            log.subscribe(subscriber).use {
                 while (synchronized(receivedRecords) { receivedRecords.size } < 1) delay(50)
             }
         }
@@ -81,12 +74,10 @@ class InMemoryLogSubscribeTest {
     fun `revocation callback fires on close`() {
         val revokedPartitions = AtomicReference<Collection<Int>>(null)
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } returns Unit
-            every { latestProcessedMsgId } returns -1
-        }
-
-        val listener = object : AssignmentListener {
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 return emptyMap()
             }
@@ -96,7 +87,7 @@ class InMemoryLogSubscribeTest {
         }
 
         InMemoryLog.Factory().openLog(emptyMap()).use { log ->
-            log.subscribe(subscriber, listener).close()
+            log.subscribe(subscriber).close()
         }
 
         assertEquals(listOf(0), revokedPartitions.get()?.toList())

@@ -298,7 +298,7 @@ class KafkaCluster(
             return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
         }
 
-        override fun subscribe(subscriber: Subscriber, listener: AssignmentListener): Subscription {
+        override fun subscribe(subscriber: GroupSubscriber): Subscription {
             val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
 
             val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
@@ -307,18 +307,18 @@ class KafkaCluster(
                 consumerConfig.openConsumer().use { consumer ->
                     val rebalanceListener = object : ConsumerRebalanceListener {
                         override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) {
-                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+                            subscriber.onPartitionsRevoked(partitions.map { it.partition() })
                         }
 
                         override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
-                            val offsets = listener.onPartitionsAssigned(partitions.map { it.partition() })
+                            val offsets = subscriber.onPartitionsAssigned(partitions.map { it.partition() })
                             for ((partition, offset) in offsets) {
                                 consumer.seek(TopicPartition(topic, partition), offset)
                             }
                         }
 
                         override fun onPartitionsLost(partitions: Collection<TopicPartition>) {
-                            listener.onPartitionsLost(partitions.map { it.partition() })
+                            subscriber.onPartitionsLost(partitions.map { it.partition() })
                         }
                     }
 

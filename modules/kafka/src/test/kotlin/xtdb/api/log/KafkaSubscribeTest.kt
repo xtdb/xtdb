@@ -1,6 +1,5 @@
 package xtdb.api.log
 
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
@@ -45,12 +44,10 @@ class KafkaSubscribeTest {
 
         val assignedPartitions = AtomicReference<Collection<Int>>(null)
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } returns Unit
-            every { latestProcessedMsgId } returns -1
-        }
-
-        val listener = object : AssignmentListener {
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 assignedPartitions.set(partitions)
                 return emptyMap()
@@ -65,7 +62,7 @@ class KafkaSubscribeTest {
                     .groupId(groupId)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, listener).use {
+                        log.subscribe(subscriber).use {
                             while (assignedPartitions.get() == null) delay(50)
                         }
                     }
@@ -81,11 +78,16 @@ class KafkaSubscribeTest {
 
         val receivedRecords = Collections.synchronizedList(mutableListOf<Record>())
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } answers {
-                receivedRecords.addAll(firstArg())
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {
+                receivedRecords.addAll(records)
             }
-            every { latestProcessedMsgId } returns -1
+            override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
+                return mapOf(0 to 2L)
+            }
+            override fun onPartitionsRevoked(partitions: Collection<Int>) {}
         }
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
@@ -100,15 +102,7 @@ class KafkaSubscribeTest {
                         log.appendMessage(txMessage(1)).await()
                         log.appendMessage(txMessage(2)).await()
 
-                        // Subscribe starting at offset 2 (skip first two messages)
-                        val listener = object : AssignmentListener {
-                            override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
-                                return mapOf(0 to 2L)
-                            }
-                            override fun onPartitionsRevoked(partitions: Collection<Int>) {}
-                        }
-
-                        log.subscribe(subscriber, listener).use {
+                        log.subscribe(subscriber).use {
                             while (synchronized(receivedRecords) { receivedRecords.size } < 1) delay(50)
                         }
                     }
@@ -129,12 +123,10 @@ class KafkaSubscribeTest {
         val revokedPartitions = AtomicReference<Collection<Int>>(null)
         val assigned = AtomicBoolean(false)
 
-        val subscriber = mockk<Subscriber> {
-            every { processRecords(any()) } returns Unit
-            every { latestProcessedMsgId } returns -1
-        }
-
-        val listener = object : AssignmentListener {
+        val subscriber = object : GroupSubscriber {
+            override val latestProcessedMsgId get() = -1L
+            override val latestSubmittedMsgId get() = -1L
+            override fun processRecords(records: List<Record>) {}
             override fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset> {
                 assigned.set(true)
                 return emptyMap()
@@ -151,7 +143,7 @@ class KafkaSubscribeTest {
                     .groupId(groupId)
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.subscribe(subscriber, listener).use {
+                        log.subscribe(subscriber).use {
                             while (!assigned.get()) delay(50)
                         }
                     }
@@ -164,8 +156,7 @@ class KafkaSubscribeTest {
     fun `subscribe without groupId throws`() {
         val topicName = "test-topic-${UUID.randomUUID()}"
 
-        val subscriber = mockk<Subscriber>()
-        val listener = mockk<AssignmentListener>()
+        val subscriber = mockk<GroupSubscriber>()
 
         KafkaCluster.ClusterFactory(container.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
@@ -175,7 +166,7 @@ class KafkaSubscribeTest {
                     .openLog(mapOf("my-cluster" to cluster))
                     .use { log ->
                         val ex = assertThrows(IllegalArgumentException::class.java) {
-                            log.subscribe(subscriber, listener)
+                            log.subscribe(subscriber)
                         }
                         assertTrue(ex.message?.contains("groupId") == true)
                     }

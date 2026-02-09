@@ -145,13 +145,13 @@ class InMemoryLog(
         return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
     }
 
-    override fun subscribe(subscriber: Subscriber, listener: AssignmentListener): Subscription {
-        val offsets = listener.onPartitionsAssigned(listOf(0))
+    override fun subscribe(subscriber: GroupSubscriber): Subscription {
+        val offsets = subscriber.onPartitionsAssigned(listOf(0))
         val nextOffset = offsets[0] ?: 0L
         val subscription = tailAll(subscriber, nextOffset - 1)
         return Subscription {
             subscription.close()
-            listener.onPartitionsRevoked(listOf(0))
+            subscriber.onPartitionsRevoked(listOf(0))
         }
     }
 
