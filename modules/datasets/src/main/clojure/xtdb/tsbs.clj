@@ -140,7 +140,9 @@
                    :tags tags
                    :timestamp timestamp
                    :doc (-> (zipmap (get tables table) (map (some-fn parse-long parse-double) cells))
-                            (assoc :xt/id (get tags pk), :xt/valid-from timestamp))})
+                            (assoc :xt/id (get tags pk)
+                                   :xt/valid-from timestamp
+                                   :xt/valid-to (.plus ^Instant timestamp log-interval)))})
 
                 (split-by-ts)
                 (without-unchanged-tags)

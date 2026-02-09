@@ -76,6 +76,21 @@ on:
         required: false
         default: ''
         type: string
+      tsbs_query_iterations:
+        description: 'Query iterations per type for TSBS IoT benchmark'
+        required: false
+        default: ''
+        type: string
+      tsbs_workers:
+        description: 'Parallel query workers for TSBS IoT benchmark'
+        required: false
+        default: ''
+        type: string
+      tsbs_burn_in:
+        description: 'Burn-in queries (discarded from stats) for TSBS IoT benchmark'
+        required: false
+        default: ''
+        type: string
       ingest_tx_overhead_doc_count:
         description: 'Document count for ingest-tx-overhead benchmark'
         required: false
@@ -277,6 +292,9 @@ jobs:
           CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
           CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
           TSBS_DEVICE_COUNT: ${{ inputs.tsbs_device_count }}
+          TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
+          TSBS_WORKERS: ${{ inputs.tsbs_workers }}
+          TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
@@ -331,6 +349,15 @@ jobs:
           fi
           if [ -n "$TSBS_DEVICE_COUNT" ]; then
             HELM_ARGS+=(--set "tsbs-iot.devices=${TSBS_DEVICE_COUNT}")
+          fi
+          if [ -n "$TSBS_QUERY_ITERATIONS" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.queryIterations=${TSBS_QUERY_ITERATIONS}")
+          fi
+          if [ -n "$TSBS_WORKERS" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.workers=${TSBS_WORKERS}")
+          fi
+          if [ -n "$TSBS_BURN_IN" ]; then
+            HELM_ARGS+=(--set "tsbs-iot.burnIn=${TSBS_BURN_IN}")
           fi
           if [ -n "$INGEST_TX_OVERHEAD_DOC_COUNT" ]; then
             HELM_ARGS+=(--set "ingestTxOverhead.docCount=${INGEST_TX_OVERHEAD_DOC_COUNT}")

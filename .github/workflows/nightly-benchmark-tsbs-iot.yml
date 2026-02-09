@@ -9,6 +9,21 @@ on:
         required: false
         default: '2000'
         type: string
+      query_iterations:
+        description: 'Query iterations per type'
+        required: false
+        default: '20'
+        type: string
+      workers:
+        description: 'Parallel query workers'
+        required: false
+        default: '4'
+        type: string
+      burn_in:
+        description: 'Burn-in queries (discarded from stats)'
+        required: false
+        default: '5'
+        type: string
       timestamp_start:
         description: 'Timestamp Start (ISO-8601)'
         required: false
@@ -40,6 +55,9 @@ jobs:
       bench_type: tsbs-iot
       job_display_name: TSBS IoT
       tsbs_device_count: ${{ inputs.devices || '2000' }}
+      tsbs_query_iterations: ${{ inputs.query_iterations || '20' }}
+      tsbs_workers: ${{ inputs.workers || '4' }}
+      tsbs_burn_in: ${{ inputs.burn_in || '5' }}
       branch: ${{ github.ref_name }}
       timeout_minutes: 120
       benchmark_timeout: PT3H

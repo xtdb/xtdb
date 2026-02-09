@@ -3,23 +3,48 @@
 (defn round-down [x]
   (long (Math/floor (double x))))
 
+(defn percentile
+  "Calculate percentile from sorted values.
+   Uses nearest-rank method: returns value at index floor(p * n)."
+  [sorted-vals p]
+  (let [n (count sorted-vals)
+        idx (-> (* p (dec n)) Math/floor long (max 0) (min (dec n)))]
+    (nth sorted-vals idx)))
+
 (defn distribution-stats
-  "Compute summary statistics from a sequence of numeric counts."
-  [counts]
-  (let [counts (vec (map long counts))
-        n (count counts)
-        sorted (vec (sort counts))
-        mean (if (pos? n) (/ (reduce + 0 sorted) (double n)) 0.0)
-        mn (if (pos? n) (first sorted) 0)
-        mx (if (pos? n) (peek sorted) 0)
-        idx (fn [p]
-              (cond
-                (zero? n) 0
-                :else (-> (Math/floor (* p (dec n))) long (max 0) (min (dec n)))))
-        median (if (pos? n) (sorted (idx 0.5)) 0)
-        p90 (if (pos? n) (sorted (idx 0.90)) 0)
-        p99 (if (pos? n) (sorted (idx 0.99)) 0)]
-    {:mean mean :median median :p90 p90 :p99 p99 :min mn :max mx}))
+  "Compute summary statistics from a sequence of numeric values.
+   Returns map with :count, :total, :min, :max, :mean, and percentiles (:p50, :p90, :p95, :p99)."
+  [values]
+  (when (seq values)
+    (let [sorted (vec (sort values))
+          n (count sorted)
+          total (reduce + 0 sorted)
+          mean (/ total (double n))]
+      {:count n
+       :total total
+       :min (first sorted)
+       :max (peek sorted)
+       :mean mean
+       :p50 (percentile sorted 0.50)
+       :p90 (percentile sorted 0.90)
+       :p95 (percentile sorted 0.95)
+       :p99 (percentile sorted 0.99)})))
+
+(defn timing-stats
+  "Calculate statistics from a collection of timing values (in nanoseconds).
+   Returns map with count, total-ms, min-ms, max-ms, mean-ms, and percentiles."
+  [timings-ns]
+  (when-let [stats (distribution-stats timings-ns)]
+    (let [->ms #(/ % 1e6)]
+      {:count (:count stats)
+       :total-ms (->ms (:total stats))
+       :min-ms (->ms (:min stats))
+       :max-ms (->ms (:max stats))
+       :mean-ms (->ms (:mean stats))
+       :p50-ms (->ms (:p50 stats))
+       :p90-ms (->ms (:p90 stats))
+       :p95-ms (->ms (:p95 stats))
+       :p99-ms (->ms (:p99 stats))})))
 
 (defn draw-lognormal
   "Draw a log-normal random variable using the underlying normal distribution

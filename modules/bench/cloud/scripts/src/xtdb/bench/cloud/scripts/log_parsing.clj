@@ -126,7 +126,7 @@
                      stage-lines)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
-     :query-stages (filterv #(= "queries" (name (:stage %))) stages)
+     :query-stages (filterv #(= "query-stats" (name (:stage %))) stages)
      :ingest-stages (filterv #(contains? #{"gen+submit-docs" "submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
