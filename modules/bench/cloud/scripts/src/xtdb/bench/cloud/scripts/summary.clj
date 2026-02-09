@@ -484,27 +484,72 @@
                         (:time-taken-ms %))))
       (reduce + 0 (map :time-taken-ms ingest-stages))))
 
+(defn tsbs-summary->query-rows
+  [{:keys [query-stages]}]
+  (let [stats-by-type (:stats-by-type (first query-stages))
+        rows (mapv (fn [[query-type stats]]
+                     (let [{:keys [count p50-ms p90-ms p99-ms mean-ms total-ms]} stats]
+                       {:query (name query-type)
+                        :n count
+                        :p50 (util/format-duration :millis p50-ms)
+                        :p90 (util/format-duration :millis p90-ms)
+                        :p99 (util/format-duration :millis p99-ms)
+                        :mean (util/format-duration :millis mean-ms)
+                        :total-ms total-ms}))
+                   (sort-by key stats-by-type))
+        total-ms (reduce + 0 (map :total-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:total-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :total-ms))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
 (defmethod summary->table "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
-    (format "TSBS IoT | Total: %s | Ingest: %s"
-            (util/format-duration :millis benchmark-total-time-ms)
-            (util/format-duration :millis ingest-time-ms))))
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)
+        {:keys [rows total-ms]} (tsbs-summary->query-rows summary)]
+    (str (format "Ingest: %s" (util/format-duration :millis ingest-time-ms))
+         "\n"
+         (util/totals->string total-ms benchmark-total-time-ms)
+         "\n\n"
+         (rows->string [:query :n :p50 :p90 :p99 :mean :percent-of-total] rows))))
 
 (defmethod summary->slack "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)
+        {:keys [rows total-ms]} (tsbs-summary->query-rows summary)]
     (str
-     (util/totals->string ingest-time-ms benchmark-total-time-ms "ingest")
-     "\n\nTSBS IoT time series benchmark completed")))
+     (format "Ingest: %s" (util/format-duration :millis ingest-time-ms))
+     "\n"
+     (util/totals->string total-ms benchmark-total-time-ms)
+     "\n\n"
+     (util/wrap-slack-code
+      (rows->string [:query :p50 :p99 :mean] rows)))))
 
 (defmethod summary->github-markdown "tsbs-iot" [summary]
   (let [{:keys [benchmark-total-time-ms ingest-stages]} summary
-        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)]
+        ingest-time-ms (tsbs-ingest-duration-ms ingest-stages)
+        {:keys [rows total-ms]} (tsbs-summary->query-rows summary)
+        columns [{:key :query :header "Query"}
+                 {:key :n :header "N"}
+                 {:key :p50 :header "P50"}
+                 {:key :p90 :header "P90"}
+                 {:key :p99 :header "P99"}
+                 {:key :mean :header "Mean"}
+                 {:key :percent-of-total :header "% of total"}]]
     (str
      "### TSBS IoT Benchmark\n\n"
      (format "- **Ingest Time**: %s\n" (util/format-duration :millis ingest-time-ms))
-     (format "- **Total Time**: %s\n" (util/format-duration :millis benchmark-total-time-ms)))))
+     "\n"
+     (util/github-table columns rows)
+     "\n\n"
+     (util/totals->string total-ms benchmark-total-time-ms))))
 
 (defn render-summary
   [summary {:keys [format]}]

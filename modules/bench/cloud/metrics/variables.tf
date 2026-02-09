@@ -211,7 +211,7 @@ variable "tsbs_iot_anomaly_logic_app_name" {
 variable "tsbs_iot_anomaly_alert_enabled" {
   description = "Whether the TSBS IoT anomaly detection Logic App is enabled"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "tsbs_iot_anomaly_devices" {

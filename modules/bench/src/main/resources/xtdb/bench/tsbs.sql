@@ -3,7 +3,7 @@ SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
 CROSS JOIN LATERAL (
   SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC FETCH FIRST 1 ROW ONLY
+  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
 ) AS r
 WHERE t.name IN (:v*:truck-names)
 
@@ -12,7 +12,7 @@ SELECT t.name, t.driver, r.longitude, r.latitude
 FROM trucks t
 CROSS JOIN LATERAL (
   SELECT longitude, latitude FROM readings FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC FETCH FIRST 1 ROW ONLY
+  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
 ) AS r
 WHERE t.name IS NOT NULL AND t.fleet = :fleet
 
@@ -21,7 +21,7 @@ SELECT t.name, t.driver, d.fuel_state
 FROM trucks t
 CROSS JOIN LATERAL (
   SELECT fuel_state FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC FETCH FIRST 1 ROW ONLY
+  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
 ) AS d
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet
@@ -32,7 +32,7 @@ SELECT t.name, t.driver, d.current_load
 FROM trucks t
 CROSS JOIN LATERAL (
   SELECT current_load FROM diagnostics FOR ALL VALID_TIME
-  WHERE _id = t._id ORDER BY _valid_from DESC FETCH FIRST 1 ROW ONLY
+  WHERE _id = t._id ORDER BY _valid_from DESC LIMIT 1
 ) AS d
 WHERE t.name IS NOT NULL
   AND t.fleet = :fleet

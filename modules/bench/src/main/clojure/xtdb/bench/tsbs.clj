@@ -198,7 +198,9 @@
    (fn [acc query]
      (when (Thread/interrupted) (throw (InterruptedException.)))
      (let [query-type (:query-type query)
-           timing-ns (b/execute-query node query)]
+           start-ns (System/nanoTime)
+           _ (xt/q node (:sqlvec query))
+           timing-ns (- (System/nanoTime) start-ns)]
        (when progress-atom (swap! progress-atom inc))
        (update acc query-type (fnil conj []) timing-ns)))
    {}
