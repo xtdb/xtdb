@@ -444,7 +444,16 @@
                                      (if (pos? setup-ms) (format " (excludes %.1fs setup)" (/ setup-ms 1000.0)) ""))
                           (log/infof "Benchmark Time: %.1fs%s"
                                      secs
-                                     (if (pos? setup-ms) (format " (excludes %.1fs setup)" (/ setup-ms 1000.0)) ""))))))))]
+                                     (if (pos? setup-ms) (format " (excludes %.1fs setup)" (/ setup-ms 1000.0)) "")))
+                        (when (pos? tx-count)
+                          (let [sorted-txs (->> tx-metrics (sort-by (comp :count val) >))
+                                name-width (max 12 (apply max (map (comp count key) sorted-txs)))
+                                fmt-str (str "  %-" name-width "s  %6d txns  avg %8.1fms  max %8.1fms  total %8.1fs")]
+                            (log/infof "Transaction Stats (%d total%s):"
+                                       tx-count
+                                       (if throughput (format ", %.1f tx/sec" throughput) ""))
+                            (doseq [[tx-name {:keys [count total-time-ms mean-ms max-ms]}] sorted-txs]
+                              (log/infof fmt-str tx-name count mean-ms max-ms (/ total-time-ms 1000.0))))))))))]
         (run-with-timeout execute timeout)))))
 
 (defn sync-node
