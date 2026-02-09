@@ -10,7 +10,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import clojure.lang.MapEntry
-           (java.util HashMap HashSet List Set)
+           (java.util ArrayList HashMap HashSet List Set)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
            (xtdb ICursor)
@@ -30,7 +30,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype TableCursor [^BufferAllocator al,
-                      ^:unsynchronized-mutable ^Relation out-rel]
+                      ^:unsynchronized-mutable ^RelationReader out-rel]
   ICursor
   (getCursorType [_] "table")
   (getChildCursors [_] [])
@@ -184,11 +184,11 @@
                         el-struct-rdr (cond-> el-rdr
                                               (instance? ArrowType$Union (.getArrowType el-rdr)) (.vectorFor "struct"))]
 
-                    (Relation. allocator
-                               ^List (vec (for [k (some-> el-struct-rdr .getKeyNames)
-                                                :when (contains? vec-types (symbol k))]
-                                            (.openSlice (.vectorFor el-struct-rdr k) allocator)))
-                               (.getValueCount el-rdr))))}))
+                    (util/with-close-on-catch [slices (ArrayList.)]
+                      (doseq [k (.getKeyNames el-struct-rdr)
+                              :when (contains? vec-types (symbol k))]
+                        (.add slices (.openSlice (.vectorFor el-struct-rdr k) allocator)))
+                      (vr/rel-reader (vec slices) (.getValueCount el-rdr)))))}))
 
 (defmethod lp/emit-expr :table [{:keys [opts]} emit-opts]
   (let [{:keys [rows column param]} opts
