@@ -141,7 +141,7 @@ class MemoryCache @JvmOverloads internal constructor(
     ) : FetchChEvent {
         override suspend fun handle(fetchReqs: FetchReqs) {
             val reqs = fetchReqs.remove(pathSlice).orEmpty()
-            LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs?.size ?: 0} awaiter(s)")
+            LOGGER.trace("FetchDone: Completing $pathSlice for ${reqs.size} awaiter(s)")
 
             try {
                 val buf = try {

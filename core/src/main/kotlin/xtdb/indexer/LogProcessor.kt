@@ -316,7 +316,7 @@ class LogProcessor(
                 .setTableName(table.schemaAndTable)
                 .setTrieKey(fb.trieKey)
                 .setDataFileSize(fb.dataFileSize)
-                .also { fb.trieMetadata?.let { tm -> it.setTrieMetadata(tm) } }
+                .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
                 .build()
         }
         dbStorage.projectionLog.appendMessage(

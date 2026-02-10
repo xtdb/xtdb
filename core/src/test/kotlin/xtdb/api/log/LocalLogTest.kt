@@ -22,11 +22,11 @@ class LocalLogTest {
         val log = LocalLog.Factory(tempDir.resolve("log")).openLog(emptyMap())
 
         // Create a subscription
-        val records = mutableListOf<Record>()
+        val receivedRecords = mutableListOf<Record>()
         val subscription = log.tailAll(
             object : Log.Subscriber {
-                override fun processRecords(recs: List<Record>) {
-                    recs.forEach { records.add(it) }
+                override fun processRecords(records: List<Record>) {
+                    records.forEach { receivedRecords.add(it) }
                 }
             },
             -1

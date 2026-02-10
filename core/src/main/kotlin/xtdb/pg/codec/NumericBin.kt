@@ -61,7 +61,7 @@ fun decode(bb: ByteBuffer): BigDecimal {
     var num = BigInteger.ZERO
 
     for (i in 0 until digitsNum) {
-        val base = TEN_THOUSAND.pow((digitsNum - i - 1).toInt())
+        val base = TEN_THOUSAND.pow(digitsNum - i - 1)
         val digit = BigInteger.valueOf(bb.short.toLong())
         num = num.add(base.multiply(digit))
     }

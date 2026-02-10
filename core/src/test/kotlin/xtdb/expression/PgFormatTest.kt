@@ -88,17 +88,17 @@ class PgFormatTest {
     }
 
     @Test
-    fun `null handling for %s`() {
+    fun `null handling for percent-s`() {
         assertEquals("value: ", pgFormat("value: %s", listOf(null)))
     }
 
     @Test
-    fun `null handling for %L`() {
+    fun `null handling for percent-L`() {
         assertEquals("value: NULL", pgFormat("value: %L", listOf(null)))
     }
 
     @Test
-    fun `null handling for %I throws`() {
+    fun `null handling for percent-I throws`() {
         val ex = assertThrows<IllegalArgumentException> {
             pgFormat("%I", listOf(null))
         }

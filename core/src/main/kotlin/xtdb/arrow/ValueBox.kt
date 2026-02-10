@@ -1,6 +1,7 @@
 package xtdb.arrow
 
-import java.lang.Double.*
+import java.lang.Double.doubleToLongBits
+import java.lang.Double.longBitsToDouble
 import java.nio.ByteBuffer
 
 private const val NULL_LEG = "null"

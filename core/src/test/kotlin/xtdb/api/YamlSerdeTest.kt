@@ -26,6 +26,7 @@ import xtdb.cache.DiskCache
 import xtdb.gcp.CloudStorage.Companion.googleCloudStorage
 import xtdb.util.asPath
 import java.net.InetAddress
+import java.net.URI
 import java.net.URL
 import java.nio.file.Paths
 
@@ -393,7 +394,7 @@ class YamlSerdeTest {
 
         assertEquals(
             OpenIdConnect(
-                issuerUrl = URL("http://localhost:8080/realms/master"),
+                issuerUrl = URI("http://localhost:8080/realms/master").toURL(),
                 clientId = "xtdb-client", 
                 clientSecret = "my-secret-key",
                 rules = listOf(
