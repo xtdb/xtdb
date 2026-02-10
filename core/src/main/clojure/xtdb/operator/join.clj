@@ -446,7 +446,7 @@
                   {:build-side :left
                    :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types right-vec-types))
                    :join-type ::inner-join
-                   :pushdown-blooms? true}))
+                   :pushdown-blooms? false}))
 
 (defmethod lp/emit-expr :join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
@@ -470,7 +470,7 @@
                        :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types (types/with-nullable-types right-vec-types)))
                        :join-type ::left-outer-join-flipped
                        :track-unmatched-build-idxs? true
-                       :pushdown-blooms? true}))))
+                       :pushdown-blooms? false}))))
 
 (defmethod lp/emit-expr :full-outer-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
@@ -491,7 +491,7 @@
                     {:build-side :right
                      :merge-vec-types-fn (fn [left-vec-types _] left-vec-types)
                      :join-type ::semi-join
-                     :pushdown-blooms? true})))
+                     :pushdown-blooms? false})))
 
 (defmethod lp/emit-expr :anti-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
@@ -513,7 +513,7 @@
                      :mark-col-name mark-col-name
                      :join-type ::mark-join
                      :track-unmatched-build-idxs? true
-                     :pushdown-blooms? true})))
+                     :pushdown-blooms? false})))
 
 (defmethod lp/emit-expr :single-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
