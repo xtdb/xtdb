@@ -24,8 +24,11 @@ on:
         required: false
         default: '4'
         type: string
-  schedule:
-    - cron: '0 5 * * *'
+      run_queue:
+        description: 'Part of nightly benchmark queue (set by suite workflow)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   id-token: write
@@ -51,4 +54,5 @@ jobs:
       fusion_reading_count: ${{ inputs.fusion_reading_count || '1000' }}
       fusion_duration: ${{ inputs.fusion_duration || 'PT30M' }}
       fusion_threads: ${{ inputs.fusion_threads || '4' }}
+      run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

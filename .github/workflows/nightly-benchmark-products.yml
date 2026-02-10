@@ -9,8 +9,11 @@ on:
         required: false
         default: ''
         type: string
-  schedule:
-    - cron: '0 10 * * *'  # Run daily at 10:00 UTC (1hr after patch)
+      run_queue:
+        description: 'Part of nightly benchmark queue (set by suite workflow)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   id-token: write
@@ -33,4 +36,5 @@ jobs:
       timeout_minutes: 90
       benchmark_timeout: PT2H
       products_limit: ${{ inputs.limit || '' }}
+      run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

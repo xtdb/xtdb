@@ -9,8 +9,11 @@ on:
         required: false
         default: '1.0'
         type: string
-  schedule:
-    - cron: '0 0 * * *'  # Run daily at midnight UTC
+      run_queue:
+        description: 'Part of nightly benchmark queue (set by suite workflow)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   id-token: write
@@ -33,4 +36,5 @@ jobs:
       branch: ${{ github.ref_name }}
       timeout_minutes: 90
       benchmark_timeout: PT2H
+      run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

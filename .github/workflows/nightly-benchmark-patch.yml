@@ -14,8 +14,11 @@ on:
         required: false
         default: '10'
         type: string
-  schedule:
-    - cron: '0 9 * * *'  # Run daily at 09:00 UTC (1hr after last benchmark)
+      run_queue:
+        description: 'Part of nightly benchmark queue (set by suite workflow)'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   id-token: write
@@ -39,4 +42,5 @@ jobs:
       benchmark_timeout: PT2H
       patch_doc_count: ${{ inputs.doc_count || '500000' }}
       patch_patch_count: ${{ inputs.patch_count || '10' }}
+      run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit

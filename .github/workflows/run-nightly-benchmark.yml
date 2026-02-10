@@ -141,6 +141,11 @@ on:
         required: false
         default: ''
         type: string
+      run_queue:
+        description: 'Whether this run is part of the nightly benchmark queue'
+        required: false
+        default: 'false'
+        type: string
 
 permissions:
   id-token: write
@@ -325,6 +330,7 @@ jobs:
           FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
           FUSION_DURATION: ${{ inputs.fusion_duration }}
           FUSION_THREADS: ${{ inputs.fusion_threads }}
+          RUN_QUEUE: ${{ inputs.run_queue }}
         run: |
           helm dependency update ./modules/bench/cloud/helm
           HELM_ARGS=(
@@ -414,6 +420,9 @@ jobs:
           fi
           if [ -n "$FUSION_THREADS" ]; then
             HELM_ARGS+=(--set "fusion.threads=${FUSION_THREADS}")
+          fi
+          if [ "$RUN_QUEUE" = "true" ]; then
+            HELM_ARGS+=(--set "providerConfig.env.RUN_QUEUE=true")
           fi
 
           helm upgrade --install "xtdb-benchmark" ./modules/bench/cloud/helm "${HELM_ARGS[@]}"

@@ -32,6 +32,10 @@ on:
         description: 'Node ID of the benchmark'
         required: true
         type: string
+      runQueue:
+        description: 'Whether to dispatch the next benchmark in the nightly queue'
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -766,3 +770,29 @@ jobs:
             -F "channel_id=${SLACK_CHANNEL}" \
             -F "initial_comment=${FRIENDLY_NAME} Benchmark Performance Trend (last 30 runs)" \
             https://slack.com/api/files.completeUploadExternal
+
+      - name: Dispatch Next Benchmark in Queue
+        if: inputs.runQueue == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const queue = [
+              'tpch', 'yakbench', 'readings', 'auctionmark',
+              'clickbench', 'tsbs-iot', 'ingest-tx-overhead',
+              'patch', 'products', 'ts-devices', 'fusion'
+            ];
+            const current = '${{ inputs.benchType }}';
+            const idx = queue.indexOf(current);
+            if (idx >= 0 && idx < queue.length - 1) {
+              const next = queue[idx + 1];
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: `nightly-benchmark-${next}.yml`,
+                ref: '${{ github.ref_name }}',
+                inputs: { run_queue: 'true' }
+              });
+              core.info(`Dispatched next benchmark: ${next} (${idx + 2}/${queue.length})`);
+            } else {
+              core.info('Queue complete - all benchmarks dispatched');
+            }
