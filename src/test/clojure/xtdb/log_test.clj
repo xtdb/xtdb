@@ -123,6 +123,25 @@
                                           :correlation-id "abc123"}
                           :authn {:user "jms"}}))
 
+;; PatchDocsWriter.writeObject used writeObject(Relation) which doesn't work
+;; because Relation doesn't implement List or ListValueReader.
+;; This was never caught because the API path converts :patch-docs to SQL
+;; via pgwire, bypassing PatchDocsWriter entirely. See #5232.
+(t/deftest can-serialize-patch-docs
+  (let [actual-bytes (log/serialize-tx-ops tu/*allocator*
+                                           (for [tx-op [[:patch-docs :foo {:xt/id 1, :v 2} {:xt/id 3, :x "hello"}]]]
+                                             (cond-> tx-op
+                                               (not (record? tx-op)) tx-ops/parse-tx-op))
+                                           {:default-db "xtdb", :default-tz #xt/zone "Europe/London"})]
+    (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
+      (t/is (= (util/->clj [{:default-tz "Europe/London"
+                             :tx-ops [#xt/tagged [:patch-docs
+                                                  {:iids [#bytes "4cd9b7672d7fbee8fb51fb1e049f6903"
+                                                          #bytes "9a83c6cb1126d93de4a30715b28f1f4b"],
+                                                   :documents #xt/tagged [:public/foo [{:xt/id 1, :v 2}
+                                                                                       {:xt/id 3, :x "hello"}]]}]]}])
+               (util/->clj (.getAsMaps rel)))))))
+
 (t/deftest validate-offset-returns-proper-errors
   (letfn [(->simulated-log [epoch latest-submitted-offset]
             (reify Log

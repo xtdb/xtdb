@@ -113,10 +113,11 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
         checkNotForbidden(op.schema, op.table)
 
         val schemaAndTable = "${op.schema}/${op.table}"
-        val tableDocWriter = tableDocWriters.getOrPut(schemaAndTable) {
+        val tableDocsWriter = tableDocWriters.getOrPut(schemaAndTable) {
             docsVec.vectorFor(schemaAndTable, LIST_TYPE, false)
-                .also { it.getListElements(STRUCT_TYPE, false) }
         }
+
+        val tableDocWriter = tableDocsWriter.getListElements(STRUCT_TYPE, false)
 
         val idVec = op.patches["_id"]
         for (idx in 0 until op.patches.rowCount) {
@@ -125,7 +126,8 @@ private class PatchDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.PatchDocs> {
         }
         iidsVec.endList()
 
-        tableDocWriter.writeObject(op.patches)
+        tableDocWriter.append(RelationAsStructReader("patches", op.patches))
+        tableDocsWriter.endList()
 
         op.validFrom?.let { validFromVec.writeObject(it) } ?: validFromVec.writeNull()
         op.validTo?.let { validToVec.writeObject(it) } ?: validToVec.writeNull()
