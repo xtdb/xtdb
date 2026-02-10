@@ -340,7 +340,7 @@
 
 (defn cmd-startup-pg30 [{:keys [frontend server] :as conn} startup-opts]
   (let [{:keys [node ^Authenticator authn playground?]} server
-        db-name (get startup-opts "database")
+        ^String db-name (get startup-opts "database")
         db-cat (db/<-node node)
         db (or (.databaseOrNull db-cat db-name)
                (when playground?
