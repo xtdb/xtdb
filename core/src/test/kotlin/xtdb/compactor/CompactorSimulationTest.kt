@@ -291,7 +291,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         mockDriver = CompactorMockDriver(dispatcher, currentSeed, driverConfig)
-        jobCalculator = createJobCalculator.invoke() as Compactor.JobCalculator
+        jobCalculator = createJobCalculator()
         allocator = RootAllocator()
 
         // Create a single shared buffer pool for all systems
@@ -302,7 +302,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
 
         trieCatalogs = List(numberOfSystems) {
-            createTrieCatalog.invoke(null, null, mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+            createTrieCatalog()
         }
 
         // All databases share the same buffer pool

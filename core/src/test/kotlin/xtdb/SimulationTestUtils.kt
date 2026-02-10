@@ -1,7 +1,9 @@
 package xtdb
 
+import xtdb.compactor.Compactor
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
+import xtdb.trie.TrieCatalog
 import xtdb.table.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
@@ -29,8 +31,14 @@ class SimulationTestUtils {
 
         // Clojure interop to get at internal functions
         val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
-        val createJobCalculator = requiringResolve("xtdb.compactor.job-calculator/->JobCalculator")
-        val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+        private val createJobCalculatorFn = requiringResolve("xtdb.compactor.job-calculator/->JobCalculator")
+        private val createTrieCatalogFn = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
+
+        fun createJobCalculator(): Compactor.JobCalculator =
+            createJobCalculatorFn.invoke() as Compactor.JobCalculator
+
+        fun createTrieCatalog(): TrieCatalog =
+            createTrieCatalogFn.invoke(null, null, mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
 
         val L0TrieKeys = sequence {
             var blockIndex = 0
