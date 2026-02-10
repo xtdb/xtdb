@@ -285,7 +285,6 @@ class CompactorSimulationTest : SimulationTestBase() {
     private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var dbs: List<MockDb>
-    private var compactCompletions: List<CompletableDeferred<Unit>> = listOf()
 
     @BeforeEach
     fun setUp() {
@@ -336,7 +335,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, listOf(l0Trie))
-            it.compactAll()
+            it.compactAllSync(null)
         }
 
         assertEquals(
@@ -368,7 +367,7 @@ class CompactorSimulationTest : SimulationTestBase() {
                 )
             )
 
-            it.compactAll()
+            it.compactAllSync(null)
 
             assertEquals(
                 listOf(
@@ -388,7 +387,7 @@ class CompactorSimulationTest : SimulationTestBase() {
                 )
             )
 
-            it.compactAll()
+            it.compactAllSync(null)
 
             assertEquals(
                 listOf(
@@ -416,7 +415,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l0tries.toList())
-            it.compactAll()
+            it.compactAllSync(null)
             val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
             assertEquals(100, allTries.prefix("l00-rc-").size)
             assertEquals(100, allTries.prefix("l01-rc-").size)
@@ -438,7 +437,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList())
 
-            it.compactAll()
+            it.compactAllSync(null)
 
             assertEquals(
                 setOf(
@@ -475,7 +474,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + existingL2Tries)
 
-            it.compactAll()
+            it.compactAllSync(null)
 
             val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
             assertEquals(
@@ -521,7 +520,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + l2tries)
 
-            it.compactAll()
+            it.compactAllSync(null)
 
             val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
 
@@ -558,9 +557,10 @@ class CompactorSimulationTest : SimulationTestBase() {
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { compactorsForDb ->
-            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
+            runBlocking {
+                compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
+            }
         }
-        runBlocking { compactCompletions.awaitAll() }
 
         // Verify all catalogs have the same results
         dbs.forEach { db ->
@@ -604,10 +604,10 @@ class CompactorSimulationTest : SimulationTestBase() {
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { compactorsForDb ->
-            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
+            runBlocking {
+                compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
+            }
         }
-
-        runBlocking { compactCompletions.awaitAll() }
 
         val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }.distinct()
 
@@ -634,10 +634,10 @@ class CompactorSimulationTest : SimulationTestBase() {
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
         }.useAll { compactorsForDb ->
-            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
+            runBlocking {
+                compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
+            }
         }
-
-        runBlocking { compactCompletions.awaitAll() }
 
         val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }
 

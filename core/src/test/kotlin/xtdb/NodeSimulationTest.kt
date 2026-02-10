@@ -184,7 +184,7 @@ class NodeSimulationTest : SimulationTestBase() {
         assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "live l1s haven't been garbage collected")
         assertEquals(l1Tries, sharedBufferPool.listTrieNames(table), "live l1s haven't been garbage collected")
 
-        compactorForDb.compactAll()
+        compactorForDb.compactAllSync(null)
 
         val l2Tries = listOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03")
         val allTries = (l1Tries + l2Tries).toSet()
@@ -239,7 +239,7 @@ class NodeSimulationTest : SimulationTestBase() {
         // Launch both compaction and GC on the dispatcher using coroutines
         runBlocking(dispatcher) {
             val compactionJob = launch {
-                compactorForDb.startCompaction().await()
+                compactorForDb.compactAll()
             }
             val gcJob = launch {
                 val asOf = Instant.now() + Duration.ofHours(1)
@@ -314,7 +314,7 @@ class NodeSimulationTest : SimulationTestBase() {
         // Launch compaction (for new L1s) and GC (for old garbage L1s) in parallel
         runBlocking(dispatcher) {
             val compactionJob = launch {
-                compactorForDb.startCompaction().await()
+                compactorForDb.compactAll()
             }
             val gcJob = launch {
                 garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1))
@@ -387,7 +387,7 @@ class NodeSimulationTest : SimulationTestBase() {
         runBlocking(dispatcher) {
             val compactionJobs = dbs.shuffled(rand).map { db ->
                 launch {
-                    db.compactorForDb.startCompaction().await()
+                    db.compactorForDb.compactAll()
                 }
             }
             val gcJobs = dbs.shuffled(rand).map { db ->
@@ -462,7 +462,7 @@ class NodeSimulationTest : SimulationTestBase() {
         runBlocking(dispatcher) {
             // System 0 runs compaction and GC to completion
             val system0Compaction = launch(CoroutineName("system0-compaction")) {
-                dbs[0].compactorForDb.startCompaction().await()
+                dbs[0].compactorForDb.compactAll()
             }
             val system0GC = launch(CoroutineName("system0-gc")) {
                 dbs[0].garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1))
@@ -480,7 +480,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
             // Now system 1 starts its compaction and GC
             val system1Compaction = launch(CoroutineName("system1-compaction")) {
-                dbs[1].compactorForDb.startCompaction().await()
+                dbs[1].compactorForDb.compactAll()
             }
             val system1GC = launch(CoroutineName("system1-gc")) {
                 dbs[1].garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1))
@@ -545,7 +545,7 @@ class NodeSimulationTest : SimulationTestBase() {
             blockCatalog.refresh(block)
         }
 
-        compactorForDb.compactAll()
+        compactorForDb.compactAllSync(null)
         runBlocking { garbageCollector.garbageCollectTries(Instant.now() + Duration.ofHours(1)) }
 
         val triesInCatalog = trieCatalog.listAllTrieKeys(table)
@@ -597,7 +597,7 @@ class NodeSimulationTest : SimulationTestBase() {
         runBlocking(dispatcher) {
             val compactionJobs = dbs.shuffled(rand).map { db ->
                 launch {
-                    db.compactorForDb.startCompaction().await()
+                    db.compactorForDb.compactAll()
                 }
             }
 
@@ -684,7 +684,7 @@ class NodeSimulationTest : SimulationTestBase() {
         runBlocking(dispatcher) {
             val compactionJobs = dbs.shuffled(rand).map { db ->
                 launch {
-                    db.compactorForDb.startCompaction().await()
+                    db.compactorForDb.compactAll()
                 }
             }
 

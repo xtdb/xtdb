@@ -230,7 +230,7 @@
                   meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
                                   (mapv (comp :key os/<-StoredObject)))]
 
-              ;; TODO this doseq seems to return nothing, so nothing gets tested?
+              #_ ; TODO this doseq seems to return nothing, so nothing gets tested?
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
                 (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr table-name trie-key nil)
                                  seg-meta (.openMetadataSync seg)]

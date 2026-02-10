@@ -50,4 +50,4 @@
   [node timeout]
 
   (-> (.getCompactor (db/primary-db node))
-      (.compactAll timeout)))
+      (.compactAllSync timeout)))

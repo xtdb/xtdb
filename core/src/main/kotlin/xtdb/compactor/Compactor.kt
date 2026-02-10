@@ -48,8 +48,14 @@ interface Compactor : AutoCloseable {
 
     interface ForDatabase : AutoCloseable {
         fun signalBlock()
-        fun compactAll(timeout: Duration? = null)
-        fun startCompaction(): CompletableDeferred<Unit>
+        suspend fun compactAll()
+
+        fun compactAllSync(timeout: Duration?) {
+            runBlocking {
+                if (timeout == null) compactAll()
+                else withTimeout(timeout) { compactAll() }
+            }
+        }
     }
 
     fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState): ForDatabase
@@ -250,25 +256,12 @@ interface Compactor : AutoCloseable {
                 if (!ignoreSignalBlock) wakeupCh.trySend(Unit)
             }
 
-            override fun compactAll(timeout: Duration?) {
-                runBlocking {
-                    scope.launch {
-                        val compactAllPromise = CompletableDeferred<Unit>().also { compactAllPromise = it }
-                        wakeupCh.send(Unit)
-
-                        LOGGER.trace("compactAll: waiting for idle")
-                        if (timeout == null) compactAllPromise.await() else withTimeout(timeout) { compactAllPromise.await() }
-                        LOGGER.trace("compactAll: idle")
-                    }.join()
-                }
-            }
-
-            override fun startCompaction(): CompletableDeferred<Unit> {
-                val compactAllPromise = CompletableDeferred<Unit>().also { this.compactAllPromise = it }
-                scope.launch {
-                    wakeupCh.send(Unit)
-                }
-                return compactAllPromise
+            override suspend fun compactAll() {
+                val promise = CompletableDeferred<Unit>().also { compactAllPromise = it }
+                wakeupCh.send(Unit)
+                LOGGER.trace("compactAll: waiting for idle")
+                promise.await()
+                LOGGER.trace("compactAll: idle")
             }
 
             override fun close() {
@@ -292,9 +285,7 @@ interface Compactor : AutoCloseable {
         val NOOP = object : Compactor {
             override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState) = object : ForDatabase {
                 override fun signalBlock() = Unit
-                override fun compactAll(timeout: Duration?) = Unit
-                override fun startCompaction() = CompletableDeferred<Unit>().apply { complete(Unit) }
-
+                override suspend fun compactAll() = Unit
                 override fun close() = Unit
             }
 
