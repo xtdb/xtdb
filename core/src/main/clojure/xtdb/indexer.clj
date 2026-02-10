@@ -685,8 +685,9 @@
       (add-tx-row! db-name live-idx-tx tx-key e {})
       (commit tx-key live-idx-tx tx-source))))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, ^Tracer tracer]}]
-  (let [tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, tracer]}]
+  (let [^Tracer tracer (when (:transaction-tracing? tracer) (:tracer tracer))
+        tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer

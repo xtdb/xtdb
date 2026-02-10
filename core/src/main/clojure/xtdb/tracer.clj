@@ -46,23 +46,29 @@
         (log/warnf e "Failed to create OpenTelemetry tracer, tracing will be disabled")
         nil))))
 
-(defmethod xtn/apply-config! :xtdb/tracer [^Xtdb$Config config _ {:keys [enabled? endpoint service-name span-processor]}]
+(defmethod xtn/apply-config! :xtdb/tracer [^Xtdb$Config config _ {:keys [enabled? endpoint service-name query-tracing? transaction-tracing? span-processor]}]
   (.tracer config
-           (cond-> (TracerConfig.) 
+           (cond-> (TracerConfig.)
              (some? enabled?) (.enabled enabled?)
              endpoint (.endpoint endpoint)
              service-name (.serviceName service-name)
+             (some? query-tracing?) (.queryTracing query-tracing?)
+             (some? transaction-tracing?) (.transactionTracing transaction-tracing?)
              span-processor (.spanProcessor span-processor))))
 
 (defmethod ig/expand-key :xtdb/tracer [k ^TracerConfig config]
   {k {:enabled? (.getEnabled config)
       :endpoint (.getEndpoint config)
       :service-name (.getServiceName config)
+      :query-tracing? (.getQueryTracing config)
+      :transaction-tracing? (.getTransactionTracing config)
       :span-processor (.getSpanProcessor config)
       :config (ig/ref :xtdb/config)}})
 
-(defmethod ig/init-key :xtdb/tracer [_ {:keys [enabled? endpoint service-name span-processor]}]
-  (create-tracer {:enabled? enabled?
-                  :endpoint endpoint
-                  :service-name service-name
-                  :span-processor span-processor}))
+(defmethod ig/init-key :xtdb/tracer [_ {:keys [enabled? endpoint service-name query-tracing? transaction-tracing? span-processor]}]
+  {:tracer (create-tracer {:enabled? enabled?
+                           :endpoint endpoint
+                           :service-name service-name
+                           :span-processor span-processor})
+   :query-tracing? query-tracing?
+   :transaction-tracing? transaction-tracing?})

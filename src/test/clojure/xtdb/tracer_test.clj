@@ -233,3 +233,42 @@
                     :attributes {"operations.count" "3"}
                     :children []}
                    tx-span)))))))
+
+(t/deftest test-query-tracing-disabled
+  (t/testing "query tracing disabled suppresses xtdb.query spans"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node
+                        {:tracer {:enabled? true
+                                  :service-name "xtdb-test"
+                                  :query-tracing? false
+                                  :span-processor span-processor}})]
+
+        (xt/q node "SELECT 1")
+        (Thread/sleep 100)
+
+        (t/is (empty? (filter #(= (:name %) "xtdb.query") @!spans)))))))
+
+(t/deftest test-transaction-tracing-disabled
+  (t/testing "transaction tracing disabled suppresses xtdb.transaction spans but query spans still appear"
+    (let [!spans (atom [])
+          exporter (test-span-exporter !spans)
+          span-processor (SimpleSpanProcessor/create exporter)]
+      (with-open [node (xtn/start-node
+                        {:tracer {:enabled? true
+                                  :service-name "xtdb-test"
+                                  :transaction-tracing? false
+                                  :span-processor span-processor}})]
+
+        (xt/submit-tx node [[:sql "INSERT INTO users (_id, name) VALUES (1, 'Alice')"]])
+        (Thread/sleep 100)
+
+        (let [span-tree (build-span-tree @!spans)]
+          (t/is (empty? (filter #(= (:name %) "xtdb.transaction") span-tree))))
+
+        (reset! !spans [])
+        (xt/q node "SELECT 1")
+        (Thread/sleep 100)
+
+        (t/is (seq (filter #(= (:name %) "xtdb.query") @!spans)))))))

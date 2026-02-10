@@ -79,13 +79,17 @@ tracer:
   enabled: true
   endpoint: "http://localhost:4318/v1/traces"
   serviceName: "xtdb-dev"
+  queryTracing: true
+  transactionTracing: true
 ----
 
 Configuration options:
 
 * `enabled?` (boolean) – Enable OpenTelemetry tracing. Default: `false`
 * `endpoint` (string) – OTLP HTTP endpoint for sending traces. Default: `"http://localhost:4318/v1/traces"`
-* `service-name` (string) – Service name for traces. Default: `"xtdb"` 
+* `service-name` (string) – Service name for traces. Default: `"xtdb"`
+* `query-tracing?` (boolean) – Enable tracing for queries. Default: `true`
+* `transaction-tracing?` (boolean) – Enable tracing for transactions. Default: `true` 
 
 Traces will be sent to Tempo and can be viewed in Grafana's Explore view.
 
