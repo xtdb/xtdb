@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -54,7 +56,8 @@ import kotlin.random.Random
 class MockDb(
     val name: DatabaseName,
     val trieCatalog: TrieCatalog,
-    val bufferPool: BufferPool
+    val bufferPool: BufferPool,
+    val compactor: Compactor,
 ) {
     val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, bufferPool, null)
     val dbState: DatabaseState get() = DatabaseState(name, null, null, trieCatalog, null)
@@ -281,8 +284,6 @@ class CompactorSimulationTest : SimulationTestBase() {
     private lateinit var sharedBufferPool: BufferPool
     private lateinit var mockDriver: CompactorMockDriver
     private lateinit var jobCalculator: Compactor.JobCalculator
-    private lateinit var compactors: List<Compactor.Impl>
-    private lateinit var trieCatalogs: List<TrieCatalog>
     private lateinit var dbs: List<MockDb>
     private var compactCompletions: List<CompletableDeferred<Unit>> = listOf()
 
@@ -297,17 +298,13 @@ class CompactorSimulationTest : SimulationTestBase() {
         // Create a single shared buffer pool for all systems
         sharedBufferPool = MemoryStorage(allocator, epoch = 0)
 
-        compactors = List(numberOfSystems) {
-            Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher)
-        }
-
-        trieCatalogs = List(numberOfSystems) {
-            createTrieCatalog()
-        }
-
-        // All databases share the same buffer pool
-        dbs = List(numberOfSystems) { i ->
-            MockDb("xtdb", trieCatalogs[i], sharedBufferPool)
+        dbs = List(numberOfSystems) {
+            MockDb(
+                name = "xtdb",
+                trieCatalog = createTrieCatalog(),
+                bufferPool = sharedBufferPool,
+                compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher),
+            )
         }
     }
 
@@ -335,18 +332,16 @@ class CompactorSimulationTest : SimulationTestBase() {
     fun singleL0Compaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, listOf(l0Trie))
             it.compactAll()
         }
 
-        Assertions.assertEquals(
+        assertEquals(
             listOf("l00-rc-b00", "l01-rc-b00"),
-            trieCatalog.listAllTrieKeys(docsTable),
+            db.trieCatalog.listAllTrieKeys(docsTable),
         )
     }
 
@@ -360,11 +355,9 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun multipleL0ToL1Compaction(iteration: Int) {
         val table = TableRef("xtdb", "public", "docs")
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             // Round 1: Add 3 L0 tries and compact
             addL0s(
                 table,
@@ -377,12 +370,12 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAll()
 
-            Assertions.assertEquals(
+            assertEquals(
                 listOf(
                     "l00-rc-b00", "l00-rc-b01", "l00-rc-b02",
                     "l01-rc-b00", "l01-rc-b01", "l01-rc-b02"
                 ),
-                trieCatalog.listAllTrieKeys(table)
+                db.trieCatalog.listAllTrieKeys(table)
             )
 
             // Round 2: Add 3 more L0 tries and compact
@@ -397,12 +390,12 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAll()
 
-            Assertions.assertEquals(
+            assertEquals(
                 listOf(
                     "l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l00-rc-b03", "l00-rc-b04", "l00-rc-b05",
                     "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04", "l01-rc-b05",
                 ),
-                trieCatalog.listAllTrieKeys(table)
+                db.trieCatalog.listAllTrieKeys(table)
             )
         }
     }
@@ -419,18 +412,15 @@ class CompactorSimulationTest : SimulationTestBase() {
     fun biggerCompactorRun() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
-        var currentTries: List<TrieKey>
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l0tries.toList())
             it.compactAll()
-            val allTries = trieCatalog.listAllTrieKeys(docsTable)
-            Assertions.assertEquals(100, allTries.prefix("l00-rc-").size)
-            Assertions.assertEquals(100, allTries.prefix("l01-rc-").size)
-            Assertions.assertEquals(8, allTries.prefix("l02-rc-").size)
+            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
+            assertEquals(100, allTries.prefix("l00-rc-").size)
+            assertEquals(100, allTries.prefix("l01-rc-").size)
+            assertEquals(8, allTries.prefix("l02-rc-").size)
         }
     }
 
@@ -441,23 +431,21 @@ class CompactorSimulationTest : SimulationTestBase() {
     fun l1cToL2cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList())
 
             it.compactAll()
 
-            Assertions.assertEquals(
+            assertEquals(
                 setOf(
                     "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03",
                     "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"
                 ),
-                trieCatalog.listAllTrieKeys(docsTable).toSet()
+                db.trieCatalog.listAllTrieKeys(docsTable).toSet()
             )
         }
     }
@@ -469,8 +457,6 @@ class CompactorSimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val rand = Random(currentSeed)
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
         // Create 4 full L1C tries
@@ -486,17 +472,17 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAll()
 
-            val allTries = trieCatalog.listAllTrieKeys(docsTable)
-            Assertions.assertEquals(
+            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
+            assertEquals(
                 setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03"),
                 allTries.prefix("l01-").toSet()
             )
-            Assertions.assertEquals(
+            assertEquals(
                 setOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"),
                 allTries.prefix("l02-").toSet()
             )
@@ -509,8 +495,6 @@ class CompactorSimulationTest : SimulationTestBase() {
     fun l2cGapFillingAndL3cCompaction(iteration: Int) {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
-        val compactor = compactors[0]
-        val trieCatalog = trieCatalogs[0]
         val db = dbs[0]
 
         // Create a complex scenario with interleaved L1C and L2C tries
@@ -534,25 +518,25 @@ class CompactorSimulationTest : SimulationTestBase() {
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b03", defaultFileTarget))
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
 
-        compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
+        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l1Tries.toList() + l2tries)
 
             it.compactAll()
 
-            val allTries = trieCatalog.listAllTrieKeys(docsTable)
+            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
 
             // Verify L2C partitions are complete (should have b03, b07, b0b, b0f for each partition)
             for (partition in 0..3) {
                 for (blockHex in listOf("03", "07", "0b", "0f")) {
-                    Assertions.assertTrue(
+                    assertTrue(
                         allTries.contains("l02-rc-p$partition-b$blockHex"),
                         "L2C partition $partition should have block b$blockHex"
                     )
                 }
             }
 
-            Assertions.assertEquals(16, allTries.prefix("l02-rc").size)
-            Assertions.assertEquals(16, allTries.prefix("l03-rc").size)
+            assertEquals(16, allTries.prefix("l02-rc").size)
+            assertEquals(16, allTries.prefix("l03-rc").size)
         }
     }
 
@@ -571,24 +555,24 @@ class CompactorSimulationTest : SimulationTestBase() {
         addL0s(usersTable, usersTries.toList())
         addL0s(ordersTable, ordersTries.toList())
 
-        compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
-        }.useAll { dbs ->
-            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
+        dbs.safeMap { db ->
+            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
+        }.useAll { compactorsForDb ->
+            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
         }
         runBlocking { compactCompletions.awaitAll() }
 
         // Verify all catalogs have the same results
-        trieCatalogs.map { trieCatalog ->
-            val docsKeys = trieCatalog.listAllTrieKeys(docsTable)
-            val usersKeys = trieCatalog.listAllTrieKeys(usersTable)
-            val ordersKeys = trieCatalog.listAllTrieKeys(ordersTable)
-            Assertions.assertEquals(16, docsKeys.prefix("l00-rc-").size)
-            Assertions.assertEquals(16, docsKeys.prefix("l01-rc-").size)
-            Assertions.assertEquals(16, docsKeys.prefix("l02-rc-").size)
-            Assertions.assertEquals(16, docsKeys.prefix("l03-rc-").size)
-            Assertions.assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
-            Assertions.assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
+        dbs.forEach { db ->
+            val docsKeys = db.trieCatalog.listAllTrieKeys(docsTable)
+            val usersKeys = db.trieCatalog.listAllTrieKeys(usersTable)
+            val ordersKeys = db.trieCatalog.listAllTrieKeys(ordersTable)
+            assertEquals(16, docsKeys.prefix("l00-rc-").size)
+            assertEquals(16, docsKeys.prefix("l01-rc-").size)
+            assertEquals(16, docsKeys.prefix("l02-rc-").size)
+            assertEquals(16, docsKeys.prefix("l03-rc-").size)
+            assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
+            assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
         }
 
     }
@@ -617,21 +601,21 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         addL0s(docsTable, listOf(l0Trie))
 
-        compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
-        }.useAll { dbs ->
-            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
+        dbs.safeMap { db ->
+            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
+        }.useAll { compactorsForDb ->
+            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
         }
 
         runBlocking { compactCompletions.awaitAll() }
 
-        val trieKeys = trieCatalogs.map { it.listAllTrieKeys(docsTable) }.distinct()
+        val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }.distinct()
 
-        Assertions.assertEquals(
+        assertEquals(
             1,
             trieKeys.size,
         )
-        Assertions.assertEquals(
+        assertEquals(
             listOf("l00-rc-b00", "l01-rc-b00"),
             trieKeys.first(),
         )
@@ -647,17 +631,17 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         addL0s(docsTable, l0tries.toList())
 
-        compactors.zip(dbs).safeMap { (compactor, db) ->
-            compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
-        }.useAll { dbs ->
-            compactCompletions = dbs.shuffled(rand).map { db -> db.startCompaction() }
+        dbs.safeMap { db ->
+            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
+        }.useAll { compactorsForDb ->
+            compactCompletions = compactorsForDb.shuffled(rand).map { it.startCompaction() }
         }
 
         runBlocking { compactCompletions.awaitAll() }
 
-        val trieKeys = trieCatalogs.map { it.listAllTrieKeys(docsTable) }
+        val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }
 
-        Assertions.assertEquals(
+        assertEquals(
             1,
             trieKeys.map { it.size }.distinct().size,
         )
