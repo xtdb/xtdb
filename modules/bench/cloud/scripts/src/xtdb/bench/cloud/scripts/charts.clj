@@ -67,7 +67,9 @@
   "Configuration for each benchmark type.
    :filter-param - parameter name in log.parameters to filter by
    :filter-value - default value to filter by
-   :filter-is-string - true if filter-value is a string (for KQL quoting)"
+   :filter-is-string - true if filter-value is a string (for KQL quoting)
+   :metric - log field to chart (default: time-taken-ms)
+   :y-label - y-axis label (default: Duration (minutes))"
   {"tpch"       {:benchmark-name "TPC-H (OLAP)"
                  :title "TPC-H Benchmark Performance"
                  :filter-param "scale-factor"
@@ -79,10 +81,12 @@
                  :filter-value 1.0
                  :filter-is-string false}
    "auctionmark" {:benchmark-name "Auction Mark OLTP"
-                  :title "AuctionMark Benchmark Performance"
+                  :title "AuctionMark Throughput"
                   :filter-param "duration"
                   :filter-value "PT30M"
-                  :filter-is-string true}
+                  :filter-is-string true
+                  :metric "throughput"
+                  :y-label "Throughput (tx/s)"}
    "readings"   {:benchmark-name "Readings benchmarks"
                  :title "Readings Benchmark Performance"
                  :filter-param "devices"
@@ -94,10 +98,12 @@
                  :filter-value nil
                  :filter-is-string false}
    "fusion"     {:benchmark-name "Fusion benchmark"
-                 :title "Fusion Benchmark Performance"
+                 :title "Fusion Throughput"
                  :filter-param "devices"
                  :filter-value 10000
-                 :filter-is-string false}
+                 :filter-is-string false
+                 :metric "throughput"
+                 :y-label "Throughput (tx/s)"}
    "tsbs-iot"   {:benchmark-name "TSBS IoT"
                  :title "TSBS IoT Benchmark Performance"
                  :filter-param "devices"
@@ -141,24 +147,30 @@
              (throw (ex-info (format "Unsupported benchmark type for timeseries plotting: %s" benchmark-type)
                              {:benchmark-type benchmark-type
                               :supported (keys benchmark-configs)})))
-         {:keys [benchmark-name title filter-param filter-value filter-is-string]} config
+         {:keys [benchmark-name title filter-param filter-value filter-is-string
+                 metric y-label]} config
+         metric (or metric "time-taken-ms")
+         y-label (or y-label "Duration (minutes)")
+         duration-metric? (= metric "time-taken-ms")
          ;; Allow override of filter-value via opts
          actual-filter-value (get opts :filter-value filter-value)
-         fetch-opts (cond-> {:benchmark benchmark-name}
+         fetch-opts (cond-> {:benchmark benchmark-name
+                             :metric metric}
                       filter-param (assoc :filter-param filter-param
                                           :filter-value actual-filter-value
                                           :filter-is-string filter-is-string)
                       (:repo opts) (assoc :repo (:repo opts))
                       (:branch opts) (assoc :branch (:branch opts)))
-         data-ms (azure/fetch-azure-benchmark-timeseries fetch-opts)
-         ;; Convert milliseconds to minutes
+         raw-data (azure/fetch-azure-benchmark-timeseries fetch-opts)
          data (mapv (fn [{:keys [timestamp value]}]
                       (let [num-value (if (string? value)
                                         (Double/parseDouble value)
                                         (double value))]
                         {:timestamp timestamp
-                         :value (/ num-value 60000.0)}))
-                    data-ms)
+                         :value (if duration-metric?
+                                  (/ num-value 60000.0)
+                                  num-value)}))
+                    raw-data)
          output-path (str benchmark-type "-benchmark-timeseries.svg")
          chart-title (if (and filter-param actual-filter-value)
                        (str title " (" filter-param "=" actual-filter-value ")")
@@ -166,6 +178,6 @@
      (plot-timeseries-vega data {:output-path output-path
                                  :title chart-title
                                  :x-label "Time"
-                                 :y-label "Duration (minutes)"})
+                                 :y-label y-label})
      (println "Generated chart:" output-path)
      output-path)))

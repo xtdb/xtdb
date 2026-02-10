@@ -172,9 +172,9 @@
 (deftest summary->table-tpch-test
   (testing "tpch table format"
     (let [test-summary {:benchmark-type "tpch"
-                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}
-                                  {:stage "cold-queries-q2-min-cost" :time-taken-ms 2000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}
+                                       {:stage "cold-queries-q2-min-cost" :time-taken-ms 2000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->table test-summary)]
       (is (string? result))
       (is (str/includes? result "Hot"))
@@ -186,9 +186,9 @@
 (deftest summary->table-yakbench-test
   (testing "yakbench table format"
     (let [test-summary {:benchmark-type "yakbench"
-                   :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000
-                                          :p90 1100000 :p99 1200000 :n 100 :sum 1000000}]}
-                   :benchmark-total-time-ms 5000}
+                        :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000
+                                               :p90 1100000 :p99 1200000 :n 100 :sum 1000000}]}
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->table test-summary)]
       (is (string? result))
       (is (str/includes? result "profile1/q1"))
@@ -205,8 +205,8 @@
 (deftest summary->slack-tpch-test
   (testing "tpch slack format wrapped in code blocks"
     (let [test-summary {:benchmark-type "tpch"
-                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->slack test-summary)]
       (is (str/includes? result "```"))
       (is (str/ends-with? result "```"))
@@ -221,23 +221,38 @@
       (is (str/includes? result "Total query time")))))
 
 (deftest summary->slack-yakbench-test
-  (testing "yakbench slack format"
+  (testing "yakbench slack format with single query (no split)"
     (let [test-summary {:benchmark-type "yakbench"
-                   :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000 :p99 1200000 :n 100 :sum 1000000}]}
-                   :benchmark-total-time-ms 5000}
+                        :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000 :p99 1200000 :n 100 :sum 1000000}]}
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->slack test-summary)]
       (is (str/includes? result "```"))
       (is (str/ends-with? result "```"))
       (is (str/includes? result "profile1/q1"))
       (is (str/includes? result "Total query time"))
-      (is (str/includes? result "Total benchmark time")))))
+      (is (str/includes? result "Total benchmark time"))
+      (is (not (str/includes? result "---SLACK-SPLIT---")))))
+
+  (testing "yakbench slack format splits with multiple queries"
+    (let [test-summary {:benchmark-type "yakbench"
+                        :profiles {:p1 [{:id "q1" :mean 1000000 :p50 900000 :p99 1200000 :n 100 :sum 1000000}
+                                        {:id "q2" :mean 2000000 :p50 1800000 :p99 2200000 :n 50 :sum 2000000}
+                                        {:id "q3" :mean 3000000 :p50 2700000 :p99 3300000 :n 30 :sum 3000000}
+                                        {:id "q4" :mean 4000000 :p50 3600000 :p99 4400000 :n 20 :sum 4000000}]}
+                        :benchmark-total-time-ms 10000}
+          result (summary/summary->slack test-summary)
+          [first-part second-part] (str/split result #"---SLACK-SPLIT---")]
+      (is (str/includes? result "---SLACK-SPLIT---"))
+      (is (str/includes? first-part "Total query time"))
+      (is (str/includes? first-part "```"))
+      (is (str/includes? second-part "```")))))
 
 (deftest summary->github-markdown-tpch-test
   (testing "tpch github markdown format"
     (let [test-summary {:benchmark-type "tpch"
-                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}
-                                  {:stage "cold-queries-q2-min-cost" :time-taken-ms 2000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}
+                                       {:stage "cold-queries-q2-min-cost" :time-taken-ms 2000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->github-markdown test-summary)]
       (is (str/includes? result "| Temp | Query |"))
       (is (str/includes? result "|"))
@@ -253,9 +268,9 @@
 (deftest summary->github-markdown-yakbench-test
   (testing "yakbench github markdown format"
     (let [test-summary {:benchmark-type "yakbench"
-                   :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000
-                                          :p90 1100000 :p99 1200000 :n 100 :sum 1000000}]}
-                   :benchmark-total-time-ms 5000}
+                        :profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000
+                                               :p90 1100000 :p99 1200000 :n 100 :sum 1000000}]}
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->github-markdown test-summary)]
       (is (str/includes? result "| Query | N | P50 |"))
       (is (str/includes? result "% of total"))
@@ -270,9 +285,9 @@
 (deftest yakbench-summary->query-rows-percent-test
   (testing "yakbench percent-of-total calculation"
     (let [test-summary {:profiles {:profile1 [{:id "q1" :mean 1000000 :p50 900000
-                                          :p90 1100000 :p99 1200000 :n 100 :sum 1000000}
-                                         {:id "q2" :mean 3000000 :p50 2700000
-                                          :p90 3300000 :p99 3600000 :n 50 :sum 3000000}]}}
+                                               :p90 1100000 :p99 1200000 :n 100 :sum 1000000}
+                                              {:id "q2" :mean 3000000 :p50 2700000
+                                               :p90 3300000 :p99 3600000 :n 50 :sum 3000000}]}}
           result (summary/yakbench-summary->query-rows test-summary)
           rows (:rows result)
           total-ms (:total-ms result)]
@@ -284,8 +299,8 @@
 (deftest render-summary-test
   (testing "rendering with different formats"
     (let [test-summary {:benchmark-type "tpch"
-                   :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
-                   :benchmark-total-time-ms 5000}]
+                        :query-stages [{:stage "hot-queries-q1-pricing" :time-taken-ms 1000}]
+                        :benchmark-total-time-ms 5000}]
       (is (string? (summary/render-summary test-summary {:format :table})))
       (is (str/includes? (summary/render-summary test-summary {:format :slack}) "```"))
       (is (str/includes? (summary/render-summary test-summary {:format :github}) "|"))))
@@ -379,7 +394,7 @@
         (let [result (log-parsing/parse-log "readings" (.getPath temp-file))]
           (is (= 7 (count (:all-stages result))))
           (is (= 3 (count (:query-stages result))))
-          (is (= 3 (count (:ingest-stages result))))
+          (is (= 2 (count (:ingest-stages result))))
           (is (= 10000 (:benchmark-total-time-ms result)))
           (is (= "query-recent-interval-day" (name (:stage (first (:query-stages result)))))))
         (finally
@@ -402,7 +417,7 @@
 (deftest readings-summary->query-rows-test
   (testing "calculating query rows with percentages"
     (let [test-summary {:query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                  {:stage :query-recent-interval-week :time-taken-ms 3000}]}
+                                       {:stage :query-recent-interval-week :time-taken-ms 3000}]}
           result (summary/readings-summary->query-rows test-summary)
           rows (:rows result)
           total (:total-ms result)]
@@ -420,9 +435,9 @@
 (deftest summary->table-readings-test
   (testing "readings table format"
     (let [test-summary {:benchmark-type "readings"
-                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                  {:stage :query-offset-1-year-interval-month :time-taken-ms 2000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
+                                       {:stage :query-offset-1-year-interval-month :time-taken-ms 2000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->table test-summary)]
       (is (string? result))
       (is (str/includes? result "Recent Day"))
@@ -433,8 +448,8 @@
 (deftest summary->slack-readings-test
   (testing "readings slack format wrapped in code blocks"
     (let [test-summary {:benchmark-type "readings"
-                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->slack test-summary)]
       (is (str/includes? result "```"))
       (is (str/ends-with? result "```"))
@@ -445,9 +460,9 @@
 (deftest summary->github-markdown-readings-test
   (testing "readings github markdown format"
     (let [test-summary {:benchmark-type "readings"
-                   :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
-                                  {:stage :query-recent-interval-week :time-taken-ms 2000}]
-                   :benchmark-total-time-ms 5000}
+                        :query-stages [{:stage :query-recent-interval-day :time-taken-ms 1000}
+                                       {:stage :query-recent-interval-week :time-taken-ms 2000}]
+                        :benchmark-total-time-ms 5000}
           result (summary/summary->github-markdown test-summary)]
       (is (str/includes? result "| Query | Time (ms) |"))
       (is (str/includes? result "|"))
@@ -482,7 +497,7 @@
 (deftest summary->table-auctionmark-test
   (testing "auctionmark table format with benchmark time"
     (let [test-summary {:benchmark-type "auctionmark"
-                   :benchmark-total-time-ms 120000}
+                        :benchmark-total-time-ms 120000}
           result (summary/summary->table test-summary)]
       (is (string? result))
       (is (str/includes? result "Total benchmark time"))
@@ -490,14 +505,14 @@
 
   (testing "auctionmark table format with nil benchmark time"
     (let [test-summary {:benchmark-type "auctionmark"
-                   :benchmark-total-time-ms nil}
+                        :benchmark-total-time-ms nil}
           result (summary/summary->table test-summary)]
       (is (str/includes? result "N/A")))))
 
 (deftest summary->slack-auctionmark-test
   (testing "auctionmark slack format"
     (let [test-summary {:benchmark-type "auctionmark"
-                   :benchmark-total-time-ms 120000}
+                        :benchmark-total-time-ms 120000}
           result (summary/summary->slack test-summary)]
       (is (string? result))
       (is (str/includes? result "Total benchmark time"))
@@ -506,7 +521,7 @@
 (deftest summary->github-markdown-auctionmark-test
   (testing "auctionmark github markdown format"
     (let [test-summary {:benchmark-type "auctionmark"
-                   :benchmark-total-time-ms 120000}
+                        :benchmark-total-time-ms 120000}
           result (summary/summary->github-markdown test-summary)]
       (is (string? result))
       (is (str/includes? result "Total benchmark time"))
@@ -586,6 +601,51 @@
                       separator-width header-width header-part))
           (is (>= separator-width 3)
               (format "Separator should have at least 3 dashes even if header is shorter")))))))
+
+(deftest parse-clickbench-log-excludes-parent-ingest-test
+  (testing "clickbench log parsing excludes parent ingest stage to avoid double counting"
+    (let [temp-file (java.io.File/createTempFile "clickbench-test" ".log")]
+      (try
+        (spit temp-file
+              (str/join "\n"
+                        ["{\"stage\":\"submit-docs\",\"time-taken-ms\":5000}"
+                         "{\"stage\":\"sync\",\"time-taken-ms\":3000}"
+                         "{\"stage\":\"finish-block\",\"time-taken-ms\":1000}"
+                         "{\"stage\":\"compact\",\"time-taken-ms\":2000}"
+                         "{\"stage\":\"ingest\",\"time-taken-ms\":11000}"
+                         "{\"stage\":\"summary\",\"time-taken-ms\":12000}"]))
+        (let [result (log-parsing/parse-log "clickbench" (.getPath temp-file))
+              ingest-stages (:ingest-stages result)
+              stage-names (set (map :stage ingest-stages))]
+          ;; parent "ingest" stage should NOT be in ingest-stages
+          (is (not (contains? stage-names "ingest")))
+          (is (= 4 (count ingest-stages)))
+          ;; sum of sub-stages should be 11000, not 22000
+          (is (= 11000 (reduce + (map :time-taken-ms ingest-stages)))))
+        (finally
+          (.delete temp-file))))))
+
+(deftest parse-tsbs-iot-log-excludes-parent-ingest-test
+  (testing "tsbs-iot log parsing excludes parent ingest stage to avoid double counting"
+    (let [temp-file (java.io.File/createTempFile "tsbs-iot-test" ".log")]
+      (try
+        (spit temp-file
+              (str/join "\n"
+                        ["{\"stage\":\"gen+submit-docs\",\"time-taken-ms\":8000}"
+                         "{\"stage\":\"sync\",\"time-taken-ms\":2000}"
+                         "{\"stage\":\"finish-block\",\"time-taken-ms\":500}"
+                         "{\"stage\":\"compact\",\"time-taken-ms\":1500}"
+                         "{\"stage\":\"ingest\",\"time-taken-ms\":12000}"
+                         "{\"stage\":\"queries\",\"time-taken-ms\":100}"
+                         "{\"stage\":\"summary\",\"time-taken-ms\":12100}"]))
+        (let [result (log-parsing/parse-log "tsbs-iot" (.getPath temp-file))
+              ingest-stages (:ingest-stages result)
+              stage-names (set (map :stage ingest-stages))]
+          (is (not (contains? stage-names "ingest")))
+          (is (= 4 (count ingest-stages)))
+          (is (= 12000 (reduce + (map :time-taken-ms ingest-stages)))))
+        (finally
+          (.delete temp-file))))))
 
 (deftest kubectl-command-construction-test
   (testing "kubectl passes args as separate strings to proc/shell"

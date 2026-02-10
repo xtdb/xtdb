@@ -10,7 +10,7 @@ on:
       scale_factor:
         description: 'Scale factor applied to the benchmark chart values'
         required: false
-        default: '1.0'
+        default: ''
         type: string
       job_display_name:
         description: 'Label to show in the job name and Slack notifications'

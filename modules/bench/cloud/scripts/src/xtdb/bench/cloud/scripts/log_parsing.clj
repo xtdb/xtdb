@@ -43,7 +43,7 @@
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages query-stages
-     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "ingest"} (:stage %)) stages)
+     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact"} (:stage %)) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -79,7 +79,7 @@
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages query-stages
-     :ingest-stages (filterv #(contains? #{"ingest" "sync" "compact"} (name (:stage %))) stages)
+     :ingest-stages (filterv #(contains? #{"sync" "compact"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -109,7 +109,7 @@
                      stage-lines)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
-     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "ingest" "download"} (:stage %)) stages)
+     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "download"} (:stage %)) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -145,7 +145,7 @@
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :query-stages (filterv #(= "query-stats" (name (:stage %))) stages)
-     :ingest-stages (filterv #(contains? #{"gen+submit-docs" "submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
+     :ingest-stages (filterv #(contains? #{"gen+submit-docs" "submit-docs" "sync" "finish-block" "compact"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -181,15 +181,13 @@
                            (throw (ex-info (str "Failed to parse JSON line: " line)
                                            {:line line :error (.getMessage e)})))))
                      stage-lines)
-        patch-stages (filterv (fn [stage]
-                                (let [stage-name (name (:stage stage))]
-                                  (or (str/starts-with? stage-name "patch-")
-                                      (contains? #{"patch-existing-docs" "patch-multiple-docs" "patch-non-existing-docs"} stage-name))))
+        patch-stages (filterv #(contains? #{"patch-existing-docs" "patch-multiple-docs" "patch-non-existing-docs"}
+                                          (name (:stage %)))
                               stages)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
      :patch-stages patch-stages
-     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
+     :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -206,7 +204,7 @@
                      stage-lines)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
-     :ingest-stages (filterv #(contains? #{"download" "submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
+     :ingest-stages (filterv #(contains? #{"download" "submit-docs" "sync" "finish-block" "compact"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 
@@ -223,7 +221,7 @@
                      stage-lines)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
-     :ingest-stages (filterv #(contains? #{"download-files" "submit-docs" "sync" "finish-block" "compact" "ingest"} (name (:stage %))) stages)
+     :ingest-stages (filterv #(contains? #{"download-files" "submit-docs" "sync" "finish-block" "compact"} (name (:stage %))) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
 

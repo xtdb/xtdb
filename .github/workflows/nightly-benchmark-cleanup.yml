@@ -682,9 +682,19 @@ jobs:
             if [ -n "$IMAGE_INFO" ]; then
               echo "$IMAGE_INFO"
             fi
-            if [ -n "$summary" ]; then
+            # Split summary on delimiter if present (for benchmarks with large output)
+            summary_main="$summary"
+            summary_extra=""
+            if [[ "$summary" == *"---SLACK-SPLIT---"* ]]; then
+              summary_main="${summary%%---SLACK-SPLIT---*}"
+              summary_extra="${summary#*---SLACK-SPLIT---}"
+              # Trim leading/trailing whitespace
+              summary_extra="$(echo "$summary_extra" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+            fi
+
+            if [ -n "$summary_main" ]; then
               echo ""
-              echo "$summary"
+              echo "$summary_main"
             fi
             if [ "${{ steps.upload-logs.outcome }}" = "success" ] || [ "${{ steps.upload-grafana.outcome }}" = "success" ]; then
               echo ":link: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view artifacts>"
@@ -693,6 +703,15 @@ jobs:
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
+
+          # Store extra summary for follow-up message
+          if [ -n "$summary_extra" ]; then
+            {
+              echo "msg_extra<<EOF"
+              echo "$summary_extra"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Prepare Slack Message
         if: steps.check-deployment.outcome == 'success'
@@ -710,6 +729,23 @@ jobs:
           method: chat.postMessage
           token: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
           payload-file-path: ./slack-message.json
+
+      - name: Post Slack Continuation
+        if: steps.check-deployment.outcome == 'success' && steps.compose.outputs.msg_extra != ''
+        run: |
+          jq -n --arg channel "$SLACK_CHANNEL" --arg text "$SLACK_MESSAGE" \
+            '{channel: $channel, text: $text}' > slack-message-extra.json
+        env:
+          SLACK_CHANNEL: ${{ secrets.BENCHMARK_SLACK_CHANNEL_ID }}
+          SLACK_MESSAGE: ${{ steps.compose.outputs.msg_extra }}
+
+      - name: Post Slack Continuation Message
+        if: steps.check-deployment.outcome == 'success' && steps.compose.outputs.msg_extra != ''
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.BENCHMARK_SLACK_BOT_TOKEN }}
+          payload-file-path: ./slack-message-extra.json
 
       - name: Post Benchmark Timeseries Chart to Slack
         if: steps.timeseries-chart.outputs.has_chart == 'true'

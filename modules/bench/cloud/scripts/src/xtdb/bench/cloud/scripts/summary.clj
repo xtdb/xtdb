@@ -334,12 +334,23 @@
       (rows->string [:query :duration] rows)))))
 
 (defmethod summary->slack "yakbench" [summary]
-  (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)]
-    (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary))
-     "\n\n"
-     (util/wrap-slack-code
-      (rows->string [:query :p50 :p99 :mean] rows)))))
+  (let [{:keys [rows total-ms]} (yakbench-summary->query-rows summary)
+        mid (Math/ceil (/ (count rows) 2))
+        [first-half second-half] (split-at mid rows)]
+    (if (seq second-half)
+      (str
+       (util/totals->string total-ms (:benchmark-total-time-ms summary))
+       "\n\n"
+       (util/wrap-slack-code
+        (rows->string [:query :p50 :p99 :mean] first-half))
+       "\n---SLACK-SPLIT---\n"
+       (util/wrap-slack-code
+        (rows->string [:query :p50 :p99 :mean] second-half)))
+      (str
+       (util/totals->string total-ms (:benchmark-total-time-ms summary))
+       "\n\n"
+       (util/wrap-slack-code
+        (rows->string [:query :p50 :p99 :mean] rows))))))
 
 (defmethod summary->slack "readings" [summary]
   (let [{:keys [rows total-ms]} (readings-summary->query-rows summary)]
@@ -527,12 +538,8 @@
     normalized))
 
 (defn tsbs-ingest-duration-ms
-  "Prefer the top-level ingest stage duration; fall back to summing sub-stages."
   [ingest-stages]
-  (or (some->> ingest-stages
-               (some #(when (= "ingest" (name (:stage %)))
-                        (:time-taken-ms %))))
-      (reduce + 0 (map :time-taken-ms ingest-stages))))
+  (reduce + 0 (map :time-taken-ms ingest-stages)))
 
 (defn tsbs-summary->query-rows
   [{:keys [query-stages]}]
