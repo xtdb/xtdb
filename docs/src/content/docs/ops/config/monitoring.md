@@ -84,6 +84,12 @@ tracer:
   # Service name identifier for traces.
   # (Can be set as an !Env value)
   # serviceName: "xtdb"
+
+  # Enable tracing for queries. Default: true
+  # queryTracing: true
+
+  # Enable tracing for transactions. Default: true
+  # transactionTracing: true
 ```
 
 For more information on viewing and analyzing traces with Grafana, see the ["Monitoring XTDB with Grafana"](../guides/monitoring-with-grafana#distributed-tracing-with-tempo) guide.

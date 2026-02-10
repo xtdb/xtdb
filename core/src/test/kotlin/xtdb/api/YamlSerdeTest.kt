@@ -452,13 +452,17 @@ class YamlSerdeTest {
             enabled: true
             endpoint: !Env XTDB_OTEL_HTTP_ENDPOINT
             serviceName: xtdb-service
+            queryTracing: false
+            transactionTracing: true
         """.trimIndent()
 
         assertEquals(
             TracerConfig(
                 enabled = true,
                 endpoint = "http://otelhost:4318/v1/traces",
-                serviceName = "xtdb-service"
+                serviceName = "xtdb-service",
+                queryTracing = false,
+                transactionTracing = true
             ),
             nodeConfig(input).tracer
         )

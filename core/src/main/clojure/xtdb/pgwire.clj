@@ -1924,7 +1924,7 @@
            server (assoc server
                          :query-error-counter query-error-counter
                          :query-timer query-timer
-                         :query-tracer tracer
+                         :query-tracer (when (:query-tracing? tracer) (:tracer tracer))
                          :tx-error-counter tx-error-counter
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
