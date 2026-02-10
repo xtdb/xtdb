@@ -1,7 +1,9 @@
 (ns xtdb.bench.patch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.bench :as b])
+            [xtdb.bench :as b]
+            [xtdb.util :as util])
   (:import (java.time Duration)))
 
 (defn patch-existing-docs-stage [{:keys [doc-count patch-count]}]
@@ -14,7 +16,7 @@
                               (for [i (range patch-count)]
                                 (let [id (rand-int doc-count)
                                       start-time (System/nanoTime)]
-                                  (xt/execute-tx node [(format "PATCH INTO foo RECORDS {_id: %s, c:'%s'}" id i)])
+                                  (xt/execute-tx node [["PATCH INTO foo RECORDS ?" {:xt/id id, :c i}]])
                                   (/ (- (System/nanoTime) start-time) 1000000.0))))]
                    (b/log-report worker {:stage "patch-existing-average-ms"
                                          :average-time-ms (/ (reduce + times) (count times))})))}]})
@@ -31,10 +33,10 @@
                                       id-2 (rand-int doc-count)
                                       id-3 (rand-int doc-count)
                                       start-time (System/nanoTime)]
-                                  (xt/execute-tx node [(format "PATCH INTO foo RECORDS {_id: %s, c:'%s'}, {_id: %s, c:'%s'}, {_id: %s, c:'%s'}"
-                                                               id-1 i
-                                                               id-2 i
-                                                               id-3 i)])
+                                  (xt/execute-tx node [["PATCH INTO foo RECORDS ?, ?, ?"
+                                                        {:xt/id id-1, :c i} 
+                                                        {:xt/id id-2, :c i}
+                                                        {:xt/id id-3, :c i}]])
                                   (/ (- (System/nanoTime) start-time) 1000000.0))))]
                    (b/log-report worker {:stage "patch-multiple-average-ms"
                                          :average-time-ms (/ (reduce + times) (count times))})))}]})
@@ -49,7 +51,7 @@
                               (for [i (range patch-count)]
                                 (let [id (str "new-doc-" i)
                                       start-time (System/nanoTime)]
-                                  (xt/execute-tx node [(str "PATCH INTO foo RECORDS {_id: '" id "', c: 'c" i "'}")])
+                                  (xt/execute-tx node [["PATCH INTO foo RECORDS ?" {:xt/id id, :c (str "c" i)}]])
                                   (/ (- (System/nanoTime) start-time) 1000000.0))))]
                    (b/log-report worker {:stage "patch-non-existing-average-ms"
                                          :average-time-ms (/ (reduce + times) (count times))})))}]})
@@ -84,11 +86,12 @@
                                       (doseq [batch-start (range 0 doc-count batch-size)]
                                         (when (zero? (mod batch-start 10000))
                                           (log/info (format "Batch - %s / %s" (/ batch-start batch-size) (/ doc-count batch-size))))
-                                        (xt/submit-tx node (mapv (fn [i]
-                                                                   [:put-docs :foo {:xt/id (+ i batch-start)
-                                                                                    :a (str "a" (+ i batch-start))
-                                                                                    :data (b/random-str worker 100 500)}])
-                                                                 (range 0 batch-size)))))
+                                        (xt/submit-tx node [(into [:put-docs :foo]
+                                                                  (map (fn [i]
+                                                                         {:xt/id (+ i batch-start)
+                                                                          :a (str "a" (+ i batch-start))
+                                                                          :data (b/random-str worker 100 500)}))
+                                                                  (range 0 batch-size))])))
                                     (log/info "Inserted" doc-count "documents"))}])
 
                            [{:t :do
@@ -103,4 +106,12 @@
 
            (patch-existing-docs-stage opts)
            (patch-multiple-existing-docs-stage opts)
+           #_ ; FIXME: #4990
            (patch-non-existing-docs-stage opts)]})
+
+(t/deftest ^:bench patch-benchmark
+  (-> (b/->benchmark :patch
+                      {:doc-count 100000
+                       :patch-count 10
+                       :seed 42})
+      (b/run-benchmark {:node-dir (util/->path (str (System/getProperty "user.home") "/tmp/patch-bench"))})))
