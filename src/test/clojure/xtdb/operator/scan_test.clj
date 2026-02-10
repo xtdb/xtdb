@@ -13,6 +13,7 @@
             [xtdb.vector.writer :as vw])
   (:import java.util.Arrays
            java.util.Date
+           java.util.SortedSet
            (java.util.function IntPredicate)
            xtdb.arrow.RelationReader
            (xtdb.compactor RecencyPartition)))
@@ -391,16 +392,16 @@
 
     (t/is (nil? (scan/selects->iid-set {} vw/empty-args)))
 
-    (let [iid-set (scan/selects->iid-set {"_id" (list '== '_id search-uuid)} vw/empty-args)]
+    (let [^SortedSet iid-set (scan/selects->iid-set {"_id" (list '== '_id search-uuid)} vw/empty-args)]
       (t/is (= 1 (.size iid-set)))
-      (t/is (Arrays/equals (util/uuid->bytes search-uuid) (.first iid-set))))
+      (t/is (Arrays/equals (util/uuid->bytes search-uuid) ^bytes (.first iid-set))))
 
     (t/is (nil? (scan/selects->iid-set {"_id" (list '< '_id search-uuid)} vw/empty-args)))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
-      (let [iid-set (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel)]
+      (let [^SortedSet iid-set (scan/selects->iid-set '{"_id" (== _id ?search_uuid)} args-rel)]
         (t/is (= 1 (.size iid-set)))
-        (t/is (Arrays/equals (util/uuid->bytes search-uuid) (.first iid-set)))))
+        (t/is (Arrays/equals (util/uuid->bytes search-uuid) ^bytes (.first iid-set)))))
 
     (with-open [^RelationReader args-rel (tu/open-args {:search-uuid [#uuid "00000000-0000-0000-0000-000000000000"
                                                                       #uuid "80000000-0000-0000-0000-000000000000"]})]
@@ -473,7 +474,7 @@
       (let [old-selects->iid-set scan/selects->iid-set]
         (with-redefs [scan/selects->iid-set
                       (fn [& args]
-                        (let [iid-set (apply old-selects->iid-set args)]
+                        (let [^SortedSet iid-set (apply old-selects->iid-set args)]
                           (when iid-set
                             (assert (> (.size iid-set) 1) "Should use MultiIidSelector"))
                           iid-set))]

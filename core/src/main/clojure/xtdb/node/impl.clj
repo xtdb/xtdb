@@ -186,7 +186,7 @@
 
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)
-          db (.databaseOrNull db-cat (:default-db opts))]
+          db (.databaseOrNull db-cat ^String (:default-db opts))]
       (await-msg-result this db tx-id)))
 
   (open-sql-query [this query query-opts]
@@ -213,7 +213,7 @@
   xtp/PStatus
   (latest-completed-txs [_]
     (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [db-name]
+         (into {} (map (fn [^String db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
                                        (.getLiveIndex)
@@ -221,7 +221,7 @@
 
   (latest-submitted-msg-ids [_]
     (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [db-name]
+         (into {} (map (fn [^String db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
                                        (.getSourceLog)
@@ -229,7 +229,7 @@
 
   (latest-processed-msg-ids [_]
     (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [db-name]
+         (into {} (map (fn [^String db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
                                        (.getLogProcessor)
