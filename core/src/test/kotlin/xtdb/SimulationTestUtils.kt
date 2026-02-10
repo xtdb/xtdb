@@ -29,7 +29,7 @@ class SimulationTestUtils {
 
         // Clojure interop to get at internal functions
         val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
-        val createJobCalculator = requiringResolve("xtdb.compactor/->JobCalculator")
+        val createJobCalculator = requiringResolve("xtdb.compactor.job-calculator/->JobCalculator")
         val createTrieCatalog = requiringResolve("xtdb.trie-catalog/->TrieCatalog")
 
         val L0TrieKeys = sequence {
