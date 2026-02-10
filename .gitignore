@@ -7,6 +7,10 @@ pom.xml.asc
 *.class
 .nrepl-port
 
+# clj-kondo
+**/.clj-kondo/
+!/.clj-kondo/
+
 # Ignore Gradle project-specific cache directory
 .gradle
 
