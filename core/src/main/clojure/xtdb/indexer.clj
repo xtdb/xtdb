@@ -110,10 +110,7 @@
               doc-start-idx (.getListStartIndex docs-rdr tx-op-idx)
               ^long iid-start-idx (or (some-> iids-rdr (.getListStartIndex tx-op-idx))
                                       Long/MIN_VALUE)]
-          (metrics/with-span tracer "xtdb.transaction.put-docs" {:attributes {:db (.getDbName table)
-                                                                              :schema (.getSchemaName table)
-                                                                              :table (.getTableName table)}}
-            (dotimes [row-idx (.getListCount docs-rdr tx-op-idx)]
+          (dotimes [row-idx (.getListCount docs-rdr tx-op-idx)]
               (let [doc-idx (+ doc-start-idx row-idx)
                     valid-from (if (and row-valid-from-rdr (not (.isNull row-valid-from-rdr doc-idx)))
                                  (.getLong row-valid-from-rdr doc-idx)
@@ -137,7 +134,7 @@
                              (.getBytes iid-rdr (+ iid-start-idx row-idx))
                              (ByteBuffer/wrap (util/->iid (.getObject id-rdr doc-idx))))
                            valid-from valid-to
-                           #(.copyRow doc-copier doc-idx)))))))
+                           #(.copyRow doc-copier doc-idx))))))
 
         nil))))
 
@@ -170,17 +167,14 @@
                                   {:valid-from (time/micros->instant valid-from)
                                    :valid-to (time/micros->instant valid-to)})))
 
-          (metrics/with-span tracer "xtdb.transaction.delete-docs" {:attributes {:db (.getDbName table)
-                                                                                 :schema (.getSchemaName table)
-                                                                                 :table (.getTableName table)}}
-            (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
-              (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-                (with-crash-log crash-logger "error deleting documents"
-                  {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                  {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
+          (let [iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
+            (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+              (with-crash-log crash-logger "error deleting documents"
+                {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
+                {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
 
-                  (.logDelete live-table-tx (.getBytes iid-rdr (+ iids-start-idx iid-idx))
-                              valid-from valid-to))))))
+                (.logDelete live-table-tx (.getBytes iid-rdr (+ iids-start-idx iid-idx))
+                            valid-from valid-to)))))
 
         nil))))
 
@@ -199,15 +193,12 @@
 
           (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
 
-          (metrics/with-span tracer "xtdb.transaction.erase-docs" {:attributes {:db (.getDbName table)
-                                                                                :schema (.getSchemaName table)
-                                                                                :table (.getTableName table)}}
-            (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
-              (with-crash-log crash-logger "error erasing documents"
-                {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                {:live-idx live-idx, :live-table-tx live-table, :tx-ops-rdr tx-ops-rdr}
+          (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
+            (with-crash-log crash-logger "error erasing documents"
+              {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
+              {:live-idx live-idx, :live-table-tx live-table, :tx-ops-rdr tx-ops-rdr}
 
-                (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx)))))))
+              (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))))))
 
         nil))))
 

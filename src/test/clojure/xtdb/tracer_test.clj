@@ -165,8 +165,9 @@
               tx-spans (filter #(= (:name %) "xtdb.transaction") span-tree)
               tx-child-spans (mapv #(first (:children %)) tx-spans)]
           (t/is (= 5 (count tx-spans)))
-          ;; we may expect the patch/delete/erase to differ here if they go through delete-docs/erase-docs indexer
-          (t/is (= ["xtdb.transaction.put-docs"
+          ;; put-docs/delete-docs/erase-docs no longer create child spans
+          ;; patch-docs and sql still do
+          (t/is (= [nil
                     "xtdb.transaction.sql"
                     "xtdb.transaction.patch-docs"
                     "xtdb.transaction.sql"
@@ -175,12 +176,7 @@
           (let [[put-tx update-tx _patch-tx _delete-tx _erase-tx] tx-spans]
             (t/is (= {:name "xtdb.transaction"
                       :attributes {"operations.count" "1"}
-                      :children
-                      [{:name "xtdb.transaction.put-docs"
-                        :attributes {"db" "xtdb"
-                                     "schema" "public"
-                                     "table" "users"},
-                        :children []}]}
+                      :children []}
                      put-tx))
             (t/is (= {:name "xtdb.transaction"
                       :attributes {"operations.count" "1"}
@@ -235,20 +231,5 @@
               tx-span (first (filter #(= (:name %) "xtdb.transaction") span-tree))]
           (t/is (= {:name "xtdb.transaction"
                     :attributes {"operations.count" "3"}
-                    :children
-                    [{:name "xtdb.transaction.put-docs"
-                      :attributes {"db" "xtdb"
-                                   "schema" "public"
-                                   "table" "users"},
-                      :children []}
-                     {:name "xtdb.transaction.put-docs"
-                      :attributes {"db" "xtdb"
-                                   "schema" "public"
-                                   "table" "users2"},
-                      :children []}
-                     {:name "xtdb.transaction.put-docs"
-                      :attributes {"db" "xtdb"
-                                   "schema" "public"
-                                   "table" "users3"},
-                      :children []}]}
+                    :children []}
                    tx-span)))))))
