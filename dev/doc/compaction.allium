@@ -83,8 +83,7 @@ rule CompactionJobCompletes {
         -- Input tries transition to garbage once outputs are live.
 
         -- Eagerly register in trie catalog (idempotent).
-        for each trie in job.output_tries:
-            trie_cat/trie_catalog.addTries(job.table, trie, tries_added.log_timestamp)
+        trie_cat/trie_catalog.addTries(job.output_tries, tries_added.log_timestamp)
 
         job.status = completed
 }

@@ -93,7 +93,7 @@ value MessageId {
 
 value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
-    tx_id: Int
+    tx_id: Long
     system_time: Instant
 }
 
@@ -196,7 +196,7 @@ rule ClientSubmitsTransaction {
 
 rule ProcessTxMessage {
     -- A transaction message arrives from the source log.
-    when: msg: TxMessage appended to source_log
+    when: msg: TxMessage appended to database.source_log
 
     requires: msg.msg_id > log_processor.latest_processed_msg_id
 
@@ -212,7 +212,7 @@ rule ProcessTxMessage {
 }
 
 rule ProcessFlushBlockMessage {
-    when: msg: FlushBlockMessage appended to source_log
+    when: msg: FlushBlockMessage appended to database.source_log
 
     requires: msg.msg_id > log_processor.latest_processed_msg_id
     requires: msg.expected_block_idx == block_catalog.current_block_index
@@ -225,15 +225,14 @@ rule ProcessFlushBlockMessage {
 rule ProcessTriesAddedMessage {
     -- Tries-added messages are idempotent notifications.
     -- They arrive on the replica-log but currently also on the source-log (because both point to the same underlying log).
-    when: msg: TriesAddedMessage appended to source_log
+    when: msg: TriesAddedMessage appended to database.source_log
 
     requires: msg.msg_id > log_processor.latest_processed_msg_id
     requires: msg.storage_version == current_storage_version
     requires: msg.storage_epoch == current_storage_epoch
 
     ensures:
-        for each trie in msg.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie, msg.log_timestamp)
+        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
         log_processor.latest_processed_msg_id = msg.msg_id
 }
 
@@ -249,23 +248,25 @@ rule LeaderFinishesBlock {
     requires: database.mode == read_write
 
     let block_index = (block_catalog.current_block_index ?? -1) + 1
-    let finished = live_index.finishBlock(block_index)
+    -- finishBlock returns a per-table map of finished blocks,
+    -- each containing tries and table metadata.
+    -- See: indexer/LiveIndex.kt (finishBlock), indexer/LiveTable.kt (FinishedBlock)
+    let finished_tables = live_index.finishBlock(block_index)
+    let tries = finished_tables.collectTries()
 
     ensures:
         -- Write tries-added to the replica-log so followers can see them.
-        let tries_added = TriesAddedMessage.created(tries: finished.tries)
+        let tries_added = TriesAddedMessage.created(tries: tries)
         tries_added appended to database.replica_log
 
         -- Register tries locally.
-        for each trie in finished.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie, log_timestamp)
+        trie_cat/trie_catalog.addTries(tries, log_timestamp)
 
         -- Persist block to object store.
         Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
-            latest_processed_msg_id: log_processor.latest_processed_msg_id,
-            tables: finished.tables
+            latest_processed_msg_id: log_processor.latest_processed_msg_id
         )
 
         -- Reset for next block.

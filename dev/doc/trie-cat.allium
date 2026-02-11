@@ -109,9 +109,11 @@ entity TrieCatalog {
     -- Each shard tracks live, nascent and garbage sets independently.
     tries: Map<TableRef, Map<TrieKey, TrieDetails>>
 
-    -- addTries: register new tries, transitioning superseded inputs to garbage.
+    -- addTries(tries, as_of): register new tries, transitioning superseded inputs to garbage.
+    --   Each TrieDetails carries its own table reference.
     -- refresh: rebuild the entire catalog from block metadata in the object store.
     --   Used by read-only followers after a new block appears.
+    -- deleteTries(tries): remove garbage entries from the catalog after file deletion.
 }
 
 ------------------------------------------------------------
@@ -120,11 +122,10 @@ entity TrieCatalog {
 
 rule TriesAdded {
     -- Called by db.allium (block flush, ProcessTriesAddedMessage) and compaction.allium.
-    when: TriesAdded(table, tries, as_of)
+    when: TriesAdded(tries, as_of)
 
     ensures:
-        for each trie in tries:
-            trie_catalog.addTries(table, trie, as_of)
+        trie_catalog.addTries(tries, as_of)
 }
 
 rule FollowerRefreshes {

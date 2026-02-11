@@ -59,7 +59,8 @@ rule GarbageCollectorRuns {
 
     ensures:
         for each trie in eligible:
-            ObjectStore.delete(trie.metaFilePath)
-            ObjectStore.delete(trie.dataFilePath)
-        trie_cat/trie_catalog.tries = trie_cat/trie_catalog.tries.remove(eligible)
+            -- Paths derived from trie.table and trie.trie_key; see trie/Trie.kt
+            ObjectStore.delete(metaFilePath(trie.table, trie.trie_key))
+            ObjectStore.delete(dataFilePath(trie.table, trie.trie_key))
+        trie_cat/trie_catalog.deleteTries(eligible)
 }
