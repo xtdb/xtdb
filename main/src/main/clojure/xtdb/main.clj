@@ -83,6 +83,7 @@
         !shutdown? (promise)]
     (.addShutdownHook (Runtime/getRuntime)
                       (Thread. (fn []
+                                 (log/info "Stopping node...")
                                  (let [shutdown-ms 10000]
                                    (deliver !shutdown? true)
                                    (.join main-thread shutdown-ms)
