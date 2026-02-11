@@ -76,7 +76,7 @@ interface Compactor : AutoCloseable {
                         private val al = allocator.openChildAllocator("compactor")
                             .also { meterRegistry?.register(it) }
 
-                        private val log = dbStorage.projectionLog
+                        private val log = dbStorage.replicaLog
                         private val bp = dbStorage.bufferPool
                         private val mm = dbStorage.metadataManager
 

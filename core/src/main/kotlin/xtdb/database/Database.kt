@@ -52,7 +52,7 @@ data class Database(
     val liveIndex: LiveIndex get() = state.liveIndex
 
     val sourceLog: Log get() = storage.sourceLog
-    val projectionLog: Log get() = storage.projectionLog
+    val replicaLog: Log get() = storage.replicaLog
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 

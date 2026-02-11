@@ -170,7 +170,7 @@
       :factory factory
       :mode mode}})
 
-(defmethod ig/expand-key :xtdb/projection-log [k {:keys [base factory mode]}]
+(defmethod ig/expand-key :xtdb/replica-log [k {:keys [base factory mode]}]
   {k {:base base
       :block-cat (ig/ref :xtdb/block-catalog)
       :factory factory
@@ -212,15 +212,15 @@
 (defmethod ig/halt-key! :xtdb/source-log [_ ^Log log]
   (util/close log))
 
-(defmethod ig/init-key :xtdb/projection-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
-                                                 {:keys [log-clusters]} :base}]
+(defmethod ig/init-key :xtdb/replica-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
+                                              {:keys [log-clusters]} :base}]
   (let [log (if (= mode Database$Mode/READ_ONLY)
               (.openReadOnlyLog factory log-clusters)
               (.openLog factory log-clusters))]
     (validate-offsets log (.getLatestCompletedTx block-cat))
     log))
 
-(defmethod ig/halt-key! :xtdb/projection-log [_ ^Log log]
+(defmethod ig/halt-key! :xtdb/replica-log [_ ^Log log]
   (util/close log))
 
 (defn- ->TxOps [tx-ops]

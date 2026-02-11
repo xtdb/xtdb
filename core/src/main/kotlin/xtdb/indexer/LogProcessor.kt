@@ -73,8 +73,8 @@ class LogProcessor(
     }
 
     // LogProcessor subscribes to the source-log, which contains transaction messages.
-    // For now, both source-log and projection-log point to the same underlying log,
-    // so we still receive TriesAdded messages here even though they're written to projection-log.
+    // For now, both source-log and replica-log point to the same underlying log,
+    // so we still receive TriesAdded messages here even though they're written to replica-log.
     // This is intentional for the transition period.
     private val log = dbStorage.sourceLog
     private val epoch = log.epoch
@@ -310,7 +310,7 @@ class LogProcessor(
 
         val finishedBlocks = liveIndex.finishBlock(blockIdx)
 
-        // Build TrieDetails and append to projection-log
+        // Build TrieDetails and append to replica-log
         val addedTries = finishedBlocks.map { (table, fb) ->
             TrieDetails.newBuilder()
                 .setTableName(table.schemaAndTable)
@@ -319,7 +319,7 @@ class LogProcessor(
                 .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
                 .build()
         }
-        dbStorage.projectionLog.appendMessage(
+        dbStorage.replicaLog.appendMessage(
             Message.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
         )
 
