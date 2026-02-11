@@ -69,6 +69,12 @@
                                           (or (when-let [ingestion-error (get-ingestion-error (.getLogProcessor db))]
                                                 {:status 503, :body (str "Ingestion error - " ingestion-error)})
 
+                                              (deref (future
+                                                       (-> db .getLogProcessor .probeLiveness)
+                                                       false)
+                                                     15000
+                                                     {:status 503, :body "LogProcessor is not responding"})
+
                                               (let [block-lag (->block-lag db)
                                                     block-lag-healthy? (<= block-lag 5)]
                                                 (-> (if block-lag-healthy?

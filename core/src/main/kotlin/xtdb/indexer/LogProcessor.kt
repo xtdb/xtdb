@@ -2,8 +2,8 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
@@ -38,6 +38,7 @@ import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
+import xtdb.util.trace
 import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
@@ -45,6 +46,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.concurrent.Executors
 import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = LogProcessor::class.logger
@@ -154,18 +156,25 @@ class LogProcessor(
 
     private val flusher = Flusher(flushTimeout, blockCatalog)
 
-    override fun processRecords(records: List<Log.Record>) = runBlocking {
+    // TODO: daemon, or shutdown executor on close?
+    private val processingExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "log-processor").apply { isDaemon = true }
+    }
+
+    private val processingDispatcher = processingExecutor.asCoroutineDispatcher()
+
+    override fun processRecords(records: List<Log.Record>) {
         // Don't send FlushBlock messages in read-only mode - we can't write to the log
         if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            val offset = log.appendMessage(flushMessage).await().logOffset
+            val offset = log.appendMessage(flushMessage).get().logOffset
             flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
-        records.forEach { record ->
+        records.forEach { record -> runBlocking(processingDispatcher) {
             val msgId = offsetToMsgId(epoch, record.logOffset)
             var toFinishBlock = false
-            LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
+            LOG.trace("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
             try {
                 val res = when (val msg = record.message) {
@@ -300,8 +309,8 @@ class LogProcessor(
                 throw CancellationException(e)
             }
 
-            LOG.debug("Processed message $msgId")
-        }
+            LOG.trace("Processed message $msgId")
+        }}
     }
 
     fun finishBlock(systemTime: Instant) {
@@ -411,4 +420,8 @@ class LogProcessor(
 
     @JvmOverloads
     fun awaitAsync(msgId: MessageId = latestSubmittedMsgId) = watchers.awaitAsync(msgId)
+
+    fun probeLiveness() = runBlocking(processingDispatcher) {
+        LOG.debug("Liveness probe")
+    }
 }
