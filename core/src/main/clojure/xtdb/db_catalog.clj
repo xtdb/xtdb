@@ -64,8 +64,9 @@
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/source-log (assoc opts :factory (.getLog db-config) :mode mode)
-         :xtdb/replica-log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/source-log opts
+         :xtdb/replica-log opts
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
          :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
          :xtdb.indexer/crash-logger opts

@@ -164,17 +164,17 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-(defmethod ig/expand-key :xtdb/source-log [k {:keys [base factory mode]}]
+(defmethod ig/expand-key :xtdb/log [k {:keys [base factory mode]}]
   {k {:base base
       :block-cat (ig/ref :xtdb/block-catalog)
       :factory factory
       :mode mode}})
 
-(defmethod ig/expand-key :xtdb/replica-log [k {:keys [base factory mode]}]
-  {k {:base base
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :factory factory
-      :mode mode}})
+(defmethod ig/expand-key :xtdb/source-log [k _]
+  {k (ig/ref :xtdb/log)})
+
+(defmethod ig/expand-key :xtdb/replica-log [k _]
+  {k (ig/ref :xtdb/log)})
 
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
@@ -201,27 +201,20 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/source-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
-                                            {:keys [log-clusters]} :base}]
+(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
+                                      {:keys [log-clusters]} :base}]
   (let [log (if (= mode Database$Mode/READ_ONLY)
               (.openReadOnlyLog factory log-clusters)
               (.openLog factory log-clusters))]
     (validate-offsets log (.getLatestCompletedTx block-cat))
     log))
 
-(defmethod ig/halt-key! :xtdb/source-log [_ ^Log log]
+(defmethod ig/halt-key! :xtdb/log [_ ^Log log]
   (util/close log))
 
-(defmethod ig/init-key :xtdb/replica-log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
-                                              {:keys [log-clusters]} :base}]
-  (let [log (if (= mode Database$Mode/READ_ONLY)
-              (.openReadOnlyLog factory log-clusters)
-              (.openLog factory log-clusters))]
-    (validate-offsets log (.getLatestCompletedTx block-cat))
-    log))
+(defmethod ig/init-key :xtdb/source-log [_ log] log)
 
-(defmethod ig/halt-key! :xtdb/replica-log [_ ^Log log]
-  (util/close log))
+(defmethod ig/init-key :xtdb/replica-log [_ log] log)
 
 (defn- ->TxOps [tx-ops]
   (->> tx-ops
