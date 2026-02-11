@@ -129,6 +129,7 @@ When invoked:
 
 ## Important Notes
 
+- Do NOT run multiple `./gradlew` invocations concurrently — this causes Kotlin cache corruption. If you need to run multiple test sets, combine them in a single `./gradlew` call (e.g. `./gradlew :test --tests '*foo*' --tests '*bar*'`), which parallelises internally.
 - NEVER re-run tests with different flags to get more detail - read the HTML reports instead (per AGENTS.md)
 - For Clojure namespaces in commands, replace dashes with underscores (e.g., `api_test` not `api-test`)
 - Test reports accumulate - always check timestamps to ensure you're reading current results
