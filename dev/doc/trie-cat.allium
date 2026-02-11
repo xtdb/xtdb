@@ -135,11 +135,13 @@ rule FollowerRefreshes {
 
 surface ScanOperatorAccess {
     -- The scan operator reads the trie catalog to determine which files to read for a query.
+    -- Only live tries are used; nascent tries are excluded from query execution.
+    -- See: operator/scan.clj (current-tries)
 
     context table: TableRef
 
     exposes:
-        trie_catalog.listLiveAndNascentTrieKeys(table)
+        trie_catalog.listLiveTrieKeys(table)
         trie_catalog.getPartitions(table)
 }
 
