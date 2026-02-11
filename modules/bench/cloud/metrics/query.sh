@@ -3,7 +3,7 @@
 # Usage: ./query.sh <command> <query-type> <benchmark> [terraform.tfvars]
 #   command:    render | run
 #   query-type: anomaly | dashboard
-#   benchmark:  tpch | yakbench | readings | auctionmark | tsbs-iot
+#   benchmark:  tpch | yakbench | readings | auctionmark | clickbench | tsbs-iot | ...
 #
 # Examples:
 #   ./query.sh render anomaly tpch
@@ -24,7 +24,8 @@ usage() {
   echo "  command:    render | run" >&2
   echo "  query-type: anomaly | dashboard | queries-cold | queries-hot |" >&2
   echo "              profile-global | profile-max-user | profile-mean-user" >&2
-  echo "  benchmark:  tpch | yakbench | readings | auctionmark | tsbs-iot" >&2
+  echo "  benchmark:  tpch | yakbench | readings | auctionmark | clickbench |" >&2
+  echo "              tsbs-iot | ingest-tx-overhead | patch | products | ts-devices" >&2
   echo "" >&2
   echo "Examples:" >&2
   echo "  $0 render anomaly tpch          # Output the KQL query" >&2
@@ -69,8 +70,9 @@ if [[ "$QUERY_TYPE" == "profile-global" || "$QUERY_TYPE" == "profile-max-user" |
   usage
 fi
 
-if [[ "$BENCHMARK" != "tpch" && "$BENCHMARK" != "yakbench" && "$BENCHMARK" != "readings" && "$BENCHMARK" != "auctionmark" && "$BENCHMARK" != "tsbs-iot" ]]; then
-  echo "Error: benchmark must be 'tpch', 'yakbench', 'readings', 'auctionmark', or 'tsbs-iot'" >&2
+VALID_BENCHMARKS="tpch yakbench readings auctionmark clickbench tsbs-iot ingest-tx-overhead patch products ts-devices"
+if ! echo "$VALID_BENCHMARKS" | grep -qw "$BENCHMARK"; then
+  echo "Error: benchmark must be one of: $VALID_BENCHMARKS" >&2
   usage
 fi
 
@@ -103,6 +105,8 @@ ANOMALY_BASELINE_N=$(get_var "anomaly_baseline_n" "30")
 ANOMALY_BASELINE_N_TIMES_20=$((ANOMALY_BASELINE_N * 20))
 ANOMALY_SIGMA=$(get_var "anomaly_sigma" "2")
 ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD=$(get_var "anomaly_new_normal_relative_threshold" "0.05")
+ANOMALY_REPO=$(get_var "anomaly_repo" "xtdb/xtdb")
+ANOMALY_BRANCH=$(get_var "anomaly_branch" "main")
 TPCH_ANOMALY_SCALE_FACTOR=$(get_var "tpch_anomaly_scale_factor" "1.0")
 
 # Benchmark-specific configuration (mirrors local.benchmarks in main.tf)
@@ -147,6 +151,16 @@ case "$BENCHMARK" in
     METRIC_PATH="'throughput'"
     METRIC_NAME="throughput"
     ;;
+  clickbench)
+    BENCH_NAME="Clickbench Hits"
+    PARAM_NAME="benchmark"
+    PARAM_PATH="benchmark"
+    PARAM_VALUE="Clickbench Hits"
+    PARAM_VAR=""
+    PARAM_IS_STRING=true
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
+    ;;
   tsbs-iot)
     BENCH_NAME="TSBS IoT"
     PARAM_NAME="devices"
@@ -154,6 +168,46 @@ case "$BENCHMARK" in
     PARAM_VALUE=$(get_var "tsbs_iot_anomaly_devices" "2000")
     PARAM_VAR="tsbs_iot_anomaly_devices"
     PARAM_IS_STRING=false
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
+    ;;
+  ingest-tx-overhead)
+    BENCH_NAME="Ingest batch vs individual"
+    PARAM_NAME="doc-count"
+    PARAM_PATH="parameters['doc-count']"
+    PARAM_VALUE=$(get_var "ingest_tx_overhead_anomaly_doc_count" "100000")
+    PARAM_VAR="ingest_tx_overhead_anomaly_doc_count"
+    PARAM_IS_STRING=false
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
+    ;;
+  patch)
+    BENCH_NAME="PATCH Performance Benchmark"
+    PARAM_NAME="doc-count"
+    PARAM_PATH="parameters['doc-count']"
+    PARAM_VALUE=$(get_var "patch_anomaly_doc_count" "500000")
+    PARAM_VAR="patch_anomaly_doc_count"
+    PARAM_IS_STRING=false
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
+    ;;
+  products)
+    BENCH_NAME="Products"
+    PARAM_NAME="benchmark"
+    PARAM_PATH="benchmark"
+    PARAM_VALUE="Products"
+    PARAM_VAR=""
+    PARAM_IS_STRING=true
+    METRIC_PATH="'time-taken-ms'"
+    METRIC_NAME="duration_minutes"
+    ;;
+  ts-devices)
+    BENCH_NAME="TS Devices Ingest"
+    PARAM_NAME="size"
+    PARAM_PATH="parameters['size']"
+    PARAM_VALUE=$(get_var "ts_devices_anomaly_size" "small")
+    PARAM_VAR="ts_devices_anomaly_size"
+    PARAM_IS_STRING=true
     METRIC_PATH="'time-taken-ms'"
     METRIC_NAME="duration_minutes"
     ;;
@@ -245,6 +299,14 @@ render_query() {
   local ESCAPED_FILTER_EXPR
   ESCAPED_FILTER_EXPR=$(printf '%s' "$PARAM_FILTER_EXPR" | sed 's/[&/\]/\\&/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
+  # Pre-compute the Terraform ternary: ${bench.metric_name == "duration_minutes" ? "..." : "..."}
+  local METRIC_EXTEND
+  if [[ "$METRIC_NAME" == "duration_minutes" ]]; then
+    METRIC_EXTEND="| extend duration_minutes = todouble(duration_ms) / 60000"
+  else
+    METRIC_EXTEND="| extend ${METRIC_NAME} = duration_ms"
+  fi
+
   echo "$QUERY_TEMPLATE" | \
     sed "s/^.\{${MIN_INDENT}\}//" | \
     sed "s/\${var.anomaly_baseline_n}/${ANOMALY_BASELINE_N}/g" | \
@@ -252,6 +314,8 @@ render_query() {
     sed "s/\${var.tpch_anomaly_scale_factor}/${TPCH_ANOMALY_SCALE_FACTOR}/g" | \
     sed "s/\${var.anomaly_sigma}/${ANOMALY_SIGMA}/g" | \
     sed "s/\${var.anomaly_new_normal_relative_threshold}/${ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD}/g" | \
+    sed "s/\${var.anomaly_repo}/${ANOMALY_REPO//\//\\/}/g" | \
+    sed "s/\${var.anomaly_branch}/${ANOMALY_BRANCH}/g" | \
     sed "s/\${var.${PARAM_VAR}}/${PARAM_VALUE}/g" | \
     sed "s/\${each.value.param_name}/${PARAM_NAME}/g" | \
     sed "s/\${each.value.param_path}/${PARAM_PATH}/g" | \
@@ -264,7 +328,16 @@ render_query() {
     sed "s/\${bench.metric_path}/${METRIC_PATH}/g" | \
     sed "s/\${bench.metric_name}/${METRIC_NAME}/g" | \
     sed "s/\${bench.name}/${BENCH_NAME}/g" | \
-    sed "s/\${local.param_filter_expr\[each.key\]}/${ESCAPED_FILTER_EXPR}/g"
+    sed "s/\${local.param_filter_expr\[each.key\]}/${ESCAPED_FILTER_EXPR}/g" | \
+    awk -v ext="$METRIC_EXTEND" '{
+      if ($0 ~ /\$\{bench\.metric_name == "duration_minutes"/) {
+        match($0, /^[[:space:]]*/);
+        ws = substr($0, RSTART, RLENGTH);
+        print ws ext;
+      } else {
+        print;
+      }
+    }'
 }
 
 # Execute based on command
