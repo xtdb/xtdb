@@ -208,7 +208,9 @@
 
 (defn wrap-stage [f {:keys [stage setup?]}]
   (fn instrumented-stage [worker]
-    (log/info "Starting stage:" stage (when setup? "(setup)"))
+    (if setup?
+      (log/info "Starting stage:" stage "(setup)")
+      (log/info "Starting stage:" stage))
     (let [start-ms (System/currentTimeMillis)]
       (f worker)
       (let [elapsed-ms (- (System/currentTimeMillis) start-ms)]

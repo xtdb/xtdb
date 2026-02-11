@@ -109,6 +109,9 @@
                      stage-lines)
         {:keys [benchmark-total-time-ms benchmark-summary]} (parse-benchmark-summary lines)]
     {:all-stages stages
+     :query-stages (filterv (fn [stage]
+                              (str/starts-with? (:stage stage) "query-"))
+                            stages)
      :ingest-stages (filterv #(contains? #{"submit-docs" "sync" "finish-block" "compact" "download"} (:stage %)) stages)
      :benchmark-total-time-ms benchmark-total-time-ms
      :benchmark-summary benchmark-summary}))
