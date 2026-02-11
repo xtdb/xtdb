@@ -1,0 +1,191 @@
+-- compaction.allium
+--
+-- Merges small tries into larger ones for better query performance.
+-- Runs asynchronously, triggered after block flushes.
+-- The consumer of this work is the scan operator.
+-- It reads the trie catalog to understand which files it has to read for a given query.
+--
+-- This assumes understanding of the "Building a Bitemporal Index" trilogy:
+-- https://xtdb.com/blog/building-a-bitemp-index-1-taxonomy
+--
+-- Key design constraints:
+--
+--   Coordination-free: nodes compact collaboratively without coordination.
+--   Both job selection and output must be deterministic.
+--   Two nodes seeing the same trie catalog must choose the same jobs and produce identical output files.
+--   Nodes may be behind others in terms of what files they know to be available.
+--   All possible intermediate states must be valid.
+--
+--   Minimal re-work: jobs should be fine-grained enough that nodes will likely not choose the same job.
+--
+--   Consistent file sizes: output files target ~100MB.
+--   The scan operator doesn't have to handle files of wildly different sizes.
+--
+--   Clean replacement: once the output file has been written, the input files no longer need to be read.
+--   We avoid needing to figure out which _parts_ of a file have been compacted.
+--
+-- See: compactor/Compactor.kt
+
+use "./db.allium" as db
+use "./trie-cat.allium" as trie_cat
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity ObjectStore {
+    -- Durable key-value storage for blocks, tries, table-blocks.
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+-- CompactionJob is ephemeral (coroutine-scoped, not persisted).
+
+entity CompactionJob {
+    table: trie_cat/TableRef
+    input_trie_keys: List<trie_cat/TrieKey>
+    output_trie_key: trie_cat/TrieKey
+    status: pending | running | completed | failed
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+rule CompactorWakesUp {
+    when: db/CompactorSignalled()
+
+    let jobs = available_jobs(trie_cat/trie_catalog)
+
+    ensures:
+        for each job in jobs:
+            CompactionJob.created(
+                table: job.table,
+                input_trie_keys: job.trie_keys,
+                output_trie_key: job.output_trie_key,
+                status: running
+            )
+            StartCompactionJob(job)
+}
+
+rule CompactionJobCompletes {
+    when: StartCompactionJob(job)
+
+    ensures:
+        -- Write merged tries to object store.
+        -- Data file uploaded first; meta file presence is the completion marker.
+        -- Append tries-added to replica-log.
+        let tries_added = db/TriesAddedMessage.created(tries: job.output_tries)
+        tries_added appended to database.replica_log
+
+        -- Output tries are nascent until the full job group completes.
+        -- Input tries transition to garbage once outputs are live.
+
+        -- Eagerly register in trie catalog (idempotent).
+        for each trie in job.output_tries:
+            trie_cat/trie_catalog.addTries(job.table, trie)
+
+        job.status = completed
+}
+
+------------------------------------------------------------
+-- Job Selection Strategy
+------------------------------------------------------------
+
+-- The strategy is staged.
+-- Each stage has different trigger conditions:
+--
+-- == L0 → L1C + L1H (immediately) ==
+--
+-- As soon as an L0 file is available:
+--   Inputs:  the L0 file + a partial L1C file (if one exists, i.e. < 100MB)
+--   Outputs: a new L1C for events with recency = ∞
+--            0..N L1H files for events with finite recency, per weekly partition
+--
+-- This is where the current/historical split happens.
+-- Events are routed by their recency as determined during bitemporal resolution.
+--
+-- The L1H files are nascent until the corresponding L1C is uploaded.
+-- At that point the previous L1C and the L0 are garbage.
+--
+-- In practice:
+--   'User profile' data has little churn → L1C fills up, compacts to L2C.
+--   'Readings' data with user-specified valid-to → L1C stays empty.
+--
+-- == L1H → L2H (per recency partition) ==
+--
+-- Triggered when a recency partition has 4 available L1H files,
+-- or when the total size of partial L2H + L1H files exceeds 100MB.
+--   Inputs:  partial L2H (if exists) + up to 4 L1H files (3 if partial L2H)
+--   Output:  a new L2H superseding the partial and the inputs
+--
+-- == L1C → L2C (when full) ==
+--
+-- Triggered when 4 full (> 100MB) L1C files exist.
+--   Inputs:  the 4 L1C files
+--   Outputs: 4 L2C files, one per IID partition (2-bit segments)
+--
+-- The L2C files are nascent until all 4 partitions are uploaded.
+-- Once the fourth is uploaded, all 4 L2C become live, all 4 L1C become garbage.
+--
+-- == LnC → L(n+1)C / LnH → L(n+1)H (general case) ==
+--
+-- 4 files in the same partition → next level.
+-- L3C partitioned by 2 IID segments (e.g. p13), L4C by 3, etc.
+-- Same pattern for historical side.
+-- No 'is full' check needed at L2+ — files are assumed to stay ~100MB.
+
+deferred available_jobs             -- compaction job selection algorithm
+
+------------------------------------------------------------
+-- Compaction Algorithm
+------------------------------------------------------------
+
+-- See: compactor/Compactor.kt
+--
+-- Each compaction job yields one or more output segments.
+-- Each output segment consists of a data file and a meta file.
+--
+-- Writing the data file has two stages.
+-- Intermediate results are written to disk between stages to bound memory usage.
+--
+-- == Stage 1: Merge pages to disk ==
+--
+-- Similarly to the scan operator, we calculate a list of merge tasks.
+-- For each merge task, we merge-sort the input pages by IID and system-time, applying bitemporal resolution.
+--
+-- The behaviour differs depending on the compaction type:
+--   L0 → L1C/L1H: recency is calculated for each event through bitemporal resolution.
+--     Events with recency = ∞ go to the current output file.
+--     Events with finite recency are routed to historical output files, partitioned into weekly buckets.
+--   All other compactions: recency from the input file's trie key is preserved into a single output file.
+--
+-- At the end of each merge task (i.e. for each IID path prefix), accumulated rows are flushed to a temporary file on disk.
+-- This bounds the memory usage of the compactor.
+--
+-- == Stage 2: Normalise page sizes ==
+--
+-- We read the temporary files and write the final output files, normalising page sizes along the way.
+-- The input is a tree structure representing the pages written during stage 1, along with their row counts.
+--
+-- For each node in the tree:
+--   If a leaf has more rows than the page size: split by re-partitioning rows by IID.
+--     This recurses until each leaf fits within the page size limit.
+--   If a branch has fewer rows than the page size: coalesce all descendant leaves into a single page.
+--
+-- This ensures output pages are consistently sized (~1024 rows), regardless of input distribution.
+--
+-- == Upload ==
+--
+-- We construct the metadata file, then upload both to the object store.
+-- The data file is uploaded first.
+-- The presence of the meta file is the marker that the job is completed.
+-- We then submit a tries-added message to the log of the primary database.
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open_question "Should compaction have back-pressure when too many jobs are queued?"

@@ -1,0 +1,58 @@
+-- gc.allium
+--
+-- Garbage collection of superseded tries.
+-- Runs periodically, deleting data and meta files from the object store
+-- once a trie has been fully replaced by compaction output.
+--
+-- Tries transition to garbage during addTries (see trie-cat.allium), not here.
+-- This spec handles the physical cleanup: deleting files and removing catalog entries.
+--
+-- See: garbage_collector/GarbageCollector.kt, trie_catalog.clj (garbage-tries, garbage-fn)
+
+use "./trie-cat.allium" as trie_cat
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity ObjectStore {
+    -- Durable key-value storage for blocks, tries, table-blocks.
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+default blocks_to_keep = 2
+default garbage_lifetime = PT0S
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- A trie is eligible for deletion when:
+--   1. Its state is garbage (set by addTries when a new trie supersedes it).
+--   2. Its level is not 0 (L0 files are never garbage-collected; they are ephemeral).
+--   3. Its garbage_as_of is <= the as_of threshold.
+--
+-- The as_of threshold provides a grace period:
+--   as_of = system_time_of(block[latest - blocks_to_keep]) - garbage_lifetime
+-- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
+
+rule GarbageCollectorRuns {
+    -- See: garbage_collector/GarbageCollector.kt
+    when: GarbageCollectionScheduled()
+
+    let as_of = latest_block_system_time(blocks_to_keep) - garbage_lifetime
+
+    let garbage = trie_cat/trie_catalog.tries.values.flatten
+        .filter(t => t.trie_state == garbage
+                  and t.trie_key.level != 0
+                  and t.garbage_as_of <= as_of)
+
+    ensures:
+        for each trie in garbage:
+            ObjectStore.delete(trie.metaFilePath)
+            ObjectStore.delete(trie.dataFilePath)
+        trie_cat/trie_catalog.tries = trie_cat/trie_catalog.tries.remove(garbage)
+}

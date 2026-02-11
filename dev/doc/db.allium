@@ -1,0 +1,346 @@
+-- db.allium
+--
+-- The processing model of a single database within an XTDB node:
+-- transaction submission → log processing → block flushing → query.
+-- Compaction is specified separately: see compaction.allium.
+--
+-- Scope: one database (e.g. "xtdb" or a secondary).
+-- External: the multi-database orchestration layer (attach/detach).
+
+use "./trie-cat.allium" as trie_cat
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+-- Truly external: managed by the multi-database layer or the environment.
+
+external entity Client {
+    -- The party submitting transactions.
+}
+
+external entity Log {
+    -- An ordered, append-only message stream.
+    -- Two instances per database: source-log and replica-log.
+    -- Currently they MAY point to the same underlying log.
+    -- See: api/log/Log.kt
+}
+
+external entity ObjectStore {
+    -- Durable key-value storage for blocks, tries, table-blocks.
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+-- Behaviourally-relevant fields only; see linked sources for full definitions.
+
+entity LiveIndex {
+    -- See: indexer/LiveIndex.kt
+    latest_completed_tx: TransactionKey?
+    is_full: Boolean
+
+    -- Derived
+    has_data: latest_completed_tx != null
+}
+
+entity BlockCatalog {
+    -- See: catalog/BlockCatalog.kt
+}
+
+entity TableCatalog {
+    -- See: catalog/TableCatalog.kt
+}
+
+------------------------------------------------------------
+-- Values
+------------------------------------------------------------
+
+value MessageId {
+    -- Epoch + offset packed into a long.
+    -- See: util/MsgIdUtil.kt
+    epoch: Int
+    offset: Int
+}
+
+value TransactionKey {
+    -- See: block/proto/block.proto (TxKey)
+    tx_id: Int
+    system_time: Instant
+}
+
+------------------------------------------------------------
+-- Log Messages
+------------------------------------------------------------
+
+-- The LogProcessor dispatches on message kind.
+-- See: log/proto/log.proto (LogMessage oneof)
+
+entity Message {
+    msg_id: MessageId
+    log_timestamp: Instant
+    kind: TxMessage | FlushBlockMessage | TriesAddedMessage | AttachDbMessage | DetachDbMessage
+}
+
+variant TxMessage : Message {
+    -- Client-submitted transaction operations.
+    -- See: tx/TxWriter.kt, api/log/Log.kt (Log$Message$Tx) — serialised via TxWriter, not proto.
+    system_time: Instant?
+    default_tz: String?
+    user: String?
+}
+
+variant FlushBlockMessage : Message {
+    -- Request to finish the current block.
+    -- See: log/proto/log.proto (FlushBlock)
+    expected_block_index: Int?
+}
+
+variant TriesAddedMessage : Message {
+    -- Notification that new tries exist (from block flush or compaction).
+    -- See: log/proto/log.proto (TriesAdded)
+    storage_version: Int
+    storage_epoch: Int
+    tries: List<trie_cat/TrieDetails>
+}
+
+variant AttachDbMessage : Message {
+    -- See: log/proto/log.proto (AttachDatabase)
+    db_name: String
+}
+
+variant DetachDbMessage : Message {
+    -- See: log/proto/log.proto (DetachDatabase)
+    db_name: String
+}
+
+------------------------------------------------------------
+-- Defaults
+------------------------------------------------------------
+
+default flush_timeout = PT0.5S
+default max_block_rows = 102400
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+-- == Transaction Submission ==
+
+rule ClientSubmitsTransaction {
+    when: ClientSubmitsTx(client, database, tx_ops, opts)
+
+    requires: database.mode == read_write
+
+    ensures:
+        let msg = TxMessage.created(
+            system_time: opts.system_time,
+            default_tz: opts.default_tz,
+            user: opts.user
+        )
+        msg appended to database.source_log
+}
+
+
+-- == Log Processing ==
+--
+-- LogProcessor subscribes to the source-log and processes messages sequentially.
+-- This is the heart of the system.
+
+rule ProcessTxMessage {
+    -- A transaction message arrives from the source log.
+    when: msg: TxMessage appended to source_log
+
+    requires: msg.msg_id > latest_processed_msg_id
+
+    ensures:
+        -- The indexer resolves and applies the transaction.
+        -- Result is either committed or aborted.
+        let result = IndexTransaction(msg)
+        latest_processed_msg_id = msg.msg_id
+
+        -- If the live index is now full, a block flush is needed.
+        if live_index.is_full:
+            BlockFlushNeeded(msg.log_timestamp)
+}
+
+rule ProcessFlushBlockMessage {
+    when: msg: FlushBlockMessage appended to source_log
+
+    requires: msg.msg_id > latest_processed_msg_id
+    requires: msg.expected_block_index == current_block_index
+
+    ensures:
+        latest_processed_msg_id = msg.msg_id
+        BlockFlushNeeded(msg.log_timestamp)
+}
+
+rule ProcessTriesAddedMessage {
+    -- Tries-added messages are idempotent notifications.
+    -- They arrive on the replica-log but currently also on the source-log (because both point to the same underlying log).
+    when: msg: TriesAddedMessage appended to source_log
+
+    requires: msg.msg_id > latest_processed_msg_id
+    requires: msg.storage_version == current_storage_version
+    requires: msg.storage_epoch == current_storage_epoch
+
+    ensures:
+        for each trie in msg.tries:
+            trie_cat/trie_catalog.addTries(trie.table, trie)
+        latest_processed_msg_id = msg.msg_id
+}
+
+
+-- == Block Flushing ==
+--
+-- Two paths: the leader writes blocks directly;
+-- read-only nodes wait for blocks to appear from the primary.
+
+rule LeaderFinishesBlock {
+    when: BlockFlushNeeded(system_time)
+
+    requires: database.mode == read_write
+
+    let block_index = (current_block_index ?? -1) + 1
+    let finished = live_index.finishBlock(block_index)
+
+    ensures:
+        -- Write tries-added to the replica-log so followers can see them.
+        let tries_added = TriesAddedMessage.created(tries: finished.tries)
+        tries_added appended to database.replica_log
+
+        -- Register tries locally.
+        for each trie in finished.tries:
+            trie_cat/trie_catalog.addTries(trie.table, trie)
+
+        -- Persist block to object store.
+        Block.created(
+            block_index: block_index,
+            latest_completed_tx: live_index.latest_completed_tx,
+            latest_processed_msg_id: latest_processed_msg_id,
+            tables: finished.tables
+        )
+
+        -- Reset for next block.
+        live_index.nextBlock()
+
+        -- Wake up compaction.
+        CompactorSignalled()
+}
+
+rule FollowerWaitsForBlock {
+    when: BlockFlushNeeded(system_time)
+
+    requires: database.mode == read_only
+
+    let expected_block_index = (current_block_index ?? -1) + 1
+
+    -- Poll until a matching block appears in the object store.
+    ensures:
+        let block = ObjectStore.blockAppears(expected_block_index)
+
+        requires: block.latest_processed_msg_id == latest_processed_msg_id
+
+        -- Synchronise local state from the block.
+        block_catalog.refresh(block)
+        table_catalog.refresh()
+        trie_cat/trie_catalog.refresh()
+        live_index.nextBlock()
+}
+
+
+-- == Flush Timeout ==
+--
+-- If transactions have been accumulating without a block flush,
+-- the leader sends itself a FlushBlock message.
+
+rule FlushTimeoutFires {
+    when: last_flush_check + flush_timeout <= now
+
+    requires: database.mode == read_write
+    requires: live_index.has_data
+    requires: no_new_block_since_last_check
+
+    ensures:
+        FlushBlockMessage.created(
+            expected_block_index: current_block_index
+        ) appended to database.source_log
+}
+
+
+-- == Query Serving ==
+
+rule ClientOpensSnapshot {
+    when: ClientOpensSnapshot(client, database)
+
+    ensures:
+        -- A snapshot sees all committed transactions up to this point.
+        -- The snapshot is a consistent read of live index + block data.
+        Snapshot.created(
+            as_of: live_index.latest_completed_tx
+        )
+}
+
+
+-- == Error Handling ==
+
+rule ProcessingErrorHaltsNode {
+    -- Any unrecoverable error during log processing is fatal.
+    -- The node is marked unhealthy; orchestration should restart it.
+    when: ProcessingError(msg_id, error)
+
+    ensures:
+        -- All pending watchers are notified of the error.
+        -- LogProcessor stops permanently.
+        -- No partial state corruption: either a message is fully processed or not at all.
+        NodeMarkedUnhealthy()
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+actor Client {
+    identified_by: external session
+}
+
+surface TransactionSubmission {
+    for caller: Client
+
+    context db: Database
+
+    provides:
+        ClientSubmitsTx(caller, db, tx_ops, opts)
+            when db.mode == read_write
+
+    invariant: OrderedProcessing
+        -- Transactions are processed in the order they appear in the source log, not the order they were submitted.
+}
+
+surface QueryAccess {
+    for caller: Client
+
+    context db: Database
+
+    provides:
+        ClientOpensSnapshot(caller, db)
+
+    invariant: SnapshotIsolation
+        -- A snapshot sees a consistent point-in-time view.
+        -- It includes all transactions up to latest_completed_tx.
+}
+
+------------------------------------------------------------
+-- Deferred Specifications
+------------------------------------------------------------
+
+deferred IndexTransaction           -- transaction resolution (put/delete/erase logic)
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open_question "Should the flush timeout be per-database or global?"
+open_question "When source-log and replica-log are separated, does the follower subscribe to replica-log only?"
+open_question "What happens if a read-only node's latestProcessedMsgId is behind the block? (currently a Fault)"

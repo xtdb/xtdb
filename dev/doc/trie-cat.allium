@@ -1,0 +1,145 @@
+-- trie-cat.allium
+--
+-- The trie catalog: per-table inventory of immutable trie snapshots.
+--
+-- Tries are added by block flushes (see db.allium) and compaction (see compaction.allium).
+-- Tries are read by the scan operator for query execution.
+-- Tries are garbage-collected by gc.allium once superseded by compaction output.
+--
+-- See: trie/TrieCatalog.kt, log/proto/log.proto (TrieDetails, TrieState)
+
+------------------------------------------------------------
+-- Values
+------------------------------------------------------------
+
+value TableRef {
+    -- See: api/.../table/TableRef.kt
+    db_name: String
+    schema_name: String
+    table_name: String
+}
+
+value TrieDetails {
+    -- Per-trie metadata written to the log on block flush or compaction.
+    -- See: log/proto/log.proto (TrieDetails)
+    trie_key: TrieKey
+    data_file_size: Int
+    trie_metadata: TrieMetadata
+    trie_state: TrieState
+    garbage_as_of: Instant?
+}
+
+value TrieMetadata {
+    -- See: log/proto/log.proto (TrieMetadata)
+    temporal_metadata: TemporalMetadata
+    row_count: Int
+    iid_bloom: Bytes
+}
+
+value TemporalMetadata {
+    -- See: log/proto/log.proto (TemporalMetadata)
+    min_valid_from: Instant
+    max_valid_from: Instant
+    min_valid_to: Instant
+    max_valid_to: Instant
+    min_system_from: Instant
+    max_system_from: Instant
+}
+
+value TrieKey {
+    level: Int
+    recency: Instant?    -- null = current (∞); date = historical (week ending Monday 0000Z)
+    iid_partition: Bytes?  -- present at L2+; IID prefix path segments
+    block_index: Int
+
+    -- Derived
+    is_current: recency == null
+
+    -- Serialised as a string using lex hex encoding for levels and blocks.
+    -- Lex hex: first digit is the length of the hex string minus one; remainder is the hex string.
+    -- e.g. b134 is block 0x34 (decimal 52).
+    -- Examples:
+    --   l00-rc-b00         level 0, current, block 0
+    --   l01-r20200106-b00  level 1, historical, week ending 2020-01-06
+    --   l02-rc-p0-b00      level 2, current, IID partition 0, block 0
+}
+
+------------------------------------------------------------
+-- Trie State Lifecycle
+------------------------------------------------------------
+
+value TrieState {
+    -- Every trie has a state: nascent → live → garbage.
+    -- See: log/proto/log.proto (TrieState)
+    --
+    -- nascent: the trie has been uploaded but its job group is not yet complete.
+    --   A nascent trie is visible to the compactor (so it doesn't re-do the work)
+    --   but is not yet used for queries.
+    --
+    -- live: the trie is complete and available for query execution.
+    --   A trie becomes live when the last output of its job group is uploaded.
+    --   At that point, the input tries of the job transition to garbage.
+    --
+    -- garbage: the trie has been fully superseded by compaction output.
+    --   The garbage collector deletes the data and meta files from the object store,
+    --   then removes the trie from the catalog.
+
+    state: nascent | live | garbage
+}
+
+-- The LSM tree is split into current (C) and historical (H) sides based on the recency of events.
+--
+-- Current files have recency = ∞ (events whose valid-time range has not been superseded).
+-- Historical files have finite recency, partitioned into weekly buckets rolling over every Monday at 0000Z.
+--
+-- The split exploits the Lindy effect: recently-written rows are more likely to be superseded quickly.
+
+value TrieLevel = Int
+
+------------------------------------------------------------
+-- Entity
+------------------------------------------------------------
+
+-- Behaviourally-relevant fields only; see TrieCatalog.kt for full interface.
+
+entity TrieCatalog {
+    -- See: trie/TrieCatalog.kt, trie_catalog.clj
+    -- Per-table map of trie key to trie details.
+    tries: Map<TableRef, Map<TrieKey, TrieDetails>>
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+rule TriesAdded {
+    -- Called by db.allium (block flush, ProcessTriesAddedMessage) and compaction.allium.
+    when: TriesAdded(table, tries, as_of)
+
+    ensures:
+        for each trie in tries:
+            trie_catalog.addTries(table, trie, as_of)
+}
+
+rule FollowerRefreshes {
+    -- Read-only nodes refresh the catalog from the object store after a block appears.
+    when: FollowerRefreshRequested()
+
+    ensures:
+        trie_catalog.refresh()
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface ScanOperatorAccess {
+    -- The scan operator reads the trie catalog to determine which files to read for a query.
+
+    context table: TableRef
+
+    exposes:
+        trie_catalog.listLiveAndNascentTrieKeys(table)
+        trie_catalog.getPartitions(table)
+}
+

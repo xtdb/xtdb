@@ -8,6 +8,8 @@ import "xtdb/database/proto/db.proto";
 
 option java_multiple_files = true;
 
+// Behavioural spec: dev/doc/db.allium
+
 message Partition {
   int32 level = 1;
   int64 recency = 2;

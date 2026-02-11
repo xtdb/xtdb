@@ -4,6 +4,8 @@ package xtdb.database.proto;
 
 option java_multiple_files = true;
 
+// Behavioural spec: dev/doc/db.allium
+
 import "google/protobuf/any.proto";
 
 enum DatabaseMode {
