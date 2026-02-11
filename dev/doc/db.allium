@@ -64,10 +64,14 @@ entity TableCatalog {
 entity LogProcessor {
     -- See: indexer/LogProcessor.kt
     latest_processed_msg_id: MessageId
-    current_storage_version: Int
-    current_storage_epoch: Int
     last_flush_check: Instant
 }
+
+-- Storage.VERSION is a compile-time constant; storage_epoch is per-BufferPool.
+-- The LogProcessor checks incoming TriesAdded messages against these values
+-- to discard stale notifications from a previous epoch.
+external value current_storage_version: Int   -- See: storage/Storage.kt (VERSION)
+external value current_storage_epoch: Int     -- See: buffer_pool/BufferPool.kt (epoch)
 
 ------------------------------------------------------------
 -- Values
@@ -211,8 +215,8 @@ rule ProcessTriesAddedMessage {
     when: msg: TriesAddedMessage appended to source_log
 
     requires: msg.msg_id > log_processor.latest_processed_msg_id
-    requires: msg.storage_version == log_processor.current_storage_version
-    requires: msg.storage_epoch == log_processor.current_storage_epoch
+    requires: msg.storage_version == current_storage_version
+    requires: msg.storage_epoch == current_storage_epoch
 
     ensures:
         for each trie in msg.tries:
@@ -227,7 +231,7 @@ rule ProcessTriesAddedMessage {
 -- read-only nodes wait for blocks to appear from the primary.
 
 rule LeaderFinishesBlock {
-    when: BlockFlushNeeded(system_time)
+    when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_write
 
@@ -241,7 +245,7 @@ rule LeaderFinishesBlock {
 
         -- Register tries locally.
         for each trie in finished.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie, system_time)
+            trie_cat/trie_catalog.addTries(trie.table, trie, log_timestamp)
 
         -- Persist block to object store.
         Block.created(
@@ -259,7 +263,7 @@ rule LeaderFinishesBlock {
 }
 
 rule FollowerWaitsForBlock {
-    when: BlockFlushNeeded(system_time)
+    when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_only
 

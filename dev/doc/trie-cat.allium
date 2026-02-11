@@ -22,6 +22,7 @@ value TableRef {
 value TrieDetails {
     -- Per-trie metadata written to the log on block flush or compaction.
     -- See: log/proto/log.proto (TrieDetails)
+    table: TableRef
     trie_key: TrieKey
     data_file_size: Long
     trie_metadata: TrieMetadata
@@ -141,7 +142,7 @@ surface ScanOperatorAccess {
     context table: TableRef
 
     exposes:
-        trie_catalog.listLiveTrieKeys(table)
+        trie_catalog.currentTries(table)    -- live tries only; see operator/scan.clj
         trie_catalog.getPartitions(table)
 }
 
