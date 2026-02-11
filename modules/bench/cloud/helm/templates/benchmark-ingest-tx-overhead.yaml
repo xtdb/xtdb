@@ -125,6 +125,13 @@ spec:
               mountPath: /scripts
           resources:
             {{- toYaml .Values.dumpUpload.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: xtdb-env-config
+            {{- if .Values.providerConfig.existingSecret }}
+            - secretRef:
+                name: {{ .Values.providerConfig.existingSecret }}
+            {{- end }}
           env:
             - name: AZURE_STORAGE_ACCOUNT
               value: {{ .Values.providerConfig.env.AZURE_STORAGE_ACCOUNT | default "" | quote }}
@@ -136,4 +143,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            {{- if .Values.git.branch }}
+            - name: GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            {{- end }}
+            - name: GITHUB_REPOSITORY
+              value: {{ .Values.git.repo | default "xtdb/xtdb" | quote }}
+            - name: BENCH_TYPE
+              value: {{ .Values.benchType | quote }}
 {{- end }}

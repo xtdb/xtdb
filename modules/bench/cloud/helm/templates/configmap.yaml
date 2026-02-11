@@ -88,5 +88,28 @@ data:
       [[ -f "$f" ]] && upload_file "$(basename "$f")"
     done
 
+    # Fallback: trigger cleanup workflow if main container didn't (e.g. OOM kill)
+    if [ ! -f "$DUMP_DIR/.cleanup-triggered" ] && [ -n "${GITHUB_PAT:-}" ]; then
+      echo "Main container did not trigger cleanup. Triggering from sidecar as fallback..."
+      GITHUB_REPO="${GITHUB_REPOSITORY:-xtdb/xtdb}"
+      WORKFLOW_URL="https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/nightly-benchmark-cleanup.yml/dispatches"
+      REF="${GIT_BRANCH:-main}"
+
+      INPUTS="{\"benchType\":\"${BENCH_TYPE}\",\"status\":\"failure\",\"nodeId\":\"${XTDB_NODE_ID}\"}"
+      if [ "${RUN_QUEUE:-}" = "true" ]; then
+        INPUTS="{\"benchType\":\"${BENCH_TYPE}\",\"status\":\"failure\",\"nodeId\":\"${XTDB_NODE_ID}\",\"runQueue\":\"true\"}"
+      fi
+
+      curl -s -X POST \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${GITHUB_PAT}" \
+        "${WORKFLOW_URL}" \
+        -d "{\"ref\":\"${REF}\",\"inputs\":${INPUTS}}" \
+        && echo "Cleanup workflow triggered from sidecar" \
+        || echo "Failed to trigger cleanup from sidecar (non-fatal)"
+    elif [ -f "$DUMP_DIR/.cleanup-triggered" ]; then
+      echo "Cleanup already triggered by main container."
+    fi
+
     echo "Sidecar exiting."
     kill $WATCH_PID 2>/dev/null || true
