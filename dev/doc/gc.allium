@@ -12,6 +12,12 @@
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+-- No local entities; operates on trie_cat/trie_catalog and ObjectStore.
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
@@ -20,11 +26,13 @@ external entity ObjectStore {
 }
 
 ------------------------------------------------------------
--- Defaults
+-- Config
 ------------------------------------------------------------
 
-default blocks_to_keep = 10
-default garbage_lifetime_hours = 24
+config {
+    blocks_to_keep: Integer = 10
+    garbage_lifetime: Duration = 24.hours
+}
 
 ------------------------------------------------------------
 -- Rules
@@ -36,7 +44,7 @@ default garbage_lifetime_hours = 24
 --   3. Its garbage_as_of is <= the as_of threshold.
 --
 -- The as_of threshold provides a grace period:
---   as_of = system_time_of(block[latest - blocks_to_keep]) - garbage_lifetime_hours
+--   as_of = system_time_of(block[latest - config.blocks_to_keep]) - config.garbage_lifetime
 -- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
 
 -- GC is scheduled externally on a periodic timer.
@@ -50,7 +58,7 @@ rule GarbageCollectorRuns {
     -- See: garbage_collector/GarbageCollector.kt
     when: GarbageCollectionScheduled()  -- external, periodic
 
-    let as_of = latest_block_system_time(blocks_to_keep) - garbage_lifetime_hours
+    let as_of = latest_block_system_time(config.blocks_to_keep) - config.garbage_lifetime
 
     let eligible = trie_cat/trie_catalog.tries.values.flatten
         .filter(t => t.trie_state == garbage

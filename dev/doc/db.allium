@@ -10,6 +10,18 @@
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+context {
+    database: Database
+    live_index: LiveIndex
+    block_catalog: BlockCatalog
+    table_catalog: TableCatalog
+    log_processor: LogProcessor
+}
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
@@ -162,11 +174,13 @@ variant DetachDbMessage : Message {
 }
 
 ------------------------------------------------------------
--- Defaults
+-- Config
 ------------------------------------------------------------
 
-default flush_timeout_hours = 4
-default max_block_rows = 102400
+config {
+    flush_timeout: Duration = 4.hours
+    max_block_rows: Integer = 102400
+}
 
 ------------------------------------------------------------
 -- Rules
@@ -303,7 +317,7 @@ rule FollowerWaitsForBlock {
 -- the leader sends itself a FlushBlock message.
 
 rule FlushTimeoutFires {
-    when: log_processor.last_flush_check + flush_timeout_hours <= now
+    when: log_processor: LogProcessor.last_flush_check + config.flush_timeout <= now
 
     requires: database.mode == read_write
     requires: live_index.has_data

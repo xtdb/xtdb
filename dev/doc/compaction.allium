@@ -30,6 +30,13 @@ use "./db.allium" as db
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+-- No persistent local entities; operates on db/database, trie_cat/trie_catalog and ObjectStore.
+-- CompactionJob is ephemeral (created within rules).
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
