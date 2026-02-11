@@ -23,7 +23,7 @@ value TrieDetails {
     -- Per-trie metadata written to the log on block flush or compaction.
     -- See: log/proto/log.proto (TrieDetails)
     trie_key: TrieKey
-    data_file_size: Int
+    data_file_size: Long
     trie_metadata: TrieMetadata
     trie_state: TrieState
     garbage_as_of: Instant?
@@ -32,7 +32,7 @@ value TrieDetails {
 value TrieMetadata {
     -- See: log/proto/log.proto (TrieMetadata)
     temporal_metadata: TemporalMetadata
-    row_count: Int
+    row_count: Long
     iid_bloom: Bytes
 }
 
@@ -47,10 +47,10 @@ value TemporalMetadata {
 }
 
 value TrieKey {
-    level: Int
-    recency: Instant?    -- null = current (∞); date = historical (week ending Monday 0000Z)
-    iid_partition: Bytes?  -- present at L2+; IID prefix path segments
-    block_index: Int
+    level: Long
+    recency: LocalDate?  -- null = current (∞); date = historical (week ending Monday 0000Z)
+    part: Bytes?         -- present at L2+; IID prefix path segments
+    block_index: Long
 
     -- Derived
     is_current: recency == null
@@ -94,7 +94,7 @@ value TrieState {
 --
 -- The split exploits the Lindy effect: recently-written rows are more likely to be superseded quickly.
 
-value TrieLevel = Int
+value TrieLevel = Long
 
 ------------------------------------------------------------
 -- Entity

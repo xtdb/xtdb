@@ -94,7 +94,7 @@ variant TxMessage : Message {
 variant FlushBlockMessage : Message {
     -- Request to finish the current block.
     -- See: log/proto/log.proto (FlushBlock)
-    expected_block_index: Int?
+    expected_block_idx: Long?
 }
 
 variant TriesAddedMessage : Message {
@@ -119,7 +119,7 @@ variant DetachDbMessage : Message {
 -- Defaults
 ------------------------------------------------------------
 
-default flush_timeout = PT0.5S
+default flush_timeout_hours = 4
 default max_block_rows = 102400
 
 ------------------------------------------------------------
@@ -169,7 +169,7 @@ rule ProcessFlushBlockMessage {
     when: msg: FlushBlockMessage appended to source_log
 
     requires: msg.msg_id > latest_processed_msg_id
-    requires: msg.expected_block_index == current_block_index
+    requires: msg.expected_block_idx == current_block_index
 
     ensures:
         latest_processed_msg_id = msg.msg_id
@@ -234,11 +234,11 @@ rule FollowerWaitsForBlock {
 
     requires: database.mode == read_only
 
-    let expected_block_index = (current_block_index ?? -1) + 1
+    let expected_block_idx = (current_block_index ?? -1) + 1
 
     -- Poll until a matching block appears in the object store.
     ensures:
-        let block = ObjectStore.blockAppears(expected_block_index)
+        let block = ObjectStore.blockAppears(expected_block_idx)
 
         requires: block.latest_processed_msg_id == latest_processed_msg_id
 
@@ -256,7 +256,7 @@ rule FollowerWaitsForBlock {
 -- the leader sends itself a FlushBlock message.
 
 rule FlushTimeoutFires {
-    when: last_flush_check + flush_timeout <= now
+    when: last_flush_check + flush_timeout_hours <= now
 
     requires: database.mode == read_write
     requires: live_index.has_data
@@ -264,7 +264,7 @@ rule FlushTimeoutFires {
 
     ensures:
         FlushBlockMessage.created(
-            expected_block_index: current_block_index
+            expected_block_idx: current_block_index
         ) appended to database.source_log
 }
 
