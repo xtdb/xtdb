@@ -105,8 +105,13 @@ value TrieLevel = Long
 
 entity TrieCatalog {
     -- See: trie/TrieCatalog.kt, trie_catalog.clj
-    -- Per-table map of trie key to trie details.
+    -- Per-table map of trie key to trie details, grouped by shard (level, recency, part).
+    -- Each shard tracks live, nascent and garbage sets independently.
     tries: Map<TableRef, Map<TrieKey, TrieDetails>>
+
+    -- addTries: register new tries, transitioning superseded inputs to garbage.
+    -- refresh: rebuild the entire catalog from block metadata in the object store.
+    --   Used by read-only followers after a new block appears.
 }
 
 ------------------------------------------------------------

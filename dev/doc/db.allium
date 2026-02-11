@@ -54,11 +54,18 @@ entity Database {
 
 entity BlockCatalog {
     -- See: catalog/BlockCatalog.kt
-    current_block_index: Long?
+    -- Single point of truth for the latest persisted block.
+    latest_block: Block?
+
+    -- Derived
+    current_block_index: latest_block?.block_index
 }
 
 entity TableCatalog {
-    -- See: catalog/TableCatalog.kt
+    -- See: catalog/TableCatalog.kt, table_catalog.clj
+    -- Cumulative table metadata: row counts, column types, cardinality sketches.
+    -- Accumulated across all blocks; used by the query planner.
+    table_metadata: Map<trie_cat/TableRef, TableMetadata>
 }
 
 entity LogProcessor {
@@ -101,6 +108,12 @@ value Block {
 value Snapshot {
     -- A point-in-time read view of the database.
     as_of: TransactionKey
+}
+
+value TableMetadata {
+    -- Per-table cumulative metadata, merged across blocks.
+    -- See: table_catalog.clj
+    row_count: Long?
 }
 
 ------------------------------------------------------------
