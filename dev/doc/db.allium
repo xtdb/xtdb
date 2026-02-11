@@ -45,12 +45,28 @@ entity LiveIndex {
     has_data: latest_completed_tx != null
 }
 
+entity Database {
+    -- See: indexer/Indexer.kt
+    mode: read_write | read_only
+    source_log: Log
+    replica_log: Log
+}
+
 entity BlockCatalog {
     -- See: catalog/BlockCatalog.kt
+    current_block_index: Long?
 }
 
 entity TableCatalog {
     -- See: catalog/TableCatalog.kt
+}
+
+entity LogProcessor {
+    -- See: indexer/LogProcessor.kt
+    latest_processed_msg_id: MessageId
+    current_storage_version: Int
+    current_storage_epoch: Int
+    last_flush_check: Instant
 }
 
 ------------------------------------------------------------
@@ -68,6 +84,19 @@ value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
     tx_id: Int
     system_time: Instant
+}
+
+value Block {
+    -- A persisted block in the object store.
+    -- See: catalog/BlockCatalog.kt (BlockCatalog.buildBlock)
+    block_index: Long
+    latest_completed_tx: TransactionKey
+    latest_processed_msg_id: MessageId
+}
+
+value Snapshot {
+    -- A point-in-time read view of the database.
+    as_of: TransactionKey
 }
 
 ------------------------------------------------------------
@@ -152,13 +181,13 @@ rule ProcessTxMessage {
     -- A transaction message arrives from the source log.
     when: msg: TxMessage appended to source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
 
     ensures:
         -- The indexer resolves and applies the transaction.
         -- Result is either committed or aborted.
         let result = IndexTransaction(msg)
-        latest_processed_msg_id = msg.msg_id
+        log_processor.latest_processed_msg_id = msg.msg_id
 
         -- If the live index is now full, a block flush is needed.
         if live_index.is_full:
@@ -168,11 +197,11 @@ rule ProcessTxMessage {
 rule ProcessFlushBlockMessage {
     when: msg: FlushBlockMessage appended to source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
-    requires: msg.expected_block_idx == current_block_index
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.expected_block_idx == block_catalog.current_block_index
 
     ensures:
-        latest_processed_msg_id = msg.msg_id
+        log_processor.latest_processed_msg_id = msg.msg_id
         BlockFlushNeeded(msg.log_timestamp)
 }
 
@@ -181,14 +210,14 @@ rule ProcessTriesAddedMessage {
     -- They arrive on the replica-log but currently also on the source-log (because both point to the same underlying log).
     when: msg: TriesAddedMessage appended to source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
-    requires: msg.storage_version == current_storage_version
-    requires: msg.storage_epoch == current_storage_epoch
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.storage_version == log_processor.current_storage_version
+    requires: msg.storage_epoch == log_processor.current_storage_epoch
 
     ensures:
         for each trie in msg.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie)
-        latest_processed_msg_id = msg.msg_id
+            trie_cat/trie_catalog.addTries(trie.table, trie, msg.log_timestamp)
+        log_processor.latest_processed_msg_id = msg.msg_id
 }
 
 
@@ -202,7 +231,7 @@ rule LeaderFinishesBlock {
 
     requires: database.mode == read_write
 
-    let block_index = (current_block_index ?? -1) + 1
+    let block_index = (block_catalog.current_block_index ?? -1) + 1
     let finished = live_index.finishBlock(block_index)
 
     ensures:
@@ -212,13 +241,13 @@ rule LeaderFinishesBlock {
 
         -- Register tries locally.
         for each trie in finished.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie)
+            trie_cat/trie_catalog.addTries(trie.table, trie, system_time)
 
         -- Persist block to object store.
         Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
-            latest_processed_msg_id: latest_processed_msg_id,
+            latest_processed_msg_id: log_processor.latest_processed_msg_id,
             tables: finished.tables
         )
 
@@ -234,13 +263,13 @@ rule FollowerWaitsForBlock {
 
     requires: database.mode == read_only
 
-    let expected_block_idx = (current_block_index ?? -1) + 1
+    let expected_block_idx = (block_catalog.current_block_index ?? -1) + 1
 
     -- Poll until a matching block appears in the object store.
     ensures:
         let block = ObjectStore.blockAppears(expected_block_idx)
 
-        requires: block.latest_processed_msg_id == latest_processed_msg_id
+        requires: block.latest_processed_msg_id == log_processor.latest_processed_msg_id
 
         -- Synchronise local state from the block.
         block_catalog.refresh(block)
@@ -256,15 +285,15 @@ rule FollowerWaitsForBlock {
 -- the leader sends itself a FlushBlock message.
 
 rule FlushTimeoutFires {
-    when: last_flush_check + flush_timeout_hours <= now
+    when: log_processor.last_flush_check + flush_timeout_hours <= now
 
     requires: database.mode == read_write
     requires: live_index.has_data
-    requires: no_new_block_since_last_check
+    requires: block_catalog.current_block_index unchanged since log_processor.last_flush_check
 
     ensures:
         FlushBlockMessage.created(
-            expected_block_idx: current_block_index
+            expected_block_idx: block_catalog.current_block_index
         ) appended to database.source_log
 }
 
