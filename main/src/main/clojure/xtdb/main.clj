@@ -136,11 +136,14 @@
   [config-file-opt
    ["-h" "--help"]])
 
+(def !node (atom nil))
+
 (defn- start-node [args]
   (let [{{:keys [file]} :options} (-> (parse-args args node-cli-spec)
                                       (handling-arg-errors-or-help))]
-    (util/with-open [_node ((requiring-resolve 'xtdb.node/start-node) (file->node-opts file))]
+    (util/with-open [node ((requiring-resolve 'xtdb.node/start-node) (file->node-opts file))]
       (log/info "Node started")
+      (reset! !node node)
       @(shutdown-hook-promise))))
 
 (def reset-compactor-cli-spec
