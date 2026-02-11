@@ -22,8 +22,9 @@ value TableRef {
 value TrieDetails {
     -- Per-trie metadata written to the log on block flush or compaction.
     -- See: log/proto/log.proto (TrieDetails)
+    table: TableRef
     trie_key: TrieKey
-    data_file_size: Int
+    data_file_size: Long
     trie_metadata: TrieMetadata
     trie_state: TrieState
     garbage_as_of: Instant?
@@ -32,7 +33,7 @@ value TrieDetails {
 value TrieMetadata {
     -- See: log/proto/log.proto (TrieMetadata)
     temporal_metadata: TemporalMetadata
-    row_count: Int
+    row_count: Long
     iid_bloom: Bytes
 }
 
@@ -47,10 +48,10 @@ value TemporalMetadata {
 }
 
 value TrieKey {
-    level: Int
-    recency: Instant?    -- null = current (∞); date = historical (week ending Monday 0000Z)
-    iid_partition: Bytes?  -- present at L2+; IID prefix path segments
-    block_index: Int
+    level: Long
+    recency: LocalDate?  -- null = current (∞); date = historical (week ending Monday 0000Z)
+    part: Bytes?         -- present at L2+; IID prefix path segments
+    block_index: Long
 
     -- Derived
     is_current: recency == null
@@ -94,7 +95,15 @@ value TrieState {
 --
 -- The split exploits the Lindy effect: recently-written rows are more likely to be superseded quickly.
 
-value TrieLevel = Int
+value TrieLevel = Long
+
+------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+context {
+    trie_catalog: TrieCatalog
+}
 
 ------------------------------------------------------------
 -- Entity
@@ -104,8 +113,15 @@ value TrieLevel = Int
 
 entity TrieCatalog {
     -- See: trie/TrieCatalog.kt, trie_catalog.clj
-    -- Per-table map of trie key to trie details.
+    -- Per-table map of trie key to trie details, grouped by shard (level, recency, part).
+    -- Each shard tracks live, nascent and garbage sets independently.
     tries: Map<TableRef, Map<TrieKey, TrieDetails>>
+
+    -- addTries(tries, as_of): register new tries, transitioning superseded inputs to garbage.
+    --   Each TrieDetails carries its own table reference.
+    -- refresh: rebuild the entire catalog from block metadata in the object store.
+    --   Used by read-only followers after a new block appears.
+    -- deleteTries(tries): remove garbage entries from the catalog after file deletion.
 }
 
 ------------------------------------------------------------
@@ -114,11 +130,10 @@ entity TrieCatalog {
 
 rule TriesAdded {
     -- Called by db.allium (block flush, ProcessTriesAddedMessage) and compaction.allium.
-    when: TriesAdded(table, tries, as_of)
+    when: TriesAdded(tries, as_of)
 
     ensures:
-        for each trie in tries:
-            trie_catalog.addTries(table, trie, as_of)
+        trie_catalog.addTries(tries, as_of)
 }
 
 rule FollowerRefreshes {
@@ -135,11 +150,13 @@ rule FollowerRefreshes {
 
 surface ScanOperatorAccess {
     -- The scan operator reads the trie catalog to determine which files to read for a query.
+    -- Only live tries are used; nascent tries are excluded from query execution.
+    -- See: operator/scan.clj (current-tries)
 
     context table: TableRef
 
     exposes:
-        trie_catalog.listLiveAndNascentTrieKeys(table)
+        trie_catalog.currentTries(table)    -- live tries only; see operator/scan.clj
         trie_catalog.getPartitions(table)
 }
 

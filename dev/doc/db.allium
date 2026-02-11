@@ -10,6 +10,18 @@
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+context {
+    database: Database
+    live_index: LiveIndex
+    block_catalog: BlockCatalog
+    table_catalog: TableCatalog
+    log_processor: LogProcessor
+}
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
@@ -45,13 +57,40 @@ entity LiveIndex {
     has_data: latest_completed_tx != null
 }
 
+entity Database {
+    -- See: indexer/Indexer.kt
+    mode: read_write | read_only
+    source_log: Log
+    replica_log: Log
+}
+
 entity BlockCatalog {
     -- See: catalog/BlockCatalog.kt
+    -- Single point of truth for the latest persisted block.
+    latest_block: Block?
+
+    -- Derived
+    current_block_index: latest_block?.block_index
 }
 
 entity TableCatalog {
-    -- See: catalog/TableCatalog.kt
+    -- See: catalog/TableCatalog.kt, table_catalog.clj
+    -- Cumulative table metadata: row counts, column types, cardinality sketches.
+    -- Accumulated across all blocks; used by the query planner.
+    table_metadata: Map<trie_cat/TableRef, TableMetadata>
 }
+
+entity LogProcessor {
+    -- See: indexer/LogProcessor.kt
+    latest_processed_msg_id: MessageId
+    last_flush_check: Instant
+}
+
+-- Storage.VERSION is a compile-time constant; storage_epoch is per-BufferPool.
+-- The LogProcessor checks incoming TriesAdded messages against these values
+-- to discard stale notifications from a previous epoch.
+external value current_storage_version: Int   -- See: storage/Storage.kt (VERSION)
+external value current_storage_epoch: Int     -- See: buffer_pool/BufferPool.kt (epoch)
 
 ------------------------------------------------------------
 -- Values
@@ -66,8 +105,27 @@ value MessageId {
 
 value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
-    tx_id: Int
+    tx_id: Long
     system_time: Instant
+}
+
+value Block {
+    -- A persisted block in the object store.
+    -- See: catalog/BlockCatalog.kt (BlockCatalog.buildBlock)
+    block_index: Long
+    latest_completed_tx: TransactionKey
+    latest_processed_msg_id: MessageId
+}
+
+value Snapshot {
+    -- A point-in-time read view of the database.
+    as_of: TransactionKey
+}
+
+value TableMetadata {
+    -- Per-table cumulative metadata, merged across blocks.
+    -- See: table_catalog.clj
+    row_count: Long?
 }
 
 ------------------------------------------------------------
@@ -94,7 +152,7 @@ variant TxMessage : Message {
 variant FlushBlockMessage : Message {
     -- Request to finish the current block.
     -- See: log/proto/log.proto (FlushBlock)
-    expected_block_index: Int?
+    expected_block_idx: Long?
 }
 
 variant TriesAddedMessage : Message {
@@ -116,11 +174,13 @@ variant DetachDbMessage : Message {
 }
 
 ------------------------------------------------------------
--- Defaults
+-- Config
 ------------------------------------------------------------
 
-default flush_timeout = PT0.5S
-default max_block_rows = 102400
+config {
+    flush_timeout: Duration = 4.hours
+    max_block_rows: Integer = 102400
+}
 
 ------------------------------------------------------------
 -- Rules
@@ -150,15 +210,15 @@ rule ClientSubmitsTransaction {
 
 rule ProcessTxMessage {
     -- A transaction message arrives from the source log.
-    when: msg: TxMessage appended to source_log
+    when: msg: TxMessage appended to database.source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
 
     ensures:
         -- The indexer resolves and applies the transaction.
         -- Result is either committed or aborted.
         let result = IndexTransaction(msg)
-        latest_processed_msg_id = msg.msg_id
+        log_processor.latest_processed_msg_id = msg.msg_id
 
         -- If the live index is now full, a block flush is needed.
         if live_index.is_full:
@@ -166,29 +226,28 @@ rule ProcessTxMessage {
 }
 
 rule ProcessFlushBlockMessage {
-    when: msg: FlushBlockMessage appended to source_log
+    when: msg: FlushBlockMessage appended to database.source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
-    requires: msg.expected_block_index == current_block_index
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.expected_block_idx == block_catalog.current_block_index
 
     ensures:
-        latest_processed_msg_id = msg.msg_id
+        log_processor.latest_processed_msg_id = msg.msg_id
         BlockFlushNeeded(msg.log_timestamp)
 }
 
 rule ProcessTriesAddedMessage {
     -- Tries-added messages are idempotent notifications.
     -- They arrive on the replica-log but currently also on the source-log (because both point to the same underlying log).
-    when: msg: TriesAddedMessage appended to source_log
+    when: msg: TriesAddedMessage appended to database.source_log
 
-    requires: msg.msg_id > latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
     requires: msg.storage_version == current_storage_version
     requires: msg.storage_epoch == current_storage_epoch
 
     ensures:
-        for each trie in msg.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie)
-        latest_processed_msg_id = msg.msg_id
+        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+        log_processor.latest_processed_msg_id = msg.msg_id
 }
 
 
@@ -198,28 +257,30 @@ rule ProcessTriesAddedMessage {
 -- read-only nodes wait for blocks to appear from the primary.
 
 rule LeaderFinishesBlock {
-    when: BlockFlushNeeded(system_time)
+    when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_write
 
-    let block_index = (current_block_index ?? -1) + 1
-    let finished = live_index.finishBlock(block_index)
+    let block_index = (block_catalog.current_block_index ?? -1) + 1
+    -- finishBlock returns a per-table map of finished blocks,
+    -- each containing tries and table metadata.
+    -- See: indexer/LiveIndex.kt (finishBlock), indexer/LiveTable.kt (FinishedBlock)
+    let finished_tables = live_index.finishBlock(block_index)
+    let tries = finished_tables.collectTries()
 
     ensures:
         -- Write tries-added to the replica-log so followers can see them.
-        let tries_added = TriesAddedMessage.created(tries: finished.tries)
+        let tries_added = TriesAddedMessage.created(tries: tries)
         tries_added appended to database.replica_log
 
         -- Register tries locally.
-        for each trie in finished.tries:
-            trie_cat/trie_catalog.addTries(trie.table, trie)
+        trie_cat/trie_catalog.addTries(tries, log_timestamp)
 
         -- Persist block to object store.
         Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
-            latest_processed_msg_id: latest_processed_msg_id,
-            tables: finished.tables
+            latest_processed_msg_id: log_processor.latest_processed_msg_id
         )
 
         -- Reset for next block.
@@ -230,17 +291,17 @@ rule LeaderFinishesBlock {
 }
 
 rule FollowerWaitsForBlock {
-    when: BlockFlushNeeded(system_time)
+    when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_only
 
-    let expected_block_index = (current_block_index ?? -1) + 1
+    let expected_block_idx = (block_catalog.current_block_index ?? -1) + 1
 
     -- Poll until a matching block appears in the object store.
     ensures:
-        let block = ObjectStore.blockAppears(expected_block_index)
+        let block = ObjectStore.blockAppears(expected_block_idx)
 
-        requires: block.latest_processed_msg_id == latest_processed_msg_id
+        requires: block.latest_processed_msg_id == log_processor.latest_processed_msg_id
 
         -- Synchronise local state from the block.
         block_catalog.refresh(block)
@@ -256,15 +317,15 @@ rule FollowerWaitsForBlock {
 -- the leader sends itself a FlushBlock message.
 
 rule FlushTimeoutFires {
-    when: last_flush_check + flush_timeout <= now
+    when: log_processor: LogProcessor.last_flush_check + config.flush_timeout <= now
 
     requires: database.mode == read_write
     requires: live_index.has_data
-    requires: no_new_block_since_last_check
+    requires: block_catalog.current_block_index unchanged since log_processor.last_flush_check
 
     ensures:
         FlushBlockMessage.created(
-            expected_block_index: current_block_index
+            expected_block_idx: block_catalog.current_block_index
         ) appended to database.source_log
 }
 

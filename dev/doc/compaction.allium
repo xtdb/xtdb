@@ -30,6 +30,13 @@ use "./db.allium" as db
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+-- No persistent local entities; operates on db/database, trie_cat/trie_catalog and ObjectStore.
+-- CompactionJob is ephemeral (created within rules).
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
@@ -46,8 +53,8 @@ external entity ObjectStore {
 entity CompactionJob {
     table: trie_cat/TableRef
     input_trie_keys: List<trie_cat/TrieKey>
-    output_trie_key: trie_cat/TrieKey
-    status: pending | running | completed | failed
+    output_tries: List<trie_cat/TrieDetails>
+    status: running | completed
 }
 
 ------------------------------------------------------------
@@ -64,7 +71,6 @@ rule CompactorWakesUp {
             CompactionJob.created(
                 table: job.table,
                 input_trie_keys: job.trie_keys,
-                output_trie_key: job.output_trie_key,
                 status: running
             )
             StartCompactionJob(job)
@@ -78,14 +84,13 @@ rule CompactionJobCompletes {
         -- Data file uploaded first; meta file presence is the completion marker.
         -- Append tries-added to replica-log.
         let tries_added = db/TriesAddedMessage.created(tries: job.output_tries)
-        tries_added appended to database.replica_log
+        tries_added appended to db/database.replica_log
 
         -- Output tries are nascent until the full job group completes.
         -- Input tries transition to garbage once outputs are live.
 
         -- Eagerly register in trie catalog (idempotent).
-        for each trie in job.output_tries:
-            trie_cat/trie_catalog.addTries(job.table, trie)
+        trie_cat/trie_catalog.addTries(job.output_tries, tries_added.log_timestamp)
 
         job.status = completed
 }

@@ -12,6 +12,12 @@
 use "./trie-cat.allium" as trie_cat
 
 ------------------------------------------------------------
+-- Context
+------------------------------------------------------------
+
+-- No local entities; operates on trie_cat/trie_catalog and ObjectStore.
+
+------------------------------------------------------------
 -- External Entities
 ------------------------------------------------------------
 
@@ -20,11 +26,13 @@ external entity ObjectStore {
 }
 
 ------------------------------------------------------------
--- Defaults
+-- Config
 ------------------------------------------------------------
 
-default blocks_to_keep = 2
-default garbage_lifetime = PT0S
+config {
+    blocks_to_keep: Integer = 10
+    garbage_lifetime: Duration = 24.hours
+}
 
 ------------------------------------------------------------
 -- Rules
@@ -36,23 +44,31 @@ default garbage_lifetime = PT0S
 --   3. Its garbage_as_of is <= the as_of threshold.
 --
 -- The as_of threshold provides a grace period:
---   as_of = system_time_of(block[latest - blocks_to_keep]) - garbage_lifetime
+--   as_of = system_time_of(block[latest - config.blocks_to_keep]) - config.garbage_lifetime
 -- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
+
+-- GC is scheduled externally on a periodic timer.
+-- See: garbage_collector/GarbageCollector.kt (scheduleGc)
+
+-- Returns the system_time of the block at `n` positions back from latest.
+-- See: buffer_pool/BufferPool.kt (blockFromLatest)
+deferred latest_block_system_time(n: Int) -> Instant?
 
 rule GarbageCollectorRuns {
     -- See: garbage_collector/GarbageCollector.kt
-    when: GarbageCollectionScheduled()
+    when: GarbageCollectionScheduled()  -- external, periodic
 
-    let as_of = latest_block_system_time(blocks_to_keep) - garbage_lifetime
+    let as_of = latest_block_system_time(config.blocks_to_keep) - config.garbage_lifetime
 
-    let garbage = trie_cat/trie_catalog.tries.values.flatten
+    let eligible = trie_cat/trie_catalog.tries.values.flatten
         .filter(t => t.trie_state == garbage
                   and t.trie_key.level != 0
                   and t.garbage_as_of <= as_of)
 
     ensures:
-        for each trie in garbage:
-            ObjectStore.delete(trie.metaFilePath)
-            ObjectStore.delete(trie.dataFilePath)
-        trie_cat/trie_catalog.tries = trie_cat/trie_catalog.tries.remove(garbage)
+        for each trie in eligible:
+            -- Paths derived from trie.table and trie.trie_key; see trie/Trie.kt
+            ObjectStore.delete(metaFilePath(trie.table, trie.trie_key))
+            ObjectStore.delete(dataFilePath(trie.table, trie.trie_key))
+        trie_cat/trie_catalog.deleteTries(eligible)
 }
