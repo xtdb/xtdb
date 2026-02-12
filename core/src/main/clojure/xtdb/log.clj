@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
@@ -166,7 +167,7 @@
 
 (defmethod ig/expand-key :xtdb/log [k {:keys [base factory mode]}]
   {k {:base base
-      :block-cat (ig/ref :xtdb/block-catalog)
+      :buffer-pool (ig/ref :xtdb/buffer-pool)
       :factory factory
       :mode mode}})
 
@@ -201,12 +202,15 @@
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
-(defmethod ig/init-key :xtdb/log [_ {:keys [^BlockCatalog block-cat, ^Log$Factory factory, ^Database$Mode mode]
+(defmethod ig/init-key :xtdb/log [_ {:keys [buffer-pool, ^Log$Factory factory, ^Database$Mode mode]
                                       {:keys [log-clusters]} :base}]
   (let [log (if (= mode Database$Mode/READ_ONLY)
               (.openReadOnlyLog factory log-clusters)
-              (.openLog factory log-clusters))]
-    (validate-offsets log (.getLatestCompletedTx block-cat))
+              (.openLog factory log-clusters))
+        latest-completed-tx (some-> (BlockCatalog/getLatestBlock buffer-pool)
+                                    (.getLatestCompletedTx)
+                                    (block-cat/<-TxKey))]
+    (validate-offsets log latest-completed-tx)
     log))
 
 (defmethod ig/halt-key! :xtdb/log [_ ^Log log]

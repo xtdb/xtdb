@@ -13,7 +13,7 @@
 (defmethod ig/init-key :xtdb/block-catalog [_ {:keys [db-name buffer-pool]}]
   (BlockCatalog. db-name (BlockCatalog/getLatestBlock buffer-pool)))
 
-(defn- <-TxKey [^TxKey tx-key]
+(defn <-TxKey [^TxKey tx-key]
   (serde/->TxKey (.getTxId tx-key) (time/micros->instant (.getSystemTime tx-key))))
 
 (defn <-Block [^Block block]
