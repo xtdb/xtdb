@@ -26,19 +26,13 @@ import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
  * written by another process (the primary cluster).
  */
 class ReadOnlyLocalLog(
-    rootPath: Path,
+    private val rootPath: Path,
     override val epoch: Int,
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log {
 
     private val scope = CoroutineScope(coroutineContext)
     private val logFilePath = rootPath.resolve("LOG")
-    private val watchService = FileSystems.getDefault().newWatchService()
-
-    init {
-        // Watch the parent directory for modifications to the LOG file
-        rootPath.register(watchService, ENTRY_MODIFY)
-    }
 
     companion object {
         private fun messageSizeBytes(size: Int) = 1 + INT_BYTES + LONG_BYTES + size + LONG_BYTES
@@ -113,34 +107,38 @@ class ReadOnlyLocalLog(
         var currentOffset = latestProcessedOffset
 
         val subscription = scope.launch(SupervisorJob()) {
-            try {
-                // First, catch up on any existing messages
-                readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
+            FileSystems.getDefault().newWatchService().use { watchService ->
+                rootPath.register(watchService, ENTRY_MODIFY)
 
-                // Then watch for new changes
-                while (true) {
-                    val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+                try {
+                    // First, catch up on any existing messages
+                    readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
 
-                    var logModified = false
-                    for (event in key.pollEvents()) {
-                        val changedPath = event.context() as? Path
-                        if (changedPath?.name == "LOG") {
-                            logModified = true
+                    // Then watch for new changes
+                    while (true) {
+                        val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+
+                        var logModified = false
+                        for (event in key.pollEvents()) {
+                            val changedPath = event.context() as? Path
+                            if (changedPath?.name == "LOG") {
+                                logModified = true
+                            }
+                        }
+
+                        if (logModified) {
+                            readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
+                        }
+
+                        if (!key.reset()) {
+                            break // Directory no longer accessible
                         }
                     }
-
-                    if (logModified) {
-                        readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
-                    }
-
-                    if (!key.reset()) {
-                        break // Directory no longer accessible
-                    }
+                } catch (_: ClosedByInterruptException) {
+                    cancel()
+                } catch (_: InterruptedException) {
+                    cancel()
                 }
-            } catch (_: ClosedByInterruptException) {
-                cancel()
-            } catch (_: InterruptedException) {
-                cancel()
             }
         }
 
@@ -185,6 +183,5 @@ class ReadOnlyLocalLog(
 
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-        watchService.close()
     }
 }
