@@ -492,17 +492,17 @@
 (t/deftest no-returning-erased-docs-4576
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc1 :col "value1"}]
                             [:put-docs :xt_docs {:xt/id :doc2 :col "value2"}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (xt/execute-tx tu/*node* [[:erase-docs :xt_docs :doc1]])
   (t/is (= [{:xt/id :doc2 :col "value2"}] (xt/q tu/*node* "SELECT * FROM xt_docs")))
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (xt/execute-tx tu/*node* [[:delete-docs :xt_docs :doc2]])
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM xt_docs"))))
 
 (t/deftest keyword-hashing-issue-4572
   (xt/execute-tx tu/*node* [[:put-docs :cheeses {:xt/id :cheese/pálpusztai}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (t/is (= [{:xt/id :cheese/pálpusztai}]
            (xt/q tu/*node* ['#(from :cheeses [{:xt/id %} *]) :cheese/pálpusztai]))))

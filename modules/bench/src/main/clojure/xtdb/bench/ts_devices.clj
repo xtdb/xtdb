@@ -52,7 +52,7 @@
 
                     {:t :call
                      :stage :finish-block
-                     :f (fn [{:keys [node]}] (b/finish-block! node))}]}]})
+                     :f (fn [{:keys [node]}] (b/flush-block! node))}]}]})
 
 ;; not intended to be run as a test - more for ease of REPL dev
 (t/deftest ^:benchmark run-ts-devices

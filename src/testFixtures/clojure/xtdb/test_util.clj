@@ -118,13 +118,6 @@
 (defn ->tstz-range ^xtdb.types.ZonedDateTimeRange [from to]
   (ZonedDateTimeRange. (time/->zdt from) (some-> to time/->zdt)))
 
-(defn finish-block! [node]
-  (let [db (db/primary-db node)
-        live-idx (.getLiveIndex db)
-        system-time (or (some-> (.getLatestCompletedTx live-idx) .getSystemTime)
-                        (Instant/now))]
-    (.finishBlock (.getLogProcessor db) system-time)))
-
 (defn flush-block!
   ([node] (flush-block! node #xt/duration "PT5S"))
   ([node timeout]

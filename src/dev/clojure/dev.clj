@@ -92,7 +92,7 @@
        (do
          (time (tpch/submit-docs! node 0.5))
          (time (xt-log/sync-node node (Duration/ofHours 1)))
-         (tu/finish-block! node)
+         (tu/flush-block! node)
          (time (c/compact-all! node (Duration/ofMinutes 5)))))))
 
   (do

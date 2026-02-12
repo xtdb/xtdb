@@ -103,7 +103,7 @@
   (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]
     (xt/submit-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
 
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
              (set (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id]}]
@@ -116,7 +116,7 @@
                        (partition-all 20))]
       (xt/execute-tx node batch))
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= (set (concat (for [i (range 20)] {:xt/id i}) (for [i (range 80 100)] {:xt/id i})))
@@ -129,7 +129,7 @@
     (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
     (xt/execute-tx node (for [i (range 20)] [:delete-docs :xt_docs i]))
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
     (t/is (= []
@@ -145,7 +145,7 @@
   (t/testing "testing boolean metadata"
     (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]
                              [:put-docs :xt_docs {:xt/id 2 :boolean-or-int 2}]])
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
 
     (t/is (= [{:boolean-or-int true}]
              (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [{boolean_or_int (== boolean_or_int true)}]}]
@@ -299,7 +299,7 @@
 
   (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (t/is (= #{{:last-updated "tx2",
               :xt/valid-from #xt/zoned-date-time "3001-01-01T00:00Z[UTC]",
@@ -346,7 +346,7 @@
 
     (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
 
     (t/is (= '{_id #xt/type :keyword}
              (->col-type '_id)))
@@ -521,11 +521,11 @@
           search-uuid (rand-nth uuids)]
       (xt/execute-tx node (for [uuid (take 20 uuids)]
                             [:put-docs :xt_docs {:xt/id uuid}]))
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (xt/execute-tx node (for [uuid (drop 20 uuids)]
                             [:put-docs :xt_docs {:xt/id uuid}]))
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (c/compact-all! node #xt/duration "PT1S")
 
@@ -544,9 +544,9 @@
 (deftest test-pushdown-blooms
   (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
                             [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
@@ -576,7 +576,7 @@
             uuid (first first-page)]
         (xt/execute-tx node (for [uuid (concat first-page second-page)]
                              [:put-docs :docs {:xt/id uuid}]))
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (xt/execute-tx node [[:put-docs :docs {:xt/id uuid}]])
 
         ;; first + second page
@@ -621,7 +621,7 @@
 
       (dotimes [i 2]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :version i}]]))
-      (tu/finish-block! node)
+      (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT2S")
 
       (t/is (= [{:xt/id 1,
@@ -639,7 +639,7 @@
                            (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :col i}]])))]
 
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         ;; compaction happens in 2026
         (c/compact-all! node #xt/duration "PT1S")
 
@@ -699,7 +699,7 @@
                                                    {:xt/id 1 :version i}]])))]
 
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
           ;; compaction happens in 2026
           (c/compact-all! node #xt/duration "PT2S")
 
@@ -824,11 +824,11 @@
 
           (xt/execute-tx n1 tx1)
           (xt/execute-tx n2 tx1)
-          (tu/finish-block! n2)
+          (tu/flush-block! n2)
           (c/compact-all! n2 #xt/duration "PT2S")
           (xt/execute-tx n1 tx2)
           (xt/execute-tx n2 tx2)
-          (tu/finish-block! n2)
+          (tu/flush-block! n2)
           (c/compact-all! n2 #xt/duration "PT2S")
 
           (doseq [[idx {:keys [interval dir range1 range2]}] (map-indexed vector intervals)]

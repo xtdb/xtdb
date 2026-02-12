@@ -405,7 +405,7 @@
                              {:xt/id 1, :xt/valid-from #inst "2020-01-01", :xt/valid-to #inst "2020-01-02"}
                              {:xt/id 1, :xt/valid-from #inst "2020-01-04", :xt/valid-to #inst "2020-01-05"}]])
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:schema-name "public", :table-name "foo", :trie-key "l00-rc-b00",
@@ -441,7 +441,7 @@
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :a 1} {:xt/id 2, :b 2}]
                             [:put-docs :bar {:xt/id 1, :a 1} {:xt/id 2, :b 2}]])
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3, :a "hello"} {:xt/id 4, :a "world"}]])
 

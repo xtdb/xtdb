@@ -55,7 +55,7 @@
       (t/is (= [{:xt/id :foo}]
                (xt/q node '(from :foo [xt/id]))))
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (let [^RemoteBufferPool buffer-pool (.getBufferPool (db/primary-db node))
             object-store (.getObjectStore buffer-pool)]
@@ -246,7 +246,7 @@
         (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2)))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :foo}]])
-        (tu/finish-block! node1)
+        (tu/flush-block! node1)
 
         (t/testing "cached"
           (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
@@ -257,7 +257,7 @@
           (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :bar}]])
-        (tu/finish-block! node1)
+        (tu/flush-block! node1)
 
         (t/testing "live"
           (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))

@@ -44,7 +44,7 @@
                                          :compactor-threads 0})]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :foo 1}]]
                        {:default-tz #xt/zone "Asia/Kolkata"})
-        (tu/finish-block! node))
+        (tu/flush-block! node))
 
       (with-open [_node (tu/->local-node {:node-dir local-path
                                           :healthz-port port
@@ -60,13 +60,13 @@
 
                 (case (long (:status resp))
                   503 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" "2097"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" "2132"}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Message-Id"]))))
                         (Thread/sleep 250)
                         (recur))
                   200 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" "2137", "X-XTDB-Current-Message-Id" "2137"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" "2172", "X-XTDB-Current-Message-Id" "2172"}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
                         (t/is (= "Started." (:body resp)))))))))))))

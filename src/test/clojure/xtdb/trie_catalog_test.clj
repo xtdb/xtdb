@@ -329,10 +329,10 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
@@ -356,7 +356,7 @@
                            ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
                      (Instant/now))
-          (tu/finish-block! node))))
+          (tu/flush-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
@@ -608,7 +608,7 @@
               cat (.getTrieCatalog db)]
           (doseq [i (range 4)]
             (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
-            (tu/finish-block! node)
+            (tu/flush-block! node)
             (c/compact-all! node #xt/duration "PT1S"))
 
           (.collectAllGarbage gc)
@@ -775,12 +775,12 @@
         (t/is (empty? (cat/l0-blocks trie-cat))
               "Before finish-block, should still have no L0 blocks")
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (t/is (= [0] (map :block-idx (cat/l0-blocks trie-cat)))
               "Should have 1 block after first finish-block")
 
         (xt/execute-tx node [[:put-docs :table_c {:xt/id 3}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (let [blocks (cat/l0-blocks trie-cat)
               tables (for [block blocks]
                        (for [t (:tables block)]
@@ -794,7 +794,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
       (doseq [i (range 4)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
-        (tu/finish-block! node))
+        (tu/flush-block! node))
       (c/compact-all! node #xt/duration "PT1S")
 
       (let [trie-cat (.getTrieCatalog (db/primary-db node))

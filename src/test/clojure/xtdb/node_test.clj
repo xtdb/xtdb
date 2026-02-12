@@ -490,7 +490,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                               [:put-docs :bar {:xt/id "bar1"}]
                               [:put-docs :bar {:xt/id "bar2" :b 2}]])
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
 
     (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id "foo2" :c 3}]
                              [:put-docs :baz {:xt/id "foo1" :a 4}]])
@@ -857,8 +857,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))
 
-          ;; Call finish-block! to write files
-          (tu/finish-block! node)))
+          ;; Call flush-block! to write files
+          (tu/flush-block! node)))
 
       (t/testing "node can remove 'txs to skip' after block finished"
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
@@ -921,8 +921,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= @!skiptxid (-> (xt/status node)
                                     (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
 
-          ;; Call finish-block! to write files
-          (tu/finish-block! node)))
+          ;; Call flush-block! to write files
+          (tu/flush-block! node)))
 
       (t/testing "node can remove 'txs to skip' after block finished"
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
@@ -941,7 +941,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest null-to-duv-promotion-halts-ingestion-4153
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: 1.5}"])
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, a: 2, b: 1}"])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   ;; on disk, b :: Union(f64,i64)
 
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 3, b: null}"])
@@ -961,7 +961,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest check-explicitly-for-l0-content-metadat-4185
   (with-open [node (xtn/start-node {:compactor {:threads 0}})]
     (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :a #inst "2000-01-01"}]] )
-    (tu/finish-block! node)
+    (tu/flush-block! node)
 
     (t/is (= [{:xt/id 1}]
              (xt/q node ["SELECT _id FROM docs WHERE a < ?" #xt/date "2500-01-01"])))))
@@ -995,7 +995,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
       (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (t/is (= [{:xt/id :foo}]
                (xt/q node "SELECT * FROM docs"))))
@@ -1022,7 +1022,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest test-field-mismatch-4271
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1.5}"])
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 2, a: 3, b: [2, 3, 4], c: {d: 1}}"])
 
@@ -1044,7 +1044,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (with-open [node (xtn/start-node)]
     (xt/execute-tx node ["INSERT INTO foo (_id) VALUES ('foo1')"
                          "INSERT INTO bar (_id, foo) VALUES ('bar1', 'foo1')"])
-    (tu/finish-block! node)
+    (tu/flush-block! node)
 
     (c/compact-all! node #xt/duration "PT1S")
 
@@ -1072,9 +1072,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (binding [c/*ignore-signal-block?* true]
     (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col 1}]
                               [:put-docs :xt-docs {:xt/id :bar, :col 2}]])
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :toto, :col 3}]])
-    (tu/finish-block! tu/*node*))
+    (tu/flush-block! tu/*node*))
 
   (t/is (= [{:xt/id :toto, :col 3}]
            (tu/query-ra
@@ -1102,7 +1102,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (c/compact-all! tu/*node* #xt/duration "PT1S")
 
     (t/is (= res (xt/q tu/*node* "SELECT * FROM table ORDER BY _id")))))
@@ -1110,7 +1110,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest test-erase-followed-by-join-4577
   (xt/execute-tx tu/*node* ["INSERT INTO foo (_id, name) VALUES (1, 'foo'), (2, 'bar')"])
   (xt/execute-tx tu/*node* ["INSERT INTO bar (_id, name, foo_id) VALUES (1, 'baz', 1), (2, 'qux', 1), (3, 'qux', 2)"])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (xt/execute-tx tu/*node* ["ERASE FROM foo WHERE _id = 2"])
   (t/is (= [{:bar-name "baz", :name "foo", :xt/id 1}]
@@ -1118,7 +1118,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             FROM foo f
                             JOIN bar b ON f._id = b._id")))
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT2S")
 
   ;; threw Field type mismatch
@@ -1132,11 +1132,11 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (xt/execute-tx tu/*node* [[:put-docs :system {:xt/id 1}]])
     (xt/execute-tx tu/*node* [[:put-docs :device {:xt/id 2, :system_id 1, :foo "foo"}]])
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
 
     (xt/execute-tx tu/*node* [[:put-docs :device {:xt/id 3, :system_id 1, :bar "bar"}]])
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
 
     (t/is (= {:res [{:xt/id 2, :foo "foo"} {:xt/id 3, :bar "bar"}],
               :types '{_id #xt/type :i64
@@ -1292,7 +1292,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (t/deftest dml-mixed-record-id-types-4876
   (t/testing "xtql"
     (xt/execute-tx tu/*node* [[:put-docs :xtqldocs {:xt/id 0} {:xt/id "foo"} {:xt/id :bar} {:xt/id #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"}]])
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (c/compact-all! tu/*node* #xt/duration "PT1S")
     (t/is (= (set [{:xt/id 0} {:xt/id "foo"} {:xt/id :bar} {:xt/id #uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"}])
              (set (xt/q tu/*node* "SELECT * FROM xtqldocs"))))
@@ -1302,7 +1302,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   
   (t/testing "sql"
     (xt/execute-tx tu/*node* [[:sql "INSERT INTO sqldocs (_id) VALUES (?)" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (c/compact-all! tu/*node* #xt/duration "PT1S")
     (xt/execute-tx tu/*node* [[:sql "UPDATE sqldocs SET foo = 'bar' WHERE _id = ?" [0] ["foo"] [:bar] [#uuid "a3a3690b-e3a7-4e62-b03e-69cf9982ebd3"]]])
     (t/is (= (set [{:xt/id 0 :foo "bar"}

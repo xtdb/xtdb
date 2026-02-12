@@ -24,7 +24,7 @@
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (xt-log/sync-node node (Duration/ofMinutes 15))
             (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node)))
-            (tu/finish-block! node))
+            (tu/flush-block! node))
 
           (f))))))
 

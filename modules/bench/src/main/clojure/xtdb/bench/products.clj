@@ -66,7 +66,7 @@
 
                             {:t :call, :stage :finish-block
                              :f (fn [{:keys [node]}]
-                                  (b/finish-block! node))}
+                                  (b/flush-block! node))}
 
                             {:t :call, :stage :compact
                              :f (fn [{:keys [node]}]

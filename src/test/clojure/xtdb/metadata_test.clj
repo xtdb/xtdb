@@ -37,7 +37,7 @@
                             [:put-docs :xt_docs {:num (short 3) :xt/id "e"}]
                             [:put-docs :xt_docs {:num 2.0 :xt/id "f"}]])
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:num 1} {:num 1.0}]
@@ -67,7 +67,7 @@
                             [:put-docs :xt_docs {:timestamp #xt/date "2020-01-01" :xt/id "d"}]]
                  {:default-tz #xt/zone "Z"})
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
@@ -96,7 +96,7 @@
                             [:put-docs :xt_docs {:time #xt/time "04:05:06" :xt/id "b"}]]
                  {:default-tz #xt/zone "Z"})
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:time #xt/time "04:05:06"}]
@@ -109,7 +109,7 @@
     (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:page-limit 16}))]
       (xt/execute-tx node (for [i (range 20)] [:put-docs :xt_docs {:xt/id i}]))
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
       (let [first-buckets (map (comp first tu/bytes->path util/->iid) (range 20))
@@ -151,7 +151,7 @@
 (deftest test-temporal-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1}]])
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
@@ -163,7 +163,7 @@
 
 (t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1 :boolean-or-int true}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (let [metadata-mgr (.getMetadataManager (db/primary-db tu/*node*))
         true-selector (expr.meta/->metadata-selector tu/*allocator* '(== boolean_or_int true) '{boolean_or_int #xt/field {"boolean_or_int" :bool}} vw/empty-args)]
@@ -193,7 +193,7 @@
 
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
       (let [db (db/primary-db node)
@@ -223,7 +223,7 @@
                            {:xt/id "bar", :duration #xt/duration "P3D"}
                            {:xt/id "baz", :duration #xt/duration "PT0S"}]])
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT1S")
 
       (let [db (db/primary-db node)
@@ -239,7 +239,7 @@
 
 (t/deftest test-missing-type-metadata-4665
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
   (c/compact-all! tu/*node* #xt/duration "PT1S")
   (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :foo 4}]])
 
@@ -263,7 +263,7 @@
                                [:put-docs :xt_docs user3]
                                [:put-docs :xt_docs user4]])
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (let [metadata-mgr (.getMetadataManager (db/primary-db node))
                 not-null-selector (expr.meta/->metadata-selector tu/*allocator* '(not (nil? status)) '{status #xt/field {"status" :utf8}} vw/empty-args)]

@@ -34,7 +34,7 @@
           :dml (tpch/submit-dml! node scale-factor))
 
         (xt-log/sync-node node)
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (c/compact-all! node (Duration/ofMinutes 5))
 

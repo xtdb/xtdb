@@ -27,7 +27,7 @@
   (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 10}))]
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]])
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
     (xt/submit-tx node [[:put-docs :xt_docs {:name "Dan", :xt/id :dan, :ordinal 0}]
@@ -36,7 +36,7 @@
     (xt/execute-tx node [[:put-docs :xt_docs {:name "James", :xt/id :jms, :ordinal 2}]
                          [:put-docs :xt_docs {:name "Jon", :xt/id :jon, :ordinal 3}]])
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
     (let [block-cat (.getBlockCatalog (db/primary-db node))]
@@ -93,13 +93,13 @@
                          [:put-docs :xt_docs {:name "James", :xt/id :jms}]
                          [:put-docs :xt_docs {:name "Ivan", :xt/id :iva}]])
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
     (xt/execute-tx node [[:put-docs :xt_docs {:name "Håkan", :xt/id :hak}]
 
                          [:put-docs :xt_docs {:name "James", :xt/id :jms}]])
 
-    (tu/finish-block! node)
+    (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
     (let [block-cat (.getBlockCatalog (db/primary-db node))]
@@ -345,7 +345,7 @@
   (t/is (= #{{:xt/id "1"} {:xt/id "2"}}
            (set (xt/q tu/*node* "SELECT * FROM test WHERE _id < '3'"))))
 
-  (tu/finish-block! tu/*node*)
+  (tu/flush-block! tu/*node*)
 
   (t/is (= #{{:xt/id "1"} {:xt/id "2"}}
            (set (xt/q tu/*node* "SELECT * FROM test WHERE _id < '3'")))))

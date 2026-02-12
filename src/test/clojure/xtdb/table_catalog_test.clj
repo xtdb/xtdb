@@ -42,10 +42,10 @@
             bp (.getBufferPool db)
             trie-catalog (.getTrieCatalog db)]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4427)
                   (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4581)]
@@ -108,7 +108,7 @@
                           (map #(apply trie/->trie-details #xt/table foo %)))
                      (Instant/now))
 
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
           (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
                      "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
@@ -139,7 +139,7 @@
                            ["l02-rc-p0-b01" 4] ["l02-rc-p2-b01" 4]]
                           (map #(apply trie/->trie-details #xt/table foo %)))
                      (Instant/now))
-          (tu/finish-block! node))))
+          (tu/flush-block! node))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [bp (.getBufferPool (db/primary-db node))]

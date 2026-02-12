@@ -151,7 +151,7 @@
            (xt/q tu/*node* "SELECT *,_valid_from, _valid_to FROM docs")))
 
   (t/testing "works after compaction"
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (c/compact-all! tu/*node* #xt/duration "PT1S")
 
     (t/is (= [{:xt/id 1, :xt/valid-from #xt/zoned-date-time "2020-01-01T00:00Z[UTC]"}]

@@ -28,10 +28,10 @@
                                                              (assoc :xt/id (+ i total-size)
                                                                     :xt/valid-from #inst "2020-01-01"
                                                                     :xt/valid-to #inst "2020-02-01"))))])
-          (tu/finish-block! node)))
+          (tu/flush-block! node)))
       (c/compact-all! node nil)
       ;; this adds the new tries to the log
-      (tu/finish-block! node))))
+      (tu/flush-block! node))))
 
 (comment
   (create-test-node-dir migration-node-dir)

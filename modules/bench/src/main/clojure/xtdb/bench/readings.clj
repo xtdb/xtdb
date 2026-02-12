@@ -91,7 +91,7 @@
 
     {:t :call, :stage :compact
      :f (fn [{:keys [node]}]
-          (b/finish-block! node)
+          (b/flush-block! node)
           (b/compact! node))}]))
 
 (defmethod b/cli-flags :readings [_]

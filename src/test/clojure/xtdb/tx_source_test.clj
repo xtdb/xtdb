@@ -150,7 +150,7 @@
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc1}]])
       (t/is (= 0 (-> (.getMessages output-log) first decode-record :source :block-idx)))
 
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (xt/execute-tx node [[:put-docs :docs {:xt/id :doc2}]])
       (t/is (= 1 (-> (.getMessages output-log) last decode-record :source :block-idx))))))
@@ -230,10 +230,10 @@
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 0})]
       (xt/execute-tx node [[:put-docs :foo {:xt/id 1 :value "first"}]])
-      (tu/finish-block! node)
+      (tu/flush-block! node)
       (xt/execute-tx node [[:put-docs :foo {:xt/id 2 :value "second"}]])
       (xt/execute-tx node [[:put-docs :foo {:xt/id 3 :value "third"}]])
-      (tu/finish-block! node)
+      (tu/flush-block! node)
 
       (let [allocator (.getAllocator node)
             xtdb-db (db/primary-db node)
@@ -591,7 +591,7 @@
                    (let [non-empty-batches (filter (some-fn keyword? seq) batches)]
                      (doseq [docs non-empty-batches]
                        (xt/execute-tx node [(into [:put-docs :docs] docs)])
-                       (tu/finish-block! node))
+                       (tu/flush-block! node))
 
                      (let [^RecordingLog output-log (tu/get-output-log node)
                            messages (map decode-record (.getMessages output-log))
@@ -622,7 +622,7 @@
                                                        :compactor {:threads 1}})]
                        (doseq [docs non-empty-batches]
                          (xt/execute-tx node [(into [:put-docs :docs] docs)])
-                         (tu/finish-block! node)))
+                         (tu/flush-block! node)))
 
                      ; Backfill w/ TxSource
                      (with-open [node (xtn/start-node {:storage [:local {:path (.resolve node-dir "storage")}]
@@ -667,7 +667,7 @@
           (jdbc/execute! tx ["INSERT INTO other RECORDS {_id: 1}"]))
 
         ;; Flush to L0
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         ;; Read L0 directly
         (let [xtdb-db (db/primary-db node)

@@ -189,7 +189,7 @@
       (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                (set (xt/q node "SELECT _id FROM xt_docs"))))
       ;; Finish the block
-      (t/is (nil? (tu/finish-block! node)))
+      (t/is (nil? (tu/flush-block! node)))
 
       ;; Submit a few more transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbe}]])
@@ -225,7 +225,7 @@
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
 
       (t/testing "can finish the block"
-        (t/is (nil? (tu/finish-block! node)))))))
+        (t/is (nil? (tu/flush-block! node)))))))
 
 (t/deftest test-local-log-epochs
   (util/with-tmp-dirs #{node-dir}
@@ -238,7 +238,7 @@
       (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                (set (xt/q node "SELECT _id FROM xt_docs"))))
       ;; Finish the block
-      (t/is (nil? (tu/finish-block! node)))
+      (t/is (nil? (tu/flush-block! node)))
 
       ;; Submit a few more transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :willbe}]])
@@ -275,7 +275,7 @@
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
 
       (t/testing "can finish the block"
-        (t/is (nil? (tu/finish-block! node)))))
+        (t/is (nil? (tu/flush-block! node)))))
     
     ;; Restarting the node again with the same new log path and epoch 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
@@ -298,7 +298,7 @@
                  (set (xt/q node "SELECT _id FROM xt_docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")))))
 
       (t/testing "can finish another block"
-        (t/is (nil? (tu/finish-block! node)))))))
+        (t/is (nil? (tu/flush-block! node)))))))
 
 (t/deftest test-local-log-starts-at-correct-point-after-block-cut
   (util/with-tmp-dirs #{node-dir}
@@ -346,7 +346,7 @@
           (xt/execute-tx node (for [i batch] [:put-docs :docs {:xt/id i}])))
         (t/is (= 100 (count (xt/q node "SELECT *, _valid_from, _system_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL"))))
         (t/is (= 10 (count (xt/q node "SELECT * FROM xt.txs"))))
-        (tu/finish-block! node)
+        (tu/flush-block! node)
         (t/testing "ensure block has been written" 
           (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/"))))))
 

@@ -462,8 +462,8 @@
   ([node ^Duration timeout]
    (xt-log/sync-node node timeout)))
 
-(defn finish-block! [node]
-  (tu/finish-block! node))
+(defn flush-block! [node]
+  (tu/flush-block! node))
 
 (defn compact! [node]
   (c/compact-all! node (Duration/ofMinutes 10)))

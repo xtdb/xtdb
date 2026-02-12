@@ -60,7 +60,7 @@
                                     (mapv #(vec (.getObject iid-vec %)) (.getData leaf)))))))))))
 
     (t/testing "finish block"
-      (tu/finish-block! tu/*node*)
+      (tu/flush-block! tu/*node*)
 
       (let [trie-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/meta/l00-rc-b00.arrow"))
             leaf-ba (.getByteArray buffer-pool (util/->path "tables/public$my-table/data/l00-rc-b00.arrow"))]
@@ -193,14 +193,14 @@
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
-        (tu/finish-block! node))
+        (tu/flush-block! node))
 
       (util/with-open [node (tu/->local-node {:node-dir node-dir})]
         (let [bp (.getBufferPool (db/primary-db node))]
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
-          (tu/finish-block! node)
+          (tu/flush-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 38)
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 39)
                     (os/->StoredObject (util/->path "blocks/b01.binpb") 40)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
 

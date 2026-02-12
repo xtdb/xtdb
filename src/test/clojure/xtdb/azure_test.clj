@@ -181,7 +181,7 @@
                                    [:put-docs :bar {:xt/id "bar2"}]
                                    [:put-docs :bar {:xt/id "bar3"}]]))
 
-        (tu/finish-block! node)
+        (tu/flush-block! node)
 
         (t/is (= [{:e "bar2"} {:e "bar1"} {:e "bar3"}]
                  (xt/q node '(from :bar [{:xt/id e}]))))

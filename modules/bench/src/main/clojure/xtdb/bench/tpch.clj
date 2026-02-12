@@ -57,7 +57,7 @@
                        :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofHours 5)))}
 
                       {:t :call, :stage :finish-block
-                       :f (fn [{:keys [node]}] (b/finish-block! node))}
+                       :f (fn [{:keys [node]}] (b/flush-block! node))}
 
                       {:t :call, :stage :compact
                        :f (fn [{:keys [node]}] (b/compact! node))}])}

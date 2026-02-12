@@ -99,7 +99,7 @@
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 10)))}]}
                             {:t :do
                              :stage :finish-block
-                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/finish-block! node))}]}
+                             :tasks [{:t :call :f (fn [{:keys [node]}] (b/flush-block! node))}]}
                             {:t :do
                              :stage :compact
                              :tasks [{:t :call :f (fn [{:keys [node]}] (b/compact! node))}]}])}

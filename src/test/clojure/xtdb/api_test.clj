@@ -573,7 +573,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
-    (tu/finish-block! tu/*node*)
+    (tu/flush-block! tu/*node*)
     (c/compact-all! tu/*node* #xt/duration "PT2S")
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))))
