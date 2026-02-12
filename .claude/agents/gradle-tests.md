@@ -106,25 +106,22 @@ When invoked:
    Location: core/src/test/clojure/xtdb/transaction_test.clj:156
    Error: Expected {:success true}, got {:success false, :error "deadlock"}
    Stack trace summary: IsolationManager.acquireLocks → DeadlockException
-   Likely cause: New locking logic not handling concurrent commits correctly
 
 2. xtdb.query_test/test-temporal-join
    Location: core/src/test/clojure/xtdb/query_test.clj:89
    Error: NullPointerException at TemporalJoin.compute
    Stack trace: TemporalJoin.compute:145 → NPE on temporal bounds
-   Likely cause: Query planner changes missing null check
 
 3. xtdb.api_test/test-status-reporting
    Location: core/src/test/clojure/xtdb/api_test.clj:234
    Error: Timeout waiting for :ready status
-   Likely cause: Race condition in node startup sequence
 ```
 
 ## Key Principles
 
 - **Be concise**: Summarize, don't dump full logs
 - **Be specific**: Include file paths and line numbers
-- **Be actionable**: Suggest likely causes based on error patterns
+- **Be actionable**: Include enough context for the parent agent to diagnose
 - **Be efficient**: Use Haiku speed for quick feedback loops
 
 ## Important Notes
