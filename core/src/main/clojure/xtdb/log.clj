@@ -254,10 +254,10 @@
       :enabled? (.getEnabled indexer-conf)
       :mode mode}})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry db-catalog]} :base
+(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
                                                :keys [allocator ^DatabaseStorage storage state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode]}]
   (when enabled?
-    (let [lp (LogProcessor. allocator meter-registry db-catalog
+    (let [lp (LogProcessor. allocator meter-registry
                             storage state
                             indexer compactor block-flush-duration (set skip-txs)
                             (or mode Database$Mode/READ_WRITE))]
@@ -275,7 +275,10 @@
   ([db msg-id] (await-db db msg-id nil))
   ([^Database db, ^long msg-id, ^Duration timeout]
    @(cond-> (.awaitAsync (.getLogProcessor db) msg-id)
-      timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+      timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
+   (when-let [cp (.getControlPlaneConsumerOrNull db)]
+     @(cond-> (.awaitAsync cp msg-id)
+        timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))))
 
 (defn sync-db
   ([db] (sync-db db nil))

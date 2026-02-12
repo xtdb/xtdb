@@ -155,7 +155,7 @@ class ReadOnlyLocalLog(
         }
     }
 
-    private fun readNewMessages(currentOffset: LogOffset, subscriber: Subscriber): LogOffset? {
+    private suspend fun readNewMessages(currentOffset: LogOffset, subscriber: Subscriber): LogOffset? {
         val newLatestOffset = readLatestSubmittedOffset(logFilePath)
 
         if (newLatestOffset <= currentOffset) return null
@@ -172,7 +172,7 @@ class ReadOnlyLocalLog(
             while (ch.position() <= newLatestOffset) {
                 val record = ch.readMessage()
                 if (record != null) {
-                    subscriber.processRecords(listOf(record))
+                    runInterruptible { subscriber.processRecords(listOf(record)) }
                     lastOffset = record.logOffset
                 }
             }

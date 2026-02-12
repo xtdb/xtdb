@@ -78,6 +78,7 @@
          :xtdb.indexer/for-db opts
          :xtdb.compactor/for-db (assoc opts :mode mode)
          :xtdb.log/processor (assoc opts :indexer-conf indexer-conf :mode mode)}
+        (cond-> (:db-catalog base) (assoc :xtdb.log/control-plane opts))
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -99,7 +100,9 @@
 
                  (throw (ex-cause e))))]
     {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
-                    (:processor (:xtdb.log/processor sys)) (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
+                    (:processor (:xtdb.log/processor sys))
+                    (:consumer (:xtdb.log/control-plane sys))
+                    (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
      :sys sys}))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]

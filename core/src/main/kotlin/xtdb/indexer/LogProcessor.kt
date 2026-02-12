@@ -23,9 +23,13 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.block.proto.Block
+import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Anomaly
+import xtdb.error.Conflict
 import xtdb.error.Fault
+import xtdb.error.Incorrect
 import xtdb.error.Interrupted
+import xtdb.error.NotFound
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
@@ -49,14 +53,9 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = LogProcessor::class.logger
 
-/**
- * @param dbCatalog supplied iff you want to write secondary databases at the end of a block.
- *                  i.e. iff db == 'xtdb'
- */
 class LogProcessor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
-    private val dbCatalog: Database.Catalog?,
     private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
@@ -67,10 +66,6 @@ class LogProcessor(
 ) : Log.Subscriber, AutoCloseable {
 
     private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
-
-    init {
-        assert((dbCatalog != null) == (dbState.name == "xtdb")) { "dbCatalog supplied iff db == 'xtdb'" }
-    }
 
     // LogProcessor subscribes to the source-log, which contains transaction messages.
     // For now, both source-log and replica-log point to the same underlying log,
@@ -84,6 +79,9 @@ class LogProcessor(
     private val tableCatalog = dbState.tableCatalog
     private val trieCatalog = dbState.trieCatalog
     private val liveIndex = dbState.liveIndex
+
+    private val secondaryDatabases: MutableMap<String, DatabaseConfig> =
+        blockCatalog.secondaryDatabases.toMutableMap()
 
     @Volatile
     var latestProcessedMsgId: MessageId =
@@ -172,12 +170,12 @@ class LogProcessor(
                     is Message.Tx -> {
                         val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                             LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
-                            
+
                             // Store skipped transaction to object store
                             val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
                             bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
                             LOG.debug("Stored skipped transaction to $skippedTxPath")
-                            
+
                             // use abort flow in indexTx
                             indexer.indexTx(
                                 msgId, record.logTimestamp,
@@ -232,9 +230,11 @@ class LogProcessor(
                     }
 
                     is Message.AttachDatabase -> {
-                        requireNotNull(dbCatalog) { "attach-db received on non-primary database ${dbState.name}" }
+                        require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
                         val res = try {
-                            dbCatalog.attach(msg.dbName, msg.config)
+                            if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
+                                throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
+                            secondaryDatabases[msg.dbName] = msg.config.serializedConfig
                             TransactionCommitted(msgId, record.logTimestamp)
                         } catch (e: Anomaly.Caller) {
                             TransactionAborted(msgId, record.logTimestamp, e)
@@ -249,10 +249,18 @@ class LogProcessor(
                     }
 
                     is Message.DetachDatabase -> {
-                        requireNotNull(dbCatalog) { "detach-db received on non-primary database ${dbState.name}" }
+                        require(dbState.name == "xtdb") { "detach-db on non-primary ${dbState.name}" }
                         val res = try {
-                            dbCatalog.detach(msg.dbName)
-                            TransactionCommitted(msgId, record.logTimestamp)
+                            when {
+                                msg.dbName == "xtdb" ->
+                                    throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to msg.dbName))
+                                msg.dbName !in secondaryDatabases ->
+                                    throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
+                                else -> {
+                                    secondaryDatabases.remove(msg.dbName)
+                                    TransactionCommitted(msgId, record.logTimestamp)
+                                }
+                            }
                         } catch (e: Anomaly.Caller) {
                             TransactionAborted(msgId, record.logTimestamp, e)
                         }
@@ -339,11 +347,11 @@ class LogProcessor(
             bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
         }
 
-        val secondaryDatabases = dbCatalog?.takeIf { dbState.name == "xtdb" }?.serialisedSecondaryDatabases
+        val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            tableBlocks.keys, secondaryDatabases
+            tableBlocks.keys, secondaryDatabasesForBlock
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
