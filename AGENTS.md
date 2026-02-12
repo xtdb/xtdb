@@ -42,4 +42,7 @@ For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why
 - You MUST NOT run tests yourself - use sub-agents.
 - For Clojure tests (testing Clojure code in `/src/test/clojure`): you SHOULD use the `repl-explorer` agent via the Task tool. This gives faster feedback and allows interactive debugging.
 - For all other tests (Java, integration tests, or when REPL isn't available): you SHOULD use the `gradle-tests` agent via the Task tool.
+- You MUST NOT launch multiple `gradle-tests` agents concurrently.
+  Combine test namespaces into a single agent invocation instead.
+  The test agent will decide what/how to invoke it.
 - You SHOULD proactively run relevant tests after code changes to verify they work.
