@@ -257,6 +257,11 @@ rule ProcessTriesAddedMessage {
 -- read-only nodes wait for blocks to appear from the primary.
 
 rule LeaderFinishesBlock {
+    -- log_timestamp is the log timestamp of the message that triggered the flush
+    -- (either the transaction that filled the block, or a FlushBlock message).
+    -- This becomes the as_of for trie registration, used later by GC to determine
+    -- deletion eligibility. The 24-hour garbage_lifetime grace period absorbs
+    -- any practical difference between these two sources.
     when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_write
@@ -276,12 +281,20 @@ rule LeaderFinishesBlock {
         -- Register tries locally.
         trie_cat/trie_catalog.addTries(tries, log_timestamp)
 
+        -- Update table catalog with new metadata from finished tables.
+        -- The leader updates in-memory via finishBlock (merges delta metadata);
+        -- the follower achieves the same result via refresh (reloads from object store).
+        -- See: table_catalog.clj (finishBlock), TableCatalog (refresh)
+        table_catalog.finishBlock(finished_tables)
+
         -- Persist block to object store.
         Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
             latest_processed_msg_id: log_processor.latest_processed_msg_id
         )
+
+        block_catalog.refresh(block)
 
         -- Reset for next block.
         live_index.nextBlock()

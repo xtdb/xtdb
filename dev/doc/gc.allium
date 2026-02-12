@@ -40,17 +40,26 @@ config {
 
 -- A trie is eligible for deletion when:
 --   1. Its state is garbage (set by addTries when a new trie supersedes it).
---   2. Its level is not 0 (L0 files are never garbage-collected; they are ephemeral).
+--   2. Its level is not 0 (see below).
 --   3. Its garbage_as_of is <= the as_of threshold.
 --
 -- The as_of threshold provides a grace period:
 --   as_of = system_time_of(block[latest - config.blocks_to_keep]) - config.garbage_lifetime
 -- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
+--
+-- L0 files are excluded from trie GC.
+-- L0 files are the input to L0→L1 compaction, and compaction timing is unpredictable.
+-- The time-based grace period used by trie GC cannot guarantee that compaction has
+-- finished reading an L0 file before it becomes eligible for deletion.
+-- L0 files are small relative to compacted data (one per block, typically ~100K rows)
+-- so the storage overhead of retaining them is negligible.
+-- See: trie_catalog.clj (garbage-fn)
 
 -- GC is scheduled externally on a periodic timer.
 -- See: garbage_collector/GarbageCollector.kt (scheduleGc)
 
 -- Returns the system_time of the block at `n` positions back from latest.
+-- Returns null if fewer than `n` blocks exist.
 -- See: buffer_pool/BufferPool.kt (blockFromLatest)
 deferred latest_block_system_time(n: Int) -> Instant?
 
@@ -58,7 +67,13 @@ rule GarbageCollectorRuns {
     -- See: garbage_collector/GarbageCollector.kt
     when: GarbageCollectionScheduled()  -- external, periodic
 
-    let as_of = latest_block_system_time(config.blocks_to_keep) - config.garbage_lifetime
+    let block_time = latest_block_system_time(config.blocks_to_keep)
+
+    -- If there aren't enough blocks yet, skip GC entirely.
+    -- See: GarbageCollector.kt (defaultGarbageAsOf returning null, short-circuit via ?: return)
+    requires: block_time != null
+
+    let as_of = block_time - config.garbage_lifetime
 
     let eligible = trie_cat/trie_catalog.tries.values.flatten
         .filter(t => t.trie_state == garbage

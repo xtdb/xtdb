@@ -113,15 +113,34 @@ context {
 
 entity TrieCatalog {
     -- See: trie/TrieCatalog.kt, trie_catalog.clj
-    -- Per-table map of trie key to trie details, grouped by shard (level, recency, part).
-    -- Each shard tracks live, nascent and garbage sets independently.
-    tries: Map<TableRef, Map<TrieKey, TrieDetails>>
-
+    --
+    -- Per-table catalog, keyed by shard = (level, recency, part).
+    -- Each shard holds three ordered lists (by block_index descending): live, nascent, garbage.
+    -- Also tracks max_block_index per shard for staleness detection.
+    --
     -- addTries(tries, as_of): register new tries, transitioning superseded inputs to garbage.
-    --   Each TrieDetails carries its own table reference.
     -- refresh: rebuild the entire catalog from block metadata in the object store.
     --   Used by read-only followers after a new block appears.
     -- deleteTries(tries): remove garbage entries from the catalog after file deletion.
+    tries: Map<TableRef, Map<Shard, ShardState>>
+}
+
+value Shard = (level: Long, recency: LocalDate?, part: List<Long>)
+
+value ShardState {
+    live: List<TrieDetails>       -- ordered by block_index descending
+    nascent: List<TrieDetails>    -- ordered by block_index descending
+    garbage: List<TrieDetails>    -- ordered by block_index descending
+    max_block_index: Long
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    branch_factor: Integer = 4
+    file_size_target: Long = 104857600   -- 100 MB
 }
 
 ------------------------------------------------------------
@@ -133,8 +152,197 @@ rule TriesAdded {
     when: TriesAdded(tries, as_of)
 
     ensures:
-        trie_catalog.addTries(tries, as_of)
+        for each trie in tries:
+            trie_catalog.applyTrieNotification(trie, as_of)
 }
+
+rule ApplyTrieNotification {
+    -- Idempotent: stale notifications (already-seen block indices) are skipped.
+    -- Messages have a total ordering within their shard, so we only ever prepend.
+    -- See: trie_catalog.clj (apply-trie-notification, stale-msg?)
+    when: ApplyTrieNotification(trie, as_of)
+
+    let shard = (trie.level, trie.recency, trie.part)
+    let shard_state = trie_catalog.tries[trie.table][shard]
+
+    requires: not stale(shard_state, trie.block_index)
+    -- stale iff shard_state.max_block_index >= trie.block_index
+
+    ensures: InsertTrie(trie, as_of)
+}
+
+------------------------------------------------------------
+-- Rules: InsertTrie
+--
+-- The insertion strategy varies by level and recency.
+-- Key concepts:
+--   Levelled: the new trie supersedes partial (< file_size_target) predecessors
+--     in the same shard. Used for L1C, L2H.
+--   Tiered: the new trie is added alongside existing tries without superseding.
+--     Used for L1H, L2+C, L3+H.
+--   Nascent: the trie is not yet queryable; it becomes live when a completion
+--     condition is met (L1C arrives for L1H; all partition siblings arrive for L2+).
+--
+-- See: trie_catalog.clj (insert-trie)
+------------------------------------------------------------
+
+rule InsertTrie_L0 {
+    -- L0 files are always live immediately.
+    when: InsertTrie(trie, as_of) where trie.level == 0
+
+    ensures:
+        add trie as :live to shard [0, trie.recency, trie.part]
+}
+
+rule InsertTrie_L1H {
+    -- L1H files are nascent until the corresponding L1C file arrives.
+    -- When the L1C with the same (or later) block_index appears, it marks them live.
+    -- See: trie_catalog.clj (insert-trie, level 1 with recency)
+    when: InsertTrie(trie, as_of) where trie.level == 1 and trie.recency != null
+
+    let l1c_shard = trie_catalog.tries[trie.table][(1, null, trie.part)]
+    let l1c_latest = l1c_shard.live.first   -- highest block_index
+
+    let state =
+        if l1c_latest != null and l1c_latest.block_index >= trie.block_index:
+            :live    -- L1C already exists that covers this block
+        else:
+            :nascent -- wait for L1C
+
+    ensures:
+        add trie as state to shard [1, trie.recency, trie.part]
+        -- Track recency so that when L1C arrives, it can find these L1H files.
+        record l1h_recency(trie.block_index, trie.recency)
+}
+
+rule InsertTrie_L1C {
+    -- L1C is levelled: supersedes partial (< file_size_target) L1C files.
+    -- Also supersedes L0 files and marks pending L1H files as live.
+    -- See: trie_catalog.clj (insert-trie, level 1 without recency)
+    when: InsertTrie(trie, as_of) where trie.level == 1 and trie.recency == null
+
+    ensures:
+        -- 1. Mark any L1H files for this block_index as live.
+        for each recency in l1h_recencies(trie.block_index):
+            mark_block_index_live(shard [1, recency, []], trie.block_index)
+
+        -- 2. Supersede partial L1C files (levelled insertion).
+        supersede_partial([1, null, []], trie, as_of)
+        add trie as :live to shard [1, null, []]
+
+        -- 3. Supersede L0 files up to this block_index.
+        supersede_by_block_index([0, null, []], trie.block_index, as_of)
+}
+
+rule InsertTrie_L2H {
+    -- L2H is levelled: supersedes partial L2H files and the L1H inputs.
+    -- See: trie_catalog.clj (insert-trie, level 2 with recency)
+    when: InsertTrie(trie, as_of) where trie.level == 2 and trie.recency != null
+
+    ensures:
+        -- Supersede partial L2H files (levelled insertion).
+        supersede_partial([2, trie.recency, trie.part], trie, as_of)
+        add trie as :live to shard [2, trie.recency, trie.part]
+
+        -- Supersede L1H inputs up to this block_index.
+        supersede_by_block_index([1, trie.recency, []], trie.block_index, as_of)
+}
+
+rule InsertTrie_General {
+    -- L2+C, L3+H: tiered with partition-group completion.
+    -- The trie starts as nascent. When all siblings in the partition group
+    -- (branch_factor siblings sharing the same parent part prefix) are present,
+    -- all become live and the prior level is superseded.
+    -- See: trie_catalog.clj (insert-trie, default case)
+    when: InsertTrie(trie, as_of)
+        where not (trie.level == 0
+                   or (trie.level == 1)
+                   or (trie.level == 2 and trie.recency != null))
+
+    ensures:
+        add trie as :nascent to shard [trie.level, trie.recency, trie.part]
+
+        if completed_part_group(trie):
+            -- All branch_factor siblings exist for this block_index.
+            mark_part_group_live(trie)
+
+            -- Supersede prior level: parent shard at (level - 1, recency, pop(part)).
+            let parent_part = if trie.part.non_empty: trie.part.pop else trie.part
+            supersede_by_block_index(
+                [trie.level - 1, trie.recency, parent_part],
+                trie.block_index, as_of
+            )
+}
+
+------------------------------------------------------------
+-- Rules: Supersession helpers
+------------------------------------------------------------
+
+rule supersede_partial {
+    -- Levelled supersession: mark live tries as garbage if they are partial
+    -- (data_file_size < file_size_target) and have block_index <= the new trie's.
+    -- See: trie_catalog.clj (supersede-partial-tries)
+    when: supersede_partial(shard, new_trie, as_of)
+
+    ensures:
+        for each live_trie in shard.live
+            where live_trie.data_file_size < config.file_size_target
+              and live_trie.block_index <= new_trie.block_index:
+            transition live_trie to :garbage with garbage_as_of = as_of
+}
+
+rule supersede_by_block_index {
+    -- Unconditional supersession: mark all live tries as garbage
+    -- if their block_index <= the given block_index.
+    -- See: trie_catalog.clj (supersede-by-block-idx)
+    when: supersede_by_block_index(shard, block_index, as_of)
+
+    ensures:
+        for each live_trie in shard.live
+            where live_trie.block_index <= block_index:
+            transition live_trie to :garbage with garbage_as_of = as_of
+}
+
+rule completed_part_group {
+    -- True when all branch_factor siblings at (level, recency, parent_part ++ [0..3])
+    -- have max_block_index >= the new trie's block_index.
+    -- See: trie_catalog.clj (completed-part-group?, sibling-tries)
+    when: completed_part_group(trie) -> Boolean
+
+    let parent_part = trie.part.pop
+    ensures:
+        for each p in 0..(config.branch_factor - 1):
+            let sibling_shard = trie_catalog.tries[trie.table][(trie.level, trie.recency, parent_part ++ [p])]
+            sibling_shard.max_block_index >= trie.block_index
+}
+
+rule mark_part_group_live {
+    -- Transition all nascent tries at the given block_index across the partition group to live.
+    -- See: trie_catalog.clj (mark-part-group-live, mark-block-idx-live)
+    when: mark_part_group_live(trie)
+
+    let parent_part = trie.part.pop
+    ensures:
+        for each p in 0..(config.branch_factor - 1):
+            let shard = [trie.level, trie.recency, parent_part ++ [p]]
+            mark_block_index_live(shard, trie.block_index)
+}
+
+rule mark_block_index_live {
+    -- Find a nascent trie at the given block_index and transition it to live.
+    -- See: trie_catalog.clj (mark-block-idx-live)
+    when: mark_block_index_live(shard, block_index)
+
+    let nascent_trie = shard.nascent.find(t => t.block_index == block_index)
+
+    ensures:
+        if nascent_trie != null:
+            transition nascent_trie from :nascent to :live
+}
+
+------------------------------------------------------------
+-- Rules: Refresh and Delete
+------------------------------------------------------------
 
 rule FollowerRefreshes {
     -- Read-only nodes refresh the catalog from the object store after a block appears.
