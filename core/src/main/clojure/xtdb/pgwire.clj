@@ -1807,26 +1807,26 @@
           (.increment total-connections-counter))
         (swap! server-state assoc-in [:connections cid] conn)
 
-        (log/trace "Starting connection loop" {:port port, :cid cid})
         (conn-loop conn))
       (catch SocketException e
-        (when (= "Broken pipe (Write failed)" (.getMessage e))
-          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+        (when (or (= "Broken pipe (Write failed)" (.getMessage e))
+                  (= "Connection reset by peer" (.getMessage e)))
+          (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
           (.close conn-socket))
 
-        (when (= "Connection reset by peer" (.getMessage e))
-          (log/trace "Client closed socket while we were writing" {:port port, :cid cid})
+        (when (= "Connection reset" (.getMessage e))
+          (log/debug "Client closed socket while we were reading" {:port port, :cid cid})
           (.close conn-socket))
 
         ;; socket being closed is normal, otherwise log.
         (when-not (.isClosed conn-socket)
-          (log/error e "An exception was caught during connection" {:port port, :cid cid})))
+          (log/warn e "An exception was caught during connection" {:port port, :cid cid})))
 
       (catch EOFException _
-        (log/trace "Connection closed by client" {:port port, :cid cid}))
+        (log/debug "Connection closed by client" {:port port, :cid cid}))
 
       (catch IOException e
-        (log/debug e "IOException in connection" {:port port, :cid cid}))
+        (log/warn e "IOException in connection" {:port port, :cid cid}))
 
       (catch Interrupted _)
       (catch InterruptedException _)
