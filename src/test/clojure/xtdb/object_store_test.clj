@@ -11,7 +11,7 @@
            [java.nio.file.attribute FileAttribute]
            [java.util NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
-           [xtdb.api.storage ObjectStore ObjectStore$Factory]))
+           [xtdb.api.storage ObjectStore ObjectStore$Factory ObjectStore$StoredObject]))
 
 (defn- get-edn [^ObjectStore obj-store, ^Path k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
@@ -53,13 +53,13 @@
     (.putIfAbsent os k (.slice buf))
     (CompletableFuture/completedFuture nil))
 
-  ;; these two should be returning StoredObjects, but for some reason this seems fine
-  (listAllObjects [_this] (vec (.keySet os)))
+  (listAllObjects [_this]
+    (->> os (map (fn [e] (ObjectStore$StoredObject. (key e) (.capacity ^ByteBuffer (val e)))))))
 
   (listAllObjects [_ prefix]
     (->> (.tailMap os prefix)
          (take-while #(-> ^Path (key %) (.startsWith prefix)))
-         (map key)))
+         (map (fn [e] (ObjectStore$StoredObject. (key e) (.capacity ^ByteBuffer (val e)))))))
   
   (deleteIfExists [_this k]
     (.remove os k)
