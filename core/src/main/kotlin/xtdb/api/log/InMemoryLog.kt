@@ -21,7 +21,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-class InMemoryLog(
+class InMemoryLog @JvmOverloads constructor(
     private val instantSource: InstantSource,
     override val epoch: Int,
     coroutineContext: CoroutineContext = Dispatchers.Default

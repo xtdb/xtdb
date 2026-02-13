@@ -2,13 +2,13 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
@@ -31,13 +31,13 @@ import xtdb.error.Incorrect
 import xtdb.error.Interrupted
 import xtdb.error.NotFound
 import xtdb.log.proto.TrieDetails
+import xtdb.trie.BlockIndex
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.error
@@ -53,7 +53,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = LogProcessor::class.logger
 
-class LogProcessor(
+class LogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
     meterRegistry: MeterRegistry,
     private val dbStorage: DatabaseStorage,
@@ -62,7 +62,8 @@ class LogProcessor(
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>,
-    private val mode: Database.Mode = Database.Mode.READ_WRITE
+    private val mode: Database.Mode = Database.Mode.READ_WRITE,
+    private val maxBufferedRecords: Int = 1024
 ) : Log.Subscriber, AutoCloseable {
 
     private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
@@ -82,6 +83,11 @@ class LogProcessor(
 
     private val secondaryDatabases: MutableMap<String, DatabaseConfig> =
         blockCatalog.secondaryDatabases.toMutableMap()
+
+    // Read-only block transition: when the live index is full, we buffer messages
+    // until BlockUploaded arrives, then transition and replay.
+    private var pendingBlockIdx: BlockIndex? = null
+    private val bufferedRecords: MutableList<Log.Record> = mutableListOf()
 
     @Volatile
     var latestProcessedMsgId: MessageId =
@@ -160,127 +166,27 @@ class LogProcessor(
             flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
-        records.forEach { record ->
+        for (record in records) {
             val msgId = offsetToMsgId(epoch, record.logOffset)
-            var toFinishBlock = false
-            LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
             try {
-                val res = when (val msg = record.message) {
-                    is Message.Tx -> {
-                        val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-                            LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
-
-                            // Store skipped transaction to object store
-                            val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-                            bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
-                            LOG.debug("Stored skipped transaction to $skippedTxPath")
-
-                            // use abort flow in indexTx
-                            indexer.indexTx(
-                                msgId, record.logTimestamp,
-                                null, null, null, null, null
-                            )
-                        } else {
-                            msg.payload.asChannel.use { txOpsCh ->
-                                Relation.StreamLoader(allocator, txOpsCh).use { loader ->
-                                    Relation(allocator, loader.schema).use { rel ->
-                                        loader.loadNextPage(rel)
-
-                                        val systemTime =
-                                            (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
-
-                                        val defaultTz =
-                                            (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
-
-                                        val user = rel["user"].getObject(0) as String?
-
-                                        val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
-
-                                        indexer.indexTx(
-                                            msgId, record.logTimestamp,
-                                            rel["tx-ops"].listElements,
-                                            systemTime, defaultTz, user, userMetadata
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        if (liveIndex.isFull())
-                            toFinishBlock = true
-
-                        result
-                    }
-
-                    is Message.FlushBlock -> {
-                        val expectedBlockIdx = msg.expectedBlockIdx
-                        if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
-                            toFinishBlock = true
-
-                        null
-                    }
-
-                    is Message.TriesAdded -> {
-                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                            msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                                trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
-                            }
-                        null
-                    }
-
-                    is Message.AttachDatabase -> {
-                        require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
-                        val res = try {
-                            if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
-                                throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
-                            secondaryDatabases[msg.dbName] = msg.config.serializedConfig
-                            TransactionCommitted(msgId, record.logTimestamp)
-                        } catch (e: Anomaly.Caller) {
-                            TransactionAborted(msgId, record.logTimestamp, e)
-                        }
-
-                        indexer.addTxRow(
-                            TransactionKey(msgId, record.logTimestamp),
-                            (res as? TransactionAborted)?.error
-                        )
-
-                        res
-                    }
-
-                    is Message.DetachDatabase -> {
-                        require(dbState.name == "xtdb") { "detach-db on non-primary ${dbState.name}" }
-                        val res = try {
-                            when {
-                                msg.dbName == "xtdb" ->
-                                    throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to msg.dbName))
-                                msg.dbName !in secondaryDatabases ->
-                                    throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
-                                else -> {
-                                    secondaryDatabases.remove(msg.dbName)
-                                    TransactionCommitted(msgId, record.logTimestamp)
-                                }
-                            }
-                        } catch (e: Anomaly.Caller) {
-                            TransactionAborted(msgId, record.logTimestamp, e)
-                        }
-
-                        indexer.addTxRow(
-                            TransactionKey(msgId, record.logTimestamp),
-                            (res as? TransactionAborted)?.error
-                        )
-
-                        res
-                    }
-                }
-                latestProcessedMsgId = msgId
-                if (toFinishBlock) {
-                    if (readOnly) {
-                        waitForBlock()
+                if (pendingBlockIdx != null) {
+                    // We're waiting for a BlockUploaded message — check if this is it
+                    val msg = record.message
+                    if (msg is Message.BlockUploaded && msg.blockIndex == pendingBlockIdx) {
+                        doReadOnlyBlockTransition()
+                        replayBufferedRecords()
+                        // Fall through to process this record's successors normally
                     } else {
-                        finishBlock(record.logTimestamp)
+                        if (bufferedRecords.size >= maxBufferedRecords)
+                            throw Fault("read-only buffer overflow: buffered $maxBufferedRecords records waiting for BlockUploaded(b${pendingBlockIdx!!.asLexHex})")
+
+                        bufferedRecords.add(record)
+                        continue
                     }
                 }
+
+                val res = processRecord(msgId, record)
                 watchers.notify(msgId, res)
             } catch (e: ClosedByInterruptException) {
                 watchers.notify(msgId, e)
@@ -307,8 +213,165 @@ class LogProcessor(
                 )
                 throw CancellationException(e)
             }
+        }
+    }
 
-            LOG.debug("Processed message $msgId")
+    private fun processRecord(msgId: MessageId, record: Log.Record): TransactionResult? {
+        var toFinishBlock = false
+        LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
+
+        return when (val msg = record.message) {
+                is Message.Tx -> {
+                    val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
+                        LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+
+                        // Store skipped transaction to object store
+                        val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
+                        bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
+                        LOG.debug("Stored skipped transaction to $skippedTxPath")
+
+                        // use abort flow in indexTx
+                        indexer.indexTx(
+                            msgId, record.logTimestamp,
+                            null, null, null, null, null
+                        )
+                    } else {
+                        msg.payload.asChannel.use { txOpsCh ->
+                            Relation.StreamLoader(allocator, txOpsCh).use { loader ->
+                                Relation(allocator, loader.schema).use { rel ->
+                                    loader.loadNextPage(rel)
+
+                                    val systemTime =
+                                        (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+
+                                    val defaultTz =
+                                        (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+
+                                    val user = rel["user"].getObject(0) as String?
+
+                                    val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
+
+                                    indexer.indexTx(
+                                        msgId, record.logTimestamp,
+                                        rel["tx-ops"].listElements,
+                                        systemTime, defaultTz, user, userMetadata
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (liveIndex.isFull())
+                        toFinishBlock = true
+
+                    result
+                }
+
+                is Message.FlushBlock -> {
+                    val expectedBlockIdx = msg.expectedBlockIdx
+                    if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
+                        toFinishBlock = true
+
+                    null
+                }
+
+                is Message.TriesAdded -> {
+                    if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                        msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                            trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
+                        }
+                    null
+                }
+
+                is Message.BlockUploaded -> {
+                    // Handled in the buffering logic above; if we reach here
+                    // it means we're not waiting for a block (e.g. writer node), so ignore.
+                    null
+                }
+
+                is Message.AttachDatabase -> {
+                    require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
+                    val res = try {
+                        if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
+                            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
+                        secondaryDatabases[msg.dbName] = msg.config.serializedConfig
+                        TransactionCommitted(msgId, record.logTimestamp)
+                    } catch (e: Anomaly.Caller) {
+                        TransactionAborted(msgId, record.logTimestamp, e)
+                    }
+
+                    indexer.addTxRow(
+                        TransactionKey(msgId, record.logTimestamp),
+                        (res as? TransactionAborted)?.error
+                    )
+
+                    res
+                }
+
+                is Message.DetachDatabase -> {
+                    require(dbState.name == "xtdb") { "detach-db on non-primary ${dbState.name}" }
+                    val res = try {
+                        when {
+                            msg.dbName == "xtdb" ->
+                                throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to msg.dbName))
+                            msg.dbName !in secondaryDatabases ->
+                                throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
+                            else -> {
+                                secondaryDatabases.remove(msg.dbName)
+                                TransactionCommitted(msgId, record.logTimestamp)
+                            }
+                        }
+                    } catch (e: Anomaly.Caller) {
+                        TransactionAborted(msgId, record.logTimestamp, e)
+                    }
+
+                    indexer.addTxRow(
+                        TransactionKey(msgId, record.logTimestamp),
+                        (res as? TransactionAborted)?.error
+                    )
+
+                    res
+                }
+            }.also {
+                latestProcessedMsgId = msgId
+                if (toFinishBlock) {
+                    if (readOnly) {
+                        pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+                        LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
+                    } else {
+                        finishBlock(record.logTimestamp)
+                    }
+                }
+
+                LOG.debug("Processed message $msgId")
+            }
+    }
+
+    private fun doReadOnlyBlockTransition() {
+        val blockIdx = pendingBlockIdx!!
+        LOG.debug("read-only mode: received BlockUploaded for block 'b${blockIdx.asLexHex}', transitioning...")
+
+        val blockFile = bufferPool.allBlockFiles
+            .find { BlockCatalog.blockFilePath(blockIdx) == it.key }
+            ?: throw Fault("read-only mode: block file for 'b${blockIdx.asLexHex}' not found in object store")
+
+        val block = Block.parseFrom(bufferPool.getByteArray(blockFile.key))
+        blockCatalog.refresh(block)
+        tableCatalog.refresh()
+        trieCatalog.refresh()
+        liveIndex.nextBlock()
+
+        pendingBlockIdx = null
+        LOG.debug("read-only mode: transitioned to block 'b${blockIdx.asLexHex}'")
+    }
+
+    private fun replayBufferedRecords() {
+        val toReplay = bufferedRecords.toList()
+        bufferedRecords.clear()
+        for (record in toReplay) {
+            val msgId = offsetToMsgId(epoch, record.logOffset)
+            val res = processRecord(msgId, record)
+            watchers.notify(msgId, res)
         }
     }
 
@@ -357,65 +420,13 @@ class LogProcessor(
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
         blockCatalog.refresh(block)
 
+        // Notify read-only nodes that the block is available
+        log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId))
+
         liveIndex.nextBlock()
         compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
     }
-
-    /**
-     * In read-only mode, we can't write blocks ourselves.
-     * Instead, we poll the object store waiting for the primary cluster to write the block.
-     * When the block appears and matches our latestProcessedMsgId exactly, we can clear the live index.
-     */
-    private suspend fun waitForBlock() {
-        val expectedBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-        LOG.debug("read-only mode: waiting for block 'b${expectedBlockIdx.asLexHex}' from primary cluster...")
-
-        val pollInterval = Duration.ofSeconds(1)
-
-        while (true) {
-            val blockFile = bufferPool.allBlockFiles
-                .find { parseBlockIndex(it.key.fileName) == expectedBlockIdx }
-
-            if (blockFile != null) {
-                val block = Block.parseFrom(bufferPool.getByteArray(blockFile.key))
-                val blockMsgId = block.latestProcessedMsgId
-
-                when {
-                    blockMsgId == latestProcessedMsgId -> {
-                        // Exact match - the block covers exactly the transactions we've indexed
-                        LOG.debug("read-only mode: found matching block 'b${expectedBlockIdx.asLexHex}'")
-                        blockCatalog.refresh(block)
-                        tableCatalog.refresh()
-                        trieCatalog.refresh()
-                        liveIndex.nextBlock()
-                        return
-                    }
-                    blockMsgId > latestProcessedMsgId -> {
-                        // Block is ahead of us - this shouldn't happen in normal operation
-                        throw Fault(
-                            "Read-only block mismatch: block 'b${expectedBlockIdx.asLexHex}' has msgId $blockMsgId " +
-                                "but we're at $latestProcessedMsgId"
-                        )
-                    }
-                    else -> {
-                        // Block is behind us - keep waiting for the right one
-                        LOG.debug("read-only mode: block 'b${expectedBlockIdx.asLexHex}' has msgId $blockMsgId, " +
-                            "waiting for $latestProcessedMsgId")
-                    }
-                }
-            }
-
-            // Wait and retry
-            delay(pollInterval.toMillis())
-        }
-    }
-
-    private fun parseBlockIndex(fileName: java.nio.file.Path): Long? =
-        Regex("b(\\p{XDigit}+)\\.binpb")
-            .matchEntire(fileName.toString())
-            ?.groups?.get(1)
-            ?.value?.let { "x$it".fromLexHex }
 
     @JvmOverloads
     fun awaitAsync(msgId: MessageId = latestSubmittedMsgId) = watchers.awaitAsync(msgId)

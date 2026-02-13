@@ -138,7 +138,7 @@ value TableMetadata {
 entity Message {
     msg_id: MessageId
     log_timestamp: Instant
-    kind: TxMessage | FlushBlockMessage | TriesAddedMessage | AttachDbMessage | DetachDbMessage
+    kind: TxMessage | FlushBlockMessage | TriesAddedMessage | BlockUploadedMessage | AttachDbMessage | DetachDbMessage
 }
 
 variant TxMessage : Message {
@@ -161,6 +161,14 @@ variant TriesAddedMessage : Message {
     storage_version: Int
     storage_epoch: Int
     tries: List<trie_cat/TrieDetails>
+}
+
+variant BlockUploadedMessage : Message {
+    -- Notification that a block has been written to the object store.
+    -- Sent by the writer after finishBlock(); consumed by read-only nodes to refresh catalogs without polling.
+    -- See: log/proto/log.proto (BlockUploaded)
+    block_index: Long
+    latest_processed_msg_id: MessageId
 }
 
 variant AttachDbMessage : Message {
@@ -253,8 +261,8 @@ rule ProcessTriesAddedMessage {
 
 -- == Block Flushing ==
 --
--- Two paths: the leader writes blocks directly;
--- read-only nodes wait for blocks to appear from the primary.
+-- Two paths: the leader writes blocks and notifies via BlockUploaded on the source log;
+-- read-only nodes buffer messages until BlockUploaded arrives, then transition and replay.
 
 rule LeaderFinishesBlock {
     -- log_timestamp is the log timestamp of the message that triggered the flush
@@ -296,6 +304,13 @@ rule LeaderFinishesBlock {
 
         block_catalog.refresh(block)
 
+        -- Notify read-only nodes that the block is available.
+        let block_uploaded = BlockUploadedMessage.created(
+            block_index: block_index,
+            latest_processed_msg_id: log_processor.latest_processed_msg_id
+        )
+        block_uploaded appended to database.source_log
+
         -- Reset for next block.
         live_index.nextBlock()
 
@@ -303,24 +318,35 @@ rule LeaderFinishesBlock {
         CompactorSignalled()
 }
 
-rule FollowerWaitsForBlock {
+rule FollowerBuffersUntilBlockEnd {
+    -- The follower cannot process further txs while the live index is full.
+    -- It consumes messages from the source log, buffering them until BlockUploaded arrives.
     when: BlockFlushNeeded(log_timestamp)
 
     requires: database.mode == read_only
 
-    let expected_block_idx = (block_catalog.current_block_index ?? -1) + 1
+    let block_index = (block_catalog.current_block_index ?? -1) + 1
 
-    -- Poll until a matching block appears in the object store.
     ensures:
-        let block = ObjectStore.blockAppears(expected_block_idx)
+        let (buffered, msg) = consumeUntil BlockUploadedMessage from database.source_log
+            where msg.block_index == block_index
 
-        requires: block.latest_processed_msg_id == log_processor.latest_processed_msg_id
+        FollowerProcessesBlockEnd(block_index, buffered)
+}
 
-        -- Synchronise local state from the block.
-        block_catalog.refresh(block)
+rule FollowerProcessesBlockEnd {
+    when: FollowerProcessesBlockEnd(block_index, buffered)
+
+    ensures:
+        -- The reader doesn't write tries — it refreshes catalogs from what the writer wrote.
+        block_catalog.refresh(block_index)
         table_catalog.refresh()
         trie_cat/trie_catalog.refresh()
         live_index.nextBlock()
+
+        -- Replay buffered messages into the new live index.
+        for each buffered_msg in buffered:
+            ProcessMessage(buffered_msg)
 }
 
 
@@ -416,5 +442,4 @@ deferred IndexTransaction           -- transaction resolution (put/delete/erase 
 ------------------------------------------------------------
 
 open_question "Should the flush timeout be per-database or global?"
-open_question "When source-log and replica-log are separated, does the follower subscribe to replica-log only?"
 open_question "What happens if a read-only node's latestProcessedMsgId is behind the block? (currently a Fault)"

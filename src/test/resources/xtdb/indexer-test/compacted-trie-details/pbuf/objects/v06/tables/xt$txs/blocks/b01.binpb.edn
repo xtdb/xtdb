@@ -6,7 +6,7 @@
   "system_time" #xt/field {"system_time" :instant},
   "_id" #xt/field {"_id" :i64}},
  :hlls
- {"_id" [1654789951 2.001955671862574],
+ {"_id" [318682431 2.001955671862574],
   "system_time" [2144534777 2.001955671862574],
   "committed" [1743138479 1.0004885993744506],
   "user_metadata" [1743287434 1.0004885993744506],
@@ -25,7 +25,7 @@
       :min-system-from #xt/instant "2020-01-02T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
       :row-count 1,
-      :iid-bloom [-1074623043 5]}}
+      :iid-bloom [-89595038 5]}}
     {:trie-key "l00-rc-b00",
      :data-file-size 2894,
      :trie-metadata

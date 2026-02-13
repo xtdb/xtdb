@@ -505,6 +505,7 @@ dependencies {
     testImplementation(libs.kotest)
     testImplementation(libs.kotest.props)
     testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.mockk)
 
     // For Healthz Test
     testImplementation(libs.clj.http)
