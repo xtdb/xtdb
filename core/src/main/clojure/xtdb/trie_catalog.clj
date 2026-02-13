@@ -458,6 +458,11 @@
     (->> (garbage-tries (.get !table-cats table) as-of)
          (into #{} (map :trie-key))))
 
+  (listAllGarbageTrieKeys [this table]
+    (->> (:tries (trie-state this table))
+         (mapcat (comp :garbage val))
+         (into #{} (map :trie-key))))
+
   (deleteTries [_ table garbage-trie-keys]
     (.compute !table-cats table
               (fn [_table tries]
