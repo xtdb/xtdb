@@ -70,4 +70,5 @@ message DetachDatabase {
 message BlockUploaded {
     int64 block_index = 1;
     int64 latest_processed_msg_id = 2;
+    int32 storage_epoch = 3;
 }

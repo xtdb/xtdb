@@ -169,6 +169,7 @@ variant BlockUploadedMessage : Message {
     -- See: log/proto/log.proto (BlockUploaded)
     block_index: Long
     latest_processed_msg_id: MessageId
+    storage_epoch: StorageEpoch
 }
 
 variant AttachDbMessage : Message {
@@ -307,7 +308,8 @@ rule LeaderFinishesBlock {
         -- Notify read-only nodes that the block is available.
         let block_uploaded = BlockUploadedMessage.created(
             block_index: block_index,
-            latest_processed_msg_id: log_processor.latest_processed_msg_id
+            latest_processed_msg_id: log_processor.latest_processed_msg_id,
+            storage_epoch: buffer_pool.epoch
         )
         block_uploaded appended to database.source_log
 
@@ -330,6 +332,7 @@ rule FollowerBuffersUntilBlockEnd {
     ensures:
         let (buffered, msg) = consumeUntil BlockUploadedMessage from database.source_log
             where msg.block_index == block_index
+              and msg.storage_epoch == buffer_pool.epoch
 
         FollowerProcessesBlockEnd(block_index, buffered)
 }

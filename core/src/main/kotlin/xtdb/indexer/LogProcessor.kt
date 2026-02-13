@@ -173,7 +173,7 @@ class LogProcessor @JvmOverloads constructor(
                 if (pendingBlockIdx != null) {
                     // We're waiting for a BlockUploaded message — check if this is it
                     val msg = record.message
-                    if (msg is Message.BlockUploaded && msg.blockIndex == pendingBlockIdx) {
+                    if (msg is Message.BlockUploaded && msg.blockIndex == pendingBlockIdx && msg.storageEpoch == bufferPool.epoch) {
                         doReadOnlyBlockTransition()
                         replayBufferedRecords()
                         // Fall through to process this record's successors normally
@@ -421,7 +421,7 @@ class LogProcessor @JvmOverloads constructor(
         blockCatalog.refresh(block)
 
         // Notify read-only nodes that the block is available
-        log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId))
+        log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
 
         liveIndex.nextBlock()
         compactor.signalBlock()

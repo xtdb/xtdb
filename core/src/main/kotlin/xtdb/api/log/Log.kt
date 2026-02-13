@@ -107,7 +107,7 @@ interface Log : AutoCloseable {
                                 MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
                                 MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
-                                    BlockUploaded(it.blockIndex, it.latestProcessedMsgId)
+                                    BlockUploaded(it.blockIndex, it.latestProcessedMsgId, it.storageEpoch)
                                 }
 
                                 else -> null
@@ -151,11 +151,12 @@ interface Log : AutoCloseable {
             }
         }
 
-        data class BlockUploaded(val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId) : ProtobufMessage() {
+        data class BlockUploaded(val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId, val storageEpoch: StorageEpoch) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
                 blockUploaded = blockUploaded {
                     this.blockIndex = this@BlockUploaded.blockIndex
                     this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
+                    this.storageEpoch = this@BlockUploaded.storageEpoch
                 }
             }
         }
