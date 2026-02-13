@@ -36,15 +36,15 @@
   ObjectStore
   (getObject [_this k]
     (CompletableFuture/completedFuture
-     (let [{:keys [^ByteBuffer buf]} (or (.get os k)
-                                         (throw (os/obj-missing-exception k)))]
+     (let [^ByteBuffer buf (or (.get os k)
+                                (throw (os/obj-missing-exception k)))]
        (.slice buf))))
 
   (getObject [_this k out-path]
     (CompletableFuture/supplyAsync
      (fn []
-       (let [{:keys [^ByteBuffer buf]} (or (.get os k)
-                                           (throw (os/obj-missing-exception k)))]
+       (let [^ByteBuffer buf (or (.get os k)
+                                  (throw (os/obj-missing-exception k)))]
          (with-open [ch (util/->file-channel out-path util/write-truncate-open-opts)]
            (.write ch buf)
            out-path)))))
