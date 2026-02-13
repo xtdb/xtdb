@@ -315,13 +315,13 @@ class CompactorSimulationTest : SimulationTestBase() {
         super.tearDownSimulation()
     }
 
-    private fun addL0s(tableRef: TableRef, l0s: List<TrieDetails>) {
-        l0s.forEach {
+    private fun seedTries(tableRef: TableRef, tries: List<TrieDetails>) {
+        tries.forEach {
             mockDriver.trieKeyToFileSize[mockDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
-            addTriesToBufferPool(sharedBufferPool, tableRef, l0s)
-            db.trieCatalog.addTries(tableRef, l0s, Instant.now())
+            addTriesToBufferPool(sharedBufferPool, tableRef, tries)
+            db.trieCatalog.addTries(tableRef, tries, Instant.now())
         }
     }
 
@@ -334,7 +334,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val db = dbs[0]
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
-            addL0s(docsTable, listOf(l0Trie))
+            seedTries(docsTable, listOf(l0Trie))
             it.compactAllSync(null)
         }
 
@@ -362,7 +362,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             // Round 1: Add 3 L0 tries and compact
-            addL0s(
+            seedTries(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b00", 10 * 1024),
@@ -386,7 +386,7 @@ class CompactorSimulationTest : SimulationTestBase() {
             )
 
             // Round 2: Add 3 more L0 tries and compact
-            addL0s(
+            seedTries(
                 table,
                 listOf(
                     buildTrieDetails(table.tableName, "l00-rc-b03", 10 * 1024),
@@ -428,7 +428,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val db = dbs[0]
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
-            addL0s(docsTable, l0tries.toList())
+            seedTries(docsTable, l0tries.toList())
             it.compactAllSync(null)
             val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
             val garbageTries = db.trieCatalog.listAllGarbageTrieKeys(docsTable)
@@ -451,7 +451,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
-            addL0s(docsTable, l1Tries.toList())
+            seedTries(docsTable, l1Tries.toList())
 
             it.compactAllSync(null)
 
@@ -489,7 +489,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
-            addL0s(docsTable, l1Tries.toList() + existingL2Tries)
+            seedTries(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAllSync(null)
 
@@ -536,7 +536,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
 
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
-            addL0s(docsTable, l1Tries.toList() + l2tries)
+            seedTries(docsTable, l1Tries.toList() + l2tries)
 
             it.compactAllSync(null)
 
@@ -564,9 +564,9 @@ class CompactorSimulationTest : SimulationTestBase() {
         val usersTries = L0TrieKeys.take(16).map { buildTrieDetails(usersTable.tableName, it, l0FileSize) }
         val ordersTries = L0TrieKeys.take(16).map { buildTrieDetails(ordersTable.tableName, it, l0FileSize) }
 
-        addL0s(docsTable, docsTries.toList())
-        addL0s(usersTable, usersTries.toList())
-        addL0s(ordersTable, ordersTries.toList())
+        seedTries(docsTable, docsTries.toList())
+        seedTries(usersTable, usersTries.toList())
+        seedTries(ordersTable, ordersTries.toList())
 
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
@@ -615,7 +615,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
-        addL0s(docsTable, listOf(l0Trie))
+        seedTries(docsTable, listOf(l0Trie))
 
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
@@ -648,7 +648,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0tries = L0TrieKeys.take(1000).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
 
-        addL0s(docsTable, l0tries.toList())
+        seedTries(docsTable, l0tries.toList())
 
         dbs.safeMap { db ->
             db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState)
