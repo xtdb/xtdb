@@ -166,17 +166,25 @@ class LogProcessor @JvmOverloads constructor(
             flusher.flushedTxId = offsetToMsgId(epoch, offset)
         }
 
-        for (record in records) {
+        val queue = ArrayDeque(records)
+
+        while (queue.isNotEmpty()) {
+            val record = queue.removeFirst()
             val msgId = offsetToMsgId(epoch, record.logOffset)
 
             try {
                 if (pendingBlockIdx != null) {
-                    // We're waiting for a BlockUploaded message — check if this is it
                     val msg = record.message
                     if (msg is Message.BlockUploaded && msg.blockIndex == pendingBlockIdx && msg.storageEpoch == bufferPool.epoch) {
                         doReadOnlyBlockTransition()
-                        replayBufferedRecords()
-                        // Fall through to process this record's successors normally
+
+                        // Splice buffered records to the front of the queue so they're
+                        // processed through the same pendingBlockIdx gate as every other record.
+                        // Include the BlockUploaded so it replays through processRecord/watchers.
+                        bufferedRecords.add(record)
+                        queue.addAll(0, bufferedRecords)
+                        bufferedRecords.clear()
+                        continue
                     } else {
                         if (bufferedRecords.size >= maxBufferedRecords)
                             throw Fault("read-only buffer overflow: buffered $maxBufferedRecords records waiting for BlockUploaded(b${pendingBlockIdx!!.asLexHex})")
@@ -363,16 +371,6 @@ class LogProcessor @JvmOverloads constructor(
 
         pendingBlockIdx = null
         LOG.debug("read-only mode: transitioned to block 'b${blockIdx.asLexHex}'")
-    }
-
-    private fun replayBufferedRecords() {
-        val toReplay = bufferedRecords.toList()
-        bufferedRecords.clear()
-        for (record in toReplay) {
-            val msgId = offsetToMsgId(epoch, record.logOffset)
-            val res = processRecord(msgId, record)
-            watchers.notify(msgId, res)
-        }
     }
 
     fun finishBlock(systemTime: Instant) {

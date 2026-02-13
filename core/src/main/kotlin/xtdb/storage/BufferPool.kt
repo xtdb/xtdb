@@ -18,7 +18,7 @@ import kotlin.time.toJavaDuration
 
 typealias StorageEpoch = Int
 
-sealed interface BufferPool : AutoCloseable {
+interface BufferPool : AutoCloseable {
 
     val epoch: StorageEpoch
 
