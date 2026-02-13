@@ -2,7 +2,7 @@
 antlr = "4.13.2"
 arrow = "18.3.0"
 arrow-adbc = "0.21.0"
-aws-sdk = "2.25.50"
+aws-sdk = "2.41.27"
 azure = "1.13.1"
 azure-storage = "12.27.0"
 clojure = "1.12.0"
