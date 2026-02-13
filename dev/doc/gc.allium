@@ -48,9 +48,9 @@ config {
 -- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
 --
 -- L0 files are excluded from trie GC.
--- L0 files are the input to L0→L1 compaction, and compaction timing is unpredictable.
--- The time-based grace period used by trie GC cannot guarantee that compaction has
--- finished reading an L0 file before it becomes eligible for deletion.
+-- L0 forms a complete set of the data, so if anything goes wrong with deeper levels
+-- we can reconstruct them entirely from the L0s. This has proved valuable on several
+-- occasions during compactor development.
 -- L0 files are small relative to compacted data (one per block, typically ~100K rows)
 -- so the storage overhead of retaining them is negligible.
 -- See: trie_catalog.clj (garbage-fn)
