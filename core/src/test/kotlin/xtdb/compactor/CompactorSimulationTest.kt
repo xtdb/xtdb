@@ -658,11 +658,14 @@ class CompactorSimulationTest : SimulationTestBase() {
             }
         }
 
-        val trieKeys = dbs.map { it.trieCatalog.listLiveAndNascentTrieKeys(docsTable) }
+        // Coordination-free invariant: all systems seeing the same catalog
+        // must produce identical compaction output.
+        val distinctLiveTrieSets = dbs.map { it.trieCatalog.listLiveAndNascentTrieKeys(docsTable).toSet() }.distinct()
 
         assertEquals(
             1,
-            trieKeys.map { it.size }.distinct().size,
+            distinctLiveTrieSets.size,
+            "All systems should converge on the same set of live trie keys"
         )
     }
 }
