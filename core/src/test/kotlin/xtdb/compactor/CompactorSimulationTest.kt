@@ -339,8 +339,12 @@ class CompactorSimulationTest : SimulationTestBase() {
         }
 
         assertEquals(
-            listOf("l00-rc-b00", "l01-rc-b00"),
-            db.trieCatalog.listAllTrieKeys(docsTable),
+            listOf("l01-rc-b00"),
+            db.trieCatalog.listLiveAndNascentTrieKeys(docsTable),
+        )
+        assertEquals(
+            setOf("l00-rc-b00"),
+            db.trieCatalog.listAllGarbageTrieKeys(docsTable),
         )
     }
 
@@ -369,12 +373,16 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAllSync(null)
 
+            // L1C is levelled — each undersized L1C is superseded by the next,
+            // so only the latest (b02) remains live
             assertEquals(
-                listOf(
-                    "l00-rc-b00", "l00-rc-b01", "l00-rc-b02",
-                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02"
-                ),
-                db.trieCatalog.listAllTrieKeys(table)
+                listOf("l01-rc-b02"),
+                db.trieCatalog.listLiveAndNascentTrieKeys(table)
+            )
+            // 3 L0s garbage + 2 superseded L1Cs (b00, b01)
+            assertEquals(
+                setOf("l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l01-rc-b00", "l01-rc-b01"),
+                db.trieCatalog.listAllGarbageTrieKeys(table)
             )
 
             // Round 2: Add 3 more L0 tries and compact
@@ -389,12 +397,18 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAllSync(null)
 
+            // Only the latest L1C (b05) remains live after levelling
             assertEquals(
-                listOf(
+                listOf("l01-rc-b05"),
+                db.trieCatalog.listLiveAndNascentTrieKeys(table)
+            )
+            // 6 L0s garbage + 5 superseded L1Cs (b00-b04)
+            assertEquals(
+                setOf(
                     "l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l00-rc-b03", "l00-rc-b04", "l00-rc-b05",
-                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04", "l01-rc-b05",
+                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04",
                 ),
-                db.trieCatalog.listAllTrieKeys(table)
+                db.trieCatalog.listAllGarbageTrieKeys(table)
             )
         }
     }
@@ -416,10 +430,12 @@ class CompactorSimulationTest : SimulationTestBase() {
         db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState).use {
             addL0s(docsTable, l0tries.toList())
             it.compactAllSync(null)
-            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
-            assertEquals(100, allTries.prefix("l00-rc-").size)
-            assertEquals(100, allTries.prefix("l01-rc-").size)
-            assertEquals(8, allTries.prefix("l02-rc-").size)
+            val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
+            val garbageTries = db.trieCatalog.listAllGarbageTrieKeys(docsTable)
+            assertEquals(0, liveTries.prefix("l00-rc-").size)
+            assertTrue(garbageTries.any { it.startsWith("l00-rc-") }, "L0s should be in garbage")
+            assertTrue(liveTries.prefix("l01-rc-").size > 0, "Some L1Cs should be live")
+            assertTrue(liveTries.prefix("l02-rc-").size > 0, "Some L2Cs should be live")
         }
     }
 
@@ -440,11 +456,12 @@ class CompactorSimulationTest : SimulationTestBase() {
             it.compactAllSync(null)
 
             assertEquals(
-                setOf(
-                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03",
-                    "l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"
-                ),
-                db.trieCatalog.listAllTrieKeys(docsTable).toSet()
+                setOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"),
+                db.trieCatalog.listLiveAndNascentTrieKeys(docsTable).toSet()
+            )
+            assertEquals(
+                setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03"),
+                db.trieCatalog.listAllGarbageTrieKeys(docsTable)
             )
         }
     }
@@ -476,14 +493,15 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAllSync(null)
 
-            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
-            assertEquals(
-                setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03"),
-                allTries.prefix("l01-").toSet()
-            )
+            val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
+            assertEquals(0, liveTries.prefix("l01-").size)
             assertEquals(
                 setOf("l02-rc-p0-b03", "l02-rc-p1-b03", "l02-rc-p2-b03", "l02-rc-p3-b03"),
-                allTries.prefix("l02-").toSet()
+                liveTries.prefix("l02-").toSet()
+            )
+            assertEquals(
+                setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03"),
+                db.trieCatalog.listAllGarbageTrieKeys(docsTable)
             )
         }
     }
@@ -522,20 +540,16 @@ class CompactorSimulationTest : SimulationTestBase() {
 
             it.compactAllSync(null)
 
-            val allTries = db.trieCatalog.listAllTrieKeys(docsTable)
+            val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
 
-            // Verify L2C partitions are complete (should have b03, b07, b0b, b0f for each partition)
-            for (partition in 0..3) {
-                for (blockHex in listOf("03", "07", "0b", "0f")) {
-                    assertTrue(
-                        allTries.contains("l02-rc-p$partition-b$blockHex"),
-                        "L2C partition $partition should have block b$blockHex"
-                    )
-                }
-            }
+            // L1Cs should all be garbage after L2C supersession
+            assertEquals(0, liveTries.prefix("l01-rc").size)
 
-            assertEquals(16, allTries.prefix("l02-rc").size)
-            assertEquals(16, allTries.prefix("l03-rc").size)
+            // L2Cs should all be garbage after L3C supersession
+            assertEquals(0, liveTries.prefix("l02-rc").size)
+
+            // L3Cs should be live
+            assertEquals(16, liveTries.prefix("l03-rc").size)
         }
     }
 
@@ -564,13 +578,15 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         // Verify all catalogs have the same results
         dbs.forEach { db ->
-            val docsKeys = db.trieCatalog.listAllTrieKeys(docsTable)
-            val usersKeys = db.trieCatalog.listAllTrieKeys(usersTable)
-            val ordersKeys = db.trieCatalog.listAllTrieKeys(ordersTable)
-            assertEquals(16, docsKeys.prefix("l00-rc-").size)
-            assertEquals(16, docsKeys.prefix("l01-rc-").size)
-            assertEquals(16, docsKeys.prefix("l02-rc-").size)
+            val docsKeys = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
+            val usersKeys = db.trieCatalog.listLiveAndNascentTrieKeys(usersTable)
+            val ordersKeys = db.trieCatalog.listLiveAndNascentTrieKeys(ordersTable)
+            assertEquals(0, docsKeys.prefix("l00-rc-").size)
+            assertEquals(0, docsKeys.prefix("l01-rc-").size)
+            assertEquals(0, docsKeys.prefix("l02-rc-").size)
             assertEquals(16, docsKeys.prefix("l03-rc-").size)
+            // 16 L0 + 16 L1C + 16 L2C all superseded
+            assertEquals(48, db.trieCatalog.listAllGarbageTrieKeys(docsTable).size)
             assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
             assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
         }
@@ -609,16 +625,19 @@ class CompactorSimulationTest : SimulationTestBase() {
             }
         }
 
-        val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }.distinct()
+        val trieKeys = dbs.map { it.trieCatalog.listLiveAndNascentTrieKeys(docsTable) }.distinct()
 
         assertEquals(
             1,
             trieKeys.size,
         )
         assertEquals(
-            listOf("l00-rc-b00", "l01-rc-b00"),
+            listOf("l01-rc-b00"),
             trieKeys.first(),
         )
+        dbs.forEach { db ->
+            assertEquals(setOf("l00-rc-b00"), db.trieCatalog.listAllGarbageTrieKeys(docsTable))
+        }
     }
 
     @RepeatedTest(10)
@@ -639,7 +658,7 @@ class CompactorSimulationTest : SimulationTestBase() {
             }
         }
 
-        val trieKeys = dbs.map { it.trieCatalog.listAllTrieKeys(docsTable) }
+        val trieKeys = dbs.map { it.trieCatalog.listLiveAndNascentTrieKeys(docsTable) }
 
         assertEquals(
             1,
