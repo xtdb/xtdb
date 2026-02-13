@@ -92,7 +92,10 @@ class MemoryHashTrie(
         val data: IntArray = IntArray(0),
         val log: IntArray = IntArray(logLimit),
         private val logCount: Int = 0,
-        private var sortedData: IntArray? = null
+        // Volatile: concurrent readers may race on mergeSort; the result is deterministic
+        // so the worst case is redundant computation, but without volatile a reader on a
+        // weak memory model might never see the cached value.
+        @Volatile private var sortedData: IntArray? = null
     ) : Node {
 
         override val hashChildren = null

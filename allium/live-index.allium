@@ -1,14 +1,15 @@
 -- live-index.allium
 --
--- NOTE: generated, unverified. may contain errors.
---
 -- Scope: In-memory staging for transactions before block compaction
 -- Includes: LiveIndex, LiveTable, row operations, transaction lifecycle, snapshot visibility
 -- Excludes: Block storage, trie serialization, Arrow memory management
 --
 -- Concurrency model:
 --   - Single-writer thread: all transaction operations (StartTransaction, LogPut,
---     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially
+--     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially.
+--     This is enforced structurally: the LogProcessor (see db.allium) processes
+--     source-log messages sequentially, and all transaction lifecycle happens
+--     within that sequential processing loop.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
 --   - Writes don't block reads: persistent data structures ensure existing snapshots
 --     remain valid while new transactions commit
@@ -44,18 +45,29 @@ value ValidTimeRange {
 }
 
 value Row {
+    -- Stored as a row in an Arrow relation.
+    -- The op column is an Arrow union with three legs: put, delete, erase.
+    -- See: LiveTable.kt (liveRelation, txRelation)
     iid: IID
     system_from: Timestamp
     valid_time: ValidTimeRange
-    op: Put | Delete | Erase
+    op: Op
+}
+
+union Op {
+    -- Arrow DenseUnion: exactly one leg is populated per row.
+    put: Put
+    delete: Delete
+    erase: Erase
 }
 
 value Put {
+    -- The put leg is a struct containing the document columns.
     doc: Document
 }
 
-value Delete { }
-value Erase { }
+value Delete { }   -- null marker in the "delete" leg
+value Erase { }    -- null marker in the "erase" leg
 
 ------------------------------------------------------------
 -- Entities
@@ -151,18 +163,25 @@ rule StartTransaction {
 }
 
 rule GetTableTx {
+    -- Idempotent: returns the existing LiveTableTx if one already exists for this tx and table.
+    -- See: live_index.clj (computeIfAbsent on table-txs)
     when: GetTableTx(tx, table_ref)
-
-    let existing_table = tx.index.tables.find(t => t.table_ref = table_ref)
 
     requires: tx.status = active
 
-    ensures: LiveTableTx.created(
-        transaction: tx,
-        table_ref: table_ref,
-        live_table: existing_table,
-        rows: {}
-    )
+    let existing_table_tx = tx.table_txs.find(tt => tt.table_ref = table_ref)
+
+    ensures:
+        if existing_table_tx != null:
+            existing_table_tx
+        else:
+            let existing_table = tx.index.tables.find(t => t.table_ref = table_ref)
+            LiveTableTx.created(
+                transaction: tx,
+                table_ref: table_ref,
+                live_table: existing_table,
+                rows: {}
+            )
 }
 
 ------------------------------------------------------------
@@ -178,8 +197,7 @@ rule LogPut {
         iid: iid,
         system_from: table_tx.transaction.system_from,
         valid_time: valid_time,
-        op: put,
-        doc: doc
+        op: Op.put(Put{ doc: doc })
     })
 }
 
@@ -192,8 +210,7 @@ rule LogDelete {
         iid: iid,
         system_from: table_tx.transaction.system_from,
         valid_time: valid_time,
-        op: delete,
-        doc: null
+        op: Op.delete(Delete{})
     })
 }
 
@@ -206,8 +223,7 @@ rule LogErase {
         iid: iid,
         system_from: table_tx.transaction.system_from,
         valid_time: erase_valid_time,
-        op: erase,
-        doc: null
+        op: Op.erase(Erase{})
     })
 }
 

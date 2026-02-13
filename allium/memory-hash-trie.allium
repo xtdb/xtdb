@@ -1,7 +1,5 @@
 -- memory-hash-trie.allium
 --
--- NOTE: generated, unverified. may contain errors.
---
 -- Scope: In-memory hierarchical hash trie for row index organization
 -- Includes: MemoryHashTrie, MutableMemoryHashTrie, Node (Branch/Leaf), log compaction
 -- Excludes: Arrow serialization, disk persistence, ArrowHashTrie
@@ -89,8 +87,12 @@ entity Leaf extends Node {
     log: List<Integer>         -- UNSORTED indices (recent additions, up to log_limit)
     log_count: Integer         -- number of valid entries in log
 
-    -- Mutable cache for merged result (breaks pure immutability for performance)
-    sorted_data_cache: List<Integer>?
+    -- Volatile cache for merged result.
+    -- Multiple concurrent readers may race on this field; since the result is
+    -- deterministic, the worst case is redundant computation.
+    -- Must be @Volatile to ensure visibility across threads on weak memory models.
+    -- See: MemoryHashTrie.kt (Leaf.sortedData)
+    sorted_data_cache: volatile List<Integer>?
 
     total_count: data.count + log_count
 }
@@ -228,7 +230,9 @@ rule SplitIntoBranch {
             if buckets[bucket_idx] != null:
                 Leaf.created(
                     path: leaf.path.append(bucket_idx),
-                    data: buckets[bucket_idx]
+                    data: buckets[bucket_idx],
+                    log: empty_log(trie.log_limit),
+                    log_count: 0
                 )
             else:
                 null
