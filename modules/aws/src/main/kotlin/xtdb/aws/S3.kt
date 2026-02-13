@@ -100,7 +100,7 @@ class S3(
                     val contentLength = buf.remaining().toLong()
                     val partNum = idx + 1
 
-                    val partResp = client.uploadPart(AsyncRequestBody.fromByteBuffer(buf)) {
+                    val partResp = client.uploadPart(AsyncRequestBody.fromByteBufferUnsafe(buf)) {
                         it.bucket(bucket)
                         it.key(s3Key)
                         it.uploadId(uploadId)
@@ -179,7 +179,7 @@ class S3(
 
             val contentLength = buf.remaining().toLong()
 
-            client.putObject(AsyncRequestBody.fromByteBuffer(buf)) {
+            client.putObject(AsyncRequestBody.fromByteBufferUnsafe(buf)) {
                 it.bucket(bucket)
                 it.key(s3Key)
                 it.contentLength(contentLength)

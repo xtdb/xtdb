@@ -68,6 +68,8 @@ interface ObjectStore : AutoCloseable {
 
     /**
      * Stores an object in the object store.
+     *
+     * The provided ByteBuffer must not be modified during the execution of this method.
      */
     fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit>
 
