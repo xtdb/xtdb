@@ -27,6 +27,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
 
 * You MUST include tests for new/changed functionality.
 * You MUST run tests locally to verify they pass.
+* There MUST NOT be any reflection or boxed math warnings
 
 For user-visible features:
 * You MUST update relevant docs in `/dev/doc/` or user-facing documentation when implementing new features or changing existing behaviour.
