@@ -22,7 +22,7 @@ on:
       fusion_threads:
         description: 'OLTP thread count'
         required: false
-        default: '4'
+        default: '2'
         type: string
       run_queue:
         description: 'Part of nightly benchmark queue (set by suite workflow)'
@@ -53,6 +53,6 @@ jobs:
       fusion_device_count: ${{ inputs.fusion_device_count || '10000' }}
       fusion_reading_count: ${{ inputs.fusion_reading_count || '1000' }}
       fusion_duration: ${{ inputs.fusion_duration || 'PT30M' }}
-      fusion_threads: ${{ inputs.fusion_threads || '4' }}
+      fusion_threads: ${{ inputs.fusion_threads || '2' }}
       run_queue: ${{ inputs.run_queue || 'false' }}
     secrets: inherit
