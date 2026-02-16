@@ -276,6 +276,8 @@ class LocalLog(
                                 }
                             }
                         }
+
+                        latestCompletedOffset = targetOffset
                     }
                     .onEach {
                         if (it.logOffset > latestCompletedOffset) {
