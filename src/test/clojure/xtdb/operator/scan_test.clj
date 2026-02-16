@@ -551,14 +551,14 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (let [!page-idxs-cnt (atom 0)
-        old-filter-trie-match scan/filter-pushdown-bloom-page-idx-pred]
-    (with-redefs [scan/filter-pushdown-bloom-page-idx-pred (fn [& args]
-                                                             (when-let [^IntPredicate pred (apply old-filter-trie-match args)]
-                                                               (reify IntPredicate
-                                                                 (test [_ page-idx]
-                                                                   (let [res (.test pred page-idx)]
-                                                                     (when res (swap! !page-idxs-cnt inc))
-                                                                     res)))))]
+        old-filter-trie-match scan/filter-pushdown-bloom-hashes-page-idx-pred]
+    (with-redefs [scan/filter-pushdown-bloom-hashes-page-idx-pred (fn [& args]
+                                                                    (when-let [^IntPredicate pred (apply old-filter-trie-match args)]
+                                                                      (reify IntPredicate
+                                                                        (test [_ page-idx]
+                                                                          (let [res (.test pred page-idx)]
+                                                                            (when res (swap! !page-idxs-cnt inc))
+                                                                            res)))))]
       (t/is (= [{:col "toto"}]
                (tu/query-ra
                 '[:join {:conditions [{col col}]}

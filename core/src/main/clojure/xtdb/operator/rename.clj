@@ -55,9 +55,7 @@
      :vec-types out-vec-types
      :stats (:stats emitted-child-relation)
      :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
-                 (let [opts (-> opts
-                                (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
-                                (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
+                 (let [opts (update opts :pushdowns update-keys #(get col-name-reverse-mapping %))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))

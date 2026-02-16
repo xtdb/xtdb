@@ -22,7 +22,6 @@
            (java.util LinkedList SortedSet TreeSet)
            (java.util.function IntPredicate Predicate)
            (org.apache.arrow.memory BufferAllocator)
-           [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            xtdb.catalog.TableCatalog
@@ -175,8 +174,11 @@
             (.add iid-set (resolve-eid-to-iid eid args-rel)))
           iid-set)))))
 
-(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^PageMetadata page-metadata, pushdown-blooms, ^String col-name]
-  (when-let [^MutableRoaringBitmap pushdown-bloom (get pushdown-blooms (symbol col-name))]
+(defn filter-pushdown-bloom-hashes-page-idx-pred
+  "Creates a page index predicate that checks if ANY of the individual bloom hash arrays
+   intersect with the page's bloom filter. Returns nil if no bloom hashes for this column."
+  ^IntPredicate [^PageMetadata page-metadata, bloom-hashes, ^String col-name]
+  (when (seq bloom-hashes)
     (let [metadata-rdr (.getMetadataLeafReader page-metadata)
           bloom-rdr (-> (.vectorForOrNull metadata-rdr "columns")
                         (.getListElements)
@@ -184,11 +186,16 @@
                         (.vectorFor "bloom"))]
       (reify IntPredicate
         (test [_ page-idx]
-          (boolean
-           (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
-             (and (>= bloom-vec-idx 0)
-                  (or (.isNull bloom-rdr bloom-vec-idx)
-                      (MutableRoaringBitmap/intersects pushdown-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)))))))))))
+          (let [bloom-vec-idx (.rowIndex page-metadata col-name page-idx)]
+            (or (< bloom-vec-idx 0)                              ; column not in page metadata
+                (.isNull bloom-rdr bloom-vec-idx)                 ; no bloom for this page
+                (let [page-bloom (BloomUtils/bloomToBitmap bloom-rdr bloom-vec-idx)]
+                  ;; Check if ANY build-side hash array is fully contained in page bloom
+                  ;; BloomUtils/contains is a Kotlin extension function compiled as static method
+                  (boolean
+                   (some (fn [hash-array]
+                           (BloomUtils/contains page-bloom hash-array))
+                         bloom-hashes))))))))))
 
 
 (defn ->path-pred [^SortedSet iid-set]
@@ -277,7 +284,7 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
+         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdowns explain-analyze? tracer query-span] :as opts}]
                      (let [^Snapshot snapshot (get snaps db-name)
                            derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
@@ -285,20 +292,30 @@
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
 
                          (let [iid-set (or (selects->iid-set selects args)
-                                           (get pushdown-iids '_iid) ; usually patch
-                                           (get pushdown-iids '_id)) ; any other foreign-key join
+                                           (get-in pushdowns ['_iid :iids])  ; usually patch
+                                           (get-in pushdowns ['_id :iids]))  ; any other foreign-key join
                                col-preds (cond-> col-preds
                                            (not (empty? iid-set))
                                            (assoc "_iid" (if (= 1 (count iid-set))
                                                            (SingleIidSelector. (first iid-set))
                                                            (MultiIidSelector. iid-set))))
-                               metadata-pred (expr.meta/->metadata-selector allocator (cons 'and metadata-args) vec-types args)
+                               ;; Add min/max bounds from pushdowns as metadata predicates
+                               bounds-preds (for [[col-name {:keys [min max]}] pushdowns
+                                                  :when (and min max)
+                                                  pred [(list '>= col-name min)
+                                                        (list '<= col-name max)]]
+                                              pred)
+                               metadata-pred (expr.meta/->metadata-selector allocator
+                                                                            (cons 'and (into metadata-args bounds-preds))
+                                                                            vec-types args)
                                metadata-pred (reify MetadataPredicate
                                                (build [_ page-metadata]
                                                  (-> (.build metadata-pred page-metadata)
                                                      (as-> pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                                                                          (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred page-metadata pushdown-blooms col-name)]
-                                                                            (.and page-idx-pred bloom-page-idx-pred)
+                                                                          (if-let [bloom-hashes (get-in pushdowns [(symbol col-name) :bloom-hashes])]
+                                                                            (if-let [bloom-page-idx-pred (filter-pushdown-bloom-hashes-page-idx-pred page-metadata bloom-hashes col-name)]
+                                                                              (.and page-idx-pred bloom-page-idx-pred)
+                                                                              page-idx-pred)
                                                                             page-idx-pred))
                                                                         pred
                                                                         col-names)))))

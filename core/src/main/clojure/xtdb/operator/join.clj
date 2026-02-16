@@ -12,9 +12,9 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
-           (org.roaringbitmap.buffer MutableRoaringBitmap)
            (xtdb ICursor Bytes)
            (xtdb.arrow BitVector RelationReader VectorType)
+           (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Number MetadataFlavour$DateTime)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
            (xtdb.operator.join BuildSide ComparatorFactory DiskHashJoin JoinType MemoryHashJoin ProbeSide)))
@@ -168,26 +168,120 @@
                        (.append build-side build-rel)))
   (.end build-side))
 
-(defn- build-pushdowns [^BuildSide build-side, pushdown-blooms, pushdown-iids]
-  (when pushdown-blooms
-    (let [build-rel (.getDataRel build-side)
-          build-key-col-names (vec (.getKeyColNames build-side))]
-      (dotimes [col-idx (count build-key-col-names)]
-        (let [build-col-name (nth build-key-col-names col-idx)
-              build-col (.vectorForOrNull build-rel (str build-col-name))
-              ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)
-              ^SortedSet col-pushdown-iids (nth pushdown-iids col-idx)]
-          (dotimes [build-idx (.getRowCount build-rel)]
-            (when col-pushdown-iids
-              (let [v (.getObject build-col build-idx)]
-                (.add col-pushdown-iids (cond-> v (uuid? v) util/uuid->bytes))))
-            (.add pushdown-bloom ^ints (BloomUtils/bloomHashes build-col build-idx))))))))
+(defn- col-metadata-flavour
+  "Returns the MetadataFlavour class for a VectorType, or nil if not applicable.
+   Returns nil for unsupported types like Union/Poly."
+  [^VectorType vec-type]
+  (try
+    (MetadataFlavour/getMetadataFlavour vec-type)
+    (catch UnsupportedOperationException _
+      nil)))
+
+(defn- numeric-flavour?
+  "Returns true if the flavour is a numeric type (Number or DateTime) that supports min/max."
+  [flavour]
+  (or (identical? flavour MetadataFlavour$Number)
+      (identical? flavour MetadataFlavour$DateTime)))
+
+(defn- bytes-flavour?
+  "Returns true if the flavour is Bytes (strings, binary) that supports bloom filters."
+  [flavour]
+  (identical? flavour MetadataFlavour$Bytes))
+
+(defn- compute-min-max
+  "Computes min and max values for a numeric column. Returns {:min v :max v}."
+  [col row-count]
+  (when (pos? row-count)
+    (loop [idx 0
+           min-val Double/POSITIVE_INFINITY
+           max-val Double/NEGATIVE_INFINITY]
+      (if (< idx row-count)
+        (if (.isNull col idx)
+          (recur (inc idx) min-val max-val)
+          (let [v (.getMetaDouble col idx)]
+            (recur (inc idx)
+                   (min min-val v)
+                   (max max-val v))))
+        (when (and (not= min-val Double/POSITIVE_INFINITY)
+                   (not= max-val Double/NEGATIVE_INFINITY))
+          {:min min-val :max max-val})))))
+
+(def ^:private ^:const bloom-pushdown-threshold 1000)
+
+(defn- iid-col?
+  "Returns true if the column is an IID or UUID type suitable for direct value pushdown."
+  [col-name ^VectorType col-type]
+  (or (and (= col-type #xt/type :varbinary)
+           (str/ends-with? (str col-name) "/_iid"))
+      (= col-type #xt/type :uuid)))
+
+(defn- collect-iids
+  "Collects IID/UUID values from a column into a sorted set."
+  [build-col row-count]
+  (let [iid-set (TreeSet. Bytes/COMPARATOR)]
+    (dotimes [idx row-count]
+      (let [v (.getObject build-col idx)]
+        (.add iid-set (cond-> v (uuid? v) util/uuid->bytes))))
+    iid-set))
+
+(defn- build-pushdowns-for-col
+  "Builds pushdown info for a single column based on its type and flavour.
+   Returns a map with any applicable keys: :min, :max, :bloom-hashes, :iids"
+  [build-col col-name col-type row-count small-build?]
+  (let [flavour (col-metadata-flavour col-type)]
+    (cond-> {}
+      ;; Track min/max for Numeric/DateTime flavours
+      (numeric-flavour? flavour)
+      (merge (compute-min-max build-col row-count))
+
+      ;; Collect bloom hashes for Bytes flavour (only if < threshold rows)
+      (and small-build? (bytes-flavour? flavour))
+      (assoc :bloom-hashes
+             (mapv #(BloomUtils/bloomHashes build-col %) (range row-count)))
+
+      ;; Collect IID values for IID/UUID columns
+      (iid-col? col-name col-type)
+      (assoc :iids (collect-iids build-col row-count)))))
+
+(defn- remap-pushdowns-to-probe-keys
+  "Remaps pushdown info from build-side column names to probe-side column names.
+   Both sides are paired by position in the equi-join conditions."
+  [pushdowns build-key-col-names probe-key-col-names]
+  (when (seq pushdowns)
+    (let [build->probe (zipmap (map symbol build-key-col-names) probe-key-col-names)]
+      (reduce-kv (fn [acc build-col col-pushdowns]
+                   (if-let [probe-col (get build->probe build-col)]
+                     (assoc acc probe-col col-pushdowns)
+                     acc))
+                 {}
+                 pushdowns))))
+
+(defn- build-pushdowns
+  "Builds pushdown info map for all build-side key columns.
+   Returns {col-name {:min v :max v :bloom-hashes [...] :iids TreeSet}} where applicable."
+  [^BuildSide build-side, build-vec-types]
+  (let [build-rel (.getDataRel build-side)
+        row-count (.getRowCount build-rel)
+        small-build? (< row-count bloom-pushdown-threshold)
+        build-key-col-names (vec (.getKeyColNames build-side))]
+    (reduce (fn [pushdowns col-name]
+              (let [col-sym (symbol col-name)
+                    col-type (get build-vec-types col-sym)
+                    build-col (.vectorForOrNull build-rel col-name)]
+                (if (and col-type build-col)
+                  (let [col-pushdowns (build-pushdowns-for-col build-col col-name col-type row-count small-build?)]
+                    (if (seq col-pushdowns)
+                      (assoc pushdowns col-sym col-pushdowns)
+                      pushdowns))
+                  pushdowns)))
+            {}
+            build-key-col-names)))
 
 (deftype JoinCursor [^BufferAllocator allocator,
                      ^BuildSide build-side, ^ICursor build-cursor,
-                     probe-vec-types probe-key-cols ->probe-cursor
+                     build-vec-types probe-vec-types probe-key-cols ->probe-cursor
                      ^:unsynchronized-mutable ^ICursor hash-join-cursor
-                     pushdown-blooms, ^Set pushdown-iids
+                     pushdowns?
                      ^ComparatorFactory cmp-factory, ^JoinType join-type]
   ICursor
   (getCursorType [_] (.getJoinTypeName join-type))
@@ -196,14 +290,12 @@
   (tryAdvance [this c]
     (when-not hash-join-cursor
       (build-phase build-side build-cursor)
-      (let [shuffle? (boolean (.getShuffle build-side))]
-        (when-not shuffle?
-          (build-pushdowns build-side pushdown-blooms pushdown-iids))
+      (let [shuffle? (boolean (.getShuffle build-side))
+            pushdowns (when (and pushdowns? (not shuffle?))
+                        (-> (build-pushdowns build-side build-vec-types)
+                            (remap-pushdowns-to-probe-keys (.getKeyColNames build-side) probe-key-cols)))]
 
-        (util/with-close-on-catch [probe-cursor (->probe-cursor (when (and (not shuffle?) pushdown-blooms)
-                                                                  (zipmap (map symbol probe-key-cols) pushdown-blooms))
-                                                                (when (and (not shuffle?) pushdown-iids)
-                                                                  (zipmap (map symbol probe-key-cols) pushdown-iids)))]
+        (util/with-close-on-catch [probe-cursor (->probe-cursor (when (seq pushdowns) pushdowns))]
           (set! (.hash-join-cursor this)
                 (let [probe-vec-types (update-keys probe-vec-types str)]
                   (if shuffle?
@@ -218,7 +310,6 @@
     (.tryAdvance hash-join-cursor c))
 
   (close [_]
-    (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
     (util/try-close hash-join-cursor)
     (util/try-close build-side)
     (util/try-close build-cursor)))
@@ -227,8 +318,7 @@
                          ^BuildSide build-side, ^ICursor build-cursor,
                          ->probe-cursor, probe-key-col-names, ^ComparatorFactory cmp-factory,
                          ^:unsynchronized-mutable ^ICursor probe-cursor
-                         mark-col-name
-                         pushdown-blooms]
+                         mark-col-name]
   ICursor
   (getCursorType [_] "mark-join")
   (getChildCursors [_] [build-cursor])
@@ -237,12 +327,9 @@
 
     (when-not probe-cursor
       (build-phase build-side build-cursor)
-      (build-pushdowns build-side pushdown-blooms nil)
-
-      (set! (.probe-cursor this)
-            (->probe-cursor (zipmap (map symbol (.getKeyColNames build-side))
-                                    pushdown-blooms)
-                            nil)))
+      ;; Mark-join cannot use pushdowns because filtered pages would still need
+      ;; to produce rows with m=false, but we don't know the row count of skipped pages
+      (set! (.probe-cursor this) (->probe-cursor nil)))
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -263,7 +350,6 @@
        (aget advanced? 0))))
 
   (close [_]
-    (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
     (util/try-close build-side)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
@@ -323,7 +409,7 @@
   [{:keys [condition left right]}
    {:keys [param-types]}
    {:keys [build-side merge-vec-types-fn join-type
-           with-nil-row? pushdown-blooms? track-unmatched-build-idxs? mark-col-name]}]
+           with-nil-row? track-unmatched-build-idxs? mark-col-name pushdowns?]}]
   (let [{left-vec-types :vec-types, ->left-cursor :->cursor} left
         {right-vec-types :vec-types, ->right-cursor :->cursor} right
         {equis :equi-condition, thetas :pred-expr} (group-by first condition)
@@ -393,20 +479,10 @@
                                                                                 :key-col-names build-key-col-names
                                                                                 :with-nil-row? with-nil-row?
                                                                                 :track-unmatched-build-idxs? track-unmatched-build-idxs?})]
-                   (letfn [(->probe-cursor-with-pushdowns [our-pushdown-blooms our-pushdown-iids]
+                   (letfn [(->probe-cursor-with-pushdowns [our-pushdowns]
                              (->probe-cursor (cond-> opts
-                                               our-pushdown-blooms (update :pushdown-blooms (fnil into {}) our-pushdown-blooms)
-                                               our-pushdown-iids (update :pushdown-iids (fnil into {}) our-pushdown-iids))))]
-                     (let [pushdown-blooms (when pushdown-blooms?
-                                             (vec (repeatedly (count build-key-col-names) #(MutableRoaringBitmap.))))
-                           pushdown-iids (->> build-key-col-names
-                                              (mapv (fn [col-name]
-                                                      (let [^VectorType build-col-type (get build-vec-types col-name)]
-                                                        (when (or (and (= build-col-type #xt/type :varbinary)
-                                                                       (str/ends-with? col-name "/_iid"))
-                                                                  (= build-col-type #xt/type :uuid))
-                                                          (TreeSet. Bytes/COMPARATOR))))))
-                           cmp-factory (->cmp-factory {:build-vec-types build-vec-types
+                                               our-pushdowns (assoc :pushdowns (merge (:pushdowns opts) our-pushdowns)))))]
+                     (let [cmp-factory (->cmp-factory {:build-vec-types build-vec-types
                                                        :probe-vec-types probe-vec-types
                                                        :with-nil-row? with-nil-row?
                                                        :key-col-names probe-key-col-names
@@ -416,12 +492,13 @@
                        (project/->project-cursor opts
                                                  (cond-> (if (= join-type ::mark-join)
                                                            (MarkJoinCursor. allocator build-side build-cursor
-                                                                            ->probe-cursor-with-pushdowns (map str probe-key-col-names) cmp-factory nil
-                                                                            mark-col-name pushdown-blooms)
+                                                                            ->probe-cursor-with-pushdowns
+                                                                            (map str probe-key-col-names) cmp-factory nil
+                                                                            mark-col-name)
                                                            (JoinCursor. allocator build-side build-cursor
-                                                                        probe-vec-types probe-key-col-names
+                                                                        build-vec-types probe-vec-types probe-key-col-names
                                                                         ->probe-cursor-with-pushdowns nil
-                                                                        pushdown-blooms pushdown-iids cmp-factory
+                                                                        pushdowns? cmp-factory
                                                                         (case join-type
                                                                           ::inner-join JoinType/INNER
                                                                           ::left-outer-join JoinType/LEFT_OUTER
@@ -446,7 +523,7 @@
                   {:build-side :left
                    :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types right-vec-types))
                    :join-type ::inner-join
-                   :pushdown-blooms? true}))
+                   :pushdowns? true}))
 
 (defmethod lp/emit-expr :join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
@@ -470,7 +547,7 @@
                        :merge-vec-types-fn (fn [left-vec-types right-vec-types] (merge-with types/merge-types left-vec-types (types/with-nullable-types right-vec-types)))
                        :join-type ::left-outer-join-flipped
                        :track-unmatched-build-idxs? true
-                       :pushdown-blooms? true}))))
+                       :pushdowns? true}))))
 
 (defmethod lp/emit-expr :full-outer-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
@@ -491,7 +568,7 @@
                     {:build-side :right
                      :merge-vec-types-fn (fn [left-vec-types _] left-vec-types)
                      :join-type ::semi-join
-                     :pushdown-blooms? true})))
+                     :pushdowns? true})))
 
 (defmethod lp/emit-expr :anti-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
