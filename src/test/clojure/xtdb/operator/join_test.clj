@@ -4,6 +4,7 @@
             [clojure.test :as t :refer [deftest]]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.operator.join :as join]
@@ -344,6 +345,42 @@
                               [[{:a 12}, {:a 14}, {:a nil}]]]
                              [::tu/pages
                               [[]]]]])))))
+
+(t/deftest test-mark-join-no-bloom-pushdown
+  ;; Regression test: mark-join must not use bloom pushdown because filtered pages
+  ;; would still need to produce rows with m=false, but we don't know the row count
+  ;; of skipped pages. This test uses small page sizes to force multiple pages.
+  (binding [c/*page-size* 2]
+    (with-open [node (xtn/start-node (assoc-in tu/*node-opts* [:indexer :page-limit] 2))]
+      ;; Build side: values that will match
+      (xt/execute-tx node [[:put-docs :build {:xt/id #uuid "00000000-0000-0000-0000-000000000001" :val "match-a"}]
+                           [:put-docs :build {:xt/id #uuid "00000000-0000-0000-0000-000000000002" :val "match-b"}]])
+      (tu/flush-block! node)
+
+      ;; Probe side: matching values
+      (xt/execute-tx node [[:put-docs :probe {:xt/id #uuid "00000000-0000-0000-0000-000000000003" :val "match-a"}]
+                           [:put-docs :probe {:xt/id #uuid "00000000-0000-0000-0000-000000000004" :val "match-b"}]])
+      (tu/flush-block! node)
+
+      ;; Probe side: non-matching values (different IID prefix -> different trie segment)
+      (xt/execute-tx node [[:put-docs :probe {:xt/id #uuid "ffffffff-ffff-ffff-ffff-ffffffffffff" :val "no-match-x"}]
+                           [:put-docs :probe {:xt/id #uuid "ffffffff-ffff-ffff-ffff-fffffffffff0" :val "no-match-y"}]])
+      (tu/flush-block! node)
+
+      (c/compact-all! node #xt/duration "PT1S")
+
+      ;; Mark join must return ALL probe rows, including non-matching ones with m=false.
+      ;; If bloom pushdown were enabled, it would incorrectly filter out the page
+      ;; containing non-matching values.
+      (t/is (= #{{:val "match-a", :m true}
+                 {:val "match-b", :m true}
+                 {:val "no-match-x", :m false}
+                 {:val "no-match-y", :m false}}
+               (set (tu/query-ra
+                     '[:mark-join {:mark-spec {m [{val val}]}}
+                       [:scan {:table #xt/table probe, :columns [val]}]
+                       [:scan {:table #xt/table build, :columns [val]}]]
+                     {:node node})))))))
 
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0} 1}

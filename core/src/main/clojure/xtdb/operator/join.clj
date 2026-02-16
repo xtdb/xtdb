@@ -512,8 +512,7 @@
                      :merge-vec-types-fn (fn [left-vec-types _] (assoc left-vec-types mark-col-name #xt/type [:? :bool]))
                      :mark-col-name mark-col-name
                      :join-type ::mark-join
-                     :track-unmatched-build-idxs? true
-                     :pushdown-blooms? true})))
+                     :track-unmatched-build-idxs? true})))
 
 (defmethod lp/emit-expr :single-join [{:keys [opts] :as join-expr} args]
   (let [{:keys [conditions]} opts]
