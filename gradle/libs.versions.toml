@@ -186,4 +186,4 @@ clojurephant = { id = "dev.clojurephant.clojure", version.ref = "clojurephant" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = "freefair-javadoc" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
-jreleaser = { id = "org.jreleaser", version = "1.18.0" }
+jreleaser = { id = "org.jreleaser", version = "1.21.0" }
