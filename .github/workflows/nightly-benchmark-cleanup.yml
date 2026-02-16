@@ -168,6 +168,26 @@ jobs:
             echo "time_taken_iso=${time_iso}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Capture Kubernetes Events
+        if: steps.check-deployment.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          NS="cloud-benchmark"
+          mkdir -p pod-logs
+
+          # Capture namespace events (sorted by last timestamp)
+          echo "=== Kubernetes Events (namespace: ${NS}) ===" > pod-logs/kube-events.log
+          kubectl get events -n "$NS" --sort-by='.lastTimestamp' >> pod-logs/kube-events.log 2>&1 || true
+
+          # Capture pod descriptions (includes exit codes, OOMKill reasons, restarts)
+          echo "" >> pod-logs/kube-events.log
+          echo "=== Pod Descriptions ===" >> pod-logs/kube-events.log
+          for pod in $(kubectl get pods -n "$NS" -l app.kubernetes.io/name=xtdb -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "--- Pod: ${pod} ---" >> pod-logs/kube-events.log
+            kubectl describe pod "$pod" -n "$NS" >> pod-logs/kube-events.log 2>&1 || true
+          done
+
       - name: Set Timestamp
         id: timestamp
         run: |
