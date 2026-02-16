@@ -145,7 +145,7 @@
         container-statuses (or (get-in pod [:status :containerStatuses]) [])
         init-statuses (or (get-in pod [:status :initContainerStatuses]) [])
         containers-running? (and (seq container-statuses)
-                                  (some #(get-in % [:state :running]) container-statuses))
+                                 (some #(get-in % [:state :running]) container-statuses))
         inits-completed? (every? (fn [init]
                                    (let [term (get-in init [:state :terminated])]
                                      (and term (= 0 (:exitCode term)))))
@@ -192,8 +192,8 @@
        (let [pods-response (kubectl-get-pods namespace "app.kubernetes.io/component=benchmark")
              pods (:items pods-response)
              benchmark-pods (filterv #(= "benchmark"
-                                          (get-in % [:metadata :labels (keyword "app.kubernetes.io/component")]))
-                                      pods)]
+                                         (get-in % [:metadata :labels (keyword "app.kubernetes.io/component")]))
+                                     pods)]
 
          (if (empty? benchmark-pods)
            (do
@@ -216,9 +216,9 @@
                                            (->> (take 60))
                                            (str/join "\n")))
                      cleanup-triggered? (and log-preview
-                                              (str/includes? log-preview "Triggered cleanup workflow"))]
+                                             (str/includes? log-preview "Triggered cleanup workflow"))]
                  (log-stderr (format "Error detected: %d failing benchmark pod(s) soon after deployment."
-                                      (count failing-pods)))
+                                     (count failing-pods)))
                  ;; Log pod details to stderr
                  (doseq [pod-name pod-names]
                    (log-stderr "Pod:" pod-name)
@@ -248,11 +248,11 @@
                    (if (>= elapsed-seconds required-running-seconds)
                      (do
                        (log-stderr (format "Benchmark pods have been running for at least %ds; considering startup successful."
-                                            required-running-seconds))
+                                           required-running-seconds))
                        {:failed false})
                      (do
                        (log-stderr (format "Benchmark pods running for %.0fs (target: %ds)."
-                                            elapsed-seconds required-running-seconds))
+                                           elapsed-seconds required-running-seconds))
                        (Thread/sleep (* sleep-seconds 1000))
                        (recur (inc attempt) since)))))
 
@@ -461,7 +461,7 @@
          non-terminal (- (count initial-items) succeeded failed)]
 
      (log-stderr (format "Current pod state: %d succeeded, %d failed, %d non-terminal"
-                          succeeded failed non-terminal)))
+                         succeeded failed non-terminal)))
 
    ;; Poll job status
    (loop [iteration 1]
@@ -516,7 +516,19 @@
    {:status \"success\"|\"failure\"|\"unknown\"}"
   ([job-name] (derive-benchmark-status job-name {}))
   ([job-name {:keys [namespace] :or {namespace "cloud-benchmark"}}]
-   (let [job (kubectl "get" "job" job-name "-n" namespace)]
+   (let [job (kubectl "get" "job" job-name "-n" namespace)
+         ;; Helper: infer status from pod phases (for multi-pod jobs where job
+         ;; conditions may lag behind pod completion)
+         infer-from-pods (fn []
+                           (let [selector "app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark"
+                                 pods (:items (kubectl-get-pods namespace selector))
+                                 any-failed? (some #(= "Failed" (get-in % [:status :phase])) pods)
+                                 all-succeeded? (and (seq pods)
+                                                     (every? #(= "Succeeded" (get-in % [:status :phase])) pods))]
+                             (cond
+                               any-failed? {:status "failure"}
+                               all-succeeded? {:status "success"}
+                               :else {:status "unknown"})))]
      (if job
        (let [conditions (get-in job [:status :conditions] [])
              complete? (some #(and (= "Complete" (:type %)) (= "True" (:status %))) conditions)
@@ -524,13 +536,5 @@
          (cond
            failed? {:status "failure"}
            complete? {:status "success"}
-           :else {:status "unknown"}))
-       ;; Job not found, infer from pods
-       (let [selector "app.kubernetes.io/name=xtdb,app.kubernetes.io/component=benchmark"
-             pods (:items (kubectl-get-pods namespace selector))
-             any-failed? (some #(= "Failed" (get-in % [:status :phase])) pods)
-             any-succeeded? (some #(= "Succeeded" (get-in % [:status :phase])) pods)]
-         (cond
-           any-failed? {:status "failure"}
-           any-succeeded? {:status "success"}
-           :else {:status "unknown"}))))))
+           :else (infer-from-pods)))
+       (infer-from-pods)))))
