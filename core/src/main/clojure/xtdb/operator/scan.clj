@@ -337,11 +337,21 @@
                                                     !segments (.iterator ^Iterable merge-tasks)
                                                     schema args)
                                  (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
-                                                                                                    query-span 
+                                                                                                    query-span
                                                                                                     {"table.name" (.getTableName table)
                                                                                                      "schema.name" (.getSchemaName table)
                                                                                                      "db.name" (.getDbName table)}
-                                                                                                    (format "query.cursor.scan.%s" (.getTableName table))))))))))}))))
+                                                                                                    (format "query.cursor.scan.%s" (.getTableName table))
+                                                                                                    (not-empty
+                                                                                                     (merge-with merge
+                                                                                                                 (when pushdown-blooms
+                                                                                                                   (update-keys
+                                                                                                                    (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
+                                                                                                                    str))
+                                                                                                                 (update-keys
+                                                                                                                  (update-vals (into {} (filter val) (or pushdown-iids {}))
+                                                                                                                               (fn [s] {:iids s}))
+                                                                                                                  str)))))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-vec-types, param-types]}]
   (assert db-cat)

@@ -239,7 +239,23 @@
                                   "total_time" #xt/type [:duration :micro]
                                   "time_to_first_page" #xt/type [:duration :micro]
                                   "page_count" #xt/type :i64
-                                  "row_count" #xt/type :i64})))
+                                  "row_count" #xt/type :i64
+                                  "pushdowns" #xt/type :transit})))
+
+(defn- truncate-pushdown-val [k v]
+  (case k
+    :bloom-filter {:cardinality (.getCardinality ^org.roaringbitmap.buffer.MutableRoaringBitmap v)}
+    :iids {:count (.size ^java.util.Collection v)}
+    v))
+
+(defn- truncate-pushdowns
+  "Formats pushdowns for readable explain-analyze output.
+   Replaces bloom filters with their cardinality, and large IID sets with a count."
+  [pushdowns]
+  (vec (for [[col-name col-pushdowns] pushdowns]
+         (into {:column col-name}
+               (map (fn [[k v]] [k (truncate-pushdown-val k v)]))
+               col-pushdowns))))
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
@@ -250,7 +266,8 @@
                       :total-time (.getTotalTime ea)
                       :time-to-first-page (.getTimeToFirstPage ea)
                       :page-count (.getPageCount ea)
-                      :row-count (.getRowCount ea)}
+                      :row-count (.getRowCount ea)
+                      :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}
                      (->> (for [child (.getChildCursors cursor)]
                             (->results child (inc depth)))
                           (sequence cat)))

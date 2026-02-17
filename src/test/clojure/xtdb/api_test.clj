@@ -511,6 +511,54 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                         ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
                   (mapv elide-durations))))))
 
+(t/deftest test-explain-analyze-pushdowns
+  (let [id1 #uuid "00000000-0000-0000-0000-000000000001"
+        id2 #uuid "00000000-0000-0000-0000-000000000002"
+        id3 #uuid "00000000-0000-0000-0000-000000000003"]
+    (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id id1 :v "x"}]
+                             [:put-docs :foo {:xt/id id2 :v "y"}]
+                             [:put-docs :bar {:xt/id id1 :w "a"}]
+                             [:put-docs :bar {:xt/id id2 :w "b"}]
+                             [:put-docs :bar {:xt/id id3 :w "c"}]]))
+
+  (letfn [(scan-pushdowns [results]
+            (->> results
+                 (filter #(= :scan (:op %)))
+                 (keep :pushdowns)
+                 vec))]
+
+    (t/testing "join on _id pushes bloom + iids down to probe-side scan"
+      (let [pushdowns (scan-pushdowns
+                       (doto (xt/q tu/*node*
+                                   "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id") (clojure.pprint/pprint)))
+            probe-pushdowns (first pushdowns)]
+        (t/is (= 1 (count pushdowns))
+               "exactly one scan (probe side) should have pushdowns")
+
+        (let [pd-by-col (into {} (map (juxt :column identity)) probe-pushdowns)
+              id-pd (get pd-by-col "_id")]
+          (t/is (some? id-pd) "should have pushdown on _id")
+          (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
+          (t/is (= {:count 2} (:iids id-pd))
+                 "should have 2 IIDs from the build side"))))
+
+    (t/testing "join on non-id column pushes only bloom filter"
+      (let [pushdowns (scan-pushdowns
+                       (xt/q tu/*node*
+                             "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
+            probe-pushdowns (first pushdowns)]
+        (t/is (= 1 (count pushdowns)))
+
+        (let [[pd] probe-pushdowns]
+          (t/is (= "w" (:column pd)))
+          (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
+          (t/is (nil? (:iids pd)) "no IID pushdown on non-id column"))))
+
+    (t/testing "simple scan without join has no pushdowns"
+      (t/is (empty? (scan-pushdowns
+                     (xt/q tu/*node*
+                           "EXPLAIN ANALYZE SELECT * FROM foo")))))))
+
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]
                     (xt/q tu/*node*
