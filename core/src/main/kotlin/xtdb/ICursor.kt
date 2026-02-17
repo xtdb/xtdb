@@ -26,6 +26,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         val timeToFirstPage: Duration?
         val totalTime: Duration
         val pushdowns: Map<String, Any>?
+        val cursorAttributes: Map<String, String>?
     }
 
     val cursorType: String
@@ -104,6 +105,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                 }
             }
 
+            override val cursorAttributes get() = attributes
             override val explainAnalyze get() = this
 
             @Suppress("RedundantOverride")

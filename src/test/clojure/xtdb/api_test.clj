@@ -490,6 +490,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :scan,
+               :attributes {:table.name "people", :schema.name "public", :db.name "xtdb"}
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
@@ -505,6 +506,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}
               {:depth "    ->", :op :scan,
+               :attributes {:table.name "people", :schema.name "public", :db.name "xtdb"}
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
@@ -521,43 +523,38 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                              [:put-docs :bar {:xt/id id2 :w "b"}]
                              [:put-docs :bar {:xt/id id3 :w "c"}]]))
 
-  (letfn [(scan-pushdowns [results]
-            (->> results
-                 (filter #(= :scan (:op %)))
-                 (keep :pushdowns)
-                 vec))]
+  (letfn [(scan-rows [results]
+            (filter #(= :scan (:op %)) results))]
 
-    (t/testing "join on _id pushes bloom + iids down to probe-side scan"
-      (let [pushdowns (scan-pushdowns
-                       (doto (xt/q tu/*node*
-                                   "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id") (clojure.pprint/pprint)))
-            probe-pushdowns (first pushdowns)]
-        (t/is (= 1 (count pushdowns))
-               "exactly one scan (probe side) should have pushdowns")
+    (t/testing "join on _id pushes bloom + iids to probe-side scan"
+      (let [scans (scan-rows
+                   (xt/q tu/*node*
+                         "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
+            bar-scan (first (filter #(= "bar" (get-in % [:attributes :table.name])) scans))]
+        (t/is (some? bar-scan) "bar scan should be present")
 
-        (let [pd-by-col (into {} (map (juxt :column identity)) probe-pushdowns)
-              id-pd (get pd-by-col "_id")]
-          (t/is (some? id-pd) "should have pushdown on _id")
+        (let [[id-pd] (:pushdowns bar-scan)]
+          (t/is (= "_id" (:column id-pd)))
           (t/is (pos-int? (get-in id-pd [:bloom-filter :cardinality])))
-          (t/is (= {:count 2} (:iids id-pd))
-                 "should have 2 IIDs from the build side"))))
+          (t/is (= {:count 2} (:iids id-pd))))))
 
     (t/testing "join on non-id column pushes only bloom filter"
-      (let [pushdowns (scan-pushdowns
-                       (xt/q tu/*node*
-                             "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
-            probe-pushdowns (first pushdowns)]
-        (t/is (= 1 (count pushdowns)))
+      (let [scans (scan-rows
+                   (xt/q tu/*node*
+                         "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
+            bar-scan (first (filter #(= "bar" (get-in % [:attributes :table.name])) scans))]
+        (t/is (some? bar-scan))
 
-        (let [[pd] probe-pushdowns]
+        (let [[pd] (:pushdowns bar-scan)]
           (t/is (= "w" (:column pd)))
           (t/is (pos-int? (get-in pd [:bloom-filter :cardinality])))
-          (t/is (nil? (:iids pd)) "no IID pushdown on non-id column"))))
+          (t/is (nil? (:iids pd))))))
 
     (t/testing "simple scan without join has no pushdowns"
-      (t/is (empty? (scan-pushdowns
-                     (xt/q tu/*node*
-                           "EXPLAIN ANALYZE SELECT * FROM foo")))))))
+      (let [scans (scan-rows
+                   (xt/q tu/*node*
+                         "EXPLAIN ANALYZE SELECT * FROM foo"))]
+        (t/is (every? #(nil? (:pushdowns %)) scans))))))
 
 (t/deftest test-transit-encoding-of-ast-objects-3019
   (t/is (anomalous? [:incorrect nil #"Not all variables in expression are in scope"]

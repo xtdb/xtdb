@@ -236,6 +236,7 @@
 (def ^:private explain-analyze-types
   (LinkedHashMap. ^Map (identity {"depth" #xt/type :utf8
                                   "op" #xt/type :keyword
+                                  "attributes" #xt/type :transit
                                   "total_time" #xt/type [:duration :micro]
                                   "time_to_first_page" #xt/type [:duration :micro]
                                   "page_count" #xt/type :i64
@@ -261,13 +262,15 @@
   (letfn [(->results [^ICursor cursor, depth]
             (lazy-seq
              (if-let [ea (.getExplainAnalyze cursor)]
-               (cons {:depth (str (str/join (repeat depth "  ")) "->")
-                      :op (keyword (.getCursorType cursor))
-                      :total-time (.getTotalTime ea)
-                      :time-to-first-page (.getTimeToFirstPage ea)
-                      :page-count (.getPageCount ea)
-                      :row-count (.getRowCount ea)
-                      :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}
+               (cons (let [attrs (.getCursorAttributes ea)]
+                       {:depth (str (str/join (repeat depth "  ")) "->")
+                        :op (keyword (.getCursorType cursor))
+                        :attributes (not-empty (into {} attrs))
+                        :total-time (.getTotalTime ea)
+                        :time-to-first-page (.getTimeToFirstPage ea)
+                        :page-count (.getPageCount ea)
+                        :row-count (.getRowCount ea)
+                        :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))})
                      (->> (for [child (.getChildCursors cursor)]
                             (->results child (inc depth)))
                           (sequence cat)))
