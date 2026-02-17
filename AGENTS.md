@@ -20,25 +20,31 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * If you need to create git worktrees, you MUST create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`). This allows developers to explicitly push to their own forks.
   * After creating a worktree, you MUST `cd` into it before performing any further operations.
   * Check whether you're in a worktree when you start up - if you are, you MUST ensure that any reads and updates are done within that worktree.
+    If you are in a worktree, you MUST NOT perform any operations in any other worktree.
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
 
-## Definition of done
+## Definition of Done (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
 * You MUST include tests for new/changed functionality.
 * You MUST run tests locally to verify they pass.
+* You MUST update the Allium specs if you've made changes in those areas.
 * The full test suite MUST pass (`./gradlew test`).
   If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
   CI will run integration tests regardless, but `./gradlew test` is the minimum.
   You can assume that all tests are passing on `main`.
-* There MUST NOT be any reflection or boxed math warnings
+* There MUST NOT be any reflection or boxed math warnings.
+* Verify: all changes committed AND pushed
+* Hand off: provide context for next session
 
 For user-visible features:
 * You MUST update relevant docs in `/dev/doc/` or user-facing documentation when implementing new features or changing existing behaviour.
 
 ## Style
 
-Use sentence-per-line in documentation files (one sentence per line) - this makes diffs cleaner and easier to review.
+You MUST use sentence-per-line in documentation files and commit messages - this makes diffs cleaner and easier to review.
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
 
