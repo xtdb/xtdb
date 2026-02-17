@@ -530,6 +530,12 @@ jobs:
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
           TS_DEVICES_SIZE: ${{ inputs.ts_devices_size }}
+          CLICKBENCH_SIZE: ${{ inputs.clickbench_size }}
+          CLICKBENCH_LIMIT: ${{ inputs.clickbench_limit }}
+          TSBS_DEVICE_COUNT: ${{ inputs.tsbs_device_count }}
+          TSBS_QUERY_ITERATIONS: ${{ inputs.tsbs_query_iterations }}
+          TSBS_WORKERS: ${{ inputs.tsbs_workers }}
+          TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
           FUSION_DEVICE_COUNT: ${{ inputs.fusion_device_count }}
           FUSION_READING_COUNT: ${{ inputs.fusion_reading_count }}
           FUSION_DURATION: ${{ inputs.fusion_duration }}
@@ -561,6 +567,12 @@ jobs:
           [ -n "$INGEST_TX_OVERHEAD_BATCH_SIZES" ] && CONFIG_PARTS+=("Batch Sizes: ${INGEST_TX_OVERHEAD_BATCH_SIZES}")
           [ -n "$PATCH_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${PATCH_DOC_COUNT}")
           [ -n "$PATCH_PATCH_COUNT" ] && CONFIG_PARTS+=("Patches: ${PATCH_PATCH_COUNT}")
+          [ -n "$CLICKBENCH_SIZE" ] && CONFIG_PARTS+=("Size: ${CLICKBENCH_SIZE}")
+          [ -n "$CLICKBENCH_LIMIT" ] && CONFIG_PARTS+=("Limit: ${CLICKBENCH_LIMIT}")
+          [ -n "$TSBS_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${TSBS_DEVICE_COUNT}")
+          [ -n "$TSBS_QUERY_ITERATIONS" ] && CONFIG_PARTS+=("Query Iterations: ${TSBS_QUERY_ITERATIONS}")
+          [ -n "$TSBS_WORKERS" ] && CONFIG_PARTS+=("Workers: ${TSBS_WORKERS}")
+          [ -n "$TSBS_BURN_IN" ] && CONFIG_PARTS+=("Burn-In: ${TSBS_BURN_IN}")
           [ -n "$PRODUCTS_LIMIT" ] && CONFIG_PARTS+=("Limit: ${PRODUCTS_LIMIT}")
           [ -n "$TS_DEVICES_SIZE" ] && CONFIG_PARTS+=("Size: ${TS_DEVICES_SIZE}")
           [ -n "$FUSION_DEVICE_COUNT" ] && CONFIG_PARTS+=("Devices: ${FUSION_DEVICE_COUNT}")
@@ -568,8 +580,12 @@ jobs:
           [ -n "$FUSION_DURATION" ] && CONFIG_PARTS+=("Duration: ${FUSION_DURATION}")
           [ -n "$FUSION_THREADS" ] && CONFIG_PARTS+=("Threads: ${FUSION_THREADS}")
           # Join with " | "
-          CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
-          CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "
+          if [ ${#CONFIG_PARTS[@]} -gt 0 ]; then
+            CONFIG_INFO=$(printf " | %s" "${CONFIG_PARTS[@]}")
+            CONFIG_INFO="${CONFIG_INFO:3}" # Strip leading " | "
+          else
+            CONFIG_INFO=""
+          fi
 
           if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
             {
@@ -604,7 +620,11 @@ jobs:
           else
             {
               echo 'msg<<EOF_MSG'
-              echo "*${SLACK_LABEL} Benchmark* :rocket: Started (${CONFIG_INFO})"
+              if [ -n "${CONFIG_INFO}" ]; then
+                echo "*${SLACK_LABEL} Benchmark* :rocket: Started (${CONFIG_INFO})"
+              else
+                echo "*${SLACK_LABEL} Benchmark* :rocket: Started"
+              fi
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
               echo 'EOF_MSG'
