@@ -436,6 +436,35 @@
                   [:msg-ready {:status :transaction}]]
                  @!in-msgs))))))
 
+(deftest test-statement-and-portal-lifecycle
+  (let [frontend (->recording-frontend)
+        stmt-name "my-stmt"]
+    (with-open [conn (->conn frontend {"user" "xtdb" "database" "xtdb"})]
+
+      (t/testing "parsed statement persists across multiple bind/execute/sync cycles"
+        (pgwire/handle-msg conn {:msg-name :msg-parse :stmt-name stmt-name
+                                 :query "SELECT 1 AS x" :param-oids []})
+
+        (dotimes [_ 3]
+          (pgwire/handle-msg conn {:msg-name :msg-bind
+                                   :portal-name "p1" :stmt-name stmt-name
+                                   :arg-format [] :args [] :result-format nil})
+          (pgwire/handle-msg conn {:msg-name :msg-execute :portal-name "p1" :limit 0})
+          (pgwire/handle-msg conn {:msg-name :msg-sync}))
+
+        (let [{:keys [prepared-statements portals]} @(:conn-state conn)]
+          (t/is (contains? prepared-statements stmt-name)
+                "prepared statement should persist until explicitly closed")
+          (t/is (empty? portals)
+                "portals should be cleaned up after sync")))
+
+      (t/testing "explicit close removes the prepared statement"
+        (pgwire/handle-msg conn {:msg-name :msg-close :close-type :prepared-stmt :close-name stmt-name})
+        (pgwire/handle-msg conn {:msg-name :msg-sync})
+
+        (t/is (not (contains? (:prepared-statements @(:conn-state conn)) stmt-name))
+              "prepared statement should be removed after explicit close")))))
+
 (deftest test-single-arg-format-applies-to-all-params-5174
   ;; Per PostgreSQL wire protocol, when format code count = 1, that format applies to ALL parameters.
   ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
