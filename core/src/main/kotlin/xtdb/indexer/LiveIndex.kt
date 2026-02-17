@@ -17,6 +17,7 @@ interface LiveIndex : Snapshot.Source, AutoCloseable {
 
     interface Tx : AutoCloseable {
         fun liveTable(table: TableRef): LiveTable.Tx
+        val liveTables: Iterable<Map.Entry<TableRef, LiveTable.Tx>>
         fun openSnapshot(): Snapshot
 
         fun commit()

@@ -28,6 +28,7 @@
            (java.time Instant)
            (org.apache.arrow.memory BufferAllocator)
            xtdb.api.TransactionKey
+           (xtdb.api.log Log$Message$ResolvedTx)
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
@@ -565,9 +566,27 @@
              :tracer (ig/ref :xtdb/tracer)}
             opts)})
 
-(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSource tx-source]
-  (.commit live-idx-tx)
-  (some-> tx-source (.onCommit tx-key live-idx-tx)))
+(defn- build-table-data [^LiveIndex$Tx live-idx-tx]
+  (let [m (java.util.HashMap.)]
+    (doseq [^java.util.Map$Entry entry (.getLiveTables live-idx-tx)]
+      (let [^TableRef table-ref (.getKey entry)
+            ^LiveTable$Tx table-tx (.getValue entry)]
+        (when-let [data (.serializeTxData table-tx)]
+          (.put m (.getSchemaAndTable table-ref) data))))
+    m))
+
+(defn- ->resolved-tx [^TransactionKey tx-key committed? error table-data]
+  (Log$Message$ResolvedTx. (.getTxId tx-key)
+                            (time/instant->micros (.getSystemTime tx-key))
+                            committed?
+                            (if error (serde/write-transit error) (byte-array 0))
+                            table-data))
+
+(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSource tx-source committed? error]
+  (let [table-data (build-table-data live-idx-tx)]
+    (.commit live-idx-tx)
+    (some-> tx-source (.onCommit tx-key live-idx-tx))
+    (->resolved-tx tx-key committed? error table-data)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                db-name, db-storage, db-state, ^Indexer$TxSource tx-source
@@ -603,9 +622,7 @@
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-              (commit tx-key live-idx-tx tx-source))
-
-            (serde/->tx-aborted msg-id default-system-time err))
+              (commit tx-key live-idx-tx tx-source false err)))
 
           (let [system-time (or system-time default-system-time)
                 tx-key (serde/->TxKey msg-id system-time)]
@@ -615,9 +632,7 @@
                   (.abort live-idx-tx)
                   (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                     (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key live-idx-tx tx-source))
-
-                  (serde/->tx-aborted msg-id system-time skipped-exn))
+                    (commit tx-key live-idx-tx tx-source false skipped-exn)))
 
                 (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
@@ -671,19 +686,16 @@
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                        (commit tx-key live-idx-tx tx-source))
-
-                      (serde/->tx-aborted msg-id system-time e))
+                        (commit tx-key live-idx-tx tx-source false e)))
 
                     (do
                       (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                      (commit tx-key live-idx-tx tx-source)
-                      (serde/->tx-committed msg-id system-time)))))))))))
+                      (commit tx-key live-idx-tx tx-source true nil)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
       (add-tx-row! db-name live-idx-tx tx-key e {})
-      (commit tx-key live-idx-tx tx-source))))
+      (commit tx-key live-idx-tx tx-source (nil? e) e))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, tracer]}]
   (let [^Tracer tracer (when (:transaction-tracing? tracer) (:tracer tracer))

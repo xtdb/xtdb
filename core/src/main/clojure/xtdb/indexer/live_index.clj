@@ -73,6 +73,8 @@
 
                                 (.startTx live-table tx-key new-live-table?)))))
 
+        (getLiveTables [_] (.entrySet table-txs))
+
         (commit [_]
           (let [snap-lock-stamp (.writeLock snap-lock)]
             (try

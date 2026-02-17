@@ -140,6 +140,9 @@ constructor(
             txTrie += pos
         }
 
+        fun serializeTxData(): ByteArray? =
+            if (txRelation.rowCount > 0) txRelation.asArrowStream else null
+
         fun commit(): LiveTable {
             val txRowCount = txRelation.rowCount
             if (txRowCount > 0) {

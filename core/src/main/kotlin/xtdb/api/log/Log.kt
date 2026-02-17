@@ -110,6 +110,14 @@ interface Log : AutoCloseable {
                                     BlockUploaded(it.blockIndex, it.latestProcessedMsgId, it.storageEpoch)
                                 }
 
+                                MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
+                                    ResolvedTx(
+                                        it.txId, it.systemTimeMicros, it.committed,
+                                        it.error.toByteArray(),
+                                        it.tableDataMap.mapValues { (_, v) -> v.toByteArray() }
+                                    )
+                                }
+
                                 else -> null
                             }
                         }
@@ -157,6 +165,26 @@ interface Log : AutoCloseable {
                     this.blockIndex = this@BlockUploaded.blockIndex
                     this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                     this.storageEpoch = this@BlockUploaded.storageEpoch
+                }
+            }
+        }
+
+        data class ResolvedTx(
+            val txId: MessageId,
+            val systemTimeMicros: Long,
+            val committed: Boolean,
+            val error: ByteArray,
+            val tableData: Map<String, ByteArray>
+        ) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                resolvedTx = resolvedTx {
+                    this.txId = this@ResolvedTx.txId
+                    this.systemTimeMicros = this@ResolvedTx.systemTimeMicros
+                    this.committed = this@ResolvedTx.committed
+                    this.error = com.google.protobuf.ByteString.copyFrom(this@ResolvedTx.error)
+                    this@ResolvedTx.tableData.forEach { (k, v) ->
+                        this.tableData[k] = com.google.protobuf.ByteString.copyFrom(v)
+                    }
                 }
             }
         }

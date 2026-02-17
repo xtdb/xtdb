@@ -8,6 +8,9 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
+import xtdb.time.InstantUtil
+import xtdb.util.TransitFormat.MSGPACK
+import xtdb.util.readTransit
 import xtdb.api.TransactionResult
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Message
@@ -230,7 +233,7 @@ class LogProcessor @JvmOverloads constructor(
 
         return when (val msg = record.message) {
                 is Message.Tx -> {
-                    val result = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
+                    val resolvedTx = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
                         LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
                         // Store skipped transaction to object store
@@ -272,7 +275,14 @@ class LogProcessor @JvmOverloads constructor(
                     if (liveIndex.isFull())
                         toFinishBlock = true
 
-                    result
+                    val systemTime = InstantUtil.fromMicros(resolvedTx.systemTimeMicros)
+                    if (resolvedTx.committed)
+                        TransactionCommitted(resolvedTx.txId, systemTime)
+                    else
+                        TransactionAborted(
+                            resolvedTx.txId, systemTime,
+                            readTransit(resolvedTx.error, MSGPACK) as Throwable
+                        )
                 }
 
                 is Message.FlushBlock -> {
@@ -296,6 +306,8 @@ class LogProcessor @JvmOverloads constructor(
                     // it means we're not waiting for a block (e.g. writer node), so ignore.
                     null
                 }
+
+                is Message.ResolvedTx -> null
 
                 is Message.AttachDatabase -> {
                     require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
