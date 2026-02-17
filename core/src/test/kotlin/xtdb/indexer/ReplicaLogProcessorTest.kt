@@ -26,12 +26,12 @@ import java.time.InstantSource
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-class LogProcessorTest {
+class ReplicaLogProcessorTest {
 
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)
 
-    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = LogProcessor.Flusher(
+    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = ReplicaLogProcessor.Flusher(
         Duration.ofDays(2),
         inst(1),
         previousBlockTxId = prevBlockTxId,
@@ -83,7 +83,7 @@ class LogProcessorTest {
         )
 
         RootAllocator().use { allocator ->
-            val lp = LogProcessor(
+            val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
@@ -136,7 +136,7 @@ class LogProcessorTest {
                 liveIndex
             )
 
-            val lp = LogProcessor(
+            val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),

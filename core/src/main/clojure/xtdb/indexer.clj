@@ -720,13 +720,13 @@
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
 
-(defmethod ig/expand-key ::for-db [k {:keys [base]}]
-  {k {:base base
-      :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :db-storage (ig/ref :xtdb.db-catalog/storage)
-      :db-state (ig/ref :xtdb.db-catalog/state)
-      :crash-logger (ig/ref ::crash-logger)
-      :tx-source (ig/ref :xtdb.tx-source/for-db)}})
+(defmethod ig/expand-key ::for-db [k opts]
+  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
+            :db-storage (ig/ref :xtdb.db-catalog/storage)
+            :db-state (ig/ref :xtdb.db-catalog/state)
+            :crash-logger (ig/ref ::crash-logger)
+            :tx-source (ig/ref :xtdb.tx-source/for-db)}
+           opts)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
                                     :keys [allocator db-storage db-state ^CrashLogger crash-logger tx-source]}]

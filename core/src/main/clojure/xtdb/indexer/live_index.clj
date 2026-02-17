@@ -163,18 +163,16 @@
       (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
       (util/close allocator))))
 
-(defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [base, ^IndexerConfig indexer-conf]}]
-  {k {:base base
-
-      :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :table-cat (ig/ref :xtdb/table-catalog)
-
-      :rows-per-block (.getRowsPerBlock indexer-conf)
-      :log-limit (.getLogLimit indexer-conf)
-      :page-limit (.getPageLimit indexer-conf)
-      :skip-txs (.getSkipTxs indexer-conf)}})
+(defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [^IndexerConfig indexer-conf] :as opts}]
+  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
+            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :block-cat (ig/ref :xtdb/block-catalog)
+            :table-cat (ig/ref :xtdb/table-catalog)}
+           (assoc (dissoc opts :indexer-conf)
+                  :rows-per-block (.getRowsPerBlock indexer-conf)
+                  :log-limit (.getLogLimit indexer-conf)
+                  :page-limit (.getPageLimit indexer-conf)
+                  :skip-txs (.getSkipTxs indexer-conf)))})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
                                                     :keys [allocator, ^BlockCatalog block-cat, buffer-pool table-cat

@@ -6,7 +6,7 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode]
+           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode ReplicaIndexer SourceIndexer]
            [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
 
 ;; Database components follow a hexagonal architecture pattern:
@@ -25,12 +25,12 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/expand-key ::state [k {:keys [db-name]}]
-  {k {:db-name db-name
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :table-cat (ig/ref :xtdb/table-catalog)
-      :trie-cat (ig/ref :xtdb/trie-catalog)
-      :live-index (ig/ref :xtdb.indexer/live-index)}})
+(defmethod ig/expand-key ::state [k opts]
+  {k (into {:block-cat (ig/ref :xtdb/block-catalog)
+            :table-cat (ig/ref :xtdb/table-catalog)
+            :trie-cat (ig/ref :xtdb/trie-catalog)
+            :live-index (ig/ref :xtdb.indexer/live-index)}
+           opts)})
 
 (defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
   (DatabaseState. db-name block-cat table-cat trie-cat live-index))
@@ -60,25 +60,19 @@
         mode (.getMode db-config)
         opts {:base base, :db-name db-name}]
     (-> {::allocator opts
-         :xtdb/block-catalog opts
-         :xtdb/table-catalog opts
-         :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
          :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
          :xtdb/source-log opts
          :xtdb/replica-log opts
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
-         :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
-         :xtdb.indexer/crash-logger opts
 
          ::storage opts
-         ::state opts
 
-         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
-         :xtdb.indexer/for-db opts
-         :xtdb.compactor/for-db (assoc opts :mode mode)
-         :xtdb.log/processor (cond-> (assoc opts :indexer-conf indexer-conf :mode mode)
-                                      (:db-catalog base) (assoc :db-catalog (:db-catalog base)))}
+         :xtdb.indexer/replica-log (cond-> (assoc opts
+                                                 :indexer-conf indexer-conf
+                                                 :mode mode
+                                                 :tx-source-conf (.getTxSource conf))
+                                          (:db-catalog base) (assoc :db-catalog (:db-catalog base)))}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -99,9 +93,9 @@
                        (throw (doto e (.addSuppressed t))))))
 
                  (throw (ex-cause e))))]
-    {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
-                    (:processor (:xtdb.log/processor sys))
-                    (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
+    {:db (Database. (::allocator sys) db-config (::storage sys)
+                    (SourceIndexer. nil)
+                    (:replica-indexer (:xtdb.indexer/replica-log sys)))
      :sys sys}))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]

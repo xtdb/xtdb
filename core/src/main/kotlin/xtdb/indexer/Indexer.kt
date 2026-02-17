@@ -36,7 +36,7 @@ interface Indexer : AutoCloseable {
         ): IQuerySource.QueryCatalog {
             val queryDb = object : IQuerySource.QueryDatabase {
                 override val storage get() = storage
-                override val state get() = state
+                override val queryState get() = state
                 override fun openSnapshot() = snapSource.openSnapshot()
             }
             return object : IQuerySource.QueryCatalog {

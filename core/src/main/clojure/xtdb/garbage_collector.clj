@@ -25,7 +25,7 @@
 (defmethod ig/init-key :xtdb/garbage-collector [_ {:keys [^Database$Catalog db-cat, enabled? blocks-to-keep garbage-lifetime approx-run-interval]}]
   ;; TODO multi-db
   (let [db (.getPrimary db-cat)
-        gc (GarbageCollector$Impl. (.getBufferPool db) (.getState db)
+        gc (GarbageCollector$Impl. (.getBufferPool db) (.getQueryState db)
                                    (GarbageCollector$Driver/real)
                                    blocks-to-keep garbage-lifetime approx-run-interval)]
     (when enabled? (.start gc))

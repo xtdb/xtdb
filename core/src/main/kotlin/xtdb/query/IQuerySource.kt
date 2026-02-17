@@ -14,7 +14,7 @@ interface IQuerySource {
 
     interface QueryDatabase : Snapshot.Source {
         val storage: DatabaseStorage
-        val state: DatabaseState
+        val queryState: DatabaseState
     }
 
     fun prepareQuery(query: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery

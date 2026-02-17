@@ -212,7 +212,7 @@
                   (-> (info-schema/template-table table)
                       (get (symbol col-name)))
                   (let [db-name (.getDbName table)
-                        state (.getState (.databaseOrNull db-catalog db-name))
+                        state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
                         snap (get snaps db-name)]
                     (types/merge-types (some-> (.getType table-catalog table col-name))
@@ -229,7 +229,7 @@
             db-name (.getDbName table)
             db (.databaseOrNull db-cat db-name)
             storage (.getStorage db)
-            state (.getState db)
+            state (.getQueryState db)
             metadata-mgr (.getMetadataManager storage)
             buffer-pool (.getBufferPool storage)
             trie-catalog (.getTrieCatalog state)

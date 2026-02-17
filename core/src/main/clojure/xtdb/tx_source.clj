@@ -160,18 +160,15 @@
                (some? db-name) (.dbName db-name)
                (some? format) (.format (str (symbol format))))))
 
-(defmethod ig/expand-key ::for-db [k {:keys [base ^TxSourceConfig tx-source-conf db-name]}]
-  {k {:tx-source-conf tx-source-conf
-      :output-log (ig/ref ::output-log)
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :table-cat (ig/ref :xtdb/table-catalog)
-      :trie-cat (ig/ref :xtdb/trie-catalog)
-      :db-name db-name}
-   ::output-log {:tx-source-conf tx-source-conf
-                 :base base
-                 :db-name db-name}})
+(defmethod ig/expand-key ::for-db [k {:keys [^TxSourceConfig tx-source-conf] :as opts}]
+  {k (into {:output-log (ig/ref ::output-log)
+            :block-cat (ig/ref :xtdb/block-catalog)
+            :allocator (ig/ref :xtdb.db-catalog/allocator)
+            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :table-cat (ig/ref :xtdb/table-catalog)
+            :trie-cat (ig/ref :xtdb/trie-catalog)}
+           opts)
+   ::output-log (select-keys opts [:tx-source-conf :base :db-name])})
 
 (defrecord TxSource [^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSource

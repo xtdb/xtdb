@@ -28,10 +28,10 @@
 
          (throw (ex-info ~msg data# e#))))))
 
-(defmethod ig/expand-key :xtdb.indexer/crash-logger [k {:keys [base]}]
-  {k {:base base
-      :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)}})
+(defmethod ig/expand-key :xtdb.indexer/crash-logger [k opts]
+  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
+            :buffer-pool (ig/ref :xtdb/buffer-pool)}
+           opts)})
 
 (defmethod ig/init-key :xtdb.indexer/crash-logger [_ {{:keys [config]} :base
                                                        :keys [allocator buffer-pool]}]

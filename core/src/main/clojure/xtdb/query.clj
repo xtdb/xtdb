@@ -196,7 +196,7 @@
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
                     :last-known-blocks (->> (for [db-name (.getDatabaseNames db-cat)]
-                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getState .getBlockCatalog .getCurrentBlockIndex)]))
+                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getQueryState .getBlockCatalog .getCurrentBlockIndex)]))
 
                     :default-tz default-tz
                     :param-types param-types
