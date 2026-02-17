@@ -23,7 +23,7 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionCommitted TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
+           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
            (xtdb.api.log Log$Message$Tx Log$MessageMetadata)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog)
@@ -202,19 +202,13 @@
 
   (attach-db [this db-name db-config]
     (let [primary-db (.getPrimary db-cat)
-          msg-id (xt-log/send-attach-db! primary-db db-name db-config)
-          result (await-msg-result this primary-db msg-id)]
-      (when (instance? TransactionCommitted result)
-        (xt-log/await-db primary-db msg-id))
-      result))
+          msg-id (xt-log/send-attach-db! primary-db db-name db-config)]
+      (await-msg-result this primary-db msg-id)))
 
   (detach-db [this db-name]
     (let [primary-db (.getPrimary db-cat)
-          msg-id (xt-log/send-detach-db! primary-db db-name)
-          result (await-msg-result this primary-db msg-id)]
-      (when (instance? TransactionCommitted result)
-        (xt-log/await-db primary-db msg-id))
-      result))
+          msg-id (xt-log/send-detach-db! primary-db db-name)]
+      (await-msg-result this primary-db msg-id)))
 
   xtp/PStatus
   (latest-completed-txs [_]

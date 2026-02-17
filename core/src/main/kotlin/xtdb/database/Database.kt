@@ -23,7 +23,6 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
-import xtdb.indexer.ControlPlaneConsumer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
@@ -42,7 +41,6 @@ data class Database(
     override val state: DatabaseState,
 
     val logProcessorOrNull: LogProcessor?,
-    val controlPlaneConsumerOrNull: ControlPlaneConsumer?,
     private val compactorOrNull: Compactor.ForDatabase?,
     val txSource: TxSource?,
 ) : IQuerySource.QueryDatabase {
@@ -60,7 +58,6 @@ data class Database(
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
     val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
-    val controlPlaneConsumer: ControlPlaneConsumer get() = controlPlaneConsumerOrNull ?: error("control-plane consumer not initialised")
     val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
     override fun equals(other: Any?): Boolean =
@@ -136,17 +133,11 @@ data class Database(
         companion object {
             private suspend fun Database.await(msgId: MessageId) {
                 logProcessor.awaitAsync(msgId).await()
-                controlPlaneConsumerOrNull?.awaitAsync(msgId)?.await()
             }
             private suspend fun Database.sync() = await(logProcessor.latestSubmittedMsgId)
 
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
                 val basis = token.decodeTxBasisToken()
-
-                // Await the primary's control-plane consumer first so that all
-                // attached secondary databases exist in the catalog.
-                primary.controlPlaneConsumerOrNull
-                    ?.let { cp -> basis[primary.name]?.first()?.let { cp.awaitAsync(it).await() } }
 
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
@@ -156,12 +147,6 @@ data class Database(
             }
 
             private suspend fun Catalog.syncAll0() = coroutineScope {
-                // Await the primary's control-plane consumer first so that all
-                // attached secondary databases exist in the catalog.
-                primary.controlPlaneConsumer
-                    .awaitAsync(primary.sourceLog.latestSubmittedMsgId)
-                    .await()
-
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
                     .filter { it.logProcessorOrNull != null }

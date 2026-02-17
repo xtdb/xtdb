@@ -77,8 +77,8 @@
          :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
          :xtdb.indexer/for-db opts
          :xtdb.compactor/for-db (assoc opts :mode mode)
-         :xtdb.log/processor (assoc opts :indexer-conf indexer-conf :mode mode)}
-        (cond-> (:db-catalog base) (assoc :xtdb.log/control-plane opts))
+         :xtdb.log/processor (cond-> (assoc opts :indexer-conf indexer-conf :mode mode)
+                                      (:db-catalog base) (assoc :db-catalog (:db-catalog base)))}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -101,7 +101,6 @@
                  (throw (ex-cause e))))]
     {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
                     (:processor (:xtdb.log/processor sys))
-                    (:consumer (:xtdb.log/control-plane sys))
                     (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
      :sys sys}))
 

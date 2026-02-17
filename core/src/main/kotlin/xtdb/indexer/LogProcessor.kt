@@ -66,8 +66,15 @@ class LogProcessor @JvmOverloads constructor(
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>,
     private val mode: Database.Mode = Database.Mode.READ_WRITE,
-    private val maxBufferedRecords: Int = 1024
+    private val maxBufferedRecords: Int = 1024,
+    private val dbCatalog: Database.Catalog? = null
 ) : Log.Subscriber, AutoCloseable {
+
+    init {
+        require((dbCatalog != null) == (dbState.name == "xtdb")) {
+            "dbCatalog must be provided iff database is 'xtdb'"
+        }
+    }
 
     private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
 
@@ -315,6 +322,7 @@ class LogProcessor @JvmOverloads constructor(
                         if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
                             throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
                         secondaryDatabases[msg.dbName] = msg.config.serializedConfig
+                        dbCatalog!!.attach(msg.dbName, msg.config)
                         TransactionCommitted(msgId, record.logTimestamp)
                     } catch (e: Anomaly.Caller) {
                         TransactionAborted(msgId, record.logTimestamp, e)
@@ -338,6 +346,7 @@ class LogProcessor @JvmOverloads constructor(
                                 throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
                             else -> {
                                 secondaryDatabases.remove(msg.dbName)
+                                dbCatalog!!.detach(msg.dbName)
                                 TransactionCommitted(msgId, record.logTimestamp)
                             }
                         }

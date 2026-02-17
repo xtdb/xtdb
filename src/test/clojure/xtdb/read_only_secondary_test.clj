@@ -55,8 +55,6 @@ ATTACH DATABASE shared_db WITH $$
   mode: read-only
 $$"])
 
-        (xt-log/sync-node secondary-node)
-
         (t/is (= [{:xt/id "from-primary"}]
                  (xt/q secondary-node "SELECT * FROM shared_db.foo"))
               "read-only secondary can read data written by primary")
@@ -98,8 +96,6 @@ ATTACH DATABASE shared_db WITH $$
     path: 'target/read-only-secondary/external-writes/objects'
   mode: read-only
 $$"])
-
-        (xt-log/sync-node secondary-node)
 
         (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"}}
                  (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
