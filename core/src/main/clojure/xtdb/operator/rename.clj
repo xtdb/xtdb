@@ -54,8 +54,8 @@
      :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
      :vec-types out-vec-types
      :stats (:stats emitted-child-relation)
-     :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
+     :->cursor (fn [{:keys [explain-analyze? tracer query-span pushdowns] :as opts}]
                  (let [opts (update opts :pushdowns update-keys #(get col-name-reverse-mapping %))]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span nil nil (some-> pushdowns (update-keys str))))))}))

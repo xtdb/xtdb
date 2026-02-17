@@ -13,7 +13,7 @@
   (:import (java.util ArrayList Iterator List Set SortedSet TreeSet)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor Bytes)
-           (xtdb.arrow BitVector RelationReader VectorType)
+           (xtdb.arrow BitVector RelationReader VectorReader VectorType)
            (xtdb.arrow.metadata MetadataFlavour MetadataFlavour$Bytes MetadataFlavour$Number MetadataFlavour$DateTime)
            (xtdb.bloom BloomUtils)
            (xtdb.operator ProjectionSpec)
@@ -190,9 +190,9 @@
 
 (defn- compute-min-max
   "Computes min and max values for a numeric column. Returns {:min v :max v}."
-  [col row-count]
+  [^VectorReader col ^long row-count]
   (when (pos? row-count)
-    (loop [idx 0
+    (loop [idx (long 0)
            min-val Double/POSITIVE_INFINITY
            max-val Double/NEGATIVE_INFINITY]
       (if (< idx row-count)
@@ -200,8 +200,8 @@
           (recur (inc idx) min-val max-val)
           (let [v (.getMetaDouble col idx)]
             (recur (inc idx)
-                   (min min-val v)
-                   (max max-val v))))
+                   (Math/min min-val v)
+                   (Math/max max-val v))))
         (when (and (not= min-val Double/POSITIVE_INFINITY)
                    (not= max-val Double/NEGATIVE_INFINITY))
           {:min min-val :max max-val})))))

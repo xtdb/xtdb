@@ -239,7 +239,28 @@
                                   "total_time" #xt/type [:duration :micro]
                                   "time_to_first_page" #xt/type [:duration :micro]
                                   "page_count" #xt/type :i64
-                                  "row_count" #xt/type :i64})))
+                                  "row_count" #xt/type :i64
+                                  "pushdowns" #xt/type :transit})))
+
+(def ^:private ^:const pushdown-truncate-threshold 8)
+
+(defn- truncate-pushdown-val [k v]
+  (case k
+    :bloom-hashes {:count (count v)}
+    :iids (let [^java.util.Collection coll v
+                size (.size coll)]
+            (if (> size pushdown-truncate-threshold)
+              {:count size}
+              (mapv #(util/byte-buffer->uuid (java.nio.ByteBuffer/wrap ^bytes %)) coll)))
+    v))
+
+(defn- truncate-pushdowns
+  "Truncates large iids/bloom-hashes in pushdowns for readable explain-analyze output."
+  [pushdowns]
+  (vec (for [[col-name col-pushdowns] pushdowns]
+         (into {:column col-name}
+               (map (fn [[k v]] [k (truncate-pushdown-val k v)]))
+               col-pushdowns))))
 
 (defn- explain-analyze-results [^IResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
@@ -250,7 +271,8 @@
                       :total-time (.getTotalTime ea)
                       :time-to-first-page (.getTimeToFirstPage ea)
                       :page-count (.getPageCount ea)
-                      :row-count (.getRowCount ea)}
+                      :row-count (.getRowCount ea)
+                      :pushdowns (not-empty (truncate-pushdowns (.getPushdowns ea)))}
                      (->> (for [child (.getChildCursors cursor)]
                             (->results child (inc depth)))
                           (sequence cat)))

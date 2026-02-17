@@ -25,6 +25,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         val pageCount: Int
         val timeToFirstPage: Duration?
         val totalTime: Duration
+        val pushdowns: Map<String, Any>?
     }
 
     val cursorType: String
@@ -51,6 +52,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private val parentSpan: Span?,
             private val attributes: Map<String, String>? = null,
             private val spanName: String? = null,
+            override val pushdowns: Map<String, Any>? = null,
             private val clock: InstantSource = InstantSource.system()
         ) : ICursor by inner, ExplainAnalyze {
             override var pageCount: Int = 0; private set
@@ -121,5 +123,9 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         @JvmStatic
         fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?, spanName: String?): ICursor =
             TracingCursor(this, tracer, span, attributes, spanName)
+
+        @JvmStatic
+        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?, spanName: String?, pushdowns: Map<String, Any>?): ICursor =
+            TracingCursor(this, tracer, span, attributes, spanName, pushdowns)
     }
 }
