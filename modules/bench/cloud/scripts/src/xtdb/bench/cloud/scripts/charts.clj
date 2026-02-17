@@ -152,8 +152,13 @@
          metric (or metric "time-taken-ms")
          y-label (or y-label "Duration (minutes)")
          duration-metric? (= metric "time-taken-ms")
-         ;; Allow override of filter-value via opts
-         actual-filter-value (get opts :filter-value filter-value)
+         ;; Allow override of filter-value via opts, but only when the
+         ;; benchmark's filter-param matches (e.g. --scale-factor should
+         ;; only override benchmarks that filter by scale-factor)
+         actual-filter-value (if (and (contains? opts :filter-value)
+                                      (= "scale-factor" filter-param))
+                               (get opts :filter-value)
+                               filter-value)
          fetch-opts (cond-> {:benchmark benchmark-name
                              :metric metric}
                       filter-param (assoc :filter-param filter-param

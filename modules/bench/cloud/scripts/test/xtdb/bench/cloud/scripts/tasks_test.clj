@@ -5,6 +5,8 @@
             [xtdb.bench.cloud.scripts.summary :as summary]
             [xtdb.bench.cloud.scripts.util :as util]
             [xtdb.bench.cloud.scripts.k8s :as k8s]
+            [xtdb.bench.cloud.scripts.azure :as azure]
+            [xtdb.bench.cloud.scripts.charts :as charts]
             [babashka.process :as proc]
             [clojure.string :as str]))
 
@@ -950,10 +952,27 @@
       (let [result (k8s/derive-benchmark-status "tpch")]
         (is (= {:status "failure"} result)))))
 
-  (testing "job still running"
-    (with-redefs [k8s/kubectl (fn [& _] {:status {:conditions []}})]
+  (testing "job has no conditions, pods still running"
+    (with-redefs [k8s/kubectl (fn [& _] {:status {:conditions []}})
+                  k8s/kubectl-get-pods (constantly {:items [{:status {:phase "Running"}}]})]
       (let [result (k8s/derive-benchmark-status "tpch")]
         (is (= {:status "unknown"} result)))))
+
+  (testing "job has no conditions but all pods succeeded - infers success"
+    (with-redefs [k8s/kubectl (fn [& _] {:status {:conditions []}})
+                  k8s/kubectl-get-pods (constantly {:items [{:status {:phase "Succeeded"}}
+                                                            {:status {:phase "Succeeded"}}
+                                                            {:status {:phase "Succeeded"}}]})]
+      (let [result (k8s/derive-benchmark-status "tpch")]
+        (is (= {:status "success"} result)))))
+
+  (testing "job has no conditions, mixed pod phases - infers failure"
+    (with-redefs [k8s/kubectl (fn [& _] {:status {:conditions []}})
+                  k8s/kubectl-get-pods (constantly {:items [{:status {:phase "Succeeded"}}
+                                                            {:status {:phase "Failed"}}
+                                                            {:status {:phase "Succeeded"}}]})]
+      (let [result (k8s/derive-benchmark-status "tpch")]
+        (is (= {:status "failure"} result)))))
 
   (testing "job not found, infer from pods - failed pod"
     (with-redefs [k8s/kubectl (constantly nil)
@@ -972,3 +991,40 @@
                   k8s/kubectl-get-pods (constantly {:items []})]
       (let [result (k8s/derive-benchmark-status "tpch")]
         (is (= {:status "unknown"} result))))))
+
+(deftest plot-benchmark-timeseries-filter-override-test
+  (testing "scale-factor override applies to tpch (filter-param = scale-factor)"
+    (let [captured-opts (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                             (reset! captured-opts opts)
+                                                             [{:timestamp "2024-01-01" :value 1000}])
+                    charts/plot-timeseries-vega (fn [& _] nil)]
+        (charts/plot-benchmark-timeseries "tpch" {:filter-value 2.0})
+        (is (= 2.0 (:filter-value @captured-opts))))))
+
+  (testing "scale-factor override does NOT apply to auctionmark (filter-param = duration)"
+    (let [captured-opts (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                             (reset! captured-opts opts)
+                                                             [{:timestamp "2024-01-01" :value 30.0}])
+                    charts/plot-timeseries-vega (fn [& _] nil)]
+        (charts/plot-benchmark-timeseries "auctionmark" {:filter-value 0.1})
+        (is (= "PT30M" (:filter-value @captured-opts))))))
+
+  (testing "scale-factor override does NOT apply to fusion (filter-param = devices)"
+    (let [captured-opts (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                             (reset! captured-opts opts)
+                                                             [{:timestamp "2024-01-01" :value 30.0}])
+                    charts/plot-timeseries-vega (fn [& _] nil)]
+        (charts/plot-benchmark-timeseries "fusion" {:filter-value 0.1})
+        (is (= 10000 (:filter-value @captured-opts))))))
+
+  (testing "no override uses default filter-value"
+    (let [captured-opts (atom nil)]
+      (with-redefs [azure/fetch-azure-benchmark-timeseries (fn [opts]
+                                                             (reset! captured-opts opts)
+                                                             [{:timestamp "2024-01-01" :value 1000}])
+                    charts/plot-timeseries-vega (fn [& _] nil)]
+        (charts/plot-benchmark-timeseries "tpch" {})
+        (is (= 1.0 (:filter-value @captured-opts)))))))
