@@ -24,7 +24,7 @@ interface Indexer : AutoCloseable {
     }
 
     interface TxSource {
-        fun onCommit(txKey: TransactionKey, liveIdxTx: LiveIndex.Tx)
+        fun onCommit(resolvedTx: Log.Message.ResolvedTx)
     }
 
     companion object {
@@ -50,7 +50,6 @@ interface Indexer : AutoCloseable {
         allocator: BufferAllocator,
         storage: DatabaseStorage,
         state: DatabaseState,
-        txSource: TxSource?,
         crashLogger: CrashLogger
     ): ForDatabase
 }

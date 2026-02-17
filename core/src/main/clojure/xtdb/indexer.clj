@@ -31,7 +31,7 @@
            (xtdb.api.log Log$Message$ResolvedTx)
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
-           (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase Indexer$TxSource LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            (xtdb.query IQuerySource PreparedQuery)))
 
@@ -582,14 +582,13 @@
                             (if error (serde/write-transit error) (byte-array 0))
                             table-data))
 
-(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx ^Indexer$TxSource tx-source committed? error]
+(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx committed? error]
   (let [table-data (build-table-data live-idx-tx)]
     (.commit live-idx-tx)
-    (some-> tx-source (.onCommit tx-key live-idx-tx))
     (->resolved-tx tx-key committed? error table-data)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
-                               db-name, db-storage, db-state, ^Indexer$TxSource tx-source
+                               db-name, db-storage, db-state
                                ^LiveIndex live-index, table-catalog
                                ^CrashLogger crash-logger
                                ^Timer tx-timer
@@ -622,7 +621,7 @@
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-              (commit tx-key live-idx-tx tx-source false err)))
+              (commit tx-key live-idx-tx false err)))
 
           (let [system-time (or system-time default-system-time)
                 tx-key (serde/->TxKey msg-id system-time)]
@@ -632,7 +631,7 @@
                   (.abort live-idx-tx)
                   (util/with-open [live-idx-tx (.startTx live-index tx-key)]
                     (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key live-idx-tx tx-source false skipped-exn)))
+                    (commit tx-key live-idx-tx false skipped-exn)))
 
                 (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
@@ -686,16 +685,16 @@
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                        (commit tx-key live-idx-tx tx-source false e)))
+                        (commit tx-key live-idx-tx false e)))
 
                     (do
                       (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                      (commit tx-key live-idx-tx tx-source true nil)))))))))))
+                      (commit tx-key live-idx-tx true nil)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [live-idx-tx (.startTx live-index tx-key)]
       (add-tx-row! db-name live-idx-tx tx-key e {})
-      (commit tx-key live-idx-tx tx-source (nil? e) e))))
+      (commit tx-key live-idx-tx (nil? e) e))))
 
 (defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, tracer]}]
   (let [^Tracer tracer (when (:transaction-tracing? tracer) (:tracer tracer))
@@ -703,14 +702,14 @@
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
-      (openForDatabase [_ allocator db-storage db-state tx-source crash-logger]
+      (openForDatabase [_ allocator db-storage db-state crash-logger]
         (let [db-name (.getName db-state)]
           (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
             ;; TODO add db-name to allocator gauge
             (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
 
             (->IndexerForDatabase allocator (:node-id config) q-src
-                                  db-name db-storage db-state tx-source
+                                  db-name db-storage db-state
                                   (.getLiveIndex db-state) (.getTableCatalog db-state)
                                   crash-logger
                                   tx-timer tx-error-counter tracer))))
@@ -724,13 +723,12 @@
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
-            :crash-logger (ig/ref ::crash-logger)
-            :tx-source (ig/ref :xtdb.tx-source/for-db)}
+            :crash-logger (ig/ref ::crash-logger)}
            opts)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
-                                    :keys [allocator db-storage db-state ^CrashLogger crash-logger tx-source]}]
-  (.openForDatabase indexer allocator db-storage db-state tx-source crash-logger))
+                                    :keys [allocator db-storage db-state ^CrashLogger crash-logger]}]
+  (.openForDatabase indexer allocator db-storage db-state crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

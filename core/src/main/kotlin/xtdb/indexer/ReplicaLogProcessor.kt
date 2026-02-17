@@ -73,7 +73,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val skipTxs: Set<MessageId>,
     private val mode: Database.Mode = Database.Mode.READ_WRITE,
     private val maxBufferedRecords: Int = 1024,
-    private val dbCatalog: Database.Catalog? = null
+    private val dbCatalog: Database.Catalog? = null,
+    private val txSource: Indexer.TxSource? = null
 ) : LogProcessor, Log.Subscriber, AutoCloseable {
 
     init {
@@ -280,6 +281,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                             }
                         }
                     }
+
+                    txSource?.onCommit(resolvedTx)
 
                     if (liveIndex.isFull())
                         toFinishBlock = true

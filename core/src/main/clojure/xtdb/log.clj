@@ -247,21 +247,23 @@
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
             :indexer (ig/ref :xtdb.indexer/for-db)
-            :compactor (ig/ref :xtdb.compactor/for-db)}
-           (assoc (dissoc opts :indexer-conf)
+            :compactor (ig/ref :xtdb.compactor/for-db)
+            :tx-source (ig/ref :xtdb.tx-source/for-db)}
+           (assoc (dissoc opts :indexer-conf :tx-source-conf)
                   :block-flush-duration (.getFlushDuration indexer-conf)
                   :skip-txs (.getSkipTxs indexer-conf)
                   :enabled? (.getEnabled indexer-conf)))})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
-                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog]}]
+                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
   (when enabled?
     (let [lp (ReplicaLogProcessor. allocator meter-registry
                             db-storage db-state
                             indexer compactor block-flush-duration (set skip-txs)
                             (or mode Database$Mode/READ_WRITE)
                             1024
-                            db-catalog)]
+                            db-catalog
+                            tx-source)]
       {:processor lp
        :subscription (.tailAll (.getSourceLog db-storage) lp (.getLatestProcessedOffset lp))})))
 

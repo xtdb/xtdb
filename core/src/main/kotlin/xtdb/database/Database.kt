@@ -24,9 +24,9 @@ import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.indexer.LiveIndex
+import xtdb.indexer.Indexer.TxSource
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
-import xtdb.indexer.Indexer.TxSource
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
@@ -43,8 +43,8 @@ data class SourceIndexer(
 data class ReplicaIndexer(
     val logProcessorOrNull: LogProcessor?,
     val compactor: Compactor.ForDatabase,
-    val txSource: TxSource?,
     val state: DatabaseState,
+    val txSource: TxSource? = null,
 ) {
     val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("replica log processor not initialised")
 }

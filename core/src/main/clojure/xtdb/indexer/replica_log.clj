@@ -20,7 +20,7 @@
          :xtdb.tx-source/for-db (assoc child-opts :tx-source-conf tx-source-conf)
          :xtdb.indexer/for-db child-opts
          :xtdb.compactor/for-db (assoc child-opts :mode mode)
-         :xtdb.log/processor (cond-> (assoc child-opts :indexer-conf indexer-conf :mode mode)
+         :xtdb.log/processor (cond-> (assoc child-opts :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf)
                                db-catalog (assoc :db-catalog db-catalog))}
         (doto ig/load-namespaces))))
 
@@ -36,8 +36,8 @@
                 ig/init)]
     {:replica-indexer (ReplicaIndexer. (:processor (:xtdb.log/processor sys))
                                        (:xtdb.compactor/for-db sys)
-                                       (:xtdb.tx-source/for-db sys)
-                                       (:xtdb.db-catalog/state sys))
+                                       (:xtdb.db-catalog/state sys)
+                                       (:xtdb.tx-source/for-db sys))
      :sys sys}))
 
 (defmethod ig/halt-key! :xtdb.indexer/replica-log [_ {:keys [sys]}]
