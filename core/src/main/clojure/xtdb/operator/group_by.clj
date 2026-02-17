@@ -15,7 +15,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
            (xtdb.arrow MonoVector RelationReader Vector VectorReader VectorType VectorWriter)
-           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VariancePop VarianceSamp)
+           (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
@@ -141,20 +141,23 @@
 (defmethod ->aggregate-factory :stddev_samp [{:keys [from-name to-name zero-row?]}]
   (StdDevSamp. (str from-name) (str to-name) zero-row?))
 
+(def ^:private var-width-comparable-types
+  #{:utf8 :varbinary :keyword :uri})
+
 (defn- assert-supported-min-max-type [to-type]
-  ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`
   (let [to-col-type (types/vec-type->col-type to-type)
         to-col-type-head (types/col-type-head to-col-type)]
     (when-not (or (isa? types/col-type-hierarchy to-col-type-head :num)
                   (contains? #{:duration :date :timestamp-local :timestamp-tz :time-local :null}
-                             to-col-type-head))
+                             to-col-type-head)
+                  (contains? var-width-comparable-types to-col-type-head))
       (throw (err/unsupported :xtdb.group-by/unsupported-min-max-type
                               "Unsupported type in min/max aggregate"
                               {:unsupported-type to-col-type})))))
 
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"
-  [compare-kw {:keys [from-name from-type] :as agg-opts}]
+  [compare-kw {:keys [from-name from-type to-name zero-row?] :as agg-opts}]
 
   (let [to-arrow-type (LeastUpperBound/of [from-type])
         to-type (or (some-> to-arrow-type types/->type)
@@ -163,16 +166,22 @@
                                           {:from-type from-type})))]
     (assert-supported-min-max-type to-type)
 
-    (reducing-agg-factory (into agg-opts
-                                {:to-type to-type
-                                 :val-expr {:op :call, :f :cast, :target-type to-type
-                                            :args [{:op :variable, :variable from-name}]}
-                                 :step-expr {:op :if,
-                                             :pred {:op :call, :f compare-kw,
-                                                    :args [{:op :local, :local val-local}
-                                                           {:op :local, :local acc-local}]}
-                                             :then {:op :local, :local val-local}
-                                             :else {:op :local, :local acc-local}}}))))
+    (let [to-col-type-head (types/col-type-head (types/vec-type->col-type to-type))]
+      (if (contains? var-width-comparable-types to-col-type-head)
+        (VarWidthMinMax. (str from-name) (str to-name)
+                         (types/->nullable-type to-type) zero-row?
+                         (= compare-kw :<))
+
+        (reducing-agg-factory (into agg-opts
+                                    {:to-type to-type
+                                     :val-expr {:op :call, :f :cast, :target-type to-type
+                                                :args [{:op :variable, :variable from-name}]}
+                                     :step-expr {:op :if,
+                                                 :pred {:op :call, :f compare-kw,
+                                                        :args [{:op :local, :local val-local}
+                                                               {:op :local, :local acc-local}]}
+                                                 :then {:op :local, :local val-local}
+                                                 :else {:op :local, :local acc-local}}}))))))
 
 (defmethod ->aggregate-factory :min [agg-opts] (min-max-factory :< agg-opts))
 (defmethod ->aggregate-factory :min_all [agg-opts] (min-max-factory :< agg-opts))

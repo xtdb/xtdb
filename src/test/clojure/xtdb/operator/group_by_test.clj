@@ -479,15 +479,93 @@
                             {:with-types? true})
                (update :res set)))))
 
-(t/deftest test-throws-for-variable-width-minmax-340
-  ;; HACK only for now, until we support it properly
+(t/deftest test-throws-for-incomparable-minmax-340
   (t/is (thrown-with-msg? RuntimeException #"Incomparable types in min/max aggregate"
                           (tu/query-ra '[:group-by {:columns [{min (min a)}]}
-                                         [:table {:rows [{:a 32} {:a "foo"}]}]])))
+                                         [:table {:rows [{:a 32} {:a "foo"}]}]]))))
 
-  (t/is (thrown-with-msg? RuntimeException #"Unsupported type in min/max aggregate"
-                          (tu/query-ra '[:group-by {:columns [{min (min a)}]}
-                                         [:table {:rows [{:a "32"} {:a "foo"}]}]]))))
+(t/deftest test-min-max-strings
+  (t/is (= [{:mn "apple" :mx "cherry"}]
+           (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                          [:table {:rows [{:a "cherry"} {:a "banana"} {:a "apple"}]}]])))
+
+  (t/testing "with group-by key"
+    (t/is (= #{{:g 1 :mn "apple" :mx "banana"}
+               {:g 2 :mn "cherry" :mx "date"}}
+             (set (tu/query-ra '[:group-by {:columns [g {mn (min a)} {mx (max a)}]}
+                                 [:table {:rows [{:g 1 :a "banana"} {:g 1 :a "apple"}
+                                                 {:g 2 :a "date"} {:g 2 :a "cherry"}]}]])))))
+
+  (t/testing "with nulls"
+    (t/is (= [{:mn "apple" :mx "cherry"}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [:table {:rows [{:a "cherry"} {:a nil} {:a "apple"}]}]]))))
+
+  (t/testing "all nulls"
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)}]}
+                            [:table {:rows [{:a nil} {:a nil}]}]]))))
+
+  (t/testing "empty relation, no grouping"
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)}]}
+                            [::tu/pages {a #xt/type :utf8} []]]))))
+
+  (t/testing "empty relation, with grouping"
+    (t/is (= []
+             (tu/query-ra '[:group-by {:columns [g {mn (min a)}]}
+                            [::tu/pages {a #xt/type :utf8, g #xt/type :i64} []]]))))
+
+  (t/testing "empty strings"
+    (t/is (= [{:mn "" :mx "foo"}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [:table {:rows [{:a ""} {:a "foo"}]}]]))))
+
+  (t/testing "across multiple batches"
+    (t/is (= [{:mn "alpha" :mx "zulu"}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [::tu/pages {a #xt/type :utf8}
+                             [[{:a "bravo"} {:a "zulu"}]
+                              [{:a "alpha"} {:a "mike"}]]]]))))
+
+  (t/testing "all-nulls within a group"
+    (t/is (= #{{:g 1} {:g 2 :mn "apple"}}
+             (set (tu/query-ra '[:group-by {:columns [g {mn (min a)}]}
+                                 [:table {:rows [{:g 1 :a nil} {:g 1 :a nil}
+                                                 {:g 2 :a nil} {:g 2 :a "apple"}]}]])))))
+
+  (t/testing "single element"
+    (t/is (= [{:mn "solo" :mx "solo"}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [:table {:rows [{:a "solo"}]}]]))))
+
+  (t/testing "all same values"
+    (t/is (= [{:mn "same" :mx "same"}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [:table {:rows [{:a "same"} {:a "same"} {:a "same"}]}]]))))
+
+  (t/testing "keywords"
+    (t/is (= [{:mn :alpha :mx :charlie}]
+             (tu/query-ra '[:group-by {:columns [{mn (min a)} {mx (max a)}]}
+                            [:table {:rows [{:a :charlie} {:a :bravo} {:a :alpha}]}]]))))
+
+  (t/testing "uris"
+    (let [ua (java.net.URI. "http://a.com")
+          um (java.net.URI. "http://m.com")
+          uz (java.net.URI. "http://z.com")]
+      (t/is (= [{:mn ua :mx uz}]
+               (tu/query-ra [:group-by '{:columns [{mn (min a)} {mx (max a)}]}
+                             [::tu/pages '{a #xt/type :uri}
+                              [[{:a uz} {:a um} {:a ua}]]]])))))
+
+  (t/testing "via SQL"
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO fruits RECORDS {_id: 1, cat: 'citrus', name: 'orange'},
+                                                               {_id: 2, cat: 'citrus', name: 'lemon'},
+                                                               {_id: 3, cat: 'berry', name: 'strawberry'},
+                                                               {_id: 4, cat: 'berry', name: 'blueberry'}"]])
+    (t/is (= #{{:cat "citrus", :mn "lemon", :mx "orange"}
+               {:cat "berry", :mn "blueberry", :mx "strawberry"}}
+             (set (xt/q tu/*node* "SELECT cat, MIN(name) AS mn, MAX(name) AS mx FROM fruits GROUP BY cat"))))))
 
 (t/deftest test-handles-absent-3057
   (let [data [{:id 1 :a 1}
