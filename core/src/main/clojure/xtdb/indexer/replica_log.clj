@@ -34,7 +34,7 @@
   (let [sys (-> (replica-system opts)
                 ig/expand
                 ig/init)]
-    {:replica-indexer (ReplicaIndexer. (:processor (:xtdb.log/processor sys))
+    {:replica-indexer (ReplicaIndexer. (:xtdb.log/processor sys)
                                        (:xtdb.compactor/for-db sys)
                                        (:xtdb.db-catalog/state sys)
                                        (:xtdb.tx-source/for-db sys))

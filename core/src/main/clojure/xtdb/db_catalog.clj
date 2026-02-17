@@ -72,7 +72,12 @@
                                                  :indexer-conf indexer-conf
                                                  :mode mode
                                                  :tx-source-conf (.getTxSource conf))
-                                          (:db-catalog base) (assoc :db-catalog (:db-catalog base)))}
+                                          (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+
+         :xtdb.indexer/source-log (assoc opts
+                                         :indexer-conf indexer-conf
+                                         :mode mode
+                                         :replica-log (ig/ref :xtdb.indexer/replica-log))}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -94,7 +99,7 @@
 
                  (throw (ex-cause e))))]
     {:db (Database. (::allocator sys) db-config (::storage sys)
-                    (SourceIndexer. nil)
+                    (:source-indexer (:xtdb.indexer/source-log sys))
                     (:replica-indexer (:xtdb.indexer/replica-log sys)))
      :sys sys}))
 

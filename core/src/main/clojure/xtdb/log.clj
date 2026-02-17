@@ -180,14 +180,14 @@
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
 
-   Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html for more information and next steps.")
+  Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html for more information and next steps.")
 
 (defn ->out-of-sync-exception [latest-completed-offset ^long latest-submitted-offset ^long epoch]
   (let [log-state-str (if (= -1 latest-submitted-offset)
                         "the log is empty"
                         (format "epoch=%s, offset=%s" epoch latest-submitted-offset))]
     (IllegalStateException.
-     (format out-of-sync-log-message log-state-str epoch latest-completed-offset))))
+      (format out-of-sync-log-message log-state-str epoch latest-completed-offset))))
 
 (defn validate-offsets [^Log log ^TransactionKey latest-completed-tx]
   (when latest-completed-tx
@@ -203,7 +203,7 @@
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
 
 (defmethod ig/init-key :xtdb/log [_ {:keys [buffer-pool, ^Log$Factory factory, ^Database$Mode mode]
-                                      {:keys [log-clusters]} :base}]
+                                     {:keys [log-clusters]} :base}]
   (let [log (if (= mode Database$Mode/READ_ONLY)
               (.openReadOnlyLog factory log-clusters)
               (.openLog factory log-clusters))
@@ -257,21 +257,15 @@
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
                                                :keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
   (when enabled?
-    (let [lp (ReplicaLogProcessor. allocator meter-registry
-                            db-storage db-state
-                            indexer compactor block-flush-duration (set skip-txs)
-                            (or mode Database$Mode/READ_WRITE)
-                            1024
-                            db-catalog
-                            tx-source)]
-      {:processor lp
-       :subscription (.tailAll (.getSourceLog db-storage) lp (.getLatestProcessedOffset lp))})))
+    (ReplicaLogProcessor. allocator meter-registry
+                          db-storage db-state
+                          indexer compactor block-flush-duration (set skip-txs)
+                          (or mode Database$Mode/READ_WRITE)
+                          1024
+                          db-catalog
+                          tx-source)))
 
-(defmethod ig/resolve-key :xtdb.log/processor [_ {:keys [processor]}]
-  processor)
-
-(defmethod ig/halt-key! :xtdb.log/processor [_ {:keys [processor subscription]}]
-  (util/close subscription)
+(defmethod ig/halt-key! :xtdb.log/processor [_ ^ReplicaLogProcessor processor]
   (util/close processor))
 
 (defn await-db

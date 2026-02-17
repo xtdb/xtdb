@@ -36,6 +36,7 @@ import java.util.*
 
 data class SourceIndexer(
     val logProcessorOrNull: LogProcessor?,
+    val state: DatabaseState,
 ) {
     val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("source log processor not initialised")
 }
