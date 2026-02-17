@@ -27,6 +27,10 @@ We take great inspiration from the principle of 'making illegal states unreprese
 
 * You MUST include tests for new/changed functionality.
 * You MUST run tests locally to verify they pass.
+* The full test suite MUST pass (`./gradlew test`).
+  If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
+  CI will run integration tests regardless, but `./gradlew test` is the minimum.
+  You can assume that all tests are passing on `main`.
 * There MUST NOT be any reflection or boxed math warnings
 
 For user-visible features:
