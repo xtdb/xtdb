@@ -53,6 +53,16 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 ** Run `git config core.hooksPath .githooks` to add xtdb hooks to your local repo.
 
+== Custom JRE (jlink)
+
+XTDB builds a custom minimal JRE via link:../build-logic/jlink/build.gradle.kts[jlink] to slim down Docker images and local task execution.
+All `Test`, `JavaExec`, and `clojureRepl` tasks automatically use this custom JRE.
+
+If you hit missing-module errors (e.g. `ClassNotFoundException` for something in the JDK):
+
+* *Escape hatch:* add `-PfullJdk` to your Gradle command — e.g. `./gradlew :clojureRepl -PfullJdk`
+* *Fix forward:* add the missing module to the `jlinkModules` list in `build-logic/jlink/build.gradle.kts` and rebuild.
+
 == XTDB 'playground'
 
 XTDB nodes can be started in 'playground' mode - either through `./gradlew :run`, `clj -m xtdb.main playground` or the standalone Docker image, or by running the `playground-config` `ir/set-prep` in the `dev` namespace.
