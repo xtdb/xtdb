@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.TransactionKey
+import xtdb.api.log.Log
 import xtdb.arrow.VectorType
 import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
@@ -35,6 +36,8 @@ interface LiveIndex : Snapshot.Source, AutoCloseable {
     override fun openSnapshot(): xtdb.indexer.Snapshot
 
     fun startTx(txKey: TransactionKey): Tx
+
+    fun importTx(resolvedTx: Log.Message.ResolvedTx)
 
     fun isFull(): Boolean
     fun finishBlock(blockIdx: BlockIndex): Map<TableRef, LiveTable.FinishedBlock>

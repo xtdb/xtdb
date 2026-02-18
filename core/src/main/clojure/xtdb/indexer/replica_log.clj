@@ -21,8 +21,19 @@
          :xtdb.indexer/for-db child-opts
          :xtdb.compactor/for-db (assoc child-opts :mode mode)
          :xtdb.log/processor (cond-> (assoc child-opts :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf)
-                               db-catalog (assoc :db-catalog db-catalog))}
+                               db-catalog (assoc :db-catalog db-catalog))
+         ::replica-indexer child-opts}
         (doto ig/load-namespaces))))
+
+(defmethod ig/expand-key ::replica-indexer [k opts]
+  {k (into {:log-proc (ig/ref :xtdb.log/processor)
+            :compactor (ig/ref :xtdb.compactor/for-db)
+            :db-state (ig/ref :xtdb.db-catalog/state)
+            :tx-source (ig/ref :xtdb.tx-source/for-db)}
+           opts)})
+
+(defmethod ig/init-key ::replica-indexer [_ {:keys [log-proc compactor db-state tx-source] :as opts}]
+  (ReplicaIndexer. log-proc compactor db-state tx-source))
 
 (defmethod ig/expand-key :xtdb.indexer/replica-log [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
@@ -31,14 +42,10 @@
            opts)})
 
 (defmethod ig/init-key :xtdb.indexer/replica-log [_ opts]
-  (let [sys (-> (replica-system opts)
-                ig/expand
-                ig/init)]
-    {:replica-indexer (ReplicaIndexer. (:xtdb.log/processor sys)
-                                       (:xtdb.compactor/for-db sys)
-                                       (:xtdb.db-catalog/state sys)
-                                       (:xtdb.tx-source/for-db sys))
-     :sys sys}))
+  (-> (replica-system opts) ig/expand ig/init))
 
-(defmethod ig/halt-key! :xtdb.indexer/replica-log [_ {:keys [sys]}]
+(defmethod ig/resolve-key :xtdb.indexer/replica-log [_ {::keys [replica-indexer]}]
+  replica-indexer)
+
+(defmethod ig/halt-key! :xtdb.indexer/replica-log [_ sys]
   (ig/halt! sys))

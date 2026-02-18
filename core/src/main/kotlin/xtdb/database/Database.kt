@@ -35,10 +35,10 @@ import java.time.Duration
 import java.util.*
 
 data class SourceIndexer(
-    val logProcessorOrNull: LogProcessor?,
     val state: DatabaseState,
 ) {
-    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("source log processor not initialised")
+    val trieCatalog get() = state.trieCatalog
+    val liveIndex get() = state.liveIndex
 }
 
 data class ReplicaIndexer(

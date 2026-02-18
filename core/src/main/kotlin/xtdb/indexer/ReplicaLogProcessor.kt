@@ -17,8 +17,6 @@ import xtdb.api.log.Log.Message
 import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
-import xtdb.arrow.Relation
-import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.compactor.Compactor
@@ -33,25 +31,18 @@ import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.error.Interrupted
 import xtdb.error.NotFound
-import xtdb.log.proto.TrieDetails
 import xtdb.trie.BlockIndex
 import xtdb.table.TableRef
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
-import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
-import xtdb.util.warn
-import java.nio.ByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
 import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = ReplicaLogProcessor::class.logger
@@ -208,7 +199,12 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                 }
 
                 val res = processRecord(msgId, record)
-                watchers.notify(msgId, res)
+
+                // Attach/Detach records share a msgId with the ResolvedTx that follows them
+                // (the source emits both); we only notify watchers for the ResolvedTx.
+                val msg = record.message
+                if (msg !is Message.AttachDatabase && msg !is Message.DetachDatabase)
+                    watchers.notify(msgId, res)
             } catch (e: ClosedByInterruptException) {
                 watchers.notify(msgId, e)
                 throw CancellationException(e)
@@ -238,74 +234,34 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     }
 
     private fun processRecord(msgId: MessageId, record: Log.Record): TransactionResult? {
-        var toFinishBlock = false
         LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
         return when (val msg = record.message) {
                 is Message.Tx -> {
-                    val resolvedTx = if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-                        LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
-
-                        // Store skipped transaction to object store
-                        val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-                        bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
-                        LOG.debug("Stored skipped transaction to $skippedTxPath")
-
-                        // use abort flow in indexTx
-                        indexer.indexTx(
-                            msgId, record.logTimestamp,
-                            null, null, null, null, null
-                        )
-                    } else {
-                        msg.payload.asChannel.use { txOpsCh ->
-                            Relation.StreamLoader(allocator, txOpsCh).use { loader ->
-                                Relation(allocator, loader.schema).use { rel ->
-                                    loader.loadNextPage(rel)
-
-                                    val systemTime =
-                                        (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
-
-                                    val defaultTz =
-                                        (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
-
-                                    val user = rel["user"].getObject(0) as String?
-
-                                    val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
-
-                                    indexer.indexTx(
-                                        msgId, record.logTimestamp,
-                                        rel["tx-ops"].listElements,
-                                        systemTime, defaultTz, user, userMetadata
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    txSource?.onCommit(resolvedTx)
-
-                    if (liveIndex.isFull())
-                        toFinishBlock = true
-
-                    val systemTime = InstantUtil.fromMicros(resolvedTx.systemTimeMicros)
-                    if (resolvedTx.committed)
-                        TransactionCommitted(resolvedTx.txId, systemTime)
-                    else
-                        TransactionAborted(
-                            resolvedTx.txId, systemTime,
-                            readTransit(resolvedTx.error, MSGPACK) as Throwable
-                        )
+                    throw IllegalStateException("Message.Tx should be handled by SourceLogProcessor, not ReplicaLogProcessor")
                 }
 
                 is Message.FlushBlock -> {
+                    // Source has already finished the block and written it to storage
+                    // by the time we see this message (single-threaded forwarding).
+                    // We refresh from storage to stay in sync, which also keeps
+                    // flush-block! + sync-node working (block transition is inline).
                     val expectedBlockIdx = msg.expectedBlockIdx
-                    if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
-                        toFinishBlock = true
-
+                    if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
+                        if (readOnly) {
+                            pendingBlockIdx = expectedBlockIdx + 1
+                            LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
+                        } else {
+                            refreshBlockFromStorage()
+                        }
+                    }
                     null
                 }
 
                 is Message.TriesAdded -> {
+                    // Source writes TriesAdded to the source log. When the replica
+                    // refreshes from storage it calls trieCatalog.refresh() directly,
+                    // so we only need this for read-only nodes that haven't refreshed yet.
                     if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                         msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                             trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
@@ -314,69 +270,65 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                 }
 
                 is Message.BlockUploaded -> {
-                    // Handled in the buffering logic above; if we reach here
-                    // it means we're not waiting for a block (e.g. writer node), so ignore.
+                    // Read-only nodes handle this in the buffering logic above.
+                    // Writer nodes: refresh from storage when the source signals a block is done,
+                    // but only if we haven't already transitioned (e.g. via isFull() auto-detection).
+                    if (!readOnly && msg.storageEpoch == bufferPool.epoch
+                        && msg.blockIndex == (blockCatalog.currentBlockIndex ?: -1) + 1) {
+                        refreshBlockFromStorage()
+                    }
                     null
                 }
 
-                is Message.ResolvedTx -> null
+                is Message.ResolvedTx -> {
+                    liveIndex.importTx(msg)
+
+                    txSource?.onCommit(msg)
+
+                    if (liveIndex.isFull()) {
+                        if (readOnly) {
+                            pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+                            LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
+                        } else {
+                            // Block boundaries are deterministic — the source has already written
+                            // the block to storage synchronously before forwarding records to us.
+                            refreshBlockFromStorage()
+                        }
+                    }
+
+                    val systemTime = InstantUtil.fromMicros(msg.systemTimeMicros)
+                    if (msg.committed)
+                        TransactionCommitted(msg.txId, systemTime)
+                    else
+                        TransactionAborted(
+                            msg.txId, systemTime,
+                            readTransit(msg.error, MSGPACK) as Throwable
+                        )
+                }
+
+                // Source resolves attach/detach as a ResolvedTx that follows this record,
+                // so we only handle catalog side-effects here — watchers are notified
+                // by the subsequent ResolvedTx, not by these records.
 
                 is Message.AttachDatabase -> {
                     require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
-                    val res = try {
-                        if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
-                            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
+                    if (msg.dbName != "xtdb" && msg.dbName !in secondaryDatabases) {
                         secondaryDatabases[msg.dbName] = msg.config.serializedConfig
                         dbCatalog!!.attach(msg.dbName, msg.config)
-                        TransactionCommitted(msgId, record.logTimestamp)
-                    } catch (e: Anomaly.Caller) {
-                        TransactionAborted(msgId, record.logTimestamp, e)
                     }
-
-                    indexer.addTxRow(
-                        TransactionKey(msgId, record.logTimestamp),
-                        (res as? TransactionAborted)?.error
-                    )
-
-                    res
+                    null
                 }
 
                 is Message.DetachDatabase -> {
                     require(dbState.name == "xtdb") { "detach-db on non-primary ${dbState.name}" }
-                    val res = try {
-                        when {
-                            msg.dbName == "xtdb" ->
-                                throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to msg.dbName))
-                            msg.dbName !in secondaryDatabases ->
-                                throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
-                            else -> {
-                                secondaryDatabases.remove(msg.dbName)
-                                dbCatalog!!.detach(msg.dbName)
-                                TransactionCommitted(msgId, record.logTimestamp)
-                            }
-                        }
-                    } catch (e: Anomaly.Caller) {
-                        TransactionAborted(msgId, record.logTimestamp, e)
+                    if (msg.dbName != "xtdb" && msg.dbName in secondaryDatabases) {
+                        secondaryDatabases.remove(msg.dbName)
+                        dbCatalog!!.detach(msg.dbName)
                     }
-
-                    indexer.addTxRow(
-                        TransactionKey(msgId, record.logTimestamp),
-                        (res as? TransactionAborted)?.error
-                    )
-
-                    res
+                    null
                 }
             }.also {
                 latestProcessedMsgId = msgId
-                if (toFinishBlock) {
-                    if (readOnly) {
-                        pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-                        LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
-                    } else {
-                        finishBlock(record.logTimestamp)
-                    }
-                }
-
                 LOG.debug("Processed message $msgId")
             }
     }
@@ -399,57 +351,26 @@ class ReplicaLogProcessor @JvmOverloads constructor(
         LOG.debug("read-only mode: transitioned to block 'b${blockIdx.asLexHex}'")
     }
 
-    fun finishBlock(systemTime: Instant) {
+    /**
+     * Refreshes replica catalogs from the block file in storage (written by the source),
+     * then clears the replica's live index. Similar to the read-only block transition
+     * but without buffering — the source writes synchronously before forwarding records.
+     */
+    private fun refreshBlockFromStorage() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-        LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
+        LOG.debug("refreshing block from storage: 'b${blockIdx.asLexHex}'...")
 
-        val finishedBlocks = liveIndex.finishBlock(blockIdx)
-
-        // Build TrieDetails and append to replica-log
-        val addedTries = finishedBlocks.map { (table, fb) ->
-            TrieDetails.newBuilder()
-                .setTableName(table.schemaAndTable)
-                .setTrieKey(fb.trieKey)
-                .setDataFileSize(fb.dataFileSize)
-                .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
-                .build()
-        }
-        dbStorage.replicaLog.appendMessage(
-            Message.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
-        )
-
-        // Add tries to trie catalog
-        finishedBlocks.forEach { (table, _) ->
-            val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
-            trieCatalog.addTries(table, listOf(trie), systemTime)
-        }
-
-        val allTables = finishedBlocks.keys + blockCatalog.allTables
-        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
-
-        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
-
-        for ((table, tableBlock) in tableBlocks) {
-            val path = BlockCatalog.tableBlockPath(table, blockIdx)
-            bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
-        }
-
-        val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
-
-        val block = blockCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            tableBlocks.keys, secondaryDatabasesForBlock
-        )
-
-        bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        val block = Block.parseFrom(bufferPool.getByteArray(BlockCatalog.blockFilePath(blockIdx)))
         blockCatalog.refresh(block)
-
-        // Notify read-only nodes that the block is available
-        log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
-
+        tableCatalog.refresh()
+        trieCatalog.refresh()
         liveIndex.nextBlock()
         compactor.signalBlock()
-        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+        LOG.debug("refreshed block: 'b${blockIdx.asLexHex}'.")
+    }
+
+    fun ingestionStopped(msgId: MessageId, e: Throwable) {
+        watchers.notify(msgId, e)
     }
 
     override fun awaitAsync(msgId: MessageId) = watchers.awaitAsync(msgId)

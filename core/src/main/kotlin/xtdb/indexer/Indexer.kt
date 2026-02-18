@@ -20,7 +20,7 @@ interface Indexer : AutoCloseable {
             systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
         ): Log.Message.ResolvedTx
 
-        fun addTxRow(txKey: TransactionKey, error: Throwable?)
+        fun addTxRow(txKey: TransactionKey, error: Throwable?): Log.Message.ResolvedTx
     }
 
     interface TxSource {

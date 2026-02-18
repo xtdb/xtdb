@@ -171,6 +171,16 @@ constructor(
         }
     }
 
+    fun importData(data: RelationReader) {
+        val offset = liveRelation.rowCount
+        val count = data.rowCount
+        liveRelation.append(data)
+        liveTrie = liveTrie.addRange(offset, count)
+        trieMetadataCalculator.update(offset, offset + count)
+        hllCalculator.update(opVec, offset, offset + count)
+        rowCounter.addRows(count)
+    }
+
     fun startTx(txKey: TransactionKey, newLiveTable: Boolean) = Tx(txKey, newLiveTable)
 
     private val RelationWriter.types: Map<String, VectorType>?
