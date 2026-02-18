@@ -53,48 +53,54 @@
 
 (defmethod lp/emit-expr :project [{:keys [relation], {:keys [projections append-columns?]} :opts} {:keys [param-types] :as args}]
   (let [emitted-child-relation (lp/emit-expr relation args)]
-    (lp/unary-expr emitted-child-relation
-      (fn [{inner-vec-types :vec-types :as inner-rel}]
-        (let [projection-specs (concat (when append-columns?
-                                         (for [[col-name col-type] inner-vec-types]
-                                           (->identity-projection-spec col-name col-type)))
-                                       (for [[p-type arg] projections]
-                                         (case p-type
-                                           :column (->identity-projection-spec arg (get inner-vec-types arg))
+    (-> (lp/unary-expr emitted-child-relation
+          (fn [{inner-vec-types :vec-types :as inner-rel}]
+            (let [projection-specs (concat (when append-columns?
+                                             (for [[col-name col-type] inner-vec-types]
+                                               (->identity-projection-spec col-name col-type)))
+                                           (for [[p-type arg] projections]
+                                             (case p-type
+                                               :column (->identity-projection-spec arg (get inner-vec-types arg))
 
-                                           :row-number-column (let [[col-name _form] (first arg)]
-                                                                (ProjectionSpec$RowNumber. (str col-name)))
+                                               :row-number-column (let [[col-name _form] (first arg)]
+                                                                    (ProjectionSpec$RowNumber. (str col-name)))
 
-                                           :local-row-number-column (let [[col-name _form] (first arg)]
-                                                                      (ProjectionSpec$LocalRowNumber. (str col-name)))
+                                               :local-row-number-column (let [[col-name _form] (first arg)]
+                                                                          (ProjectionSpec$LocalRowNumber. (str col-name)))
 
-                                           :star (let [[col-name _star] (first arg)]
-                                                   (ProjectionSpec$Star. (str col-name)
-                                                                         (types/->type (into [:struct (update-keys inner-vec-types str)]))))
+                                               :star (let [[col-name _star] (first arg)]
+                                                       (ProjectionSpec$Star. (str col-name)
+                                                                             (types/->type (into [:struct (update-keys inner-vec-types str)]))))
 
-                                           :rename (let [[to-name from-name] (first arg)
-                                                         from-type (get inner-vec-types from-name)]
-                                                     (assert from-type (format "Field %s not found in relation, available %s" from-name (pr-str (keys inner-vec-types))))
-                                                     (ProjectionSpec$Rename. (str from-name) (str to-name) from-type))
+                                               :rename (let [[to-name from-name] (first arg)
+                                                             from-type (get inner-vec-types from-name)]
+                                                         (assert from-type (format "Field %s not found in relation, available %s" from-name (pr-str (keys inner-vec-types))))
+                                                         (ProjectionSpec$Rename. (str from-name) (str to-name) from-type))
 
-                                           :extend (let [[col-name form] (first arg)
-                                                         input-types {:var-types inner-vec-types
-                                                                      :param-types param-types}
-                                                         expr (expr/form->expr form input-types)]
-                                                     (expr/->expression-projection-spec col-name expr input-types)))))]
-          (let [out-vec-types (->> projection-specs
-                                   (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
-                                                       #(.getType ^ProjectionSpec %)))))]
-            {:op :project
-             :children [inner-rel]
-             :explain {:project (pr-str (into [] (map second) projections))
-                       :append? (boolean append-columns?)}
-             :vec-types out-vec-types
-             :stats (:stats emitted-child-relation)
-             :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
-                         (cond-> (->project-cursor opts in-cursor projection-specs)
-                           (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))))
-
+                                               :extend (let [[col-name form] (first arg)
+                                                             input-types {:var-types inner-vec-types
+                                                                          :param-types param-types}
+                                                             expr (expr/form->expr form input-types)]
+                                                         (expr/->expression-projection-spec col-name expr input-types)))))
+                  col-mapping (->> projections
+                                   (into {} (keep (fn [[p-type arg]]
+                                                    (when (= p-type :rename)
+                                                      (let [[to-name from-name] (first arg)]
+                                                        [to-name from-name]))))))]
+              (let [out-vec-types (->> projection-specs
+                                       (into {} (map (juxt #(symbol (.getToName ^ProjectionSpec %))
+                                                           #(.getType ^ProjectionSpec %)))))]
+                {:op :project
+                 :children [inner-rel]
+                 :explain {:project (pr-str (into [] (map second) projections))
+                           :append? (boolean append-columns?)}
+                 :vec-types out-vec-types
+                 :stats (:stats emitted-child-relation)
+                 :col-mapping col-mapping
+                 :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts} in-cursor]
+                             (cond-> (->project-cursor opts in-cursor projection-specs)
+                               (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))}))))
+        (lp/with-col-mapping))))
 (defmethod lp/emit-expr :map [{:keys [opts] :as op} args]
   (lp/emit-expr (assoc op :op :project :opts (assoc opts :append-columns? true)) args))
 

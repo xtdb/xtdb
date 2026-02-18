@@ -46,18 +46,17 @@
                                  (cond-> (get columns old-name old-name)
                                    prefix (->> name (symbol (name prefix))))])
                               (into {}))
-        col-name-reverse-mapping (set/map-invert col-name-mapping)
+        col-mapping (set/map-invert col-name-mapping)
         out-vec-types (->> inner-vec-types
                            (into {} (map (fn [[k v]] [(col-name-mapping k) v])))) ]
-    {:op :rename
-     :children [emitted-child-relation]
-     :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
-     :vec-types out-vec-types
-     :stats (:stats emitted-child-relation)
-     :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
-                 (let [opts (-> opts
-                                (update :pushdown-blooms update-keys #(get col-name-reverse-mapping %))
-                                (update :pushdown-iids update-keys #(get col-name-reverse-mapping %)))]
+    (lp/with-col-mapping
+      {:op :rename
+       :children [emitted-child-relation]
+       :explain {:prefix (some-> prefix str), :columns (some-> columns pr-str)}
+       :vec-types out-vec-types
+       :stats (:stats emitted-child-relation)
+       :col-mapping col-mapping
+       :->cursor (fn [{:keys [explain-analyze? tracer query-span] :as opts}]
                    (cond-> (util/with-close-on-catch [in-cursor (->inner-cursor opts)]
                              (RenameCursor. in-cursor col-name-mapping))
-                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span))))}))
+                     (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))

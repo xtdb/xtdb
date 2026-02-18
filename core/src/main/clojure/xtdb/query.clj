@@ -171,7 +171,7 @@
 
 (defn- plan-query [parsed-query query-opts]
   (cond
-    (vector? parsed-query) parsed-query
+    (vector? parsed-query) (with-meta parsed-query (select-keys query-opts [:explain? :explain-analyze?]))
     (instance? Sql$DirectlyExecutableStatementContext parsed-query) (sql/plan parsed-query query-opts)
 
     :else (throw (err/fault :unknown-query-type "Unknown query type"

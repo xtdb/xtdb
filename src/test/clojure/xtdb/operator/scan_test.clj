@@ -568,6 +568,27 @@
       ;; one page for the right side
       (t/is (= 1 @!page-idxs-cnt)))))
 
+(deftest test-pushdown-blooms-through-project
+  (xt/execute-tx tu/*node* [[:put-docs :xt-docs {:xt/id :foo, :col "foo"}]
+                            [:put-docs :xt-docs {:xt/id :bar, :col "bar"}]
+                            [:put-docs :xt-docs {:xt/id :toto, :col "toto"}]])
+
+  (let [ra-query '[:join {:conditions [{col renamed-col}]}
+                   [:scan {:table #xt/table xt_docs, :columns [col {col (== col "toto")}]}]
+                   [:project {:projections [{renamed-col col}]}
+                    [:scan {:table #xt/table xt_docs, :columns [col]}]]]]
+
+    (t/testing "results are correct"
+      (t/is (= [{:renamed-col "toto", :col "toto"}]
+               (tu/query-ra ra-query {:node tu/*node*}))))
+
+    (t/testing "pushdowns reach the probe-side scan with correct column name"
+      (let [ea-results (tu/query-ra ra-query {:node tu/*node* :explain-analyze? true})
+            scans (filter #(= :scan (:op %)) ea-results)
+            probe-scan (second scans)]
+        (t/is (= "col" (:column (first (:pushdowns probe-scan))))
+              "pushdown should be keyed by scan's column name, not project's")))))
+
 (deftest duplicate-rows-2815
   (let [page-limit 16]
     (with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit page-limit}}))]

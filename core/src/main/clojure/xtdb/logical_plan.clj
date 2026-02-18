@@ -129,6 +129,19 @@
                             (util/with-close-on-catch [inner (->inner-cursor opts)]
                               (->cursor opts inner)))))))
 
+(defn with-col-mapping
+  "Wraps ->cursor to remap pushdown-blooms and pushdown-iids keys
+   through the given col-mapping ({output-col input-col})."
+  [{:keys [col-mapping] :as emitted-rel}]
+  (if (seq col-mapping)
+    (-> (dissoc emitted-rel :col-mapping)
+        (update :->cursor (fn [->cursor]
+                            (fn [opts]
+                              (->cursor (-> opts
+                                            (update :pushdown-blooms update-keys #(get col-mapping % %))
+                                            (update :pushdown-iids update-keys #(get col-mapping % %))))))))
+    (dissoc emitted-rel :col-mapping)))
+
 (defn binary-expr {:style/indent 2} [{->left-cursor :->cursor, :as left} {->right-cursor :->cursor, :as right} f]
   (-> (f left right)
       (update :->cursor (fn [->cursor]
