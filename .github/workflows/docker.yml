@@ -32,103 +32,55 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/xtdb/xtdb
-          tags: |
+          tags: &tags |
             type=semver,pattern={{version}}
             type=schedule
             type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
             type=edge,branch=main
             type=sha,prefix=g
+          bake-target: standalone
 
       - name: AWS meta
         id: aws-meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/xtdb/xtdb-aws
-          tags: |
-            type=semver,pattern={{version}}
-            type=schedule
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=main
-            type=sha,prefix=g
+          tags: *tags
+          bake-target: aws
 
       - name: Azure meta
         id: azure-meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/xtdb/xtdb-azure
-          tags: |
-            type=semver,pattern={{version}}
-            type=schedule
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=main
-            type=sha,prefix=g
+          tags: *tags
+          bake-target: azure
 
       - name: Google Cloud meta
         id: google-cloud-meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/xtdb/xtdb-google-cloud
-          tags: |
-            type=semver,pattern={{version}}
-            type=schedule
-            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
-            type=edge,branch=main
-            type=sha,prefix=g
+          tags: *tags
+          bake-target: google-cloud
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@f29f5a9d7b09a7c6b29859002d29d24e1674c884 # v5.0.1
 
-      - name: Build Uberjar
+      - name: Build Uberjars
         run: ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
-      - name: Push Standalone
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+      - name: Build and push
+        uses: docker/bake-action@4ba453fbc2db7735392b93edf935aaf9b1e8eefc # v6.5.0
         with:
-          context: docker
-          platforms: linux/arm64/v8,linux/amd64
+          files: |
+            docker-bake.hcl
+            ${{ steps.standalone-meta.outputs.bake-file }}
+            ${{ steps.aws-meta.outputs.bake-file }}
+            ${{ steps.azure-meta.outputs.bake-file }}
+            ${{ steps.google-cloud-meta.outputs.bake-file }}
+          targets: default
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.standalone-meta.outputs.tags }}
-          labels: ${{ steps.standalone-meta.outputs.labels }}
-          build-args: |
-            VARIANT=standalone
-            GIT_SHA=${{ github.sha }}
-            XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
-
-      - name: Push Azure
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: docker
-          platforms: linux/arm64/v8,linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.azure-meta.outputs.tags }}
-          labels: ${{ steps.azure-meta.outputs.labels }}
-          build-args: |
-            VARIANT=azure
-            GIT_SHA=${{ github.sha }}
-            XTDB_VERSION=${{ steps.azure-meta.outputs.version }}
-
-      - name: Push AWS
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: docker
-          platforms: linux/arm64/v8,linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.aws-meta.outputs.tags }}
-          labels: ${{ steps.aws-meta.outputs.labels }}
-          build-args: |
-            VARIANT=aws
-            GIT_SHA=${{ github.sha }}
-            XTDB_VERSION=${{ steps.aws-meta.outputs.version }}
-
-      - name: Push Google Cloud
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        with:
-          context: docker
-          platforms: linux/arm64/v8,linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.google-cloud-meta.outputs.tags }}
-          labels: ${{ steps.google-cloud-meta.outputs.labels }}
-          build-args: |
-            VARIANT=google-cloud
-            GIT_SHA=${{ github.sha }}
-            XTDB_VERSION=${{ steps.google-cloud-meta.outputs.version }}
+          set: |
+            *.args.GIT_SHA=${{ github.sha }}
+            *.args.XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
