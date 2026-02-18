@@ -106,6 +106,7 @@ jetty-alpn-server = { group = "org.eclipse.jetty", name = "jetty-alpn-server", v
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
 testcontainers-kafka = { group = "org.testcontainers", name = "testcontainers-kafka", version.ref = "testcontainers" }
 testcontainers-minio = { group = "org.testcontainers", name = "testcontainers-minio", version.ref = "testcontainers" }
+testcontainers-postgresql = { group = "org.testcontainers", name = "testcontainers-postgresql", version.ref = "testcontainers" }
 testcontainers-keycloak = { group = "com.github.dasniko", name = "testcontainers-keycloak", version = "4.1.1" }
 
 micrometer-core = { group = "io.micrometer", name = "micrometer-core", version.ref = "micrometer" }

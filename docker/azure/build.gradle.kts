@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":xtdb-main"))
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":modules:xtdb-azure"))
+    implementation(project(":modules:xtdb-debezium"))
 
     runtimeOnly(libs.logback.classic)
     runtimeOnly(libs.slf4j.jpl)
