@@ -26,16 +26,24 @@ import java.time.InstantSource
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-class LogProcessorTest {
+class ReplicaLogProcessorTest {
 
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)
 
-    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = LogProcessor.Flusher(
+    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = ReplicaLogProcessor.Flusher(
         Duration.ofDays(2),
         inst(1),
         previousBlockTxId = prevBlockTxId,
         flushedTxId = flushedTxId
+    )
+
+    private fun resolvedTx(txId: Long = 0) = Log.Message.ResolvedTx(
+        txId = txId,
+        systemTimeMicros = Instant.now().toEpochMilli() * 1000,
+        committed = true,
+        error = ByteArray(0),
+        tableData = emptyMap()
     )
 
     @Test
@@ -73,7 +81,11 @@ class LogProcessorTest {
     fun `buffer overflow stops ingestion`() {
         val log = InMemoryLog(InstantSource.system(), 0)
         val blockCatalog = BlockCatalog("test", null)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { isFull() } returns false }
+        // First ResolvedTx triggers isFull → pendingBlockIdx set.
+        // Subsequent records get buffered → overflow on 3rd buffered.
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { isFull() } returns true
+        }
 
         val dbStorage = DatabaseStorage(log, log, BufferPool.UNUSED, null)
         val dbState = DatabaseState(
@@ -83,7 +95,7 @@ class LogProcessorTest {
         )
 
         RootAllocator().use { allocator ->
-            val lp = LogProcessor(
+            val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
@@ -94,10 +106,10 @@ class LogProcessorTest {
             )
 
             val now = Instant.now()
-            // FlushBlock(-1) matches currentBlockIndex(null → -1), triggers pendingBlockIdx
-            // Subsequent FlushBlock(999) don't match → get buffered → overflow on 3rd
+            // ResolvedTx triggers pendingBlockIdx via isFull().
+            // Then 3 more records get buffered, exceeding maxBufferedRecords=2.
             val records = listOf(
-                Log.Record(0, now, Log.Message.FlushBlock(-1)),
+                Log.Record(0, now, resolvedTx(0)),
                 Log.Record(1, now, Log.Message.FlushBlock(999)),
                 Log.Record(2, now, Log.Message.FlushBlock(999)),
                 Log.Record(3, now, Log.Message.FlushBlock(999)),
@@ -112,7 +124,13 @@ class LogProcessorTest {
     fun `replay handles block transitions during replay`() {
         val log = InMemoryLog(InstantSource.system(), 0)
         val blockCatalog = BlockCatalog("test", null)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { isFull() } returns false }
+        var fullCount = 0
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            // First call to isFull() (after first ResolvedTx) → true, sets pendingBlockIdx=0.
+            // After block 0 transition + replay, second ResolvedTx calls isFull() → true again, sets pendingBlockIdx=1.
+            // After block 1 transition, no more ResolvedTx so no more isFull() calls.
+            every { isFull() } answers { ++fullCount; true }
+        }
 
         val blocks = mapOf(
             0L to block { blockIndex = 0 }.toByteArray(),
@@ -136,7 +154,7 @@ class LogProcessorTest {
                 liveIndex
             )
 
-            val lp = LogProcessor(
+            val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
@@ -146,13 +164,15 @@ class LogProcessorTest {
             )
 
             val now = Instant.now()
-            // FlushBlock(-1) triggers pendingBlockIdx=0.
-            // FlushBlock(0) is buffered; during replay it triggers pendingBlockIdx=1.
-            // BlockUploaded(1) is buffered; during replay it should trigger block 1 transition.
-            // BlockUploaded(0) triggers block 0 transition + replay of the above.
+            // ResolvedTx(0) triggers isFull → pendingBlockIdx=0, starts buffering.
+            // ResolvedTx(1) is buffered.
+            // BlockUploaded(1) is buffered.
+            // BlockUploaded(0) matches pendingBlockIdx=0 → transition block 0 → replay buffered.
+            // During replay: ResolvedTx(1) triggers isFull → pendingBlockIdx=1, starts buffering again.
+            // BlockUploaded(1) now matches → transition block 1.
             val records = listOf(
-                Log.Record(0, now, Log.Message.FlushBlock(-1)),
-                Log.Record(1, now, Log.Message.FlushBlock(0)),
+                Log.Record(0, now, resolvedTx(0)),
+                Log.Record(1, now, resolvedTx(1)),
                 Log.Record(2, now, Log.Message.BlockUploaded(1, 0, 0)),
                 Log.Record(3, now, Log.Message.BlockUploaded(0, 0, 0)),
             )
@@ -160,7 +180,6 @@ class LogProcessorTest {
             lp.processRecords(records)
 
             // Both block transitions should complete.
-            // Before the fix, BlockUploaded(1) was missed during replay → stuck at block 0.
             assertEquals(1L, blockCatalog.currentBlockIndex)
             assertNull(lp.ingestionError)
         }

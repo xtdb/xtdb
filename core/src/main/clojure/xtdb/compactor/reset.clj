@@ -30,8 +30,9 @@
         (log/info "Node caught up - resetting compaction...")
 
         (let [bp (.getBufferPool db)
-              trie-cat (.getTrieCatalog db)
-              live-idx (.getLiveIndex db)
+              source-indexer (.getSourceIndexer db)
+              trie-cat (.getTrieCatalog source-indexer)
+              live-idx (.getLiveIndex source-indexer)
               compacted-file-keys (vec (for [^TableRef table (.getTables trie-cat)
                                              ^String trie-key (trie-cat/compacted-trie-keys (trie-cat/trie-state trie-cat table))
 

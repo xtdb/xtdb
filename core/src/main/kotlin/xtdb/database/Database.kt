@@ -24,9 +24,9 @@ import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.indexer.LiveIndex
+import xtdb.indexer.Indexer.TxSource
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
-import xtdb.indexer.Indexer.TxSource
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
@@ -34,31 +34,46 @@ import xtdb.trie.TrieCatalog
 import java.time.Duration
 import java.util.*
 
+data class SourceIndexer(
+    val state: DatabaseState,
+) {
+    val trieCatalog get() = state.trieCatalog
+    val liveIndex get() = state.liveIndex
+}
+
+data class ReplicaIndexer(
+    val logProcessorOrNull: LogProcessor?,
+    val compactor: Compactor.ForDatabase,
+    val state: DatabaseState,
+    val txSource: TxSource? = null,
+) {
+    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("replica log processor not initialised")
+}
+
 data class Database(
     val allocator: BufferAllocator,
     val config: Config,
     override val storage: DatabaseStorage,
-    override val state: DatabaseState,
-
-    val logProcessorOrNull: LogProcessor?,
-    private val compactorOrNull: Compactor.ForDatabase?,
-    val txSource: TxSource?,
+    val sourceIndexer: SourceIndexer,
+    val replicaIndexer: ReplicaIndexer,
 ) : IQuerySource.QueryDatabase {
-    val name: DatabaseName get() = state.name
-    override fun openSnapshot(): Snapshot = state.liveIndex.openSnapshot()
+    override val queryState: DatabaseState get() = replicaIndexer.state
+    val name: DatabaseName get() = queryState.name
+    override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
 
-    val blockCatalog: BlockCatalog get() = state.blockCatalog
-    val tableCatalog: TableCatalog get() = state.tableCatalog
-    val trieCatalog: TrieCatalog get() = state.trieCatalog
-    val liveIndex: LiveIndex get() = state.liveIndex
+    val blockCatalog: BlockCatalog get() = queryState.blockCatalog
+    val tableCatalog: TableCatalog get() = queryState.tableCatalog
+    val trieCatalog: TrieCatalog get() = queryState.trieCatalog
+    val liveIndex: LiveIndex get() = queryState.liveIndex
 
     val sourceLog: Log get() = storage.sourceLog
     val replicaLog: Log get() = storage.replicaLog
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
-    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
-    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
+    val logProcessor: LogProcessor get() = replicaIndexer.logProcessor
+    val compactor: Compactor.ForDatabase get() = replicaIndexer.compactor
+    val txSource: TxSource? get() = replicaIndexer.txSource
 
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)
@@ -141,7 +156,7 @@ data class Database(
 
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.logProcessorOrNull != null }
+                    .filter { it.replicaIndexer.logProcessorOrNull != null }
                     .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
                     .joinAll()
             }
@@ -149,7 +164,7 @@ data class Database(
             private suspend fun Catalog.syncAll0() = coroutineScope {
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.logProcessorOrNull != null }
+                    .filter { it.replicaIndexer.logProcessorOrNull != null }
                     .map { db -> launch { db.sync() } }
                     .joinAll()
             }

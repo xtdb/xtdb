@@ -6,7 +6,7 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode]
+           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode ReplicaIndexer SourceIndexer]
            [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
 
 ;; Database components follow a hexagonal architecture pattern:
@@ -25,12 +25,12 @@
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
 
-(defmethod ig/expand-key ::state [k {:keys [db-name]}]
-  {k {:db-name db-name
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :table-cat (ig/ref :xtdb/table-catalog)
-      :trie-cat (ig/ref :xtdb/trie-catalog)
-      :live-index (ig/ref :xtdb.indexer/live-index)}})
+(defmethod ig/expand-key ::state [k opts]
+  {k (into {:block-cat (ig/ref :xtdb/block-catalog)
+            :table-cat (ig/ref :xtdb/table-catalog)
+            :trie-cat (ig/ref :xtdb/trie-catalog)
+            :live-index (ig/ref :xtdb.indexer/live-index)}
+           opts)})
 
 (defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
   (DatabaseState. db-name block-cat table-cat trie-cat live-index))
@@ -54,55 +54,62 @@
              :indexer (ig/ref :xtdb/indexer)
              :compactor (ig/ref :xtdb/compactor)}}})
 
+(defmethod ig/expand-key ::database [k opts]
+  {k (into {:allocator (ig/ref ::allocator)
+            :storage (ig/ref ::storage)
+            :source-log (ig/ref :xtdb.indexer/source-log)
+            :replica-log (ig/ref :xtdb.indexer/replica-log)}
+           opts)})
+
+(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage source-log replica-log]}]
+  (Database. allocator db-config storage source-log replica-log))
+
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
         mode (.getMode db-config)
         opts {:base base, :db-name db-name}]
     (-> {::allocator opts
-         :xtdb/block-catalog opts
-         :xtdb/table-catalog opts
-         :xtdb/trie-catalog opts
          :xtdb.metadata/metadata-manager opts
          :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
          :xtdb/source-log opts
          :xtdb/replica-log opts
          :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
-         :xtdb.indexer/live-index (assoc opts :indexer-conf indexer-conf)
-         :xtdb.indexer/crash-logger opts
 
          ::storage opts
-         ::state opts
 
-         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
-         :xtdb.indexer/for-db opts
-         :xtdb.compactor/for-db (assoc opts :mode mode)
-         :xtdb.log/processor (cond-> (assoc opts :indexer-conf indexer-conf :mode mode)
-                                      (:db-catalog base) (assoc :db-catalog (:db-catalog base)))}
+         :xtdb.indexer/replica-log (cond-> (assoc opts
+                                                 :indexer-conf indexer-conf
+                                                 :mode mode
+                                                 :tx-source-conf (.getTxSource conf))
+                                          (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+
+         :xtdb.indexer/source-log (assoc opts
+                                         :indexer-conf indexer-conf
+                                         :mode mode
+                                         :replica-log (ig/ref :xtdb.indexer/replica-log))
+
+         ::database (assoc opts :db-config db-config)}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
-  (let [sys (try
-               (-> (db-system db-name base db-config)
-                   ig/expand
-                   ig/init)
-               (catch clojure.lang.ExceptionInfo e
-                 (log/debug "Failed to initialize database system" {:db-name db-name, :exception (class e)})
-                 (when-let [cause (.getCause e)]
-                   (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
-                 (when-let [data (ex-data e)]
-                   (log/debug "Ex-data:" data))
-                 (try
-                   (ig/halt! (:system (ex-data e)))
-                   (catch Throwable t
-                     (let [^Throwable e (or (ex-cause e) e)]
-                       (throw (doto e (.addSuppressed t))))))
+  (try
+    (-> (db-system db-name base db-config)
+        ig/expand
+        ig/init)
+    (catch clojure.lang.ExceptionInfo e
+      (log/debug "Failed to initialize database system" {:db-name db-name, :exception (class e)})
+      (when-let [cause (.getCause e)]
+        (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
+      (when-let [data (ex-data e)]
+        (log/debug "Ex-data:" data))
+      (try
+        (ig/halt! (:system (ex-data e)))
+        (catch Throwable t
+          (let [^Throwable e (or (ex-cause e) e)]
+            (throw (doto e (.addSuppressed t))))))
 
-                 (throw (ex-cause e))))]
-    {:db (Database. (::allocator sys) db-config (::storage sys) (::state sys)
-                    (:processor (:xtdb.log/processor sys))
-                    (:xtdb.compactor/for-db sys) (:xtdb.tx-source/for-db sys))
-     :sys sys}))
+      (throw (ex-cause e)))))
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
   (util/with-close-on-catch [!dbs (HashMap.)]
@@ -112,7 +119,7 @@
                    (getDatabaseNames [_] (set (keys !dbs)))
 
                    (databaseOrNull [_ db-name]
-                     (:db (.get !dbs db-name)))
+                     (::database (.get !dbs db-name)))
 
                    (attach [_ db-name db-config]
                      (when (.containsKey !dbs db-name)
@@ -132,7 +139,7 @@
                                                        (throw (err/incorrect ::invalid-db-config "Failed to open database"
                                                                              {::err/cause t}))))]
                        (.put !dbs db-name db)
-                       (:db db)))
+                       (::database db)))
 
                    (detach [_ db-name]
                      (when (= "xtdb" db-name)
@@ -141,22 +148,22 @@
                      (when-not (.containsKey !dbs db-name)
                        (throw (err/not-found :xtdb/no-such-db "Database does not exist" {:db-name db-name})))
                      
-                     (when-some [{:keys [sys]} (.remove !dbs db-name)]
+                     (when-some [sys (.remove !dbs db-name)]
                        (ig/halt! sys)))
 
                    AutoCloseable
                    (close [_]
-                     (doseq [[_ {:keys [sys]}] !dbs]
+                     (doseq [[_ sys] !dbs]
                        (ig/halt! sys))))]
 
       (let [xtdb-db-config (cond-> (-> (Database$Config.)
                                        (.log (.getLog conf))
                                        (.storage (.getStorage conf)))
                              (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
-        (util/with-close-on-catch [xtdb-db (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
-          (.put !dbs "xtdb" xtdb-db)
+        (util/with-close-on-catch [xtdb-sys (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
+          (.put !dbs "xtdb" xtdb-sys)
 
-          (let [^Database xtdb-db (:db xtdb-db)]
+          (let [^Database xtdb-db (::database xtdb-sys)]
             (doseq [[db-name ^Database$Config db-config] (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
                                                              (update-vals Database$Config/fromProto))
                     :when (not= db-name "xtdb")]

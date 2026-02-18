@@ -30,7 +30,7 @@
   (let [^BufferAllocator allocator (.getAllocator tu/*node*)
         db (db/primary-db tu/*node*)
         buffer-pool (.getBufferPool db)
-        live-index (.getLiveIndex db)
+        live-index (.getLiveIndex (.getSourceIndexer db))
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
@@ -367,6 +367,7 @@
 
       (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp
                                                              block-cat table-catalog
+                                                             "xtdb"
                                                              nil tables
                                                              nil (StampedLock.)
                                                              (RefCounter.)

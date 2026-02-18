@@ -173,9 +173,10 @@
              (MapEntry/create table table-block))
            (into {})))))
 
-(defmethod ig/expand-key :xtdb/table-catalog [k _]
-  {k {:buffer-pool (ig/ref :xtdb/buffer-pool)
-      :block-cat (ig/ref :xtdb/block-catalog)}})
+(defmethod ig/expand-key :xtdb/table-catalog [k opts]
+  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
+            :block-cat (ig/ref :xtdb/block-catalog)}
+           opts)})
 
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
   (doto (TableCatalog. buffer-pool block-cat {})

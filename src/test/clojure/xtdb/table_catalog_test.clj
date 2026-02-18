@@ -40,7 +40,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [db (db/primary-db node)
             bp (.getBufferPool db)
-            trie-catalog (.getTrieCatalog db)]
+            trie-catalog (.getTrieCatalog (.getSourceIndexer db))]
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
         (tu/flush-block! node)
 
@@ -130,7 +130,7 @@
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
         ;; need some dummy tx for latest-completed-txt
         (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
-        (let [cat (.getTrieCatalog (db/primary-db node))]
+        (let [cat (.getTrieCatalog (.getSourceIndexer (db/primary-db node)))]
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-r20200101-b00" 5] ["l01-rc-b00" 2]

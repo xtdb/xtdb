@@ -349,7 +349,7 @@
     (t/testing "artifically adding tries"
 
       (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-        (let [cat (.getTrieCatalog (db/primary-db node))]
+        (let [cat (.getTrieCatalog (.getSourceIndexer (db/primary-db node)))]
           (.addTries cat #xt/table foo
                      (->> [["l00-rc-b00" 1] ["l00-rc-b01" 1] ["l00-rc-b02" 1] ["l00-rc-b03" 1]
                            ["l01-rc-b00" 2] ["l01-rc-b01" 2] ["l01-rc-b02" 2]

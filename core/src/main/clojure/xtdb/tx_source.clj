@@ -15,7 +15,7 @@
            (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.arrow Relation RelationReader)
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.indexer Indexer$TxSource LiveIndex$Tx LiveTable$Tx)
+           (xtdb.indexer Indexer$TxSource)
            (xtdb.storage BufferPool)
            (xtdb.table TableRef)
            (xtdb.trie Trie TrieCatalog)))
@@ -35,13 +35,15 @@
                   (= op-tag :put) (assoc :doc (.getValue op))))))
        (into [])))
 
-(defn read-table-rows [^TableRef table ^LiveIndex$Tx live-idx-tx]
-  (let [^LiveTable$Tx live-table (.liveTable live-idx-tx table)
-        tx-relation (.getTxRelation live-table)]
-    {:db (.getDbName table)
-     :schema (.getSchemaName table)
-     :table (.getTableName table)
-     :ops (map #(dissoc % :system-from) (read-relation-rows tx-relation))}))
+(defn read-table-rows-from-ipc [^BufferAllocator allocator ^String db-name ^String schema-and-table ^bytes ipc-bytes]
+  (let [table-ref (TableRef/parse db-name schema-and-table)]
+    (with-open [loader (Relation/streamLoader allocator ipc-bytes)
+                rel (Relation. allocator (.getSchema loader))]
+      (.loadNextPage loader rel)
+      {:db (.getDbName table-ref)
+       :schema (.getSchemaName table-ref)
+       :table (.getTableName table-ref)
+       :ops (map #(dissoc % :system-from) (read-relation-rows rel))})))
 
 (defn ->encode-fn [fmt]
   (case fmt
@@ -160,34 +162,31 @@
                (some? db-name) (.dbName db-name)
                (some? format) (.format (str (symbol format))))))
 
-(defmethod ig/expand-key ::for-db [k {:keys [base ^TxSourceConfig tx-source-conf db-name]}]
-  {k {:tx-source-conf tx-source-conf
-      :output-log (ig/ref ::output-log)
-      :block-cat (ig/ref :xtdb/block-catalog)
-      :allocator (ig/ref :xtdb.db-catalog/allocator)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :table-cat (ig/ref :xtdb/table-catalog)
-      :trie-cat (ig/ref :xtdb/trie-catalog)
-      :db-name db-name}
-   ::output-log {:tx-source-conf tx-source-conf
-                 :base base
-                 :db-name db-name}})
+(defmethod ig/expand-key ::for-db [k {:keys [^TxSourceConfig tx-source-conf] :as opts}]
+  {k (into {:output-log (ig/ref ::output-log)
+            :block-cat (ig/ref :xtdb/block-catalog)
+            :allocator (ig/ref :xtdb.db-catalog/allocator)
+            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :table-cat (ig/ref :xtdb/table-catalog)
+            :trie-cat (ig/ref :xtdb/trie-catalog)}
+           opts)
+   ::output-log (select-keys opts [:tx-source-conf :base :db-name])})
 
-(defrecord TxSource [^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
+(defrecord TxSource [^BufferAllocator allocator ^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSource
-  (onCommit [_ tx-key live-idx-tx]
-    (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
-      (util/with-open [live-idx-snap (.openSnapshot live-idx-tx)]
-        (let [live-tables (->> (.getLiveTables live-idx-snap)
-                               (filter #(some? (.getTxRelation (.liveTable live-idx-snap %)))))]
+  (onCommit [_ resolved-tx]
+    (let [tx-key (serde/->TxKey (.getTxId resolved-tx)
+                                (time/micros->instant (.getSystemTimeMicros resolved-tx)))]
+      (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
+        (let [table-data (.getTableData resolved-tx)]
           @(.appendMessage output-log
                            (-> {:transaction {:id tx-key}
                                 :system-time (.getSystemTime tx-key)
-                                :source {;:version "1.0.0" ;; TODO
-                                         :db db-name
+                                :source {:db db-name
                                          :block-idx (inc (or (.getCurrentBlockIndex block-cat) -1))}
-                                :tables (->> live-tables
-                                             (map #(read-table-rows % live-idx-tx))
+                                :tables (->> table-data
+                                             (map (fn [[schema-and-table ipc-bytes]]
+                                                    (read-table-rows-from-ipc allocator db-name schema-and-table ipc-bytes)))
                                              (into []))}
                                encode-fn
                                Log$Message$Tx.)))))))
@@ -215,7 +214,8 @@
                                            db-name encode-fn trie-cat
                                            last-message refresh!))]
       (log/info "Tx-source now processing live transactions")
-      (map->TxSource {:output-log output-log
+      (map->TxSource {:allocator allocator
+                      :output-log output-log
                       :encode-fn encode-fn
                       :block-cat block-cat
                       :db-name db-name

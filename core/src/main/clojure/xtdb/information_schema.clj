@@ -482,7 +482,7 @@
                  schema params]
         ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
         ;; should be types/merge-types as per scan-vec-types
-        (let [db-state (.getState db)
+        (let [db-state (.getQueryState db)
               db-name (.getName db-state)
               table-catalog (.getTableCatalog db-state)
               trie-catalog (.getTrieCatalog db-state)

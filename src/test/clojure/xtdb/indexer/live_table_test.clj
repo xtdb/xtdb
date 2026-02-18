@@ -152,6 +152,7 @@
             live-index-allocator (util/->child-allocator allocator "live-index")]
         (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp
                                                                block-cat table-catalog
+                                                               "xtdb"
                                                                nil (HashMap.)
                                                                nil (StampedLock.)
                                                                (RefCounter.)
