@@ -73,4 +73,23 @@
                                         JOIN bar b ON f._id = b._id
                                         ORDER BY f._id")))))))))
 
+(t/deftest test-export-snapshot-strips-server-components
+  (let [node-dir (util/->path "target/export-server-strip-test")]
+    (util/delete-dir node-dir)
 
+    (with-open [node (tu/->local-node {:node-dir node-dir
+                                       :rows-per-block 10})]
+      (xt/execute-tx node [[:put-docs :foo {:xt/id 1, :name "Alice"}]])
+      (tu/flush-block! node))
+
+    (let [node-opts {:log [:local {:path (.resolve node-dir "log")}]
+                     :storage [:local {:path (.resolve node-dir "objects")}]
+                     :server {:port 0}
+                     :flight-sql {:port 0}
+                     :healthz {:port 0}
+                     :tracer {:enabled? true}}
+
+          {:keys [tables file-count]} (export/export-snapshot! node-opts "xtdb")]
+
+      (t/is (= 2 tables))
+      (t/is (pos? file-count)))))

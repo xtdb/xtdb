@@ -37,8 +37,10 @@
    (let [config (doto (xtn/->config node-opts)
                   (-> (.getCompactor) (.threads 0))
                   (-> (.getIndexer) (.enabled false))
+                  (-> (.getTracer) (.enabled false))
                   (.setServer nil)
-                  (.setFlightSql nil))]
+                  (.setFlightSql nil)
+                  (.setHealthz nil))]
 
      (log/info (str "Starting minimal node to export snapshot of database: " db-name))
 
