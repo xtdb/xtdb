@@ -20,6 +20,9 @@ val jlinkModules = listOf(
     // manual additions
     "java.logging",
     "java.net.http",
+    // clojureRepl
+    "jdk.compiler",
+    "jdk.javadoc",
 )
 
 val customJreDir = layout.buildDirectory.dir("custom-jre")
