@@ -112,6 +112,8 @@
   (createConnectionBuilder [this]
     (let [server (util/component this :xtdb.pgwire/server)
           ^DataSource data-source (or (:read-write server) (:read-only server))]
+      (when-not data-source
+        (throw (err/incorrect ::pgwire-not-enabled "Cannot create JDBC connection: pgwire server is not enabled")))
       (.createConnectionBuilder data-source)))
 
   (connect [this-node]
