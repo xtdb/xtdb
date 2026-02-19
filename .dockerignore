@@ -8,3 +8,5 @@
 !docker/aws/
 !docker/azure/
 !docker/google-cloud/
+!modules/datasets
+!modules/bench
