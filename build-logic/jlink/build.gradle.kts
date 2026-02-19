@@ -20,6 +20,8 @@ val jlinkModules = listOf(
     // manual additions
     "java.logging",
     "java.net.http",
+    "jdk.crypto.ec",
+    "jdk.crypto.cryptoki",
     // clojureRepl
     "jdk.compiler",
     "jdk.javadoc",
