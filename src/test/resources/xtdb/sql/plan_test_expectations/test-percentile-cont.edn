@@ -1,0 +1,11 @@
+[:project
+ {:projections [{_column_1 _percentile_cont_out_2}]}
+ [:group-by
+  {:columns
+   [{_percentile_cont_out_2
+     (percentile_cont
+      0.5
+      [t.1/amount {:direction :asc}])}]}
+  [:rename
+   {:prefix t.1}
+   [:scan {:table #xt/table t, :columns [amount]}]]]]

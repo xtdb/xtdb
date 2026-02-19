@@ -2,9 +2,11 @@
   (:require [clojure.spec.alpha :as s]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
+            [xtdb.expression.comparator :as expr.comp]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.operator.distinct :as distinct]
+            [xtdb.operator.order-by :as order-by]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -21,13 +23,21 @@
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
 
+(s/def ::sort-spec (s/cat :column ::lp/column
+                          :opts (s/keys :req-un [::order-by/direction])))
+
+(s/def ::fraction (s/or :literal number?, :param ::lp/param))
+
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
         :unary (s/cat :f simple-symbol?
                       :from-column ::lp/column)
         :binary (s/cat :f simple-symbol?
                        :left-column ::lp/column
-                       :right-column ::lp/column)))
+                       :right-column ::lp/column)
+        :ordered-set (s/cat :f simple-symbol?
+                            :fraction ::fraction
+                            :sort-spec (s/spec ::sort-spec))))
 
 (s/def ::aggregate
   (s/map-of ::lp/column ::aggregate-expr :conform-keys true :count 1))
@@ -38,6 +48,19 @@
   (s/cat :op #{:γ :gamma :group-by}
          :opts (s/keys :req-un [::columns])
          :relation ::lp/ra-expression))
+
+(defn- read-fraction-param ^double [^RelationReader args param]
+  (let [v (some-> args (.vectorForOrNull (str param)) (.getObject 0))]
+    (if (number? v)
+      (double v)
+      (throw (err/incorrect :xtdb/expected-number (format "Expected: number, got: %s" v)
+                            {:v v, :param param})))))
+
+(defn- resolve-fraction ^double [fraction-spec ^RelationReader args]
+  (let [[tag arg] fraction-spec]
+    (case tag
+      :literal (double arg)
+      :param (read-fraction-param args arg))))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -325,6 +348,120 @@
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
 
+(defn- percentile-cont-result
+  "Interpolates between two values for PERCENTILE_CONT.
+   rank = fraction * (N - 1), then linear interpolation between floor and ceil."
+  [^VectorReader acc-col, ^ints sorted-idxs, ^double fraction]
+  (let [n (alength sorted-idxs)]
+    (cond
+      (zero? n) nil
+      (== 1 n) (double (.getObject acc-col (aget sorted-idxs 0)))
+      :else
+      (let [rank (* fraction (double (dec n)))
+            lo (int (Math/floor rank))
+            hi (int (Math/ceil rank))]
+        (if (== lo hi)
+          (double (.getObject acc-col (aget sorted-idxs lo)))
+          (let [v-lo (double (.getObject acc-col (aget sorted-idxs lo)))
+                v-hi (double (.getObject acc-col (aget sorted-idxs hi)))
+                t (- rank (double lo))]
+            (+ v-lo (* t (- v-hi v-lo)))))))))
+
+(defn- percentile-disc-result
+  "Picks the value at ceil(fraction * N) - 1 for PERCENTILE_DISC (first value whose cumulative dist >= fraction)."
+  [^VectorReader acc-col, ^ints sorted-idxs, ^double fraction]
+  (let [n (alength sorted-idxs)]
+    (cond
+      (zero? n) nil
+      (<= fraction 0.0) (.getObject acc-col (aget sorted-idxs 0))
+      (>= fraction 1.0) (.getObject acc-col (aget sorted-idxs (dec n)))
+      :else
+      (let [idx (int (Math/ceil (* fraction (double n))))]
+        (.getObject acc-col (aget sorted-idxs (max 0 (dec idx))))))))
+
+(deftype PercentileAggregateSpec [^BufferAllocator allocator
+                                  from-name to-name ^VectorType to-type
+                                  ^VectorWriter acc-col
+                                  ^:unsynchronized-mutable ^long base-idx
+                                  ^List group-idxmaps
+                                  ^double fraction
+                                  sort-opts
+                                  percentile-mode
+                                  zero-row?]
+  AggregateSpec
+  (aggregate [this in-rel group-mapping]
+    (let [in-vec (.vectorForOrNull in-rel (str from-name))
+          row-count (.getValueCount in-vec)]
+      (.append acc-col in-vec)
+
+      (dotimes [idx row-count]
+        ;; nulls excluded from ordered-set aggregates per SQL standard
+        (when-not (.isNull in-vec idx)
+          (let [group-idx (.getInt group-mapping idx)]
+            (while (<= (.size group-idxmaps) group-idx)
+              (.add group-idxmaps (IntStream/builder)))
+            (.add ^IntStream$Builder (.get group-idxmaps group-idx)
+                  (+ base-idx idx)))))
+
+      (set! (.base-idx this) (+ base-idx row-count))))
+
+  (openFinishedVector [_]
+    (util/with-close-on-catch [out-vec (Vector/open allocator to-name to-type)]
+      (let [{:keys [direction] :or {direction :asc}} sort-opts
+            col-comp (expr.comp/->comparator acc-col acc-col :nulls-last)
+            compute-fn (case percentile-mode
+                         :cont percentile-cont-result
+                         :disc percentile-disc-result)]
+
+        (doseq [^IntStream$Builder isb group-idxmaps]
+          (let [idxs (.toArray (.build isb))
+                sorted (if (pos? (alength idxs))
+                         (-> (IntStream/of idxs)
+                             (.boxed)
+                             (.sorted (cond-> ^java.util.Comparator
+                                        (fn [a b] (.applyAsInt ^java.util.function.IntBinaryOperator col-comp a b))
+                                        (= :desc direction) (.reversed)))
+                             (.mapToInt identity)
+                             (.toArray))
+                         (int-array 0))]
+            (if (pos? (alength sorted))
+              (let [result (compute-fn acc-col sorted fraction)]
+                (if (nil? result)
+                  (.writeNull out-vec)
+                  (.writeObject out-vec result)))
+              (.writeNull out-vec))))
+
+        (when (and zero-row? (zero? (.size group-idxmaps)))
+          (.writeNull out-vec))
+
+        out-vec)))
+
+  Closeable
+  (close [_]
+    (util/close acc-col)))
+
+(defn- percentile-factory [mode {:keys [from-name from-type fraction to-name zero-row? sort-opts]}]
+  (let [out-type (if (= mode :cont) #xt/type :f64 from-type)
+        to-type (types/->nullable-type out-type)]
+    (reify AggregateSpec$Factory
+      (getColName [_] (str to-name))
+      (getType [_] to-type)
+
+      (build [this al args]
+        (let [frac (resolve-fraction fraction args)]
+          (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
+            (PercentileAggregateSpec. al from-name
+                                      (.getColName this) (.getType this)
+                                      acc-col
+                                      0 (ArrayList.)
+                                      frac sort-opts mode zero-row?)))))))
+
+(defmethod ->aggregate-factory :percentile_cont [agg-opts]
+  (percentile-factory :cont agg-opts))
+
+(defmethod ->aggregate-factory :percentile_disc [agg-opts]
+  (percentile-factory :disc agg-opts))
+
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]
   (reducing-agg-factory (into agg-opts
                               {:to-type #xt/type :bool
@@ -394,7 +531,17 @@
                                                                    from-type (get vec-types from-column #xt/type :null)]
                                                                {:f f
                                                                 :from-name from-column
-                                                                :from-type from-type}))))))
+                                                                :from-type from-type})
+
+                                                             [:ordered-set agg-opts]
+                                                             (let [{:keys [f fraction sort-spec]} agg-opts
+                                                                   {:keys [column opts]} sort-spec
+                                                                   from-type (get vec-types column #xt/type :null)]
+                                                               {:f f
+                                                                :from-name column
+                                                                :from-type from-type
+                                                                :fraction fraction
+                                                                :sort-opts opts}))))))
               out-vec-types (into (->> group-cols
                                          (into {} (map (juxt identity vec-types))))
                                     (->> agg-factories

@@ -745,7 +745,15 @@ aggregateFunction
     : 'COUNT' '(' ASTERISK ')' # CountStarFunction
     | 'ARRAY_AGG' '(' expr ('ORDER' 'BY' sortSpecificationList)? ')' # ArrayAggFunction
     | setFunctionType '(' setQuantifier? expr ')' # SetFunction
+    | orderedSetFunctionType '(' percentileFraction ')' 'WITHIN' 'GROUP' '(' 'ORDER' 'BY' sortSpecification ')' # OrderedSetFunction
     ;
+
+percentileFraction
+    : literal              # PercentileFractionLiteral
+    | parameterSpecification # PercentileFractionParam
+    ;
+
+orderedSetFunctionType : 'PERCENTILE_CONT' | 'PERCENTILE_DISC' ;
 
 setFunctionType
     : 'AVG' | 'MAX' | 'MIN' | 'SUM' | 'COUNT'

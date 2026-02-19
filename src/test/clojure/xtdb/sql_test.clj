@@ -894,6 +894,17 @@
             FROM foo "
           {:table-info {#xt/table foo #{"a"}}}))))
 
+(t/deftest test-ordered-set-aggregates
+  (t/is (=plan-file
+         "test-percentile-cont"
+         (sql/plan "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount) FROM t"
+                   {:table-info {#xt/table t #{"amount"}}})))
+
+  (t/is (=plan-file
+         "test-percentile-disc-desc"
+         (sql/plan "SELECT PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY amount DESC) FROM t"
+                   {:table-info {#xt/table t #{"amount"}}}))))
+
 (t/deftest test-window-functions
   (t/is (=plan-file
          "test-window-with-partition-and-order-by"

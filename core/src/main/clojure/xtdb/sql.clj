@@ -1044,6 +1044,10 @@
   PlanError
   (error-string [_] "Window functions are not allowed in this context"))
 
+(defrecord NullOrderingIgnored [set-fn]
+  PlanError
+  (error-string [_] (format "NULL ordering is ignored for %s (nulls are excluded from ordered-set aggregates)" set-fn)))
+
 (def ^xtdb.antlr.SqlVisitor string-literal-visitor
   (reify SqlVisitor
     (visitCharacterStringLiteral [this ctx] (-> (.characterString ctx) (.accept this)))
@@ -1153,6 +1157,9 @@
   (visitIntegerLiteral [_ ctx]
     (or (parse-long (.getText ctx))
         (add-err! env (->CannotParseInteger (.getText ctx)))))
+
+  (visitPercentileFractionLiteral [this ctx] (-> (.literal ctx) (.accept this)))
+  (visitPercentileFractionParam [this ctx] (-> (.parameterSpecification ctx) (.accept this)))
 
   (visitCharacterStringLiteral [_ ctx] (.accept ctx string-literal-visitor))
   (visitSqlStandardString [_ ctx] (.accept ctx string-literal-visitor))
@@ -1874,6 +1881,34 @@
                                (vary-meta assoc :agg-in-sym? true))]
                 {:agg-expr (list set-fn in-sym)
                  :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
+
+      agg-sym))
+
+  (visitOrderedSetFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
+    (let [set-fn (symbol (str/lower-case (.getText (.orderedSetFunctionType ctx))))
+          agg-sym (-> (->col-sym (str "_" set-fn "_out_" (swap! !id-count inc)))
+                      (vary-meta assoc :agg-out-sym? true))
+          fraction-expr (-> (.percentileFraction ctx)
+                            (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
+          ^Sql$SortSpecificationContext sort-spec-ctx (.sortSpecification ctx)
+          sort-expr (-> (.expr sort-spec-ctx)
+                        (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
+          dir (or (some-> (.orderingSpecification sort-spec-ctx) (.getText) str/lower-case keyword) :asc)
+          _ (when (.nullOrdering sort-spec-ctx)
+              (add-warning! env (->NullOrderingIgnored set-fn)))
+          sort-opts {:direction dir}
+
+          ;; handle sort expression - may need in-projection
+          [sort-sym sort-in]
+          (if (:column? (meta sort-expr))
+            [sort-expr nil]
+            (let [in-sym (-> (->col-sym (str "_" set-fn "_sort_" (swap! !id-count inc)))
+                             (vary-meta assoc :agg-in-sym? true))]
+              [in-sym {in-sym sort-expr}]))]
+
+      (.put !aggs agg-sym
+            (cond-> {:agg-expr (list set-fn fraction-expr [sort-sym sort-opts])}
+              sort-in (assoc :in-projection (->ProjectedCol sort-in (first (keys sort-in))))))
 
       agg-sym))
 
