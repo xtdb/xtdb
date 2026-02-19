@@ -48,6 +48,8 @@ You MUST use sentence-per-line in documentation files and commit messages - this
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
 
+For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, not raw Java exceptions.
+
 ## Running tests
 
 - You MUST NOT run tests yourself - use sub-agents.

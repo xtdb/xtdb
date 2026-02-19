@@ -260,6 +260,20 @@ Assume your reader is a senior developer familiar with XTDB and its codebase.
 * Links to issues or external context ("see #1234", "per RFC 7231 §6.5.1")
 * Warnings about subtle behaviour that could trip up future developers
 
+== Errors
+
+Use `xtdb.error` (aliased as `err`) for throwing errors — not raw Java exceptions.
+We're migrating the codebase to this convention; new code should always use it.
+
+Each error takes a namespaced keyword as its error code (e.g. `::my-error-code`) and a human-readable message.
+Choose the appropriate anomaly category:
+
+* `err/incorrect` — bad input or configuration (caller's fault)
+* `err/unsupported` — feature not (yet) implemented
+* `err/fault` — internal error (our fault)
+
+See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
+
 == Git
 
 see link:GIT.adoc[] for details on git practices in XTDB.
