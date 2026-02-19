@@ -11,11 +11,12 @@ java {
 // To re-run:
 // 1) ./gradlew :docker:standalone:shadowJar
 // 2) jdeps --ignore-missing-deps --print-module-deps docker/standalone/build/libs/xtdb-standalone.jar
+// NOTE: You'll likely want to run these for each of the jars we build
 val jlinkModules = listOf(
     // from jdeps
     "java.base", "java.compiler", "java.desktop", "java.instrument",
     "java.naming", "java.prefs", "java.security.jgss", "java.security.sasl",
-    "java.sql", "jdk.jdi", "jdk.management", "jdk.unsupported",
+    "java.sql", "jdk.httpserver", "jdk.jdi", "jdk.management", "jdk.unsupported",
 
     // manual additions
     "java.logging",
