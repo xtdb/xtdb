@@ -53,9 +53,6 @@
              tag (.tag tag-key tag-value))
          (.register reg)))))
 
-(defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
-  (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
-
 (defn- register-gauge! [^MeterRegistry reg, ^Gauge$Builder g]
   (doto (.register g reg)
     (as-> ^Gauge registered

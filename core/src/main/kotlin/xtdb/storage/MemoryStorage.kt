@@ -1,6 +1,5 @@
 package xtdb.storage
 
-import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
@@ -17,7 +16,6 @@ import xtdb.error.Unsupported
 import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.openChildAllocator
-import xtdb.util.register
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels.newChannel
@@ -26,11 +24,10 @@ import java.util.*
 
 internal class MemoryStorage(
     allocator: BufferAllocator,
-    meterRegistry: MeterRegistry? = null,
     override val epoch: StorageEpoch
 ) : BufferPool, IEvictBufferTest {
 
-    private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
+    private val allocator = allocator.openChildAllocator("buffer-pool")
 
     private val memoryStore: NavigableMap<Path, ArrowBuf> = TreeMap()
 

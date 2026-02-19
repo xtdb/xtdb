@@ -43,7 +43,7 @@ internal class RemoteBufferPool(
     dbName: DatabaseName,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
-    private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
+    private val allocator = allocator.openChildAllocator("buffer-pool")
 
     private val arrowFooterCache = arrowFooterCache()
 

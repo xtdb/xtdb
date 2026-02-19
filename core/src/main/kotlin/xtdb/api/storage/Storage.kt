@@ -89,7 +89,7 @@ object Storage {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
-        ): BufferPool = MemoryStorage(allocator, meterRegistry, epoch)
+        ): BufferPool = MemoryStorage(allocator, epoch)
     }
 
     @JvmStatic

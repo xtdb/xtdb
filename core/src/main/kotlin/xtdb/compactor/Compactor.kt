@@ -72,12 +72,10 @@ interface Compactor : AutoCloseable {
 
         companion object {
             @JvmStatic
-            fun real(meterRegistry: MeterRegistry?, pageSize: Int, recencyPartition: RecencyPartition?) =
+            fun real(pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
                     override fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
-                            .also { meterRegistry?.register(it) }
-
                         private val log = dbStorage.sourceLog
                         private val bp = dbStorage.bufferPool
                         private val mm = dbStorage.metadataManager

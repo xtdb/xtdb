@@ -221,7 +221,6 @@
         table-cat (or table-cat (.getTableCatalog db-state))
         latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-      (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
         (->LiveIndex allocator buffer-pool
                      block-cat table-cat

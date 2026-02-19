@@ -38,7 +38,7 @@ internal class LocalStorage(
     val rootPath: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
-    private val allocator = allocator.openChildAllocator("buffer-pool").also { meterRegistry?.register(it) }
+    private val allocator = allocator.openChildAllocator("buffer-pool")
 
     private val arrowFooterCache: Cache<Path, ArrowFooter> = arrowFooterCache()
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
