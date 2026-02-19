@@ -273,76 +273,151 @@
         {:id (:xt/id feed)
          :titles titles}))))
 
-(defn get-distributed-item-ids
-  "Returns IDs at various positions for scan benchmarking.
-   Fetches 1000 spread and 1000 clustered IDs, then pre-samples for 10, 100, 1000 sizes.
-   Spread IDs are sampled via take-nth to maintain distribution across IID space."
+(defn get-distributed-items
+  "Returns item data at various positions for scan benchmarking.
+   Fetches 1000 spread and 1000 clustered items with _id, content_key, lang, length, published_at.
+   Spread items are sampled via take-nth to maintain distribution across IID space."
   [conn]
   (let [n 1000
         cnt (:cnt (first (xt/q conn ["SELECT count(*) as cnt FROM items"])))
         step (max (quot cnt n) 1)
         mid (quot cnt 2)
 
-        ;; Spread IIDs - evenly distributed across the IID space
-        spread-1000 (mapv :xt/id
-                          (xt/q conn
-                                [(str "SELECT _id FROM ("
-                                      "  SELECT _id, row_number() OVER (ORDER BY _id) as rn"
-                                      "  FROM items"
-                                      ") AS numbered WHERE (rn - 1) % ? = 0"
-                                      "  ORDER BY rn"
-                                      "  LIMIT ?")
-                                 step n]))
+        cols "_id, item$content_key, item$lang, item$length, item$published_at"
 
-        ;; Clustered IIDs - consecutive from middle of IID space
-        clustered-1000 (mapv :xt/id
-                             (xt/q conn
-                                   [(str "SELECT _id FROM ("
-                                         "  SELECT _id, row_number() OVER (ORDER BY _id) as rn"
-                                         "  FROM items"
-                                         ") AS numbered WHERE rn BETWEEN ? AND ?"
-                                         "  ORDER BY rn")
-                                    mid (+ mid n -1)]))]
+        ;; Spread - evenly distributed across the IID space
+        spread-1000 (vec (xt/q conn
+                               [(str "SELECT " cols " FROM ("
+                                     "  SELECT " cols ", row_number() OVER (ORDER BY _id) as rn"
+                                     "  FROM items"
+                                     ") AS numbered WHERE (rn - 1) % ? = 0"
+                                     "  ORDER BY rn"
+                                     "  LIMIT ?")
+                                step n]))
+
+        ;; Clustered - consecutive from middle of IID space
+        clustered-1000 (vec (xt/q conn
+                                  [(str "SELECT " cols " FROM ("
+                                        "  SELECT " cols ", row_number() OVER (ORDER BY _id) as rn"
+                                        "  FROM items"
+                                        ") AS numbered WHERE rn BETWEEN ? AND ?"
+                                        "  ORDER BY rn")
+                                   mid (+ mid n -1)]))]
     ;; Pre-sample for different sizes
     {:spread-10 (vec (take-nth 100 spread-1000))
      :spread-100 (vec (take-nth 10 spread-1000))
      :spread-1000 spread-1000
      :clustered-10 (vec (take 10 clustered-1000))
      :clustered-100 (vec (take 100 clustered-1000))
-     :clustered-1000 clustered-1000}))
+     :clustered-1000 clustered-1000
+     :langs (vec (distinct (map :item/lang spread-1000)))}))
 
-(defn- or-clause [n]
-  (str/join " OR " (repeat n "_id = ?")))
+(defn- or-clause [col n]
+  (str/join " OR " (repeat n (str col " = ?"))))
 
 (defn scan-items-individual-benchmark-queries
   "Generates benchmark queries for individual point lookups at different IID positions."
   [{:keys [spread-10]}]
-  (for [[i id] (map-indexed vector spread-10)]
+  (for [[i item] (map-indexed vector spread-10)]
     {:id (keyword (str "scan-p" (* i 10)))
-     :f #(xt/q % ["SELECT _id FROM items WHERE _id = ?" id])}))
+     :f #(xt/q % ["SELECT _id FROM items WHERE _id = ?" (:xt/id item)])}))
 
 (defn scan-items-set-benchmark-queries
-  "Generates benchmark queries for set lookups (IN and OR) with varying sizes."
+  "Generates benchmark queries for set lookups (IN and OR) with varying sizes on _id (IID path)."
   [{:keys [spread-10 spread-100 spread-1000 clustered-10 clustered-100 clustered-1000]}]
+  (let [ids #(mapv :xt/id %)]
+    [{:id :scan-spread-in-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] (ids spread-10)))}
+     {:id :scan-clustered-in-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] (ids clustered-10)))}
+     {:id :scan-spread-or-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "_id" 10))] (ids spread-10)))}
+     {:id :scan-clustered-or-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "_id" 10))] (ids clustered-10)))}
 
-  [{:id :scan-spread-in-10
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] spread-10))}
-   {:id :scan-clustered-in-10
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 10))] clustered-10))}
-   {:id :scan-spread-or-10
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause 10))] spread-10))}
-   {:id :scan-clustered-or-10
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause 10))] clustered-10))}
+     {:id :scan-spread-in-100
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] (ids spread-100)))}
+     {:id :scan-clustered-in-100
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] (ids clustered-100)))}
 
-   {:id :scan-spread-in-100
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] spread-100))}
-   {:id :scan-clustered-in-100
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 100))] clustered-100))}
+     {:id :scan-spread-in-1000
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] (ids spread-1000)))}
+     {:id :scan-clustered-in-1000
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] (ids clustered-1000)))}]))
 
-   {:id :scan-spread-in-1000
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] spread-1000))}
-   {:id :scan-clustered-in-1000
-    :f #(xt/q % (into [(str "SELECT _id FROM items WHERE _id IN " (?s 1000))] clustered-1000))}])
+(defn scan-items-by-content-key-queries
+  "Generates benchmark queries for IN lookups on content_key (unique non-_id UUID column)."
+  [{:keys [spread-10 spread-100 spread-1000 clustered-10 clustered-100 clustered-1000]}]
+  (let [ckeys #(mapv :item/content-key %)]
+    [{:id :content-key-spread-in-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 10))] (ckeys spread-10)))}
+     {:id :content-key-clustered-in-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 10))] (ckeys clustered-10)))}
+     {:id :content-key-spread-or-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "item$content_key" 10))] (ckeys spread-10)))}
+     {:id :content-key-clustered-or-10
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE " (or-clause "item$content_key" 10))] (ckeys clustered-10)))}
+
+     {:id :content-key-spread-in-100
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 100))] (ckeys spread-100)))}
+     {:id :content-key-clustered-in-100
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 100))] (ckeys clustered-100)))}
+
+     {:id :content-key-spread-in-1000
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 1000))] (ckeys spread-1000)))}
+     {:id :content-key-clustered-in-1000
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$content_key IN " (?s 1000))] (ckeys clustered-1000)))}]))
+
+(defn scan-items-filter-queries
+  "Generates benchmark queries for various filter types: equality, range, sparse."
+  [{:keys [spread-1000 langs]}]
+  (let [lengths (mapv :item/length spread-1000)
+        min-len (apply min lengths)
+        max-len (apply max lengths)
+        len-range (- max-len min-len)
+        ;; Thresholds for > filter selecting ~10%, ~25%, ~50% of rows
+        len-10pct (+ min-len (quot (* len-range 9) 10))
+        len-25pct (+ min-len (quot (* len-range 3) 4))
+        len-50pct (+ min-len (quot len-range 2))
+
+        timestamps (mapv :item/published-at spread-1000)
+        min-ts ^java.time.ZonedDateTime (reduce #(if (.isBefore ^java.time.ZonedDateTime %1 ^java.time.ZonedDateTime %2) %1 %2) timestamps)
+        max-ts (reduce #(if (.isAfter ^java.time.ZonedDateTime %1 ^java.time.ZonedDateTime %2) %1 %2) timestamps)
+        ts-range (.toMillis (java.time.Duration/between min-ts max-ts))
+        ;; Selectivity targets for timestamp
+        ts-10pct (.plus ^java.time.ZonedDateTime min-ts (java.time.Duration/ofMillis (quot (* ts-range 9) 10)))
+        ts-50pct (.plus ^java.time.ZonedDateTime min-ts (java.time.Duration/ofMillis (quot ts-range 2)))
+
+        n-langs (count langs)
+        _ (assert (>= n-langs 8) (str "Need at least 8 distinct langs for selectivity targets, got " n-langs))
+        langs-12pct (vec (take (quot n-langs 8) langs))
+        langs-25pct (vec (take (quot n-langs 4) langs))
+        langs-50pct (vec (take (quot n-langs 2) langs))]
+
+    [{:id :lang-select-12pct
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$lang IN " (?s (count langs-12pct)))] langs-12pct))}
+     {:id :lang-select-25pct
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$lang IN " (?s (count langs-25pct)))] langs-25pct))}
+     {:id :lang-select-50pct
+      :f #(xt/q % (into [(str "SELECT _id FROM items WHERE item$lang IN " (?s (count langs-50pct)))] langs-50pct))}
+
+     ;; Length range filters
+     {:id :length-select-10pct
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$length > ?" len-10pct])}
+     {:id :length-select-25pct
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$length > ?" len-25pct])}
+     {:id :length-select-50pct
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$length > ?" len-50pct])}
+
+     ;; Timestamp range filters (recent items)
+     {:id :published-select-10pct
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$published_at > ?" ts-10pct])}
+     {:id :published-select-50pct
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$published_at > ?" ts-50pct])}
+
+     ;; Sparse column filter (~0.1% have doc_type)
+     {:id :doc-type-not-null
+      :f #(xt/q % ["SELECT _id FROM items WHERE item$doc_type IS NOT NULL"])}]))
 
 (defn profile-data
   [pstats]
@@ -503,7 +578,7 @@
                                         :mean-user (get-mean-user conn)
                                         :active-users (get-active-users conn random scale-factor)
                                         :biggest-feed (get-biggest-feed conn random)
-                                        :distributed-item-ids (get-distributed-item-ids conn)})))}
+                                        :distributed-items (get-distributed-items conn)})))}
 
            {:t :call
             :stage :profile-global-queries
@@ -530,16 +605,30 @@
            {:t :call
             :stage :profile-scan-items-individual
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [distributed-item-ids]} @!state
-                       {:keys [profile formatted]} (profile node 1000 (scan-items-individual-benchmark-queries distributed-item-ids))]
+                 (let [{:keys [distributed-items]} @!state
+                       {:keys [profile formatted]} (profile node 1000 (scan-items-individual-benchmark-queries distributed-items))]
                    (swap! !state update :profiles assoc :scan-individual profile)
                    (println formatted)))}
            {:t :call
             :stage :profile-scan-items-sets
             :f (fn [{:keys [node !state]}]
-                 (let [{:keys [distributed-item-ids]} @!state
-                       {:keys [profile formatted]} (profile node 50 (scan-items-set-benchmark-queries distributed-item-ids))]
+                 (let [{:keys [distributed-items]} @!state
+                       {:keys [profile formatted]} (profile node 50 (scan-items-set-benchmark-queries distributed-items))]
                    (swap! !state update :profiles assoc :scan-sets profile)
+                   (println formatted)))}
+           {:t :call
+            :stage :profile-scan-content-key
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [distributed-items]} @!state
+                       {:keys [profile formatted]} (profile node 10 (scan-items-by-content-key-queries distributed-items))]
+                   (swap! !state update :profiles assoc :scan-content-key profile)
+                   (println formatted)))}
+           {:t :call
+            :stage :profile-scan-filters
+            :f (fn [{:keys [node !state]}]
+                 (let [{:keys [distributed-items]} @!state
+                       {:keys [profile formatted]} (profile node 5 (scan-items-filter-queries distributed-items))]
+                   (swap! !state update :profiles assoc :scan-filters profile)
                    (println formatted)))}
            {:t :call
             :stage :inspect
@@ -577,8 +666,8 @@
               mean-user (get-mean-user conn)
               active-users (get-active-users conn random scale)
               biggest-feed (get-biggest-feed conn random)
-              distributed-item-ids (get-distributed-item-ids conn)]
-          
+              distributed-items (get-distributed-items conn)]
+
           (println "Profile Global")
           (println (:formatted (profile node 10 (benchmarks-queries active-users biggest-feed))))
           (println "Profile Max User")
@@ -586,8 +675,12 @@
           (println "Profile Mean User")
           (println (:formatted (profile node 50 (user-specific-benchmarks-queries mean-user))))
           (println "Profile Item Scan by IDs")
-          (println (:formatted (profile node 1000 (scan-items-individual-benchmark-queries distributed-item-ids))))
-          (println (:formatted (profile node 50 (scan-items-set-benchmark-queries distributed-item-ids))))
+          (println (:formatted (profile node 1000 (scan-items-individual-benchmark-queries distributed-items))))
+          (println (:formatted (profile node 50 (scan-items-set-benchmark-queries distributed-items))))
+          (println "Profile Item Scan by Content Key")
+          (println (:formatted (profile node 10 (scan-items-by-content-key-queries distributed-items))))
+          (println "Profile Filter Queries")
+          (println (:formatted (profile node 5 (scan-items-filter-queries distributed-items))))
           (println "Inspect")
           (inspect node {:max-user max-user
                          :active-users active-users}))))
