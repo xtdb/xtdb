@@ -8,7 +8,8 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
   (:import (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
@@ -102,7 +103,7 @@
       (getColName [_] (str to-name))
       (getType [_] to-type)
 
-      (build [this al]
+      (build [this al _args]
         (let [out-vec (Vector/open al (.getColName this) (.getType this))]
           (reify
             AggregateSpec
@@ -195,8 +196,8 @@
     (getColName [_] (.getColName agg-factory))
     (getType [_] (.getType agg-factory))
 
-    (build [_ al]
-      (let [agg-spec (.build agg-factory al)
+    (build [_ al args]
+      (let [agg-spec (.build agg-factory al args)
             rel-maps (ArrayList.)]
         (reify
           AggregateSpec
@@ -304,7 +305,7 @@
       (getColName [_] (str to-name))
       (getType [_] to-type)
 
-      (build [this al]
+      (build [this al _args]
         (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   0 (ArrayList.) (if zero-row? :null :empty-rel)))))))
@@ -319,7 +320,7 @@
       (getColName [_] (str to-name))
       (getType [_] to-type)
 
-      (build [this al]
+      (build [this al _args]
         (util/with-close-on-catch [acc-col (Vector/open al "$data$" from-type)]
           (ArrayAggAggregateSpec. al from-name (.getColName this) (.getType this) acc-col
                                   0 (ArrayList.) (if zero-row? :empty-vec :empty-rel)))))))
@@ -408,10 +409,10 @@
                                                 [(str to-column) (pr-str agg-form)]))))}
            :vec-types out-vec-types
 
-           :->cursor (fn [{:keys [allocator explain-analyze? tracer query-span]} in-cursor]
+           :->cursor (fn [{:keys [allocator args explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
                                  (doseq [^AggregateSpec$Factory factory agg-factories]
-                                   (.add agg-specs (.build factory allocator)))
+                                   (.add agg-specs (.build factory allocator (or args vw/empty-args))))
 
                                  (GroupByCursor. allocator in-cursor
                                                  (->group-mapper allocator (select-keys vec-types group-cols))

@@ -20,10 +20,10 @@ sealed class Variance(
 
     override val type: VectorType = Maybe(F64)
 
-    override fun build(al: BufferAllocator) = object : AggregateSpec {
-        private val sumxAgg = Sum(fromName, "sumx", F64, hasZeroRow).build(al)
-        private val sumx2Agg = Sum("x2", "sumx2", F64, hasZeroRow).build(al)
-        private val countAgg = Count(fromName, "count", hasZeroRow).build(al)
+    override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
+        private val sumxAgg = Sum(fromName, "sumx", F64, hasZeroRow).build(al, args)
+        private val sumx2Agg = Sum("x2", "sumx2", F64, hasZeroRow).build(al, args)
+        private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return

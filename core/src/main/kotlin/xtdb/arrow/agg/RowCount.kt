@@ -13,7 +13,7 @@ import xtdb.arrow.VectorType.Companion.I64
 class RowCount(override val colName: FieldName, val hasZeroRow: Boolean) : AggregateSpec.Factory {
     override val type: VectorType = I64
 
-    override fun build(al: BufferAllocator): AggregateSpec {
+    override fun build(al: BufferAllocator, args: RelationReader): AggregateSpec {
         val outVec = LongVector(al, colName, false)
 
         return object : AggregateSpec {

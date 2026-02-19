@@ -1,6 +1,7 @@
 package xtdb.arrow.agg
 
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.arrow.RelationReader
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
@@ -34,7 +35,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val sumFactory = Sum("values", "sum", I32, false)
-                sumFactory.build(allocator).use { sumAgg ->
+                sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping)
                     sumAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)
@@ -52,7 +53,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 3)
                 val sumFactory = Sum("values", "sum", I32, false)
-                sumFactory.build(allocator).use { sumAgg ->
+                sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping)
                     sumAgg.openFinishedVector().use { result ->
                         assertEquals(1, result.valueCount)
@@ -69,7 +70,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val avgFactory = Average("values", valuesVec.type, "avg", false)
-                avgFactory.build(allocator).use { avgAgg ->
+                avgFactory.build(allocator, RelationReader.DUAL).use { avgAgg ->
                     avgAgg.aggregate(inRel, groupMapping)
                     avgAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)
@@ -87,7 +88,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val varFactory = VariancePop("values", "var", false)
-                varFactory.build(allocator).use { varAgg ->
+                varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping)
                     varAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)
@@ -105,7 +106,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 3)
                 val varFactory = VarianceSamp("values", "var", false)
-                varFactory.build(allocator).use { varAgg ->
+                varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping)
                     varAgg.openFinishedVector().use { result ->
                         assertEquals(1, result.valueCount)
@@ -122,7 +123,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val stdDevFactory = StdDevPop("values", "std-dev", false)
-                stdDevFactory.build(allocator).use { stdDevAgg ->
+                stdDevFactory.build(allocator, RelationReader.DUAL).use { stdDevAgg ->
                     stdDevAgg.aggregate(inRel, groupMapping)
                     stdDevAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)
@@ -140,7 +141,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 3)
                 val stdDevFactory = StdDevSamp("values", "std-dev", false)
-                stdDevFactory.build(allocator).use { stdDevAgg ->
+                stdDevFactory.build(allocator, RelationReader.DUAL).use { stdDevAgg ->
                     stdDevAgg.aggregate(inRel, groupMapping)
                     stdDevAgg.openFinishedVector().use { result ->
                         assertEquals(1, result.valueCount)
@@ -157,7 +158,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 0)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 3)
                 val varFactory = VariancePop("values", "var", false)
-                varFactory.build(allocator).use { varAgg ->
+                varFactory.build(allocator, RelationReader.DUAL).use { varAgg ->
                     varAgg.aggregate(inRel, groupMapping)
                     varAgg.openFinishedVector().use { result ->
                         assertEquals(1, result.valueCount)
@@ -176,7 +177,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val sumFactory = Sum("values", "sum", decimalType, false)
-                sumFactory.build(allocator).use { sumAgg ->
+                sumFactory.build(allocator, RelationReader.DUAL).use { sumAgg ->
                     sumAgg.aggregate(inRel, groupMapping)
                     sumAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)
@@ -196,7 +197,7 @@ class AggregateTest {
             Vector.fromList(allocator, "group-mapping", I32, listOf(0, 0, 1, 1)).use { groupMapping ->
                 val inRel = RelationReader.from(listOf(valuesVec), 4)
                 val avgFactory = Average("values", valuesVec.type, "avg", false)
-                avgFactory.build(allocator).use { avgAgg ->
+                avgFactory.build(allocator, RelationReader.DUAL).use { avgAgg ->
                     avgAgg.aggregate(inRel, groupMapping)
                     avgAgg.openFinishedVector().use { result ->
                         assertEquals(2, result.valueCount)

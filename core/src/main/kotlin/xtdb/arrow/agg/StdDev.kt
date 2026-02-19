@@ -10,8 +10,8 @@ sealed class StdDev(override val colName: FieldName, private val varianceFactory
 
     override val type: VectorType = maybe(F64)
 
-    override fun build(al: BufferAllocator) = object : AggregateSpec {
-        private val varianceAgg = varianceFactory.build(al)
+    override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
+        private val varianceAgg = varianceFactory.build(al, args)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) =
             varianceAgg.aggregate(inRel, groupMapping)

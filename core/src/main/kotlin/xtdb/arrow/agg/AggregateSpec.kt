@@ -10,7 +10,7 @@ interface AggregateSpec : AutoCloseable {
     interface Factory {
         val colName: String
         val type: VectorType
-        fun build(al: BufferAllocator): AggregateSpec
+        fun build(al: BufferAllocator, args: RelationReader): AggregateSpec
     }
 
     fun aggregate(inRel: RelationReader, groupMapping: GroupMapping)

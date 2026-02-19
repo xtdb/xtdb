@@ -4,7 +4,8 @@
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
   (:import [xtdb.arrow Vector]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -125,7 +126,7 @@
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v,
                                                      :from-type #xt/type #{:i64 :f64}
                                                      :to-name 'vsum, :zero-row? true})
-          sum-spec (.build sum-factory tu/*allocator*)]
+          sum-spec (.build sum-factory tu/*allocator* vw/empty-args)]
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
@@ -328,7 +329,7 @@
 
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type #xt/type :i64
                                                      :to-name 'vs, :zero-row? true})]
-      (util/with-open [agg-spec (.build agg-factory tu/*allocator*)]
+      (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
         (.aggregate agg-spec (vr/rel-reader [k0]) gm0)

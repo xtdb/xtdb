@@ -24,9 +24,9 @@ class Average(val fromName: FieldName, fromType: VectorType, override val colNam
 
     override val type: VectorType = maybe(sumOutType)
 
-    override fun build(al: BufferAllocator) = object : AggregateSpec {
-        private val sumAgg = Sum(fromName, "sum", sumOutType, hasZeroRow).build(al)
-        private val countAgg = Count(fromName, "count", hasZeroRow).build(al)
+    override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
+        private val sumAgg = Sum(fromName, "sum", sumOutType, hasZeroRow).build(al, args)
+        private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
             sumAgg.aggregate(inRel, groupMapping)

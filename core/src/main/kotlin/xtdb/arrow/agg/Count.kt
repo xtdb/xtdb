@@ -17,7 +17,7 @@ class Count(
 ) : AggregateSpec.Factory {
     override val type: VectorType = I64
 
-    override fun build(al: BufferAllocator): AggregateSpec {
+    override fun build(al: BufferAllocator, args: RelationReader): AggregateSpec {
         val outVec = LongVector(al, colName, nullable = false)
         return object : AggregateSpec {
 

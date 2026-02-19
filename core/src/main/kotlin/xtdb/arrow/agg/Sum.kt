@@ -20,7 +20,7 @@ class Sum(
             leastUpperBound(listOf(fromType)) ?: throw Incorrect("Cannot compute SUM over type $fromType")
     }
 
-    override fun build(al: BufferAllocator) = object : AggregateSpec {
+    override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val outVec = al.openVector(colName, type)
 
         override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
