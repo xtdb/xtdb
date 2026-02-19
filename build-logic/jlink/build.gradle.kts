@@ -14,8 +14,8 @@ java {
 val jlinkModules = listOf(
     // from jdeps
     "java.base", "java.compiler", "java.desktop", "java.instrument",
-    "java.naming", "java.prefs", "java.security.jgss", "java.sql",
-    "jdk.jdi", "jdk.management", "jdk.unsupported",
+    "java.naming", "java.prefs", "java.security.jgss", "java.security.sasl",
+    "java.sql", "jdk.jdi", "jdk.management", "jdk.unsupported",
 
     // manual additions
     "java.logging",
