@@ -217,7 +217,6 @@
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-      (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
         (->LiveIndex allocator buffer-pool
                      block-cat table-cat

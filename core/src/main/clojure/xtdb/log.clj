@@ -254,10 +254,9 @@
                   :skip-txs (.getSkipTxs indexer-conf)
                   :enabled? (.getEnabled indexer-conf)))})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
-                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
   (when enabled?
-    (ReplicaLogProcessor. allocator meter-registry
+    (ReplicaLogProcessor. allocator
                           db-storage db-state
                           indexer compactor block-flush-duration (set skip-txs)
                           (or mode Database$Mode/READ_WRITE)

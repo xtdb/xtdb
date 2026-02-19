@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import org.apache.arrow.memory.RootAllocator
@@ -96,7 +95,7 @@ class ReplicaLogProcessorTest {
 
         RootAllocator().use { allocator ->
             val lp = ReplicaLogProcessor(
-                allocator, SimpleMeterRegistry(),
+                allocator,
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
                 mockk<Compactor.ForDatabase>(relaxed = true),
@@ -155,7 +154,7 @@ class ReplicaLogProcessorTest {
             )
 
             val lp = ReplicaLogProcessor(
-                allocator, SimpleMeterRegistry(),
+                allocator,
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
                 mockk<Compactor.ForDatabase>(relaxed = true),
