@@ -117,7 +117,7 @@ jobs:
 
       - name: Build shadowJar for bench
         if: steps.check-image.outputs.exists != 'true'
-        run: ./gradlew shadowJar
+        run: ./gradlew :modules:bench:shadowJar
 
       - name: Build and Push xtdb-bench Image
         if: steps.check-image.outputs.exists != 'true'
