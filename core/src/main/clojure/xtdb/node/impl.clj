@@ -42,13 +42,17 @@
 (defmethod ig/init-key :xtdb/config [_ cfg] cfg)
 
 (defmethod ig/expand-key :xtdb/allocator [k ^Xtdb$Config config]
-  {k {:allocator (.getAllocator config)}})
+  {k {:allocator (.getAllocator config)
+      :meter-registry (ig/ref ::metrics/registry)}})
 
-(defmethod ig/init-key :xtdb/allocator [_ {:keys [allocator]}]
+(defmethod ig/init-key :xtdb/allocator [_ {:keys [allocator meter-registry]}]
   (if allocator
     {:allocator allocator, :close? false}
-
-    {:allocator (RootAllocator. (long (* 0.9 (util/max-direct-memory))))
+    {:allocator (let [limit (long (* 0.9 (util/max-direct-memory)))]
+                  (if meter-registry
+                    (doto (RootAllocator. (metrics/root-allocator-listener meter-registry) limit)
+                      (->> (metrics/register-root-allocator-meters! meter-registry)))
+                    (RootAllocator. limit)))
      :close? true}))
 
 (defmethod ig/resolve-key :xtdb/allocator [_ {:keys [allocator]}]

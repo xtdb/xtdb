@@ -1,9 +1,10 @@
 (ns xtdb.metrics
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge MeterRegistry Tag Timer Timer$Sample)
+  (:import (io.micrometer.core.instrument Counter Gauge Gauge$Builder MeterRegistry Tag Timer Timer$Sample)
            (io.micrometer.core.instrument.binder MeterBinder)
            (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
            (io.micrometer.core.instrument.binder.system ProcessorMetrics)
@@ -54,6 +55,40 @@
 
 (defn add-allocator-gauge [reg meter-name ^BufferAllocator allocator]
   (add-gauge reg meter-name (fn [] (.getAllocatedMemory allocator)) {:unit "bytes"}))
+
+(defn- register-gauge! [^MeterRegistry reg, ^Gauge$Builder g]
+  (doto (.register g reg)
+    (as-> ^Gauge registered
+      (log/debug "Registered allocator gauge:" (.getId registered)))))
+
+(defn- allocator-gauge-builders [^BufferAllocator alloc, name]
+  (->> [(Gauge/builder (str name ".allocated") #(.getAllocatedMemory alloc))
+        (when (< (.getLimit alloc) Long/MAX_VALUE)
+          (Gauge/builder (str name ".limit") #(.getLimit alloc)))]
+       (remove nil?)
+       (map #(.baseUnit % "bytes"))))
+
+(defn register-root-allocator-meters! [^MeterRegistry reg, ^BufferAllocator alloc]
+  (doseq [^Gauge$Builder g (allocator-gauge-builders alloc "xtdb.allocator.root.memory")]
+    (register-gauge! reg g)))
+
+(defn root-allocator-listener
+  "Registers exhaustive and exclusive memory-usage meters for certain RootAllocator children.
+   Database allocator is expected to be named 'database/<db-name>'"
+  [^MeterRegistry reg]
+  ; An allocator listener with a naming convention for allocators is enough for now.
+  ; A BufferAllocator wrapper would enable explicit child allocator settings at their creation site.
+  (reify org.apache.arrow.memory.AllocationListener
+    (^void onChildAdded [_, ^BufferAllocator parent, ^BufferAllocator child]
+      (let [[parent-name db-name] (str/split (.getName parent) #"/" 2)
+            [child-name] (str/split (.getName child) #"/" 2)]
+        (when (or (and (instance? org.apache.arrow.memory.RootAllocator parent)
+                       (not= child-name "database"))
+                  (= parent-name "database"))
+          (doseq [g (allocator-gauge-builders child "xtdb.allocator.memory")]
+            (register-gauge! reg (-> g
+                                     (.tag "allocator" child-name)
+                                     (.tag "database" (or db-name ""))))))))))
 
 (defn start-span ^Span [^Tracer tracer ^String span-name {:keys [^Span parent-span attributes]}]
   (let [span-builder (if parent-span
