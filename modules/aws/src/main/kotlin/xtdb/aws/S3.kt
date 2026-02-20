@@ -78,6 +78,14 @@ class S3(
         client.close()
     }
 
+    private fun efficientAsyncRequestBody(buf: ByteBuffer): AsyncRequestBody =
+        buf
+            // prevents copying the buffer into a new heap ByteBuffer, as `fromByteBuffer` would do
+            .let(AsyncRequestBody::fromByteBufferUnsafe)
+            // makes the buffer non-replayable, again preventing heap copies for payload-signing or checksum calculations
+            // (couldn't achive this effect by S3 client configuration)
+            .let(AsyncRequestBody::fromPublisher)
+
     override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<CompletedPart>> = scope.future {
         val s3Key = prefix.resolve(k).toString()
         val initResp = client.createMultipartUpload {
@@ -100,7 +108,7 @@ class S3(
                     val contentLength = buf.remaining().toLong()
                     val partNum = idx + 1
 
-                    val partResp = client.uploadPart(AsyncRequestBody.fromByteBufferUnsafe(buf)) {
+                    val partResp = client.uploadPart(efficientAsyncRequestBody(buf)) {
                         it.bucket(bucket)
                         it.key(s3Key)
                         it.uploadId(uploadId)
@@ -179,7 +187,7 @@ class S3(
 
             val contentLength = buf.remaining().toLong()
 
-            client.putObject(AsyncRequestBody.fromByteBufferUnsafe(buf)) {
+            client.putObject(efficientAsyncRequestBody(buf)) {
                 it.bucket(bucket)
                 it.key(s3Key)
                 it.contentLength(contentLength)
