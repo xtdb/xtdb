@@ -111,10 +111,18 @@ interface Log : AutoCloseable {
                                 }
 
                                 MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
+                                    val dbOp = when (it.dbOpCase) {
+                                        xtdb.log.proto.ResolvedTx.DbOpCase.ATTACH_DATABASE ->
+                                            it.attachDatabase.let { a -> DbOp.Attach(a.dbName, Database.Config.fromProto(a.config)) }
+                                        xtdb.log.proto.ResolvedTx.DbOpCase.DETACH_DATABASE ->
+                                            DbOp.Detach(it.detachDatabase.dbName)
+                                        else -> null
+                                    }
                                     ResolvedTx(
                                         it.txId, it.systemTimeMicros, it.committed,
                                         it.error.toByteArray(),
-                                        it.tableDataMap.mapValues { (_, v) -> v.toByteArray() }
+                                        it.tableDataMap.mapValues { (_, v) -> v.toByteArray() },
+                                        dbOp
                                     )
                                 }
 
@@ -169,12 +177,18 @@ interface Log : AutoCloseable {
             }
         }
 
+        sealed interface DbOp {
+            data class Attach(val dbName: DatabaseName, val config: Database.Config) : DbOp
+            data class Detach(val dbName: DatabaseName) : DbOp
+        }
+
         data class ResolvedTx(
             val txId: MessageId,
             val systemTimeMicros: Long,
             val committed: Boolean,
             val error: ByteArray,
-            val tableData: Map<String, ByteArray>
+            val tableData: Map<String, ByteArray>,
+            val dbOp: DbOp? = null
         ) : ProtobufMessage() {
             override fun toLogMessage() = logMessage {
                 resolvedTx = resolvedTx {
@@ -184,6 +198,16 @@ interface Log : AutoCloseable {
                     this.error = com.google.protobuf.ByteString.copyFrom(this@ResolvedTx.error)
                     this@ResolvedTx.tableData.forEach { (k, v) ->
                         this.tableData[k] = com.google.protobuf.ByteString.copyFrom(v)
+                    }
+                    when (val op = this@ResolvedTx.dbOp) {
+                        is DbOp.Attach -> attachDatabase = attachDatabase {
+                            this.dbName = op.dbName
+                            this.config = op.config.serializedConfig
+                        }
+                        is DbOp.Detach -> detachDatabase = detachDatabase {
+                            this.dbName = op.dbName
+                        }
+                        null -> {}
                     }
                 }
             }

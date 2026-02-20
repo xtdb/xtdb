@@ -580,7 +580,8 @@
                             (time/instant->micros (.getSystemTime tx-key))
                             committed?
                             (if error (serde/write-transit error) (byte-array 0))
-                            table-data))
+                            table-data
+                            nil))
 
 (defn- commit [tx-key ^LiveIndex$Tx live-idx-tx committed? error]
   (let [table-data (build-table-data live-idx-tx)]

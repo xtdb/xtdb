@@ -188,8 +188,10 @@ class SourceLogProcessor(
                             null
                         } catch (e: Anomaly.Caller) { e }
 
+                        val dbOp = if (error == null) Message.DbOp.Attach(msg.dbName, msg.config) else null
                         val resolvedTx = indexer.addTxRow(TransactionKey(msgId, record.logTimestamp), error)
-                        listOf(record, Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
+                            .copy(dbOp = dbOp)
+                        listOf(Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
                     }
 
                     is Message.DetachDatabase -> {
@@ -206,8 +208,10 @@ class SourceLogProcessor(
                             }
                         } catch (e: Anomaly.Caller) { e }
 
+                        val dbOp = if (error == null) Message.DbOp.Detach(msg.dbName) else null
                         val resolvedTx = indexer.addTxRow(TransactionKey(msgId, record.logTimestamp), error)
-                        listOf(record, Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
+                            .copy(dbOp = dbOp)
+                        listOf(Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
                     }
 
                     is Message.TriesAdded -> {

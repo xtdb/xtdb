@@ -200,8 +200,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
 
                 val res = processRecord(msgId, record)
 
-                // Attach/Detach records share a msgId with the ResolvedTx that follows them
-                // (the source emits both); we only notify watchers for the ResolvedTx.
+                // Source AttachDatabase/DetachDatabase records don't notify watchers —
+                // their paired ResolvedTx (which follows) will.
                 val msg = record.message
                 if (msg !is Message.AttachDatabase && msg !is Message.DetachDatabase)
                     watchers.notify(msgId, res)
@@ -237,10 +237,6 @@ class ReplicaLogProcessor @JvmOverloads constructor(
         LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
         return when (val msg = record.message) {
-                is Message.Tx -> {
-                    throw IllegalStateException("Message.Tx should be handled by SourceLogProcessor, not ReplicaLogProcessor")
-                }
-
                 is Message.FlushBlock -> {
                     // Source has already finished the block and written it to storage
                     // by the time we see this message (single-threaded forwarding).
@@ -297,36 +293,31 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     }
 
                     val systemTime = InstantUtil.fromMicros(msg.systemTimeMicros)
-                    if (msg.committed)
+
+                    if (msg.committed) {
+                        // Handle attach/detach catalog side-effects encoded in the ResolvedTx
+                        when (val dbOp = msg.dbOp) {
+                            is Message.DbOp.Attach -> {
+                                secondaryDatabases[dbOp.dbName] = dbOp.config.serializedConfig
+                                dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                            }
+                            is Message.DbOp.Detach -> {
+                                secondaryDatabases.remove(dbOp.dbName)
+                                dbCatalog!!.detach(dbOp.dbName)
+                            }
+                            null -> {}
+                        }
+
                         TransactionCommitted(msg.txId, systemTime)
-                    else
+                    } else {
                         TransactionAborted(
                             msg.txId, systemTime,
                             readTransit(msg.error, MSGPACK) as Throwable
                         )
-                }
-
-                // Source resolves attach/detach as a ResolvedTx that follows this record,
-                // so we only handle catalog side-effects here — watchers are notified
-                // by the subsequent ResolvedTx, not by these records.
-
-                is Message.AttachDatabase -> {
-                    require(dbState.name == "xtdb") { "attach-db on non-primary ${dbState.name}" }
-                    if (msg.dbName != "xtdb" && msg.dbName !in secondaryDatabases) {
-                        secondaryDatabases[msg.dbName] = msg.config.serializedConfig
-                        dbCatalog!!.attach(msg.dbName, msg.config)
                     }
-                    null
                 }
 
-                is Message.DetachDatabase -> {
-                    require(dbState.name == "xtdb") { "detach-db on non-primary ${dbState.name}" }
-                    if (msg.dbName != "xtdb" && msg.dbName in secondaryDatabases) {
-                        secondaryDatabases.remove(msg.dbName)
-                        dbCatalog!!.detach(msg.dbName)
-                    }
-                    null
-                }
+                is Message.Tx, is Message.AttachDatabase, is Message.DetachDatabase -> null
             }.also {
                 latestProcessedMsgId = msgId
                 LOG.debug("Processed message $msgId")

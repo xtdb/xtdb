@@ -74,6 +74,11 @@ message ResolvedTx {
     bool committed = 3;
     bytes error = 4;
     map<string, bytes> table_data = 5;
+
+    oneof db_op {
+        AttachDatabase attach_database = 6;
+        DetachDatabase detach_database = 7;
+    }
 }
 
 message BlockUploaded {
