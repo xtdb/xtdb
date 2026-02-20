@@ -480,8 +480,6 @@
                                         (.maximumSize 4096)
                                         (.build))))]
 
-    (some-> metrics-registry (metrics/add-allocator-gauge "query_source.allocator.allocated_memory" allocator))
-
     (map->QuerySource deps)))
 
 (defmethod ig/init-key ::query-source [_ deps]

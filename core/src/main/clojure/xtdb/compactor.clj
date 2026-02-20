@@ -17,7 +17,7 @@
 (def ^:dynamic *page-size* 1024)
 
 (defn- open-compactor [{:keys [metrics-registry threads]}]
-  (Compactor$Impl. (Compactor$Driver/real metrics-registry *page-size* *recency-partition*)
+  (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition*)
                    metrics-registry
                    (jc/->JobCalculator)
                    *ignore-signal-block?* threads))

@@ -473,8 +473,7 @@
     (t/is (= #{:tags :name :value}
              (set (keys (first res)))))
     (t/is (empty? (set/difference #{"system.cpu.count"
-                                    "live-index.allocator.allocated_memory"
-                                    "buffer-pool.allocator.allocated_memory"
+                                    "xtdb.allocator.memory.allocated"
                                     "jvm.memory.used"
                                     "node.tx.latestSubmittedMsgId"}
                                   (into #{} (map :name) res)))

@@ -55,7 +55,6 @@ private val LOG = ReplicaLogProcessor::class.logger
  */
 class ReplicaLogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
-    meterRegistry: MeterRegistry,
     private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
@@ -112,13 +111,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
 
     override val ingestionError get() = watchers.exception
 
-    private val allocator =
-        allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
-            .also { allocator ->
-                Gauge.builder("watcher.allocator.allocated_memory", allocator) { it.allocatedMemory.toDouble() }
-                    .baseUnit("bytes")
-                    .register(meterRegistry)
-            }
+    private val allocator = allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
 
     override fun close() {
         allocator.close()

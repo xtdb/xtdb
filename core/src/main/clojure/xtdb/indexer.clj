@@ -705,9 +705,6 @@
       (openForDatabase [_ allocator db-storage db-state crash-logger]
         (let [db-name (.getName db-state)]
           (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
-            ;; TODO add db-name to allocator gauge
-            (metrics/add-allocator-gauge metrics-registry "indexer.allocator.allocated_memory" allocator)
-
             (->IndexerForDatabase allocator (:node-id config) q-src
                                   db-name db-storage db-state
                                   (.getLiveIndex db-state) (.getTableCatalog db-state)
