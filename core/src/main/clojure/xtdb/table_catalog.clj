@@ -100,5 +100,6 @@
            opts)})
 
 (defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
-  (doto (TableCatalog. block-cat buffer-pool)
-    (.refresh)))
+  (let [block-idx (.getCurrentBlockIndex block-cat)]
+    (doto (TableCatalog. block-cat buffer-pool)
+      (.refresh (or block-idx -1)))))

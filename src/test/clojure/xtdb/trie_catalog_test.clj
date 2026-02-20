@@ -371,7 +371,7 @@
 
 (defn trie-catalog-init [table->table-block]
   (TrieCatalog. nil nil
-                (cat/load-tries table->table-block cat/*file-size-target*)
+                (volatile! {:block-idx nil, :table-cats (cat/load-tries table->table-block cat/*file-size-target*)})
                 cat/*file-size-target*))
 
 (t/deftest test-trie-catalog-init-old-and-new-block-files-mixed-4664
@@ -529,7 +529,7 @@
                        ["l03-r20250101-p3-b09"]))))
 
 (t/deftest test-dry-trie-catalog-gc
-  (let [cat (TrieCatalog. nil nil (ConcurrentHashMap.) 20)] ;file-size-target
+  (let [cat (TrieCatalog. nil nil (volatile! {:block-idx nil, :table-cats (ConcurrentHashMap.)}) 20)] ;file-size-target
     (letfn [(add-tries [tries inst]
               (.addTries cat #xt/table foo
                          (map #(apply trie/->trie-details #xt/table foo %) tries)
@@ -726,7 +726,7 @@
               :tries [{:trie-key "l03-r20200101-p0-b07" :block-idx 7}]}]))))
 
 (t/deftest test-delete-garbage-l1-l2-with-live-l3
-  (let [cat (TrieCatalog. nil nil (ConcurrentHashMap.) 20)
+  (let [cat (TrieCatalog. nil nil (volatile! {:block-idx nil, :table-cats (ConcurrentHashMap.)}) 20)
         table #xt/table foo
         add-tries (fn [tries inst]
                     (.addTries cat table

@@ -343,8 +343,8 @@ rule FollowerProcessesBlockEnd {
     ensures:
         -- The reader doesn't write tries — it refreshes catalogs from what the writer wrote.
         block_catalog.refresh(block_index)
-        table_catalog.refresh()
-        trie_cat/trie_catalog.refresh()
+        table_catalog.refresh(block_index)
+        trie_cat/trie_catalog.refresh(block_index)
         live_index.nextBlock()
 
         -- Replay buffered messages into the new live index.

@@ -254,15 +254,14 @@ class ReplicaLogProcessor @JvmOverloads constructor(
 
         val block = Block.parseFrom(bufferPool.getByteArray(blockFile.key))
         blockCatalog.refresh(block)
-        tableCatalog.refresh()
-        trieCatalog.refresh()
+        tableCatalog.refresh(blockIdx)
+        trieCatalog.refresh(blockIdx)
         liveIndex.nextBlock()
         compactor.signalBlock()
 
         pendingBlockIdx = null
         LOG.debug("transitioned to block 'b${blockIdx.asLexHex}'")
     }
-
 
 
     fun ingestionStopped(msgId: MessageId, e: Throwable) {

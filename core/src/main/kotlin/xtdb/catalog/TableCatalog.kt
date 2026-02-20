@@ -29,29 +29,39 @@ class TableCatalog(
         val hlls: Map<ColumnName, HLL>
     )
 
-    @Volatile
-    private var tables: Map<TableRef, TableMeta> = emptyMap()
+    private data class State(
+        val blockIdx: Long?,
+        val tables: Map<TableRef, TableMeta>
+    )
 
-    fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
+    @Volatile
+    private var state = State(null, emptyMap())
+
+    fun rowCount(table: TableRef): Long? = state.tables[table]?.rowCount
 
     fun getType(table: TableRef, columnName: ColumnName): VectorType? =
-        tables[table]?.vecTypes?.get(columnName)
+        state.tables[table]?.vecTypes?.get(columnName)
 
     fun getTypes(table: TableRef): Map<ColumnName, VectorType>? =
-        tables[table]?.vecTypes
+        state.tables[table]?.vecTypes
 
     val types: Map<TableRef, Map<ColumnName, VectorType>>
-        get() = tables.mapValues { (_, meta) -> meta.vecTypes }
+        get() = state.tables.mapValues { (_, meta) -> meta.vecTypes }
 
-    fun refresh() {
-        tables = loadTablesFromStorage(bufferPool, blockCatalog)
+    fun refresh(blockIndex: Long) {
+        if (state.blockIdx?.let { blockIndex <= it } ?: false) return
+
+        state = State(
+            blockIdx = blockIndex,
+            tables = loadTablesFromStorage(bufferPool, blockCatalog)
+        )
     }
 
     fun finishBlock(
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
-        val oldTables = tables
+        val oldTables = state.tables
 
         val deltaByTable = tableMetadata.mapValues { (_, fb) ->
             TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas)
@@ -60,7 +70,10 @@ class TableCatalog(
         val allTableRefs = oldTables.keys + deltaByTable.keys
         val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
 
-        tables = newTables
+        state = State(
+            blockIdx = blockCatalog.currentBlockIndex,
+            tables = newTables
+        )
 
         return newTables.mapValues { (table, meta) ->
             buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)

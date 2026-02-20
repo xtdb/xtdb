@@ -52,6 +52,7 @@ class BlockCatalog(
     }
 
     fun refresh(block: Block?) {
+        if (block != null && block.blockIndex == currentBlockIndex) return
         latestBlock = block
     }
 

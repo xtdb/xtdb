@@ -207,8 +207,9 @@
                          (catch Exception _ nil))
           refresh! (fn []
                      (.refresh block-cat (BlockCatalog/getLatestBlock buffer-pool))
-                     (.refresh table-cat)
-                     (.refresh trie-cat))
+                     (let [block-idx (or (.getCurrentBlockIndex block-cat) -1)]
+                       (.refresh table-cat block-idx)
+                       (.refresh trie-cat block-idx)))
           last-tx-key (when (or last-message (.getInitialScan tx-source-conf))
                         (backfill-from-l0! allocator buffer-pool output-log
                                            db-name encode-fn trie-cat

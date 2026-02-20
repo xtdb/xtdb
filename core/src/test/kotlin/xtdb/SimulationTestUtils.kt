@@ -11,6 +11,7 @@ import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.requiringResolve
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 
 class SimulationTestUtils {
     companion object {
@@ -37,8 +38,19 @@ class SimulationTestUtils {
         fun createJobCalculator(): Compactor.JobCalculator =
             createJobCalculatorFn.invoke() as Compactor.JobCalculator
 
-        fun createTrieCatalog(): TrieCatalog =
-            createTrieCatalogFn.invoke(null, null, mutableMapOf<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
+        private val volatileFn = requiringResolve("clojure.core/volatile!")
+
+        fun createTrieCatalog(): TrieCatalog {
+            val state = volatileFn.invoke(
+                clojure.lang.PersistentArrayMap.create(
+                    mapOf(
+                        clojure.lang.Keyword.intern("block-idx") to null,
+                        clojure.lang.Keyword.intern("table-cats") to ConcurrentHashMap<Any, Any>()
+                    )
+                )
+            )
+            return createTrieCatalogFn.invoke(null, null, state, 100 * 1024 * 1024) as TrieCatalog
+        }
 
         val L0TrieKeys = sequence {
             var blockIndex = 0

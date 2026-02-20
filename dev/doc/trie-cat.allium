@@ -347,10 +347,10 @@ rule mark_block_index_live {
 rule FollowerRefreshes {
     -- Read-only nodes refresh the catalog from the object store
     -- when a BlockUploadedMessage arrives (see db.allium: FollowerProcessesBlockEnd).
-    when: FollowerRefreshRequested()
+    when: FollowerRefreshRequested(block_index)
 
     ensures:
-        trie_catalog.refresh()
+        trie_catalog.refresh(block_index)
 }
 
 ------------------------------------------------------------
