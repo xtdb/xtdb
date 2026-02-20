@@ -17,12 +17,21 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * We use conventional commits for commit messages. Common prefixes: `feat:`, `fix:`, `refactor:`, `tidy:`, `build:`, `test:`, `dev:`, `ai:`.
   * Use sub-tags/scopes in parentheses where relevant, e.g. `fix(ee):`, `feat(sql):`, `refactor(logical-plan):`.
   * Indicate breaking changes with `!`, e.g. `tidy!:`.
-* If you need to create git worktrees, you MUST create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`). This allows developers to explicitly push to their own forks.
-  * After creating a worktree, you MUST `cd` into it before performing any further operations.
-  * Check whether you're in a worktree when you start up - if you are, you MUST ensure that any reads and updates are done within that worktree.
-    If you are in a worktree, you MUST NOT perform any operations in any other worktree.
+  * You MUST use the commit skill for writing commit messages.
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
+
+## Git worktrees
+
+**We make heavy use of git worktrees for parallel agents.**
+
+* At the start of a session, you MUST check to see whether you're in a worktree.
+* If so: 
+  * you, nor any sub-agents, MUST NOT try to read/write files in any other worktree.
+  * you, nor any sub-agents, MUST NOT try to execute processes in any other worktree.
+  * you have access to the full git history in the worktree - you MUST NOT try to run any git commands in other worktrees.
+* If you're asked to create a worktree, you MUST create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`).
+  This allows developers to explicitly push to their own forks.
 
 ## Definition of Done (Session Completion)
 
@@ -37,6 +46,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
   You can assume that all tests are passing on `main`.
 * There MUST NOT be any reflection or boxed math warnings.
 * Verify: all changes committed AND pushed
+  You MUST use the commit skill to create commit messages.
 * Hand off: provide context for next session
 
 For user-visible features:
@@ -45,6 +55,7 @@ For user-visible features:
 ## Style
 
 You MUST use sentence-per-line in documentation files and commit messages - this makes diffs cleaner and easier to review.
+You MUST use the commit skill to create commit messages.
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
 
