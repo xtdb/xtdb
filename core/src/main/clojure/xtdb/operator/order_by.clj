@@ -85,9 +85,11 @@
                   col-comparator (expr.comp/->comparator read-col1 read-col2 null-ordering)
 
                   ^Comparator
-                  comparator (cond-> ^Comparator (fn [left right]
-                                                   (.applyAsInt col-comparator left right))
-                               (= :desc direction) (.reversed))]
+                  comparator (if (= :desc direction)
+                               (fn [left right]
+                                 (- (.applyAsInt col-comparator left right)))
+                               (fn [left right]
+                                 (.applyAsInt col-comparator left right)))]
               (if acc
                 (.thenComparing acc comparator)
                 comparator)))
