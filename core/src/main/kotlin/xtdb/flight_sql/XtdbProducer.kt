@@ -9,13 +9,18 @@ import com.google.protobuf.ByteString
 import com.google.protobuf.Message
 import org.apache.arrow.flight.*
 import org.apache.arrow.flight.FlightProducer.*
+import org.apache.arrow.flight.sql.FlightSqlProducer
 import org.apache.arrow.flight.sql.NoOpFlightSqlProducer
 import org.apache.arrow.flight.sql.impl.FlightSql.*
 import org.apache.arrow.flight.sql.impl.FlightSql.ActionEndTransactionRequest.EndTransaction
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.UInt4Vector
+import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
+import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
@@ -389,6 +394,199 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ps?.cursor?.close()
 
         listener.onCompleted()
+    }
+
+    // -- Metadata endpoints --
+
+    private fun metadataFlightInfo(cmd: Message, schema: Schema, descriptor: FlightDescriptor): FlightInfo {
+        val ticket = Ticket(ProtoAny.pack(cmd).toByteArray())
+        return FlightInfo(schema, descriptor, listOf(FlightEndpoint(ticket)), -1, -1)
+    }
+
+    private fun streamArrowReader(reader: ArrowReader, listener: ServerStreamListener) {
+        reader.use { rdr ->
+            VectorSchemaRoot.create(rdr.vectorSchemaRoot.schema, allocator).use { vsr ->
+                val loader = VectorLoader(vsr)
+                listener.start(vsr)
+
+                while (rdr.loadNextBatch()) {
+                    VectorUnloader(rdr.vectorSchemaRoot).recordBatch.use { rb ->
+                        loader.load(rb)
+                        listener.putNext()
+                    }
+                }
+
+                listener.completed()
+            }
+        }
+    }
+
+    override fun getFlightInfoTableTypes(
+        request: CommandGetTableTypes, ctx: CallContext?, descriptor: FlightDescriptor
+    ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_TABLE_TYPES_SCHEMA, descriptor)
+
+    override fun getStreamTableTypes(ctx: CallContext?, listener: ServerStreamListener) {
+        streamArrowReader(defaultConnection.getTableTypes(), listener)
+    }
+
+    override fun getFlightInfoSqlInfo(
+        request: CommandGetSqlInfo, ctx: CallContext?, descriptor: FlightDescriptor
+    ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA, descriptor)
+
+    override fun getStreamSqlInfo(
+        command: CommandGetSqlInfo, ctx: CallContext?, listener: ServerStreamListener
+    ) {
+        val requestedCodes = command.infoList.toSet()
+
+        singleBatchStream(FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA, listener) { root ->
+            val infoNameVec = root.getVector("info_name") as UInt4Vector
+            val valueVec = root.getVector("value") as DenseUnionVector
+            val stringVec = valueVec.getVarCharVector(0)
+
+            var idx = 0
+            fun addString(code: Int, value: String) {
+                if (requestedCodes.isNotEmpty() && code !in requestedCodes) return
+                infoNameVec.setSafe(idx, code)
+                valueVec.setTypeId(idx, 0)
+                valueVec.offsetBuffer.setInt(idx.toLong() * DenseUnionVector.OFFSET_WIDTH, idx)
+                stringVec.setSafe(idx, value.toByteArray())
+                idx++
+            }
+
+            // FlightSQL SqlInfo codes
+            addString(0, "XTDB")     // FLIGHT_SQL_SERVER_NAME
+            addString(1, "dev")      // FLIGHT_SQL_SERVER_VERSION
+
+            valueVec.valueCount = idx
+            root.rowCount = idx
+        }
+    }
+
+    override fun getFlightInfoCatalogs(
+        request: CommandGetCatalogs, ctx: CallContext?, descriptor: FlightDescriptor
+    ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, descriptor)
+
+    override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) {
+        singleBatchStream(FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, listener) { root ->
+            val vec = root.getVector("catalog_name") as VarCharVector
+            vec.setSafe(0, "xtdb".toByteArray())
+            root.rowCount = 1
+        }
+    }
+
+    override fun getFlightInfoSchemas(
+        request: CommandGetDbSchemas, ctx: CallContext?, descriptor: FlightDescriptor
+    ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, descriptor)
+
+    override fun getStreamSchemas(
+        command: CommandGetDbSchemas, ctx: CallContext?, listener: ServerStreamListener
+    ) {
+        val catalogFilter = if (command.hasCatalog()) command.catalog else null
+        val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
+
+        if (catalogFilter != null && catalogFilter != "xtdb") {
+            singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
+                root.rowCount = 0
+            }
+            return
+        }
+
+        val sql = buildString {
+            append("SELECT DISTINCT table_schema FROM information_schema.tables")
+            schemaFilter?.let { append(" WHERE table_schema LIKE '${it.replace("'", "''")}'") }
+            append(" ORDER BY table_schema")
+        }
+
+        defaultConnection.openSqlQuery(sql).use { cursor ->
+            singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
+                val catalogVec = root.getVector("catalog_name") as VarCharVector
+                val schemaVec = root.getVector("db_schema_name") as VarCharVector
+                var idx = 0
+                cursor.forEachRemaining { rel ->
+                    for (i in 0 until rel.rowCount) {
+                        catalogVec.setSafe(idx, "xtdb".toByteArray())
+                        schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
+                        idx++
+                    }
+                }
+                root.rowCount = idx
+            }
+        }
+    }
+
+    override fun getFlightInfoTables(
+        request: CommandGetTables, ctx: CallContext?, descriptor: FlightDescriptor
+    ): FlightInfo {
+        val schema = if (request.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
+        else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
+        return metadataFlightInfo(request, schema, descriptor)
+    }
+
+    override fun getStreamTables(
+        command: CommandGetTables, ctx: CallContext?, listener: ServerStreamListener
+    ) {
+        val catalogFilter = if (command.hasCatalog()) command.catalog else null
+        val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
+        val tableFilter = if (command.hasTableNameFilterPattern()) command.tableNameFilterPattern else null
+        val typeFilters = command.tableTypesList.takeIf { it.isNotEmpty() }
+
+        if (catalogFilter != null && catalogFilter != "xtdb") {
+            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
+            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
+            singleBatchStream(schema, listener) { root -> root.rowCount = 0 }
+            return
+        }
+
+        // XTDB only has TABLE type
+        if (typeFilters != null && "TABLE" !in typeFilters) {
+            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
+            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
+            singleBatchStream(schema, listener) { root -> root.rowCount = 0 }
+            return
+        }
+
+        val conditions = mutableListOf<String>()
+        schemaFilter?.let { conditions.add("table_schema LIKE '${it.replace("'", "''")}'") }
+        tableFilter?.let { conditions.add("table_name LIKE '${it.replace("'", "''")}'") }
+        val where = if (conditions.isNotEmpty()) "WHERE ${conditions.joinToString(" AND ")}" else ""
+
+        val sql = "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
+
+        val cursor = defaultConnection.openSqlQuery(sql)
+        cursor.use {
+            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
+            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
+
+            singleBatchStream(schema, listener) { root ->
+                val catalogVec = root.getVector("catalog_name") as VarCharVector
+                val schemaVec = root.getVector("db_schema_name") as VarCharVector
+                val tableVec = root.getVector("table_name") as VarCharVector
+                val typeVec = root.getVector("table_type") as VarCharVector
+
+                var idx = 0
+                cursor.forEachRemaining { rel ->
+                    for (i in 0 until rel.rowCount) {
+                        catalogVec.setSafe(idx, "xtdb".toByteArray())
+                        schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
+                        tableVec.setSafe(idx, rel.get("table_name").getObject(i).toString().toByteArray())
+                        typeVec.setSafe(idx, "TABLE".toByteArray())
+                        // TODO: include_schema support (table_schema binary column)
+                        idx++
+                    }
+                }
+                root.rowCount = idx
+            }
+        }
+    }
+
+    private fun singleBatchStream(schema: Schema, listener: ServerStreamListener, populate: (VectorSchemaRoot) -> Unit) {
+        VectorSchemaRoot.create(schema, allocator).use { root ->
+            root.allocateNew()
+            populate(root)
+            listener.start(root)
+            listener.putNext()
+            listener.completed()
+        }
     }
 
     override fun beginTransaction(

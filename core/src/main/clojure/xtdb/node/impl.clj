@@ -28,6 +28,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
+           xtdb.table.TableRef
            (xtdb.query IQuerySource PreparedQuery)
            (xtdb.tx TxWriter)
            (xtdb.util MsgIdUtil)))
@@ -130,7 +131,11 @@
 
        (prepareSql [_ sql]
          (let [query-opts (-> {} (with-query-opts-defaults this-node))]
-           (xtp/prepare-sql this-node sql query-opts))))))
+           (xtp/prepare-sql this-node sql query-opts)))
+
+       (getColumnTypes [_ table]
+         (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
+           (.getColumnTypes db table))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

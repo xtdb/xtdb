@@ -19,7 +19,10 @@ import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.applyStorage
 import xtdb.catalog.BlockCatalog
+import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
+import xtdb.table.TableRef
+import xtdb.trie.ColumnName
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
@@ -63,6 +66,8 @@ data class Database(
 
     val blockCatalog: BlockCatalog get() = queryState.blockCatalog
     val tableCatalog: TableCatalog get() = queryState.tableCatalog
+
+    fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? = tableCatalog.getTypes(table)
     val trieCatalog: TrieCatalog get() = queryState.trieCatalog
     val liveIndex: LiveIndex get() = queryState.liveIndex
 
