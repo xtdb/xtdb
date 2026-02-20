@@ -59,7 +59,6 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val liveIndex: LiveIndex,
     private val compactor: Compactor.ForDatabase,
     private val skipTxs: Set<MessageId>,
-    private val mode: Database.Mode = Database.Mode.READ_WRITE,
     private val maxBufferedRecords: Int = 1024,
     private val dbCatalog: Database.Catalog? = null,
     private val txSource: Indexer.TxSource? = null
@@ -70,8 +69,6 @@ class ReplicaLogProcessor @JvmOverloads constructor(
             "dbCatalog must be provided iff database is 'xtdb'"
         }
     }
-
-    private val readOnly: Boolean get() = mode == Database.Mode.READ_ONLY
 
     private val log = dbStorage.sourceLog
     private val epoch = log.epoch
@@ -131,7 +128,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                 if (pendingBlockIdx != null) {
                     val msg = record.message
                     if (msg is Message.BlockUploaded && msg.blockIndex == pendingBlockIdx && msg.storageEpoch == bufferPool.epoch) {
-                        doReadOnlyBlockTransition()
+                        doBlockTransition()
 
                         // Splice buffered records to the front of the queue so they're
                         // processed through the same pendingBlockIdx gate as every other record.
@@ -142,7 +139,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                         continue
                     } else {
                         if (bufferedRecords.size >= maxBufferedRecords)
-                            throw Fault("read-only buffer overflow: buffered $maxBufferedRecords records waiting for BlockUploaded(b${pendingBlockIdx!!.asLexHex})")
+                            throw Fault("buffer overflow: buffered $maxBufferedRecords records waiting for BlockUploaded(b${pendingBlockIdx!!.asLexHex})")
 
                         bufferedRecords.add(record)
                         continue
@@ -151,11 +148,13 @@ class ReplicaLogProcessor @JvmOverloads constructor(
 
                 val res = processRecord(msgId, record)
 
-                // Source AttachDatabase/DetachDatabase records don't notify watchers —
-                // their paired ResolvedTx (which follows) will.
-                val msg = record.message
-                if (msg !is Message.AttachDatabase && msg !is Message.DetachDatabase)
-                    watchers.notify(msgId, res)
+                when (record.message) {
+                    is Message.ResolvedTx, is Message.BlockUploaded, is Message.TriesAdded ->
+                        watchers.notify(msgId, res)
+                    // Other messages (Tx, AttachDatabase, DetachDatabase, FlushBlock) don't notify —
+                    // the source resolves them into messages that do.
+                    else -> {}
+                }
             } catch (e: ClosedByInterruptException) {
                 watchers.notify(msgId, e)
                 throw CancellationException(e)
@@ -195,12 +194,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     // flush-block! + sync-node working (block transition is inline).
                     val expectedBlockIdx = msg.expectedBlockIdx
                     if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                        if (readOnly) {
-                            pendingBlockIdx = expectedBlockIdx + 1
-                            LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
-                        } else {
-                            refreshBlockFromStorage()
-                        }
+                        pendingBlockIdx = expectedBlockIdx + 1
+                        LOG.debug("waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
                     }
                     null
                 }
@@ -216,16 +211,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     null
                 }
 
-                is Message.BlockUploaded -> {
-                    // Read-only nodes handle this in the buffering logic above.
-                    // Writer nodes: refresh from storage when the source signals a block is done,
-                    // but only if we haven't already transitioned (e.g. via isFull() auto-detection).
-                    if (!readOnly && msg.storageEpoch == bufferPool.epoch
-                        && msg.blockIndex == (blockCatalog.currentBlockIndex ?: -1) + 1) {
-                        refreshBlockFromStorage()
-                    }
-                    null
-                }
+                // Block transitions are handled by the pending-block gate in processRecords.
+                is Message.BlockUploaded -> null
 
                 is Message.ResolvedTx -> {
                     liveIndex.importTx(msg)
@@ -233,14 +220,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     txSource?.onCommit(msg)
 
                     if (liveIndex.isFull()) {
-                        if (readOnly) {
-                            pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-                            LOG.debug("read-only mode: waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
-                        } else {
-                            // Block boundaries are deterministic — the source has already written
-                            // the block to storage synchronously before forwarding records to us.
-                            refreshBlockFromStorage()
-                        }
+                        pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+                        LOG.debug("waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
                     }
 
                     val systemTime = InstantUtil.fromMicros(msg.systemTimeMicros)
@@ -275,41 +256,26 @@ class ReplicaLogProcessor @JvmOverloads constructor(
             }
     }
 
-    private fun doReadOnlyBlockTransition() {
+    private fun doBlockTransition() {
         val blockIdx = pendingBlockIdx!!
-        LOG.debug("read-only mode: received BlockUploaded for block 'b${blockIdx.asLexHex}', transitioning...")
+        LOG.debug("received BlockUploaded for block 'b${blockIdx.asLexHex}', transitioning...")
 
         val blockFile = bufferPool.allBlockFiles
             .find { BlockCatalog.blockFilePath(blockIdx) == it.key }
-            ?: throw Fault("read-only mode: block file for 'b${blockIdx.asLexHex}' not found in object store")
+            ?: throw Fault("block file for 'b${blockIdx.asLexHex}' not found in object store")
 
         val block = Block.parseFrom(bufferPool.getByteArray(blockFile.key))
         blockCatalog.refresh(block)
         tableCatalog.refresh()
         trieCatalog.refresh()
         liveIndex.nextBlock()
+        compactor.signalBlock()
 
         pendingBlockIdx = null
-        LOG.debug("read-only mode: transitioned to block 'b${blockIdx.asLexHex}'")
+        LOG.debug("transitioned to block 'b${blockIdx.asLexHex}'")
     }
 
-    /**
-     * Refreshes replica catalogs from the block file in storage (written by the source),
-     * then clears the replica's live index. Similar to the read-only block transition
-     * but without buffering — the source writes synchronously before forwarding records.
-     */
-    private fun refreshBlockFromStorage() {
-        val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-        LOG.debug("refreshing block from storage: 'b${blockIdx.asLexHex}'...")
 
-        val block = Block.parseFrom(bufferPool.getByteArray(BlockCatalog.blockFilePath(blockIdx)))
-        blockCatalog.refresh(block)
-        tableCatalog.refresh()
-        trieCatalog.refresh()
-        liveIndex.nextBlock()
-        compactor.signalBlock()
-        LOG.debug("refreshed block: 'b${blockIdx.asLexHex}'.")
-    }
 
     fun ingestionStopped(msgId: MessageId, e: Throwable) {
         watchers.notify(msgId, e)

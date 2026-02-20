@@ -14,7 +14,6 @@ import xtdb.block.proto.block
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
-import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.storage.BufferPool
@@ -101,7 +100,6 @@ class ReplicaLogProcessorTest {
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 emptySet(),
-                Database.Mode.READ_ONLY,
                 maxBufferedRecords = 2
             )
 
@@ -160,7 +158,6 @@ class ReplicaLogProcessorTest {
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 emptySet(),
-                Database.Mode.READ_ONLY,
             )
 
             val now = Instant.now()
