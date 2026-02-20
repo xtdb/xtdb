@@ -487,7 +487,7 @@
               table-catalog (.getTableCatalog db-state)
               trie-catalog (.getTrieCatalog db-state)
               schema-info (-> (merge-with merge
-                                          (.getTypes table-catalog)
+                                          (update-vals (into {} (.getTypes table-catalog)) #(into {} %))
                                           (some-> (.getLiveIndex ^Snapshot snap)
                                                   (.getAllColumnTypes)))
                               (merge meta-table-schemas)

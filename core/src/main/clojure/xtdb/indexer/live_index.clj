@@ -43,7 +43,7 @@
 
 (defn ->schema [^LiveIndex$Snapshot live-index-snap, ^TableCatalog table-catalog]
   (merge-with set/union
-              (update-vals (.getTypes table-catalog)
+              (update-vals (into {} (.getTypes table-catalog))
                            (comp set keys))
               (update-vals (some-> live-index-snap (.getAllColumnTypes))
                            (comp set keys))))
