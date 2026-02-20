@@ -269,6 +269,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo {
         try {
             val sql = cmd.queryBytes.toStringUtf8()
+
+            // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
+            if (isDml(sql)) {
+                throw CallStatus.INVALID_ARGUMENT
+                    .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
+                    .toRuntimeException()
+            }
             val ticketHandle = newHandle()
             val pq = defaultConnection.prepareSql(sql)
             val cursor = pq.openQuery(EMPTY)

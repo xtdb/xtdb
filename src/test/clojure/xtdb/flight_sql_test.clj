@@ -134,6 +134,13 @@
       (t/is (= #{{:name "James"} {:name "Matt"} {:name "Håkan"} {:name "Dan"}}
                (q))))))
 
+(t/deftest test-dml-via-query-path-returns-helpful-error
+  ;; #5082 - DML sent through executeQuery path should give a clear error
+  (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
+                          (.execute *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James')" empty-call-opts)))]
+    (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
+    (t/is (re-find #"executeUpdate" (.getMessage ex)))))
+
 (t/deftest test-adbc
   (with-open [stmt (.createStatement *adbc-conn*)]
     (.setSqlQuery stmt "
