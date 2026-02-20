@@ -10,8 +10,8 @@
 ;; then forwards resolved data to the replica processor for import.
 ;; Also owns block finishing: writes tries, table blocks and block files to storage.
 
-(defn- source-system [{:keys [indexer-conf mode replica-log] :as opts}]
-  (let [child-opts (dissoc opts :indexer-conf :mode :replica-log)]
+(defn- source-system [{:keys [indexer-conf mode replica-log block-flush-duration] :as opts}]
+  (let [child-opts (dissoc opts :indexer-conf :mode :replica-log :block-flush-duration)]
     (-> {:xtdb/block-catalog child-opts
          :xtdb/table-catalog child-opts
          :xtdb/trie-catalog child-opts
@@ -22,7 +22,8 @@
          ::source-processor (assoc child-opts
                                    :indexer-conf indexer-conf
                                    :mode mode
-                                   :replica-indexer replica-log)
+                                   :replica-indexer replica-log
+                                   :block-flush-duration block-flush-duration)
          ::source-indexer child-opts}
         (doto ig/load-namespaces))))
 
@@ -38,12 +39,14 @@
                                                      indexer live-index
                                                      ^IndexerConfig indexer-conf
                                                      ^Database$Mode mode
-                                                     ^ReplicaIndexer replica-indexer]}]
+                                                     ^ReplicaIndexer replica-indexer
+                                                     block-flush-duration]}]
   (when-let [replica-proc (.getLogProcessorOrNull replica-indexer)]
     (let [src-proc (SourceLogProcessor. allocator db-storage db-state
                                         indexer live-index
                                         replica-proc (set (.getSkipTxs indexer-conf))
-                                        (= mode Database$Mode/READ_ONLY))]
+                                        (= mode Database$Mode/READ_ONLY)
+                                        block-flush-duration)]
       {:src-proc src-proc
        :subscription (let [source-log (.getSourceLog db-storage)]
                        (.tailAll source-log src-proc (.getLatestProcessedOffset replica-proc)))})))

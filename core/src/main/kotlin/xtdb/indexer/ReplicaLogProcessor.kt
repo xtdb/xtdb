@@ -2,7 +2,6 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
@@ -41,8 +40,6 @@ import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import java.nio.channels.ClosedByInterruptException
-import java.time.Duration
-import java.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 
 private val LOG = ReplicaLogProcessor::class.logger
@@ -61,7 +58,6 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val indexer: Indexer.ForDatabase,
     private val liveIndex: LiveIndex,
     private val compactor: Compactor.ForDatabase,
-    flushTimeout: Duration,
     private val skipTxs: Set<MessageId>,
     private val mode: Database.Mode = Database.Mode.READ_WRITE,
     private val maxBufferedRecords: Int = 1024,
@@ -124,52 +120,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
         allocator.close()
     }
 
-    data class Flusher(
-        val flushTimeout: Duration,
-        var lastFlushCheck: Instant,
-        var previousBlockTxId: MessageId,
-        var flushedTxId: MessageId
-    ) {
-        constructor(flushTimeout: Duration, blockCatalog: BlockCatalog) : this(
-            flushTimeout, Instant.now(),
-            previousBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
-            flushedTxId = -1
-        )
-
-        fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId, latestCompletedTxId: MessageId): Boolean =
-            when {
-                lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> false
-
-                currentBlockTxId != previousBlockTxId -> {
-                    lastFlushCheck = now
-                    previousBlockTxId = currentBlockTxId
-                    false
-                }
-
-                else -> {
-                    lastFlushCheck = now
-                    true
-                }
-            }
-
-        fun checkBlockTimeout(blockCatalog: BlockCatalog, liveIndex: LiveIndex) =
-            checkBlockTimeout(
-                Instant.now(),
-                currentBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
-                latestCompletedTxId = liveIndex.latestCompletedTx?.txId ?: -1
-            )
-    }
-
-    private val flusher = Flusher(flushTimeout, blockCatalog)
-
     override fun processRecords(records: List<Log.Record>) = runBlocking {
-        // Don't send FlushBlock messages in read-only mode - we can't write to the log
-        if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
-            val flushMessage = Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            val offset = log.appendMessage(flushMessage).await().logOffset
-            flusher.flushedTxId = offsetToMsgId(epoch, offset)
-        }
-
         val queue = ArrayDeque(records)
 
         while (queue.isNotEmpty()) {

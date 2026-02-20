@@ -31,7 +31,7 @@ class ReplicaLogProcessorTest {
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)
 
-    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = ReplicaLogProcessor.Flusher(
+    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = SourceLogProcessor.Flusher(
         Duration.ofDays(2),
         inst(1),
         previousBlockTxId = prevBlockTxId,
@@ -100,7 +100,7 @@ class ReplicaLogProcessorTest {
                 mockk<Indexer.ForDatabase>(relaxed = true),
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
-                Duration.ofHours(1), emptySet(),
+                emptySet(),
                 Database.Mode.READ_ONLY,
                 maxBufferedRecords = 2
             )
@@ -159,7 +159,7 @@ class ReplicaLogProcessorTest {
                 mockk<Indexer.ForDatabase>(relaxed = true),
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
-                Duration.ofHours(1), emptySet(),
+                emptySet(),
                 Database.Mode.READ_ONLY,
             )
 

@@ -86,7 +86,8 @@
          :xtdb.indexer/source-log (assoc opts
                                          :indexer-conf indexer-conf
                                          :mode mode
-                                         :replica-log (ig/ref :xtdb.indexer/replica-log))
+                                         :replica-log (ig/ref :xtdb.indexer/replica-log)
+                                         :block-flush-duration (.getFlushDuration indexer-conf))
 
          ::database (assoc opts :db-config db-config)}
         (doto ig/load-namespaces))))

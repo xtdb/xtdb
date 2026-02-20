@@ -26,6 +26,7 @@ import xtdb.util.debug
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -49,6 +50,7 @@ class SourceLogProcessor(
     private val replicaProcessor: ReplicaLogProcessor,
     private val skipTxs: Set<MessageId>,
     private val readOnly: Boolean = false,
+    flushTimeout: Duration = Duration.ofMinutes(5),
 ) : Log.Subscriber {
 
     private val log = dbStorage.sourceLog
@@ -63,6 +65,44 @@ class SourceLogProcessor(
         blockCatalog.secondaryDatabases.toMutableMap()
 
     private var latestProcessedMsgId: MessageId = blockCatalog.latestProcessedMsgId ?: -1
+
+    data class Flusher(
+        val flushTimeout: Duration,
+        var lastFlushCheck: Instant,
+        var previousBlockTxId: MessageId,
+        var flushedTxId: MessageId
+    ) {
+        constructor(flushTimeout: Duration, blockCatalog: BlockCatalog) : this(
+            flushTimeout, Instant.now(),
+            previousBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
+            flushedTxId = -1
+        )
+
+        fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId, latestCompletedTxId: MessageId): Boolean =
+            when {
+                lastFlushCheck + flushTimeout >= now || flushedTxId == latestCompletedTxId -> false
+
+                currentBlockTxId != previousBlockTxId -> {
+                    lastFlushCheck = now
+                    previousBlockTxId = currentBlockTxId
+                    false
+                }
+
+                else -> {
+                    lastFlushCheck = now
+                    true
+                }
+            }
+
+        fun checkBlockTimeout(blockCatalog: BlockCatalog, liveIndex: LiveIndex) =
+            checkBlockTimeout(
+                Instant.now(),
+                currentBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1,
+                latestCompletedTxId = liveIndex.latestCompletedTx?.txId ?: -1
+            )
+    }
+
+    private val flusher = Flusher(flushTimeout, blockCatalog)
 
     private fun resolveTx(msgId: MessageId, record: Log.Record, msg: Message.Tx): Message.ResolvedTx {
         return if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
@@ -149,6 +189,12 @@ class SourceLogProcessor(
     }
 
     override fun processRecords(records: List<Log.Record>) {
+        if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
+            val flushMessage = Message.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
+            val offset = log.appendMessage(flushMessage).get().logOffset
+            flusher.flushedTxId = offsetToMsgId(epoch, offset)
+        }
+
         var lastMsgId: MessageId = latestProcessedMsgId
 
         val amended = try {
