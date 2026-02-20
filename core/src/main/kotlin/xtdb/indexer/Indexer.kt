@@ -50,6 +50,7 @@ interface Indexer : AutoCloseable {
         allocator: BufferAllocator,
         storage: DatabaseStorage,
         state: DatabaseState,
+        liveIndex: LiveIndex,
         crashLogger: CrashLogger
     ): ForDatabase
 }

@@ -91,7 +91,6 @@ class ReplicaLogProcessorTest {
         val dbState = DatabaseState(
             "test", blockCatalog,
             mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true),
-            liveIndex
         )
 
         RootAllocator().use { allocator ->
@@ -99,6 +98,7 @@ class ReplicaLogProcessorTest {
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
+                liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 Duration.ofHours(1), emptySet(),
                 Database.Mode.READ_ONLY,
@@ -151,13 +151,13 @@ class ReplicaLogProcessorTest {
             val dbState = DatabaseState(
                 "test", blockCatalog,
                 mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true),
-                liveIndex
             )
 
             val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
                 mockk<Indexer.ForDatabase>(relaxed = true),
+                liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 Duration.ofHours(1), emptySet(),
                 Database.Mode.READ_ONLY,

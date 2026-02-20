@@ -59,6 +59,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
+    private val liveIndex: LiveIndex,
     private val compactor: Compactor.ForDatabase,
     flushTimeout: Duration,
     private val skipTxs: Set<MessageId>,
@@ -83,7 +84,6 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val blockCatalog = dbState.blockCatalog
     private val tableCatalog = dbState.tableCatalog
     private val trieCatalog = dbState.trieCatalog
-    private val liveIndex = dbState.liveIndex
 
     private val secondaryDatabases: MutableMap<String, DatabaseConfig> =
         blockCatalog.secondaryDatabases.toMutableMap()

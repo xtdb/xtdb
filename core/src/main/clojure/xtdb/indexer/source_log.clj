@@ -55,10 +55,11 @@
   (util/close subscription))
 
 (defmethod ig/expand-key ::source-indexer [k opts]
-  {k (into {:db-state (ig/ref :xtdb.db-catalog/state)} opts)})
+  {k (into {:db-state (ig/ref :xtdb.db-catalog/state)
+            :live-index (ig/ref :xtdb.indexer/live-index)} opts)})
 
-(defmethod ig/init-key ::source-indexer [_ {:keys [db-state]}]
-  (SourceIndexer. db-state))
+(defmethod ig/init-key ::source-indexer [_ {:keys [db-state live-index]}]
+  (SourceIndexer. db-state live-index))
 
 (defmethod ig/expand-key :xtdb.indexer/source-log [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)

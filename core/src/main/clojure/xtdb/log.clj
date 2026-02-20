@@ -247,6 +247,7 @@
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
             :indexer (ig/ref :xtdb.indexer/for-db)
+            :live-index (ig/ref :xtdb.indexer/live-index)
             :compactor (ig/ref :xtdb.compactor/for-db)
             :tx-source (ig/ref :xtdb.tx-source/for-db)}
            (assoc (dissoc opts :indexer-conf :tx-source-conf)
@@ -255,11 +256,11 @@
                   :enabled? (.getEnabled indexer-conf)))})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
-                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
+                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer live-index compactor block-flush-duration skip-txs enabled? ^Database$Mode mode db-catalog tx-source]}]
   (when enabled?
     (ReplicaLogProcessor. allocator meter-registry
                           db-storage db-state
-                          indexer compactor block-flush-duration (set skip-txs)
+                          indexer live-index compactor block-flush-duration (set skip-txs)
                           (or mode Database$Mode/READ_WRITE)
                           1024
                           db-catalog

@@ -29,11 +29,12 @@
   {k (into {:log-proc (ig/ref :xtdb.log/processor)
             :compactor (ig/ref :xtdb.compactor/for-db)
             :db-state (ig/ref :xtdb.db-catalog/state)
+            :live-index (ig/ref :xtdb.indexer/live-index)
             :tx-source (ig/ref :xtdb.tx-source/for-db)}
            opts)})
 
-(defmethod ig/init-key ::replica-indexer [_ {:keys [log-proc compactor db-state tx-source] :as opts}]
-  (ReplicaIndexer. log-proc compactor db-state tx-source))
+(defmethod ig/init-key ::replica-indexer [_ {:keys [log-proc compactor db-state live-index tx-source]}]
+  (ReplicaIndexer. log-proc compactor db-state live-index tx-source))
 
 (defmethod ig/expand-key :xtdb.indexer/replica-log [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)

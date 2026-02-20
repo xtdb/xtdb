@@ -702,7 +702,7 @@
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
     (reify Indexer
-      (openForDatabase [_ allocator db-storage db-state crash-logger]
+      (openForDatabase [_ allocator db-storage db-state live-index crash-logger]
         (let [db-name (.getName db-state)]
           (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
             ;; TODO add db-name to allocator gauge
@@ -710,7 +710,7 @@
 
             (->IndexerForDatabase allocator (:node-id config) q-src
                                   db-name db-storage db-state
-                                  (.getLiveIndex db-state) (.getTableCatalog db-state)
+                                  live-index (.getTableCatalog db-state)
                                   crash-logger
                                   tx-timer tx-error-counter tracer))))
 
@@ -723,12 +723,13 @@
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
+            :live-index (ig/ref :xtdb.indexer/live-index)
             :crash-logger (ig/ref ::crash-logger)}
            opts)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
-                                    :keys [allocator db-storage db-state ^CrashLogger crash-logger]}]
-  (.openForDatabase indexer allocator db-storage db-state crash-logger))
+                                    :keys [allocator db-storage db-state ^LiveIndex live-index ^CrashLogger crash-logger]}]
+  (.openForDatabase indexer allocator db-storage db-state live-index crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

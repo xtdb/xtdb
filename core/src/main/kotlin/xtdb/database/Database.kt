@@ -39,15 +39,16 @@ import java.util.*
 
 data class SourceIndexer(
     val state: DatabaseState,
+    val liveIndex: LiveIndex,
 ) {
     val trieCatalog get() = state.trieCatalog
-    val liveIndex get() = state.liveIndex
 }
 
 data class ReplicaIndexer(
     val logProcessorOrNull: LogProcessor?,
     val compactor: Compactor.ForDatabase,
     val state: DatabaseState,
+    val liveIndex: LiveIndex,
     val txSource: TxSource? = null,
 ) {
     val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("replica log processor not initialised")
@@ -62,14 +63,14 @@ data class Database(
 ) : IQuerySource.QueryDatabase {
     override val queryState: DatabaseState get() = replicaIndexer.state
     val name: DatabaseName get() = queryState.name
-    override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
+    override fun openSnapshot(): Snapshot = replicaIndexer.liveIndex.openSnapshot()
 
     val blockCatalog: BlockCatalog get() = queryState.blockCatalog
     val tableCatalog: TableCatalog get() = queryState.tableCatalog
 
     fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? = tableCatalog.getTypes(table)
     val trieCatalog: TrieCatalog get() = queryState.trieCatalog
-    val liveIndex: LiveIndex get() = queryState.liveIndex
+    val liveIndex: LiveIndex get() = replicaIndexer.liveIndex
 
     val sourceLog: Log get() = storage.sourceLog
     val replicaLog: Log get() = storage.replicaLog

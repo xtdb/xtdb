@@ -28,12 +28,11 @@
 (defmethod ig/expand-key ::state [k opts]
   {k (into {:block-cat (ig/ref :xtdb/block-catalog)
             :table-cat (ig/ref :xtdb/table-catalog)
-            :trie-cat (ig/ref :xtdb/trie-catalog)
-            :live-index (ig/ref :xtdb.indexer/live-index)}
+            :trie-cat (ig/ref :xtdb/trie-catalog)}
            opts)})
 
-(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
-  (DatabaseState. db-name block-cat table-cat trie-cat live-index))
+(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat]}]
+  (DatabaseState. db-name block-cat table-cat trie-cat))
 
 (defmethod ig/expand-key ::storage [k _]
   {k {:source-log (ig/ref :xtdb/source-log)
