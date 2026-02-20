@@ -16,11 +16,15 @@ import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.unsupported
 import xtdb.database.DatabaseName
+import xtdb.query.PreparedQuery
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
+
+    private var autoCommit = true
+    private val pendingOps = mutableListOf<TxOp>()
 
     interface XtdbStatement : AdbcStatement {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
@@ -58,10 +62,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun executeUpdate(): UpdateResult {
-            listOf(TxOp.Sql(sql ?: error("SQL query not set"))).useAll { ops ->
-                // TODO multi-db
-                node.executeTx("xtdb", ops)
-            }
+            executeDml(TxOp.Sql(sql ?: error("SQL query not set")))
             return UpdateResult(-1)
         }
 
@@ -69,6 +70,37 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
 
         override fun close() = Unit
+    }
+
+    internal fun executeDml(op: TxOp) {
+        if (autoCommit) {
+            listOf(op).useAll { ops ->
+                // TODO multi-db
+                node.executeTx("xtdb", ops)
+            }
+        } else {
+            pendingOps.add(op)
+        }
+    }
+
+    override fun setAutoCommit(autoCommit: Boolean) {
+        this.autoCommit = autoCommit
+    }
+
+    override fun commit() {
+        val ops = pendingOps.toList()
+        pendingOps.clear()
+        if (ops.isNotEmpty()) {
+            ops.useAll {
+                // TODO multi-db
+                node.executeTx("xtdb", ops)
+            }
+        }
+    }
+
+    override fun rollback() {
+        pendingOps.forEach { it.close() }
+        pendingOps.clear()
     }
 
     override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): XtdbStatement {
@@ -112,6 +144,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
     }
 
+    fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql)
+
     override fun getInfo(infoCodes: IntArray?) = TODO("Not yet implemented")
 
     interface Node {
@@ -119,7 +153,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
         fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
         fun openSqlQuery(sql: String): IResultCursor
+        fun prepareSql(sql: String): PreparedQuery
     }
 
-    override fun close() = Unit
+    override fun close() {
+        rollback()
+    }
 }

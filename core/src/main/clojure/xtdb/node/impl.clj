@@ -126,7 +126,11 @@
        (openSqlQuery [_ sql]
          (let [query-opts (-> {} (with-query-opts-defaults this-node))]
            (-> (xtp/prepare-sql this-node sql query-opts)
-               (.openQuery query-opts)))))))
+               (.openQuery query-opts))))
+
+       (prepareSql [_ sql]
+         (let [query-opts (-> {} (with-query-opts-defaults this-node))]
+           (xtp/prepare-sql this-node sql query-opts))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

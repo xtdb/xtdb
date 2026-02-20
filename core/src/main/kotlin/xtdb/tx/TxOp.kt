@@ -51,4 +51,13 @@ sealed interface TxOp : AutoCloseable {
             args?.close()
         }
     }
+
+    /**
+     * SQL with pre-serialized Arrow IPC stream bytes for args.
+     * Used by FlightSQL prepared statement updates where args arrive as bytes over the wire.
+     */
+    data class SqlBytes(val sql: String, val argBytes: ByteArray) : TxOp {
+        override fun openSlice(al: BufferAllocator): TxOp = this
+        override fun close() = Unit
+    }
 }

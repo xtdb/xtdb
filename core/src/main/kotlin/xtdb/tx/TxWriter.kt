@@ -48,18 +48,22 @@ private fun interface TxOpWriter<O : TxOp> {
     fun writeOp(op: O)
 }
 
-private class SqlWriter(val al: BufferAllocator, ops: VectorWriter) : TxOpWriter<TxOp.Sql> {
+private class SqlWriter(val al: BufferAllocator, ops: VectorWriter) {
     private val sqlVec = ops.vectorFor("sql", STRUCT_TYPE, false)
     private val queryVec = sqlVec.vectorFor("query", UTF8_TYPE, false)
     private val argsVec = sqlVec.vectorFor("args", VAR_BINARY_TYPE, false)
 
-    override fun writeOp(op: TxOp.Sql) {
+    fun writeOp(op: TxOp.Sql) {
         queryVec.writeObject(op.sql)
-
         op.args?.let { args ->
             args.openDirectSlice(al).use { argsVec.writeObject(it.asArrowStream) }
         }
+        sqlVec.endStruct()
+    }
 
+    fun writeOp(op: TxOp.SqlBytes) {
+        queryVec.writeObject(op.sql)
+        if (op.argBytes.isNotEmpty()) argsVec.writeObject(op.argBytes)
         sqlVec.endStruct()
     }
 }
@@ -213,6 +217,7 @@ fun List<TxOp>.toBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
                 is TxOp.DeleteDocs -> deleteDocsWriter.writeOp(op)
                 is TxOp.EraseDocs -> eraseDocsWriter.writeOp(op)
                 is TxOp.Sql -> sqlWriter.writeOp(op)
+                is TxOp.SqlBytes -> sqlWriter.writeOp(op)
             }
         }
 

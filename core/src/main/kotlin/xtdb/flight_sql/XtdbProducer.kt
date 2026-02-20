@@ -4,7 +4,6 @@ import clojure.lang.IPersistentMap
 import clojure.lang.IPersistentVector
 import clojure.lang.PersistentArrayMap
 import clojure.lang.PersistentArrayMap.EMPTY
-import clojure.lang.PersistentVector
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
@@ -18,6 +17,7 @@ import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
 import xtdb.arrow.ArrowUnloader
 import xtdb.arrow.Relation
@@ -30,6 +30,7 @@ import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.withName
 import xtdb.kw
 import xtdb.query.PreparedQuery
+import xtdb.tx.TxOp
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMapIndexed
@@ -40,7 +41,6 @@ import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import java.util.function.BiFunction
 
 private fun resultTypesToSchema(types: SequencedMap<String, VectorType>) =
     Schema(types.map { (name, type) -> type.toField(name) })
@@ -75,15 +75,11 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
 
 private fun cljMap(vararg pairs: Pair<Any, Any?>): IPersistentMap = PersistentArrayMap.create(pairs.toMap())
 
-private fun cljVec(vararg items: Any?): IPersistentVector = PersistentVector.create(*items)
-
-// TODO multi-db
-private val DEFAULT_DB_OPTS = cljMap("default-db".kw to "xtdb")
-
 private fun isDml(sql: String): Boolean {
     // TODO multi-db
+    val defaultDbOpts = cljMap("default-db".kw to "xtdb")
     val parsed = requiringResolve("xtdb.sql.parse/parse-statement")
-        .invoke(sql, DEFAULT_DB_OPTS)
+        .invoke(sql, defaultDbOpts)
 
     val opKeyword = (parsed as? IPersistentVector)?.nth(0) as? clojure.lang.Keyword
     return opKeyword?.name in setOf("insert", "update", "delete", "erase", "create-user", "alter-user")
@@ -119,14 +115,6 @@ private fun FlightStream.toBytes(allocator: BufferAllocator): ByteArray =
             }
     }
 
-// Clojure record for SqlByteArgs - used for prepared statement updates with byte args
-private val sqlByteArgsConstructor = requiringResolve("xtdb.tx-ops/->SqlByteArgs")
-
-private fun sqlByteArgs(sql: String, argBytes: ByteArray): Any =
-    sqlByteArgsConstructor.invoke(sql, argBytes)
-
-private class FsqlTx(val dml: MutableList<Any> = mutableListOf())
-
 private class PreparedStatement(
     val sql: String,
     val txHandle: TxHandle?,
@@ -153,31 +141,34 @@ internal fun FlightServer.Builder.withErrorLoggingMiddleware(): FlightServer.Bui
 class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
-    private val fsqlTxs = ConcurrentHashMap<TxHandle, FsqlTx>()
+    private val connections = ConcurrentHashMap<TxHandle, XtdbConnection>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
     private val tickets = ConcurrentHashMap<TicketHandle, IResultCursor>()
 
+    /** Connection for auto-commit (non-transactional) operations. */
+    private val defaultConnection: XtdbConnection = node.connect() as XtdbConnection
+
     override fun close() {
         stmts.closeAll()
+        connections.values.forEach { it.close() }
+        connections.clear()
+        defaultConnection.close()
         allocator.close()
     }
 
-    private fun execDml(dml: Any, txHandle: TxHandle?) {
+    private fun connectionFor(txHandle: TxHandle?): XtdbConnection =
         if (txHandle != null) {
-            val updated = fsqlTxs.computeIfPresent(txHandle, BiFunction { _, fsqlTx ->
-                fsqlTx.dml.add(dml)
-                fsqlTx
-            })
-            requireNotNull(updated) { "unknown tx" }
+            requireNotNull(connections[txHandle]) { "unknown tx" }
         } else {
-            try {
-                // TODO multi-db
-                requiringResolve("xtdb.protocols/execute-tx")
-                    .invoke(node, listOf(dml), DEFAULT_DB_OPTS)
-            } catch (t: Throwable) {
-                LOGGER.warn(t, "bang")
-                throw t
-            }
+            defaultConnection
+        }
+
+    private fun execDml(op: TxOp, txHandle: TxHandle?) {
+        try {
+            connectionFor(txHandle).executeDml(op)
+        } catch (t: Throwable) {
+            LOGGER.warn(t, "bang")
+            throw t
         }
     }
 
@@ -212,7 +203,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): Runnable = Runnable {
         try {
             execDml(
-                cljVec("sql".kw, cmd.query),
+                TxOp.Sql(cmd.query),
                 if (cmd.hasTransactionId()) cmd.transactionId else null
             )
 
@@ -262,9 +253,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         // but (maybe out of date?) this doesn't seem possible in FSQL.
         val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
 
-        val dml = sqlByteArgs(ps.sql, flightStream.toBytes(allocator))
+        val op = TxOp.SqlBytes(ps.sql, flightStream.toBytes(allocator))
         try {
-            execDml(dml, ps.txHandle)
+            execDml(op, ps.txHandle)
             ackStream.sendDoPutUpdateRes(allocator)
         } catch (t: Throwable) {
             ackStream.onError(t)
@@ -279,7 +270,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         try {
             val sql = cmd.queryBytes.toStringUtf8()
             val ticketHandle = newHandle()
-            val pq = node.prepareSql(sql, DEFAULT_DB_OPTS) // TODO multi-db
+            val pq = defaultConnection.prepareSql(sql)
             val cursor = pq.openQuery(EMPTY)
             val ticket = Ticket(
                 ProtoAny.pack(
@@ -353,7 +344,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
-        val pq = node.prepareSql(sql, DEFAULT_DB_OPTS) // TODO multi-db
+        val pq = defaultConnection.prepareSql(sql)
         val ps = PreparedStatement(
             sql,
             if (req.hasTransactionId()) req.transactionId else null,
@@ -398,12 +389,14 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ctx: CallContext?,
         listener: StreamListener<ActionBeginTransactionResult>
     ) {
-        val fsqlTxId = newHandle()
-        fsqlTxs[fsqlTxId] = FsqlTx()
+        val txHandle = newHandle()
+        val conn = node.connect() as XtdbConnection
+        conn.setAutoCommit(false)
+        connections[txHandle] = conn
 
         listener.onNext(
             ActionBeginTransactionResult.newBuilder()
-                .setTransactionId(fsqlTxId)
+                .setTransactionId(txHandle)
                 .build()
         )
 
@@ -415,19 +408,20 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ctx: CallContext?,
         listener: StreamListener<Result>
     ) {
-        val fsqlTxId = req.transactionId
-        val fsqlTx = requireNotNull(fsqlTxs.remove(fsqlTxId)) { "unknown tx" }
+        val txHandle = req.transactionId
+        val conn = requireNotNull(connections.remove(txHandle)) { "unknown tx" }
 
         if (req.action == EndTransaction.END_TRANSACTION_COMMIT) {
             try {
-                // TODO multi-db
-                requiringResolve("xtdb.protocols/execute-tx")
-                    .invoke(node, fsqlTx.dml, DEFAULT_DB_OPTS)
+                conn.commit()
                 listener.onCompleted()
             } catch (t: Throwable) {
                 listener.onError(t)
+            } finally {
+                conn.close()
             }
         } else {
+            conn.close()
             listener.onCompleted()
         }
     }
