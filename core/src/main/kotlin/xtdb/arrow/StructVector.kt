@@ -161,7 +161,7 @@ class StructVector private constructor(
         override var pos = 0
             set(value) {
                 field = value
-                readers.forEach { it.value.pos = value }
+                if (!isNull) readers.forEach { it.value.pos = value }
             }
 
         override val isNull get() = this@StructVector.isNull(pos)

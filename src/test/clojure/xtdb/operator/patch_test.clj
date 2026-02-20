@@ -167,6 +167,13 @@
   (xt/execute-tx tu/*node* [[:patch-docs :docs {:xt/id 3, :a #{1 nil}}]])
   (t/is (= [{:xt/id 3, :a #{1 nil}}] (xt/q tu/*node* "SELECT * FROM docs WHERE _id = 3"))))
 
+(t/deftest test-patch-list-of-structs-with-nils
+  ;; minimised repro from prop test - patching a record with a list containing structs and nils,
+  ;; then patching again, causes NPE during ingestion
+  (xt/execute-tx tu/*node* [[:patch-docs :docs {:a nil, :b nil, :c [{:3 true} nil {:3 0}], :d nil, :xt/id 1}]])
+  (xt/execute-tx tu/*node* [[:patch-docs :docs {:a nil, :xt/id 1}]])
+  (t/is (= 1 (count (xt/q tu/*node* "SELECT * FROM docs")))))
+
 (t/deftest ^:property multiple-patches-on-record
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
