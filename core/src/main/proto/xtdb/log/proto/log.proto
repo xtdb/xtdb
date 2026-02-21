@@ -16,6 +16,7 @@ message LogMessage {
         DetachDatabase detach_database = 4;
         BlockUploaded block_uploaded = 5;
         ResolvedTx resolved_tx = 6;
+        BlockBoundary block_boundary = 7;
     }
 }
 
@@ -79,6 +80,10 @@ message ResolvedTx {
         AttachDatabase attach_database = 6;
         DetachDatabase detach_database = 7;
     }
+}
+
+message BlockBoundary {
+    int64 block_index = 1;
 }
 
 message BlockUploaded {

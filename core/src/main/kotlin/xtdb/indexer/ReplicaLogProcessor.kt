@@ -187,16 +187,9 @@ class ReplicaLogProcessor @JvmOverloads constructor(
         LOG.debug("Processing message $msgId, ${record.message.javaClass.simpleName}")
 
         return when (val msg = record.message) {
-                is Message.FlushBlock -> {
-                    // Source has already finished the block and written it to storage
-                    // by the time we see this message (single-threaded forwarding).
-                    // We refresh from storage to stay in sync, which also keeps
-                    // flush-block! + sync-node working (block transition is inline).
-                    val expectedBlockIdx = msg.expectedBlockIdx
-                    if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                        pendingBlockIdx = expectedBlockIdx + 1
-                        LOG.debug("waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
-                    }
+                is Message.BlockBoundary -> {
+                    pendingBlockIdx = msg.blockIndex
+                    LOG.debug("waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
                     null
                 }
 
@@ -211,18 +204,10 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     null
                 }
 
-                // Block transitions are handled by the pending-block gate in processRecords.
-                is Message.BlockUploaded -> null
-
                 is Message.ResolvedTx -> {
                     liveIndex.importTx(msg)
 
                     txSource?.onCommit(msg)
-
-                    if (liveIndex.isFull()) {
-                        pendingBlockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-                        LOG.debug("waiting for block 'b${pendingBlockIdx!!.asLexHex}' via BlockUploaded message...")
-                    }
 
                     val systemTime = InstantUtil.fromMicros(msg.systemTimeMicros)
 
@@ -249,7 +234,10 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                     }
                 }
 
-                is Message.Tx, is Message.AttachDatabase, is Message.DetachDatabase -> null
+                is Message.Tx, is Message.AttachDatabase, is Message.DetachDatabase, is Message.FlushBlock -> null
+
+                // Block transitions are handled by the pending-block gate in processRecords.
+                is Message.BlockUploaded -> null
             }.also {
                 latestProcessedMsgId = msgId
                 LOG.debug("Processed message $msgId")

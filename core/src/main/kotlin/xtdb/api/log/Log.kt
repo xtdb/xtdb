@@ -110,6 +110,8 @@ interface Log : AutoCloseable {
                                     BlockUploaded(it.blockIndex, it.latestProcessedMsgId, it.storageEpoch)
                                 }
 
+                                MessageCase.BLOCK_BOUNDARY -> BlockBoundary(msg.blockBoundary.blockIndex)
+
                                 MessageCase.RESOLVED_TX -> msg.resolvedTx.let {
                                     val dbOp = when (it.dbOpCase) {
                                         xtdb.log.proto.ResolvedTx.DbOpCase.ATTACH_DATABASE ->
@@ -174,6 +176,12 @@ interface Log : AutoCloseable {
                     this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                     this.storageEpoch = this@BlockUploaded.storageEpoch
                 }
+            }
+        }
+
+        data class BlockBoundary(val blockIndex: BlockIndex) : ProtobufMessage() {
+            override fun toLogMessage() = logMessage {
+                blockBoundary = blockBoundary { this.blockIndex = this@BlockBoundary.blockIndex }
             }
         }
 

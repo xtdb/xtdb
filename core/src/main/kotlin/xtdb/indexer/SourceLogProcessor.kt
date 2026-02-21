@@ -139,53 +139,57 @@ class SourceLogProcessor(
         }
     }
 
-    private fun finishBlock(systemTime: Instant) {
+    private fun finishBlock(systemTime: Instant): Log.Record {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
-        val finishedBlocks = liveIndex.finishBlock(blockIdx)
+        if (!readOnly) {
+            val finishedBlocks = liveIndex.finishBlock(blockIdx)
 
-        val addedTries = finishedBlocks.map { (table, fb) ->
-            TrieDetails.newBuilder()
-                .setTableName(table.schemaAndTable)
-                .setTrieKey(fb.trieKey)
-                .setDataFileSize(fb.dataFileSize)
-                .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
-                .build()
+            val addedTries = finishedBlocks.map { (table, fb) ->
+                TrieDetails.newBuilder()
+                    .setTableName(table.schemaAndTable)
+                    .setTrieKey(fb.trieKey)
+                    .setDataFileSize(fb.dataFileSize)
+                    .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
+                    .build()
+            }
+            log.appendMessage(
+                Message.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
+            )
+
+            finishedBlocks.forEach { (table, _) ->
+                val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
+                trieCatalog.addTries(table, listOf(trie), systemTime)
+            }
+
+            val allTables = finishedBlocks.keys + blockCatalog.allTables
+            val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
+
+            val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
+
+            for ((table, tableBlock) in tableBlocks) {
+                val path = BlockCatalog.tableBlockPath(table, blockIdx)
+                bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+            }
+
+            val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
+
+            val block = blockCatalog.buildBlock(
+                blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+                tableBlocks.keys, secondaryDatabasesForBlock
+            )
+
+            bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+            blockCatalog.refresh(block)
+
+            log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
         }
-        log.appendMessage(
-            Message.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
-        )
-
-        finishedBlocks.forEach { (table, _) ->
-            val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
-            trieCatalog.addTries(table, listOf(trie), systemTime)
-        }
-
-        val allTables = finishedBlocks.keys + blockCatalog.allTables
-        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
-
-        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
-
-        for ((table, tableBlock) in tableBlocks) {
-            val path = BlockCatalog.tableBlockPath(table, blockIdx)
-            bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
-        }
-
-        val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
-
-        val block = blockCatalog.buildBlock(
-            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            tableBlocks.keys, secondaryDatabasesForBlock
-        )
-
-        bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
-        blockCatalog.refresh(block)
-
-        log.appendMessage(Message.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
 
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+
+        return Log.Record(-1, systemTime, Message.BlockBoundary(blockIdx))
     }
 
     override fun processRecords(records: List<Log.Record>) {
@@ -207,23 +211,22 @@ class SourceLogProcessor(
                     is Message.Tx -> {
                         val resolvedTx = resolveTx(msgId, record, msg)
 
-                        if (liveIndex.isFull()) {
-                            if (readOnly)
-                                liveIndex.nextBlock()
-                            else
-                                finishBlock(record.logTimestamp)
-                        }
+                        val blockBoundary = if (liveIndex.isFull()) finishBlock(record.logTimestamp) else null
 
-                        listOf(Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
+                        listOfNotNull(
+                            Log.Record(record.logOffset, record.logTimestamp, resolvedTx),
+                            blockBoundary
+                        )
                     }
 
                     is Message.FlushBlock -> {
-                        if (!readOnly) {
-                            val expectedBlockIdx = msg.expectedBlockIdx
+                        val expectedBlockIdx = msg.expectedBlockIdx
+                        val blockBoundary =
                             if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
                                 finishBlock(record.logTimestamp)
-                        }
-                        listOf(record)
+                            else null
+
+                        listOfNotNull(record, blockBoundary)
                     }
 
                     is Message.AttachDatabase -> {
@@ -271,7 +274,7 @@ class SourceLogProcessor(
                         listOf(record)
                     }
 
-                    is Message.BlockUploaded, is Message.ResolvedTx -> listOf(record)
+                    is Message.BlockUploaded, is Message.ResolvedTx, is Message.BlockBoundary -> listOf(record)
                 }
             }
         } catch (e: Throwable) {
