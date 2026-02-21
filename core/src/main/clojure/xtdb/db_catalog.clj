@@ -77,13 +77,21 @@
 
          ::storage opts
 
+         ;; shared catalogs + state - created once, shared by both sub-systems
+         :xtdb/block-catalog opts
+         :xtdb/table-catalog opts
+         :xtdb/trie-catalog opts
+         ::state opts
+
          :xtdb.indexer/replica-log (cond-> (assoc opts
+                                                 :db-state (ig/ref ::state)
                                                  :indexer-conf indexer-conf
                                                  :mode mode
                                                  :tx-source-conf (.getTxSource conf))
                                           (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
          :xtdb.indexer/source-log (assoc opts
+                                         :db-state (ig/ref ::state)
                                          :indexer-conf indexer-conf
                                          :mode mode
                                          :replica-log (ig/ref :xtdb.indexer/replica-log)

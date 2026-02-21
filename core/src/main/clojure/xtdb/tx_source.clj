@@ -15,6 +15,7 @@
            (xtdb.api.log Log Log$Message Log$Message$Tx)
            (xtdb.arrow Relation RelationReader)
            (xtdb.catalog BlockCatalog TableCatalog)
+           xtdb.database.DatabaseState
            (xtdb.indexer Indexer$TxSource)
            (xtdb.storage BufferPool)
            (xtdb.table TableRef)
@@ -164,11 +165,8 @@
 
 (defmethod ig/expand-key ::for-db [k {:keys [^TxSourceConfig tx-source-conf] :as opts}]
   {k (into {:output-log (ig/ref ::output-log)
-            :block-cat (ig/ref :xtdb/block-catalog)
             :allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)
-            :table-cat (ig/ref :xtdb/table-catalog)
-            :trie-cat (ig/ref :xtdb/trie-catalog)}
+            :buffer-pool (ig/ref :xtdb/buffer-pool)}
            opts)
    ::output-log (select-keys opts [:tx-source-conf :base :db-name])})
 
@@ -192,13 +190,15 @@
                                Log$Message$Tx.)))))))
 
 (defmethod ig/init-key ::for-db [_ {:keys [^TxSourceConfig tx-source-conf ^Log output-log
-                                           ^BlockCatalog block-cat allocator buffer-pool
-                                           ^TableCatalog table-cat
-                                           ^TrieCatalog trie-cat db-name]}]
+                                           ^DatabaseState db-state allocator buffer-pool
+                                           db-name]}]
   (when (and tx-source-conf
              (.getEnable tx-source-conf)
              (= db-name (.getDbName tx-source-conf)))
-    (let [encode-fn (->encode-fn (keyword (.getFormat tx-source-conf)))
+    (let [block-cat (.getBlockCatalog db-state)
+          table-cat (.getTableCatalog db-state)
+          trie-cat (.getTrieCatalog db-state)
+          encode-fn (->encode-fn (keyword (.getFormat tx-source-conf)))
           last-message (try
                          (let [decode-record (->decode-fn (keyword (.getFormat tx-source-conf)))]
                            (->> (.readLastMessage output-log)

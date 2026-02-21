@@ -10,14 +10,11 @@
 ;; then forwards resolved data to the replica processor for import.
 ;; Also owns block finishing: writes tries, table blocks and block files to storage.
 
-(defn- source-system [{:keys [indexer-conf mode replica-log block-flush-duration] :as opts}]
-  (let [child-opts (dissoc opts :indexer-conf :mode :replica-log :block-flush-duration)]
-    (-> {:xtdb/block-catalog child-opts
-         :xtdb/table-catalog child-opts
-         :xtdb/trie-catalog child-opts
-         :xtdb.indexer/live-index (assoc child-opts :indexer-conf indexer-conf)
+(defn- source-system [{:keys [indexer-conf mode replica-log block-flush-duration db-state] :as opts}]
+  (let [child-opts (-> (dissoc opts :indexer-conf :mode :replica-log :block-flush-duration :db-state)
+                       (assoc :db-state db-state))]
+    (-> {:xtdb.indexer/live-index (assoc child-opts :indexer-conf indexer-conf)
          :xtdb.indexer/crash-logger child-opts
-         :xtdb.db-catalog/state child-opts
          :xtdb.indexer/for-db child-opts
          ::source-processor (assoc child-opts
                                    :indexer-conf indexer-conf
@@ -30,7 +27,6 @@
 (defmethod ig/expand-key ::source-processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :db-state (ig/ref :xtdb.db-catalog/state)
             :indexer (ig/ref :xtdb.indexer/for-db)
             :live-index (ig/ref :xtdb.indexer/live-index)}
            opts)})
@@ -58,8 +54,7 @@
   (util/close subscription))
 
 (defmethod ig/expand-key ::source-indexer [k opts]
-  {k (into {:db-state (ig/ref :xtdb.db-catalog/state)
-            :live-index (ig/ref :xtdb.indexer/live-index)} opts)})
+  {k (into {:live-index (ig/ref :xtdb.indexer/live-index)} opts)})
 
 (defmethod ig/init-key ::source-indexer [_ {:keys [db-state live-index]}]
   (SourceIndexer. db-state live-index))

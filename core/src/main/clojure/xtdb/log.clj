@@ -245,7 +245,6 @@
 (defmethod ig/expand-key :xtdb.log/processor [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :db-state (ig/ref :xtdb.db-catalog/state)
             :indexer (ig/ref :xtdb.indexer/for-db)
             :live-index (ig/ref :xtdb.indexer/live-index)
             :compactor (ig/ref :xtdb.compactor/for-db)

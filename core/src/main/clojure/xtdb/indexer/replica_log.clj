@@ -7,16 +7,15 @@
 ;; The parent db-system injects shared resources (allocator, buffer-pool, db-storage)
 ;; via child-opts, which override the ig/ref defaults in each component's expand-key.
 
-(defn- replica-system [{:keys [indexer-conf mode tx-source-conf db-catalog] :as opts}]
-  (let [child-opts (-> (dissoc opts :indexer-conf :mode :tx-source-conf :db-catalog)
+(defn- replica-system [{:keys [indexer-conf mode tx-source-conf db-catalog db-state] :as opts}]
+  (let [child-opts (-> (dissoc opts :indexer-conf :mode :tx-source-conf :db-catalog :db-state)
                        ;; compactor::for-db uses :storage, others use :db-storage
-                       (assoc :storage (:db-storage opts)))]
-    (-> {:xtdb/block-catalog child-opts
-         :xtdb/table-catalog child-opts
-         :xtdb/trie-catalog child-opts
-         :xtdb.indexer/live-index (assoc child-opts :indexer-conf indexer-conf)
+                       (assoc :storage (:db-storage opts)
+                              :db-state db-state
+                              ;; compactor::for-db uses :state not :db-state
+                              :state db-state))]
+    (-> {:xtdb.indexer/live-index (assoc child-opts :indexer-conf indexer-conf)
          :xtdb.indexer/crash-logger child-opts
-         :xtdb.db-catalog/state child-opts
          :xtdb.tx-source/for-db (assoc child-opts :tx-source-conf tx-source-conf)
          :xtdb.indexer/for-db child-opts
          :xtdb.compactor/for-db (assoc child-opts :mode mode)
@@ -28,7 +27,6 @@
 (defmethod ig/expand-key ::replica-indexer [k opts]
   {k (into {:log-proc (ig/ref :xtdb.log/processor)
             :compactor (ig/ref :xtdb.compactor/for-db)
-            :db-state (ig/ref :xtdb.db-catalog/state)
             :live-index (ig/ref :xtdb.indexer/live-index)
             :tx-source (ig/ref :xtdb.tx-source/for-db)}
            opts)})

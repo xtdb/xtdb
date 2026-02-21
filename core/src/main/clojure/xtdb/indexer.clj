@@ -723,7 +723,6 @@
 (defmethod ig/expand-key ::for-db [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :db-state (ig/ref :xtdb.db-catalog/state)
             :live-index (ig/ref :xtdb.indexer/live-index)
             :crash-logger (ig/ref ::crash-logger)}
            opts)})

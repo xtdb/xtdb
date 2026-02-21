@@ -32,8 +32,7 @@
 
 (defmethod ig/expand-key ::for-db [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :storage (ig/ref :xtdb.db-catalog/storage)
-            :state (ig/ref :xtdb.db-catalog/state)}
+            :storage (ig/ref :xtdb.db-catalog/storage)}
            opts)})
 
 (defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [allocator storage state ^Database$Mode mode]}]

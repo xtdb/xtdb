@@ -21,6 +21,7 @@
            xtdb.storage.BufferPool
            (xtdb.arrow Relation Relation$StreamLoader)
            (xtdb.catalog BlockCatalog TableCatalog)
+           xtdb.database.DatabaseState
            (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.table TableRef)
            (xtdb.util RefCounter RowCounter)))
@@ -202,9 +203,7 @@
 
 (defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)
-            :block-cat (ig/ref :xtdb/block-catalog)
-            :table-cat (ig/ref :xtdb/table-catalog)}
+            :buffer-pool (ig/ref :xtdb/buffer-pool)}
            (assoc (dissoc opts :indexer-conf)
                   :rows-per-block (.getRowsPerBlock indexer-conf)
                   :log-limit (.getLogLimit indexer-conf)
@@ -212,10 +211,12 @@
                   :skip-txs (.getSkipTxs indexer-conf)))})
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
-                                                    :keys [allocator, ^BlockCatalog block-cat, buffer-pool table-cat
+                                                    :keys [allocator, ^DatabaseState db-state, buffer-pool
                                                            db-name
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
-  (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
+  (let [block-cat (.getBlockCatalog db-state)
+        table-cat (.getTableCatalog db-state)
+        latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)
       (let [tables (HashMap.)]
