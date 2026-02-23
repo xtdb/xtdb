@@ -1,5 +1,6 @@
 (ns xtdb.bench.fusion
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [hugsql.core :as hugsql]
@@ -20,7 +21,7 @@
 (def series-names ["Series-A" "Series-B" "Series-C" "Series-D" "Series-E"])
 (def model-names ["Model-1" "Model-2"])
 
-(defn random-float [rng min max]
+(defn random-float [^java.util.Random rng min max]
   (+ min (* (.nextDouble rng) (- max min))))
 
 (defn random-int [rng min max]
@@ -132,7 +133,7 @@
    :name (str "Test Case " case-num)
    :description (str "Registration check " case-num)})
 
-(defn generate-test-suite-run [rng run-id system-id suite-id base-time]
+(defn generate-test-suite-run [rng run-id system-id suite-id ^java.time.Instant base-time]
   (let [passed? (random/chance? rng 0.8)
         test-start (.plusSeconds base-time 43200)] ; 12 hours after system creation
     {:xt/id run-id
@@ -141,9 +142,9 @@
      :status (if passed? "DONE" "FAILED")
      :passed? passed?
      :started-at test-start
-     :completed-at (.plusSeconds test-start 300)}))
+     :completed-at (.plusSeconds ^Instant test-start 300)}))
 
-(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed? base-time]
+(defn generate-test-case-run [rng run-id suite-run-id case-id suite-passed? ^java.time.Instant base-time]
   (let [case-passed? (or suite-passed? (random/chance? rng 0.7))
         test-start (.plusSeconds base-time 43200)] ; Same as suite run start
     {:xt/id run-id
@@ -151,6 +152,27 @@
      :test-case-id case-id
      :status (if case-passed? "OK" "FAILED")
      :executed-at test-start}))
+(def control-event-ids ["event-alpha" "event-beta" "event-gamma" "event-delta"])
+
+(defn generate-control-plans
+  "Generate sparse control plan records. Each event spans 1-2 hours of valid time,
+   with control values distributed across systems."
+  [rng system-ids base-time]
+  (let [num-events (+ 3 (random/next-int rng 2))] ; 3-4 events
+    (for [event-idx (range num-events)
+          :let [event-id (nth control-event-ids event-idx)
+                ;; Spread events across the time range
+                ^Instant event-start (.plus ^Instant base-time (Duration/ofHours (* event-idx 12)))
+                event-duration (Duration/ofHours (+ 1 (random/next-int rng 2)))
+                event-end (.plus event-start event-duration)]
+          system-id (take (+ 5 (random/next-int rng 10)) (random/shuffle rng system-ids))]
+      {:xt/id (str system-id "-cp-" event-id)
+       :control-value (random-float rng 500 5000)
+       :event-id event-id
+       :status "ACTIVE"
+       :valid-from event-start
+       :valid-to event-end})))
+
 
 (defn ->init-tables-stage
   [system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids batch-size base-time]
@@ -224,31 +246,65 @@
                                                                      case-id
                                                                      suite-passed?
                                                                      base-time))
-                                           test-case-ids))]))))})
+                                           test-case-ids))])))
 
-(defn ->readings-docs [rng system-ids reading-idx start end]
-  (into [:put-docs {:into :readings :valid-from start :valid-to end}]
+        ;; Insert control plan records for multi-reading aggregation query
+        ;; Group by event since all plans within an event share the same temporal range
+        (let [plans (generate-control-plans random system-ids base-time)
+              by-event (group-by (juxt :valid-from :valid-to) plans)]
+          (log/infof "Inserting %d control plan records across %d event windows"
+                     (count plans) (count by-event))
+          (doseq [[[vf vt] event-plans] by-event]
+            (xt/submit-tx node [(into [:put-docs {:into :control_plan
+                                                  :valid-from vf
+                                                  :valid-to vt}]
+                                      (map #(-> %
+                                                (dissoc :valid-from :valid-to)
+                                                (set/rename-keys {:control-value :control_value
+                                                                          :event-id :event_id}))
+                                           event-plans))]))))})
+
+(defn ->reading-a-docs
+  "System active power readings (watts). 5 min cadence.
+   Used by both the existing per-system queries and the multi-reading aggregation query."
+  [rng system-ids reading-idx start end]
+  (into [:put-docs {:into :reading_a :valid-from start :valid-to end}]
         (for [system-id system-ids]
-          {:xt/id (str system-id "-" reading-idx)
+          {:xt/id (str system-id "-a-" reading-idx)
            :system-id system-id
-           :value (random-float rng -100 100)
+           :value (random-float rng -10000 10000)
            :duration 300})))
+
+(defn ->reading-b-docs
+  "Site active power readings (watts). Same cadence as readings (5 min)."
+  [rng site-ids reading-idx start end]
+  (into [:put-docs {:into :reading_b :valid-from start :valid-to end}]
+        (for [site-id site-ids]
+          {:xt/id (str site-id "-b-" reading-idx)
+           :value (random-float rng -10000 10000)})))
+
+(defn ->reading-c-docs
+  "System state of charge readings (watt-hours). Slower cadence (15 min)."
+  [rng system-ids reading-idx start end]
+  (into [:put-docs {:into :reading_c :valid-from start :valid-to end}]
+        (for [system-id system-ids]
+          {:xt/id (str system-id "-c-" reading-idx)
+           :value (random-float rng 0 50000)})))
 
 (defn generate-reading-system-times
   "Generate system-times for readings with bimodal lag distribution.
   Returns vector of [idx system-time] pairs."
-  [random interval-count base-system-time]
+  [random interval-count ^Instant base-system-time]
   (loop [idx 0
-         last-time base-system-time
+         ^Instant last-time base-system-time
          result []]
     (if (>= idx interval-count)
       result
       (let [lag-seconds (if (random/chance? random 0.8)
                           (random/next-int random 6)
                           (+ 280 (random/next-int random 41)))
-            calculated-time (-> base-system-time
-                                (.plusSeconds (* idx 300))
-                                (.plusSeconds lag-seconds))
+            ^Instant calculated-time (.plusSeconds (.plusSeconds base-system-time (long (* idx 300)))
+                                                  (long lag-seconds))
             system-time (if (.isAfter calculated-time last-time)
                           calculated-time
                           (.plusMillis last-time 1))]
@@ -275,15 +331,18 @@
 (defn ->ingest-interleaved-stage
   "Interleave readings ingestion with system updates.
    Updates happen every (readings/updates-per-system) intervals, simulating
-   realistic mixed workload where readings and updates arrive concurrently."
-  [system-ids readings updates-per-system batch-size update-batch-size base-time]
+   realistic mixed workload where readings and updates arrive concurrently.
+   Also inserts reading_a (5 min), reading_b (5 min), and reading_c (15 min) for
+   the multi-reading aggregation query."
+  [system-ids site-ids readings updates-per-system batch-size update-batch-size base-time]
   {:t :call, :stage :ingest-interleaved
    :f (fn [{:keys [node random]}]
         (log/infof "Inserting %d readings with %d interleaved update rounds" readings updates-per-system)
         (let [intervals (->> (tu/->instants :minute 5 base-time)
                              (partition 2 1)
                              (take readings))
-              batches (partition-all batch-size system-ids)
+              sys-batches (partition-all batch-size system-ids)
+              site-batches (partition-all batch-size site-ids)
               base-system-time (Instant/now)
               system-times (generate-reading-system-times random readings base-system-time)
               update-interval (max 1 (quot readings updates-per-system))]
@@ -291,13 +350,25 @@
                  active-systems (vec system-ids)
                  update-round 0]
             (when-let [[[idx system-time] [start end]] (first reading-data)]
-              ;; Insert readings
+              ;; Insert reading_a (system power) + reading_b (site power) at 5 min cadence
               (when (zero? (mod idx 1000))
                 (log/infof "Readings batch %d" idx))
-              (doseq [batch batches]
+              (doseq [batch sys-batches]
                 (xt/submit-tx node
-                              [(->readings-docs random (vec batch) idx start end)]
+                              [(->reading-a-docs random (vec batch) idx start end)]
                               {:system-time system-time}))
+              ;; reading_b keyed by site
+              (doseq [batch site-batches]
+                (xt/submit-tx node
+                              [(->reading-b-docs random (vec batch) idx start end)]
+                              {:system-time system-time}))
+              ;; reading_c at 15 min cadence (every 3rd 5-min interval)
+              (when (zero? (mod idx 3))
+                (let [c-end (.plus ^Instant start (Duration/ofMinutes 15))]
+                  (doseq [batch sys-batches]
+                    (xt/submit-tx node
+                                  [(->reading-c-docs random (vec batch) (quot idx 3) start c-end)]
+                                  {:system-time system-time}))))
               ;; Do update round at intervals (if we have rounds remaining)
               (let [should-update? (and (pos? (count active-systems))
                                         (< update-round updates-per-system)
@@ -327,7 +398,7 @@
               (log/infof "Readings batch %d" idx))
             (doseq [batch batches]
               (xt/submit-tx node
-                            [(->readings-docs random (vec batch) idx start end)]
+                            [(->reading-a-docs random (vec batch) idx start end)]
                             {:system-time system-time})))))})
 
 (defn ->update-system-stage [system-ids updates-per-system update-batch-size]
@@ -368,18 +439,43 @@
 (defn exec-cumulative-registration [node start end opts]
   (xt/q node (query-cumulative-registration-sqlvec {:start start :end end}) opts))
 
+(defn exec-multi-reading-aggregation [node system-ids start end opts]
+  (xt/q node (query-multi-reading-aggregation-sqlvec {:system-ids system-ids :start start :end end}) opts))
+
 ;; OLTP mixed workload procs
 
 (defn proc-insert-readings
-  "Insert a batch of readings for random systems"
+  "Insert a batch of reading_a for random systems"
   [{:keys [node random !state]}]
   (let [{:keys [system-ids base-time ^AtomicLong !reading-idx]} @!state
         idx (.getAndIncrement !reading-idx)
-        start (.plus ^Instant base-time (Duration/ofMinutes (* 5 idx)))
+        ^Instant start (.plus ^Instant base-time (Duration/ofMinutes (* 5 idx)))
         end (.plus start (Duration/ofMinutes 5))
         batch-size (min 100 (count system-ids))
         batch (vec (repeatedly batch-size #(random/uniform-nth random system-ids)))]
-    (xt/submit-tx node [(->readings-docs random batch idx start end)])))
+    (xt/submit-tx node [(->reading-a-docs random batch idx start end)])))
+
+(defn proc-insert-readings-b
+  "Insert a batch of reading_b (site power) for random sites"
+  [{:keys [node random !state]}]
+  (let [{:keys [site-ids base-time ^AtomicLong !reading-b-idx]} @!state
+        idx (.getAndIncrement !reading-b-idx)
+        ^Instant start (.plus ^Instant base-time (Duration/ofMinutes (* 5 idx)))
+        end (.plus start (Duration/ofMinutes 5))
+        batch-size (min 100 (count site-ids))
+        batch (vec (repeatedly batch-size #(random/uniform-nth random site-ids)))]
+    (xt/submit-tx node [(->reading-b-docs random batch idx start end)])))
+
+(defn proc-insert-readings-c
+  "Insert a batch of reading_c (state of charge) for random systems. 15 min intervals."
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids base-time ^AtomicLong !reading-c-idx]} @!state
+        idx (.getAndIncrement !reading-c-idx)
+        ^Instant start (.plus ^Instant base-time (Duration/ofMinutes (* 15 idx)))
+        end (.plus start (Duration/ofMinutes 15))
+        batch-size (min 100 (count system-ids))
+        batch (vec (repeatedly batch-size #(random/uniform-nth random system-ids)))]
+    (xt/submit-tx node [(->reading-c-docs random batch idx start end)])))
 
 (defn proc-update-system
   "Update a random system's fields"
@@ -428,6 +524,15 @@
     (when (and min-valid-time max-valid-time)
       (exec-cumulative-registration node min-valid-time max-valid-time {}))))
 
+(defn proc-query-multi-reading-aggregation
+  "Run the multi-table reading aggregation with deltas and control plans.
+   Targets ~30 systems to match production query patterns."
+  [{:keys [node random !state]}]
+  (let [{:keys [system-ids min-valid-time max-valid-time]} @!state]
+    (when (and min-valid-time max-valid-time)
+      (let [sample (vec (take 30 (random/shuffle random system-ids)))]
+        (exec-multi-reading-aggregation node sample min-valid-time max-valid-time {})))))
+
 (defn ->query-stage [query-type]
   {:t :call
    :stage (keyword (str "query-" (name query-type)))
@@ -440,7 +545,8 @@
             :readings-for-system (exec-readings-for-system node sample-system-id min-valid-time max-valid-time opts)
             :system-count-over-time (exec-system-count-over-time node min-valid-time max-valid-time opts)
             :readings-range-bins (exec-readings-range-bins node min-valid-time max-valid-time opts)
-            :cumulative-registration (exec-cumulative-registration node min-valid-time max-valid-time opts))))})
+            :cumulative-registration (exec-cumulative-registration node min-valid-time max-valid-time opts)
+            :multi-reading-aggregation (exec-multi-reading-aggregation node (vec (take 30 system-ids)) min-valid-time max-valid-time opts))))})
 
 (defmethod b/cli-flags :fusion [_]
   [[nil "--devices DEVICES" "Number of systems" :parse-fn parse-long :default 10000]
@@ -478,12 +584,15 @@
                   :update-batch-size update-batch-size :updates-per-system updates-per-system
                   :duration duration :threads threads :staged-only? staged-only?}
      :->state #(do {:!state (atom {:system-ids system-ids
+                                   :site-ids site-ids
                                    :base-time base-time
-                                   :!reading-idx (AtomicLong. readings)})})
+                                   :!reading-idx (AtomicLong. readings)
+                                   :!reading-b-idx (AtomicLong. readings)
+                                   :!reading-c-idx (AtomicLong. (quot readings 3))})})
      :tasks (concat
              (when-not no-load?
                [(->init-tables-stage system-ids site-ids organisation-ids device-series-ids device-model-ids device-ids test-suite-id test-case-ids update-batch-size base-time)
-                (->ingest-interleaved-stage system-ids readings updates-per-system batch-size update-batch-size base-time)
+                (->ingest-interleaved-stage system-ids site-ids readings updates-per-system batch-size update-batch-size base-time)
                 (->sync-stage)
                 (->compact-stage)])
 
@@ -492,9 +601,9 @@
                :f (fn [{:keys [node !state]}]
                     (let [latest-completed-tx (-> (xt/status node)
                                                   (get-in [:latest-completed-txs "xtdb" 0]))
-                          max-vt (-> (xt/q node "SELECT max(_valid_from) AS m FROM readings FOR ALL VALID_TIME")
+                          max-vt (-> (xt/q node "SELECT max(_valid_from) AS m FROM reading_a FOR ALL VALID_TIME")
                                      first :m)
-                          min-vt (-> (xt/q node "SELECT min(_valid_from) AS m FROM readings FOR ALL VALID_TIME")
+                          min-vt (-> (xt/q node "SELECT min(_valid_from) AS m FROM reading_a FOR ALL VALID_TIME")
                                      first :m)]
                       (log/infof "Valid time range: %s to %s" min-vt max-vt)
                       (swap! !state into {:latest-completed-tx latest-completed-tx
@@ -507,7 +616,8 @@
                 (->query-stage :readings-for-system)
                 (->query-stage :system-count-over-time)
                 (->query-stage :readings-range-bins)
-                (->query-stage :cumulative-registration)])
+                (->query-stage :cumulative-registration)
+                (->query-stage :multi-reading-aggregation)])
 
              (when-not staged-only?
                [;; OLTP mixed workload - interleaved reads and writes
@@ -522,14 +632,17 @@
                                  :think Duration/ZERO
                                  :pooled-task {:t :pick-weighted
                                                :choices [;; Writes (30%)
-                                                         [20.0 {:t :call, :transaction :insert-readings, :f (b/wrap-in-catch proc-insert-readings)}]
+                                                         [12.0 {:t :call, :transaction :insert-readings, :f (b/wrap-in-catch proc-insert-readings)}]
+                                                         [5.0 {:t :call, :transaction :insert-readings-b, :f (b/wrap-in-catch proc-insert-readings-b)}]
+                                                         [3.0 {:t :call, :transaction :insert-readings-c, :f (b/wrap-in-catch proc-insert-readings-c)}]
                                                          [10.0 {:t :call, :transaction :update-system, :f (b/wrap-in-catch proc-update-system)}]
                                                          ;; Reads (70%)
-                                                         [25.0 {:t :call, :transaction :query-system-settings, :f (b/wrap-in-catch proc-query-system-settings)}]
+                                                         [20.0 {:t :call, :transaction :query-system-settings, :f (b/wrap-in-catch proc-query-system-settings)}]
                                                          [20.0 {:t :call, :transaction :query-readings, :f (b/wrap-in-catch proc-query-readings)}]
                                                          [10.0 {:t :call, :transaction :query-system-count, :f (b/wrap-in-catch proc-query-system-count)}]
                                                          [10.0 {:t :call, :transaction :query-range-bins, :f (b/wrap-in-catch proc-query-range-bins)}]
-                                                         [5.0 {:t :call, :transaction :query-registration, :f (b/wrap-in-catch proc-query-registration)}]]}}]}
+                                                         [5.0 {:t :call, :transaction :query-registration, :f (b/wrap-in-catch proc-query-registration)}]
+                                                         [5.0 {:t :call, :transaction :query-multi-reading-aggregation, :f (b/wrap-in-catch proc-query-multi-reading-aggregation)}]]}}]}
                 {:t :call, :stage :sync-after-oltp, :f (fn [{:keys [node]}] (b/sync-node node))}]))}))
 
 ;; ============================================================================
@@ -555,7 +668,7 @@
         long-ratio (/ (count long-lags) (double (count lags)))]
 
     ;; All times should be monotonically increasing
-    (t/is (every? (fn [[[_ t1] [_ t2]]] (or (.isBefore t1 t2) (.equals t1 t2)))
+    (t/is (every? (fn [[[_ ^Instant t1] [_ ^Instant t2]]] (or (.isBefore t1 t2) (.equals t1 t2)))
                   (partition 2 1 times))
           "System times must be monotonically increasing")
 

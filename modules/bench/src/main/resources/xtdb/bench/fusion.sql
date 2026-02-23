@@ -7,14 +7,14 @@ WHERE _id = :system-id
 -- :name query-readings-for-system :? :*
 -- Time-series scan for specific system
 -- NOTE: Production query is missing temporal join constraint (CONTAINS predicate).
--- Without 'system._valid_time CONTAINS readings._valid_from', this produces a cartesian
+-- Without 'system._valid_time CONTAINS reading_a._valid_from', this produces a cartesian
 -- product - each reading is joined with ALL versions of the system.
-SELECT readings._valid_to as reading_time, readings.value::float AS reading_value
-FROM readings FOR ALL VALID_TIME
-JOIN system FOR ALL VALID_TIME ON system._id = readings.system_id
+SELECT reading_a._valid_to as reading_time, reading_a.value::float AS reading_value
+FROM reading_a FOR ALL VALID_TIME
+JOIN system FOR ALL VALID_TIME ON system._id = reading_a.system_id
 WHERE system._id = :system-id
-  AND readings._valid_from >= :start
-  AND readings._valid_from < :end
+  AND reading_a._valid_from >= :start
+  AND reading_a._valid_from < :end
 ORDER BY reading_time
 
 -- :name query-system-count-over-time :? :*
@@ -41,7 +41,7 @@ WITH corrected_readings AS (
          (bin)._from AS corrected_from,
          (bin)._weight AS corrected_weight,
          r.value * (bin)._weight AS corrected_portion
-  FROM readings AS r, UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
+  FROM reading_a AS r, UNNEST(range_bins(INTERVAL 'PT1H', r._valid_time)) AS b(bin)
   WHERE r._valid_from >= :start AND r._valid_from < :end
 )
 SELECT corrected_from AS t, SUM(corrected_portion) / SUM(corrected_weight) AS value
@@ -129,3 +129,194 @@ FROM gen
 LEFT OUTER JOIN data_with_status ON data_with_status.t = gen.t
 GROUP BY gen.t, registration_status
 ORDER BY gen.t, registration_status
+
+-- :name query-multi-reading-aggregation :? :*
+-- Multi-table reading aggregation with range_bins, delta calculations, and control plan targets.
+-- Exercises: multiple CTEs with range_bins, MATERIALIZED CTE, ROW_NUMBER window function,
+-- AGE/EXTRACT for time delta, IN filter on system IDs, and UNION of heterogeneous result sets.
+-- The IN filter mirrors production where queries target a subset of ~30 systems.
+WITH
+  systems AS (
+    SELECT
+      sys._id AS sid,
+      sys.rtg_max_w AS rtg_max_w,
+      sys.set_max_discharge_rate_w,
+      sys.set_max_charge_rate_w
+    FROM system AS sys
+    WHERE sys._id IN (:v*:system-ids)
+  ),
+  ap_corrected_readings AS (
+    SELECT
+      r.system_id AS sid,
+      r._valid_from AS r_vf,
+      r._valid_to AS r_vt,
+      (bin)._from AS corrected_from,
+      (bin)._weight AS corrected_weight,
+      r.value * (bin)._weight AS corrected_portion
+    FROM reading_a FOR ALL VALID_TIME AS r,
+         UNNEST(range_bins(INTERVAL 'PT5M', r._valid_time)) AS b(bin)
+    WHERE r.system_id IN (:v*:system-ids)
+      AND r._valid_from >= :start AND r._valid_from < :end
+  ),
+  ap_summed_by_system AS (
+    SELECT
+      sid,
+      corrected_from AS t,
+      SUM(corrected_portion) / SUM(corrected_weight) AS value
+    FROM ap_corrected_readings
+    GROUP BY sid, corrected_from
+  ),
+  sp_corrected_readings AS (
+    SELECT
+      r._id AS sid,
+      r._valid_from AS r_vf,
+      r._valid_to AS r_vt,
+      (bin)._from AS corrected_from,
+      (bin)._weight AS corrected_weight,
+      r.value * (bin)._weight AS corrected_portion
+    FROM reading_b FOR ALL VALID_TIME AS r,
+         UNNEST(range_bins(INTERVAL 'PT5M', r._valid_time)) AS b(bin)
+    WHERE r._valid_from >= :start AND r._valid_from < :end
+  ),
+  sp_summed_by_system AS (
+    SELECT
+      sid,
+      corrected_from AS t,
+      SUM(corrected_portion) / SUM(corrected_weight) AS value
+    FROM sp_corrected_readings
+    GROUP BY sid, corrected_from
+  ),
+  soc_corrected_readings AS (
+    SELECT
+      r.system_id AS sid,
+      r._valid_from AS r_vf,
+      r._valid_to AS r_vt,
+      (bin)._from AS corrected_from,
+      (bin)._weight AS corrected_weight,
+      r.value * (bin)._weight AS corrected_portion
+    FROM reading_c FOR ALL VALID_TIME AS r,
+         UNNEST(range_bins(INTERVAL 'PT5M', r._valid_time)) AS b(bin)
+    WHERE r.system_id IN (:v*:system-ids)
+      AND r._valid_from >= :start AND r._valid_from < :end
+  ),
+  MATERIALIZED soc_summed_by_system AS (
+    SELECT
+      sid,
+      corrected_from AS t,
+      SUM(corrected_portion) / SUM(corrected_weight) AS value
+    FROM soc_corrected_readings
+    GROUP BY sid, corrected_from
+  ),
+  soc_reading AS (
+    SELECT
+      *,
+      t,
+      ROW_NUMBER() OVER (ORDER BY sid, t) AS rn
+    FROM soc_summed_by_system
+  ),
+  previous_reading_number AS (
+    SELECT
+      sid,
+      value,
+      t,
+      (rn + 1) AS prn
+    FROM soc_reading
+  ),
+  all_reading AS (
+    SELECT
+      soc_reading.*,
+      prn.prn AS prn_prn,
+      prn.value AS prn_value,
+      prn.t AS prn_valid_from
+    FROM soc_reading
+    JOIN previous_reading_number AS prn ON prn.sid = soc_reading.sid
+    WHERE soc_reading.rn = prn.prn
+  ),
+  deltas AS (
+    SELECT
+      *,
+      all_reading.value - all_reading.prn_value AS value_delta,
+      (all_reading.t - all_reading.prn_valid_from) AS time_delta_interval,
+      (
+        EXTRACT(HOUR FROM AGE(all_reading.t, all_reading.prn_valid_from))
+      ) + (
+        EXTRACT(MINUTE FROM AGE(all_reading.t, all_reading.prn_valid_from)) / 60.0
+      ) + (
+        EXTRACT(SECOND FROM AGE(all_reading.t, all_reading.prn_valid_from)) / 3600.0
+      ) AS time_delta
+    FROM all_reading
+  ),
+  aggregated_control_plans AS (
+    SELECT
+      _valid_from,
+      _valid_to,
+      SUM(control_value) AS aggregated_control_value,
+      event_id,
+      status
+    FROM control_plan FOR ALL VALID_TIME
+    WHERE status = 'ACTIVE'
+    GROUP BY event_id, status, _valid_from, _valid_to
+    ORDER BY _valid_from
+  )
+
+SELECT
+  t,
+  SUM(value) AS reading_value,
+  'active_power' AS type
+FROM ap_summed_by_system
+GROUP BY t
+
+UNION
+
+SELECT
+  t,
+  SUM(value) AS reading_value,
+  'site_power' AS type
+FROM sp_summed_by_system
+GROUP BY t
+
+UNION
+
+SELECT
+  t,
+  SUM(value) AS reading_value,
+  'state_of_charge' AS type
+FROM soc_summed_by_system
+GROUP BY t
+
+UNION
+
+SELECT
+  t,
+  -1 * SUM(value_delta / time_delta) AS reading_value,
+  'charge_rate' AS type
+FROM deltas
+GROUP BY t
+
+UNION
+
+SELECT
+  _valid_from AS t,
+  COALESCE(
+    MIN(CASE WHEN is_start THEN aggregated_control_value END),
+    MIN(aggregated_control_value)
+  ) AS reading_value,
+  event_id AS type
+FROM (
+  SELECT
+    event_id,
+    aggregated_control_value,
+    _valid_from,
+    TRUE AS is_start
+  FROM aggregated_control_plans
+  UNION ALL
+  SELECT
+    event_id,
+    aggregated_control_value,
+    (_valid_to - INTERVAL 'PT1S') AS _valid_from,
+    FALSE AS is_start
+  FROM aggregated_control_plans
+) AS cp
+GROUP BY _valid_from, event_id
+
+ORDER BY t
