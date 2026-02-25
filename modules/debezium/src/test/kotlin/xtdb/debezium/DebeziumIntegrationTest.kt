@@ -195,4 +195,70 @@ class DebeziumIntegrationTest {
         assertCdcEvent(messages[2], "u", after = buildJsonObject { put("id", 2); put("name", "updated") })
         assertCdcEvent(messages[3], "d")
     }
+
+    @Test
+    fun `debezium type mapping for PG temporal and structural types`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            """CREATE TABLE IF NOT EXISTS type_probe (
+                _id INT PRIMARY KEY,
+                ts TIMESTAMP,
+                tstz TIMESTAMPTZ,
+                d DATE,
+                t TIME,
+                b BOOLEAN,
+                i INT,
+                bi BIGINT,
+                f FLOAT,
+                dp DOUBLE PRECISION,
+                txt TEXT,
+                j JSON,
+                jb JSONB
+            )""",
+        )
+
+        registerConnectorAndAwait()
+
+        pgExecute(
+            """INSERT INTO type_probe (_id, ts, tstz, d, t, b, i, bi, f, dp, txt, j, jb)
+               VALUES (
+                   1,
+                   '2024-01-01 00:00:00',
+                   '2024-01-01 00:00:00+00',
+                   '2024-01-01',
+                   '12:30:00',
+                   true,
+                   42,
+                   9999999999,
+                   3.14,
+                   2.718281828,
+                   'hello',
+                   '{"key": "val"}',
+                   '{"key": "val"}'
+               )""",
+        )
+
+        val messages = pollMessages("testdb.public.type_probe", expected = 1)
+        val after = messages[0].payload()["after"]!!.jsonObject
+
+        // Temporal types — TIMESTAMP is epoch micros, TIMESTAMPTZ is ISO string
+        assertEquals(1704067200000000L, after["ts"]!!.jsonPrimitive.longOrNull, "TIMESTAMP should be epoch micros")
+        assertTrue(after["tstz"]!!.jsonPrimitive.isString, "TIMESTAMPTZ should be a string")
+        assertTrue(after["tstz"]!!.jsonPrimitive.content.endsWith("Z"), "TIMESTAMPTZ should be ISO-8601 UTC")
+        assertEquals(19723L, after["d"]!!.jsonPrimitive.longOrNull, "DATE should be days since epoch")
+        assertEquals(45000000000L, after["t"]!!.jsonPrimitive.longOrNull, "TIME should be nanos since midnight")
+
+        // Numeric types
+        assertEquals(42L, after["i"]!!.jsonPrimitive.longOrNull, "INT should be a long")
+        assertEquals(9999999999L, after["bi"]!!.jsonPrimitive.longOrNull, "BIGINT should be a long")
+        assertEquals(3.14, after["f"]!!.jsonPrimitive.doubleOrNull, "FLOAT should be a double")
+        assertEquals(2.718281828, after["dp"]!!.jsonPrimitive.doubleOrNull, "DOUBLE should be a double")
+
+        // Text/JSON types — both JSON and JSONB come through as strings
+        assertEquals("hello", after["txt"]!!.jsonPrimitive.content)
+        assertTrue(after["j"]!!.jsonPrimitive.isString, "JSON should be a string")
+        assertTrue(after["jb"]!!.jsonPrimitive.isString, "JSONB should be a string")
+
+        // Boolean
+        assertEquals(true, after["b"]!!.jsonPrimitive.booleanOrNull, "BOOLEAN should be a boolean")
+    }
 }
