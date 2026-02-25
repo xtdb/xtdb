@@ -398,7 +398,13 @@
 
   (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
   (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
-  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out"))))
+  ;; $1 (Java-style) and \1 (Postgres-style) both work as backreferences
+  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out")))
+  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' \\1 ') AS out")))
+  (t/is (= [{:out "example.com"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('http://example.com/some/path', '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS out")))
+
+  ;; \\1 in replacement = literal backslash + '1', not a backreference
+  (t/is (= [{:out "f\\1\\1b\\1r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', '\\\\1') AS out"))))
 
 (t/deftest test-bool-test-expr
   (t/are [sql expected]

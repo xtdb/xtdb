@@ -1112,8 +1112,17 @@
                     `(boolean (re-find (compile-regex ~(or re-literal `(resolve-string ~needle-code)) ~flags)
                                        (resolve-string ~haystack-code))))}))
 
+(defn- postgres-backrefs->java
+  "Converts \\N backreferences to Java's $N in a single pass.
+  Handles \\\\ (literal backslash) first so \\\\1 isn't mistaken for a backref."
+  ^String [^String replacement]
+  (str/replace replacement #"\\(\\|\d+)"
+             (fn [[_ group]]
+               (if (= group "\\") "\\\\" (str "$" group)))))
+
 (defmethod codegen-call [:regexp_replace :utf8] [{:keys [pattern replacement start n flags]}]
-  (let [flag-map {\s [Pattern/DOTALL]
+  (let [replacement (postgres-backrefs->java replacement)
+        flag-map {\s [Pattern/DOTALL]
                   \i [Pattern/CASE_INSENSITIVE, Pattern/UNICODE_CASE]
                   \m [Pattern/MULTILINE]}
 
