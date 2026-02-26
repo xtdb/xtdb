@@ -48,5 +48,6 @@
   "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
   [node timeout]
 
-  (-> (.getCompactor (db/primary-db node))
+  (-> (.getLogProcessor (db/primary-db node))
+      (.getCompactor)
       (.compactAllSync timeout)))

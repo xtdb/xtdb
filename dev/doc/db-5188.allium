@@ -5,9 +5,9 @@
 --
 -- Key changes from db.allium:
 -- 1. Source and replica are always separate logs (invariant, not just convention).
--- 2. An IndexingCoordinator owns the indexing pipeline lifecycle per database.
---    It holds the currently active system (leader or follower) as an AutoCloseable,
---    driven by Kafka consumer group rebalancing (onPartitionsAssigned/Revoked).
+-- 2. A LogProcessor owns the indexing pipeline lifecycle per database.
+--    DirectLogProcessor is the current implementation.
+--    Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
 -- 3. A single LiveIndex sits outside the coordinator as shared state.
 --    Leader mode feeds it from source processing; follower mode feeds it from replica processing.
 -- 4. Watchers also sit outside the coordinator as shared state.
@@ -27,7 +27,7 @@ use "./compaction.allium" as compaction
 
 context {
     database: Database
-    indexing_coordinator: IndexingCoordinator
+    log_processor: LogProcessor
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- shared across leader/follower modes
     block_catalog: BlockCatalog
@@ -86,16 +86,13 @@ entity Database {
         -- Source and replica are always distinct logs.
 }
 
-entity IndexingCoordinator {
-    -- See: indexer/IndexingCoordinator.kt (to be created)
+entity LogProcessor {
+    -- See: indexer/LogProcessor.kt (interface), indexer/DirectLogProcessor.kt (current impl)
     -- Owns the indexing pipeline lifecycle for a database.
-    -- Uses a Kotlin coroutine channel loop to serialize state transitions.
-    -- Holds the currently active system as an AutoCloseable; no mode enum.
+    -- DirectLogProcessor combines source and replica processing into a single sub-system.
     --
-    -- Hex arch: delegates to a Port interface with startLeader() and startFollower(),
-    -- each returning AutoCloseable. The coordinator is opaque to what's inside each mode.
-    --
-    -- Transitions are driven by Kafka consumer group rebalancing:
+    -- Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
+    -- Transitions would be serialized via a coroutine channel loop.
     --   onPartitionsAssigned → TransitionToLeader
     --   onPartitionsRevoked  → TransitionToFollower
     --
@@ -307,37 +304,37 @@ config {
 -- Rules: Coordinator Transitions
 ------------------------------------------------------------
 
--- The IndexingCoordinator serializes transitions via a coroutine channel.
+-- The LogProcessor serializes transitions via a coroutine channel.
 -- Kafka consumer group rebalancing drives these transitions.
 
 rule TransitionToLeader {
     when: PartitionsAssigned(database)
 
-    requires: indexing_coordinator.active_system is not LeaderSystem
+    requires: log_processor.active_system is not LeaderSystem
 
     ensures:
         -- Close any existing follower system.
-        if indexing_coordinator.active_system != null:
-            indexing_coordinator.active_system.close()
+        if log_processor.active_system != null:
+            log_processor.active_system.close()
 
         -- Start leader system.
         -- The transition is atomic with respect to live_index:
         -- no messages are processed between close and start.
-        indexing_coordinator.active_system = LeaderSystem.start()
+        log_processor.active_system = LeaderSystem.start()
 }
 
 rule TransitionToFollower {
     when: PartitionsRevoked(database)
 
-    requires: indexing_coordinator.active_system is not FollowerSystem
+    requires: log_processor.active_system is not FollowerSystem
 
     ensures:
         -- Close any existing leader system.
-        if indexing_coordinator.active_system != null:
-            indexing_coordinator.active_system.close()
+        if log_processor.active_system != null:
+            log_processor.active_system.close()
 
         -- Start follower system.
-        indexing_coordinator.active_system = FollowerSystem.start()
+        log_processor.active_system = FollowerSystem.start()
 }
 
 ------------------------------------------------------------
@@ -347,7 +344,7 @@ rule TransitionToFollower {
 rule ClientSubmitsTransaction {
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: indexing_coordinator.active_system is LeaderSystem
+    requires: log_processor.active_system is LeaderSystem
 
     ensures:
         let msg = TxMessage.created(
@@ -368,9 +365,9 @@ rule ClientSubmitsTransaction {
 
 rule LeaderProcessesTx {
     when: msg: TxMessage consumed from database.source_log
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: msg.msg_id > leader.latest_processed_msg_id
 
@@ -390,9 +387,9 @@ rule LeaderProcessesTx {
 
 rule LeaderProcessesAttachDb {
     when: msg: AttachDbMessage consumed from database.source_log
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: msg.msg_id > leader.latest_processed_msg_id
 
@@ -409,9 +406,9 @@ rule LeaderProcessesAttachDb {
 
 rule LeaderProcessesDetachDb {
     when: msg: DetachDbMessage consumed from database.source_log
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: msg.msg_id > leader.latest_processed_msg_id
 
@@ -428,9 +425,9 @@ rule LeaderProcessesDetachDb {
 
 rule LeaderProcessesFlushBlock {
     when: msg: FlushBlockMessage consumed from database.source_log
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: msg.msg_id > leader.latest_processed_msg_id
     requires: msg.expected_block_idx == block_catalog.current_block_index
@@ -444,9 +441,9 @@ rule LeaderProcessesTriesAdded {
     -- L1+ from compactor. The leader needs these in its trie catalog
     -- for correct partition info at block time, and forwards them to the replica log.
     when: msg: TriesAddedMessage consumed from database.source_log
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: msg.msg_id > leader.latest_processed_msg_id
     requires: msg.storage_version == current_storage_version
@@ -480,7 +477,7 @@ rule LeaderFinishesBlock {
     -- any practical difference between these two sources.
     when: LeaderBlockFlushNeeded(log_timestamp)
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
     let block_index = (block_catalog.current_block_index ?? -1) + 1
     let finished_tables = live_index.finishBlock(block_index)
     let tries = finished_tables.collectTries()
@@ -525,9 +522,9 @@ rule LeaderFinishesBlock {
 
 rule LeaderFlushTimeout {
     when: leader.last_flush_check + config.flush_timeout <= now
-    mode: indexing_coordinator.active_system is LeaderSystem
+    mode: log_processor.active_system is LeaderSystem
 
-    let leader = indexing_coordinator.active_system
+    let leader = log_processor.active_system
 
     requires: live_index.has_data
     requires: block_catalog.current_block_index unchanged since leader.last_flush_check
@@ -547,7 +544,7 @@ rule LeaderFlushTimeout {
 
 rule FollowerProcessesResolvedTx {
     when: msg: ResolvedTxMessage consumed from database.replica_log
-    mode: indexing_coordinator.active_system is FollowerSystem
+    mode: log_processor.active_system is FollowerSystem
 
     ensures:
         live_index.importTx(msg)
@@ -559,7 +556,7 @@ rule FollowerProcessesResolvedTx {
             database.catalog.detach(msg.db_op.db_name)
 
         -- Notify watchers using the source-log tx id.
-        let follower = indexing_coordinator.active_system
+        let follower = log_processor.active_system
         follower.latest_processed_msg_id = msg.tx_id
         watchers.notify(msg.tx_id, result)
 }
@@ -567,7 +564,7 @@ rule FollowerProcessesResolvedTx {
 rule FollowerProcessesTriesAdded {
     -- Both L0 (from block finishing) and L1+ (forwarded from source).
     when: msg: TriesAddedMessage consumed from database.replica_log
-    mode: indexing_coordinator.active_system is FollowerSystem
+    mode: log_processor.active_system is FollowerSystem
 
     requires: msg.storage_version == current_storage_version
     requires: msg.storage_epoch == current_storage_epoch
@@ -580,10 +577,10 @@ rule FollowerProcessesBlockBoundary {
     -- The leader has signalled a block boundary.
     -- Enter pending mode: buffer subsequent records until BlockUploaded.
     when: msg: BlockBoundaryMessage consumed from database.replica_log
-    mode: indexing_coordinator.active_system is FollowerSystem
+    mode: log_processor.active_system is FollowerSystem
 
     ensures:
-        let follower = indexing_coordinator.active_system
+        let follower = log_processor.active_system
         follower.pending_block_index = msg.block_index
         -- All subsequent messages are buffered until BlockUploaded arrives.
 }
@@ -591,9 +588,9 @@ rule FollowerProcessesBlockBoundary {
 rule FollowerProcessesBlockUploaded {
     -- Block is available in storage. Refresh catalogs and transition.
     when: msg: BlockUploadedMessage consumed from database.replica_log
-    mode: indexing_coordinator.active_system is FollowerSystem
+    mode: log_processor.active_system is FollowerSystem
 
-    let follower = indexing_coordinator.active_system
+    let follower = log_processor.active_system
 
     requires: msg.storage_epoch == current_storage_epoch
     requires: msg.block_index == (block_catalog.current_block_index ?? -1) + 1
@@ -690,7 +687,7 @@ surface TransactionSubmission {
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when indexing_coordinator.active_system is LeaderSystem
+            when log_processor.active_system is LeaderSystem
 
     invariant: OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.

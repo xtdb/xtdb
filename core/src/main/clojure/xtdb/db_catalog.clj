@@ -76,12 +76,12 @@
             :storage (ig/ref ::storage)
             :db-state (ig/ref ::state)
             :watchers (ig/ref ::watchers)
-            :replica-log (ig/ref :xtdb.indexer/replica-log)}
+            :log-processor (ig/ref :xtdb.indexer/direct-log-processor)}
            opts)})
 
-(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers replica-log]}]
-  (let [{:keys [log-processor compactor tx-source]} replica-log]
-    (Database. allocator db-config storage db-state log-processor compactor watchers tx-source)))
+(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers
+                                             log-processor]}]
+  (Database. allocator db-config storage db-state log-processor watchers))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
@@ -111,20 +111,14 @@
                            :db-storage (ig/ref ::storage)
                            :db-state (ig/ref ::state))
 
-         :xtdb.indexer/replica-log (cond-> (assoc opts
-                                                  :db-state (ig/ref ::state)
-                                                  :watchers (ig/ref ::watchers)
-                                                  :indexer-conf indexer-conf
-                                                  :mode mode
-                                                  :tx-source-conf (.getTxSource conf))
-                                     (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
-
-         :xtdb.indexer/source-log (assoc opts
-                                         :db-state (ig/ref ::state)
-                                         :indexer-conf indexer-conf
-                                         :mode mode
-                                         :replica-log (ig/ref :xtdb.indexer/replica-log)
-                                         :block-flush-duration (.getFlushDuration indexer-conf))
+         :xtdb.indexer/direct-log-processor (cond-> (assoc opts
+                                                          :db-state (ig/ref ::state)
+                                                          :watchers (ig/ref ::watchers)
+                                                          :indexer-conf indexer-conf
+                                                          :mode mode
+                                                          :tx-source-conf (.getTxSource conf)
+                                                          :block-flush-duration (.getFlushDuration indexer-conf))
+                                                   (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
          ::database (assoc opts :db-config db-config)}
         (doto ig/load-namespaces))))

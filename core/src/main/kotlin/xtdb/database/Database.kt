@@ -25,12 +25,10 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.table.TableRef
 import xtdb.trie.ColumnName
-import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
+import xtdb.indexer.DirectLogProcessor
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.Indexer.TxSource
-import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
@@ -45,10 +43,8 @@ data class Database(
     val config: Config,
     override val storage: DatabaseStorage,
     override val queryState: DatabaseState,
-    val logProcessorOrNull: LogProcessor?,
-    val compactor: Compactor.ForDatabase,
+    val logProcessorOrNull: DirectLogProcessor?,
     private val watchers: Watchers,
-    val txSource: TxSource? = null,
 ) : IQuerySource.QueryDatabase {
     val name: DatabaseName get() = queryState.name
     override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
@@ -65,7 +61,7 @@ data class Database(
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
-    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("replica log processor not initialised")
+    val logProcessor: DirectLogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
 
     fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
         checkNotNull(logProcessorOrNull) { "log processor not initialised" }
