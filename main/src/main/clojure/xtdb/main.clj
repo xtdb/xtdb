@@ -22,6 +22,7 @@
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
   (println " * `tx-source`: runs a node which replicates the transaction log to an external log")
+  (println " * `debezium-cdc`: starts a node with Debezium CDC ingestion from Kafka")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -261,6 +262,32 @@
           (println "Usage: `read-table-block-file <file>`")
           (System/exit 2))))))
 
+(def debezium-cdc-cli-spec
+  [config-file-opt
+   ["-b" "--bootstrap-servers SERVERS" "Kafka bootstrap servers"
+    :id :bootstrap-servers]
+   ["-t" "--topic TOPIC" "Kafka topic to consume CDC events from"
+    :id :topic]
+   ["-d" "--db-name DB_NAME" "XTDB database name"
+    :id :db-name
+    :default "xtdb"]
+   ["-h" "--help"]])
+
+(defn- start-debezium-cdc [args]
+  (let [{{:keys [file bootstrap-servers topic db-name]} :options}
+        (-> (parse-args args debezium-cdc-cli-spec)
+            (handling-arg-errors-or-help))]
+    (when-not (and bootstrap-servers topic)
+      (binding [*out* *err*]
+        (println "Required: --bootstrap-servers and --topic")
+        (System/exit 2)))
+    (util/with-open [_cdc ((requiring-resolve 'xtdb.debezium/start!)
+                           (file->node-opts file)
+                           {:bootstrap-servers bootstrap-servers
+                            :topic topic
+                            :db-name db-name})]
+      @(shutdown-hook-promise))))
+
 (defn -main [& args]
   (binding [*out* *err*]
     (println (str "Starting " (util/xtdb-version-string) " ...")))
@@ -279,6 +306,8 @@
         "reset-compactor" (do
                             (reset-compactor! more-args)
                             (System/exit 0))
+
+        "debezium-cdc" (start-debezium-cdc more-args)
 
         "tx-source" (do
                       (tx-source! more-args)
