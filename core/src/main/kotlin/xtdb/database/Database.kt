@@ -72,14 +72,14 @@ data class Database(
 ) : IQuerySource.QueryDatabase {
     override val queryState: DatabaseState get() = replicaIndexer.state
     val name: DatabaseName get() = queryState.name
-    override fun openSnapshot(): Snapshot = replicaIndexer.liveIndex.openSnapshot()
+    override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
 
     val blockCatalog: BlockCatalog get() = queryState.blockCatalog
     val tableCatalog: TableCatalog get() = queryState.tableCatalog
 
     fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? = tableCatalog.getTypes(table)
     val trieCatalog: TrieCatalog get() = queryState.trieCatalog
-    val liveIndex: LiveIndex get() = replicaIndexer.liveIndex
+    val liveIndex: LiveIndex get() = queryState.liveIndex
 
     val sourceLog: Log<SourceMessage> get() = storage.sourceLog
     val replicaLog: Log<ReplicaMessage> get() = storage.replicaLog

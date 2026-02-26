@@ -17,9 +17,10 @@ use "./compaction.allium" as compaction
 
 context {
     database: Database
-    live_index: LiveIndex
-    block_catalog: BlockCatalog
-    table_catalog: TableCatalog
+    database_state: DatabaseState  -- shared catalogs + live index
+    live_index: database_state.live_index
+    block_catalog: database_state.block_catalog
+    table_catalog: database_state.table_catalog
     log_processor: LogProcessor
 }
 

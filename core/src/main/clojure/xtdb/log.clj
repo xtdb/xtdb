@@ -18,7 +18,7 @@
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory SourceMessage$Tx Log$MessageMetadata)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
-           (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
+           (xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Mode)
            xtdb.indexer.ReplicaLogProcessor
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
@@ -251,7 +251,6 @@
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :indexer (ig/ref :xtdb.indexer/for-db)
-            :live-index (ig/ref :xtdb.indexer/live-index)
             :compactor (ig/ref :xtdb.compactor/for-db)
             :watchers (ig/ref :xtdb.indexer.replica-log/watchers)
             :tx-source (ig/ref :xtdb.tx-source/for-db)}
@@ -260,11 +259,11 @@
                   :enabled? (.getEnabled indexer-conf)))})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
-                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer live-index compactor skip-txs watchers enabled? db-catalog tx-source]}]
+                                               :keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state indexer compactor skip-txs watchers enabled? db-catalog tx-source]}]
   (when enabled?
     (ReplicaLogProcessor. allocator meter-registry
                           db-storage db-state
-                          indexer live-index compactor (set skip-txs)
+                          indexer (.getLiveIndex db-state) compactor (set skip-txs)
                           watchers
                           1024
                           db-catalog

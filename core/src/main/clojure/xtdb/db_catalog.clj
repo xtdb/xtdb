@@ -28,11 +28,12 @@
 (defmethod ig/expand-key ::state [k opts]
   {k (into {:block-cat (ig/ref :xtdb/block-catalog)
             :table-cat (ig/ref :xtdb/table-catalog)
-            :trie-cat (ig/ref :xtdb/trie-catalog)}
+            :trie-cat (ig/ref :xtdb/trie-catalog)
+            :live-index (ig/ref :xtdb.indexer/live-index)}
            opts)})
 
-(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat]}]
-  (DatabaseState. db-name block-cat table-cat trie-cat))
+(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
+  (DatabaseState. db-name block-cat table-cat trie-cat live-index))
 
 (defmethod ig/expand-key ::storage [k _]
   {k {:source-log (ig/ref :xtdb/source-log)
@@ -77,10 +78,14 @@
 
          ::storage opts
 
-         ;; shared catalogs + state - created once, shared by both sub-systems
+         ;; shared catalogs, live index + state - created once, shared by both sub-systems
          :xtdb/block-catalog opts
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
+         :xtdb.indexer/live-index (assoc opts
+                                         :indexer-conf indexer-conf
+                                         :block-cat (ig/ref :xtdb/block-catalog)
+                                         :table-cat (ig/ref :xtdb/table-catalog))
          ::state opts
 
          :xtdb.indexer/replica-log (cond-> (assoc opts

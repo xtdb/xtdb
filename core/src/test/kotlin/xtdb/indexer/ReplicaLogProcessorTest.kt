@@ -88,7 +88,7 @@ class ReplicaLogProcessorTest {
         val dbStorage = DatabaseStorage(log, null, BufferPool.UNUSED, null)
         val dbState = DatabaseState(
             "test", blockCatalog,
-            mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true),
+            mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true), null,
         )
 
         RootAllocator().use { allocator ->
@@ -142,7 +142,7 @@ class ReplicaLogProcessorTest {
             val dbStorage = DatabaseStorage(log, null, bufferPool, null)
             val dbState = DatabaseState(
                 "test", blockCatalog,
-                mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true),
+                mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true), null,
             )
 
             val lp = ReplicaLogProcessor(
