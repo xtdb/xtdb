@@ -24,7 +24,7 @@ LABEL usage="Example docker-run options for custom logging configuration: \
 --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml'"
 
 # For healthcheck
-RUN apk add --no-cache wget
+RUN apk add --no-cache wget gcompat
 
 COPY --from=jlink /build/build/custom-jre /opt/java
 ENV PATH="/opt/java/bin:$PATH"
