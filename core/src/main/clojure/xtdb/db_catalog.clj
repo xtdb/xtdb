@@ -6,8 +6,10 @@
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
            xtdb.api.Xtdb$Config
-           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode ReplicaIndexer SourceIndexer]
-           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
+           [xtdb.api.log Watchers]
+           [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode]
+           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]
+           [xtdb.util MsgIdUtil]))
 
 ;; Database components follow a hexagonal architecture pattern:
 ;;
@@ -54,15 +56,34 @@
              :indexer (ig/ref :xtdb/indexer)
              :compactor (ig/ref :xtdb/compactor)}}})
 
+(defmethod ig/expand-key ::watchers [k opts]
+  {k (into {:db-storage (ig/ref ::storage)
+            :db-state (ig/ref ::state)}
+           opts)})
+
+(defmethod ig/init-key ::watchers [_ {:keys [^DatabaseStorage db-storage, ^DatabaseState db-state]}]
+  (let [block-catalog (.getBlockCatalog db-state)
+        epoch (.getEpoch (.getSourceLog db-storage))
+        latest-processed (some-> (.getLatestProcessedMsgId block-catalog)
+                                 (as-> msg-id
+                                       (if (= (MsgIdUtil/msgIdToEpoch msg-id) epoch)
+                                         msg-id
+                                         (dec (MsgIdUtil/offsetToMsgId epoch 0)))))]
+    (Watchers. (or latest-processed -1))))
+
 (defmethod ig/expand-key ::database [k opts]
   {k (into {:allocator (ig/ref ::allocator)
             :storage (ig/ref ::storage)
+            :db-state (ig/ref ::state)
+            :watchers (ig/ref ::watchers)
             :source-log (ig/ref :xtdb.indexer/source-log)
             :replica-log (ig/ref :xtdb.indexer/replica-log)}
            opts)})
 
-(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage source-log replica-log]}]
-  (Database. allocator db-config storage source-log replica-log))
+(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers source-log replica-log]}]
+  (let [{:keys [source-live-index]} source-log
+        {:keys [log-processor compactor tx-source]} replica-log]
+    (Database. allocator db-config storage db-state source-live-index log-processor compactor watchers tx-source)))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
@@ -88,12 +109,17 @@
                                          :table-cat (ig/ref :xtdb/table-catalog))
          ::state opts
 
+         ::watchers (assoc opts
+                           :db-storage (ig/ref ::storage)
+                           :db-state (ig/ref ::state))
+
          :xtdb.indexer/replica-log (cond-> (assoc opts
-                                                 :db-state (ig/ref ::state)
-                                                 :indexer-conf indexer-conf
-                                                 :mode mode
-                                                 :tx-source-conf (.getTxSource conf))
-                                          (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+                                                  :db-state (ig/ref ::state)
+                                                  :watchers (ig/ref ::watchers)
+                                                  :indexer-conf indexer-conf
+                                                  :mode mode
+                                                  :tx-source-conf (.getTxSource conf))
+                                     (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
          :xtdb.indexer/source-log (assoc opts
                                          :db-state (ig/ref ::state)

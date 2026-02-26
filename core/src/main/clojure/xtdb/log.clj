@@ -252,7 +252,6 @@
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :indexer (ig/ref :xtdb.indexer/for-db)
             :compactor (ig/ref :xtdb.compactor/for-db)
-            :watchers (ig/ref :xtdb.indexer.replica-log/watchers)
             :tx-source (ig/ref :xtdb.tx-source/for-db)}
            (assoc (dissoc opts :indexer-conf :tx-source-conf)
                   :skip-txs (.getSkipTxs indexer-conf)
@@ -275,7 +274,7 @@
 (defn await-db
   ([db msg-id] (await-db db msg-id nil))
   ([^Database db, ^long msg-id, ^Duration timeout]
-   @(cond-> (.awaitSourceMessageAsync (.getReplicaIndexer db) msg-id)
+   @(cond-> (.awaitSourceMessageAsync db msg-id)
       timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
 (defn sync-db

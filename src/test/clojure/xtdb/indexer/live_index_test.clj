@@ -30,7 +30,7 @@
   (let [^BufferAllocator allocator (.getAllocator tu/*node*)
         db (db/primary-db tu/*node*)
         buffer-pool (.getBufferPool db)
-        live-index (.getLiveIndex (.getSourceIndexer db))
+        live-index (.getSourceLiveIndex db)
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
