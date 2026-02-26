@@ -6,6 +6,7 @@ import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
+import xtdb.api.log.LogOffset
 import xtdb.api.log.MessageId
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
@@ -141,7 +142,7 @@ class SourceLogProcessor(
         }
     }
 
-    private fun finishBlock(systemTime: Instant): Log.Record<ReplicaMessage> {
+    private fun finishBlock(logOffset: LogOffset, systemTime: Instant): Log.Record<ReplicaMessage> {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
@@ -191,7 +192,7 @@ class SourceLogProcessor(
         liveIndex.nextBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
 
-        return Log.Record(-1, systemTime, ReplicaMessage.BlockBoundary(blockIdx))
+        return Log.Record(logOffset, systemTime, ReplicaMessage.BlockBoundary(blockIdx))
     }
 
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
@@ -213,7 +214,7 @@ class SourceLogProcessor(
                     is SourceMessage.Tx -> {
                         val resolvedTx = resolveTx(msgId, record, msg)
 
-                        val blockBoundary = if (liveIndex.isFull()) finishBlock(record.logTimestamp) else null
+                        val blockBoundary = if (liveIndex.isFull()) finishBlock(record.logOffset, record.logTimestamp) else null
 
                         listOfNotNull(
                             Log.Record(record.logOffset, record.logTimestamp, resolvedTx),
@@ -225,7 +226,7 @@ class SourceLogProcessor(
                         val expectedBlockIdx = msg.expectedBlockIdx
                         val blockBoundary =
                             if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
-                                finishBlock(record.logTimestamp)
+                                finishBlock(record.logOffset, record.logTimestamp)
                             else null
 
                         listOfNotNull(blockBoundary)
