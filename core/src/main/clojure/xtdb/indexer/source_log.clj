@@ -3,18 +3,23 @@
             [xtdb.util :as util])
   (:import [xtdb.api IndexerConfig]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer SourceLogProcessor]))
+           [xtdb.indexer ReplicaLogProcessor SourceLogProcessor]))
 
 ;; Nested integrant sub-system that owns the source indexer's state, processor and subscription.
 ;; The source processor resolves txs using its own Indexer.ForDatabase,
 ;; then forwards resolved data to the replica processor for import.
 ;; Also owns block finishing: writes tries, table blocks and block files to storage.
+;;
+;; The source processor uses the shared LiveIndex from DatabaseState —
+;; there is no separate source LiveIndex.
 
 (defn- source-system [{:keys [indexer-conf mode replica-log block-flush-duration db-state] :as opts}]
   (let [child-opts (-> (dissoc opts :indexer-conf :mode :replica-log :block-flush-duration :db-state)
-                       (assoc :db-state db-state))]
-    (-> {:xtdb.indexer/live-index (assoc child-opts :indexer-conf indexer-conf)
-         :xtdb.indexer/crash-logger child-opts
+                       (assoc :db-state db-state
+                              ;; pass the shared live-index explicitly so sub-system components
+                              ;; don't try to ig/ref a key that doesn't exist here
+                              :live-index (.getLiveIndex ^DatabaseState db-state)))]
+    (-> {:xtdb.indexer/crash-logger child-opts
          :xtdb.indexer/for-db child-opts
          ::source-processor (assoc child-opts
                                    :indexer-conf indexer-conf
@@ -26,8 +31,7 @@
 (defmethod ig/expand-key ::source-processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :indexer (ig/ref :xtdb.indexer/for-db)
-            :live-index (ig/ref :xtdb.indexer/live-index)}
+            :indexer (ig/ref :xtdb.indexer/for-db)}
            opts)})
 
 (defmethod ig/init-key ::source-processor [_ {:keys [allocator ^DatabaseStorage db-storage db-state
@@ -36,7 +40,7 @@
                                                      ^Database$Mode mode
                                                      replica-indexer
                                                      block-flush-duration]}]
-  (when-let [replica-proc (:log-processor replica-indexer)]
+  (when-let [^ReplicaLogProcessor replica-proc (:log-processor replica-indexer)]
     (let [src-proc (SourceLogProcessor. allocator db-storage db-state
                                         indexer live-index
                                         replica-proc (set (.getSkipTxs indexer-conf))
@@ -61,8 +65,8 @@
 (defmethod ig/init-key :xtdb.indexer/source-log [_ opts]
   (-> (source-system opts) ig/expand ig/init))
 
-(defmethod ig/resolve-key :xtdb.indexer/source-log [_ sys]
-  {:source-live-index (:xtdb.indexer/live-index sys)})
+(defmethod ig/resolve-key :xtdb.indexer/source-log [_ _sys]
+  nil)
 
 (defmethod ig/halt-key! :xtdb.indexer/source-log [_ sys]
   (ig/halt! sys))

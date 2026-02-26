@@ -195,7 +195,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
                 }
 
                 is ReplicaMessage.ResolvedTx -> {
-                    liveIndex.importTx(msg)
+                    // TODO: importTx disabled — source processor writes to the shared LiveIndex directly via startTx.
+                    // liveIndex.importTx(msg)
 
                     txSource?.onCommit(msg)
 
@@ -244,7 +245,8 @@ class ReplicaLogProcessor @JvmOverloads constructor(
         blockCatalog.refresh(block)
         tableCatalog.refresh(blockIdx)
         trieCatalog.refresh(blockIdx)
-        liveIndex.nextBlock()
+        // TODO: nextBlock disabled — source processor calls nextBlock on the shared LiveIndex directly.
+        // liveIndex.nextBlock()
         compactor.signalBlock()
 
         pendingBlockIdx = null

@@ -45,7 +45,6 @@ data class Database(
     val config: Config,
     override val storage: DatabaseStorage,
     override val queryState: DatabaseState,
-    val sourceLiveIndex: LiveIndex,
     val logProcessorOrNull: LogProcessor?,
     val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,

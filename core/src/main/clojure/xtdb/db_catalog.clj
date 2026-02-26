@@ -76,14 +76,12 @@
             :storage (ig/ref ::storage)
             :db-state (ig/ref ::state)
             :watchers (ig/ref ::watchers)
-            :source-log (ig/ref :xtdb.indexer/source-log)
             :replica-log (ig/ref :xtdb.indexer/replica-log)}
            opts)})
 
-(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers source-log replica-log]}]
-  (let [{:keys [source-live-index]} source-log
-        {:keys [log-processor compactor tx-source]} replica-log]
-    (Database. allocator db-config storage db-state source-live-index log-processor compactor watchers tx-source)))
+(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers replica-log]}]
+  (let [{:keys [log-processor compactor tx-source]} replica-log]
+    (Database. allocator db-config storage db-state log-processor compactor watchers tx-source)))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
