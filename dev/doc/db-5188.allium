@@ -6,7 +6,8 @@
 -- Key changes from db.allium:
 -- 1. Source and replica are always separate logs (invariant, not just convention).
 -- 2. A LogProcessor owns the indexing pipeline lifecycle per database.
---    DirectLogProcessor is the current implementation.
+--    DirectLogProcessor wraps source + replica processing into a single sub-system.
+--    Compactor and TxSource are peers at db-system level, not children of the processor.
 --    Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
 -- 3. A single LiveIndex sits outside the coordinator as shared state.
 --    Leader mode feeds it from source processing; follower mode feeds it from replica processing.
@@ -32,6 +33,8 @@ context {
     watchers: Watchers                 -- shared across leader/follower modes
     block_catalog: BlockCatalog
     table_catalog: TableCatalog
+    compactor: Compactor.ForDatabase   -- peer of log_processor at db-system level
+    tx_source: Indexer.TxSource?       -- peer of log_processor at db-system level
 }
 
 ------------------------------------------------------------
@@ -89,7 +92,7 @@ entity Database {
 entity LogProcessor {
     -- See: indexer/LogProcessor.kt (interface), indexer/DirectLogProcessor.kt (current impl)
     -- Owns the indexing pipeline lifecycle for a database.
-    -- DirectLogProcessor combines source and replica processing into a single sub-system.
+    -- DirectLogProcessor wraps source + replica processing; compactor and txsource are peers at db-system level.
     --
     -- Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
     -- Transitions would be serialized via a coroutine channel loop.

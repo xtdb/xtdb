@@ -250,9 +250,7 @@
 (defmethod ig/expand-key :xtdb.log/processor [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :indexer (ig/ref :xtdb.indexer/for-db)
-            :compactor (ig/ref :xtdb.compactor/for-db)
-            :tx-source (ig/ref :xtdb.tx-source/for-db)}
+            :indexer (ig/ref :xtdb.indexer/for-db)}
            (assoc (dissoc opts :indexer-conf :tx-source-conf)
                   :skip-txs (.getSkipTxs indexer-conf)
                   :enabled? (.getEnabled indexer-conf)))})

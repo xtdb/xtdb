@@ -8,10 +8,11 @@
 ;; Single integrant sub-system combining source and replica log processing.
 ;; Replaces the separate :xtdb.indexer/source-log and :xtdb.indexer/replica-log sub-systems.
 
-(defn- log-processor-system [{:keys [indexer-conf mode tx-source-conf db-catalog db-state watchers block-flush-duration]
+(defn- log-processor-system [{:keys [indexer-conf mode tx-source-conf db-catalog db-state watchers
+                                     block-flush-duration compactor-for-db tx-source-for-db]
                               :as opts}]
   (let [child-opts (-> (dissoc opts :indexer-conf :mode :tx-source-conf :db-catalog :db-state :watchers
-                               :block-flush-duration)
+                               :block-flush-duration :compactor-for-db :tx-source-for-db)
                        (assoc :storage (:db-storage opts)
                               :db-state db-state
                               :state db-state
@@ -19,9 +20,10 @@
                               :watchers watchers))]
     (-> {:xtdb.indexer/crash-logger child-opts
          :xtdb.indexer/for-db child-opts
-         :xtdb.tx-source/for-db (assoc child-opts :tx-source-conf tx-source-conf)
-         :xtdb.compactor/for-db (assoc child-opts :mode mode)
-         :xtdb.log/processor (cond-> (assoc child-opts :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf)
+         :xtdb.log/processor (cond-> (assoc child-opts
+                                            :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf
+                                            :compactor compactor-for-db
+                                            :tx-source tx-source-for-db)
                                db-catalog (assoc :db-catalog db-catalog))
          ::source-processor (assoc child-opts
                                    :indexer-conf indexer-conf
@@ -69,9 +71,7 @@
 
 (defmethod ig/resolve-key :xtdb.indexer/direct-log-processor [_ sys]
   (when-let [replica-proc (:xtdb.log/processor sys)]
-    (DirectLogProcessor. replica-proc
-                         (:xtdb.compactor/for-db sys)
-                         (:xtdb.tx-source/for-db sys))))
+    (DirectLogProcessor. replica-proc)))
 
 (defmethod ig/halt-key! :xtdb.indexer/direct-log-processor [_ sys]
   (ig/halt! sys))

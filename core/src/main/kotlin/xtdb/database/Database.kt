@@ -27,7 +27,9 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
+import xtdb.compactor.Compactor
 import xtdb.indexer.DirectLogProcessor
+import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
@@ -45,6 +47,8 @@ data class Database(
     override val queryState: DatabaseState,
     val logProcessorOrNull: DirectLogProcessor?,
     private val watchers: Watchers,
+    val compactorOrNull: Compactor.ForDatabase? = null,
+    val txSourceOrNull: Indexer.TxSource? = null,
 ) : IQuerySource.QueryDatabase {
     val name: DatabaseName get() = queryState.name
     override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
@@ -62,6 +66,7 @@ data class Database(
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
     val logProcessor: DirectLogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
+    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
     fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
         checkNotNull(logProcessorOrNull) { "log processor not initialised" }

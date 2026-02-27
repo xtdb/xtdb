@@ -80,8 +80,8 @@
            opts)})
 
 (defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers
-                                             log-processor]}]
-  (Database. allocator db-config storage db-state log-processor watchers))
+                                             log-processor compactor-for-db tx-source-for-db]}]
+  (Database. allocator db-config storage db-state log-processor watchers compactor-for-db tx-source-for-db))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
@@ -111,16 +111,27 @@
                            :db-storage (ig/ref ::storage)
                            :db-state (ig/ref ::state))
 
+         :xtdb.compactor/for-db (assoc opts :mode mode
+                                             :state (ig/ref ::state)
+                                             :watchers (ig/ref ::watchers))
+
+         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf)
+                                             :db-state (ig/ref ::state))
+
          :xtdb.indexer/direct-log-processor (cond-> (assoc opts
                                                           :db-state (ig/ref ::state)
                                                           :watchers (ig/ref ::watchers)
                                                           :indexer-conf indexer-conf
                                                           :mode mode
                                                           :tx-source-conf (.getTxSource conf)
-                                                          :block-flush-duration (.getFlushDuration indexer-conf))
+                                                          :block-flush-duration (.getFlushDuration indexer-conf)
+                                                          :compactor-for-db (ig/ref :xtdb.compactor/for-db)
+                                                          :tx-source-for-db (ig/ref :xtdb.tx-source/for-db))
                                                    (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
-         ::database (assoc opts :db-config db-config)}
+         ::database (assoc opts :db-config db-config
+                                :compactor-for-db (ig/ref :xtdb.compactor/for-db)
+                                :tx-source-for-db (ig/ref :xtdb.tx-source/for-db))}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]

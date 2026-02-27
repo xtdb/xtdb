@@ -22,6 +22,7 @@ context {
     block_catalog: database_state.block_catalog
     table_catalog: database_state.table_catalog
     log_processor: LogProcessor
+    compactor: Compactor.ForDatabase  -- peer of log_processor at db-system level
 }
 
 ------------------------------------------------------------
