@@ -113,10 +113,10 @@
 
          :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
 
-         :xtdb.indexer/direct-log-processor (cond-> (assoc opts
-                                                           :tx-source-conf (.getTxSource conf)
-                                                           :block-flush-duration (.getFlushDuration indexer-conf))
-                                              (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+         :xtdb.log/processor (cond-> (assoc opts
+                                                  :tx-source-conf (.getTxSource conf)
+                                                  :block-flush-duration (.getFlushDuration indexer-conf))
+                                     (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
          ::database opts}
         (doto ig/load-namespaces))))
