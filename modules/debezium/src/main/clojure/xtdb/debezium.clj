@@ -13,7 +13,7 @@
                             (.setServer nil)
                             (.setFlightSql nil))]
                (.open config))
-        log (DebeziumLog. bootstrap-servers topic)
+        log (DebeziumLog. {"bootstrap.servers" bootstrap-servers} topic)
         processor (DebeziumProcessor. node db-name (.allocator node))
         subscription (.tailAll log processor -1)]
     (log/info "Debezium CDC node started"
