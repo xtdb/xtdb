@@ -18,11 +18,10 @@
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            (xtdb.database Database Database$Catalog)
-           (xtdb.indexer LogProcessor)
            xtdb.storage.BufferPoolKt))
 
-(defn get-ingestion-error [^LogProcessor log-processor]
-  (.getIngestionError log-processor))
+(defn get-ingestion-error [^Database db]
+  (.getIngestionError db))
 
 (defn- ->block-lag [^Database db]
   ;; we could add a gauge for this too
@@ -54,7 +53,7 @@
 
                 ["/healthz/started" {:name :started
                                      :get (fn [{:keys [^long initial-target-message-id, ^Database db]}]
-                                            (let [lpm-id (.getLatestProcessedMsgId (.getLogProcessor db))]
+                                            (let [lpm-id (.getLatestProcessedMsgId db)]
                                               (into {:headers {"X-XTDB-Target-Message-Id" (str initial-target-message-id)
                                                                "X-XTDB-Current-Message-Id" (str lpm-id)}}
                                                     (if (< lpm-id initial-target-message-id)
@@ -66,7 +65,7 @@
 
                 ["/healthz/alive" {:name :alive
                                    :get (fn [{:keys [^Database db]}]
-                                          (or (when-let [ingestion-error (get-ingestion-error (.getLogProcessor db))]
+                                          (or (when-let [ingestion-error (get-ingestion-error db)]
                                                 {:status 503, :body (str "Ingestion error - " ingestion-error)})
 
                                               (let [block-lag (->block-lag db)

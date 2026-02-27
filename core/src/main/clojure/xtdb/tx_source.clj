@@ -166,7 +166,8 @@
 (defmethod ig/expand-key ::for-db [k {:keys [^TxSourceConfig tx-source-conf] :as opts}]
   {k (into {:output-log (ig/ref ::output-log)
             :allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)}
+            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :db-state (ig/ref :xtdb.db-catalog/state)}
            opts)
    ::output-log (select-keys opts [:tx-source-conf :base :db-name])})
 

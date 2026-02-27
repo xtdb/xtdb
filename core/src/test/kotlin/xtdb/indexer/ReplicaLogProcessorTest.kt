@@ -92,6 +92,7 @@ class ReplicaLogProcessorTest {
         )
 
         RootAllocator().use { allocator ->
+            val watchers = Watchers(-1)
             val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
@@ -99,7 +100,7 @@ class ReplicaLogProcessorTest {
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 emptySet(),
-                watchers = Watchers(-1),
+                watchers = watchers,
                 maxBufferedRecords = 2
             )
 
@@ -114,7 +115,7 @@ class ReplicaLogProcessorTest {
             )
 
             assertThrows<Exception> { lp.processRecords(records) }
-            assertNotNull(lp.ingestionError, "ingestion error should be set after buffer overflow")
+            assertNotNull(watchers.exception, "ingestion error should be set after buffer overflow")
         }
     }
 
@@ -145,6 +146,7 @@ class ReplicaLogProcessorTest {
                 mockk<TableCatalog>(relaxed = true), mockk<TrieCatalog>(relaxed = true), null,
             )
 
+            val watchers = Watchers(-1)
             val lp = ReplicaLogProcessor(
                 allocator, SimpleMeterRegistry(),
                 dbStorage, dbState,
@@ -152,7 +154,7 @@ class ReplicaLogProcessorTest {
                 liveIndex,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 emptySet(),
-                watchers = Watchers(-1),
+                watchers = watchers,
             )
 
             val now = Instant.now()
@@ -174,7 +176,7 @@ class ReplicaLogProcessorTest {
 
             // Both block transitions should complete.
             assertEquals(1L, blockCatalog.currentBlockIndex)
-            assertNull(lp.ingestionError)
+            assertNull(watchers.exception)
         }
     }
 }

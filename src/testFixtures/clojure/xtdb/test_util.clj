@@ -37,7 +37,7 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveTable LogProcessor)
+           xtdb.indexer.LiveTable
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool

@@ -5,6 +5,7 @@
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
+           xtdb.api.IndexerConfig
            xtdb.api.Xtdb$Config
            [xtdb.api.log Watchers]
            [xtdb.database Database DatabaseState DatabaseStorage Database$Catalog Database$Config Database$Mode]
@@ -76,62 +77,45 @@
             :storage (ig/ref ::storage)
             :db-state (ig/ref ::state)
             :watchers (ig/ref ::watchers)
-            :log-processor (ig/ref :xtdb.indexer/direct-log-processor)}
+            :compactor-for-db (ig/ref :xtdb.compactor/for-db)
+            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)}
            opts)})
 
-(defmethod ig/init-key ::database [_ {:keys [allocator db-config storage db-state watchers
-                                             log-processor compactor-for-db tx-source-for-db]}]
-  (Database. allocator db-config storage db-state log-processor watchers compactor-for-db tx-source-for-db))
+(defmethod ig/init-key ::database [_ {:keys [allocator ^IndexerConfig indexer-conf db-config storage db-state watchers
+                                             compactor-for-db tx-source-for-db]}]
+  (Database. allocator db-config storage db-state (.getEnabled indexer-conf) watchers compactor-for-db tx-source-for-db))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
-        mode (.getMode db-config)
-        opts {:base base, :db-name db-name}]
+        opts {:base base, :db-name db-name, :mode (.getMode db-config), :db-config db-config, :indexer-conf indexer-conf}]
     (-> {::allocator opts
          :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog db-config) :mode mode)
+         :xtdb/log (assoc opts :factory (.getLog db-config))
          :xtdb/source-log opts
-         :xtdb/replica-log (assoc opts :factory (.getLog db-config) :mode mode)
-         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config) :mode mode)
+         :xtdb/replica-log (assoc opts :factory (.getLog db-config))
+         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
 
          ::storage opts
 
-         ;; shared catalogs, live index + state - created once, shared by both sub-systems
          :xtdb/block-catalog opts
          :xtdb/table-catalog opts
          :xtdb/trie-catalog opts
-         :xtdb.indexer/live-index (assoc opts
-                                         :indexer-conf indexer-conf
-                                         :block-cat (ig/ref :xtdb/block-catalog)
-                                         :table-cat (ig/ref :xtdb/table-catalog))
+         :xtdb.indexer/live-index opts
          ::state opts
 
-         ::watchers (assoc opts
-                           :db-storage (ig/ref ::storage)
-                           :db-state (ig/ref ::state))
+         ::watchers opts
 
-         :xtdb.compactor/for-db (assoc opts :mode mode
-                                             :state (ig/ref ::state)
-                                             :watchers (ig/ref ::watchers))
+         :xtdb.compactor/for-db opts
 
-         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf)
-                                             :db-state (ig/ref ::state))
+         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
 
          :xtdb.indexer/direct-log-processor (cond-> (assoc opts
-                                                          :db-state (ig/ref ::state)
-                                                          :watchers (ig/ref ::watchers)
-                                                          :indexer-conf indexer-conf
-                                                          :mode mode
-                                                          :tx-source-conf (.getTxSource conf)
-                                                          :block-flush-duration (.getFlushDuration indexer-conf)
-                                                          :compactor-for-db (ig/ref :xtdb.compactor/for-db)
-                                                          :tx-source-for-db (ig/ref :xtdb.tx-source/for-db))
-                                                   (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+                                                           :tx-source-conf (.getTxSource conf)
+                                                           :block-flush-duration (.getFlushDuration indexer-conf))
+                                              (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 
-         ::database (assoc opts :db-config db-config
-                                :compactor-for-db (ig/ref :xtdb.compactor/for-db)
-                                :tx-source-for-db (ig/ref :xtdb.tx-source/for-db))}
+         ::database opts}
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]

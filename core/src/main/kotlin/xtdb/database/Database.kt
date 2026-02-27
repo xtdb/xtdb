@@ -28,7 +28,6 @@ import xtdb.trie.ColumnName
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.compactor.Compactor
-import xtdb.indexer.DirectLogProcessor
 import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.Snapshot
@@ -45,7 +44,7 @@ data class Database(
     val config: Config,
     override val storage: DatabaseStorage,
     override val queryState: DatabaseState,
-    val logProcessorOrNull: DirectLogProcessor?,
+    val isIndexing: Boolean,
     private val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
     val txSourceOrNull: Indexer.TxSource? = null,
@@ -65,11 +64,13 @@ data class Database(
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
-    val logProcessor: DirectLogProcessor get() = logProcessorOrNull ?: error("log processor not initialised")
     val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
+    val latestProcessedMsgId: MessageId get() = watchers.currentMsgId
+    val ingestionError: Throwable? get() = watchers.exception
+
     fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
-        checkNotNull(logProcessorOrNull) { "log processor not initialised" }
+        check(isIndexing) { "log processor not initialised" }
         return watchers.awaitAsync(sourceMsgId)
     }
 
@@ -157,7 +158,7 @@ data class Database(
 
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.logProcessorOrNull != null }
+                    .filter { it.isIndexing }
                     .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
                     .joinAll()
             }
@@ -165,7 +166,7 @@ data class Database(
             private suspend fun Catalog.syncAll0() = coroutineScope {
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.logProcessorOrNull != null }
+                    .filter { it.isIndexing }
                     .map { db -> launch { db.sync() } }
                     .joinAll()
             }

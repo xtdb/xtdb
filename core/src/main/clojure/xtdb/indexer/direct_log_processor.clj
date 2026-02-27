@@ -3,7 +3,8 @@
             [xtdb.util :as util])
   (:import [xtdb.api IndexerConfig]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer DirectLogProcessor ReplicaLogProcessor SourceLogProcessor]))
+           [xtdb.indexer ReplicaLogProcessor SourceLogProcessor]
+           [xtdb.util MsgIdUtil]))
 
 ;; Single integrant sub-system combining source and replica log processing.
 ;; Replaces the separate :xtdb.indexer/source-log and :xtdb.indexer/replica-log sub-systems.
@@ -51,11 +52,15 @@
                                         (= mode Database$Mode/READ_ONLY)
                                         block-flush-duration)]
       {:src-proc src-proc
-       :subscription (let [source-log (.getSourceLog db-storage)]
-                       (.tailAll source-log src-proc (.getLatestProcessedOffset replica-processor)))})))
-
-(defmethod ig/resolve-key ::source-processor [_ {:keys [src-proc]}]
-  src-proc)
+       :subscription (let [source-log (.getSourceLog db-storage)
+                           epoch (.getEpoch source-log)
+                           latest-processed-msg-id (.getLatestProcessedMsgId (.getBlockCatalog db-state))
+                           latest-offset (if latest-processed-msg-id
+                                           (if (= (MsgIdUtil/msgIdToEpoch latest-processed-msg-id) epoch)
+                                             (MsgIdUtil/msgIdToOffset latest-processed-msg-id)
+                                             -1)
+                                           -1)]
+                       (.tailAll source-log src-proc latest-offset))})))
 
 (defmethod ig/halt-key! ::source-processor [_ {:keys [subscription]}]
   (util/close subscription))
@@ -63,15 +68,15 @@
 (defmethod ig/expand-key :xtdb.indexer/direct-log-processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :buffer-pool (ig/ref :xtdb/buffer-pool)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)}
+            :db-storage (ig/ref :xtdb.db-catalog/storage)
+            :db-state (ig/ref :xtdb.db-catalog/state)
+            :watchers (ig/ref :xtdb.db-catalog/watchers)
+            :compactor-for-db (ig/ref :xtdb.compactor/for-db)
+            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)}
            opts)})
 
 (defmethod ig/init-key :xtdb.indexer/direct-log-processor [_ opts]
   (-> (log-processor-system opts) ig/expand ig/init))
-
-(defmethod ig/resolve-key :xtdb.indexer/direct-log-processor [_ sys]
-  (when-let [replica-proc (:xtdb.log/processor sys)]
-    (DirectLogProcessor. replica-proc)))
 
 (defmethod ig/halt-key! :xtdb.indexer/direct-log-processor [_ sys]
   (ig/halt! sys))

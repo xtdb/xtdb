@@ -243,7 +243,6 @@
          (into {} (map (fn [^String db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
-                                       (.getLogProcessor)
                                        (.getLatestProcessedMsgId))]])))))
 
   (await-token [this]

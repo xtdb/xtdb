@@ -27,7 +27,6 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil
 import xtdb.trie.BlockIndex
 import xtdb.util.MsgIdUtil.msgIdToEpoch
-import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.TransitFormat.MSGPACK
@@ -42,7 +41,7 @@ private val LOG = ReplicaLogProcessor::class.logger
 
 /**
  * Processes all log messages for the replica side of a database.
- * In this first increment, the replica LP is functionally identical to the previous LogProcessor —
+ * In this first increment, the replica LP is functionally identical to the previous log processor —
  * it handles Tx indexing, block finishing, TriesAdded, etc.
  * It is driven by the source-log subscription forwarding records to it.
  */
@@ -59,7 +58,7 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val maxBufferedRecords: Int = 1024,
     private val dbCatalog: Database.Catalog? = null,
     private val txSource: Indexer.TxSource? = null
-) : LogProcessor, Log.Subscriber<ReplicaMessage>, AutoCloseable {
+) : Log.Subscriber<ReplicaMessage>, AutoCloseable {
 
     init {
         require((dbCatalog != null) == (dbState.name == "xtdb")) {
@@ -84,18 +83,11 @@ class ReplicaLogProcessor @JvmOverloads constructor(
     private val bufferedRecords: MutableList<Log.Record<ReplicaMessage>> = mutableListOf()
 
     @Volatile
-    override var latestProcessedMsgId: MessageId =
+    private var latestProcessedMsgId: MessageId =
         blockCatalog.latestProcessedMsgId?.let {
             // used if the epoch is incremented so that we seek to the start of the new log
             if (msgIdToEpoch(it) == epoch) it else offsetToMsgId(epoch, 0) - 1
         } ?: -1
-        private set
-
-    override val latestProcessedOffset = blockCatalog.latestProcessedMsgId?.let {
-        if (msgIdToEpoch(it) == epoch) msgIdToOffset(it) else -1
-    } ?: -1
-
-    override val ingestionError get() = watchers.exception
 
     private val allocator =
         allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
