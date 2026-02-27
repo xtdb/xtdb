@@ -510,8 +510,7 @@
 
 (defmethod ig/expand-key :xtdb/trie-catalog [k opts]
   {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
-            :block-cat (ig/ref :xtdb/block-catalog)
-            :table-cat (ig/ref :xtdb/table-catalog)}
+            :block-cat (ig/ref :xtdb/block-catalog)}
            opts)})
 
 (defn load-tries ^java.util.Map [table->table-block file-size-target]

@@ -1,11 +1,26 @@
 package xtdb.indexer
 
-import xtdb.api.log.MessageId
+import xtdb.database.Database
+import xtdb.database.Database.Mode.*
 
-interface LogProcessor : AutoCloseable {
-    val latestProcessedMsgId: MessageId
-    val latestProcessedOffset: Long
-    val ingestionError: Throwable?
+class LogProcessor(private val factory: SystemFactory, initialMode: Database.Mode) : AutoCloseable {
 
-    override fun close()
+    interface System : AutoCloseable
+
+    interface SystemFactory {
+        fun openReadWriteSystem(): System
+        fun openReadOnlySystem(): System
+    }
+
+    private fun openSystem(mode: Database.Mode) = when (mode) {
+        READ_WRITE -> factory.openReadWriteSystem()
+        READ_ONLY -> factory.openReadOnlySystem()
+    }
+
+    @Volatile
+    private var system: System = openSystem(initialMode)
+
+    override fun close() {
+        system.close()
+    }
 }

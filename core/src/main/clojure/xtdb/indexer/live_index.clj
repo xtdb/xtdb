@@ -203,7 +203,9 @@
 
 (defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)}
+            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :block-cat (ig/ref :xtdb/block-catalog)
+            :table-cat (ig/ref :xtdb/table-catalog)}
            (assoc (dissoc opts :indexer-conf)
                   :rows-per-block (.getRowsPerBlock indexer-conf)
                   :log-limit (.getLogLimit indexer-conf)
@@ -212,10 +214,11 @@
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
                                                     :keys [allocator, ^DatabaseState db-state, buffer-pool
+                                                           block-cat table-cat
                                                            db-name
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
-  (let [block-cat (.getBlockCatalog db-state)
-        table-cat (.getTableCatalog db-state)
+  (let [block-cat (or block-cat (.getBlockCatalog db-state))
+        table-cat (or table-cat (.getTableCatalog db-state))
         latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (metrics/add-allocator-gauge meter-registry "live-index.allocator.allocated_memory" allocator)

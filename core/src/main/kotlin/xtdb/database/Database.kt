@@ -25,12 +25,11 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.table.TableRef
 import xtdb.trie.ColumnName
-import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
+import xtdb.compactor.Compactor
+import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.Indexer.TxSource
-import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
@@ -40,55 +39,40 @@ import java.time.Duration
 import java.util.*
 import java.util.concurrent.CompletableFuture
 
-data class SourceIndexer(
-    val state: DatabaseState,
-    val liveIndex: LiveIndex,
-) {
-    val trieCatalog get() = state.trieCatalog
-}
-
-data class ReplicaIndexer(
-    val logProcessorOrNull: LogProcessor?,
-    val compactor: Compactor.ForDatabase,
-    val state: DatabaseState,
-    val liveIndex: LiveIndex,
-    private val watchers: Watchers,
-    val txSource: TxSource? = null,
-) {
-    val logProcessor: LogProcessor get() = logProcessorOrNull ?: error("replica log processor not initialised")
-
-    fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
-        checkNotNull(logProcessorOrNull) { "log processor not initialised" }
-        return watchers.awaitAsync(sourceMsgId)
-    }
-}
-
 data class Database(
     val allocator: BufferAllocator,
     val config: Config,
     override val storage: DatabaseStorage,
-    val sourceIndexer: SourceIndexer,
-    val replicaIndexer: ReplicaIndexer,
+    override val queryState: DatabaseState,
+    val isIndexing: Boolean,
+    private val watchers: Watchers,
+    val compactorOrNull: Compactor.ForDatabase? = null,
+    val txSourceOrNull: Indexer.TxSource? = null,
 ) : IQuerySource.QueryDatabase {
-    override val queryState: DatabaseState get() = replicaIndexer.state
     val name: DatabaseName get() = queryState.name
-    override fun openSnapshot(): Snapshot = replicaIndexer.liveIndex.openSnapshot()
+    override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
 
     val blockCatalog: BlockCatalog get() = queryState.blockCatalog
     val tableCatalog: TableCatalog get() = queryState.tableCatalog
 
     fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? = tableCatalog.getTypes(table)
     val trieCatalog: TrieCatalog get() = queryState.trieCatalog
-    val liveIndex: LiveIndex get() = replicaIndexer.liveIndex
+    val liveIndex: LiveIndex get() = queryState.liveIndex
 
     val sourceLog: Log<SourceMessage> get() = storage.sourceLog
     val replicaLog: Log<ReplicaMessage> get() = storage.replicaLog
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
-    val logProcessor: LogProcessor get() = replicaIndexer.logProcessor
-    val compactor: Compactor.ForDatabase get() = replicaIndexer.compactor
-    val txSource: TxSource? get() = replicaIndexer.txSource
+    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
+
+    val latestProcessedMsgId: MessageId get() = watchers.currentMsgId
+    val ingestionError: Throwable? get() = watchers.exception
+
+    fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
+        check(isIndexing) { "log processor not initialised" }
+        return watchers.awaitAsync(sourceMsgId)
+    }
 
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)
@@ -164,7 +148,7 @@ data class Database(
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
             private suspend fun Database.await(msgId: MessageId) {
-                replicaIndexer.awaitSourceMessageAsync(msgId).await()
+                awaitSourceMessageAsync(msgId).await()
             }
 
             private suspend fun Database.sync() = await(sourceLog.latestSubmittedMsgId)
@@ -174,7 +158,7 @@ data class Database(
 
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.replicaIndexer.logProcessorOrNull != null }
+                    .filter { it.isIndexing }
                     .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
                     .joinAll()
             }
@@ -182,7 +166,7 @@ data class Database(
             private suspend fun Catalog.syncAll0() = coroutineScope {
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
-                    .filter { it.replicaIndexer.logProcessorOrNull != null }
+                    .filter { it.isIndexing }
                     .map { db -> launch { db.sync() } }
                     .joinAll()
             }

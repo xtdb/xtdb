@@ -74,7 +74,7 @@
         (metrics/wrap-query query-timer))))
 
 (defn- await-msg-result [node ^Database db msg-id]
-  (or (let [^TransactionResult tx-res (-> @(.awaitSourceMessageAsync (.getReplicaIndexer db) msg-id)
+  (or (let [^TransactionResult tx-res (-> @(.awaitSourceMessageAsync db msg-id)
                                           (util/rethrowing-cause))]
         (when (and tx-res
                    (= (.getTxId tx-res) msg-id))
@@ -243,7 +243,6 @@
          (into {} (map (fn [^String db-name]
                          ;; TODO multi-part
                          [db-name [(-> (.databaseOrNull db-cat db-name)
-                                       (.getLogProcessor)
                                        (.getLatestProcessedMsgId))]])))))
 
   (await-token [this]

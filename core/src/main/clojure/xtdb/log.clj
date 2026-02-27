@@ -14,12 +14,11 @@
            (java.util HashMap List)
            java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
-           (xtdb.api IndexerConfig TransactionKey Xtdb$Config)
+           (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory SourceMessage$Tx Log$MessageMetadata)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
            (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
-           xtdb.indexer.ReplicaLogProcessor
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs)
@@ -247,36 +246,11 @@
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
         (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
 
-(defmethod ig/expand-key :xtdb.log/processor [k {:keys [^IndexerConfig indexer-conf] :as opts}]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :indexer (ig/ref :xtdb.indexer/for-db)
-            :live-index (ig/ref :xtdb.indexer/live-index)
-            :compactor (ig/ref :xtdb.compactor/for-db)
-            :watchers (ig/ref :xtdb.indexer.replica-log/watchers)
-            :tx-source (ig/ref :xtdb.tx-source/for-db)}
-           (assoc (dissoc opts :indexer-conf :tx-source-conf)
-                  :skip-txs (.getSkipTxs indexer-conf)
-                  :enabled? (.getEnabled indexer-conf)))})
-
-(defmethod ig/init-key :xtdb.log/processor [_ {{:keys [meter-registry]} :base
-                                               :keys [allocator ^DatabaseStorage db-storage db-state indexer live-index compactor skip-txs watchers enabled? db-catalog tx-source]}]
-  (when enabled?
-    (ReplicaLogProcessor. allocator meter-registry
-                          db-storage db-state
-                          indexer live-index compactor (set skip-txs)
-                          watchers
-                          1024
-                          db-catalog
-                          tx-source)))
-
-(defmethod ig/halt-key! :xtdb.log/processor [_ ^ReplicaLogProcessor processor]
-  (util/close processor))
 
 (defn await-db
   ([db msg-id] (await-db db msg-id nil))
   ([^Database db, ^long msg-id, ^Duration timeout]
-   @(cond-> (.awaitSourceMessageAsync (.getReplicaIndexer db) msg-id)
+   @(cond-> (.awaitSourceMessageAsync db msg-id)
       timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
 (defn sync-db
