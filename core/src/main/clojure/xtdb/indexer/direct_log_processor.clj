@@ -6,8 +6,27 @@
            [xtdb.indexer ReplicaLogProcessor SourceLogProcessor]
            [xtdb.util MsgIdUtil]))
 
-;; Single integrant sub-system combining source and replica log processing.
-;; Replaces the separate :xtdb.indexer/source-log and :xtdb.indexer/replica-log sub-systems.
+(defmethod ig/expand-key :xtdb.log/replica-processor [k {:keys [^IndexerConfig indexer-conf] :as opts}]
+  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
+            :db-storage (ig/ref :xtdb.db-catalog/storage)
+            :indexer (ig/ref :xtdb.indexer/for-db)}
+           (assoc (dissoc opts :indexer-conf :tx-source-conf)
+                  :skip-txs (.getSkipTxs indexer-conf)
+                  :enabled? (.getEnabled indexer-conf)))})
+
+(defmethod ig/init-key :xtdb.log/replica-processor [_ {{:keys [meter-registry]} :base
+                                                        :keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state indexer compactor skip-txs watchers enabled? db-catalog tx-source]}]
+  (when enabled?
+    (ReplicaLogProcessor. allocator meter-registry
+                          db-storage db-state
+                          indexer (.getLiveIndex db-state) compactor (set skip-txs)
+                          watchers
+                          1024
+                          db-catalog
+                          tx-source)))
+
+(defmethod ig/halt-key! :xtdb.log/replica-processor [_ ^ReplicaLogProcessor processor]
+  (util/close processor))
 
 (defn- log-processor-system [{:keys [indexer-conf mode tx-source-conf db-catalog db-state watchers
                                      block-flush-duration compactor-for-db tx-source-for-db]
@@ -21,7 +40,7 @@
                               :watchers watchers))]
     (-> {:xtdb.indexer/crash-logger child-opts
          :xtdb.indexer/for-db child-opts
-         :xtdb.log/processor (cond-> (assoc child-opts
+         :xtdb.log/replica-processor (cond-> (assoc child-opts
                                             :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf
                                             :compactor compactor-for-db
                                             :tx-source tx-source-for-db)
@@ -36,7 +55,7 @@
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :indexer (ig/ref :xtdb.indexer/for-db)
-            :replica-processor (ig/ref :xtdb.log/processor)}
+            :replica-processor (ig/ref :xtdb.log/replica-processor)}
            opts)})
 
 (defmethod ig/init-key ::source-processor [_ {:keys [allocator ^DatabaseStorage db-storage db-state
