@@ -4,29 +4,21 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
            [xtdb.indexer LogProcessor LogProcessor$System LogProcessor$SystemFactory
-                         ReplicaLogProcessor SourceLogProcessor]
+                         SourceLogProcessor]
            [xtdb.util MsgIdUtil]))
 
-(defn- open-replica-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
-                                       indexer-for-db compactor-for-db tx-source-for-db watchers db-catalog
-                                       ^IndexerConfig indexer-conf]
-                                {:keys [meter-registry]} :base}]
-  (ReplicaLogProcessor. allocator meter-registry
-                        db-storage db-state
-                        indexer-for-db (.getLiveIndex db-state) compactor-for-db (set (.getSkipTxs indexer-conf))
-                        watchers
-                        1024
-                        db-catalog
-                        tx-source-for-db))
-
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
-                                      indexer-for-db ^IndexerConfig indexer-conf block-flush-duration]}
-                              ^ReplicaLogProcessor replica-processor
+                                      indexer-for-db compactor-for-db tx-source-for-db watchers db-catalog
+                                      ^IndexerConfig indexer-conf block-flush-duration]
+                                {:keys [meter-registry]} :base}
                               read-only?]
-  (SourceLogProcessor. allocator db-storage db-state
+  (SourceLogProcessor. allocator meter-registry
+                       db-storage db-state
                        indexer-for-db (.getLiveIndex db-state)
-                       replica-processor (set (.getSkipTxs indexer-conf))
+                       watchers compactor-for-db (set (.getSkipTxs indexer-conf))
                        read-only?
+                       db-catalog
+                       tx-source-for-db
                        block-flush-duration))
 
 (defn- subscribe-source-log [^DatabaseStorage db-storage ^DatabaseState db-state ^SourceLogProcessor src-proc]
@@ -41,13 +33,12 @@
     (.tailAll source-log src-proc latest-offset)))
 
 (defn- open-system [opts read-only?]
-  (let [replica-proc (open-replica-processor opts)
-        src-proc (open-source-processor opts replica-proc read-only?)
+  (let [src-proc (open-source-processor opts read-only?)
         subscription (subscribe-source-log (:db-storage opts) (:db-state opts) src-proc)]
     (reify LogProcessor$System
       (close [_]
         (util/close subscription)
-        (util/close replica-proc)))))
+        (util/close src-proc)))))
 
 (defmethod ig/expand-key :xtdb.log/processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)

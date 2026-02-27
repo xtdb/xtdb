@@ -1,16 +1,22 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.TransactionAborted
+import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
-import xtdb.api.log.DbOp
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
-import xtdb.api.log.MessageId
+import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.arrow.asChannel
 import xtdb.catalog.BlockCatalog
+import xtdb.compactor.Compactor
+import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.proto.DatabaseConfig
@@ -20,12 +26,15 @@ import xtdb.error.Incorrect
 import xtdb.error.NotFound
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
+import xtdb.time.InstantUtil
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.TransitFormat.MSGPACK
 import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.logger
+import xtdb.util.readTransit
 import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.time.Duration
@@ -36,24 +45,34 @@ import java.time.ZonedDateTime
 private val LOG = SourceLogProcessor::class.logger
 
 /**
- * Subscribes to the source log and resolves SourceMessage.Tx records into ReplicaMessage.ResolvedTx,
- * then forwards the amended records to the replica processor via processRecords.
- * All other message types pass through unchanged.
- *
+ * Subscribes to the source log and resolves SourceMessage.Tx records into ReplicaMessage.ResolvedTx.
  * Also owns block finishing: when the source LiveIndex is full, writes tries, table blocks,
  * and the block file to storage, then appends TriesAdded + BlockUploaded to the source log.
+ *
+ * Post-processing (watchers notification, attach/detach, txSource callbacks, compactor signalling)
+ * is handled inline after resolving each batch of records.
  */
 class SourceLogProcessor(
-    private val allocator: BufferAllocator,
+    allocator: BufferAllocator,
+    meterRegistry: MeterRegistry,
     private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
     private val liveIndex: LiveIndex,
-    private val replicaProcessor: ReplicaLogProcessor,
+    private val watchers: Watchers,
+    private val compactor: Compactor.ForDatabase,
     private val skipTxs: Set<MessageId>,
     private val readOnly: Boolean = false,
+    private val dbCatalog: Database.Catalog? = null,
+    private val txSource: Indexer.TxSource? = null,
     flushTimeout: Duration = Duration.ofMinutes(5),
-) : Log.Subscriber<SourceMessage> {
+) : Log.Subscriber<SourceMessage>, AutoCloseable {
+
+    init {
+        require((dbCatalog != null) == (dbState.name == "xtdb")) {
+            "dbCatalog must be provided iff database is 'xtdb'"
+        }
+    }
 
     private val log = dbStorage.sourceLog
     private val epoch = log.epoch
@@ -67,6 +86,23 @@ class SourceLogProcessor(
         blockCatalog.secondaryDatabases.toMutableMap()
 
     private var latestProcessedMsgId: MessageId = blockCatalog.latestProcessedMsgId ?: -1
+
+    // Read-only block transition: when the live index is full, we buffer messages
+    // until BlockUploaded arrives from the writer, then refresh catalogs and replay.
+    private var pendingBlockIdx: Long? = null
+    private val bufferedRecords: MutableList<Log.Record<SourceMessage>> = mutableListOf()
+
+    private val allocator =
+        allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
+            .also { alloc ->
+                Gauge.builder("watcher.allocator.allocated_memory", alloc) { it.allocatedMemory.toDouble() }
+                    .baseUnit("bytes")
+                    .register(meterRegistry)
+            }
+
+    override fun close() {
+        allocator.close()
+    }
 
     data class Flusher(
         val flushTimeout: Duration,
@@ -141,57 +177,61 @@ class SourceLogProcessor(
         }
     }
 
-    private fun finishBlock(systemTime: Instant): Log.Record<ReplicaMessage> {
+    private fun finishBlock(systemTime: Instant) {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
-        if (!readOnly) {
-            val finishedBlocks = liveIndex.finishBlock(blockIdx)
+        val finishedBlocks = liveIndex.finishBlock(blockIdx)
 
-            val addedTries = finishedBlocks.map { (table, fb) ->
-                TrieDetails.newBuilder()
-                    .setTableName(table.schemaAndTable)
-                    .setTrieKey(fb.trieKey)
-                    .setDataFileSize(fb.dataFileSize)
-                    .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
-                    .build()
-            }
-            log.appendMessage(
-                SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
-            )
+        val addedTries = finishedBlocks.map { (table, fb) ->
+            TrieDetails.newBuilder()
+                .setTableName(table.schemaAndTable)
+                .setTrieKey(fb.trieKey)
+                .setDataFileSize(fb.dataFileSize)
+                .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
+                .build()
+        }
+        log.appendMessage(
+            SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries)
+        )
 
-            finishedBlocks.forEach { (table, _) ->
-                val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
-                trieCatalog.addTries(table, listOf(trie), systemTime)
-            }
-
-            val allTables = finishedBlocks.keys + blockCatalog.allTables
-            val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
-
-            val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
-
-            for ((table, tableBlock) in tableBlocks) {
-                val path = BlockCatalog.tableBlockPath(table, blockIdx)
-                bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
-            }
-
-            val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
-
-            val block = blockCatalog.buildBlock(
-                blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-                tableBlocks.keys, secondaryDatabasesForBlock
-            )
-
-            bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
-            blockCatalog.refresh(block)
-
-            log.appendMessage(SourceMessage.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
+        finishedBlocks.forEach { (table, _) ->
+            val trie = addedTries.find { it.tableName == table.schemaAndTable }!!
+            trieCatalog.addTries(table, listOf(trie), systemTime)
         }
 
-        liveIndex.nextBlock()
-        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+        val allTables = finishedBlocks.keys + blockCatalog.allTables
+        val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
 
-        return Log.Record(-1, systemTime, ReplicaMessage.BlockBoundary(blockIdx))
+        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
+
+        for ((table, tableBlock) in tableBlocks) {
+            val path = BlockCatalog.tableBlockPath(table, blockIdx)
+            bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+        }
+
+        val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
+
+        val block = blockCatalog.buildBlock(
+            blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
+            tableBlocks.keys, secondaryDatabasesForBlock
+        )
+
+        bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        blockCatalog.refresh(block)
+
+        log.appendMessage(SourceMessage.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
+
+        liveIndex.nextBlock()
+        compactor.signalBlock()
+        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+    }
+
+    private fun enterPendingBlock() {
+        val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
+        pendingBlockIdx = blockIdx
+        liveIndex.nextBlock()
+        LOG.debug("read-only: waiting for block 'b${blockIdx.asLexHex}' via BlockUploaded...")
     }
 
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
@@ -202,33 +242,52 @@ class SourceLogProcessor(
         }
 
         var lastMsgId: MessageId = latestProcessedMsgId
+        val queue = ArrayDeque(records)
 
-        val amended = try {
-            records.flatMap { record ->
+        try {
+            while (queue.isNotEmpty()) {
+                val record = queue.removeFirst()
                 val msgId = offsetToMsgId(epoch, record.logOffset)
                 lastMsgId = msgId
                 latestProcessedMsgId = msgId
 
+                if (pendingBlockIdx != null) {
+                    val msg = record.message
+                    if (msg is SourceMessage.BlockUploaded
+                        && msg.blockIndex == pendingBlockIdx
+                        && msg.storageEpoch == bufferPool.epoch
+                    ) {
+                        compactor.signalBlock()
+                        pendingBlockIdx = null
+
+                        // Replay buffered records (including this BlockUploaded).
+                        bufferedRecords.add(record)
+                        queue.addAll(0, bufferedRecords)
+                        bufferedRecords.clear()
+                        continue
+                    } else {
+                        bufferedRecords.add(record)
+                        continue
+                    }
+                }
+
                 when (val msg = record.message) {
                     is SourceMessage.Tx -> {
                         val resolvedTx = resolveTx(msgId, record, msg)
+                        notifyTx(msgId, resolvedTx)
 
-                        val blockBoundary = if (liveIndex.isFull()) finishBlock(record.logTimestamp) else null
-
-                        listOfNotNull(
-                            Log.Record(record.logOffset, record.logTimestamp, resolvedTx),
-                            blockBoundary
-                        )
+                        if (liveIndex.isFull()) {
+                            if (readOnly) enterPendingBlock()
+                            else finishBlock(record.logTimestamp)
+                        }
                     }
 
                     is SourceMessage.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx
-                        val blockBoundary =
-                            if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L))
-                                finishBlock(record.logTimestamp)
-                            else null
-
-                        listOfNotNull(blockBoundary)
+                        if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
+                            if (readOnly) enterPendingBlock()
+                            else finishBlock(record.logTimestamp)
+                        }
                     }
 
                     is SourceMessage.AttachDatabase -> {
@@ -239,10 +298,16 @@ class SourceLogProcessor(
                             null
                         } catch (e: Anomaly.Caller) { e }
 
-                        val dbOp = if (error == null) DbOp.Attach(msg.dbName, msg.config) else null
-                        val resolvedTx = indexer.addTxRow(TransactionKey(msgId, record.logTimestamp), error)
-                            .copy(dbOp = dbOp)
-                        listOf(Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
+                        val txKey = TransactionKey(msgId, record.logTimestamp)
+                        val resolvedTx = indexer.addTxRow(txKey, error)
+                        txSource?.onCommit(resolvedTx)
+
+                        if (error == null) {
+                            dbCatalog!!.attach(msg.dbName, msg.config)
+                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
+                        } else {
+                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
+                        }
                     }
 
                     is SourceMessage.DetachDatabase -> {
@@ -259,39 +324,51 @@ class SourceLogProcessor(
                             }
                         } catch (e: Anomaly.Caller) { e }
 
-                        val dbOp = if (error == null) DbOp.Detach(msg.dbName) else null
-                        val resolvedTx = indexer.addTxRow(TransactionKey(msgId, record.logTimestamp), error)
-                            .copy(dbOp = dbOp)
-                        listOf(Log.Record(record.logOffset, record.logTimestamp, resolvedTx))
+                        val txKey = TransactionKey(msgId, record.logTimestamp)
+                        val resolvedTx = indexer.addTxRow(txKey, error)
+                        txSource?.onCommit(resolvedTx)
+
+                        if (error == null) {
+                            dbCatalog!!.detach(msg.dbName)
+                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
+                        } else {
+                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
+                        }
                     }
 
                     is SourceMessage.TriesAdded -> {
-                        // Compactor appends TriesAdded to the source log.
-                        // We need to update the source's trie catalog so that
-                        // finishBlock writes correct partition info to block files.
                         if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                                 trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
                             }
-
-                        // Convert source TriesAdded → replica TriesAdded for forwarding
-                        listOf(Log.Record(record.logOffset, record.logTimestamp,
-                            ReplicaMessage.TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries)))
+                        watchers.notify(msgId, null)
                     }
 
                     is SourceMessage.BlockUploaded -> {
-                        // Round-trips through the source log; convert to replica message
-                        listOf(Log.Record(record.logOffset, record.logTimestamp,
-                            ReplicaMessage.BlockUploaded(msg.blockIndex, msg.latestProcessedMsgId, msg.storageEpoch)))
+                        watchers.notify(msgId, null)
                     }
                 }
             }
         } catch (e: Throwable) {
-            // Notify replica watchers so that awaiting clients don't hang.
-            replicaProcessor.ingestionStopped(lastMsgId, e)
+            watchers.notify(lastMsgId, e)
             throw e
         }
+    }
 
-        replicaProcessor.processRecords(amended)
+    private fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
+        txSource?.onCommit(resolvedTx)
+
+        val systemTime = InstantUtil.fromMicros(resolvedTx.systemTimeMicros)
+
+        val result = if (resolvedTx.committed) {
+            TransactionCommitted(resolvedTx.txId, systemTime)
+        } else {
+            TransactionAborted(
+                resolvedTx.txId, systemTime,
+                readTransit(resolvedTx.error, MSGPACK) as Throwable
+            )
+        }
+
+        watchers.notify(msgId, result)
     }
 }
