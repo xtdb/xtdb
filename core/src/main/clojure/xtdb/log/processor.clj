@@ -3,8 +3,7 @@
             [xtdb.util :as util])
   (:import [xtdb.api IndexerConfig]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer LogProcessor LogProcessor$System LogProcessor$SystemFactory
-                         SourceLogProcessor]
+           [xtdb.indexer SourceLogProcessor]
            [xtdb.util MsgIdUtil]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
@@ -32,15 +31,7 @@
                         -1)]
     (.tailAll source-log src-proc latest-offset)))
 
-(defn- open-system [opts read-only?]
-  (let [src-proc (open-source-processor opts read-only?)
-        subscription (subscribe-source-log (:db-storage opts) (:db-state opts) src-proc)]
-    (reify LogProcessor$System
-      (close [_]
-        (util/close subscription)
-        (util/close src-proc)))))
-
-(defmethod ig/expand-key :xtdb.log/processor [k opts]
+(defmethod ig/expand-key :xtdb.log.processor/source [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :buffer-pool (ig/ref :xtdb/buffer-pool)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
@@ -51,12 +42,13 @@
             :indexer-for-db (ig/ref :xtdb.indexer/for-db)}
            opts)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [^IndexerConfig indexer-conf ^Database$Mode mode] :as opts}]
+(defmethod ig/init-key :xtdb.log.processor/source [_ {:keys [^IndexerConfig indexer-conf ^Database$Mode mode] :as opts}]
   (when (.getEnabled indexer-conf)
-    (let [factory (reify LogProcessor$SystemFactory
-                    (openReadWriteSystem [_] (open-system opts false))
-                    (openReadOnlySystem [_] (open-system opts true)))]
-      (LogProcessor. factory mode))))
+    (let [read-only? (= mode Database$Mode/READ_ONLY)
+          src-proc (open-source-processor opts read-only?)
+          subscription (subscribe-source-log (:db-storage opts) (:db-state opts) src-proc)]
+      {:source-processor src-proc, :subscription subscription})))
 
-(defmethod ig/halt-key! :xtdb.log/processor [_ processor]
-  (util/close processor))
+(defmethod ig/halt-key! :xtdb.log.processor/source [_ {:keys [subscription source-processor]}]
+  (util/close subscription)
+  (util/close source-processor))

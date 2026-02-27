@@ -27,10 +27,10 @@ context {
     live_index: database_state.live_index
     block_catalog: database_state.block_catalog
     table_catalog: database_state.table_catalog
-    log_processor: LogProcessor
+    source_processor: SourceLogProcessor
     watchers: Watchers
-    compactor: Compactor.ForDatabase  -- peer of log_processor at db-system level
-    tx_source: Indexer.TxSource?     -- peer of log_processor at db-system level
+    compactor: Compactor.ForDatabase  -- peer of source_processor at db-system level
+    tx_source: Indexer.TxSource?     -- peer of source_processor at db-system level
 }
 
 ------------------------------------------------------------
@@ -101,21 +101,20 @@ entity Watchers {
     current_msg_id: MessageId
 }
 
-entity LogProcessor {
-    -- See: indexer/LogProcessor.kt, log/processor.clj
-    -- Manages a System (SourceLogProcessor + subscription) via SystemFactory.
-    -- The SystemFactory can open read-write or read-only systems;
-    -- LogProcessor holds the current system and can swap it on mode transitions.
-    --
-    -- The SourceLogProcessor handles the full pipeline: resolving transactions,
-    -- finishing blocks, notifying watchers, attach/detach catalog mutations,
+entity SourceLogProcessor {
+    -- See: indexer/SourceLogProcessor.kt, log/processor.clj
+    -- Subscribes to the source log and processes messages sequentially.
+    -- Handles the full pipeline: resolving transactions, finishing blocks,
+    -- notifying watchers, attach/detach catalog mutations,
     -- txSource callbacks, and compactor signalling.
+    -- Created directly as an integrant component with a fixed mode
+    -- (read-write or read-only) determined at db startup.
     latest_processed_msg_id: MessageId
     last_flush_check: Instant
 }
 
 -- Storage.VERSION is a compile-time constant; storage_epoch is per-BufferPool.
--- The LogProcessor checks incoming TriesAdded messages against these values
+-- The SourceLogProcessor checks incoming TriesAdded messages against these values
 -- to discard stale notifications from a previous epoch.
 external value current_storage_version: Int   -- See: storage/Storage.kt (VERSION)
 external value current_storage_epoch: Int     -- See: buffer_pool/BufferPool.kt (epoch)
@@ -251,13 +250,13 @@ rule ProcessTxMessage {
     -- A transaction message arrives from the source log.
     when: msg: TxMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
 
     ensures:
         -- The indexer resolves and applies the transaction.
         -- Result is either committed or aborted.
         let result = IndexTransaction(msg)
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
 
         -- Notify txSource and watchers.
         tx_source?.onCommit(result)
@@ -271,11 +270,11 @@ rule ProcessTxMessage {
 rule ProcessFlushBlockMessage {
     when: msg: FlushBlockMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
     requires: msg.expected_block_idx == block_catalog.current_block_index
 
     ensures:
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
         BlockFlushNeeded(msg.log_timestamp)
 }
 
@@ -283,13 +282,13 @@ rule ProcessTriesAddedMessage {
     -- Tries-added messages are written to the source log by the compactor.
     when: msg: TriesAddedMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
     requires: msg.storage_version == current_storage_version
     requires: msg.storage_epoch == current_storage_epoch
 
     ensures:
         trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
         watchers.notify(msg.msg_id, null)
 }
 
@@ -299,17 +298,17 @@ rule ProcessBlockUploadedMessage {
     -- (catalogs were already updated during block finishing).
     when: msg: BlockUploadedMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
 
     ensures:
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
         watchers.notify(msg.msg_id, null)
 }
 
 rule ProcessAttachDbMessage {
     when: msg: AttachDbMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
     requires: msg.db_name != "xtdb"
     requires: msg.db_name not in secondary_databases
 
@@ -318,13 +317,13 @@ rule ProcessAttachDbMessage {
         tx_source?.onCommit(result)
         database.catalog.attach(msg.db_name, msg.config)
         watchers.notify(msg.msg_id, result)
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
 }
 
 rule ProcessDetachDbMessage {
     when: msg: DetachDbMessage consumed from database.source_log
 
-    requires: msg.msg_id > log_processor.latest_processed_msg_id
+    requires: msg.msg_id > source_processor.latest_processed_msg_id
     requires: msg.db_name != "xtdb"
     requires: msg.db_name in secondary_databases
 
@@ -333,7 +332,7 @@ rule ProcessDetachDbMessage {
         tx_source?.onCommit(result)
         database.catalog.detach(msg.db_name)
         watchers.notify(msg.msg_id, result)
-        log_processor.latest_processed_msg_id = msg.msg_id
+        source_processor.latest_processed_msg_id = msg.msg_id
 }
 
 
@@ -378,7 +377,7 @@ rule FinishBlock {
         let block = Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
-            latest_processed_msg_id: log_processor.latest_processed_msg_id
+            latest_processed_msg_id: source_processor.latest_processed_msg_id
         )
 
         block_catalog.refresh(block)
@@ -386,7 +385,7 @@ rule FinishBlock {
         -- Write BlockUploaded to the source log (round-trips back for watchers).
         let block_uploaded = BlockUploadedMessage.created(
             block_index: block_index,
-            latest_processed_msg_id: log_processor.latest_processed_msg_id,
+            latest_processed_msg_id: source_processor.latest_processed_msg_id,
             storage_epoch: current_storage_epoch
         )
         block_uploaded appended to database.source_log
@@ -460,11 +459,11 @@ rule CompactionJobCompletes {
 -- the leader sends itself a FlushBlock message.
 
 rule FlushTimeoutFires {
-    when: log_processor: LogProcessor.last_flush_check + config.flush_timeout <= now
+    when: source_processor: SourceLogProcessor.last_flush_check + config.flush_timeout <= now
 
     requires: database.mode == read_write
     requires: live_index.has_data
-    requires: block_catalog.current_block_index unchanged since log_processor.last_flush_check
+    requires: block_catalog.current_block_index unchanged since source_processor.last_flush_check
 
     ensures:
         FlushBlockMessage.created(
@@ -496,7 +495,7 @@ rule ProcessingErrorHaltsNode {
 
     ensures:
         -- All pending watchers are notified of the error.
-        -- LogProcessor stops permanently.
+        -- SourceLogProcessor stops permanently.
         -- No partial state corruption: either a message is fully processed or not at all.
         watchers.notify(msg_id, error)
         NodeMarkedUnhealthy()

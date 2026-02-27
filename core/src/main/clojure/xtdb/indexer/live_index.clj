@@ -167,7 +167,7 @@
     (>= (.getBlockRowCount row-counter) rows-per-block))
 
   (finishBlock [_ block-idx]
-    ;; Return FinishedBlock map directly - LogProcessor handles I/O (log append, trie-cat.addTries)
+    ;; Return FinishedBlock map directly - SourceLogProcessor handles I/O (log append, trie-cat.addTries)
     (LiveTable/finishBlock tables block-idx))
 
   (nextBlock [this]

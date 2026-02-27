@@ -7,7 +7,7 @@
 -- Concurrency model:
 --   - Single-writer thread: all transaction operations (StartTransaction, LogPut,
 --     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially.
---     This is enforced structurally: the LogProcessor (see db.allium) processes
+--     This is enforced structurally: the SourceLogProcessor (see db.allium) processes
 --     source-log messages sequentially, and all transaction lifecycle happens
 --     within that sequential processing loop.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
