@@ -106,6 +106,9 @@
 
          ::watchers opts
 
+         :xtdb.indexer/crash-logger opts
+         :xtdb.indexer/for-db opts
+
          :xtdb.compactor/for-db opts
 
          :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))

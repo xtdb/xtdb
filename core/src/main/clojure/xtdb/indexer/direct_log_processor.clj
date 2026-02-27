@@ -7,12 +7,9 @@
            [xtdb.util MsgIdUtil]))
 
 (defmethod ig/expand-key :xtdb.log/replica-processor [k {:keys [^IndexerConfig indexer-conf] :as opts}]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :indexer (ig/ref :xtdb.indexer/for-db)}
-           (assoc (dissoc opts :indexer-conf :tx-source-conf)
-                  :skip-txs (.getSkipTxs indexer-conf)
-                  :enabled? (.getEnabled indexer-conf)))})
+  {k (assoc (dissoc opts :indexer-conf :tx-source-conf)
+            :skip-txs (.getSkipTxs indexer-conf)
+            :enabled? (.getEnabled indexer-conf))})
 
 (defmethod ig/init-key :xtdb.log/replica-processor [_ {{:keys [meter-registry]} :base
                                                         :keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state indexer compactor skip-txs watchers enabled? db-catalog tx-source]}]
@@ -29,18 +26,16 @@
   (util/close processor))
 
 (defn- log-processor-system [{:keys [indexer-conf mode tx-source-conf db-catalog db-state watchers
-                                     block-flush-duration compactor-for-db tx-source-for-db]
+                                     block-flush-duration compactor-for-db tx-source-for-db
+                                     indexer-for-db]
                               :as opts}]
   (let [child-opts (-> (dissoc opts :indexer-conf :mode :tx-source-conf :db-catalog :db-state :watchers
-                               :block-flush-duration :compactor-for-db :tx-source-for-db)
-                       (assoc :storage (:db-storage opts)
-                              :db-state db-state
-                              :state db-state
+                               :block-flush-duration :compactor-for-db :tx-source-for-db :indexer-for-db)
+                       (assoc :db-state db-state
+                              :indexer indexer-for-db
                               :live-index (.getLiveIndex ^DatabaseState db-state)
                               :watchers watchers))]
-    (-> {:xtdb.indexer/crash-logger child-opts
-         :xtdb.indexer/for-db child-opts
-         :xtdb.log/replica-processor (cond-> (assoc child-opts
+    (-> {:xtdb.log/replica-processor (cond-> (assoc child-opts
                                             :indexer-conf indexer-conf :mode mode :tx-source-conf tx-source-conf
                                             :compactor compactor-for-db
                                             :tx-source tx-source-for-db)
@@ -52,10 +47,7 @@
         (doto ig/load-namespaces))))
 
 (defmethod ig/expand-key ::source-processor [k opts]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :indexer (ig/ref :xtdb.indexer/for-db)
-            :replica-processor (ig/ref :xtdb.log/replica-processor)}
+  {k (into {:replica-processor (ig/ref :xtdb.log/replica-processor)}
            opts)})
 
 (defmethod ig/init-key ::source-processor [_ {:keys [allocator ^DatabaseStorage db-storage db-state
@@ -91,7 +83,8 @@
             :db-state (ig/ref :xtdb.db-catalog/state)
             :watchers (ig/ref :xtdb.db-catalog/watchers)
             :compactor-for-db (ig/ref :xtdb.compactor/for-db)
-            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)}
+            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)
+            :indexer-for-db (ig/ref :xtdb.indexer/for-db)}
            opts)})
 
 (defmethod ig/init-key :xtdb.indexer/direct-log-processor [_ opts]
