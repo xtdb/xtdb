@@ -137,8 +137,11 @@ class DebeziumIntegrationTest {
         }
     }
 
-    private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> {
-        return node.getConnection().use { conn ->
+    private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
+        xtQueryDb(node, "xtdb", sql)
+
+    private fun xtQueryDb(node: Xtdb, dbName: String, sql: String): List<Map<String, Any?>> {
+        return node.createConnectionBuilder().database(dbName).build().use { conn ->
             conn.createStatement().use { stmt ->
                 stmt.executeQuery(sql).use { rs ->
                     val metadata = rs.metaData
@@ -596,6 +599,67 @@ class DebeziumIntegrationTest {
             assertEquals(1L, (rows[0]["_id"] as Number).toLong())
             assertEquals("Widget", rows[0]["name"])
             assertEquals(100L, (rows[0]["qty"] as Number).toLong())
+        }
+    }
+
+    @Test
+    fun `CDC events are ingested into secondary database`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS cdc_secondary_test (_id INT PRIMARY KEY, name TEXT, email TEXT)",
+            "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
+        )
+
+        registerConnectorAndAwait()
+
+        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+            // Attach a secondary database
+            node.getConnection().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("ATTACH DATABASE cdc_secondary")
+                }
+            }
+
+            val log = DebeziumLog(kafka.bootstrapServers, "testdb.public.cdc_secondary_test")
+            val processor = DebeziumProcessor(node, "cdc_secondary", node.allocator)
+            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+
+            val capturing = object : Log.Subscriber<SourceMessage> {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                    processor.processRecords(records)
+                    received.addAll(records)
+                }
+            }
+
+            log.use {
+                log.tailAll(capturing, -1).use {
+                    pgExecute(
+                        "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                    )
+
+                    // snapshot(Alice) + insert(Bob) = 2 records
+                    while (received.size < 2) delay(100)
+                    delay(2000)
+                }
+            }
+
+            // Secondary db should have the rows
+            val rows = xtQueryDb(node, "cdc_secondary",
+                """SELECT _id, name, email
+                   FROM public.cdc_secondary_test
+                   ORDER BY _id"""
+            )
+            assertEquals(2, rows.size, "Expected 2 rows in secondary database")
+            assertEquals(1L, (rows[0]["_id"] as Number).toLong())
+            assertEquals("Alice", rows[0]["name"])
+            assertEquals(2L, (rows[1]["_id"] as Number).toLong())
+            assertEquals("Bob", rows[1]["name"])
+
+            // Primary db should have no debezium txs
+            val primaryTxs = xtQuery(node,
+                """SELECT _id FROM xt.txs
+                   WHERE (user_metadata).source = 'debezium'"""
+            )
+            assertEquals(0, primaryTxs.size, "Primary database should have no debezium transactions")
         }
     }
 
