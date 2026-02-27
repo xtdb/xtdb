@@ -21,18 +21,6 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
 
-## Git worktrees
-
-**We make heavy use of git worktrees for parallel agents.**
-
-* At the start of a session, you MUST check to see whether you're in a worktree.
-* If so: 
-  * you, nor any sub-agents, MUST NOT try to read/write files in any other worktree.
-  * you, nor any sub-agents, MUST NOT try to execute processes in any other worktree.
-  * you have access to the full git history in the worktree - you MUST NOT try to run any git commands in other worktrees.
-* If you're asked to create a worktree, you MUST create them in the `.tasks` directory in the repo root without setting upstream tracking (e.g., `git worktree add .tasks/<branch-name> -b <branch-name> origin/main`).
-  This allows developers to explicitly push to their own forks.
-
 ## Definition of Done (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
