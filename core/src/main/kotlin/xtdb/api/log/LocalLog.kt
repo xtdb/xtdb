@@ -250,71 +250,90 @@ class LocalLog<M>(
         }
     }
 
-    override fun tailAll(subscriber: Subscriber<M>, latestProcessedOffset: LogOffset): Subscription {
-        var latestCompletedOffset = latestProcessedOffset
+    override fun openConsumer(): Consumer<M> = object : Consumer<M> {
+        override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+            var latestCompletedOffset = afterOffset
 
-        val ch = Channel<Record<M>>(100)
+            val ch = Channel<Record<M>>(100)
 
-        val subscription = scope.launch(SupervisorJob()) {
-            launch {
-                committedCh
-                    .onSubscription {
-                        val targetOffset = mutex.withLock { latestSubmittedOffset }
-                        if (targetOffset < 0) return@onSubscription
+            val producerJob = scope.launch(SupervisorJob()) {
+                launch {
+                    committedCh
+                        .onSubscription {
+                            val targetOffset = mutex.withLock { latestSubmittedOffset }
+                            if (targetOffset < 0) return@onSubscription
 
-                        runInterruptible {
-                            FileChannel.open(logFilePath).use { ch ->
-                                val latestCompleted = latestCompletedOffset
-                                if (latestCompleted >= 0) {
-                                    ch.position(latestCompleted)
-                                    ch.readMessage()
-                                }
+                            val catchUpRecords = runInterruptible {
+                                FileChannel.open(logFilePath).use { fileCh ->
+                                    val latestCompleted = latestCompletedOffset
+                                    if (latestCompleted >= 0) {
+                                        fileCh.position(latestCompleted)
+                                        fileCh.readMessage()
+                                    }
 
-                                while (ch.position() <= targetOffset) {
-                                    subscriber.processRecords(listOfNotNull(ch.readMessage()))
+                                    buildList {
+                                        while (fileCh.position() <= targetOffset) {
+                                            fileCh.readMessage()?.let { add(it) }
+                                        }
+                                    }
                                 }
                             }
-                        }
 
-                        latestCompletedOffset = targetOffset
-                    }
-                    .onEach {
-                        if (it.logOffset > latestCompletedOffset) {
-                            latestCompletedOffset = it.logOffset
-                            ch.send(it)
-                        }
-                    }
-                    .onCompletion { ch.close() }
-                    .catch {
-                        try {
-                            throw it
-                        } catch (_: ClosedByInterruptException) {
-                            throw CancellationException()
-                        } catch (_: InterruptedException) {
-                            throw CancellationException()
-                        }
-                    }
-                    .collect()
-            }
+                            for (record in catchUpRecords) {
+                                ch.send(record)
+                            }
 
-            while (true) {
-                val msg = withTimeoutOrNull(1.minutes) {
-                    ch.receiveCatching().let { if (it.isClosed) throw CancellationException() else it.getOrThrow()}
+                            latestCompletedOffset = targetOffset
+                        }
+                        .onEach {
+                            if (it.logOffset > latestCompletedOffset) {
+                                latestCompletedOffset = it.logOffset
+                                ch.send(it)
+                            }
+                        }
+                        .onCompletion { ch.close() }
+                        .catch {
+                            try {
+                                throw it
+                            } catch (_: ClosedByInterruptException) {
+                                throw CancellationException()
+                            } catch (_: InterruptedException) {
+                                throw CancellationException()
+                            }
+                        }
+                        .collect()
                 }
-                runInterruptible { subscriber.processRecords(listOfNotNull(msg)) }
             }
+
+            val consumerJob = scope.launch(SupervisorJob()) {
+                try {
+                    while (isActive) {
+                        val msg = withTimeoutOrNull(1.minutes) {
+                            ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                        }
+                        if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
+                    }
+                } finally {
+                    producerJob.cancelAndJoin()
+                }
+            }
+
+            return Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
         }
 
-        return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
+        override fun close() {}
     }
 
-    override fun subscribe(subscriber: GroupSubscriber<M>): Subscription {
-        val offsets = subscriber.onPartitionsAssigned(listOf(0))
-        val nextOffset = offsets[0] ?: 0L
-        val subscription = tailAll(subscriber, nextOffset - 1)
-        return Subscription {
-            subscription.close()
-            subscriber.onPartitionsRevoked(listOf(0))
+    override fun openGroupConsumer(listener: SubscriptionListener): Consumer<M> {
+        listener.onPartitionsAssigned(listOf(0))
+        val inner = openConsumer()
+        return object : Consumer<M> {
+            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>) =
+                inner.tailAll(afterOffset, processor)
+            override fun close() {
+                inner.close()
+                listener.onPartitionsRevoked(listOf(0))
+            }
         }
     }
 

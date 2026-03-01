@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.*
 import java.time.Duration
 import java.util.Collections.synchronizedList
@@ -41,7 +42,7 @@ class KafkaAtomicProducerTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
-        val subscriber = mockk<Subscriber<SourceMessage>> {
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
             every { processRecords(capture(msgs)) } returns Unit
         }
 
@@ -51,7 +52,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(subscriber, -1).use {
+                        log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
@@ -83,7 +84,7 @@ class KafkaAtomicProducerTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
-        val subscriber = mockk<Subscriber<SourceMessage>> {
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
             every { processRecords(capture(msgs)) } returns Unit
         }
 
@@ -93,7 +94,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(subscriber, -1).use {
+                        log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 // Abort this transaction
                                 producer.openTx().use { tx ->
@@ -131,7 +132,7 @@ class KafkaAtomicProducerTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
-        val subscriber = mockk<Subscriber<SourceMessage>> {
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
             every { processRecords(capture(msgs)) } returns Unit
         }
 
@@ -141,7 +142,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(subscriber, -1).use {
+                        log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 // First transaction
                                 producer.openTx().use { tx ->
@@ -180,7 +181,7 @@ class KafkaAtomicProducerTest {
         val topicName = "test-topic-${UUID.randomUUID()}"
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
-        val subscriber = mockk<Subscriber<SourceMessage>> {
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
             every { processRecords(capture(msgs)) } returns Unit
         }
 
@@ -190,7 +191,7 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(subscriber, -1).use {
+                        log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))

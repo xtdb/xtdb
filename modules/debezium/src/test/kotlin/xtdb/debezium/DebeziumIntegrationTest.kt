@@ -19,6 +19,7 @@ import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
 import xtdb.api.log.Log
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.SourceMessage
 import java.net.URI
 import java.net.http.HttpClient
@@ -300,7 +301,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -308,7 +309,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                         "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
@@ -366,7 +367,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -374,7 +375,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
                            VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
@@ -448,7 +449,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -456,7 +457,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
                     )
@@ -510,7 +511,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -518,7 +519,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
                            VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
@@ -575,7 +576,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -583,7 +584,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
                     )
@@ -625,7 +626,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "cdc_secondary", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -633,7 +634,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     pgExecute(
                         "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                     )
@@ -683,7 +684,7 @@ class DebeziumIntegrationTest {
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.Subscriber<SourceMessage> {
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
@@ -691,7 +692,7 @@ class DebeziumIntegrationTest {
             }
 
             log.use {
-                log.tailAll(capturing, -1).use {
+                log.tailAll(-1, capturing).use {
                     // TIMESTAMP (no tz) → Debezium sends as Long, not a string
                     pgExecute(
                         """INSERT INTO bad_times (_id, name, _valid_from)

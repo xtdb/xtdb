@@ -80,6 +80,16 @@ interface Log<M> : AutoCloseable {
         }
     }
 
+    fun interface RecordProcessor<in M> {
+        fun processRecords(records: List<Record<M>>)
+    }
+
+    interface Consumer<M> : AutoCloseable {
+        fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription
+    }
+
+    fun interface Subscription : AutoCloseable
+
     companion object {
         @JvmStatic
         val inMemoryLog get() = InMemoryLog.Factory()
@@ -90,6 +100,17 @@ interface Log<M> : AutoCloseable {
         @Suppress("unused")
         @JvmSynthetic
         fun localLog(path: Path, configure: LocalLog.Factory.() -> Unit) = localLog(path).also(configure)
+
+        @JvmStatic
+        fun <M> Log<M>.tailAll(
+            afterOffset: LogOffset,
+            processor: RecordProcessor<M>,
+        ): AutoCloseable {
+            val consumer = openConsumer()
+            val subscription = consumer.tailAll(afterOffset, processor)
+            return AutoCloseable { subscription.close(); consumer.close() }
+        }
+
     }
 
     interface Registration {
@@ -135,24 +156,14 @@ interface Log<M> : AutoCloseable {
 
     fun readLastMessage(): M?
 
-    fun tailAll(subscriber: Subscriber<M>, latestProcessedOffset: LogOffset): Subscription
+    fun openConsumer(): Consumer<M>
+    fun openGroupConsumer(listener: SubscriptionListener): Consumer<M>
 
-    interface GroupSubscriber<in M> : Subscriber<M> {
-        /**
-         * @return Map of partition to next offset to consume from.
-         *         Partitions not in the map use Kafka's default (committed offset or auto.offset.reset).
-         */
-        fun onPartitionsAssigned(partitions: Collection<Int>): Map<Int, LogOffset>
-
+    interface SubscriptionListener {
+        fun onPartitionsAssigned(partitions: Collection<Int>)
         fun onPartitionsRevoked(partitions: Collection<Int>)
-
         fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
     }
-
-    fun subscribe(subscriber: GroupSubscriber<M>): Subscription
-
-    @FunctionalInterface
-    fun interface Subscription : AutoCloseable
 
     class Record<out M>(
         val epoch: Int,
@@ -163,7 +174,4 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = MsgIdUtil.offsetToMsgId(epoch, logOffset)
     }
 
-    interface Subscriber<in M> {
-        fun processRecords(records: List<Record<M>>)
-    }
 }

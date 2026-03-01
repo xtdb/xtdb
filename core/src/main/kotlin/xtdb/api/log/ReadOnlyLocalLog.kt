@@ -1,6 +1,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log.*
 import xtdb.error.Incorrect
 import xtdb.time.InstantUtil.fromMicros
@@ -17,6 +18,7 @@ import java.nio.file.WatchKey
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.exists
 import kotlin.io.path.name
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
@@ -105,76 +107,94 @@ class ReadOnlyLocalLog<M>(
         }
     }
 
-    override fun tailAll(subscriber: Subscriber<M>, latestProcessedOffset: LogOffset): Subscription {
-        var currentOffset = latestProcessedOffset
+    override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
+        override fun tailAll(afterOffset: LogOffset, processor: Log.RecordProcessor<M>): Log.Subscription {
+            val ch = Channel<Log.Record<M>>(100)
 
-        val subscription = scope.launch(SupervisorJob()) {
-            FileSystems.getDefault().newWatchService().use { watchService ->
-                rootPath.register(watchService, ENTRY_MODIFY)
+            val producerJob = scope.launch(SupervisorJob()) {
+                var currentOffset = afterOffset
 
-                try {
-                    // First, catch up on any existing messages
-                    readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
+                FileSystems.getDefault().newWatchService().use { watchService ->
+                    rootPath.register(watchService, ENTRY_MODIFY)
 
-                    // Then watch for new changes
-                    while (true) {
-                        val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+                    try {
+                        readNewMessages(currentOffset, ch)?.let { currentOffset = it }
 
-                        var logModified = false
-                        for (event in key.pollEvents()) {
-                            val changedPath = event.context() as? Path
-                            if (changedPath?.name == logFileName) {
-                                logModified = true
+                        while (true) {
+                            val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+
+                            var logModified = false
+                            for (event in key.pollEvents()) {
+                                val changedPath = event.context() as? Path
+                                if (changedPath?.name == logFileName) {
+                                    logModified = true
+                                }
+                            }
+
+                            if (logModified) {
+                                readNewMessages(currentOffset, ch)?.let { currentOffset = it }
+                            }
+
+                            if (!key.reset()) {
+                                break
                             }
                         }
-
-                        if (logModified) {
-                            readNewMessages(currentOffset, subscriber)?.let { currentOffset = it }
-                        }
-
-                        if (!key.reset()) {
-                            break // Directory no longer accessible
-                        }
+                    } catch (_: ClosedByInterruptException) {
+                        cancel()
+                    } catch (_: InterruptedException) {
+                        cancel()
                     }
-                } catch (_: ClosedByInterruptException) {
-                    cancel()
-                } catch (_: InterruptedException) {
-                    cancel()
                 }
             }
+
+            val consumerJob = scope.launch(SupervisorJob()) {
+                try {
+                    while (isActive) {
+                        val msg = withTimeoutOrNull(1.minutes) {
+                            ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                        }
+                        if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
+                    }
+                } finally {
+                    producerJob.cancelAndJoin()
+                }
+            }
+
+            return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
         }
 
-        return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
+        override fun close() {}
     }
 
-    override fun subscribe(subscriber: GroupSubscriber<M>): Subscription {
-        val offsets = subscriber.onPartitionsAssigned(listOf(0))
-        val nextOffset = offsets[0] ?: 0L
-        val subscription = tailAll(subscriber, nextOffset - 1)
-        return Subscription {
-            subscription.close()
-            subscriber.onPartitionsRevoked(listOf(0))
+    override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> {
+        listener.onPartitionsAssigned(listOf(0))
+        val inner = openConsumer()
+        return object : Log.Consumer<M> {
+            override fun tailAll(afterOffset: LogOffset, processor: Log.RecordProcessor<M>) =
+                inner.tailAll(afterOffset, processor)
+            override fun close() {
+                inner.close()
+                listener.onPartitionsRevoked(listOf(0))
+            }
         }
     }
 
-    private suspend fun readNewMessages(currentOffset: LogOffset, subscriber: Subscriber<M>): LogOffset? {
+    private suspend fun readNewMessages(currentOffset: LogOffset, ch: Channel<Log.Record<M>>): LogOffset? {
         val newLatestOffset = readLatestSubmittedOffset(logFilePath)
 
         if (newLatestOffset <= currentOffset) return null
 
         var lastOffset = currentOffset
-        FileChannel.open(logFilePath, READ).use { ch ->
-            // Position after the current offset
+        FileChannel.open(logFilePath, READ).use { fileCh ->
             if (currentOffset >= 0) {
-                ch.position(currentOffset)
-                ch.readMessage() // skip past current
+                fileCh.position(currentOffset)
+                fileCh.readMessage()
             }
 
-            // Read all new messages
-            while (ch.position() <= newLatestOffset) {
-                val record = ch.readMessage()
+            while (fileCh.position() <= newLatestOffset) {
+                val record = fileCh.readMessage()
                 if (record != null) {
-                    runInterruptible { subscriber.processRecords(listOf(record)) }
+                    ch.send(record)
                     lastOffset = record.logOffset
                 }
             }

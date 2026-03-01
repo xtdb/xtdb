@@ -92,20 +92,9 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         override fun close() {}
     }
 
-    override fun tailAll(
-        subscriber: Log.Subscriber<M>,
-        latestProcessedOffset: LogOffset
-    ): Log.Subscription = error("tailAll")
+    override fun openConsumer(): Log.Consumer<M> = error("openConsumer")
 
-    override fun subscribe(subscriber: Log.GroupSubscriber<M>): Log.Subscription {
-        val offsets = subscriber.onPartitionsAssigned(listOf(0))
-        val nextOffset = offsets[0] ?: 0L
-        val subscription = tailAll(subscriber, nextOffset - 1)
-        return Log.Subscription {
-            subscription.close()
-            subscriber.onPartitionsRevoked(listOf(0))
-        }
-    }
+    override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> = error("openGroupConsumer")
 
     override fun close() = Unit
 }
