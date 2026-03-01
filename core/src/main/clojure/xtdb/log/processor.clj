@@ -2,6 +2,7 @@
   (:require [integrant.core :as ig]
             [xtdb.util :as util])
   (:import [xtdb.api IndexerConfig]
+           [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
            [xtdb.indexer SourceLogProcessor]
            [xtdb.util MsgIdUtil]))
@@ -29,7 +30,7 @@
                           (MsgIdUtil/msgIdToOffset latest-processed-msg-id)
                           -1)
                         -1)]
-    (.tailAll source-log src-proc latest-offset)))
+    (Log/tailAll source-log latest-offset src-proc)))
 
 (defmethod ig/expand-key :xtdb.log.processor/source [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)

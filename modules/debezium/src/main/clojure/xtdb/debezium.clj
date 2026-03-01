@@ -3,7 +3,7 @@
             [xtdb.error :as err]
             [xtdb.node :as xtn]
             [xtdb.util :as util])
-  (:import (xtdb.api.log KafkaCluster)
+  (:import (xtdb.api.log KafkaCluster Log)
            (xtdb.debezium DebeziumLog DebeziumProcessor)))
 
 (defn- resolve-kafka-config
@@ -29,12 +29,15 @@
         kafka-config (resolve-kafka-config node kafka-cluster)
         log (DebeziumLog. kafka-config topic)
         processor (DebeziumProcessor. node db-name (.allocator node))
-        subscription (.tailAll log processor -1)]
+        subscription (Log/tailAll log -1 processor)]
     (log/info "Debezium CDC node started"
-              {:kafka-cluster kafka-cluster :topic topic :db-name db-name})
+              {:kafka-cluster kafka-cluster
+               :topic topic :db-name db-name})
     (reify java.lang.AutoCloseable
       (close [_]
+        (log/info "Shutting down Debezium CDC node...")
         (util/close subscription)
         (util/close processor)
         (util/close log)
-        (util/close node)))))
+        (util/close node)
+        (log/info "Debezium CDC node shut down.")))))

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.Record
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
@@ -23,12 +24,12 @@ class LocalLogTest {
         // Create a subscription
         val receivedRecords = mutableListOf<Record<SourceMessage>>()
         val subscription = log.tailAll(
-            object : Log.Subscriber<SourceMessage> {
+            -1L,
+            object : Log.RecordProcessor<SourceMessage> {
                 override fun processRecords(records: List<Record<SourceMessage>>) {
                     records.forEach { receivedRecords.add(it) }
                 }
-            },
-            -1
+            }
         )
 
         log.appendMessage(SourceMessage.FlushBlock(1))

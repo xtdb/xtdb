@@ -8,6 +8,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
+
 import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -263,14 +264,12 @@ class KafkaCluster(
             }
         }
 
-        override fun tailAll(subscriber: Subscriber<M>, latestProcessedOffset: LogOffset): Subscription {
+        private fun tailAll(
+            kafkaConsumer: KafkaConsumer<*, ByteArray>,
+            processor: RecordProcessor<M>,
+        ): Subscription {
             val job = scope.launch {
-                kafkaConfigMap.openConsumer().use { c ->
-                    TopicPartition(topic, 0).also { tp ->
-                        c.assign(listOf(tp))
-                        c.seek(tp, latestProcessedOffset + 1)
-                    }
-
+                kafkaConsumer.use { c ->
                     runInterruptible(Dispatchers.IO) {
                         while (true) {
                             val records = try {
@@ -279,11 +278,11 @@ class KafkaCluster(
                                 throw InterruptedException()
                             }
 
-                            subscriber.processRecords(
+                            processor.processRecords(
                                 records.mapNotNull { record ->
                                     codec.decode(record.value())
                                         ?.let { msg ->
-                                            Record(
+                                            Log.Record(
                                                 epoch,
                                                 record.offset(),
                                                 Instant.ofEpochMilli(record.timestamp()),
@@ -300,59 +299,41 @@ class KafkaCluster(
             return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
         }
 
-        override fun subscribe(subscriber: GroupSubscriber<M>): Subscription {
-            val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
-
-            val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
-
-            val job = scope.launch {
-                consumerConfig.openConsumer().use { consumer ->
-                    val rebalanceListener = object : ConsumerRebalanceListener {
-                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) {
-                            subscriber.onPartitionsRevoked(partitions.map { it.partition() })
-                        }
-
-                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
-                            val offsets = subscriber.onPartitionsAssigned(partitions.map { it.partition() })
-                            for ((partition, offset) in offsets) {
-                                consumer.seek(TopicPartition(topic, partition), offset)
-                            }
-                        }
-
-                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) {
-                            subscriber.onPartitionsLost(partitions.map { it.partition() })
-                        }
-                    }
-
-                    consumer.subscribe(listOf(topic), rebalanceListener)
-
-                    runInterruptible(Dispatchers.IO) {
-                        while (true) {
-                            val records = try {
-                                consumer.poll(pollDuration).records(topic)
-                            } catch (_: InterruptException) {
-                                throw InterruptedException()
-                            }
-
-                            subscriber.processRecords(
-                                records.mapNotNull { record ->
-                                    codec.decode(record.value())
-                                        ?.let { msg ->
-                                            Record(
-                                                epoch,
-                                                record.offset(),
-                                                Instant.ofEpochMilli(record.timestamp()),
-                                                msg
-                                            )
-                                        }
-                                }
-                            )
-                        }
-                    }
+        override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
+            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+                val c = kafkaConfigMap.openConsumer()
+                TopicPartition(topic, 0).also { tp ->
+                    c.assign(listOf(tp))
+                    c.seek(tp, afterOffset + 1)
                 }
+                return tailAll(c, processor)
             }
 
-            return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+            override fun close() {}
+        }
+
+        override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<M> {
+            val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
+            val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
+
+            return object : Log.Consumer<M> {
+                override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+                    val c = consumerConfig.openConsumer()
+                    c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+
+                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                            listener.onPartitionsAssigned(partitions.map { it.partition() })
+
+                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
+                            listener.onPartitionsLost(partitions.map { it.partition() })
+                    })
+                    return tailAll(c, processor)
+                }
+
+                override fun close() {}
+            }
         }
 
         override fun close() = Unit

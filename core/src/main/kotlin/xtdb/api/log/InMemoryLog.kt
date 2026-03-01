@@ -117,9 +117,10 @@ class InMemoryLog<M> @JvmOverloads constructor(
 
     override fun readLastMessage(): M? = null
 
-    override fun tailAll(subscriber: Subscriber<M>, latestProcessedOffset: LogOffset): Subscription {
-        val job = subscriberScope.launch {
-            var latestCompletedOffset = latestProcessedOffset
+    override fun openConsumer(): Consumer<M> = object : Consumer<M> {
+        override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+            var latestCompletedOffset = afterOffset
+
             val ch = committedCh
                 .filter {
                     val logOffset = it.logOffset
@@ -130,29 +131,40 @@ class InMemoryLog<M> @JvmOverloads constructor(
                 }
                 .onEach { latestCompletedOffset = it.logOffset }
                 .buffer(100)
-                .produceIn(this)
+                .produceIn(subscriberScope)
 
-            while (isActive) {
-                val records: List<Record<M>> = select {
-                    ch.onReceiveCatching { if (it.isClosed) null else listOf(it.getOrThrow()) }
+            val job = subscriberScope.launch {
+                try {
+                    while (isActive) {
+                        val records = select {
+                            ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
 
-                    @OptIn(ExperimentalCoroutinesApi::class)
-                    onTimeout(1.minutes) { emptyList() }
-                } ?: break
-                runInterruptible { subscriber.processRecords(records) }
+                            @OptIn(ExperimentalCoroutinesApi::class)
+                            onTimeout(1.minutes) { emptyList() }
+                        }
+                        if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
+                    }
+                } finally {
+                    ch.cancel()
+                }
             }
+
+            return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
         }
 
-        return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+        override fun close() {}
     }
 
-    override fun subscribe(subscriber: GroupSubscriber<M>): Subscription {
-        val offsets = subscriber.onPartitionsAssigned(listOf(0))
-        val nextOffset = offsets[0] ?: 0L
-        val subscription = tailAll(subscriber, nextOffset - 1)
-        return Subscription {
-            subscription.close()
-            subscriber.onPartitionsRevoked(listOf(0))
+    override fun openGroupConsumer(listener: SubscriptionListener): Consumer<M> {
+        listener.onPartitionsAssigned(listOf(0))
+        val inner = openConsumer()
+        return object : Consumer<M> {
+            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>) =
+                inner.tailAll(afterOffset, processor)
+            override fun close() {
+                inner.close()
+                listener.onPartitionsRevoked(listOf(0))
+            }
         }
     }
 

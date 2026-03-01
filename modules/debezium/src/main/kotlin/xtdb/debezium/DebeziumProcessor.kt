@@ -15,7 +15,7 @@ class DebeziumProcessor(
     private val node: Xtdb,
     private val dbName: String,
     private val allocator: BufferAllocator,
-) : Log.Subscriber<SourceMessage>, AutoCloseable {
+) : Log.RecordProcessor<SourceMessage>, AutoCloseable {
 
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
         for (record in records) {

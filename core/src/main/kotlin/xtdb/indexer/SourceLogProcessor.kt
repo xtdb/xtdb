@@ -62,7 +62,7 @@ class SourceLogProcessor(
     private val dbCatalog: Database.Catalog? = null,
     private val txSource: Indexer.TxSource? = null,
     flushTimeout: Duration = Duration.ofMinutes(5),
-) : Log.Subscriber<SourceMessage>, AutoCloseable {
+) : Log.RecordProcessor<SourceMessage>, AutoCloseable {
 
     init {
         require((dbCatalog != null) == (dbState.name == "xtdb")) {

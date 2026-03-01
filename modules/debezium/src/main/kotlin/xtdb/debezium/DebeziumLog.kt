@@ -41,50 +41,67 @@ class DebeziumLog @JvmOverloads constructor(
     override fun openAtomicProducer(transactionalId: String): AtomicProducer<SourceMessage> =
         throw UnsupportedOperationException("CDC log is read-only")
 
-    override fun subscribe(subscriber: GroupSubscriber<SourceMessage>): Subscription =
+    override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<SourceMessage> =
         throw UnsupportedOperationException("CDC log does not support group subscription")
 
     override fun readLastMessage(): SourceMessage? = null
 
-    override fun tailAll(subscriber: Subscriber<SourceMessage>, latestProcessedOffset: Long): Subscription {
-        val job = scope.launch {
-            KafkaConsumer<String, String>(
-                kafkaConfig + mapOf(
-                    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
-                    ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
-                    ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
-                )
-            ).use { c ->
-                TopicPartition(topic, 0).also { tp ->
-                    c.assign(listOf(tp))
-                    c.seek(tp, latestProcessedOffset + 1)
-                }
-                runInterruptible(Dispatchers.IO) {
-                    while (true) {
-                        val records = try {
-                            c.poll(pollDuration).records(topic)
-                        } catch (_: InterruptException) {
-                            throw InterruptedException()
-                        }
+    override fun openConsumer(): Log.Consumer<SourceMessage> = object : Log.Consumer<SourceMessage> {
+        override fun tailAll(afterOffset: Long, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
+            val ch = kotlinx.coroutines.channels.Channel<List<Log.Record<SourceMessage>>>(10)
 
-                        subscriber.processRecords(
-                            records.mapNotNull { record ->
-                                record.value()?.let { value ->
-                                    Record(
-                                        epoch,
-                                        record.offset(),
-                                        Instant.ofEpochMilli(record.timestamp()),
-                                        SourceMessage.Tx(value.toByteArray()),
-                                    )
-                                }
+            val producerJob = scope.launch {
+                KafkaConsumer<String, String>(
+                    kafkaConfig + mapOf(
+                        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
+                        ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
+                        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
+                    )
+                ).use { c ->
+                    TopicPartition(topic, 0).also { tp ->
+                        c.assign(listOf(tp))
+                        c.seek(tp, afterOffset + 1)
+                    }
+                    runInterruptible(Dispatchers.IO) {
+                        while (true) {
+                            val records = try {
+                                c.poll(pollDuration).records(topic)
+                            } catch (_: InterruptException) {
+                                throw InterruptedException()
                             }
-                        )
+
+                            ch.trySend(
+                                records.mapNotNull { record ->
+                                    record.value()?.let { value ->
+                                        Log.Record(
+                                            epoch,
+                                            record.offset(),
+                                            Instant.ofEpochMilli(record.timestamp()),
+                                            SourceMessage.Tx(value.toByteArray()),
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
+
+            val consumerJob = scope.launch {
+                try {
+                    while (isActive) {
+                        val records = ch.receive()
+                        if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
+                    }
+                } finally {
+                    producerJob.cancelAndJoin()
+                }
+            }
+
+            return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
         }
 
-        return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+        override fun close() {}
     }
 
     override fun close() {

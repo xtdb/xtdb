@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
 import xtdb.database.Database
@@ -45,7 +46,7 @@ class KafkaClusterTest {
     fun `round-trips messages`() = runTest(timeout = 30.seconds) {
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
-        val subscriber = mockk<Subscriber<SourceMessage>> {
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
             every { processRecords(capture(msgs)) } returns Unit
         }
 
@@ -69,7 +70,7 @@ class KafkaClusterTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(subscriber, -1).use { _ ->
+                        log.tailAll(-1, subscriber).use { _ ->
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
                             log.appendMessage(SourceMessage.Tx(txPayload)).await()
 
