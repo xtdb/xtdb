@@ -53,8 +53,7 @@ class KafkaAtomicProducerTest {
             .pollDuration(Duration.ofMillis(100))
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
-                    .openSourceLog(mapOf("my-cluster" to cluster))
-                    .use { log ->
+                    .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
                         log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.withTx { tx ->

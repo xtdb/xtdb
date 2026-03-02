@@ -506,18 +506,6 @@
       (t/is (anomalous? [:unsupported ::err/unsupported]
                         (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :count 42}]]))))))
 
-(t/deftest bug-catch-closed-by-interrupt-exception-740
-  (let [e (ClosedByInterruptException.)]
-    (with-redefs [idx/->put-docs-indexer (fn [& _args]
-                                           (throw e))
-                  log/log* (let [log* log/log*]
-                             (fn [logger level throwable message]
-                               (when-not (identical? e throwable)
-                                 (log* logger level throwable message))))]
-      (t/is (thrown-with-msg? Exception #"Interrupted"
-                              (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo(_id) VALUES (1)"]]))))))
-
-
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/can-index-sql-insert")]

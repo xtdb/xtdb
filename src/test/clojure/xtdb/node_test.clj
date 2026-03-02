@@ -832,111 +832,157 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (t/is (= [{:xt/id 1, :tz -7} {:xt/id 2, :tz 4} {:xt/id 3, :tz 2}]
            (xt/q tu/*node* "SELECT _id, EXTRACT(TIMEZONE_HOUR FROM ts) as tz from docs ORDER BY _id"))))
 
-(t/deftest test-skip-txes
-  (let [!skiptxid (atom nil)]
-    (util/with-tmp-dirs #{path}
-      (t/testing "node with no txes skipped:"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
-          (t/testing "Send three transactions"
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
-            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
-              (reset! !skiptxid tx-id))
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]]))
+(t/deftest test-skip-txes-multi-writer
+  (when-not (db/single-writer?)
+    (let [!skiptxid (atom nil)]
+      (util/with-tmp-dirs #{path}
+        (t/testing "node with no txes skipped:"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]})]
+            (t/testing "Send three transactions"
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+              (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+                (reset! !skiptxid tx-id))
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]]))
 
-          (t/testing "Can query three back out"
-            (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
-                     (set (xt/q node "SELECT * from xt_docs")))))))
+            (t/testing "Can query three back out"
+              (t/is (= (set [{:xt/id :foo} {:xt/id :bar} {:xt/id :baz}])
+                       (set (xt/q node "SELECT * from xt_docs")))))))
 
-      (t/testing "node with txs to skip"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
-                                          :indexer {:skip-txs [@!skiptxid]}})]
-          (xt-log/sync-node node #xt/duration "PT5S")
-          (t/testing "Can query two back out - skipped one"
-            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
-                     (set (xt/q node "SELECT * from xt_docs")))))
-
-          ;; Call flush-block! to write files
-          (tu/flush-block! node)))
-
-      (t/testing "node can remove 'txs to skip' after block finished"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
-          (t/testing "Only two results are returned"
-            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
-                     (set (xt/q node "SELECT * from xt_docs"))))))))))
-
-(t/deftest test-skipped-tx-stored-in-object-store
-  (let [!skiptxid (atom nil)]
-    (util/with-tmp-dirs #{path}
-      (t/testing "Skip a transaction and verify it's stored in object store"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
-          (t/testing "Send three transactions, capturing middle tx id"
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
-            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
-              (reset! !skiptxid tx-id))
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])))
-
-        (t/testing "Restart node with tx to skip"
+        (t/testing "node with txs to skip"
           (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                             :storage [:local {:path (str path "/storage")}]
                                             :indexer {:skip-txs [@!skiptxid]}})]
             (xt-log/sync-node node #xt/duration "PT5S")
-            
-            (t/testing "Verify skipped transaction is stored in object store"
-              (let [buffer-pool (.getBufferPool (db/primary-db node))
-                    skipped-tx-path (util/->path (format "skipped-txs/%s" (util/->lex-dec-string @!skiptxid)))
-                    stored-objects (.listAllObjects buffer-pool (util/->path "skipped-txs"))]
-                (t/is (seq stored-objects) "skipped-txs directory should contain files")
-                (t/is (some #(= skipped-tx-path (:key (os/<-StoredObject %))) stored-objects)
-                      "Skipped transaction should be stored in object store")))))))))
+            (t/testing "Can query two back out - skipped one"
+              (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                       (set (xt/q node "SELECT * from xt_docs")))))
 
-(t/deftest test-skip-txes-latest-submitted-tx-id
-  (let [!skiptxid (atom nil)]
-    (util/with-tmp-dirs #{path}
-      (t/testing "node with no txes skipped:"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]})]
-          (t/testing "Send two transactions"
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
-            (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
-              (reset! !skiptxid tx-id)))
+            ;; Call flush-block! to write files
+            (tu/flush-block! node)))
 
-          (t/is (= @!skiptxid (-> (xt/status node)
-                                  (get-in [:latest-completed-txs "xtdb" 0 :tx-id]))))))
+        (t/testing "node can remove 'txs to skip' after block finished"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]})]
+            (t/testing "Only two results are returned"
+              (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                       (set (xt/q node "SELECT * from xt_docs")))))))))))
 
-      (t/testing "node with txs to skip"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
-                                          :indexer {:skip-txs [@!skiptxid]}
-                                          :compactor {:threads 0}})]
+(t/deftest test-skipped-tx-stored-in-object-store-multi-writer
+  (when-not (db/single-writer?)
+    (let [!skiptxid (atom nil)]
+      (util/with-tmp-dirs #{path}
+        (t/testing "Skip a transaction and verify it's stored in object store"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]})]
+            (t/testing "Send three transactions, capturing middle tx id"
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+              (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+                (reset! !skiptxid tx-id))
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])))
 
-          (xt-log/sync-node node #xt/duration "PT5S")
-          (t/testing "Can query one back out - skipped one"
-            (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
+          (t/testing "Restart node with tx to skip"
+            (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                              :storage [:local {:path (str path "/storage")}]
+                                              :indexer {:skip-txs [@!skiptxid]}})]
+              (xt-log/sync-node node #xt/duration "PT5S")
 
-          (t/testing "Latest submitted tx id should be the one that was skipped"
+              (t/testing "Verify skipped transaction is stored in object store"
+                (let [buffer-pool (.getBufferPool (db/primary-db node))
+                      skipped-tx-path (util/->path (format "skipped-txs/%s" (util/->lex-dec-string @!skiptxid)))
+                      stored-objects (.listAllObjects buffer-pool (util/->path "skipped-txs"))]
+                  (t/is (seq stored-objects) "skipped-txs directory should contain files")
+                  (t/is (some #(= skipped-tx-path (:key (os/<-StoredObject %))) stored-objects)
+                        "Skipped transaction should be stored in object store"))))))))))
+
+(t/deftest test-skip-txes-latest-submitted-tx-id-multi-writer
+  (when-not (db/single-writer?)
+    (let [!skiptxid (atom nil)]
+      (util/with-tmp-dirs #{path}
+        (t/testing "node with no txes skipped:"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]})]
+            (t/testing "Send two transactions"
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+              (let [{:keys [tx-id]} (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])]
+                (reset! !skiptxid tx-id)))
+
             (t/is (= @!skiptxid (-> (xt/status node)
-                                    (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
+                                    (get-in [:latest-completed-txs "xtdb" 0 :tx-id]))))))
 
-          ;; Call flush-block! to write files
-          (tu/flush-block! node)))
+        (t/testing "node with txs to skip"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]
+                                            :indexer {:skip-txs [@!skiptxid]}
+                                            :compactor {:threads 0}})]
 
-      (t/testing "node can remove 'txs to skip' after block finished"
-        (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
-                                          :storage [:local {:path (str path "/storage")}]
-                                          :compactor {:threads 0}})]
+            (xt-log/sync-node node #xt/duration "PT5S")
+            (t/testing "Can query one back out - skipped one"
+              (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
 
-          (t/testing "Latest submitted tx id should still be the one that was skipped"
-            (t/is (= @!skiptxid (-> (xt/status node)
-                                    (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
+            (t/testing "Latest submitted tx id should be the one that was skipped"
+              (t/is (= @!skiptxid (-> (xt/status node)
+                                      (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
 
-          (t/testing "Can send a new transaction after skipping one"
-            (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
-            (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
-                     (set (xt/q node "SELECT * from xt_docs"))))))))))
+            ;; Call flush-block! to write files
+            (tu/flush-block! node)))
+
+        (t/testing "node can remove 'txs to skip' after block finished"
+          (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
+                                            :storage [:local {:path (str path "/storage")}]
+                                            :compactor {:threads 0}})]
+
+            (t/testing "Latest submitted tx id should still be the one that was skipped"
+              (t/is (= @!skiptxid (-> (xt/status node)
+                                      (get-in [:latest-completed-txs "xtdb" 0 :tx-id])))))
+
+            (t/testing "Can send a new transaction after skipping one"
+              (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
+              (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
+                       (set (xt/q node "SELECT * from xt_docs")))))))))))
+
+(t/deftest test-skip-txes-single-writer
+  (when (db/single-writer?)
+    (with-open [node (xtn/start-node {:indexer {:skip-txs [1]}})]
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+      (t/is (anomalous? [:fault :xtdb/skipped-tx "Transaction was skipped"]
+                        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])))
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
+
+      (t/testing "Can query two back out - skipped one"
+        (t/is (= #{:foo :baz}
+                 (set (map :xt/id (xt/q node "SELECT * from xt_docs")))))))))
+
+(t/deftest test-skipped-tx-stored-in-object-store-single-writer
+  (when (db/single-writer?)
+    (with-open [node (xtn/start-node {:indexer {:skip-txs [1]}})]
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+      (t/is (anomalous? [:fault :xtdb/skipped-tx "Transaction was skipped"]
+                        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])))
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :baz}]])
+
+      (t/testing "Verify skipped transaction is stored in object store"
+        (let [buffer-pool (.getBufferPool (db/primary-db node))
+              skipped-tx-path (util/->path (format "skipped-txs/%s" (util/->lex-dec-string 1)))
+              stored-objects (.listAllObjects buffer-pool (util/->path "skipped-txs"))]
+          (t/is (seq stored-objects) "skipped-txs directory should contain files")
+          (t/is (some #(= skipped-tx-path (:key (os/<-StoredObject %))) stored-objects)
+                "Skipped transaction should be stored in object store"))))))
+
+(t/deftest test-skip-txes-latest-submitted-tx-id-single-writer
+  (when (db/single-writer?)
+    (with-open [node (xtn/start-node {:indexer {:skip-txs [1]}
+                                      :compactor {:threads 0}})]
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+      (t/is (anomalous? [:fault :xtdb/skipped-tx "Transaction was skipped"]
+                        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])))
+
+      (t/testing "Can query one back out - skipped one"
+        (t/is (= #{:foo} (set (map :xt/id (xt/q node "SELECT * from xt_docs"))))))
+
+      (t/testing "Latest submitted tx id should be the one that was skipped"
+        (t/is (= 1 (-> (xt/status node)
+                        (get-in [:latest-completed-txs "xtdb" 0 :tx-id]))))))))
 
 (t/deftest null-to-duv-promotion-halts-ingestion-4153
   (xt/submit-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, a: 1, b: 1.5}"])

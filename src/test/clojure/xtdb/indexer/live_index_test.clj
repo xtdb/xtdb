@@ -200,9 +200,10 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/flush-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 39)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 40)]
-                   (.listAllObjects bp (util/->path "blocks")))))))))
+          (let [[b00-size b01-size] (if (db/single-writer?) [42 43] [39 40])]
+            (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") b00-size)
+                      (os/->StoredObject (util/->path "blocks/b01.binpb") b01-size)]
+                     (.listAllObjects bp (util/->path "blocks"))))))))))
 
 ;; -----------------------------------------------------------------------------
 ;; Tests derived from live-index.allium spec - verifying implicit behaviours

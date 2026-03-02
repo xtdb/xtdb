@@ -201,7 +201,7 @@ class SourceLogProcessor(
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            tableBlocks.keys, secondaryDatabasesForBlock
+            boundaryReplicaMsgId = null, tableBlocks.keys, secondaryDatabasesForBlock
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))

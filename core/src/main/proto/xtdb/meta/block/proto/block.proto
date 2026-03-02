@@ -40,4 +40,7 @@ message Block {
 
     // present iff it's the cluster's primary ('xtdb') database
     map<string, xtdb.database.proto.DatabaseConfig> secondary_databases = 5;
+
+    // the replica-log message ID of the BlockBoundary message for this block
+    int64 boundary_replica_msg_id = 6;
 }

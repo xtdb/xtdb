@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -73,67 +74,71 @@ $$"])
               "read-only secondary rejects writes")))))
 
 (t/deftest read-only-secondary-detects-external-log-writes
-  (let [node-dir (util/->path "target/read-only-secondary/external-writes")]
-    (util/delete-dir node-dir)
+  ;; in single-writer mode, read-only secondaries require a leader resolving transactions
+  ;; into the replica log - a submit-only node (indexer disabled) doesn't suffice.
+  ;; this scenario is covered by read-only-secondary-follows-primary and read-only-secondary-survives-block-flush.
+  (when-not (db/single-writer?)
+    (let [node-dir (util/->path "target/read-only-secondary/external-writes")]
+      (util/delete-dir node-dir)
 
-    ;; Phase 1: Start a "submit-only" node
-    (with-open [submit-node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
-                                             :storage [:local {:path (.resolve node-dir "objects")}]
-                                             :indexer {:enabled? false}
-                                             :compactor {:threads 0}})]
+      ;; Phase 1: Start a "submit-only" node
+      (with-open [submit-node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                               :storage [:local {:path (.resolve node-dir "objects")}]
+                                               :indexer {:enabled? false}
+                                               :compactor {:threads 0}})]
 
-      (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx1"}]])
-      (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx2"}]])
+        (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx1"}]])
+        (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx2"}]])
 
-      ;; Phase 2: Start a read-only secondary that should detect log changes via file watcher
-      (with-open [secondary-node (xtn/start-node)]
+        ;; Phase 2: Start a read-only secondary that should detect log changes via file watcher
+        (with-open [secondary-node (xtn/start-node)]
 
-        (jdbc/execute! secondary-node ["
-ATTACH DATABASE shared_db WITH $$
-  log: !Local
-    path: 'target/read-only-secondary/external-writes/log'
-  storage: !Local
-    path: 'target/read-only-secondary/external-writes/objects'
-  mode: read-only
-$$"])
+          (jdbc/execute! secondary-node ["
+                                         ATTACH DATABASE shared_db WITH $$
+                                         log: !Local
+                                           path: 'target/read-only-secondary/external-writes/log'
+                                         storage: !Local
+                                           path: 'target/read-only-secondary/external-writes/objects'
+                                         mode: read-only
+                                         $$"])
 
-        (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"}}
-                 (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
-              "read-only secondary indexes transactions from log")
+          (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"}}
+                   (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
+                "read-only secondary indexes transactions from log")
 
-        ;; Phase 3: Submit more transactions from the submit-only node
-        (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx3"}]])
+          ;; Phase 3: Submit more transactions from the submit-only node
+          (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx3"}]])
 
-        ;; Give the file watcher time to detect the change
-        (Thread/sleep 100)
-        (xt-log/sync-node secondary-node #xt/duration "PT5S")
+          ;; Give the file watcher time to detect the change
+          (Thread/sleep 100)
+          (xt-log/sync-node secondary-node #xt/duration "PT5S")
 
-        (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"} {:xt/id "tx3"}}
-                 (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
-              "read-only secondary detects new transactions written by external process")
+          (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"} {:xt/id "tx3"}}
+                   (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
+                "read-only secondary detects new transactions written by external process")
 
-        (tu/flush-block! submit-node)
-        (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx4"}]])
+          (tu/flush-block! submit-node)
+          (xt/submit-tx submit-node [[:put-docs :foo {:xt/id "tx4"}]])
 
-        (let [!fut (future
-                     (Thread/sleep 100)
-                     (xt-log/sync-node secondary-node #xt/duration "PT5S"))]
-          (Thread/sleep 200)
-          (t/is (not (realized? !fut))
-                "blocks til the primary writes the block")
+          (let [!fut (future
+                       (Thread/sleep 100)
+                       (xt-log/sync-node secondary-node #xt/duration "PT5S"))]
+            (Thread/sleep 200)
+            (t/is (not (realized? !fut))
+                  "blocks til the primary writes the block")
 
-          ;; Phase 4: Start a full primary node
-          (with-open [primary-node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
-                                                    :storage [:local {:path (.resolve node-dir "objects")}]})]
+            ;; Phase 4: Start a full primary node
+            (with-open [primary-node (xtn/start-node {:log [:local {:path (.resolve node-dir "log")}]
+                                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
 
-            (xt/submit-tx primary-node [[:put-docs :foo {:xt/id "tx5"}]])
+              (xt/submit-tx primary-node [[:put-docs :foo {:xt/id "tx5"}]])
 
-            (Thread/sleep 100)
-            @!fut
+              (Thread/sleep 100)
+              @!fut
 
-            (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"} {:xt/id "tx3"} {:xt/id "tx4"} {:xt/id "tx5"}}
-                     (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
-                  "read-only secondary sees tx written by full primary node")))))))
+              (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"} {:xt/id "tx3"} {:xt/id "tx4"} {:xt/id "tx5"}}
+                       (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
+                    "read-only secondary sees tx written by full primary node"))))))))
 
 (t/deftest read-only-secondary-survives-block-flush
   (let [node-dir (util/->path "target/read-only-secondary/block-flush")]

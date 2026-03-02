@@ -15,6 +15,7 @@ import xtdb.api.PathWithEnvVarSerde
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.util.MsgIdUtil
+import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
 import java.nio.file.Path
@@ -138,14 +139,14 @@ interface Log<M> : AutoCloseable {
     val epoch: Int
 
     val latestSubmittedMsgId: MessageId
-        get() = MsgIdUtil.offsetToMsgId(epoch, latestSubmittedOffset)
+        get() = offsetToMsgId(epoch, latestSubmittedOffset)
 
     class MessageMetadata(
         val epoch: Int,
         val logOffset: LogOffset,
         val logTimestamp: LogTimestamp
     ) {
-        val msgId: MessageId get() = MsgIdUtil.offsetToMsgId(epoch, logOffset)
+        val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
     fun appendMessage(message: M): CompletableFuture<MessageMetadata>
@@ -195,7 +196,7 @@ interface Log<M> : AutoCloseable {
         val logTimestamp: Instant,
         val message: M
     ) {
-        val msgId: MessageId get() = MsgIdUtil.offsetToMsgId(epoch, logOffset)
+        val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
 }
