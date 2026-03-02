@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
 private val logger = LoggerFactory.getLogger(DebeziumLog::class.java)
 
 class DebeziumLog @JvmOverloads constructor(
-    private val bootstrapServers: String,
+    private val kafkaConfig: Map<String, String>,
     private val topic: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),
     coroutineContext: CoroutineContext = Dispatchers.Default,
@@ -49,8 +49,7 @@ class DebeziumLog @JvmOverloads constructor(
     override fun tailAll(subscriber: Subscriber<SourceMessage>, latestProcessedOffset: Long): Subscription {
         val job = scope.launch {
             KafkaConsumer<String, String>(
-                mapOf(
-                    ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
+                kafkaConfig + mapOf(
                     ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
                     ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
                     ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,

@@ -264,8 +264,8 @@
 
 (def debezium-cdc-cli-spec
   [config-file-opt
-   ["-b" "--bootstrap-servers SERVERS" "Kafka bootstrap servers"
-    :id :bootstrap-servers]
+   ["-k" "--kafka-cluster ALIAS" "Kafka cluster alias (from node config log-clusters)"
+    :id :kafka-cluster]
    ["-t" "--topic TOPIC" "Kafka topic to consume CDC events from"
     :id :topic]
    ["-d" "--db-name DB_NAME" "XTDB database name"
@@ -274,16 +274,16 @@
    ["-h" "--help"]])
 
 (defn- start-debezium-cdc [args]
-  (let [{{:keys [file bootstrap-servers topic db-name]} :options}
+  (let [{{:keys [file kafka-cluster topic db-name]} :options}
         (-> (parse-args args debezium-cdc-cli-spec)
             (handling-arg-errors-or-help))]
-    (when-not (and bootstrap-servers topic)
+    (when-not (and kafka-cluster topic)
       (binding [*out* *err*]
-        (println "Required: --bootstrap-servers and --topic")
+        (println "Required: --kafka-cluster and --topic")
         (System/exit 2)))
     (util/with-open [_cdc ((requiring-resolve 'xtdb.debezium/start!)
                            (file->node-opts file)
-                           {:bootstrap-servers bootstrap-servers
+                           {:kafka-cluster kafka-cluster
                             :topic topic
                             :db-name db-name})]
       @(shutdown-hook-promise))))

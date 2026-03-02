@@ -47,6 +47,8 @@ class DebeziumLogTest {
         }.toString()
     }
 
+    private fun kafkaConfig() = mapOf("bootstrap.servers" to kafka.bootstrapServers)
+
     private fun produceMessages(topic: String, messages: List<String>) {
         KafkaProducer<String, String>(
             mapOf(
@@ -79,7 +81,7 @@ class DebeziumLogTest {
             }
         }
 
-        val log = DebeziumLog(kafka.bootstrapServers, topic)
+        val log = DebeziumLog(kafkaConfig(), topic)
         log.use {
             // Resume from offset 1 — should skip records 0 and 1, receive 2 and 3
             log.tailAll(subscriber, 1).use {
@@ -115,7 +117,7 @@ class DebeziumLogTest {
             }
         }
 
-        val log = DebeziumLog(kafka.bootstrapServers, topic)
+        val log = DebeziumLog(kafkaConfig(), topic)
         log.use {
             log.tailAll(subscriber, -1).use {
                 while (received.isEmpty()) delay(100)
@@ -141,7 +143,7 @@ class DebeziumLogTest {
             }
         }
 
-        val log = DebeziumLog(kafka.bootstrapServers, topic)
+        val log = DebeziumLog(kafkaConfig(), topic)
 
         val subscription = log.tailAll(subscriber, -1)
         while (received.isEmpty()) delay(100)
