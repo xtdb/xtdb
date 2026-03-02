@@ -398,7 +398,80 @@
 
   (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
   (t/is (= [{:out "fxxbxr"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', 'x') AS out")))
-  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out"))))
+  ;; $1 (Java-style) and \1 (Postgres-style) both work as backreferences
+  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' $1 ') AS out")))
+  (t/is (= [{:out "f o  o b a r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', ' \\1 ') AS out")))
+  (t/is (= [{:out "example.com"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('http://example.com/some/path', '^https?://(?:www\\.)?([^/]+)/.*$', '\\1') AS out")))
+
+  ;; \\1 in replacement = literal backslash + '1', not a backreference
+  (t/is (= [{:out "f\\1\\1b\\1r"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foobar', '(a|e|i|o|u)', '\\\\1') AS out")))
+
+  ;; multiple capture groups with postgres-style backrefs
+  (t/is (= [{:out "bar-foo"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foo-bar', '(\\w+)-(\\w+)', '\\2-\\1') AS out")))
+
+  ;; \0 whole-match backref
+  (t/is (= [{:out "[foo] [bar]"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foo bar', '(\\w+)', '[\\0]') AS out")))
+
+  ;; mixed $1 and \2 in the same replacement
+  (t/is (= [{:out "bar-foo"}] (xt/q tu/*node* "SELECT REGEXP_REPLACE('foo-bar', '(\\w+)-(\\w+)', '\\2-$1') AS out"))))
+
+(t/deftest test-postgres-backrefs->java
+  (let [convert @#'expr/postgres-backrefs->java]
+    (t/testing "no backrefs - passthrough"
+      (t/is (= "hello" (convert "hello")))
+      (t/is (= "" (convert "")))
+      (t/is (= "plain text with spaces" (convert "plain text with spaces"))))
+
+    (t/testing "single backref"
+      (t/is (= "$1" (convert "\\1")))
+      (t/is (= "$0" (convert "\\0")))
+      (t/is (= "$9" (convert "\\9"))))
+
+    (t/testing "multi-digit backref"
+      (t/is (= "$12" (convert "\\12")))
+      (t/is (= "$99" (convert "\\99")))
+      (t/is (= "$123" (convert "\\123"))))
+
+    (t/testing "multiple backrefs"
+      (t/is (= "$2-$1" (convert "\\2-\\1")))
+      (t/is (= "[$1] [$2] [$3]" (convert "[\\1] [\\2] [\\3]"))))
+
+    (t/testing "adjacent backrefs"
+      (t/is (= "$1$2" (convert "\\1\\2")))
+      (t/is (= "$1$2$3" (convert "\\1\\2\\3"))))
+
+    (t/testing "escaped backslash (\\\\) preserved as literal backslash"
+      ;; \\ in input (two chars: \ \) → \\ in output (preserved)
+      (t/is (= "\\\\" (convert "\\\\")))
+      (t/is (= "a\\\\b" (convert "a\\\\b"))))
+
+    (t/testing "escaped backslash followed by digit = literal backslash + digit, not backref"
+      ;; \\1 in input (three chars: \ \ 1) → \\ consumes the first two, 1 remains literal
+      (t/is (= "\\\\1" (convert "\\\\1")))
+      ;; \\1\\2 → literal backslash + 1, literal backslash + 2
+      (t/is (= "\\\\1\\\\2" (convert "\\\\1\\\\2"))))
+
+    (t/testing "java-style $N passes through unchanged"
+      (t/is (= "$1" (convert "$1")))
+      (t/is (= "$2 and $3" (convert "$2 and $3"))))
+
+    (t/testing "mixed $N and \\N"
+      (t/is (= "$2-$1" (convert "\\2-$1")))
+      (t/is (= "$1$2" (convert "$1\\2"))))
+
+    (t/testing "backref with surrounding text"
+      (t/is (= "prefix-$1-suffix" (convert "prefix-\\1-suffix")))
+      (t/is (= " $1 " (convert " \\1 "))))
+
+    (t/testing "lone backslash passes through unchanged"
+      ;; \a, \z etc - not a backref, not an escaped backslash
+      ;; the function doesn't touch these (Java's Matcher treats \x as literal x)
+      (t/is (= "\\a" (convert "\\a")))
+      (t/is (= "\\n" (convert "\\n")))
+      ;; trailing lone backslash - also passes through
+      ;; (Java's Matcher.replaceAll would throw on this, but that's not our problem)
+      (t/is (= "trailing\\" (convert "trailing\\")))
+      (t/is (= "\\" (convert "\\"))))))
 
 (t/deftest test-bool-test-expr
   (t/are [sql expected]
