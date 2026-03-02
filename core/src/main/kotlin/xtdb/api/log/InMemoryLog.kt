@@ -64,7 +64,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
             // that check files can be deterministic
             val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
 
-            val record = Record(++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
+            val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
             onCommit.complete(MessageMetadata(record.logOffset,ts.truncatedTo(MICROS)))
             record
         }

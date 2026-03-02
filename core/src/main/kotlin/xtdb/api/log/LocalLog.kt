@@ -103,7 +103,7 @@ class LocalLog<M>(
             codec.decode(ByteBuffer.allocate(size).also { read(it); it.flip() }.array())
                 ?: return null
 
-        return Record(pos, fromMicros(headerBuf.getLong()), message)
+        return Record(epoch, pos, fromMicros(headerBuf.getLong()), message)
             .also { position(pos + messageSizeBytes(size)) }
     }
 
@@ -144,7 +144,7 @@ class LocalLog<M>(
                             flip()
                         })
 
-                Record(offset, ts, msg)
+                Record(epoch, offset, ts, msg)
             }
 
             logFileChannel.force(true)

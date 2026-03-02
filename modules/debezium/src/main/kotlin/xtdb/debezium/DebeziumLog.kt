@@ -71,6 +71,7 @@ class DebeziumLog @JvmOverloads constructor(
                             records.mapNotNull { record ->
                                 record.value()?.let { value ->
                                     Record(
+                                        epoch,
                                         record.offset(),
                                         Instant.ofEpochMilli(record.timestamp()),
                                         SourceMessage.Tx(value.toByteArray()),

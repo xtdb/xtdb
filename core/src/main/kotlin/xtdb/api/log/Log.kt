@@ -155,10 +155,13 @@ interface Log<M> : AutoCloseable {
     fun interface Subscription : AutoCloseable
 
     class Record<out M>(
+        val epoch: Int,
         val logOffset: LogOffset,
         val logTimestamp: Instant,
         val message: M
-    )
+    ) {
+        val msgId: MessageId get() = MsgIdUtil.offsetToMsgId(epoch, logOffset)
+    }
 
     interface Subscriber<in M> {
         fun processRecords(records: List<Record<M>>)

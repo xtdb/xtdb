@@ -83,7 +83,7 @@ class ReadOnlyLocalLog<M>(
             codec.decode(ByteBuffer.allocate(size).also { read(it); it.flip() }.array())
                 ?: return null
 
-        return Record(pos, fromMicros(headerBuf.getLong()), message)
+        return Record(epoch, pos, fromMicros(headerBuf.getLong()), message)
             .also { position(pos + messageSizeBytes(size)) }
     }
 

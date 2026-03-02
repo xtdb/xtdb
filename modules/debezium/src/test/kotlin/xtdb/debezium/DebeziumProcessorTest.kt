@@ -34,7 +34,7 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
+        return Record(0, offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
     }
 
     private fun deleteRecord(
@@ -54,7 +54,7 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
+        return Record(0, offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
     }
 
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> {
@@ -74,7 +74,7 @@ class DebeziumProcessorTest {
     }
 
     private fun rawRecord(payload: String, offset: Long = 0): Record<SourceMessage> =
-        Record(offset, Instant.now(), SourceMessage.Tx(payload.toByteArray()))
+        Record(0, offset, Instant.now(), SourceMessage.Tx(payload.toByteArray()))
 
     private fun awaitTxs(node: Xtdb, expected: Int, timeout: kotlin.time.Duration = 10.seconds) {
         val start = TimeSource.Monotonic.markNow()

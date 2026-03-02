@@ -284,6 +284,7 @@ class KafkaCluster(
                                     codec.decode(record.value())
                                         ?.let { msg ->
                                             Record(
+                                                epoch,
                                                 record.offset(),
                                                 Instant.ofEpochMilli(record.timestamp()),
                                                 msg
@@ -338,6 +339,7 @@ class KafkaCluster(
                                     codec.decode(record.value())
                                         ?.let { msg ->
                                             Record(
+                                                epoch,
                                                 record.offset(),
                                                 Instant.ofEpochMilli(record.timestamp()),
                                                 msg

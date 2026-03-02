@@ -240,7 +240,7 @@ class SourceLogProcessor(
         try {
             while (queue.isNotEmpty()) {
                 val record = queue.removeFirst()
-                val msgId = offsetToMsgId(epoch, record.logOffset)
+                val msgId = record.msgId
                 lastMsgId = msgId
                 latestProcessedMsgId = msgId
 
