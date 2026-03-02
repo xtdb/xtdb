@@ -19,11 +19,7 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Anomaly
-import xtdb.error.Conflict
-import xtdb.error.Incorrect
-import xtdb.error.NotFound
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil
@@ -81,9 +77,6 @@ class SourceLogProcessor(
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
-
-    private val secondaryDatabases: MutableMap<String, DatabaseConfig> =
-        blockCatalog.secondaryDatabases.toMutableMap()
 
     private var latestProcessedMsgId: MessageId = blockCatalog.latestProcessedMsgId ?: -1
 
@@ -210,7 +203,7 @@ class SourceLogProcessor(
             bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
         }
 
-        val secondaryDatabasesForBlock = secondaryDatabases.takeIf { dbState.name == "xtdb" }
+        val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
@@ -291,19 +284,16 @@ class SourceLogProcessor(
                     }
 
                     is SourceMessage.AttachDatabase -> {
+                        val txKey = TransactionKey(msgId, record.logTimestamp)
                         val error = try {
-                            if (msg.dbName == "xtdb" || msg.dbName in secondaryDatabases)
-                                throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
-                            secondaryDatabases[msg.dbName] = msg.config.serializedConfig
+                            dbCatalog!!.attach(msg.dbName, msg.config)
                             null
                         } catch (e: Anomaly.Caller) { e }
 
-                        val txKey = TransactionKey(msgId, record.logTimestamp)
                         val resolvedTx = indexer.addTxRow(txKey, error)
                         txSource?.onCommit(resolvedTx)
 
                         if (error == null) {
-                            dbCatalog!!.attach(msg.dbName, msg.config)
                             watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
                         } else {
                             watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
@@ -311,25 +301,16 @@ class SourceLogProcessor(
                     }
 
                     is SourceMessage.DetachDatabase -> {
+                        val txKey = TransactionKey(msgId, record.logTimestamp)
                         val error = try {
-                            when {
-                                msg.dbName == "xtdb" ->
-                                    throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to msg.dbName))
-                                msg.dbName !in secondaryDatabases ->
-                                    throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
-                                else -> {
-                                    secondaryDatabases.remove(msg.dbName)
-                                    null
-                                }
-                            }
+                            dbCatalog!!.detach(msg.dbName)
+                            null
                         } catch (e: Anomaly.Caller) { e }
 
-                        val txKey = TransactionKey(msgId, record.logTimestamp)
                         val resolvedTx = indexer.addTxRow(txKey, error)
                         txSource?.onCommit(resolvedTx)
 
                         if (error == null) {
-                            dbCatalog!!.detach(msg.dbName)
                             watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
                         } else {
                             watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
