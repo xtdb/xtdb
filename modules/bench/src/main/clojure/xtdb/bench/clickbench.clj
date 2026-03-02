@@ -5,6 +5,7 @@
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
+            [hugsql.core :as hugsql]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.bench :as b]
@@ -18,6 +19,8 @@
            [software.amazon.awssdk.regions Region]
            [software.amazon.awssdk.services.s3 S3Client]
            [software.amazon.awssdk.services.s3.model GetObjectRequest]))
+
+(hugsql/def-sqlvec-fns "xtdb/bench/clickbench.sql")
 
 (def hits-header
   [:watch-id :java-enable :title :good-event :event-time :event-date :counter-id :client-ip :region-id :user-id
@@ -170,9 +173,30 @@
 
    ["-h" "--help"]])
 
-(def queries
-  (->> (io/resource "clickbench/queries.sql")
-       slurp str/split-lines))
+(def query-sqlvec-fns
+  "Ordered list of [query-name sqlvec-fn] pairs from the HugSQL-defined clickbench queries."
+  (let [defs (hugsql/map-of-sqlvec-fns "xtdb/bench/clickbench.sql")]
+    (->> defs
+         (sort-by (fn [[k _]]
+                    (let [[_ n] (re-find #"q(\d+)" (name k))]
+                      (parse-long n))))
+         (mapv (fn [[k {:keys [fn]}]]
+                 ;; strip the -sqlvec suffix from the key name
+                 (let [query-name (str/replace (name k) #"-sqlvec$" "")]
+                   [query-name fn]))))))
+
+(defn query-stage [query-name sqlvec-fn]
+  {:t :call, :stage (keyword (str "query-" query-name))
+   :f (fn [{:keys [node]}]
+        (let [sql (first (sqlvec-fn))]
+          (log/info (format "Running %s: %s" query-name sql))
+          (try
+            (let [result (xt/q node sql)]
+              (log/info (format "%s completed, %d rows returned" query-name (count result)))
+              (count result))
+            (catch Throwable e
+              (log/error e (format "%s failed" query-name))
+              (throw e)))))})
 
 (defmethod b/->benchmark :clickbench [_ {:keys [no-load? limit size], :or {size :small}}]
   (log/info {:no-load? no-load? :limit limit :size size})
@@ -203,13 +227,12 @@
 
                             {:t :call, :stage :compact
                              :f (fn [{:keys [node]}]
-                                  (b/compact! node))}
+                                  (b/compact! node))}])}
 
-                            {:t :call, :stage :queries
-                             :f (fn [{:keys [node]}]
-                                  (doseq [query (take 1 queries)]
-                                    (log/info "Running query:" query)
-                                    (xt/q node query)))}])}]})
+           {:t :do, :stage :queries
+            :tasks (mapv (fn [[query-name sqlvec-fn]]
+                           (query-stage query-name sqlvec-fn))
+                         query-sqlvec-fns)}]})
 
 (t/deftest ^:benchmark run-clickbench
   (-> (b/->benchmark :clickbench {})

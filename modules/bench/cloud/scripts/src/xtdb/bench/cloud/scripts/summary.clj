@@ -115,6 +115,41 @@
    :time-taken-ms time-taken-ms
    :duration (util/format-duration :millis time-taken-ms)})
 
+(defn clickbench-stage->query-row
+  [idx {:keys [stage time-taken-ms]}]
+  (when-let [[_ query-num name] (re-find #"^query-q(\d+)-(.*)$" stage)]
+    (let [q (str "Q" query-num)
+          friendly-name (util/title-case name)
+          duration-pt (util/format-duration :millis time-taken-ms)]
+      {:query-order idx
+       :query-index (Long/parseLong query-num)
+       :q q
+       :query (str q " " friendly-name)
+       :query-name friendly-name
+       :stage stage
+       :time-taken-ms time-taken-ms
+       :duration duration-pt})))
+
+(defn clickbench-summary->query-rows
+  [summary]
+  (let [rows (->> (:query-stages summary)
+                  (map-indexed clickbench-stage->query-row)
+                  (remove nil?)
+                  (sort-by :query-index)
+                  vec)
+        total-ms (reduce + 0 (map :time-taken-ms rows))
+        rows-with-percent (mapv (fn [row]
+                                  (let [ms (:time-taken-ms row)
+                                        pct (if (pos? total-ms)
+                                              (* 100.0 (/ ms total-ms))
+                                              0.0)]
+                                    (-> row
+                                        (assoc :percent-of-total (format "%.2f%%" pct))
+                                        (dissoc :query-order :query-index))))
+                                rows)]
+    {:rows rows-with-percent
+     :total-ms total-ms}))
+
 (defn ingest-tx-overhead-stage->row
   [idx {:keys [stage time-taken-ms]}]
   (when-let [[_ batch-size] (re-find #"^ingest-batch-(\d+)$" (name stage))]
@@ -286,10 +321,15 @@
               "N/A"))))
 
 (defmethod summary->table "clickbench" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
-         "\n\n"
-         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+  (let [{ingest-rows :rows ingest-ms :total-ms} (clickbench-summary->stage-rows summary)
+        {query-rows :rows query-ms :total-ms} (clickbench-summary->query-rows summary)]
+    (cond-> (str (util/totals->string ingest-ms (:benchmark-total-time-ms summary) "ingest")
+                 "\n\n"
+                 (rows->string [:stage :time-taken-ms :duration :percent-of-total] ingest-rows))
+      (seq query-rows)
+      (str "\n\nQueries total: " (util/format-duration :millis query-ms)
+           "\n\n"
+           (rows->string [:q :query-name :time-taken-ms :duration :percent-of-total] query-rows)))))
 
 (defmethod summary->table "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
@@ -375,12 +415,19 @@
               "N/A"))))
 
 (defmethod summary->slack "clickbench" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
-    (str
-     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
-     "\n\n"
-     (util/wrap-slack-code
-      (rows->string [:stage :duration] rows)))))
+  (let [{ingest-rows :rows ingest-ms :total-ms} (clickbench-summary->stage-rows summary)
+        {query-rows :rows query-ms :total-ms} (clickbench-summary->query-rows summary)]
+    (cond-> (str
+             (util/totals->string ingest-ms (:benchmark-total-time-ms summary) "ingest")
+             "\n\n"
+             (util/wrap-slack-code
+              (rows->string [:stage :duration] ingest-rows)))
+      (seq query-rows)
+      (str "\n---SLACK-SPLIT---\n"
+           "Queries total: " (util/format-duration :millis query-ms)
+           "\n\n"
+           (util/wrap-slack-code
+            (rows->string [:query :duration] query-rows))))))
 
 (defmethod summary->slack "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
@@ -489,14 +536,25 @@
               "N/A"))))
 
 (defmethod summary->github-markdown "clickbench" [summary]
-  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)
-        columns [{:key :stage :header "Stage"}
-                 {:key :time-taken-ms :header "Time (ms)"}
-                 {:key :duration :header "Duration"}
-                 {:key :percent-of-total :header "% of total"}]]
-    (str (util/github-table columns rows)
-         "\n\n"
-         (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest"))))
+  (let [{ingest-rows :rows ingest-ms :total-ms} (clickbench-summary->stage-rows summary)
+        {query-rows :rows query-ms :total-ms} (clickbench-summary->query-rows summary)
+        ingest-columns [{:key :stage :header "Stage"}
+                        {:key :time-taken-ms :header "Time (ms)"}
+                        {:key :duration :header "Duration"}
+                        {:key :percent-of-total :header "% of total"}]
+        query-columns [{:key :q :header "Query"}
+                       {:key :query-name :header "Name"}
+                       {:key :time-taken-ms :header "Time (ms)"}
+                       {:key :duration :header "Duration"}
+                       {:key :percent-of-total :header "% of total"}]]
+    (cond-> (str (util/github-table ingest-columns ingest-rows)
+                 "\n\n"
+                 (util/totals->string ingest-ms (:benchmark-total-time-ms summary) "ingest"))
+      (seq query-rows)
+      (str "\n\n### Queries\n\n"
+           (util/github-table query-columns query-rows)
+           "\n\n"
+           "Queries total: " (util/format-duration :millis query-ms)))))
 
 (defmethod summary->github-markdown "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)
