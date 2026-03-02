@@ -903,7 +903,11 @@
                                            :db-config (try
                                                         (or (some-> (.configYaml ctx)
                                                                     (sql/plan-expr env)
-                                                                    (Database$Config/fromYaml))
+                                                                    (as-> yaml
+                                                                      (do (when (re-find #"!Env\b" yaml)
+                                                                            (throw (IllegalArgumentException.
+                                                                                     "!Env is not supported in ATTACH DATABASE - environment variables are resolved at submission time and baked into the log, use literal values instead")))
+                                                                          (Database$Config/fromYaml yaml))))
                                                             (Database$Config.))
                                                         (catch Exception e
                                                           (throw (err/incorrect :xtdb/invalid-database-config

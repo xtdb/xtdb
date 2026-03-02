@@ -159,3 +159,13 @@
       (t/is (= [{:xt/id "xtdb", :version 2}] (xt/q xtdb-conn '(from :foo [xt/id version]))))
 
       (t/is (= [{:xt/id "new-db"}] (xt/q new-db-conn '(from :foo [xt/id])))))))
+
+(t/deftest test-attach-db-rejects-env-tag-5311
+  (with-open [node (xtn/start-node)
+              conn (.build (.createConnectionBuilder node))]
+    (t/is (thrown-with-msg?
+             Exception #"!Env is not supported in ATTACH DATABASE"
+             (jdbc/execute! conn ["ATTACH DATABASE my_db WITH $$
+                                     log: !Local
+                                       path: !Env MY_LOG_PATH
+                                   $$"])))))
