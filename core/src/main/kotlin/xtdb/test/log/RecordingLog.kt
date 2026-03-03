@@ -50,6 +50,7 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
 
         return CompletableFuture.completedFuture(
             Log.MessageMetadata(
+                epoch,
                 ++latestSubmittedOffset,
                 ts.truncatedTo(ChronoUnit.MICROS)
             )

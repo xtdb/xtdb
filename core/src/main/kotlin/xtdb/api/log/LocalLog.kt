@@ -204,7 +204,7 @@ class LocalLog<M>(
             val onCommit = CompletableDeferred<Record<M>>()
             appendCh.send(NewMessage(message, onCommit))
             val record = onCommit.await()
-            MessageMetadata(record.logOffset, record.logTimestamp)
+            MessageMetadata(epoch, record.logOffset, record.logTimestamp)
         }
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {

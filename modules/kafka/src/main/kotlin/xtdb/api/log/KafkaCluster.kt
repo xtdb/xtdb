@@ -185,6 +185,7 @@ class KafkaCluster(
                         ) { recordMetadata, e ->
                             if (e == null) res.complete(
                                 MessageMetadata(
+                                    epoch,
                                     recordMetadata.offset(),
                                     Instant.ofEpochMilli(recordMetadata.timestamp())
                                 )
@@ -233,6 +234,7 @@ class KafkaCluster(
                             if (e == null) {
                                 future.complete(
                                     MessageMetadata(
+                                        epoch,
                                         recordMetadata.offset(),
                                         Instant.ofEpochMilli(recordMetadata.timestamp())
                                     )

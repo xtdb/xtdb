@@ -65,7 +65,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
             val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
 
             val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
-            onCommit.complete(MessageMetadata(record.logOffset,ts.truncatedTo(MICROS)))
+            onCommit.complete(MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS)))
             record
         }
         .shareIn(scope, SharingStarted.Eagerly, 100)

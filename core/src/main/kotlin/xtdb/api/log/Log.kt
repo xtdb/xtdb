@@ -132,9 +132,12 @@ interface Log<M> : AutoCloseable {
         get() = MsgIdUtil.offsetToMsgId(epoch, latestSubmittedOffset)
 
     class MessageMetadata(
+        val epoch: Int,
         val logOffset: LogOffset,
         val logTimestamp: LogTimestamp
-    )
+    ) {
+        val msgId: MessageId get() = MsgIdUtil.offsetToMsgId(epoch, logOffset)
+    }
 
     fun appendMessage(message: M): CompletableFuture<MessageMetadata>
 

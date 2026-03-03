@@ -244,7 +244,7 @@
                                                                                                   (-> (select-keys opts [:authn :default-db])
                                                                                                       (assoc :default-tz (:default-tz opts default-tz)
                                                                                                              :system-time (some-> system-time time/expect-instant))))))]
-        (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
+        (.getMsgId message-meta)))))
 
 
 (defn await-db
@@ -271,9 +271,7 @@
   (.sendFlushBlockMessage db))
 
 (defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
-  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog primary-db))
-                           (.getLogOffset (.sendAttachDbMessage primary-db db-name db-config))))
+  (.getMsgId (.sendAttachDbMessage primary-db db-name db-config)))
 
 (defn send-detach-db! ^long [^Database primary-db, db-name]
-  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog primary-db))
-                           (.getLogOffset (.sendDetachDbMessage primary-db db-name))))
+  (.getMsgId (.sendDetachDbMessage primary-db db-name)))

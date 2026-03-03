@@ -30,8 +30,7 @@
            xtdb.error.Anomaly
            xtdb.table.TableRef
            (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.tx TxWriter)
-           (xtdb.util MsgIdUtil)))
+           (xtdb.tx TxWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -175,7 +174,7 @@
         (util/rethrowing-cause
          (let [tx-msg (SourceMessage$Tx. (TxWriter/serializeTxOps tx-ops allocator tx-opts))
                ^Log$MessageMetadata message-meta @(.appendMessage log tx-msg)]
-           (Xtdb$SubmittedTx. (MsgIdUtil/offsetToMsgId (.getEpoch log) (.getLogOffset message-meta))))))
+           (Xtdb$SubmittedTx. (.getMsgId message-meta)))))
       (catch Anomaly e
         (when tx-error-counter
           (.increment tx-error-counter))
