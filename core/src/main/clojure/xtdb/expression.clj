@@ -1392,8 +1392,8 @@
        patch)))
 
 (defn current-setting [setting-name]
-  (if (= setting-name "server_version_num")
-    (parse-version (xtdb-server-version))
+  (case setting-name
+    "server_version_num" 160000
     (throw (err/unsupported ::unsupported-setting (str "Setting not supported: " setting-name)
                             {:setting-name setting-name}))))
 
