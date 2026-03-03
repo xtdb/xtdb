@@ -256,7 +256,7 @@ class LocalLog<M>(
 
             val ch = Channel<Record<M>>(100)
 
-            val producerJob = scope.launch(SupervisorJob()) {
+            val subscription = scope.launch(SupervisorJob()) {
                 launch {
                     committedCh
                         .onSubscription {
@@ -303,22 +303,16 @@ class LocalLog<M>(
                         }
                         .collect()
                 }
-            }
 
-            val consumerJob = scope.launch(SupervisorJob()) {
-                try {
-                    while (isActive) {
-                        val msg = withTimeoutOrNull(1.minutes) {
-                            ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
-                        }
-                        if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
+                while (isActive) {
+                    val msg = withTimeoutOrNull(1.minutes) {
+                        ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
                     }
-                } finally {
-                    producerJob.cancelAndJoin()
+                    if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
                 }
             }
 
-            return Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
+            return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
         }
 
         override fun close() {}

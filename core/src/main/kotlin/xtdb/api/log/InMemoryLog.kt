@@ -121,31 +121,27 @@ class InMemoryLog<M> @JvmOverloads constructor(
         override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
             var latestCompletedOffset = afterOffset
 
-            val ch = committedCh
-                .filter {
-                    val logOffset = it.logOffset
-                    check(logOffset <= latestCompletedOffset + 1) {
-                        "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
-                    }
-                    logOffset > latestCompletedOffset
-                }
-                .onEach { latestCompletedOffset = it.logOffset }
-                .buffer(100)
-                .produceIn(subscriberScope)
-
             val job = subscriberScope.launch {
-                try {
-                    while (isActive) {
-                        val records = select {
-                            ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
-
-                            @OptIn(ExperimentalCoroutinesApi::class)
-                            onTimeout(1.minutes) { emptyList() }
+                val ch = committedCh
+                    .filter {
+                        val logOffset = it.logOffset
+                        check(logOffset <= latestCompletedOffset + 1) {
+                            "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
                         }
-                        if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
+                        logOffset > latestCompletedOffset
                     }
-                } finally {
-                    ch.cancel()
+                    .onEach { latestCompletedOffset = it.logOffset }
+                    .buffer(100)
+                    .produceIn(this)
+
+                while (isActive) {
+                    val records = select {
+                        ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
+
+                        @OptIn(ExperimentalCoroutinesApi::class)
+                        onTimeout(1.minutes) { emptyList() }
+                    }
+                    if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
                 }
             }
 
