@@ -4,7 +4,7 @@
             [xtdb.pgwire :as-alias pgw]
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
-           [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException InputStream OutputStream]
+           [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException IOException InputStream OutputStream]
            [java.lang AutoCloseable]
            [java.net Socket]
            [java.nio.charset StandardCharsets]
@@ -136,16 +136,15 @@
         (.flush out))))
 
   (read-client-msg! [_]
-    (let [type-char (char (.readUnsignedByte in))
-          msg-var (or (client-msgs type-char)
-                      (throw (err-protocol-violation (str "Unknown client message " type-char))))
-          rdr (:read @msg-var)]
-      (try
+    (try
+      (let [type-char (char (.readUnsignedByte in))
+            msg-var (or (client-msgs type-char)
+                        (throw (err-protocol-violation (str "Unknown client message " type-char))))
+            rdr (:read @msg-var)]
         (-> (rdr (read-untyped-msg in))
-            (assoc :msg-name (:name @msg-var)))
-        (catch Exception e
-          (log/error e "Error reading client message")
-          (throw (err-protocol-violation (str "Error reading client message " (ex-message e))))))))
+            (assoc :msg-name (:name @msg-var))))
+      (catch IOException e
+        (throw (err-protocol-violation (str "Error reading client message " (ex-message e)) e)))))
 
   (host-address [_] (.getHostAddress (.getInetAddress socket)))
 
