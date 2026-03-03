@@ -55,7 +55,7 @@ sealed interface ReplicaMessage {
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
-                            BlockUploaded(it.blockIndex, it.latestProcessedMsgId, it.storageEpoch)
+                            BlockUploaded(it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList)
                         }
 
                         else -> null
@@ -130,12 +130,18 @@ sealed interface ReplicaMessage {
         }
     }
 
-    data class BlockUploaded(val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId, val storageEpoch: StorageEpoch) : ProtobufMessage() {
+    data class BlockUploaded(
+        val storageVersion: Int, val storageEpoch: StorageEpoch,
+        val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
+        val tries: List<TrieDetails>
+    ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockUploaded = blockUploaded {
+                this.storageVersion = this@BlockUploaded.storageVersion
+                this.storageEpoch = this@BlockUploaded.storageEpoch
                 this.blockIndex = this@BlockUploaded.blockIndex
                 this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
-                this.storageEpoch = this@BlockUploaded.storageEpoch
+                tries.addAll(this@BlockUploaded.tries)
             }
         }
     }

@@ -211,7 +211,8 @@ class SourceLogProcessor(
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
         blockCatalog.refresh(block)
 
-        log.appendMessage(SourceMessage.BlockUploaded(blockIdx, latestProcessedMsgId, bufferPool.epoch))
+        // NOTE: we still send TriesAdded separately above for backwards compat
+        log.appendMessage(SourceMessage.BlockUploaded(Storage.VERSION, bufferPool.epoch, blockIdx, latestProcessedMsgId, addedTries))
 
         liveIndex.nextBlock()
         compactor.signalBlock()

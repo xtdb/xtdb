@@ -15,21 +15,14 @@
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
+            [xtdb.serde.types :as st]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.trie :as trie]
             [xtdb.ts-devices :as ts]
-            [xtdb.tx-ops :as tx-ops]
-            [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.serde.types :as st])
-  (:import java.nio.ByteBuffer
-           (java.nio.channels ClosedByInterruptException)
+            [xtdb.util :as util])
+  (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
-           (java.time Duration Instant InstantSource ZoneId)
-           org.apache.arrow.memory.BufferAllocator
-           (xtdb.arrow Relation)
-           xtdb.trie.MemoryHashTrie))
+           (java.time Duration InstantSource)))
 
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
