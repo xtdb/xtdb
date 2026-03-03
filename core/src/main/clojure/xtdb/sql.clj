@@ -1194,6 +1194,9 @@
 (def-sql-fns [str] 1 Long/MAX_VALUE)
 (def-sql-fns [format] 1 Long/MAX_VALUE)
 (def-sql-fns [namespace local_name reverse] 1 1)
+(def-sql-fns [quote_ident parse_ident] 1 1)
+(def-sql-fns [string_to_array] 2 2)
+(def-sql-fns [array_lower array_length] 2 2)
 
 ;; system info
 (def-sql-fns [col_description] 2 2)

@@ -1391,16 +1391,17 @@
        (* minor 1000)
        patch)))
 
-(defn current-setting [setting-name]
+(defn current-setting ^String [setting-name]
   (case setting-name
-    "server_version_num" 160000
+    "server_version_num" "160000"
+    "search_path" "public"
     (throw (err/unsupported ::unsupported-setting (str "Setting not supported: " setting-name)
                             {:setting-name setting-name}))))
 
 (defmethod codegen-call [:current_setting :utf8] [_]
-  {:return-type #xt/type :i64
+  {:return-type #xt/type :utf8
    :->call-code (fn [[setting-name]]
-                  `(current-setting (resolve-string ~setting-name)))})
+                  `(resolve-utf8-buf (current-setting (resolve-string ~setting-name))))})
 
 (defn sleep [^long duration unit]
   (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
@@ -1557,6 +1558,32 @@
    :->call-code (fn [[s target replacement]]
                   `(-> (.replace (resolve-string ~s) (resolve-string ~target) (resolve-string ~replacement))
                        (resolve-utf8-buf)))})
+
+(defmethod codegen-call [:quote_ident :utf8] [_]
+  {:return-type #xt/type :utf8
+   :->call-code (fn [[s]]
+                  `(resolve-utf8-buf (resolve-string ~s)))})
+
+(defn string-to-array ^java.util.List [^String s ^String delimiter]
+  (let [parts (.split s (java.util.regex.Pattern/quote delimiter) -1)]
+    (java.util.ArrayList. ^java.util.Collection (vec parts))))
+
+(defmethod codegen-call [:string_to_array :utf8 :utf8] [_]
+  {:return-type #xt/type [:list :utf8]
+   :continue-call (fn [f [s delim]]
+                    (f #xt/type [:list :utf8]
+                       `(string-to-array (resolve-string ~s) (resolve-string ~delim))))})
+
+(defn parse-ident ^java.util.List [^String s]
+  (let [parts (.split s "\\." -1)]
+    (java.util.ArrayList. ^java.util.Collection
+      (mapv #(clojure.string/replace % #"^\"|\"$" "") parts))))
+
+(defmethod codegen-call [:parse_ident :utf8] [_]
+  {:return-type #xt/type [:list :utf8]
+   :continue-call (fn [f [s]]
+                    (f #xt/type [:list :utf8]
+                       `(parse-ident (resolve-string ~s))))})
 
 (defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type #xt/type :varbinary
@@ -2037,6 +2064,26 @@
 
                      (.size ~arr)))})
 
+(defmethod codegen-call [:array_lower :list :i64] [_]
+  {:return-type #xt/type :i32
+   :->call-code (fn [[_arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_LOWER for dimension != 1"
+                                               {:dim ~dim})))
+                     (int 1)))})
+
+(defmethod codegen-call [:array_length :list :i64] [_]
+  {:return-type #xt/type :i32
+   :->call-code (fn [[arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_LENGTH for dimension != 1"
+                                               {:dim ~dim})))
+                     (.size ~arr)))})
+
 (defn trim-array-view ^xtdb.arrow.ListValueReader [^long trimmed-value-count ^ListValueReader lst]
   (reify ListValueReader
     (size [_] trimmed-value-count)
@@ -2149,7 +2196,7 @@
     (reify ListValueReader
       (size [_]
         (Math/max (int 0)
-                  (int (Math/ceil (/ (Math/subtractExact end start) step)))))
+                  (int (inc (Math/floorDiv (Math/subtractExact end start) step)))))
 
       (nth [_ idx]
         (doto box
@@ -2159,6 +2206,11 @@
   {:return-type #xt/type [:list :i64]
    :->call-code (fn [[start end step]]
                   `(series (long ~start) (long ~end) (long ~step)))})
+
+(defmethod codegen-call [:generate_series :int :int] [_]
+  {:return-type #xt/type [:list :i64]
+   :->call-code (fn [[start end]]
+                  `(series (long ~start) (long ~end) 1))})
 
 (defmethod codegen-call [:== :set :set] [_]
   (throw (UnsupportedOperationException. "TODO: `==` on sets")))
