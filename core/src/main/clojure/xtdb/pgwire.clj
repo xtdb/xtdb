@@ -716,7 +716,7 @@
     :rows (fn [_conn] [["xtdb"]])}])
 
 (defn- trim-sql [s]
-  (-> s (str/triml) (str/replace #";\s*$" "")))
+  (-> s (str/replace #"--[^\n]*" "") (str/trim) (str/replace #";\s*$" "")))
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
