@@ -47,7 +47,6 @@ data class Database(
     val isIndexing: Boolean,
     private val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
-    val txSourceOrNull: Indexer.TxSource? = null,
 ) : IQuerySource.QueryDatabase {
     val name: DatabaseName get() = queryState.name
     override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()

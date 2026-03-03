@@ -38,14 +38,20 @@
 (defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
   (DatabaseState. db-name block-cat table-cat trie-cat live-index))
 
-(defmethod ig/expand-key ::storage [k _]
-  {k {:source-log (ig/ref :xtdb/source-log)
-      :replica-log (ig/ref :xtdb/replica-log)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}})
+(defmethod ig/expand-key ::storage [k {:keys [^Xtdb$Config base db-name] :as opts}]
+  (let [^Xtdb$Config conf (get-in base [:config :config])
+        tx-source-conf (some-> conf .getTxSource)]
+    {k (cond-> {:source-log (ig/ref :xtdb/source-log)
+                :replica-log (ig/ref :xtdb/replica-log)
+                :buffer-pool (ig/ref :xtdb/buffer-pool)
+                :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}
+         (and tx-source-conf
+              (.getEnable tx-source-conf)
+              (= db-name (.getDbName tx-source-conf)))
+         (assoc :tx-source-output-log (ig/ref :xtdb.tx-source/output-log)))}))
 
-(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log buffer-pool metadata-manager]}]
-  (DatabaseStorage. source-log replica-log buffer-pool metadata-manager))
+(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log tx-source-output-log buffer-pool metadata-manager]}]
+  (DatabaseStorage. source-log replica-log tx-source-output-log buffer-pool metadata-manager))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
@@ -77,13 +83,12 @@
             :storage (ig/ref ::storage)
             :db-state (ig/ref ::state)
             :watchers (ig/ref ::watchers)
-            :compactor-for-db (ig/ref :xtdb.compactor/for-db)
-            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)}
+            :compactor-for-db (ig/ref :xtdb.compactor/for-db)}
            opts)})
 
 (defmethod ig/init-key ::database [_ {:keys [allocator ^IndexerConfig indexer-conf db-config storage db-state watchers
-                                             compactor-for-db tx-source-for-db]}]
-  (Database. allocator db-config storage db-state (.getEnabled indexer-conf) watchers compactor-for-db tx-source-for-db))
+                                             compactor-for-db]}]
+  (Database. allocator db-config storage db-state (.getEnabled indexer-conf) watchers compactor-for-db))
 
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
