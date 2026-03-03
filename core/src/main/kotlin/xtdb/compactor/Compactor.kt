@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
@@ -161,6 +162,7 @@ interface Compactor : AutoCloseable {
     ) : Compactor {
 
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
+        private val jobsSemaphore = Semaphore(threadCount)
 
         override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
@@ -210,27 +212,34 @@ interface Compactor : AutoCloseable {
                         availableJobs.keys.forEach { jobKey ->
                             if (queuedJobs.add(jobKey)) {
                                 jobsScope.launch(CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
-                                    // check it's still required
-                                    val job = availableJobs[jobKey]
-                                    if (job != null) {
-                                        LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
+                                    jobsSemaphore.acquire()
+                                    try {
+                                        // check it's still required
+                                        val job = availableJobs[jobKey]
+                                        if (job != null) {
+                                            LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
 
-                                        val timer = meterRegistry?.let { Timer.start(it) }
-                                        val triesAdded = driver.executeJob(job)
-                                        jobTimer?.let { timer?.stop(it) }
-                                        driver.publishTries(triesAdded)
+                                            val timer = meterRegistry?.let { Timer.start(it) }
+                                            val triesAdded = driver.executeJob(job)
+                                            jobTimer?.let { timer?.stop(it) }
+                                            driver.publishTries(triesAdded)
 
-                                        LOGGER.debug {
-                                            buildString {
-                                                append("compacted '${job.table.sym}'")
-                                                append(" -> ")
-                                                append(
-                                                    triesAdded.tries
-                                                        .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                            LOGGER.debug {
+                                                buildString {
+                                                    append("compacted '${job.table.sym}'")
+                                                    append(" -> ")
+                                                    append(
+                                                        triesAdded.tries
+                                                            .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                                }
                                             }
                                         }
+                                    } finally {
+                                        jobsSemaphore.release()
                                     }
 
+                                    // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
+                                    // so this node doesn't attempt it again
                                     doneCh.send(jobKey)
                                 }
                             }
