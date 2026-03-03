@@ -5,16 +5,19 @@ import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log.Companion.tailAll
-import xtdb.api.log.Log.*
+import xtdb.api.log.Log.Record
+import xtdb.api.log.Log.RecordProcessor
 import java.time.Duration
+import java.util.*
 import java.util.Collections.synchronizedList
-import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
@@ -54,10 +57,9 @@ class KafkaAtomicProducerTest {
                     .use { log ->
                         log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
-                                producer.openTx().use { tx ->
+                                producer.withTx { tx ->
                                     tx.appendMessage(txMessage(1))
                                     tx.appendMessage(txMessage(2))
-                                    tx.commit()
                                 }
                             }
 
@@ -104,9 +106,8 @@ class KafkaAtomicProducerTest {
                                 }
 
                                 // Commit this one so subscriber gets something
-                                producer.openTx().use { tx ->
+                                producer.withTx { tx ->
                                     tx.appendMessage(txMessage(3))
-                                    tx.commit()
                                 }
                             }
 
@@ -144,24 +145,12 @@ class KafkaAtomicProducerTest {
                     .use { log ->
                         log.tailAll(-1, subscriber).use {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
-                                // First transaction
-                                producer.openTx().use { tx ->
-                                    tx.appendMessage(txMessage(1))
-                                    tx.commit()
-                                }
-
-                                // Second transaction
-                                producer.openTx().use { tx ->
+                                producer.withTx { tx -> tx.appendMessage(txMessage(1)) }
+                                producer.withTx { tx ->
                                     tx.appendMessage(txMessage(2))
                                     tx.appendMessage(txMessage(3))
-                                    tx.commit()
                                 }
-
-                                // Third transaction
-                                producer.openTx().use { tx ->
-                                    tx.appendMessage(txMessage(4))
-                                    tx.commit()
-                                }
+                                producer.withTx { tx -> tx.appendMessage(txMessage(4)) }
                             }
 
                             while (synchronized(msgs) { msgs.flatten().size } < 4) delay(100)

@@ -155,6 +155,18 @@ interface Log<M> : AutoCloseable {
             fun commit()
             fun abort()
         }
+
+        companion object {
+            inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
+                openTx().use { tx ->
+                    try {
+                        block(tx).also { tx.commit() }
+                    } catch (e: Throwable) {
+                        tx.abort()
+                        throw e
+                    }
+                }
+        }
     }
 
     fun readLastMessage(): M?
