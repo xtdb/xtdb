@@ -723,6 +723,12 @@
 (defn- trim-sql [s]
   (-> s (str/triml) (str/replace #";\s*$" "")))
 
+(defn- comment-only?
+  "Returns true if the SQL string contains only whitespace and single-line comments.
+   Uses the same pattern as the ANTLR lexer's LINE_COMMENT rule."
+  [s]
+  (str/blank? (str/replace s #"--[^\r\n]*" "")))
+
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
   ;; TODO I bet this may cause some amusement. Not sure what to do about non-parsed query matching, it'll do for now.
@@ -740,7 +746,7 @@
       (if-let [replacement (replace-queries sql)]
         (recur replacement)
 
-        (or (when (str/blank? sql)
+        (or (when (or (str/blank? sql) (comment-only? sql))
               [{:statement-type :empty-query}])
 
             (when-some [canned-response (get-canned-response sql)]
