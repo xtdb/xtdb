@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
@@ -212,8 +213,7 @@ interface Compactor : AutoCloseable {
                         availableJobs.keys.forEach { jobKey ->
                             if (queuedJobs.add(jobKey)) {
                                 jobsScope.launch(CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
-                                    jobsSemaphore.acquire()
-                                    try {
+                                    jobsSemaphore.withPermit {
                                         // check it's still required
                                         val job = availableJobs[jobKey]
                                         if (job != null) {
@@ -234,8 +234,6 @@ interface Compactor : AutoCloseable {
                                                 }
                                             }
                                         }
-                                    } finally {
-                                        jobsSemaphore.release()
                                     }
 
                                     // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
