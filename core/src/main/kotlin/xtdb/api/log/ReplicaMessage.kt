@@ -50,7 +50,9 @@ sealed interface ReplicaMessage {
                             TriesAdded(it.storageVersion, it.storageEpoch, it.triesList)
                         }
 
-                        ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> BlockBoundary(msg.blockBoundary.blockIndex)
+                        ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> msg.blockBoundary.let {
+                            BlockBoundary(it.blockIndex, it.latestProcessedMsgId)
+                        }
 
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
                             BlockUploaded(it.blockIndex, it.latestProcessedMsgId, it.storageEpoch)
@@ -119,9 +121,12 @@ sealed interface ReplicaMessage {
         }
     }
 
-    data class BlockBoundary(val blockIndex: BlockIndex) : ProtobufMessage() {
+    data class BlockBoundary(val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
-            blockBoundary = blockBoundary { this.blockIndex = this@BlockBoundary.blockIndex }
+            blockBoundary = blockBoundary {
+                this.blockIndex = this@BlockBoundary.blockIndex
+                this.latestProcessedMsgId = this@BlockBoundary.latestProcessedMsgId
+            }
         }
     }
 

@@ -273,7 +273,7 @@ variant BlockBoundaryMessage : ReplicaMessage {
     -- Followers enter pending mode and buffer subsequent messages until BlockUploaded.
     -- See: log/proto/log.proto (BlockBoundary)
     block_index: Long
-    latest_completed_tx: TransactionKey
+    latest_processed_msg_id: MessageId
 }
 
 variant BlockUploadedMessage : ReplicaMessage {
@@ -507,7 +507,7 @@ rule LeaderFinishesBlock {
         -- Signal replica: block boundary, then block uploaded.
         BlockBoundaryMessage.created(
             block_index: block_index,
-            latest_completed_tx: live_index.latest_completed_tx
+            latest_processed_msg_id: leader.latest_processed_msg_id
         ) appended to database.replica_log
 
         BlockUploadedMessage.created(
