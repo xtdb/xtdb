@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
+import xtdb.util.MsgIdUtil
 import xtdb.database.proto.inMemoryLog
 import java.time.Instant
 import java.time.InstantSource
@@ -118,8 +119,8 @@ class InMemoryLog<M> @JvmOverloads constructor(
     override fun readLastMessage(): M? = null
 
     override fun openConsumer(): Consumer<M> = object : Consumer<M> {
-        override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
-            var latestCompletedOffset = afterOffset
+        override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+            var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
             val job = subscriberScope.launch {
                 val ch = committedCh
@@ -155,8 +156,8 @@ class InMemoryLog<M> @JvmOverloads constructor(
         listener.onPartitionsAssigned(listOf(0))
         val inner = openConsumer()
         return object : Consumer<M> {
-            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>) =
-                inner.tailAll(afterOffset, processor)
+            override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
+                inner.tailAll(afterMsgId, processor)
             override fun close() {
                 inner.close()
                 listener.onPartitionsRevoked(listOf(0))

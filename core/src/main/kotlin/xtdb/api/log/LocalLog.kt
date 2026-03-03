@@ -17,6 +17,7 @@ import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
+import xtdb.util.MsgIdUtil
 import xtdb.database.proto.localLog
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
@@ -251,8 +252,8 @@ class LocalLog<M>(
     }
 
     override fun openConsumer(): Consumer<M> = object : Consumer<M> {
-        override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
-            var latestCompletedOffset = afterOffset
+        override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+            var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
             val ch = Channel<Record<M>>(100)
 
@@ -322,8 +323,8 @@ class LocalLog<M>(
         listener.onPartitionsAssigned(listOf(0))
         val inner = openConsumer()
         return object : Consumer<M> {
-            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>) =
-                inner.tailAll(afterOffset, processor)
+            override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
+                inner.tailAll(afterMsgId, processor)
             override fun close() {
                 inner.close()
                 listener.onPartitionsRevoked(listOf(0))

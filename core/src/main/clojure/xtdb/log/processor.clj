@@ -4,8 +4,7 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer SourceLogProcessor]
-           [xtdb.util MsgIdUtil]))
+           [xtdb.indexer SourceLogProcessor]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
                                       indexer-for-db compactor-for-db tx-source-for-db watchers db-catalog
@@ -23,14 +22,8 @@
 
 (defn- subscribe-source-log [^DatabaseStorage db-storage ^DatabaseState db-state ^SourceLogProcessor src-proc]
   (let [source-log (.getSourceLog db-storage)
-        epoch (.getEpoch source-log)
-        latest-processed-msg-id (.getLatestProcessedMsgId (.getBlockCatalog db-state))
-        latest-offset (if latest-processed-msg-id
-                        (if (= (MsgIdUtil/msgIdToEpoch latest-processed-msg-id) epoch)
-                          (MsgIdUtil/msgIdToOffset latest-processed-msg-id)
-                          -1)
-                        -1)]
-    (Log/tailAll source-log latest-offset src-proc)))
+        latest-processed-msg-id (or (.getLatestProcessedMsgId (.getBlockCatalog db-state)) -1)]
+    (Log/tailAll source-log latest-processed-msg-id src-proc)))
 
 (defmethod ig/expand-key :xtdb.log.processor/source [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)

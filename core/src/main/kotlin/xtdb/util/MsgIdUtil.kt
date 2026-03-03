@@ -20,4 +20,15 @@ object MsgIdUtil {
 
     @JvmStatic
     fun msgIdToOffset(msgId: Long): MessageId = msgId and OFFSET_MASK
+
+    /**
+     * Converts an "after" MessageId to a LogOffset for a given epoch.
+     * If the msg-id is from a different epoch, returns -1 (start from beginning).
+     */
+    @JvmStatic
+    fun afterMsgIdToOffset(epoch: Int, afterMsgId: MessageId): LogOffset = when {
+        afterMsgId < 0 -> -1L
+        msgIdToEpoch(afterMsgId) == epoch -> msgIdToOffset(afterMsgId)
+        else -> -1L
+    }
 }

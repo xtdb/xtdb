@@ -26,7 +26,6 @@ import xtdb.segment.BufferPoolSegment
 import xtdb.table.TableRef
 import xtdb.trie.*
 import xtdb.util.*
-import xtdb.util.MsgIdUtil
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -138,8 +137,7 @@ interface Compactor : AutoCloseable {
                             }
 
                         override suspend fun publishTries(triesAdded: TriesAdded) {
-                            val metadata = log.appendMessage(triesAdded).await()
-                            val msgId = MsgIdUtil.offsetToMsgId(log.epoch, metadata.logOffset)
+                            val msgId = log.appendMessage(triesAdded).await().msgId
                             watchers.awaitAsync(msgId).await()
                         }
 

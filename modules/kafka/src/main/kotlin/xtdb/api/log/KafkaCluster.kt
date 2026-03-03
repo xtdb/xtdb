@@ -36,6 +36,7 @@ import xtdb.api.StringMapWithEnvVarsSerde
 import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
+import xtdb.util.MsgIdUtil
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
 import java.nio.file.Path
@@ -113,7 +114,7 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
 }
 
 private sealed interface GroupConsumerControl {
-    data class TailAll(val afterOffset: LogOffset, val processor: RecordProcessor<*>) : GroupConsumerControl
+    data class TailAll(val afterMsgId: MessageId, val processor: RecordProcessor<*>) : GroupConsumerControl
     data object StopTailing : GroupConsumerControl
 }
 
@@ -309,7 +310,8 @@ class KafkaCluster(
         }
 
         override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
-            override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+            override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+                val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
                 val c = kafkaConfigMap.openConsumer()
                 TopicPartition(topic, 0).also { tp ->
                     c.assign(listOf(tp))
@@ -351,7 +353,8 @@ class KafkaCluster(
                         is GroupConsumerControl.TailAll -> {
                             @Suppress("UNCHECKED_CAST")
                             currentProcessor = msg.processor as RecordProcessor<M>
-                            c.seek(tp, msg.afterOffset + 1)
+                            val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, msg.afterMsgId)
+                            c.seek(tp, afterOffset + 1)
                             c.resume(listOf(tp))
                         }
                         is GroupConsumerControl.StopTailing -> {
@@ -393,8 +396,8 @@ class KafkaCluster(
             }
 
             return object : Log.Consumer<M> {
-                override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
-                    controlChannel.trySend(GroupConsumerControl.TailAll(afterOffset, processor))
+                override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+                    controlChannel.trySend(GroupConsumerControl.TailAll(afterMsgId, processor))
 
                     return Subscription {
                         controlChannel.trySend(GroupConsumerControl.StopTailing)

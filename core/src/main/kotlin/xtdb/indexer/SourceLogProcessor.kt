@@ -23,7 +23,6 @@ import xtdb.error.Anomaly
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil
-import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.TransitFormat.MSGPACK
@@ -71,7 +70,6 @@ class SourceLogProcessor(
     }
 
     private val log = dbStorage.sourceLog
-    private val epoch = log.epoch
     private val bufferPool = dbStorage.bufferPool
 
     private val blockCatalog = dbState.blockCatalog
@@ -230,8 +228,7 @@ class SourceLogProcessor(
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
         if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            val offset = log.appendMessage(flushMessage).get().logOffset
-            flusher.flushedTxId = offsetToMsgId(epoch, offset)
+            flusher.flushedTxId = log.appendMessage(flushMessage).get().msgId
         }
 
         var lastMsgId: MessageId = latestProcessedMsgId

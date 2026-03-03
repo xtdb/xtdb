@@ -9,7 +9,9 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.*
+import xtdb.api.log.MessageId
 import xtdb.api.log.SourceMessage
+import xtdb.util.MsgIdUtil
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
@@ -47,7 +49,8 @@ class DebeziumLog @JvmOverloads constructor(
     override fun readLastMessage(): SourceMessage? = null
 
     override fun openConsumer(): Log.Consumer<SourceMessage> = object : Log.Consumer<SourceMessage> {
-        override fun tailAll(afterOffset: Long, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
+        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
+            val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
             val ch = kotlinx.coroutines.channels.Channel<List<Log.Record<SourceMessage>>>(10)
 
             val producerJob = scope.launch {

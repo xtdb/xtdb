@@ -85,7 +85,7 @@ interface Log<M> : AutoCloseable {
     }
 
     interface Consumer<M> : AutoCloseable {
-        fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription
+        fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription
     }
 
     fun interface Subscription : AutoCloseable
@@ -103,11 +103,11 @@ interface Log<M> : AutoCloseable {
 
         @JvmStatic
         fun <M> Log<M>.tailAll(
-            afterOffset: LogOffset,
+            afterMsgId: MessageId,
             processor: RecordProcessor<M>,
         ): AutoCloseable {
             val consumer = openConsumer()
-            val subscription = consumer.tailAll(afterOffset, processor)
+            val subscription = consumer.tailAll(afterMsgId, processor)
             return AutoCloseable { subscription.close(); consumer.close() }
         }
 

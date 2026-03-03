@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log.*
 import xtdb.error.Incorrect
+import xtdb.util.MsgIdUtil
 import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
 import java.nio.ByteBuffer
@@ -108,11 +109,11 @@ class ReadOnlyLocalLog<M>(
     }
 
     override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
-        override fun tailAll(afterOffset: LogOffset, processor: Log.RecordProcessor<M>): Log.Subscription {
+        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
             val ch = Channel<Log.Record<M>>(100)
 
             val producerJob = scope.launch(SupervisorJob()) {
-                var currentOffset = afterOffset
+                var currentOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
                 FileSystems.getDefault().newWatchService().use { watchService ->
                     rootPath.register(watchService, ENTRY_MODIFY)
@@ -170,8 +171,8 @@ class ReadOnlyLocalLog<M>(
         listener.onPartitionsAssigned(listOf(0))
         val inner = openConsumer()
         return object : Log.Consumer<M> {
-            override fun tailAll(afterOffset: LogOffset, processor: Log.RecordProcessor<M>) =
-                inner.tailAll(afterOffset, processor)
+            override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
+                inner.tailAll(afterMsgId, processor)
             override fun close() {
                 inner.close()
                 listener.onPartitionsRevoked(listOf(0))
