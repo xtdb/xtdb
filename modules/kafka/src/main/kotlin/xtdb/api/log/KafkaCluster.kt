@@ -8,8 +8,10 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.future.future
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -108,6 +110,11 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
 
         else -> error("Topic $topic does not exist, auto-create set to false")
     }
+}
+
+private sealed interface GroupConsumerControl {
+    data class TailAll(val afterOffset: LogOffset, val processor: RecordProcessor<*>) : GroupConsumerControl
+    data object StopTailing : GroupConsumerControl
 }
 
 class KafkaCluster(
@@ -316,23 +323,86 @@ class KafkaCluster(
             val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
             val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
 
-            return object : Log.Consumer<M> {
-                override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
-                    val c = consumerConfig.openConsumer()
-                    c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
-                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+            val c = consumerConfig.openConsumer()
+            val tp = TopicPartition(topic, 0)
+            val controlChannel = Channel<GroupConsumerControl>(Channel.UNLIMITED)
 
-                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsAssigned(partitions.map { it.partition() })
+            c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                    listener.onPartitionsRevoked(partitions.map { it.partition() })
 
-                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsLost(partitions.map { it.partition() })
-                    })
-                    return tailAll(c, processor)
+                // onPartitionsAssigned is called from the poll thread, so pause is safe here
+                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
+                    c.pause(partitions)
+                    listener.onPartitionsAssigned(partitions.map { it.partition() })
                 }
 
-                override fun close() {}
+                override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
+                    listener.onPartitionsLost(partitions.map { it.partition() })
+            })
+
+            val pollingJob = scope.launch(Dispatchers.IO) {
+                var currentProcessor: RecordProcessor<M>? = null
+
+                fun handleControl(msg: GroupConsumerControl) {
+                    when (msg) {
+                        is GroupConsumerControl.TailAll -> {
+                            @Suppress("UNCHECKED_CAST")
+                            currentProcessor = msg.processor as RecordProcessor<M>
+                            c.seek(tp, msg.afterOffset + 1)
+                            c.resume(listOf(tp))
+                        }
+                        is GroupConsumerControl.StopTailing -> {
+                            c.pause(listOf(tp))
+                            currentProcessor = null
+                        }
+                    }
+                }
+
+                while (isActive) {
+                    select {
+                        controlChannel.onReceive { msg -> handleControl(msg) }
+
+                        onTimeout(0) {
+                            val records = runInterruptible {
+                                try {
+                                    c.poll(pollDuration).records(topic)
+                                } catch (_: InterruptException) {
+                                    throw InterruptedException()
+                                }
+                            }
+
+                            currentProcessor?.processRecords(
+                                records.mapNotNull { record ->
+                                    codec.decode(record.value())
+                                        ?.let { msg ->
+                                            Log.Record(
+                                                epoch,
+                                                record.offset(),
+                                                Instant.ofEpochMilli(record.timestamp()),
+                                                msg
+                                            )
+                                        }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            return object : Log.Consumer<M> {
+                override fun tailAll(afterOffset: LogOffset, processor: RecordProcessor<M>): Subscription {
+                    controlChannel.trySend(GroupConsumerControl.TailAll(afterOffset, processor))
+
+                    return Subscription {
+                        controlChannel.trySend(GroupConsumerControl.StopTailing)
+                    }
+                }
+
+                override fun close() {
+                    runBlocking { withTimeout(5.seconds) { pollingJob.cancelAndJoin() } }
+                    c.close()
+                }
             }
         }
 
