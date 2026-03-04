@@ -8,6 +8,7 @@ import xtdb.log.proto.attachDatabase
 import xtdb.log.proto.blockBoundary
 import xtdb.log.proto.blockUploaded
 import xtdb.log.proto.detachDatabase
+import xtdb.log.proto.noOp
 import xtdb.log.proto.replicaLogMessage
 import xtdb.log.proto.resolvedTx
 import xtdb.log.proto.triesAdded
@@ -67,6 +68,8 @@ sealed interface ReplicaMessage {
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
                             BlockUploaded(it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList)
                         }
+
+                        ReplicaLogMessage.MessageCase.NO_OP -> NoOp
 
                         else -> null
                     }
@@ -154,5 +157,9 @@ sealed interface ReplicaMessage {
                 tries.addAll(this@BlockUploaded.tries)
             }
         }
+    }
+
+    data object NoOp : ProtobufMessage() {
+        override fun toLogMessage() = replicaLogMessage { noOp = noOp {} }
     }
 }

@@ -12,6 +12,7 @@ message ReplicaLogMessage {
         TriesAdded tries_added = 2;
         BlockBoundary block_boundary = 3;
         BlockUploaded block_uploaded = 4;
+        NoOp no_op = 5;
     }
 }
 
@@ -32,3 +33,5 @@ message BlockBoundary {
     int64 block_index = 1;
     int64 latest_processed_msg_id = 2;
 }
+
+message NoOp {}
