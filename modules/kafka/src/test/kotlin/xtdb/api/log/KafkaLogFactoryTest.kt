@@ -23,6 +23,7 @@ class KafkaLogFactoryTest {
         assertEquals("my-topic-replica", restored.replicaTopic)
         assertEquals("myCluster", restored.replicaCluster)
         assertEquals(0, restored.epoch)
+        assertEquals("xtdb-my-topic", restored.groupId)
     }
 
     @Test

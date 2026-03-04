@@ -165,7 +165,7 @@ class KafkaCluster(
         private val clusterAlias: LogClusterAlias,
         private val topic: String,
         override val epoch: Int,
-        private val groupId: String?
+        private val groupId: String
     ) : Log<M> {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -324,7 +324,6 @@ class KafkaCluster(
         }
 
         override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<M> {
-            val groupId = requireNotNull(groupId) { "groupId must be configured to use subscribe" }
             val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
 
             val c = consumerConfig.openConsumer()
@@ -423,7 +422,7 @@ class KafkaCluster(
         var replicaTopic: String = "$topic-replica",
         var autoCreateTopic: Boolean = true,
         var epoch: Int = 0,
-        var groupId: String? = null
+        var groupId: String = "xtdb-$topic"
     ) : Factory {
 
         fun replicaCluster(replicaCluster: LogClusterAlias) = apply { this.replicaCluster = replicaCluster }
@@ -472,7 +471,7 @@ class KafkaCluster(
                 this.logClusterAlias = cluster
                 this.replicaClusterAlias = replicaCluster
                 this.replicaTopic = this@LogFactory.replicaTopic
-                if (this@LogFactory.groupId != null) this.groupId = this@LogFactory.groupId!!
+                this.groupId = this@LogFactory.groupId
             }, "proto.xtdb.com"))
         }
     }
