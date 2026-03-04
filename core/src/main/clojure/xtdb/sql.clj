@@ -532,20 +532,90 @@
   PlanError
   (error-string [_] (format "Missing grouping columns: %s" missing-grouping-cols)))
 
-(defrecord GroupInvariantColsTracker [env scope, ^Set !implied-gicrs ^Set !unresolved-cr]
+(defrecord GroupInvariantColsTracker [env scope, ^Set !implied-gicrs ^Set !unresolved-cr
+                                     !projected-cols !group-by-in-projs]
   SqlVisitor
   (visitSelectClause [this ctx] (.accept (.getParent ctx) this))
 
   (visitGroupByClause [_ gbc]
-    (let [grouping-cols (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
-                               (.accept grp-el
-                                        (reify SqlVisitor
-                                          (visitOrdinaryGroupingSet [_ ctx]
-                                            (.accept (.columnReference ctx)
-                                                     (map->ExprPlanVisitor {:env env :scope scope
-                                                                            :!unresolved-cr !unresolved-cr})))))))]
+    (let [;; build alias map from SELECT projected-cols (FROM-first precedence for GROUP BY)
+          alias-cols (->> @!projected-cols
+                          (into {} (mapcat (fn [{:keys [col-sym]}]
+                                            [[(symbol (name col-sym)) col-sym]
+                                             [col-sym col-sym]]))))
 
-      (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs) (set grouping-cols)))]
+          gb-scope (reify Scope
+                     (available-cols [_]
+                       (set/union (available-cols scope) (set (keys alias-cols))))
+                     (-find-cols [_ [col-name :as chain] excl-cols]
+                       (or (find-cols scope chain excl-cols)
+                           (when (= 1 (count chain))
+                             (when-let [sym (get alias-cols col-name)]
+                               (when-not (contains? excl-cols col-name)
+                                 [sym]))))))
+
+          ;; map from SELECT expressions to their col-syms (for dedup)
+          select-expr-to-col (into {} (for [{:keys [projection col-sym]} @!projected-cols
+                                            :when (map? projection)
+                                            :let [[_ expr] (first projection)]]
+                                        [expr col-sym]))
+
+          ;; reverse map: col-sym -> expr (for alias resolution)
+          select-col-to-expr (into {} (for [{:keys [projection col-sym]} @!projected-cols
+                                            :when (map? projection)
+                                            :let [[_ expr] (first projection)]]
+                                        [col-sym expr]))
+
+          gb-expr-visitor (map->ExprPlanVisitor {:env env :scope gb-scope :!unresolved-cr !unresolved-cr})
+
+          grouping-elements (vec (for [^ParserRuleContext grp-el (.groupingElement gbc)]
+                                  (.accept grp-el
+                                           (reify SqlVisitor
+                                             (visitExpressionGroupingSet [_ ctx]
+                                               (let [expr (.accept (.expr ctx) gb-expr-visitor)]
+                                                 (cond
+                                                   ;; alias resolved to a SELECT col-sym with a complex expression
+                                                   (and (lp/column? expr) (contains? select-col-to-expr expr))
+                                                   {:col-sym expr :expr (get select-col-to-expr expr) :replace-in-projected-cols? true}
+
+                                                   ;; simple column ref from FROM - use as-is
+                                                   (lp/column? expr)
+                                                   {:col-sym expr}
+
+                                                   ;; matches a SELECT expression - reuse col-sym, pre-project it
+                                                   (contains? select-expr-to-col expr)
+                                                   {:col-sym (get select-expr-to-col expr) :expr expr :replace-in-projected-cols? true}
+
+                                                   ;; new expression - create synthetic col
+                                                   :else
+                                                   (let [gb-sym (->col-sym (str "_gb" (swap! (:!id-count env) inc)))]
+                                                     {:col-sym gb-sym :expr expr}))))
+
+                                             (visitEmptyGroupingSet [_ _ctx])))))
+
+          _ (doseq [{:keys [col-sym expr replace-in-projected-cols?]} grouping-elements
+                     :when expr]
+              (swap! !group-by-in-projs conj {col-sym expr})
+              (when replace-in-projected-cols?
+                (swap! !projected-cols
+                       (fn [pcs] (mapv (fn [pc]
+                                         (if (= (:col-sym pc) col-sym)
+                                           (assoc pc :projection col-sym)
+                                           pc))
+                                       pcs)))))
+
+          grouping-cols (mapv :col-sym grouping-elements)
+
+          ;; collect raw columns referenced by GROUP BY expressions (for permissive validation)
+          gb-referenced-cols (into #{}
+                                   (comp (mapcat (comp vals))
+                                         (mapcat #(tree-seq coll? seq %))
+                                         (filter lp/column?)
+                                         (filter namespace))
+                                   @!group-by-in-projs)]
+
+      (if-let [missing-grouping-cols (not-empty (set/difference (set !implied-gicrs)
+                                                                (set/union (set grouping-cols) gb-referenced-cols)))]
         (add-err! env (->MissingGroupingColumns missing-grouping-cols))
         grouping-cols)))
 
@@ -558,8 +628,10 @@
         (some-> !implied-gicrs (.add sym))
         sym))))
 
-(defn- wrap-aggs [plan aggs group-invariant-cols]
-  (let [in-projs (not-empty (into [] (keep (comp :projection :in-projection)) (vals aggs)))]
+(defn- wrap-aggs [plan aggs group-invariant-cols group-by-in-projs]
+  (let [in-projs (not-empty (into (vec group-by-in-projs)
+                                  (keep (comp :projection :in-projection))
+                                  (vals aggs)))]
     (as-> plan plan
       (if in-projs
         [:map {:projections in-projs} plan]
@@ -2389,7 +2461,10 @@
                         order-by-clause]
   (let [!unresolved-cr (HashSet.)
         !implied-gicrs (HashSet.)
-        group-invar-col-tracker (->GroupInvariantColsTracker env scope !implied-gicrs !unresolved-cr)
+        !projected-cols (atom nil)
+        !group-by-in-projs (atom [])
+        group-invar-col-tracker (->GroupInvariantColsTracker env scope !implied-gicrs !unresolved-cr
+                                                             !projected-cols !group-by-in-projs)
 
         having-plan (when having-clause
                       (let [!subqs (HashMap.)
@@ -2400,7 +2475,9 @@
                          :aggs (not-empty (into {} !aggs))}))
 
 
-        {:keys [projected-cols windows agg-subqs] :as select-plan} (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
+        {:keys [windows agg-subqs] :as select-plan} (.accept select-clause (->SelectClauseProjectedCols env group-invar-col-tracker))
+        _ (reset! !projected-cols (:projected-cols select-plan))
+
         aggs (not-empty (merge (:aggs select-plan) (:aggs having-plan)))
         grouped-table? (boolean (or aggs group-by-clause))
         group-invariant-cols (when grouped-table?
@@ -2408,6 +2485,9 @@
                                  (.accept group-by-clause group-invar-col-tracker)
                                  (for [col-ref !implied-gicrs]
                                    col-ref)))
+
+        ;; use potentially-rewritten projected-cols (GROUP BY dedup may have changed projections)
+        projected-cols @!projected-cols
 
         ob-plan (some-> order-by-clause
                         (plan-order-by env scope
@@ -2443,7 +2523,7 @@
             agg-subqs (apply-sqs agg-subqs))
 
           (cond-> plan
-            grouped-table? (wrap-aggs aggs group-invariant-cols))
+            grouped-table? (wrap-aggs aggs group-invariant-cols @!group-by-in-projs))
 
           (if-let [{:keys [predicate subqs]} having-plan]
             (-> plan

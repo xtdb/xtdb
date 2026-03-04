@@ -894,6 +894,62 @@
             FROM foo "
           {:table-info {#xt/table foo #{"a"}}}))))
 
+(t/deftest test-group-by-expression
+  (t/testing "expression grouping"
+    (t/is (=plan-file
+           "test-group-by-expression"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"
+                     {:table-info {#xt/table products #{"category"}}}))))
+
+  (t/testing "alias grouping"
+    (t/is (=plan-file
+           "test-group-by-alias"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY cat"
+                     {:table-info {#xt/table products #{"category"}}}))))
+
+  (t/testing "mixed expression and column grouping"
+    (t/is (=plan-file
+           "test-group-by-mixed"
+           (sql/plan "SELECT a, UPPER(b) AS ub, COUNT(*) AS cnt FROM t GROUP BY a, UPPER(b)"
+                     {:table-info {#xt/table t #{"a" "b"}}}))))
+
+  (t/testing "expression grouping (not in SELECT)"
+    (t/is (=plan-file
+           "test-group-by-expr-not-in-select"
+           (sql/plan "SELECT COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"
+                     {:table-info {#xt/table products #{"category"}}}))))
+
+  (t/testing "FROM column takes precedence over alias on name conflict"
+    ;; GROUP BY b resolves to FROM column b, not the alias b (which maps to a).
+    ;; So 'a' is not covered by GROUP BY, producing a planning error.
+    (t/is (thrown-with-msg? Exception #"Missing grouping columns"
+           (sql/plan "SELECT a AS b, COUNT(*) AS cnt FROM t GROUP BY b"
+                     {:table-info {#xt/table t #{"a" "b"}}}))))
+
+  (t/testing "ungrouped column with expression GROUP BY"
+    (t/is (thrown-with-msg? Exception #"Missing grouping columns"
+           (sql/plan "SELECT a, COUNT(*) AS cnt FROM t GROUP BY UPPER(b)"
+                     {:table-info {#xt/table t #{"a" "b"}}}))))
+
+  (t/testing "execution"
+    (xt/submit-tx tu/*node* [[:put-docs :products {:xt/id 1 :category "food"}]
+                              [:put-docs :products {:xt/id 2 :category "food"}]
+                              [:put-docs :products {:xt/id 3 :category "drink"}]])
+    (t/is (= #{{:cat "FOOD" :cnt 2} {:cat "DRINK" :cnt 1}}
+             (set (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"))))
+    (t/is (= #{{:cat "FOOD" :cnt 2} {:cat "DRINK" :cnt 1}}
+             (set (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY cat")))
+          "GROUP BY alias")
+    (t/is (= #{{:cnt 2} {:cnt 1}}
+             (set (xt/q tu/*node* "SELECT COUNT(*) AS cnt FROM products GROUP BY UPPER(category)")))
+          "GROUP BY expression not in SELECT")
+
+    ;; gb-referenced-cols permits this at plan time because category appears inside UPPER(category),
+    ;; but it fails at runtime because category doesn't survive the :group-by node.
+    ;; TODO: stricter plan-time validation would reject this (as PostgreSQL does).
+    (t/is (thrown? Exception
+             (xt/q tu/*node* "SELECT category, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)")))))
+
 (t/deftest test-ordered-set-aggregates
   (t/is (=plan-file
          "test-percentile-cont"

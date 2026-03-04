@@ -245,7 +245,7 @@
       (pg/execute conn "SELECT 2 AS b FROM docs GROUP BY b")
       ;; the fn-notice runs in a separate executor pool
       (Thread/sleep 100)
-      (t/is (= #{"Table not found: docs" "Column not found: b"}
+      (t/is (= #{"Table not found: docs"}
                (set @warns))))))
 
 (deftest test-time

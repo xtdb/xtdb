@@ -2040,7 +2040,7 @@ ORDER BY t.oid DESC LIMIT 1"
               stmt (.prepareStatement conn "SELECT 2 AS b FROM docs GROUP BY b")]
     (.execute stmt)
 
-    (t/is (= #{"Table not found: docs" "Column not found: b"}
+    (t/is (= #{"Table not found: docs"}
              (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt)))))))
 
 (deftest test-ignore-returning-keys-3668

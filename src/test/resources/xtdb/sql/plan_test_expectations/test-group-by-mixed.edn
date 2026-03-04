@@ -1,0 +1,9 @@
+[:project
+ {:projections [{a t.1/a} {ub ub} {cnt _row_count_2}]}
+ [:group-by
+  {:columns [t.1/a ub {_row_count_2 (row-count)}]}
+  [:map
+   {:projections [{ub (upper t.1/b)}]}
+   [:rename
+    {:prefix t.1}
+    [:scan {:table #xt/table t, :columns [a b]}]]]]]

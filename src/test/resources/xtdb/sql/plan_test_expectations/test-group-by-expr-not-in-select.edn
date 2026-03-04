@@ -1,0 +1,5 @@
+[:project {:projections [{cnt _row_count_2}]}
+ [:group-by {:columns [_gb3 {_row_count_2 (row-count)}]}
+  [:map {:projections [{_gb3 (upper products.1/category)}]}
+   [:rename {:prefix products.1}
+    [:scan {:table #xt/table products, :columns [category]}]]]]]
