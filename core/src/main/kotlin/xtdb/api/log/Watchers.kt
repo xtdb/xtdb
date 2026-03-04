@@ -27,6 +27,7 @@ class Watchers @JvmOverloads constructor(
         data class Notify(val msgId: MessageId, val result: TransactionResult?) : Event
         data class NotifyException(val msgId: MessageId, val exception: Throwable) : Event
         data class NewWatcher(val watcher: Watcher) : Event
+        data class Sync(val onDone: CompletableDeferred<MessageId>) : Event
     }
 
     private val channel = Channel<Event>(Channel.UNLIMITED)
@@ -67,6 +68,8 @@ class Watchers @JvmOverloads constructor(
                         else -> watchers.add(watcher)
                     }
                 }
+
+                is Sync -> { event.onDone.complete(currentMsgId) }
             }
         }
     }
@@ -99,6 +102,12 @@ class Watchers @JvmOverloads constructor(
     }
 
     fun awaitAsync(msgId: MessageId) = scope.future { await0(msgId) }
+
+    suspend fun sync(): MessageId {
+        val res = CompletableDeferred<MessageId>()
+        channel.send(Sync(res))
+        return res.await()
+    }
 
     override fun toString() =
         "(Watchers {watcherCount=${watchers.size}, firstWatcherMsgId=${watchers.firstOrNull()?.msgId}, currentMsgId=$currentMsgId, exception=$exception)})"
