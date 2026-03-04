@@ -533,9 +533,11 @@
                         (do
                           (.countDown latch)
                           ;; delay until we see a draining state
+                          ;; yield to avoid pinning virtual thread carriers
                           (loop [wait-until (+ (System/currentTimeMillis) 5000)]
                             (when (and (< (System/currentTimeMillis) wait-until)
                                        (not @!closing?))
+                              (Thread/yield)
                               (recur wait-until)))
                           (parse-sql query))))]
         (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
