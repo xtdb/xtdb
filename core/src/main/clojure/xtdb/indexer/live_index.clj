@@ -6,8 +6,7 @@
             [xtdb.metrics :as metrics]
             [xtdb.serde :as serde]
             [xtdb.trie :as trie]
-            [xtdb.util :as util]
-            [xtdb.time :as time])
+            [xtdb.util :as util])
   (:import (java.lang AutoCloseable)
            (java.nio ByteBuffer)
            (java.nio.channels Channels)
@@ -129,7 +128,7 @@
           (util/close table-txs)))))
 
   (importTx [this resolved-tx]
-    (let [tx-key (serde/->TxKey (.getTxId resolved-tx) (time/micros->instant (.getSystemTimeMicros resolved-tx)))
+    (let [tx-key (serde/->TxKey (.getTxId resolved-tx) (.getSystemTime resolved-tx))
           snap-lock-stamp (.writeLock snap-lock)]
       (try
         (doseq [[schema-and-table ^bytes ipc-bytes] (.getTableData resolved-tx)]

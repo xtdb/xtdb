@@ -577,9 +577,9 @@
 
 (defn- ->resolved-tx [^TransactionKey tx-key committed? error table-data]
   (ReplicaMessage$ResolvedTx. (.getTxId tx-key)
-                              (time/instant->micros (.getSystemTime tx-key))
+                              (.getSystemTime tx-key)
                               committed?
-                              (if error (serde/write-transit error) (byte-array 0))
+                              error
                               table-data
                               nil))
 

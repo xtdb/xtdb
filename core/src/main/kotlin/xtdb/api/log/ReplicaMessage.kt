@@ -12,8 +12,14 @@ import xtdb.log.proto.replicaLogMessage
 import xtdb.log.proto.resolvedTx
 import xtdb.log.proto.triesAdded
 import xtdb.storage.StorageEpoch
+import xtdb.time.InstantUtil.asMicros
+import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
+import xtdb.util.TransitFormat.MSGPACK
+import xtdb.util.readTransit
+import xtdb.util.writeTransit
 import java.nio.ByteBuffer
+import java.time.Instant
 
 sealed interface ReplicaMessage {
 
@@ -39,8 +45,12 @@ sealed interface ReplicaMessage {
                                 else -> null
                             }
                             ResolvedTx(
-                                it.txId, it.systemTimeMicros, it.committed,
-                                it.error.toByteArray(),
+                                it.txId,
+                                fromMicros(it.systemTimeMicros),
+                                it.committed,
+                                it.error.toByteArray().let { bs ->
+                                    if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
+                                },
                                 it.tableDataMap.mapValues { (_, v) -> v.toByteArray() },
                                 dbOp
                             )
@@ -78,18 +88,18 @@ sealed interface ReplicaMessage {
 
     data class ResolvedTx(
         val txId: MessageId,
-        val systemTimeMicros: Long,
+        val systemTime: Instant,
         val committed: Boolean,
-        val error: ByteArray,
+        val error: Throwable?,
         val tableData: Map<String, ByteArray>,
         val dbOp: DbOp? = null
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
                 this.txId = this@ResolvedTx.txId
-                this.systemTimeMicros = this@ResolvedTx.systemTimeMicros
+                this.systemTimeMicros = this@ResolvedTx.systemTime.asMicros
                 this.committed = this@ResolvedTx.committed
-                this.error = ByteString.copyFrom(this@ResolvedTx.error)
+                this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
                 this@ResolvedTx.tableData.forEach { (k, v) ->
                     this.tableData[k] = ByteString.copyFrom(v)
                 }

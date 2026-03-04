@@ -174,7 +174,7 @@
 (defrecord TxSource [^BufferAllocator allocator ^Log output-log encode-fn ^BlockCatalog block-cat db-name last-tx-key]
   Indexer$TxSource
   (onCommit [_ resolved-tx]
-    (let [system-time (time/micros->instant (.getSystemTimeMicros resolved-tx))
+    (let [system-time (.getSystemTime resolved-tx)
           tx-key (serde/->TxKey (.getTxId resolved-tx) system-time)]
       (when (or (nil? last-tx-key) (gt tx-key last-tx-key))
         (let [table-data (.getTableData resolved-tx)]

@@ -22,14 +22,11 @@ import xtdb.database.DatabaseStorage
 import xtdb.error.Anomaly
 import xtdb.log.proto.TrieDetails
 import xtdb.table.TableRef
-import xtdb.time.InstantUtil
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.TransitFormat.MSGPACK
 import xtdb.util.asPath
 import xtdb.util.debug
 import xtdb.util.logger
-import xtdb.util.readTransit
 import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.time.Duration
@@ -337,15 +334,10 @@ class SourceLogProcessor(
     private fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
         txSource?.onCommit(resolvedTx)
 
-        val systemTime = InstantUtil.fromMicros(resolvedTx.systemTimeMicros)
-
         val result = if (resolvedTx.committed) {
-            TransactionCommitted(resolvedTx.txId, systemTime)
+            TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
         } else {
-            TransactionAborted(
-                resolvedTx.txId, systemTime,
-                readTransit(resolvedTx.error, MSGPACK) as Throwable
-            )
+            TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error!!)
         }
 
         watchers.notify(msgId, result)
