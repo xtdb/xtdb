@@ -1,0 +1,149 @@
+version: '3'
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "8090:8090"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":8090"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  # a service simply to create the bucket
+  minio-setup:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing myminio/xtdb-bucket &&
+      echo 'MinIO bucket created successfully!'"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    expose:
+      - 9092
+      - 9999
+      - 29092
+      - 29093
+    ports:
+      - 29092:29092
+      - 29093:29093
+    environment:
+      CLUSTER_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+
+  # --- Source Postgres (the database being CDC'd) ---
+
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sourcedb
+    command: ["postgres", "-c", "wal_level=logical"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # captures PG WAL → Kafka
+  debezium-connect:
+    image: quay.io/debezium/connect:3.0
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: "1"
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_statuses
+
+  debezium-init:
+    image: curlimages/curl
+    depends_on:
+      - debezium-connect
+      - postgres
+    volumes:
+      - ./register-connector.sh:/register-connector.sh:ro
+    entrypoint: ["/bin/sh", "/register-connector.sh"]
+
+  # main XTDB node (queryable via pgwire on :5433)
+  xtdb:
+    image: xtdb/xtdb-aws:latest
+    depends_on:
+      - kafka
+      - minio-setup
+    expose:
+      - 8080
+      - 5432
+      - 9832
+    ports:
+      - "8081:8080"
+      - "5433:5432"
+      - "9832:9832"
+    environment:
+      AWS_REGION: "aws-iso-global"
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_S3_USE_VIRTUAL_HOSTING: "false"
+      XTDB_NODE_ID: "xt-node-1"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      XTDB_LOG_TOPIC: "xt_log"
+      XTDB_S3_BUCKET: "xtdb-bucket"
+      XTDB_S3_ENDPOINT: "http://minio:9000"
+      ACCESS_KEY: "minioadmin"
+      SECRET_KEY: "minioadmin"
+    command: ["-f", "/config/dc_config.yaml"]
+    volumes:
+      - ../dc_config.yaml:/config/dc_config.yaml
+
+  # XTDB CDC node
+  xtdb-cdc:
+    image: xtdb/xtdb-aws:latest
+    depends_on:
+      - kafka
+      - minio-setup
+      - debezium-init
+    environment:
+      AWS_REGION: "aws-iso-global"
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_S3_USE_VIRTUAL_HOSTING: "false"
+      XTDB_NODE_ID: "xt-cdc-node"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      XTDB_LOG_TOPIC: "xt_log"
+      XTDB_S3_BUCKET: "xtdb-bucket"
+      XTDB_S3_ENDPOINT: "http://minio:9000"
+      ACCESS_KEY: "minioadmin"
+      SECRET_KEY: "minioadmin"
+    command: ["debezium-cdc", "--kafka-cluster", "kafkaCluster", "-t", "sourcedb.public.cdc_demo", "-f", "/config/dc_config.yaml"]
+    volumes:
+      - ../dc_config.yaml:/config/dc_config.yaml
+
+volumes:
+  minio_data:
