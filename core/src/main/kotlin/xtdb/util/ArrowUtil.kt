@@ -6,7 +6,7 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.UnionVector
 
 internal fun BufferAllocator.openChildAllocator(name: String) =
-    newChildAllocator(name, 0, Long.MAX_VALUE)
+    newChildAllocator(name, 0, limit)
 
 fun ValueVector.openSlice(offset: Int = 0, len: Int = valueCount): ValueVector =
     when {
