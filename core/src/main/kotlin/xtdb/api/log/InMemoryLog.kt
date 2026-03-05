@@ -12,6 +12,7 @@ import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil
 import xtdb.database.proto.inMemoryLog
+import xtdb.error.Interrupted
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
@@ -51,9 +52,10 @@ class InMemoryLog<M> @JvmOverloads constructor(
             ReadOnlyLog(openReplicaLog(clusters))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.inMemoryLog = inMemoryLog {  }
+            dbConfig.inMemoryLog = inMemoryLog { }
         }
     }
+
     private val subscriberScope = scope + SupervisorJob(scope.coroutineContext.job)
 
     internal data class NewMessage<M>(
@@ -145,7 +147,13 @@ class InMemoryLog<M> @JvmOverloads constructor(
                         @OptIn(ExperimentalCoroutinesApi::class)
                         onTimeout(1.minutes) { emptyList() }
                     }
-                    if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
+                    if (records.isNotEmpty()) runInterruptible {
+                        try {
+                            processor.processRecords(records)
+                        } catch (_: Interrupted) {
+                            throw InterruptedException()
+                        }
+                    }
                 }
             }
 
@@ -161,6 +169,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         return object : Consumer<M> {
             override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
                 inner.tailAll(afterMsgId, processor)
+
             override fun close() {
                 inner.close()
                 listener.onPartitionsRevoked(listOf(0))
