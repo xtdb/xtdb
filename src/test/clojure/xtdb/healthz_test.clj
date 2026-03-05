@@ -56,17 +56,18 @@
                 (throw (ex-info "timed out" {})))
 
               (let [resp (clj-http/get (->healthz-url port "started")
-                                       {:throw-exceptions false})]
+                                       {:throw-exceptions false})
+                    msg-id (if (db/single-writer?) 2137 2502)]
 
                 (case (long (:status resp))
                   503 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" "2502"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" (str msg-id)}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Message-Id"]))))
                         (Thread/sleep 250)
                         (recur))
                   200 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" "2502", "X-XTDB-Current-Message-Id" "2502"}
+                        (t/is (= {"X-XTDB-Target-Message-Id" (str msg-id), "X-XTDB-Current-Message-Id" (str msg-id)}
                                  (-> (:headers resp)
                                      (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
                         (t/is (= "Started." (:body resp)))))))))))))
