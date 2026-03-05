@@ -74,8 +74,9 @@ sealed class CdcEvent {
         }
 
         fun fromJson(envelope: JsonObject): CdcEvent {
-            val payload = envelope["payload"]?.jsonObject
-                ?: throw Incorrect("Missing 'payload' in CDC message")
+            // Auto-detect JsonConverter envelope (schemas.enable=true wraps in {schema, payload}).
+            // TODO: revisit when we add schema management — may want to use the schema field.
+            val payload = envelope["payload"]?.jsonObject ?: envelope
 
             val op = payload["op"]?.jsonPrimitive?.content
                 ?: throw Incorrect("Missing 'op' in payload")

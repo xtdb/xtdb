@@ -38,8 +38,9 @@ class CdcEventTest {
         table: String = "test_items",
         tsNs: Long = 1700000000000000000L,
         lsn: Long = 12345L,
-    ): JsonObject = buildJsonObject {
-        putJsonObject("payload") {
+        wrapInPayload: Boolean = true,
+    ): JsonObject {
+        val cdcPayload = buildJsonObject {
             put("op", op)
             if (before != null) put("before", before) else put("before", JsonNull)
             if (after != null) put("after", after) else put("after", JsonNull)
@@ -50,6 +51,8 @@ class CdcEventTest {
                 put("lsn", lsn)
             }
         }
+
+        return if (wrapInPayload) buildJsonObject { put("payload", cdcPayload) } else cdcPayload
     }
 
     // -- JSON conversion tests --
@@ -247,6 +250,31 @@ class CdcEventTest {
         event as CdcEvent.Put
         assertEquals("myschema", event.schema)
         assertEquals("users", event.table)
+    }
+
+    // -- Non-enveloped (schemas.enable=false) tests --
+
+    @Test
+    fun `non-enveloped create produces Put event`() {
+        val after = buildJsonObject { put("_id", 1); put("name", "Alice") }
+        val event = CdcEvent.fromJson(cdcEnvelope("c", after = after, wrapInPayload = false))
+
+        assertInstanceOf(CdcEvent.Put::class.java, event)
+        event as CdcEvent.Put
+        assertEquals("public", event.schema)
+        assertEquals("test_items", event.table)
+        assertEquals(1L, event.doc["_id"])
+        assertEquals("Alice", event.doc["name"])
+    }
+
+    @Test
+    fun `non-enveloped delete produces Delete event`() {
+        val before = buildJsonObject { put("_id", 3); put("name", "to-delete") }
+        val event = CdcEvent.fromJson(cdcEnvelope("d", before = before, wrapInPayload = false))
+
+        assertInstanceOf(CdcEvent.Delete::class.java, event)
+        event as CdcEvent.Delete
+        assertEquals(3L, event.id)
     }
 
     // -- TxOp conversion tests --

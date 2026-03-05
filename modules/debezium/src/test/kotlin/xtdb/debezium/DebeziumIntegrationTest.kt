@@ -84,7 +84,10 @@ class DebeziumIntegrationTest {
     private fun connectUrl() =
         "http://${debeziumConnect.host}:${debeziumConnect.getMappedPort(8083)}"
 
-    private suspend fun registerConnectorAndAwait(schemas: String = "public") {
+    private suspend fun registerConnectorAndAwait(
+        schemas: String = "public",
+        extraConfig: Map<String, String> = emptyMap(),
+    ) {
         fun isConnectorRunning(): Boolean {
             try {
                 val resp = httpClient.send(
@@ -117,6 +120,7 @@ class DebeziumIntegrationTest {
                 put("topic.prefix", "testdb")
                 put("schema.include.list", schemas)
                 put("plugin.name", "pgoutput")
+                for ((k, v) in extraConfig) put(k, v)
             }
         }
 
@@ -343,6 +347,67 @@ class DebeziumIntegrationTest {
             assertNull(history[1]["_valid_to"], "Updated row should be current")
 
             // Bob: inserted then deleted — valid_to proves DELETE op worked
+            assertEquals(2L, (history[2]["_id"] as Number).toLong())
+            assertEquals("bob@example.com", history[2]["email"])
+            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+        }
+    }
+
+    @Test
+    fun `CDC events ingested with schemas-enable=false`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS cdc_no_envelope (_id INT PRIMARY KEY, name TEXT, email TEXT)",
+            "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
+        )
+
+        registerConnectorAndAwait(extraConfig = mapOf(
+            "value.converter" to "org.apache.kafka.connect.json.JsonConverter",
+            "value.converter.schemas.enable" to "false",
+        ))
+
+        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+            val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
+            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
+            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+
+            val capturing = object : Log.RecordProcessor<SourceMessage> {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                    processor.processRecords(records)
+                    received.addAll(records)
+                }
+            }
+
+            log.use {
+                log.tailAll(-1, capturing).use {
+                    pgExecute(
+                        "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                        "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
+                        "DELETE FROM cdc_no_envelope WHERE _id = 2",
+                    )
+
+                    // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
+                    while (received.size < 4) delay(100)
+                    delay(2000)
+                }
+            }
+
+            val history = xtQuery(node,
+                """SELECT _id, name, email, _valid_from, _valid_to
+                   FROM public.cdc_no_envelope
+                   FOR ALL VALID_TIME
+                   ORDER BY _id, _valid_from"""
+            )
+
+            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
+
+            assertEquals(1L, (history[0]["_id"] as Number).toLong())
+            assertEquals("alice@example.com", history[0]["email"])
+            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
+
+            assertEquals(1L, (history[1]["_id"] as Number).toLong())
+            assertEquals("alice-new@example.com", history[1]["email"])
+            assertNull(history[1]["_valid_to"], "Updated row should be current")
+
             assertEquals(2L, (history[2]["_id"] as Number).toLong())
             assertEquals("bob@example.com", history[2]["email"])
             assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
