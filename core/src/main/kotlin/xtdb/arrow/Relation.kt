@@ -150,17 +150,23 @@ class Relation(
 
         private val reader = MessageChannelReader(ReadChannel(ch), al)
 
+        private fun readNext() = try {
+            reader.readNext()
+        } catch (_: ClosedByInterruptException) {
+            throw InterruptedException()
+        }
+
         override val schema: Schema
 
         init {
-            val schemaMessage = (reader.readNext() ?: error("empty stream")).message
+            val schemaMessage = (readNext() ?: error("empty stream")).message
             check(schemaMessage.headerType() == MessageHeader.Schema) { "expected schema message" }
 
             schema = MessageSerializer.deserializeSchema(schemaMessage)
         }
 
         override fun loadNextPage(rel: Relation): Boolean {
-            val msg = reader.readNext() ?: return false
+            val msg = readNext() ?: return false
 
             msg.message.headerType().let {
                 check(it == MessageHeader.RecordBatch) { "unexpected Type message type: $it" }
