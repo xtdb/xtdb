@@ -1515,7 +1515,10 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
            (xt/q tu/*node* "SELECT current_user v")))
 
   (t/is (= [{:v "xtdb"}]
-           (xt/q tu/*node* "SELECT current_database v")))
+           (xt/q tu/*node* "SELECT current_database() v")))
+
+  (t/is (= [{:current-database "xtdb"}]
+           (xt/q tu/*node* "SELECT current_database() AS current_database")))
 
   (t/is (= [{:v "public"}]
            (xt/q tu/*node* "SELECT current_schema v")

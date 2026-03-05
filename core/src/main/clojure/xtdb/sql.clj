@@ -1177,6 +1177,8 @@
       1 (first wrapped-args)
       (xt/template (concat ~@wrapped-args)))))
 
+(def-sql-fns [current_database] 0 0)
+
 ;; mathy
 (def-sql-fns [octet_length length cardinality] 1 1)
 (def-sql-fns [array_upper] 2 2)
@@ -1856,7 +1858,6 @@
   (visitCurrentSchemaFunction [_ _] '(current-schema))
   (visitCurrentSchemasFunction [this ctx] (list 'current-schemas (-> (.expr ctx) (.accept this))))
   (visitCurrentCatalogFunction [_ _] '(current-database))
-  (visitCurrentDatabaseFunction [_ _] '(current-database))
 
   (visitSimpleCaseExpr [this ctx]
     (let [case-operand (-> (.expr ctx) (.accept this))
