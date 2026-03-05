@@ -576,7 +576,7 @@
                                                  (cond
                                                    ;; alias resolved to a SELECT col-sym with a complex expression
                                                    (and (lp/column? expr) (contains? select-col-to-expr expr))
-                                                   {:col-sym expr :expr (get select-col-to-expr expr) :replace-in-projected-cols? true}
+                                                   {:col-sym expr :expr (get select-col-to-expr expr)}
 
                                                    ;; simple column ref from FROM - use as-is
                                                    (lp/column? expr)
@@ -584,7 +584,7 @@
 
                                                    ;; matches a SELECT expression - reuse col-sym, pre-project it
                                                    (contains? select-expr-to-col expr)
-                                                   {:col-sym (get select-expr-to-col expr) :expr expr :replace-in-projected-cols? true}
+                                                   {:col-sym (get select-expr-to-col expr) :expr expr}
 
                                                    ;; new expression - create synthetic col
                                                    :else
@@ -593,16 +593,9 @@
 
                                              (visitEmptyGroupingSet [_ _ctx])))))
 
-          _ (doseq [{:keys [col-sym expr replace-in-projected-cols?]} grouping-elements
+          _ (doseq [{:keys [col-sym expr]} grouping-elements
                      :when expr]
-              (swap! !group-by-in-projs conj {col-sym expr})
-              (when replace-in-projected-cols?
-                (swap! !projected-cols
-                       (fn [pcs] (mapv (fn [pc]
-                                         (if (= (:col-sym pc) col-sym)
-                                           (assoc pc :projection col-sym)
-                                           pc))
-                                       pcs)))))
+              (swap! !group-by-in-projs conj {col-sym expr}))
 
           grouping-cols (mapv :col-sym grouping-elements)
 
@@ -2183,7 +2176,8 @@
   (error-string [_] (format "Column count mismatch: expected %s, given %s" expected given)))
 
 (defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
-                                     {:keys [!id-count] :as env} inner-scope outer-col-syms]
+                                     {:keys [!id-count] :as env} inner-scope outer-col-syms
+                                     & {:keys [gb-expr-to-col] :or {gb-expr-to-col {}}}]
   (let [outer-cols (->> outer-col-syms
                         (into {} (mapcat (juxt (juxt identity identity)
                                                (juxt (comp symbol name) identity)))))
@@ -2202,7 +2196,8 @@
 
     (-> (.sortSpecification ctx)
         (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
-                     (let [expr (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
+                     (let [expr (cond-> (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
+                                 (seq gb-expr-to-col) (->> (w/postwalk #(get gb-expr-to-col % %))))
                            dir (or (some-> (.orderingSpecification sort-spec-ctx)
                                            (.getText)
                                            str/lower-case
@@ -2233,8 +2228,8 @@
                                  {:order-by-spec [in-sym ob-opts]
                                   :in-projection {in-sym expr}})))))))))
 
-(defn- plan-order-by [^Sql$OrderByClauseContext ctx env inner-scope outer-col-syms]
-  (plan-sort-specification-list (.sortSpecificationList ctx) env inner-scope outer-col-syms))
+(defn- plan-order-by [^Sql$OrderByClauseContext ctx env inner-scope outer-col-syms & opts]
+  (apply plan-sort-specification-list (.sortSpecificationList ctx) env inner-scope outer-col-syms opts))
 
 (defn- wrap-isolated-ob [plan outer-col-syms ob-specs]
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
@@ -2487,12 +2482,33 @@
                                  (for [col-ref !implied-gicrs]
                                    col-ref)))
 
-        ;; use potentially-rewritten projected-cols (GROUP BY dedup may have changed projections)
-        projected-cols @!projected-cols
+        ;; map from GROUP BY expression -> col-sym for substitution in SELECT/ORDER BY/HAVING
+        gb-expr-to-col (into {} (map (fn [m] (let [[k v] (first m)] [v k]))) @!group-by-in-projs)
+
+        ;; rewrite SELECT projections to substitute GROUP BY expressions with their col-syms
+        projected-cols (if (seq gb-expr-to-col)
+                         (mapv (fn [{:keys [projection col-sym] :as pc}]
+                                 (if (map? projection)
+                                   (let [[pc-col expr] (first projection)
+                                         rewritten (w/postwalk #(get gb-expr-to-col % %) expr)]
+                                     (if (= rewritten pc-col)
+                                       (assoc pc :projection col-sym)
+                                       (assoc pc :projection {pc-col rewritten})))
+                                   pc))
+                               @!projected-cols)
+                         @!projected-cols)
+
+        ;; rewrite HAVING to use grouped col-syms instead of raw expressions
+        having-plan (if (and having-plan (seq gb-expr-to-col))
+                      (update having-plan :predicate
+                              (fn [pred]
+                                (w/postwalk #(get gb-expr-to-col % %) pred)))
+                      having-plan)
 
         ob-plan (some-> order-by-clause
                         (plan-order-by env scope
-                                       (mapv :col-sym projected-cols)))]
+                                       (mapv :col-sym projected-cols)
+                                       :gb-expr-to-col gb-expr-to-col))]
 
     (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
       (doseq [col dup-cols]

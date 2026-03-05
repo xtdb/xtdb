@@ -934,21 +934,59 @@
   (t/testing "execution"
     (xt/submit-tx tu/*node* [[:put-docs :products {:xt/id 1 :category "food"}]
                               [:put-docs :products {:xt/id 2 :category "food"}]
-                              [:put-docs :products {:xt/id 3 :category "drink"}]])
-    (t/is (= #{{:cat "FOOD" :cnt 2} {:cat "DRINK" :cnt 1}}
-             (set (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"))))
-    (t/is (= #{{:cat "FOOD" :cnt 2} {:cat "DRINK" :cnt 1}}
-             (set (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY cat")))
+                              [:put-docs :products {:xt/id 3 :category "drink"}]
+                              [:put-docs :products {:xt/id 4 :category "drink"}]
+                              [:put-docs :products {:xt/id 5 :category "snack"}]])
+
+    (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2} {:cat "SNACK" :cnt 1}]
+             (sort-by :cat (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"))))
+    (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2} {:cat "SNACK" :cnt 1}]
+             (sort-by :cat (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY cat")))
           "GROUP BY alias")
-    (t/is (= #{{:cnt 2} {:cnt 1}}
-             (set (xt/q tu/*node* "SELECT COUNT(*) AS cnt FROM products GROUP BY UPPER(category)")))
+    (t/is (= [{:cnt 1} {:cnt 2} {:cnt 2}]
+             (sort-by :cnt (xt/q tu/*node* "SELECT COUNT(*) AS cnt FROM products GROUP BY UPPER(category)")))
           "GROUP BY expression not in SELECT")
 
     ;; gb-referenced-cols permits this at plan time because category appears inside UPPER(category),
     ;; but it fails at runtime because category doesn't survive the :group-by node.
     ;; TODO: stricter plan-time validation would reject this (as PostgreSQL does).
     (t/is (thrown? Exception
-             (xt/q tu/*node* "SELECT category, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)")))))
+             (xt/q tu/*node* "SELECT category, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"))))
+
+  (t/testing "ORDER BY same expression as GROUP BY"
+    (t/is (=plan-file
+           "test-group-by-expr-order-by"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) ORDER BY UPPER(category)"
+                     {:table-info {#xt/table products #{"category"}}})))
+    (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2} {:cat "SNACK" :cnt 1}]
+             (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) ORDER BY UPPER(category) ASC")))
+    (t/is (= [{:cat "DRINK!" :cnt 2} {:cat "FOOD!" :cnt 2} {:cat "SNACK!" :cnt 1}]
+             (xt/q tu/*node* "SELECT UPPER(category) || '!' AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) ORDER BY UPPER(category) || '!' ASC"))
+          "ORDER BY expression containing GROUP BY sub-expression"))
+
+  (t/testing "HAVING with GROUP BY expression (pushable - no aggregates)"
+    (t/is (=plan-file
+           "test-group-by-expr-having-pushable"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) HAVING UPPER(category) <> 'OTHER'"
+                     {:table-info {#xt/table products #{"category"}}}))))
+
+  (t/testing "HAVING with GROUP BY expression (non-pushable - mixed with aggregate)"
+    (t/is (=plan-file
+           "test-group-by-expr-having-non-pushable"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) HAVING COUNT(*) > 1 AND UPPER(category) <> 'OTHER'"
+                     {:table-info {#xt/table products #{"category"}}})))
+    (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2}]
+             (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) HAVING COUNT(*) > 1 ORDER BY UPPER(category)"))
+          "HAVING + ORDER BY with multiple results")
+    (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2}]
+             (sort-by :cat (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category) HAVING COUNT(*) > 1 AND UPPER(category) <> 'OTHER'")))))
+
+  (t/testing "Metabase-style binned expression"
+    (xt/submit-tx tu/*node* [[:put-docs :orders {:xt/id 1}]
+                              [:put-docs :orders {:xt/id 2}]
+                              [:put-docs :orders {:xt/id 3}]])
+    (t/is (= [{:x 1.0 :cnt 1} {:x 2.0 :cnt 1} {:x 3.0 :cnt 1}]
+             (xt/q tu/*node* "SELECT (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 AS x, COUNT(*) AS cnt FROM orders GROUP BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ORDER BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ASC")))))
 
 (t/deftest test-ordered-set-aggregates
   (t/is (=plan-file
