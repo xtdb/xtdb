@@ -852,7 +852,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                           :storage [:local {:path (str path "/storage")}]
                                           :indexer {:skip-txs [@!skiptxid]}})]
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (t/testing "Can query two back out - skipped one"
             (t/is (= (set [{:xt/id :foo} {:xt/id :baz}])
                      (set (xt/q node "SELECT * from xt_docs")))))
@@ -883,7 +883,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (with-open [node (xtn/start-node {:log [:local {:path (str path "/log")}]
                                             :storage [:local {:path (str path "/storage")}]
                                             :indexer {:skip-txs [@!skiptxid]}})]
-            (xt-log/sync-node node)
+            (xt-log/sync-node node #xt/duration "PT5S")
             
             (t/testing "Verify skipped transaction is stored in object store"
               (let [buffer-pool (.getBufferPool (db/primary-db node))
@@ -913,7 +913,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                                           :indexer {:skip-txs [@!skiptxid]}
                                           :compactor {:threads 0}})]
 
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (t/testing "Can query one back out - skipped one"
             (t/is (= (set [{:xt/id :foo}]) (set (xt/q node "SELECT * from xt_docs")))))
 

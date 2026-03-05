@@ -249,25 +249,19 @@
         (.getMsgId message-meta)))))
 
 
-(defn await-db
-  ([db msg-id] (await-db db msg-id nil))
-  ([^Database db, ^long msg-id, ^Duration timeout]
-   @(cond-> (.awaitSourceMessageAsync db msg-id)
-      timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+(defn await-db [^Database db, ^long msg-id, ^Duration timeout]
+  @(cond-> (.awaitSourceMessageAsync db msg-id)
+     timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
 
-(defn sync-db
-  ([db] (sync-db db nil))
-  ([^Database db, ^Duration timeout]
-   (let [msg-id (.getLatestSubmittedMsgId (.getSourceLog db))]
-     (await-db db msg-id timeout))))
+(defn sync-db [^Database db, ^Duration timeout]
+  (let [msg-id (.getLatestSubmittedMsgId (.getSourceLog db))]
+    (await-db db msg-id timeout)))
 
-(defn await-node
-  ([node token] (await-node node token nil))
-  ([node token timeout] (.awaitAll (db/<-node node) token timeout)))
+(defn await-node [node token timeout]
+  (.awaitAll (db/<-node node) token timeout))
 
-(defn sync-node
-  ([node] (sync-node node nil))
-  ([node timeout] (.syncAll (db/<-node node) timeout)))
+(defn sync-node [node timeout]
+  (.syncAll (db/<-node node) timeout))
 
 (defn send-flush-block-msg! [^Database db]
   (.sendFlushBlockMessage db))

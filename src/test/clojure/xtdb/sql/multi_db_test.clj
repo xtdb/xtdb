@@ -142,7 +142,7 @@ ATTACH DATABASE new_db WITH $$
 
     (t/testing "restart node"
       (let [^Path root-path (util/with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
-                              (xt-log/sync-node node)
+                              (xt-log/sync-node node #xt/duration "PT5S")
                               (with-open [conn (-> (.createConnectionBuilder node)
                                                    (.database "new_db")
                                                    (.build))]

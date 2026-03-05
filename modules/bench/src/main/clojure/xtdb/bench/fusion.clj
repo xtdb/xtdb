@@ -529,7 +529,7 @@
                                                          [10.0 {:t :call, :transaction :query-system-count, :f (b/wrap-in-catch proc-query-system-count)}]
                                                          [10.0 {:t :call, :transaction :query-range-bins, :f (b/wrap-in-catch proc-query-range-bins)}]
                                                          [5.0 {:t :call, :transaction :query-registration, :f (b/wrap-in-catch proc-query-registration)}]]}}]}
-                {:t :call, :stage :sync-after-oltp, :f (fn [{:keys [node]}] (b/sync-node node))}]))}))
+                {:t :call, :stage :sync-after-oltp, :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}]))}))
 
 ;; ============================================================================
 ;; Tests

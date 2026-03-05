@@ -33,7 +33,7 @@
           :docs (tpch/submit-docs! node scale-factor)
           :dml (tpch/submit-dml! node scale-factor))
 
-        (xt-log/sync-node node)
+        (xt-log/sync-node node #xt/duration "PT2M")
         (tu/flush-block! node)
 
         (c/compact-all! node (Duration/ofMinutes 5))

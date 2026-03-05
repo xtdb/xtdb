@@ -11,7 +11,8 @@
             [xtdb.compactor :as c]
             [xtdb.datasets.yakbench :as yakbench]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (java.time Duration)))
 
 (defn ?s [n]
   (str "(" (str/join ", " (repeat n "?")) ")"))
@@ -408,7 +409,7 @@
                               (yakbench/load-data! conn random scale-factor)))}
                       {:t :call
                        :stage :await-transactions
-                       :f (fn [{:keys [node]}] (b/sync-node node))}
+                       :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}
                       {:t :call
                        :stage :flush-block
                        :f (fn [{:keys [node]}] (tu/flush-block! node))}]})
@@ -475,7 +476,7 @@
         (println "Load data")
         (yakbench/load-data! conn random scale)
         (println "Flush block")
-        (b/sync-node node)
+        (b/sync-node node (Duration/ofMinutes 5))
         (tu/flush-block! node)
         (println "Compact")
         (c/compact-all! node nil)

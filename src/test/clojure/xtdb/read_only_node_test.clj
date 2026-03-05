@@ -25,7 +25,7 @@
                               (.readOnlyDatabases true)
                               (.open))]
 
-        (xt-log/sync-node ro-node)
+        (xt-log/sync-node ro-node #xt/duration "PT5S")
 
         (t/is (= [{:xt/id "from-rw"}]
                  (xt/q ro-node "SELECT * FROM foo"))
@@ -36,7 +36,7 @@
               "read-only node rejects writes")
 
         (xt/submit-tx rw-node [[:put-docs :foo {:xt/id "from-rw", :v 2}]])
-        (xt-log/sync-node ro-node)
+        (xt-log/sync-node ro-node #xt/duration "PT5S")
 
         (t/is (= [{:xt/id "from-rw", :v 2}]
                  (xt/q ro-node "SELECT * FROM foo"))

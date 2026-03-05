@@ -4,7 +4,7 @@
             [xtdb.bench :as b]
             [xtdb.bench.auctionmark :as am]
             [xtdb.test-util :as tu :refer [*node*]])
-  (:import (java.time Clock)
+  (:import (java.time Clock Duration)
            (java.util Random UUID)))
 
 (t/use-fixtures :each tu/with-node)
@@ -93,7 +93,7 @@
       (b/generate worker :user am/generate-user 1)
       (b/generate worker :category am/generate-category 1)
       (b/generate worker :item am/generate-item 1)
-      (b/sync-node *node*)
+      (b/sync-node *node* (Duration/ofMinutes 1))
       (t/is (some? (first (am/proc-get-item worker)))))))
 
 (deftest proc-new-user-test

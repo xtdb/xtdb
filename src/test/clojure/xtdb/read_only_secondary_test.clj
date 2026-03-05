@@ -61,7 +61,7 @@ $$"])
 
         (xt/submit-tx primary-node [[:put-docs :foo {:xt/id "from-primary", :v 2}]])
 
-        (xt-log/sync-node secondary-node)
+        (xt-log/sync-node secondary-node #xt/duration "PT5S")
 
         (t/is (= [{:xt/id "from-primary", :v 2}]
                  (xt/q secondary-node "SELECT * FROM shared_db.foo"))
@@ -106,7 +106,7 @@ $$"])
 
         ;; Give the file watcher time to detect the change
         (Thread/sleep 100)
-        (xt-log/sync-node secondary-node)
+        (xt-log/sync-node secondary-node #xt/duration "PT5S")
 
         (t/is (= #{{:xt/id "tx1"} {:xt/id "tx2"} {:xt/id "tx3"}}
                  (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))
@@ -117,7 +117,7 @@ $$"])
 
         (let [!fut (future
                      (Thread/sleep 100)
-                     (xt-log/sync-node secondary-node))]
+                     (xt-log/sync-node secondary-node #xt/duration "PT5S"))]
           (Thread/sleep 200)
           (t/is (not (realized? !fut))
                 "blocks til the primary writes the block")
@@ -162,11 +162,11 @@ $$"])
               "read-only secondary sees data before block flush")
 
         (tu/flush-block! primary-node)
-        (xt-log/sync-node primary-node)
+        (xt-log/sync-node primary-node #xt/duration "PT5S")
         (xt/submit-tx primary-node [[:put-docs :foo {:xt/id "after-block-1"}]])
 
         (Thread/sleep 100)
-        (xt-log/sync-node secondary-node)
+        (xt-log/sync-node secondary-node #xt/duration "PT5S")
 
         (t/is (= #{{:xt/id "before-block-1"} {:xt/id "before-block-2"} {:xt/id "after-block-1"}}
                  (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))

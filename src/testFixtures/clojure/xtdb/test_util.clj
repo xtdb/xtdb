@@ -228,7 +228,7 @@
          query-opts (-> query-opts
                         (update :default-db (fnil identity "xtdb"))
                         (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
-                                         (doto (-> :await-token (->> (xt-log/await-node node)))))))
+                                         (doto (-> :await-token (as-> token (xt-log/await-node node token nil)))))))
 
          [^IQuerySource q-src close-q-src?] (if node
                                               [(util/component node ::q/query-source) false]

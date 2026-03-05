@@ -52,19 +52,19 @@
                        (map :id)))]
 
           (submit! (range 100))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 100) (q)))
 
           (submit! (range 100 200))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 200) (q)))
 
           (submit! (range 200 500))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (range 500) (q)))
@@ -223,7 +223,7 @@
                                                         {:xt/id x}))]))))]
 
             (submit! (take 512 (cycle (bad-uuid-seq 8))))
-            (xt-log/sync-node node)
+            (xt-log/sync-node node #xt/duration "PT5S")
             (c/compact-all! node (Duration/ofSeconds 5))
 
             (let [^String table-name "foo"
@@ -260,19 +260,19 @@
                        (map :id)))]
 
           (submit! (bad-uuid-seq 100))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 100) (q)))
 
           (submit! (bad-uuid-seq 100 200))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 200) (q)))
 
           (submit! (bad-uuid-seq 200 500))
-          (xt-log/sync-node node)
+          (xt-log/sync-node node #xt/duration "PT5S")
           (c/compact-all! node (Duration/ofSeconds 1))
 
           (t/is (= (bad-uuid-seq 500) (q))))))))

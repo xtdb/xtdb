@@ -385,7 +385,7 @@
    {:t :call, :f [b/generate :item generate-item (* sf 1e6 10)]}
    {:t :call, :f [b/generate :gag generate-global-attribute-group 100]}
    {:t :call, :f [b/generate :gav generate-global-attribute-value 1000]}
-   {:t :call, :f (comp b/sync-node :node)}])
+   {:t :call, :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}])
 
 (defn row-count [node table]
   (-> (xt/q node (xt/template
@@ -462,7 +462,7 @@
                         :tasks [;; wait for node to catch up
                                 {:t :call, :f (fn [{:keys [node] :as worker}]
                                                 (when no-load?
-                                                  (b/sync-node node)
+                                                  (b/sync-node node (Duration/ofMinutes 5))
                                                   (load-stats-into-worker worker)))}]}
 
                        {:t :concurrently
@@ -490,4 +490,4 @@
                                         :duration duration
                                         :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
                                         :job-task {:t :call, :transaction :index-item-status-groups, :f (b/wrap-in-catch index-item-status-groups!)}}]}
-                       (when sync {:t :call, :f (comp b/sync-node :node)})]))}))
+                       (when sync {:t :call, :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))})]))}))

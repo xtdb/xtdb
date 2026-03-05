@@ -7,7 +7,8 @@
             [xtdb.compactor :as c]
             [xtdb.datasets.scan-items :as scan-items]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (java.time Duration)))
 
 (defn- get-conn ^java.sql.Connection [^xtdb.api.DataSource node]
   (.build (.createConnectionBuilder node)))
@@ -205,7 +206,7 @@
                               (scan-items/load-data! conn random n-items id-type)))}
                       {:t :call
                        :stage :await-transactions
-                       :f (fn [{:keys [node]}] (b/sync-node node))}
+                       :f (fn [{:keys [node]}] (b/sync-node node (Duration/ofMinutes 5)))}
                       {:t :call
                        :stage :flush-block
                        :f (fn [{:keys [node]}] (tu/flush-block! node))}]})
@@ -276,7 +277,7 @@
         (println "Load data")
         (scan-items/load-data! conn random n-items id-type)
         (println "Flush block")
-        (b/sync-node node)
+        (b/sync-node node (Duration/ofMinutes 5))
         (tu/flush-block! node)
         (println "Compact")
         (c/compact-all! node nil)

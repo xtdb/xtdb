@@ -458,11 +458,8 @@
                               (log/infof fmt-str tx-name count mean-ms max-ms (/ total-time-ms 1000.0))))))))))]
         (run-with-timeout execute timeout)))))
 
-(defn sync-node
-  ([node] (xt-log/sync-node node))
-
-  ([node ^Duration timeout]
-   (xt-log/sync-node node timeout)))
+(defn sync-node [node ^Duration timeout]
+  (xt-log/sync-node node timeout))
 
 (defn flush-block! [node]
   (tu/flush-block! node (Duration/ofMinutes 5)))
