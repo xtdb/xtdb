@@ -33,7 +33,7 @@
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
-           (xtdb.query IQuerySource PreparedQuery)))
+           (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -378,8 +378,8 @@
                      #(.copyRow doc-copier idx))))))))
 
 (defn- ->patch-docs-indexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, db-cat, ^Instant system-time
-                             {:keys [default-db ^Tracer tracer] :as tx-opts}]
+                             ^IQuerySource q-src, ^IQuerySource$QueryCatalog db-cat, ^Instant system-time
+                             {:keys [^String default-db, ^Tracer tracer] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
         iid-rdr (.getListElements iids-rdr)
