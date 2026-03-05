@@ -36,6 +36,9 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         override fun openReplicaLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
             RecordingLog<ReplicaMessage>(instantSource, emptyList())
 
+        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
+            ReadOnlyLog(openReplicaLog(clusters))
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) = Unit
     }
 

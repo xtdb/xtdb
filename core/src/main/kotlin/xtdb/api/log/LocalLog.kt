@@ -377,6 +377,9 @@ class LocalLog<M>(
         override fun openReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
             LocalLog(path, ReplicaMessage.Codec, instantSource, epoch, useInstantSourceForNonTx, coroutineContext, logFileName = "REPLICA_LOG")
 
+        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLocalLog(path, ReplicaMessage.Codec, epoch, coroutineContext, logFileName = "REPLICA_LOG")
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {
                 this.path = this@Factory.path.toString()

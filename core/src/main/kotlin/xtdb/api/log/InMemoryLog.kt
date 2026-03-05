@@ -47,6 +47,9 @@ class InMemoryLog<M> @JvmOverloads constructor(
         override fun openReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
             InMemoryLog<ReplicaMessage>(instantSource, epoch, coroutineContext)
 
+        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLog(openReplicaLog(clusters))
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.inMemoryLog = inMemoryLog {  }
         }

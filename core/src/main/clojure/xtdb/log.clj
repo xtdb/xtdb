@@ -217,9 +217,11 @@
 
 (defmethod ig/init-key :xtdb/source-log [_ log] log)
 
-(defmethod ig/init-key :xtdb/replica-log [_ {:keys [^Log$Factory factory]
+(defmethod ig/init-key :xtdb/replica-log [_ {:keys [^Log$Factory factory ^Database$Mode mode]
                                               {:keys [log-clusters]} :base}]
-  (.openReplicaLog factory log-clusters))
+  (if (= mode Database$Mode/READ_ONLY)
+    (.openReadOnlyReplicaLog factory log-clusters)
+    (.openReplicaLog factory log-clusters)))
 
 (defmethod ig/halt-key! :xtdb/replica-log [_ ^Log log]
   (util/close log))

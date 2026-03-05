@@ -464,6 +464,9 @@ class KafkaCluster(
             return cluster.KafkaLog(ReplicaMessage.Codec, clusterAlias, replicaTopic, epoch, groupId)
         }
 
+        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
+            ReadOnlyLog(openReplicaLog(clusters))
+
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {
                 this.topic = this@LogFactory.topic
