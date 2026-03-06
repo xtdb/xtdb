@@ -9,7 +9,6 @@ import xtdb.storage.BufferPool
 data class DatabaseStorage(
     val sourceLogOrNull: Log<SourceMessage>?,
     val replicaLogOrNull: Log<ReplicaMessage>?,
-    val txSourceOutputLogOrNull: Log<SourceMessage>?,
     val bufferPoolOrNull: BufferPool?,
     val metadataManagerOrNull: PageMetadata.Factory?,
 ) {
@@ -17,5 +16,4 @@ data class DatabaseStorage(
     val replicaLog: Log<ReplicaMessage> get() = replicaLogOrNull ?: error("no replica-log")
     val bufferPool: BufferPool get() = bufferPoolOrNull ?: error("no buffer-pool")
     val metadataManager: PageMetadata.Factory get() = metadataManagerOrNull ?: error("no metadata-manager")
-    val txSourceOutputLog: Log<SourceMessage> get() = txSourceOutputLogOrNull ?: error("no tx-source-output-log")
 }

@@ -21,7 +21,6 @@
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
-  (println " * `tx-source`: runs a node which replicates the transaction log to an external log")
   (println " * `debezium-cdc`: starts a node with Debezium CDC ingestion from Kafka")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
@@ -161,17 +160,6 @@
 
     ((requiring-resolve 'xtdb.compactor.reset/reset-compactor!) (file->node-opts file) db-name {:dry-run? dry-run?})))
 
-(def tx-source-cli-spec
-  [config-file-opt
-   ["-h" "--help"]])
-
-(defn- tx-source! [args]
-  (let [{{:keys [file]} :options} (-> (parse-args args tx-source-cli-spec)
-                                      (handling-arg-errors-or-help))]
-    (util/with-open [_node ((requiring-resolve 'xtdb.tx-source/open!) (file->node-opts file))]
-      (log/info "Tx Source node started")
-      @(shutdown-hook-promise))))
-
 (def export-snapshot-cli-spec
   [config-file-opt
    [nil "--dry-run"
@@ -308,10 +296,6 @@
                             (System/exit 0))
 
         "debezium-cdc" (start-debezium-cdc more-args)
-
-        "tx-source" (do
-                      (tx-source! more-args)
-                      (System/exit 0))
 
         "export-snapshot" (do
                             (export-snapshot! more-args)

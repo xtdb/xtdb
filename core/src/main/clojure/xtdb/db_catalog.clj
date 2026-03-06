@@ -38,20 +38,14 @@
 (defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
   (DatabaseState. db-name block-cat table-cat trie-cat live-index))
 
-(defmethod ig/expand-key ::storage [k {:keys [^Xtdb$Config base db-name] :as opts}]
-  (let [^Xtdb$Config conf (get-in base [:config :config])
-        tx-source-conf (some-> conf .getTxSource)]
-    {k (cond-> {:source-log (ig/ref :xtdb/source-log)
-                :replica-log (ig/ref :xtdb/replica-log)
-                :buffer-pool (ig/ref :xtdb/buffer-pool)
-                :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}
-         (and tx-source-conf
-              (.getEnable tx-source-conf)
-              (= db-name (.getDbName tx-source-conf)))
-         (assoc :tx-source-output-log (ig/ref :xtdb.tx-source/output-log)))}))
+(defmethod ig/expand-key ::storage [k _opts]
+  {k {:source-log (ig/ref :xtdb/source-log)
+      :replica-log (ig/ref :xtdb/replica-log)
+      :buffer-pool (ig/ref :xtdb/buffer-pool)
+      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}})
 
-(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log tx-source-output-log buffer-pool metadata-manager]}]
-  (DatabaseStorage. source-log replica-log tx-source-output-log buffer-pool metadata-manager))
+(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log buffer-pool metadata-manager]}]
+  (DatabaseStorage. source-log replica-log buffer-pool metadata-manager))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
@@ -116,10 +110,7 @@
 
          :xtdb.compactor/for-db opts
 
-         :xtdb.tx-source/for-db (assoc opts :tx-source-conf (.getTxSource conf))
-
          :xtdb.log.processor/source (cond-> (assoc opts
-                                                        :tx-source-conf (.getTxSource conf)
                                                         :block-flush-duration (.getFlushDuration indexer-conf))
                                                (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
 

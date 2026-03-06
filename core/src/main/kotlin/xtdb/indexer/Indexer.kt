@@ -23,10 +23,6 @@ interface Indexer : AutoCloseable {
         fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx
     }
 
-    interface TxSource {
-        fun onCommit(resolvedTx: ReplicaMessage.ResolvedTx)
-    }
-
     companion object {
         @JvmStatic
         fun queryCatalog(

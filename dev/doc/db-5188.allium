@@ -7,7 +7,7 @@
 -- 1. Source and replica are always separate logs (invariant, not just convention).
 -- 2. A LogProcessor owns the indexing pipeline lifecycle per database.
 --    It manages a System via SystemFactory; each System wraps source + replica processing.
---    Compactor and TxSource are peers at db-system level, not children of the processor.
+--    Compactor is a peer at db-system level, not a child of the processor.
 --    Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
 -- 3. A single LiveIndex sits outside the coordinator as shared state.
 --    Leader mode feeds it from source processing; follower mode feeds it from replica processing.
@@ -34,7 +34,6 @@ context {
     block_catalog: BlockCatalog
     table_catalog: TableCatalog
     compactor: Compactor.ForDatabase   -- peer of log_processor at db-system level
-    tx_source: Indexer.TxSource?       -- peer of log_processor at db-system level
 }
 
 ------------------------------------------------------------
@@ -93,7 +92,7 @@ entity LogProcessor {
     -- See: indexer/LogProcessor.kt, log/processor.clj
     -- Owns the indexing pipeline lifecycle for a database.
     -- Manages a System via SystemFactory; the factory opens read-write or read-only systems.
-    -- Compactor and TxSource are peers at db-system level, not children of the processor.
+    -- Compactor is a peer at db-system level, not a child of the processor.
     --
     -- Future: coordinator with leader/follower transitions driven by Kafka consumer group rebalancing.
     -- Transitions would be serialized via a coroutine channel loop.

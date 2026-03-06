@@ -30,7 +30,6 @@ context {
     source_processor: SourceLogProcessor
     watchers: Watchers
     compactor: Compactor.ForDatabase  -- peer of source_processor at db-system level
-    tx_source: Indexer.TxSource?     -- peer of source_processor at db-system level
 }
 
 ------------------------------------------------------------
@@ -106,7 +105,7 @@ entity SourceLogProcessor {
     -- Subscribes to the source log and processes messages sequentially.
     -- Handles the full pipeline: resolving transactions, finishing blocks,
     -- notifying watchers, attach/detach catalog mutations,
-    -- txSource callbacks, and compactor signalling.
+    -- and compactor signalling.
     -- Created directly as an integrant component with a fixed mode
     -- (read-write or read-only) determined at db startup.
     latest_processed_msg_id: MessageId
@@ -258,8 +257,7 @@ rule ProcessTxMessage {
         let result = IndexTransaction(msg)
         source_processor.latest_processed_msg_id = msg.msg_id
 
-        -- Notify txSource and watchers.
-        tx_source?.onCommit(result)
+        -- Notify watchers.
         watchers.notify(msg.msg_id, result)
 
         -- If the live index is now full, a block flush is needed.
@@ -314,7 +312,6 @@ rule ProcessAttachDbMessage {
 
     ensures:
         let result = indexer.addTxRow(msg)
-        tx_source?.onCommit(result)
         database.catalog.attach(msg.db_name, msg.config)
         watchers.notify(msg.msg_id, result)
         source_processor.latest_processed_msg_id = msg.msg_id
@@ -329,7 +326,6 @@ rule ProcessDetachDbMessage {
 
     ensures:
         let result = indexer.addTxRow(msg)
-        tx_source?.onCommit(result)
         database.catalog.detach(msg.db_name)
         watchers.notify(msg.msg_id, result)
         source_processor.latest_processed_msg_id = msg.msg_id

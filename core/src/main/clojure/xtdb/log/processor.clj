@@ -7,7 +7,7 @@
            [xtdb.indexer SourceLogProcessor]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
-                                      indexer-for-db compactor-for-db tx-source-for-db watchers db-catalog
+                                      indexer-for-db compactor-for-db watchers db-catalog
                                       ^IndexerConfig indexer-conf block-flush-duration]
                                 {:keys [meter-registry]} :base}
                               read-only?]
@@ -17,7 +17,6 @@
                        watchers compactor-for-db (set (.getSkipTxs indexer-conf))
                        read-only?
                        db-catalog
-                       tx-source-for-db
                        block-flush-duration))
 
 (defn- subscribe-source-log [^DatabaseStorage db-storage ^DatabaseState db-state ^SourceLogProcessor src-proc]
@@ -32,7 +31,6 @@
             :db-state (ig/ref :xtdb.db-catalog/state)
             :watchers (ig/ref :xtdb.db-catalog/watchers)
             :compactor-for-db (ig/ref :xtdb.compactor/for-db)
-            :tx-source-for-db (ig/ref :xtdb.tx-source/for-db)
             :indexer-for-db (ig/ref :xtdb.indexer/for-db)}
            opts)})
 

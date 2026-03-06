@@ -78,7 +78,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var authn: Authenticator.Factory = UserTable(),
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var tracer: TracerConfig = TracerConfig(),
-        var txSource: TxSourceConfig? = null,
         var readOnlyDatabases: Boolean = false,
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
@@ -121,8 +120,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         @JvmSynthetic
         fun garbageCollector(configure: GarbageCollectorConfig.() -> Unit) =
             garbageCollector(GarbageCollectorConfig().also(configure))
-
-        fun txSource(txSource: TxSourceConfig) = apply { this.txSource = txSource }
 
         fun readOnlyDatabases(readOnlyDatabases: Boolean = true) = apply { this.readOnlyDatabases = readOnlyDatabases }
 

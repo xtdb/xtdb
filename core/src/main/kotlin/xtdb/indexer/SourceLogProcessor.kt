@@ -41,7 +41,7 @@ private val LOG = SourceLogProcessor::class.logger
  * Also owns block finishing: when the source LiveIndex is full, writes tries, table blocks,
  * and the block file to storage, then appends TriesAdded + BlockUploaded to the source log.
  *
- * Post-processing (watchers notification, attach/detach, txSource callbacks, compactor signalling)
+ * Post-processing (watchers notification, attach/detach, compactor signalling)
  * is handled inline after resolving each batch of records.
  */
 class SourceLogProcessor(
@@ -56,7 +56,6 @@ class SourceLogProcessor(
     private val skipTxs: Set<MessageId>,
     private val readOnly: Boolean = false,
     private val dbCatalog: Database.Catalog? = null,
-    private val txSource: Indexer.TxSource? = null,
     flushTimeout: Duration = Duration.ofMinutes(5),
 ) : Log.RecordProcessor<SourceMessage>, AutoCloseable {
 
@@ -285,8 +284,7 @@ class SourceLogProcessor(
                             null
                         } catch (e: Anomaly.Caller) { e }
 
-                        val resolvedTx = indexer.addTxRow(txKey, error)
-                        txSource?.onCommit(resolvedTx)
+                        indexer.addTxRow(txKey, error)
 
                         if (error == null) {
                             watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
@@ -302,8 +300,7 @@ class SourceLogProcessor(
                             null
                         } catch (e: Anomaly.Caller) { e }
 
-                        val resolvedTx = indexer.addTxRow(txKey, error)
-                        txSource?.onCommit(resolvedTx)
+                        indexer.addTxRow(txKey, error)
 
                         if (error == null) {
                             watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
@@ -332,8 +329,6 @@ class SourceLogProcessor(
     }
 
     private fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
-        txSource?.onCommit(resolvedTx)
-
         val result = if (resolvedTx.committed) {
             TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
         } else {

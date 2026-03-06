@@ -413,13 +413,6 @@
     (-> db-cat
         (.databaseOrNull db-name))))
 
-(defn get-output-log
-  ([node] (get-output-log node "xtdb"))
-  ([node db-name]
-   (-> (database-or-null node db-name)
-       (.getStorage)
-       (.getTxSourceOutputLogOrNull))))
-
 (defn get-trie-cat
   ([node] (get-trie-cat node "xtdb"))
   ([node db-name]
