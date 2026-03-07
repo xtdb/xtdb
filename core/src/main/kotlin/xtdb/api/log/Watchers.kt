@@ -14,13 +14,14 @@ class Watchers @JvmOverloads constructor(
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : AutoCloseable {
     private val scope = CoroutineScope(coroutineContext)
+
     private class Watcher(val msgId: MessageId, val onDone: CompletableDeferred<TransactionResult?>)
 
     @Volatile
     var currentMsgId = currentMsgId
         private set
 
-    var exception: IngestionStoppedException? = null
+    var exception: Exception? = null
         private set
 
     private sealed interface Event {
@@ -50,7 +51,7 @@ class Watchers @JvmOverloads constructor(
 
                 is NotifyException -> {
                     val ex = event.exception
-                        .let { it as? IngestionStoppedException ?: IngestionStoppedException(event.msgId, it) }
+                        .let { it as? InterruptedException ?: it as? IngestionStoppedException ?: IngestionStoppedException(event.msgId, it) }
                         .also { exception = it }
 
                     watchers.forEach { it.onDone.completeExceptionally(ex) }
@@ -69,7 +70,9 @@ class Watchers @JvmOverloads constructor(
                     }
                 }
 
-                is Sync -> { event.onDone.complete(currentMsgId) }
+                is Sync -> {
+                    event.onDone.complete(currentMsgId)
+                }
             }
         }
     }
@@ -79,8 +82,13 @@ class Watchers @JvmOverloads constructor(
     }
 
     override fun close() {
-        channel.close()
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+        runBlocking {
+            withTimeout(5.seconds) {
+                channel.send(NotifyException(currentMsgId, InterruptedException("Watchers closed")))
+                channel.close()
+                scope.coroutineContext.job.cancelAndJoin()
+            }
+        }
     }
 
     fun notify(msgId: MessageId, result: TransactionResult?) {
@@ -96,7 +104,9 @@ class Watchers @JvmOverloads constructor(
         if (currentMsgId >= msgId) return null
 
         val res = CompletableDeferred<TransactionResult?>()
-        channel.trySend(NewWatcher(Watcher(msgId, res))).getOrThrow()
+        val sendRes = channel.trySend(NewWatcher(Watcher(msgId, res)))
+        if (sendRes.isClosed) throw InterruptedException()
+        sendRes.getOrThrow()
 
         return res.await()
     }

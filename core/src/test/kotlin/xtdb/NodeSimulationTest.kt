@@ -170,6 +170,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
+                boundaryReplicaMsgId = null,
                 tables = listOf(table),
                 secondaryDatabases = null
             )
@@ -227,6 +228,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
+                boundaryReplicaMsgId = null,
                 tables = listOf(table),
                 secondaryDatabases = null
             )
@@ -303,6 +305,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
+                boundaryReplicaMsgId = null,
                 tables = listOf(table),
                 secondaryDatabases = null
             )
@@ -373,6 +376,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
+                    boundaryReplicaMsgId = null,
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
@@ -445,6 +449,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
+                    boundaryReplicaMsgId = null,
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
@@ -539,6 +544,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
+                boundaryReplicaMsgId = null,
                 tables = listOf(table),
                 secondaryDatabases = null
             )
@@ -586,6 +592,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
+                    boundaryReplicaMsgId = null,
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
@@ -673,6 +680,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
+                    boundaryReplicaMsgId = null,
                     tables = listOf(table),
                     secondaryDatabases = null
                 )

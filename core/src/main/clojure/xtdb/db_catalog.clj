@@ -63,14 +63,8 @@
            opts)})
 
 (defmethod ig/init-key ::watchers [_ {:keys [^DatabaseStorage db-storage, ^DatabaseState db-state]}]
-  (let [block-catalog (.getBlockCatalog db-state)
-        epoch (.getEpoch (.getSourceLog db-storage))
-        latest-processed (some-> (.getLatestProcessedMsgId block-catalog)
-                                 (as-> msg-id
-                                       (if (= (MsgIdUtil/msgIdToEpoch msg-id) epoch)
-                                         msg-id
-                                         (dec (MsgIdUtil/offsetToMsgId epoch 0)))))]
-    (Watchers. (or latest-processed -1))))
+  (Watchers. (max (or (.getLatestProcessedMsgId (.getBlockCatalog db-state)) -1)
+                  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog db-storage)) -1))))
 
 (defmethod ig/expand-key ::database [k opts]
   {k (into {:allocator (ig/ref ::allocator)
@@ -84,37 +78,47 @@
                                              compactor-for-db]}]
   (Database. allocator db-config storage db-state (.getEnabled indexer-conf) watchers compactor-for-db))
 
+(defn single-writer? []
+  (some-> (System/getenv "XTDB_SINGLE_WRITER") Boolean/parseBoolean))
+
 (defn- db-system [db-name base ^Database$Config db-config]
   (let [^Xtdb$Config conf (get-in base [:config :config])
         indexer-conf (.getIndexer conf)
         opts {:base base, :db-name db-name, :mode (.getMode db-config), :db-config db-config, :indexer-conf indexer-conf}]
-    (-> {::allocator opts
-         :xtdb.metadata/metadata-manager opts
-         :xtdb/log (assoc opts :factory (.getLog db-config))
-         :xtdb/source-log opts
-         :xtdb/replica-log (assoc opts :factory (.getLog db-config))
-         :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
+    (-> (cond-> {::allocator opts
+                 :xtdb.metadata/metadata-manager opts
+                 :xtdb/log (assoc opts :factory (.getLog db-config))
+                 :xtdb/source-log opts
+                 :xtdb/replica-log (assoc opts :factory (.getLog db-config))
+                 :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
 
-         ::storage opts
+                 ::storage opts
 
-         :xtdb/block-catalog opts
-         :xtdb/table-catalog opts
-         :xtdb/trie-catalog opts
-         :xtdb.indexer/live-index opts
-         ::state opts
+                 :xtdb/block-catalog opts
+                 :xtdb/table-catalog opts
+                 :xtdb/trie-catalog opts
+                 :xtdb.indexer/live-index opts
+                 ::state opts
 
-         ::watchers opts
+                 ::watchers opts
 
-         :xtdb.indexer/crash-logger opts
-         :xtdb.indexer/for-db opts
+                 :xtdb.indexer/crash-logger opts
+                 :xtdb.indexer/for-db opts
 
-         :xtdb.compactor/for-db opts
+                 :xtdb.compactor/for-db opts
 
-         :xtdb.log.processor/source (cond-> (assoc opts
-                                                        :block-flush-duration (.getFlushDuration indexer-conf))
-                                               (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+                 ::database opts}
 
-         ::database opts}
+          (single-writer?)
+          (assoc :xtdb.log.processor/block-finisher (cond-> opts
+                                                      (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+                 :xtdb.log/processor (cond-> opts
+                                       (:db-catalog base) (assoc :db-catalog (:db-catalog base))))
+
+          (not (single-writer?))
+          (assoc :xtdb.log.processor/source (cond-> (assoc opts
+                                                            :block-flush-duration (.getFlushDuration indexer-conf))
+                                              (:db-catalog base) (assoc :db-catalog (:db-catalog base)))))
         (doto ig/load-namespaces))))
 
 (defn- open-db [db-name base db-config]
@@ -169,10 +173,10 @@
                    (detach [_ db-name]
                      (when (= "xtdb" db-name)
                        (throw (err/incorrect :xtdb/cannot-detach-primary "Cannot detach the primary 'xtdb' database" {:db-name db-name})))
-                       
+
                      (when-not (.containsKey !dbs db-name)
                        (throw (err/not-found :xtdb/no-such-db "Database does not exist" {:db-name db-name})))
-                     
+
                      (when-some [sys (.remove !dbs db-name)]
                        (ig/halt! sys)))
 

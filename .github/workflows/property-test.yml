@@ -14,12 +14,18 @@ on:
 
 jobs:
   property-test:
-    name: Property Test
+    name: Property Test (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       checks: write
+    strategy:
+      fail-fast: false
+      matrix:
+        single-writer: ['', 'true']
+    env:
+      XTDB_SINGLE_WRITER: ${{ matrix.single-writer }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
       - name: Set up JDK 21
@@ -38,7 +44,7 @@ jobs:
         uses: mikepenz/action-junit-report@74626db7353a25a20a72816467ebf035f674c5f8 # v6.2.0
         if: always()
         with:
-          check_name: JUnit Property Test Report
+          check_name: JUnit Property Test Report (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
           report_paths: '**/build/test-results/property-test/TEST-*.xml'
 
       - name: Post Slack Notification (On Fail/Cancel)

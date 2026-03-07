@@ -16,9 +16,9 @@
            [xtdb.util MsgIdUtil]))
 
 (t/use-fixtures :each
-  tu/with-allocator
-  #_aet/wrap-regen ; uncomment to regenerate expected Arrow EDN files <<no-commit>>
-  )
+                tu/with-allocator
+                #_aet/wrap-regen ; uncomment to regenerate expected Arrow EDN files <<no-commit>>
+                )
 
 (defn- test-serialize-tx-ops
   ([file tx-ops] (test-serialize-tx-ops file tx-ops {}))
@@ -182,7 +182,7 @@
   (util/with-tmp-dirs #{local-disk-path}
     ;; Node with local storage and memory log 
     (with-open [node (xtn/start-node {:log [:in-memory {}]
-                                       :storage [:local {:path local-disk-path}]})]
+                                      :storage [:local {:path local-disk-path}]})]
       ;; Submit a few transactions
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
       (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]])
@@ -199,18 +199,18 @@
                      {:xt/id :willbe}
                      {:xt/id :lost}])
                (set (xt/q node "SELECT _id FROM xt_docs")))))
-    
+
     ;; Node with intact storage and (now) empty memory log 
     (t/is
-     (thrown-with-msg?
-      IllegalStateException
-      #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
-      (xtn/start-node {:log [:in-memory {}]
-                       :storage [:local {:path local-disk-path}]})))
+      (thrown-with-msg?
+        IllegalStateException
+        #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+        (xtn/start-node {:log [:in-memory {}]
+                         :storage [:local {:path local-disk-path}]})))
 
     ;; Node with intact storage and empty memory log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:in-memory {:epoch 1}]
-                                       :storage [:local {:path local-disk-path}]})]
+                                      :storage [:local {:path local-disk-path}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
@@ -251,16 +251,16 @@
 
     ;; Node with intact storage and empty directory-log
     (t/is
-     (thrown-with-msg?
-      IllegalStateException
-      #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
-      (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
-                       :storage [:local {:path (.resolve node-dir "objects")}]})))
+      (thrown-with-msg?
+        IllegalStateException
+        #"Node failed to start due to an invalid transaction log state \(the log is empty\)"
+        (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
+                         :storage [:local {:path (.resolve node-dir "objects")}]})))
 
     ;; Node with intact storage and empty directory-log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
                                                     :epoch 1}]
-                                       :storage [:local {:path (.resolve node-dir "objects")}]})]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
       (t/testing "can query previous indexed values, unindexed values will be lost"
         (t/is (= (set [{:xt/id :foo} {:xt/id :bar}])
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
@@ -276,7 +276,7 @@
 
       (t/testing "can finish the block"
         (t/is (nil? (tu/flush-block! node)))))
-    
+
     ;; Restarting the node again with the same new log path and epoch 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
                                                     :epoch 1}]

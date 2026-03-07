@@ -16,7 +16,7 @@ interface TransactionAborted : TransactionResult {
     val error: Throwable
 
     companion object {
-        operator fun invoke(txId: Long, systemTime: Instant, error: Throwable) =
+        operator fun invoke(txId: Long, systemTime: Instant, error: Throwable?) =
             requiringResolve("xtdb.serde/->tx-aborted").invoke(txId, systemTime, error) as TransactionAborted
     }
 }

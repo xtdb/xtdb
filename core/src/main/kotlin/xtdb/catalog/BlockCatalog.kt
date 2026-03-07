@@ -60,6 +60,7 @@ class BlockCatalog(
         blockIndex: BlockIndex,
         latestCompletedTx: TransactionKey?,
         latestProcessedMsgId: MessageId,
+        boundaryReplicaMsgId: MessageId?,
         tables: Collection<TableRef>,
         secondaryDatabases: Map<String, DatabaseConfig>?
     ): Block {
@@ -77,6 +78,7 @@ class BlockCatalog(
                 }
             }
             this.latestProcessedMsgId = latestProcessedMsgId
+            boundaryReplicaMsgId?.let { this.boundaryReplicaMsgId = it }
             this.tableNames.addAll(tables.map { it.sym.toString() })
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
         }
@@ -93,6 +95,9 @@ class BlockCatalog(
     val latestProcessedMsgId: MessageId?
         get() = latestBlock?.let { block -> block.latestProcessedMsgId.takeIf { block.hasLatestProcessedMsgId() } }
             ?: latestCompletedTx?.txId
+
+    val boundaryReplicaMsgId: MessageId?
+        get() = latestBlock?.let { block -> block.boundaryReplicaMsgId.takeIf { block.hasBoundaryReplicaMsgId() } }
 
     val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
 

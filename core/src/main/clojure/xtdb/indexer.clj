@@ -37,7 +37,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private skipped-exn (ex-info "skipped" {}))
+(def ^:private skipped-exn (err/fault :xtdb/skipped-tx "Transaction was skipped"))
 
 (defn- assert-timestamp-col-type [^VectorReader rdr]
   (when-not (or (nil? rdr) (= types/temporal-arrow-type (.getArrowType rdr)))

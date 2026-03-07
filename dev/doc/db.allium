@@ -8,35 +8,33 @@
 -- Scope: one database (e.g. "xtdb" or a secondary).
 -- External: the multi-database orchestration layer (attach/detach).
 --
--- Currently, a single SourceLogProcessor handles the full pipeline:
--- resolving transactions, finishing blocks, notifying watchers,
--- and signalling the compactor.
--- The replica log exists but is not consumed; it will become the
--- follower's input when leader/follower separation lands (see db-5188.allium).
+-- Source and replica are always separate logs (invariant, not just convention).
+-- A LogProcessor owns the indexing pipeline lifecycle per database.
+-- Compactor is a peer at db-system level, not a child of the processor.
+-- Leader/follower transitions driven by Kafka consumer group rebalancing (or local log startup).
+-- A single LiveIndex sits outside the processor as shared state.
+-- Leader mode feeds it from source processing; follower mode feeds it from replica processing.
+-- Two Watchers instances: source_watchers for client correlation,
+-- replica_watchers for transition synchronization.
+-- The compactor writes L1+ to the source log; the leader forwards to replica.
 
 use "./trie-cat.allium" as trie_cat
 use "./compaction.allium" as compaction
 
-------------------------------------------------------------
--- Context
-------------------------------------------------------------
+---- Context
 
 context {
     database: Database
-    database_state: DatabaseState  -- shared catalogs + live index
-    live_index: database_state.live_index
-    block_catalog: database_state.block_catalog
-    table_catalog: database_state.table_catalog
-    source_processor: SourceLogProcessor
-    watchers: Watchers
-    compactor: Compactor.ForDatabase  -- peer of source_processor at db-system level
+    log_processor: LogProcessor
+    live_index: LiveIndex              -- shared across leader/follower modes
+    source_watchers: Watchers          -- correlates source-log msg_ids with client futures
+    replica_watchers: Watchers         -- tracks replica log progress for transition sync
+    block_catalog: BlockCatalog
+    table_catalog: TableCatalog
+    compactor: Compactor.ForDatabase   -- peer of log_processor at db-system level
 }
 
-------------------------------------------------------------
--- External Entities
-------------------------------------------------------------
-
--- Truly external: managed by the multi-database layer or the environment.
+---- External Entities
 
 external entity Client {
     -- The party submitting transactions.
@@ -44,9 +42,8 @@ external entity Client {
 
 external entity Log {
     -- An ordered, append-only message stream.
-    -- Two instances per database: source_log and replica_log.
-    -- Currently only source_log is consumed; replica_log exists
-    -- for future follower use (see db-5188.allium).
+    -- Two separate instances per database: source_log and replica_log.
+    -- They MUST be distinct logs (not aliases for the same underlying log).
     -- See: api/log/Log.kt
 }
 
@@ -54,14 +51,11 @@ external entity ObjectStore {
     -- Durable key-value storage for blocks, tries, table-blocks.
 }
 
-------------------------------------------------------------
--- Entities
-------------------------------------------------------------
-
--- Behaviourally-relevant fields only; see linked sources for full definitions.
+---- Entities
 
 entity LiveIndex {
     -- See: indexer/LiveIndex.kt
+    -- Single instance shared across leader and follower modes.
     latest_completed_tx: TransactionKey?
     is_full: Boolean
 
@@ -71,14 +65,46 @@ entity LiveIndex {
 
 entity Database {
     -- See: indexer/Indexer.kt
-    mode: read_write | read_only
     source_log: Log
-    replica_log: Log  -- exists but currently unused; future follower input
+    replica_log: Log
+
+    invariant: source_log != replica_log
+        -- Source and replica are always distinct logs.
+}
+
+entity LogProcessor {
+    -- See: indexer/LogProcessor.kt, log/processor.clj
+    -- Owns the indexing pipeline lifecycle for a database.
+    -- Implements Log.SubscriptionListener (onPartitionsAssigned/Revoked drive transitions).
+    -- Starts in follower mode. Always in exactly one mode.
+    --
+    -- Transitions are driven by Kafka consumer group rebalancing:
+    --   onPartitionsAssigned → TransitionToLeader
+    --   onPartitionsRevoked  → TransitionToFollower
+    -- For local log, the single node is always immediately assigned.
+    mode: Leader | Follower
+    latest_processed_msg_id: MessageId
+}
+
+variant Leader : LogProcessor {
+    -- Subscribes to the source log, resolves messages,
+    -- writes resolved output to the replica log.
+    -- Also owns block finishing: writes tries, table blocks, block files to storage.
+    -- See: indexer/LogProcessor.kt (LeaderLogProcessor)
+    last_flush_check: Instant
+}
+
+variant Follower : LogProcessor {
+    -- Subscribes to the replica log.
+    -- Feeds the shared live_index from replica messages.
+    -- Exposes pending_block state for handoff during leader transition.
+    -- See: indexer/LogProcessor.kt (FollowerLogProcessor)
+    pending_block_index: Long?
+    pending_block: PendingBlock?  -- captured during transition to leader
 }
 
 entity BlockCatalog {
     -- See: catalog/BlockCatalog.kt
-    -- Single point of truth for the latest persisted block.
     latest_block: Block?
 
     -- Derived
@@ -87,40 +113,26 @@ entity BlockCatalog {
 
 entity TableCatalog {
     -- See: catalog/TableCatalog.kt, table_catalog.clj
-    -- Cumulative table metadata: row counts, column types, cardinality sketches.
-    -- Accumulated across all blocks; used by the query planner.
     table_metadata: Map<trie_cat/TableRef, TableMetadata>
 }
 
 entity Watchers {
-    -- Correlates source-log message IDs with client futures.
-    -- Clients receive the source-log msg_id from submit-tx;
-    -- the SourceLogProcessor notifies them when each message is processed.
+    -- Two instances per database:
+    --   source_watchers: correlates source-log message IDs with client futures.
+    --     Clients receive the source-log msg_id from submit-tx;
+    --     the processor notifies them when the corresponding ResolvedTx is processed.
+    --     sync() returns the latest notified msg_id (used for source log resume).
+    --   replica_watchers: tracks replica log processing progress.
+    --     Used during leader transition to ensure the follower has caught up
+    --     before handoff (await on NoOp msg_id after fencing).
     -- See: api/log/Watchers.kt
     current_msg_id: MessageId
 }
 
-entity SourceLogProcessor {
-    -- See: indexer/SourceLogProcessor.kt, log/processor.clj
-    -- Subscribes to the source log and processes messages sequentially.
-    -- Handles the full pipeline: resolving transactions, finishing blocks,
-    -- notifying watchers, attach/detach catalog mutations,
-    -- and compactor signalling.
-    -- Created directly as an integrant component with a fixed mode
-    -- (read-write or read-only) determined at db startup.
-    latest_processed_msg_id: MessageId
-    last_flush_check: Instant
-}
-
--- Storage.VERSION is a compile-time constant; storage_epoch is per-BufferPool.
--- The SourceLogProcessor checks incoming TriesAdded messages against these values
--- to discard stale notifications from a previous epoch.
 external value current_storage_version: Int   -- See: storage/Storage.kt (VERSION)
 external value current_storage_epoch: Int     -- See: buffer_pool/BufferPool.kt (epoch)
 
-------------------------------------------------------------
--- Values
-------------------------------------------------------------
+---- Values
 
 value MessageId {
     -- Epoch + offset packed into a long.
@@ -131,34 +143,48 @@ value MessageId {
 
 value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
+    -- tx_id is monotonically increasing (assigned by the source log).
+    -- system_time is NOT monotonic (clients can set arbitrary system times).
+    -- Ordering comparisons MUST use tx_id, not system_time.
     tx_id: Long
     system_time: Instant
 }
 
 value Block {
     -- A persisted block in the object store.
-    -- See: catalog/BlockCatalog.kt (BlockCatalog.buildBlock)
     block_index: Long
     latest_completed_tx: TransactionKey
-    latest_processed_msg_id: MessageId
+    latest_processed_msg_id: MessageId       -- source log
+    latest_replica_msg_id: MessageId         -- replica log; msg id of the BlockBoundary message
 }
 
 value Snapshot {
-    -- A point-in-time read view of the database.
     as_of: TransactionKey
 }
 
 value TableMetadata {
-    -- Per-table cumulative metadata, merged across blocks.
-    -- See: table_catalog.clj
     row_count: Long?
 }
 
-------------------------------------------------------------
--- Log Messages
-------------------------------------------------------------
+value DbOp {
+    -- A database-level side-effect carried within a ResolvedTx.
+    -- See: api/log/DbOp.kt
+    kind: Attach | Detach
+}
 
--- The SourceLogProcessor dispatches on message kind.
+variant Attach : DbOp {
+    db_name: String
+    config: DatabaseConfig
+}
+
+variant Detach : DbOp {
+    db_name: String
+}
+
+---- Source Log Messages
+
+-- Messages on the source log. Written by clients, the leader (FlushBlock),
+-- and the compactor (TriesAdded L1+).
 -- See: log/proto/log.proto (LogMessage oneof)
 
 entity SourceMessage {
@@ -177,13 +203,14 @@ variant TxMessage : SourceMessage {
 }
 
 variant FlushBlockMessage : SourceMessage {
-    -- Request to finish the current block.
+    -- Leader self-sends to trigger block flush on timeout.
     -- See: log/proto/log.proto (FlushBlock)
     expected_block_idx: Long?
 }
 
 variant TriesAddedMessage : SourceMessage {
-    -- Notification that new tries exist (from block flush or compaction).
+    -- L1+ compaction results written by the compactor.
+    -- The leader forwards these to the replica log.
     -- See: log/proto/log.proto (TriesAdded)
     storage_version: Int
     storage_epoch: Int
@@ -191,8 +218,8 @@ variant TriesAddedMessage : SourceMessage {
 }
 
 variant BlockUploadedMessage : SourceMessage {
-    -- Notification that a block has been written to the object store.
-    -- Written by the leader after block finishing; consumed by read-only nodes.
+    -- Written by the single-writer path (SourceLogProcessor).
+    -- The leader ignores this (notifies watchers only).
     -- See: log/proto/log.proto (BlockUploaded)
     block_index: Long
     latest_processed_msg_id: MessageId
@@ -209,25 +236,211 @@ variant DetachDbMessage : SourceMessage {
     db_name: String
 }
 
-------------------------------------------------------------
--- Config
-------------------------------------------------------------
+---- Replica Log Messages
+
+-- Messages on the replica log. Written exclusively by the leader.
+-- Consumed by all nodes (including the leader's own follower, after transition).
+
+entity ReplicaMessage {
+    msg_id: MessageId
+    log_timestamp: Instant
+    kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
+         | TriesAddedMessage | NoOpMessage
+}
+
+variant ResolvedTxMessage : ReplicaMessage {
+    -- A resolved transaction: put/delete/erase events that require no database reads.
+    -- Carries the source tx_id so watchers can correlate with submit-tx responses.
+    -- Attach/detach results are encoded as a dbOp field within the resolved tx.
+    -- See: api/log/Log.kt (Message.ResolvedTx), api/log/ReplicaMessage.kt (ResolvedTx)
+    tx_id: MessageId            -- source-log msg id of the original Tx/Attach/Detach
+    committed: Boolean
+    db_op: DbOp?               -- Attach or Detach side-effect, if any
+    table_data: Map<String, Bytes>  -- resolved row data per table, serialized; imported by replica processor
+}
+
+variant BlockBoundaryMessage : ReplicaMessage {
+    -- Leader signals that a block boundary has been reached.
+    -- Followers enter pending mode and buffer subsequent messages until BlockUploaded.
+    -- L0 tries are delivered in the subsequent BlockUploaded message (not separately).
+    -- See: log/proto/replica-log.proto (BlockBoundary)
+    block_index: Long
+    latest_processed_msg_id: MessageId   -- source log high-water at block time
+}
+
+variant BlockUploadedMessage : ReplicaMessage {
+    -- Block has been written to the object store.
+    -- Carries L0 tries so followers can update their trie catalogs.
+    -- Followers refresh catalogs and transition out of pending mode.
+    -- See: log/proto/log.proto (BlockUploaded)
+    block_index: Long
+    latest_processed_msg_id: MessageId
+    storage_version: Int
+    storage_epoch: Int
+    tries: List<trie_cat/TrieDetails>
+}
+
+variant TriesAddedMessage : ReplicaMessage {
+    -- New tries available.
+    -- L1+ tries: forwarded by the leader from the source log (compactor writes).
+    -- See: log/proto/log.proto (TriesAdded)
+    storage_version: Int
+    storage_epoch: Int
+    tries: List<trie_cat/TrieDetails>
+}
+
+variant NoOpMessage : ReplicaMessage {
+    -- No-operation message used for fencing during leader transition.
+    -- The new leader sends a NoOp after opening the transactional producer,
+    -- then awaits replica_watchers for its msg_id to ensure the follower
+    -- has fully processed all prior messages before handoff.
+    -- See: api/log/ReplicaMessage.kt (NoOp)
+}
+
+---- Config
 
 config {
-    flush_timeout: Duration = 4.hours
+    flush_timeout: Duration = 5.minutes
     max_block_rows: Integer = 102400
 }
 
-------------------------------------------------------------
--- Rules
-------------------------------------------------------------
+---- Rules: Coordinator Transitions
 
--- == Transaction Submission ==
+-- Kafka consumer group rebalancing (or local log startup) drives transitions.
+-- The LogProcessor serializes transitions: close old system, start new one.
+
+-- == Fencing ==
+--
+-- The leader holds a transactional producer on the replica log.
+-- Opening a new transactional producer fences the old one — no further
+-- messages can be committed by the previous leader.
+-- This guarantees at most one writer to the replica log at any time.
+--
+-- The source log is NOT fenced. Stale messages from a previous leader
+-- (FlushBlock) or compactor (TriesAdded) may appear on the source log
+-- after a transition. This is safe because:
+--   - FlushBlock is a CAS on expected_block_idx; stale flushes fail the check.
+--   - TriesAdded is idempotent; addTries tolerates duplicates.
+
+-- == Transition Safety ==
+--
+-- close() on the active system MUST NOT interrupt an in-flight transaction
+-- commit or import. Applying (resolving) a transaction is safe to interrupt
+-- because it does not mutate the live index — only the commit/import step
+-- writes to the live index. close() waits for any in-progress commit/import
+-- to complete, then stops the subscription. This ensures the live index
+-- always reflects a complete prefix of the replica log (for followers)
+-- or source log (for the leader), never a partial transaction.
+
+-- == Leader Startup ==
+--
+-- A new leader can always reconstruct correct state from:
+--   1. The last persisted block (from block catalog)
+--   2. The follower's in-memory state (which has been processing replica messages)
+--
+-- The fencing + NoOp + await sequence ensures the follower has fully caught up
+-- before its state is captured and it is shut down.
+-- If the follower had a pending block (saw BlockBoundary but not BlockUploaded),
+-- the new leader finishes the block before starting source log consumption.
+
+rule TransitionToLeader {
+    when: PartitionsAssigned(database)
+    requires: log_processor.mode is Follower
+
+    ensures:
+        -- Fence: open transactional producer on replica log.
+        -- After this, the previous leader cannot commit further messages.
+        let producer = database.replica_log.openTransactionalProducer()
+
+        -- Send a NoOp to get a known msg_id, then await replica_watchers.
+        -- This ensures the follower has fully processed all replica messages
+        -- up to the fence point before we capture its state and shut it down.
+        let noop_msg_id = NoOpMessage.created() appended to database.replica_log
+        replica_watchers.await(noop_msg_id)
+
+        -- Capture the follower's pending block state (if it saw BlockBoundary
+        -- but not BlockUploaded before the fence point).
+        let pending_block = log_processor.pending_block
+
+        -- If the follower had a pending block, the new leader must finish it.
+        -- The pending block's data is already in the live index (written before
+        -- BlockBoundary), but the block file was never persisted.
+        if pending_block is set:
+            LeaderCompletesInterruptedBlock(
+                pending_block.block_index,
+                pending_block.boundary_msg_id,
+                pending_block.boundary_message
+            )
+            -- Replay buffered records (messages that arrived after BlockBoundary)
+            -- through the transition processor.
+            HandleReplicaMessages(pending_block.buffered_records)
+
+        -- Determine source log resume point.
+        -- source_watchers.sync() returns the latest notified source msg_id,
+        -- which accounts for all work the follower did (it notifies source_watchers
+        -- as it processes ResolvedTx messages).
+        let source_resume = source_watchers.sync()
+
+        -- Switch to leader mode: subscribe to source log.
+        log_processor.mode = Leader
+        log_processor.start(source_resume)
+
+    invariant: ReplayEquivalence
+        -- The live index state after transition is identical regardless of
+        -- how much work the follower had already done.
+}
+
+rule LeaderCompletesInterruptedBlock {
+    -- The previous leader wrote BlockBoundary but crashed before BlockUploaded.
+    -- The block data is in the live index (written before BlockBoundary).
+    -- The new leader persists the block and writes BlockUploaded to unblock
+    -- pending mode.
+    when: LeaderCompletesInterruptedBlock(block_index, boundary_msg_id, boundary_message)
+
+    ensures:
+        -- Persist block to object store (may already exist — idempotent).
+        let block = Block.created(
+            block_index: block_index,
+            latest_completed_tx: live_index.latest_completed_tx,
+            latest_processed_msg_id: boundary_message.latest_processed_msg_id,
+            latest_replica_msg_id: boundary_msg_id
+        )
+        block_catalog.refresh(block)
+
+        let block_uploaded = BlockUploadedMessage.created(
+            block_index: block_index,
+            latest_processed_msg_id: boundary_message.latest_processed_msg_id,
+            storage_version: current_storage_version,
+            storage_epoch: current_storage_epoch,
+            tries: finished_tables.collectTries()
+        )
+        block_uploaded appended to database.replica_log
+
+        -- HandleReplicaMessage for BlockUploaded will call nextBlock()
+        -- and replay buffered records.
+        HandleReplicaMessage(block_uploaded)
+}
+
+rule TransitionToFollower {
+    when: PartitionsRevoked(database)
+    requires: log_processor.mode is Leader
+
+    ensures:
+        -- close() completes any in-flight commit, then stops.
+        -- Switch to follower mode: subscribe to replica log from the latest
+        -- submitted msg id. Idempotency checks (HandleReplicaMessage) skip
+        -- messages whose txs are already in the live index.
+        let start = database.replica_log.latestSubmittedMsgId
+        log_processor.mode = Follower
+        log_processor.start(from: start)
+}
+
+---- Rules: Transaction Submission
 
 rule ClientSubmitsTransaction {
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: database.mode == read_write
+    requires: log_processor.mode is Leader
 
     ensures:
         let msg = TxMessage.created(
@@ -238,195 +451,293 @@ rule ClientSubmitsTransaction {
         msg appended to database.source_log
 }
 
+---- Rules: Leader Mode (source processing)
 
--- == Log Processing ==
---
--- The SourceLogProcessor subscribes to the source-log and processes messages sequentially.
--- After each message, it notifies watchers so awaiting clients can proceed.
--- This is the heart of the system.
+-- The leader subscribes to the source log.
+-- It resolves each message and writes the result to the replica log.
+-- Feeds the shared live_index directly.
 
-rule ProcessTxMessage {
-    -- A transaction message arrives from the source log.
+rule LeaderProcessesTx {
     when: msg: TxMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
 
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
 
     ensures:
-        -- The indexer resolves and applies the transaction.
-        -- Result is either committed or aborted.
-        let result = IndexTransaction(msg)
-        source_processor.latest_processed_msg_id = msg.msg_id
+        let resolved = IndexTransaction(msg)
+        ResolvedTxMessage.created(
+            tx_id: msg.msg_id,
+            committed: resolved.committed,
+            db_op: resolved.db_op
+        ) appended to database.replica_log
 
-        -- Notify watchers.
-        watchers.notify(msg.msg_id, result)
+        log_processor.latest_processed_msg_id = msg.msg_id
 
-        -- If the live index is now full, a block flush is needed.
         if live_index.is_full:
-            BlockFlushNeeded(msg.log_timestamp)
+            LeaderBlockFlushNeeded(msg.log_timestamp)
 }
 
-rule ProcessFlushBlockMessage {
-    when: msg: FlushBlockMessage consumed from database.source_log
+rule LeaderProcessesAttachDb {
+    when: msg: AttachDbMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
 
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
+
+    ensures:
+        let resolved = ResolveAttach(msg)
+        ResolvedTxMessage.created(
+            tx_id: msg.msg_id,
+            committed: resolved.committed,
+            db_op: resolved.db_op
+        ) appended to database.replica_log
+
+        log_processor.latest_processed_msg_id = msg.msg_id
+}
+
+rule LeaderProcessesDetachDb {
+    when: msg: DetachDbMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
+
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
+
+    ensures:
+        let resolved = ResolveDetach(msg)
+        ResolvedTxMessage.created(
+            tx_id: msg.msg_id,
+            committed: resolved.committed,
+            db_op: resolved.db_op
+        ) appended to database.replica_log
+
+        log_processor.latest_processed_msg_id = msg.msg_id
+}
+
+rule LeaderProcessesFlushBlock {
+    when: msg: FlushBlockMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
+
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
     requires: msg.expected_block_idx == block_catalog.current_block_index
 
     ensures:
-        source_processor.latest_processed_msg_id = msg.msg_id
-        BlockFlushNeeded(msg.log_timestamp)
+        log_processor.latest_processed_msg_id = msg.msg_id
+        LeaderBlockFlushNeeded(msg.log_timestamp)
 }
 
-rule ProcessTriesAddedMessage {
-    -- Tries-added messages are written to the source log by the compactor.
+rule LeaderProcessesTriesAdded {
+    -- L1+ from compactor. The leader needs these in its trie catalog
+    -- for correct partition info at block time, and forwards them to the replica log.
     when: msg: TriesAddedMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
 
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
     requires: msg.storage_version == current_storage_version
     requires: msg.storage_epoch == current_storage_epoch
 
     ensures:
+        -- Update the trie catalog (needed for finishBlock partition info).
         trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-        source_processor.latest_processed_msg_id = msg.msg_id
-        watchers.notify(msg.msg_id, null)
+
+        -- Forward to replica log so followers see L1+ tries.
+        TriesAddedMessage.created(
+            storage_version: msg.storage_version,
+            storage_epoch: msg.storage_epoch,
+            tries: msg.tries
+        ) appended to database.replica_log
+
+        log_processor.latest_processed_msg_id = msg.msg_id
 }
 
-rule ProcessBlockUploadedMessage {
-    -- BlockUploaded round-trips through the source log after block finishing.
-    -- The source processor notifies watchers but takes no other action
-    -- (catalogs were already updated during block finishing).
+rule LeaderProcessesBlockUploaded {
+    -- BlockUploaded on the source log is from the single-writer path.
+    -- The leader ignores it (notifies watchers only).
     when: msg: BlockUploadedMessage consumed from database.source_log
+    mode: log_processor.mode is Leader
 
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
-
-    ensures:
-        source_processor.latest_processed_msg_id = msg.msg_id
-        watchers.notify(msg.msg_id, null)
-}
-
-rule ProcessAttachDbMessage {
-    when: msg: AttachDbMessage consumed from database.source_log
-
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
-    requires: msg.db_name != "xtdb"
-    requires: msg.db_name not in secondary_databases
+    requires: msg.msg_id > log_processor.latest_processed_msg_id
 
     ensures:
-        let result = indexer.addTxRow(msg)
-        database.catalog.attach(msg.db_name, msg.config)
-        watchers.notify(msg.msg_id, result)
-        source_processor.latest_processed_msg_id = msg.msg_id
+        source_watchers.notify(msg.msg_id, null)
+        log_processor.latest_processed_msg_id = msg.msg_id
 }
 
-rule ProcessDetachDbMessage {
-    when: msg: DetachDbMessage consumed from database.source_log
+---- Rules: Leader Block Finishing
 
-    requires: msg.msg_id > source_processor.latest_processed_msg_id
-    requires: msg.db_name != "xtdb"
-    requires: msg.db_name in secondary_databases
-
-    ensures:
-        let result = indexer.addTxRow(msg)
-        database.catalog.detach(msg.db_name)
-        watchers.notify(msg.msg_id, result)
-        source_processor.latest_processed_msg_id = msg.msg_id
-}
-
-
--- == Block Flushing ==
+-- The leader finishes blocks: writes storage, then signals the replica log.
 --
--- When the live index is full (or a flush timeout fires), the read-write node writes
--- tries, table blocks, and the block file to storage, then signals the compactor.
--- Read-only nodes enter a pending-block state: they call nextBlock() to reset
--- the live index, then buffer subsequent messages until BlockUploaded arrives
--- from the writer. On BlockUploaded, buffered messages are replayed.
+-- Double-finish is not possible: LeaderBlockFlushNeeded is fired by either
+-- LeaderProcessesTx (when live_index.is_full) or LeaderProcessesFlushBlock.
+-- These are processed sequentially on the source log subscription thread.
+-- If LeaderProcessesTx triggers a flush, it finishes the block and calls
+-- nextBlock() — the live index is no longer full. If a FlushBlock message
+-- arrives later for the same block_index, its CAS (expected_block_idx ==
+-- block_catalog.current_block_index) fails because the block catalog has
+-- already advanced.
 
-rule FinishBlock {
+rule LeaderFinishesBlock {
     -- log_timestamp is the log timestamp of the message that triggered the flush
     -- (either the transaction that filled the block, or a FlushBlock message).
     -- This becomes the as_of for trie registration, used later by GC to determine
     -- deletion eligibility. The 24-hour garbage_lifetime grace period absorbs
     -- any practical difference between these two sources.
-    when: BlockFlushNeeded(log_timestamp)
-
-    requires: database.mode == read_write
+    when: LeaderBlockFlushNeeded(log_timestamp)
 
     let block_index = (block_catalog.current_block_index ?? -1) + 1
-    -- finishBlock returns a per-table map of finished blocks,
-    -- each containing tries and table metadata.
-    -- See: indexer/LiveIndex.kt (finishBlock), indexer/LiveTable.kt (FinishedBlock)
-    let finished_tables = live_index.finishBlock(block_index)
-    let tries = finished_tables.collectTries()
 
     ensures:
-        -- Write tries-added to the source log so it round-trips back.
-        let tries_added = TriesAddedMessage.created(tries: tries)
-        tries_added appended to database.source_log
+        -- Signal replica: block boundary first.
+        -- The BlockBoundary message's msg_id becomes the block's
+        -- latest_replica_msg_id — the resume point for replica log subscriptions.
+        let block_boundary = BlockBoundaryMessage.created(
+            block_index: block_index,
+            latest_processed_msg_id: log_processor.latest_processed_msg_id
+        )
+        block_boundary appended to database.replica_log
 
-        -- Register tries locally.
+        -- Finish the block: writes tries, table blocks, block file to storage.
+        let finished_tables = live_index.finishBlock(block_index)
+        let tries = finished_tables.collectTries()
+
+        -- Register L0 tries in the trie catalog.
         trie_cat/trie_catalog.addTries(tries, log_timestamp)
 
         -- Update table catalog with new metadata from finished tables.
-        -- See: table_catalog.clj (finishBlock), TableCatalog (refresh)
         table_catalog.finishBlock(finished_tables)
 
         -- Persist block to object store.
         let block = Block.created(
             block_index: block_index,
             latest_completed_tx: live_index.latest_completed_tx,
-            latest_processed_msg_id: source_processor.latest_processed_msg_id
+            latest_processed_msg_id: log_processor.latest_processed_msg_id,
+            latest_replica_msg_id: block_boundary.msg_id
         )
-
         block_catalog.refresh(block)
 
-        -- Write BlockUploaded to the source log (round-trips back for watchers).
-        let block_uploaded = BlockUploadedMessage.created(
+        -- Write BlockUploaded to replica log with L0 tries bundled.
+        -- Followers receive L0 tries from this message, not from a separate TriesAdded.
+        BlockUploadedMessage.created(
             block_index: block_index,
-            latest_processed_msg_id: source_processor.latest_processed_msg_id,
-            storage_epoch: current_storage_epoch
-        )
-        block_uploaded appended to database.source_log
+            latest_processed_msg_id: log_processor.latest_processed_msg_id,
+            storage_version: current_storage_version,
+            storage_epoch: current_storage_epoch,
+            tries: tries
+        ) appended to database.replica_log
 
         -- Reset for next block.
         live_index.nextBlock()
-
-        -- Wake up compaction.
         CompactorSignalled()
 }
 
-rule ReadOnlyEntersPendingBlock {
-    -- In read-only mode, when the live index is full or FlushBlock matches,
-    -- we reset the live index and buffer messages until the writer's BlockUploaded arrives.
-    when: BlockFlushNeeded(log_timestamp)
+---- Rules: Leader Flush Timeout
 
-    requires: database.mode == read_only
+rule LeaderFlushTimeout {
+    when: log_processor.last_flush_check + config.flush_timeout <= now
+    mode: log_processor.mode is Leader
 
-    ensures:
-        live_index.nextBlock()
-        -- Enter pending-block state; buffer all messages until BlockUploaded.
-}
-
-rule ReadOnlyBlockTransition {
-    -- BlockUploaded from the writer unblocks the read-only node.
-    when: BlockUploadedMessage consumed while in pending-block state
-
-    requires: msg.storage_epoch == current_storage_epoch
-    requires: msg.block_index == pending_block_index
+    requires: live_index.has_data
+    requires: block_catalog.current_block_index unchanged since log_processor.last_flush_check
 
     ensures:
-        -- Wake up compaction.
-        CompactorSignalled()
-
-        -- Replay buffered messages (including this BlockUploaded).
-        for each buffered_msg in buffered:
-            ProcessMessage(buffered_msg)
+        FlushBlockMessage.created(
+            expected_block_idx: block_catalog.current_block_index
+        ) appended to database.source_log
 }
 
+---- Rules: Replica Message Handling
 
--- == Compaction Orchestration ==
---
+-- HandleReplicaMessage dispatches a single replica log message.
+-- Used by both the follower's normal processing loop and the
+-- transition processor during leader startup.
+-- Idempotent: txs already in the live index are skipped.
+
+rule HandleReplicaMessage {
+    -- Dispatches a single replica log message.
+    -- Idempotent for all message types:
+    --   - ResolvedTx: skipped if tx_id <= live_index.latest_completed_tx.tx_id
+    --   - TriesAdded: addTries is idempotent.
+    --   - BlockBoundary: sets pending_block_index (idempotent).
+    --   - BlockUploaded: skipped if block_index <= block_catalog.current_block_index.
+    --   - NoOp: ignored.
+    when: msg: ReplicaMessage
+
+    ensures:
+        -- Pending mode guard: while a block boundary has been seen but
+        -- BlockUploaded has not yet arrived, buffer everything except
+        -- BlockUploaded. Messages after BlockBoundary belong to the next
+        -- block, but nextBlock() hasn't been called yet (that happens when
+        -- BlockUploaded arrives). Processing them before nextBlock() would
+        -- corrupt the live index.
+        if pending_block_index is set
+           and msg is not BlockUploadedMessage:
+            buffer(msg)
+            return
+
+        if msg is ResolvedTxMessage:
+            -- Skip if already applied (e.g. resuming from block boundary,
+            -- or transition reusing follower's work).
+            -- Comparison is on tx_id (monotonically increasing Long), not
+            -- system_time (which can be set by the client and is not monotonic).
+            if live_index.latest_completed_tx?.tx_id >= msg.tx_id:
+                return
+            live_index.importTx(msg)
+            if msg.db_op is Attach:
+                database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
+            if msg.db_op is Detach:
+                database.catalog.detach(msg.db_op.db_name)
+            source_watchers.notify(msg.tx_id, result)
+
+        if msg is TriesAddedMessage:
+            requires: msg.storage_version == current_storage_version
+            requires: msg.storage_epoch == current_storage_epoch
+            -- addTries is idempotent: duplicate tries are ignored.
+            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+
+        if msg is BlockBoundaryMessage:
+            -- Enter pending mode. Subsequent messages (except BlockUploaded)
+            -- will be buffered by the guard above.
+            pending_block_index = msg.block_index
+
+        if msg is BlockUploadedMessage:
+            requires: msg.storage_version == current_storage_version
+            requires: msg.storage_epoch == current_storage_epoch
+            -- Skip if this block has already been processed.
+            if msg.block_index <= (block_catalog.current_block_index ?? -1):
+                pending_block_index = null
+                return
+            requires: msg.block_index == (block_catalog.current_block_index ?? -1) + 1
+            -- Process L0 tries bundled in this message.
+            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+            block_catalog.refresh(msg.block)
+            live_index.nextBlock()
+            CompactorSignalled()
+            pending_block_index = null
+            ReplayBuffered()
+
+        if msg is NoOpMessage:
+            -- No-op; used for fencing synchronization only.
+            pass
+}
+
+---- Rules: Follower Mode
+
+-- The follower subscribes to the replica log and dispatches each
+-- message through HandleReplicaMessage. This is its entire loop.
+-- It also notifies replica_watchers after each record for transition sync.
+
+rule FollowerProcessesMessage {
+    when: msg: ReplicaMessage consumed from database.replica_log
+    mode: log_processor.mode is Follower
+
+    ensures:
+        HandleReplicaMessage(msg)
+        replica_watchers.notify(msg.msg_id)
+}
+
+---- Rules: Compaction Orchestration
+
 -- The compactor runs asynchronously, triggered after block flushes.
--- Job selection and the merge algorithm are specified in compaction.allium;
--- this section handles triggering, message flow, and catalog registration.
+-- Job selection and the merge algorithm are specified in compaction.allium.
+-- The compactor writes L1+ TriesAdded to the source log (not the replica log).
+-- The leader forwards these to the replica log.
 
 rule CompactorWakesUp {
     when: CompactorSignalled()
@@ -438,68 +749,44 @@ rule CompactorWakesUp {
             StartCompactionJob(job)
 }
 
-rule CompactionJobCompletes {
+rule CompactionJobWritesOutput {
     when: StartCompactionJob(job)
 
     ensures:
         -- Data file uploaded first; meta file presence is the completion marker.
-        -- Append tries-added to source-log; processed inline by SourceLogProcessor.
-        let tries_added = TriesAddedMessage.created(tries: job.output_tries)
-        tries_added appended to database.source_log
+
+        -- Write TriesAdded to the source log.
+        -- The leader will forward to the replica log.
+        TriesAddedMessage.created(tries: job.output_tries) appended to database.source_log
 }
 
-
--- == Flush Timeout ==
---
--- If transactions have been accumulating without a block flush,
--- the leader sends itself a FlushBlock message.
-
-rule FlushTimeoutFires {
-    when: source_processor: SourceLogProcessor.last_flush_check + config.flush_timeout <= now
-
-    requires: database.mode == read_write
-    requires: live_index.has_data
-    requires: block_catalog.current_block_index unchanged since source_processor.last_flush_check
-
-    ensures:
-        FlushBlockMessage.created(
-            expected_block_idx: block_catalog.current_block_index
-        ) appended to database.source_log
+rule CompactionJobConfirmed {
+    -- The TriesAdded has round-tripped through the log and is now in the trie catalog.
+    -- Job selection naturally sees the updated catalog for the next cycle.
+    when: job.output_tries visible in trie_cat/trie_catalog
 }
 
-
--- == Query Serving ==
+---- Rules: Query Serving
 
 rule ClientOpensSnapshot {
     when: ClientOpensSnapshot(client, database)
 
     ensures:
-        -- A snapshot sees all committed transactions up to this point.
-        -- The snapshot is a consistent read of live index + block data.
         Snapshot.created(
             as_of: live_index.latest_completed_tx
         )
 }
 
-
--- == Error Handling ==
+---- Rules: Error Handling
 
 rule ProcessingErrorHaltsNode {
-    -- Any unrecoverable error during log processing is fatal.
-    -- The node is marked unhealthy; orchestration should restart it.
     when: ProcessingError(msg_id, error)
 
     ensures:
-        -- All pending watchers are notified of the error.
-        -- SourceLogProcessor stops permanently.
-        -- No partial state corruption: either a message is fully processed or not at all.
-        watchers.notify(msg_id, error)
         NodeMarkedUnhealthy()
 }
 
-------------------------------------------------------------
--- Surfaces
-------------------------------------------------------------
+---- Surfaces
 
 actor Client {
     identified_by: external session
@@ -512,10 +799,10 @@ surface TransactionSubmission {
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when db.mode == read_write
+            when log_processor.mode is Leader
 
     invariant: OrderedProcessing
-        -- Transactions are processed in the order they appear in the source log, not the order they were submitted.
+        -- Transactions are processed in the order they appear in the source log.
 }
 
 surface QueryAccess {
@@ -531,8 +818,8 @@ surface QueryAccess {
         -- It includes all transactions up to latest_completed_tx.
 }
 
-------------------------------------------------------------
--- Deferred Specifications
-------------------------------------------------------------
+---- Deferred Specifications
 
 deferred IndexTransaction           -- transaction resolution (put/delete/erase logic)
+deferred ResolveAttach              -- attach database resolution
+deferred ResolveDetach              -- detach database resolution
