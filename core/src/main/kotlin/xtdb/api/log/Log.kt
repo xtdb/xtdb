@@ -2,6 +2,9 @@
 
 package xtdb.api.log
 
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
@@ -13,10 +16,12 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.util.MsgIdUtil
 import xtdb.util.asPath
+import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -103,15 +108,18 @@ interface Log<M> : AutoCloseable {
         fun localLog(path: Path, configure: LocalLog.Factory.() -> Unit) = localLog(path).also(configure)
 
         @JvmStatic
-        fun <M> Log<M>.tailAll(
-            afterMsgId: MessageId,
-            processor: RecordProcessor<M>,
-        ): AutoCloseable {
-            val consumer = openConsumer()
-            val subscription = consumer.tailAll(afterMsgId, processor)
-            return AutoCloseable { subscription.close(); consumer.close() }
-        }
+        fun <M> Log<M>.tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
+            openConsumer().closeOnCatch { c ->
+                c.tailAll(afterMsgId, processor).closeOnCatch { subs ->
+                    Subscription {
+                        runBlocking {
+                            withTimeoutOrNull(5.seconds) { runInterruptible { subs.close() } }
+                        }
 
+                        c.close()
+                    }
+                }
+            }
     }
 
     interface Registration {

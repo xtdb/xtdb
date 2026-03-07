@@ -34,14 +34,14 @@ import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringMapWithEnvVarsSerde
 import xtdb.api.StringWithEnvVarSerde
-import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
-import xtdb.util.MsgIdUtil
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
+import xtdb.util.MsgIdUtil.afterMsgIdToOffset
+import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import java.time.Duration
-import java.time.Instant
+import java.time.Instant.ofEpochMilli
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -113,16 +113,16 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     }
 }
 
-private sealed interface GroupConsumerControl {
-    data class TailAll(val afterMsgId: MessageId, val processor: RecordProcessor<*>) : GroupConsumerControl
-    data object StopTailing : GroupConsumerControl
+private sealed interface ConsumerControl<out M> {
+    data class TailAll<M>(val afterMsgId: MessageId, val processor: Log.RecordProcessor<M>) : ConsumerControl<M>
+    data class StopTailing<M>(val onStop: CompletableDeferred<Unit>) : ConsumerControl<M>
 }
 
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
     coroutineContext: CoroutineContext = Dispatchers.Default
-) : Cluster {
+) : Log.Cluster {
     val producer = kafkaConfigMap.openProducer()
     val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
@@ -139,12 +139,11 @@ class KafkaCluster(
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
-    ) : Cluster.Factory<KafkaCluster> {
+    ) : Log.Cluster.Factory<KafkaCluster> {
 
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
-        fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -162,7 +161,6 @@ class KafkaCluster(
 
     private inner class KafkaLog<M>(
         private val codec: MessageCodec<M>,
-        private val clusterAlias: LogClusterAlias,
         private val topic: String,
         override val epoch: Int,
         private val groupId: String
@@ -177,18 +175,18 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
 
-        override fun appendMessage(message: M): CompletableFuture<MessageMetadata> =
+        override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> =
             scope.future {
-                CompletableDeferred<MessageMetadata>()
+                CompletableDeferred<Log.MessageMetadata>()
                     .also { res ->
                         producer.send(
                             ProducerRecord(topic, null, Unit, codec.encode(message))
                         ) { recordMetadata, e ->
                             if (e == null) res.complete(
-                                MessageMetadata(
+                                Log.MessageMetadata(
                                     epoch,
                                     recordMetadata.offset(),
-                                    Instant.ofEpochMilli(recordMetadata.timestamp())
+                                    ofEpochMilli(recordMetadata.timestamp())
                                 )
                             ) else res.completeExceptionally(e)
                         }
@@ -208,7 +206,7 @@ class KafkaCluster(
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
 
-        override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
+        override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer<M> {
             private val producer = KafkaProducer(
                 mapOf(
                     "enable.idempotence" to "true",
@@ -220,24 +218,24 @@ class KafkaCluster(
                 ByteArraySerializer()
             ).also { it.initTransactions() }
 
-            override fun openTx(): AtomicProducer.Tx<M> {
+            override fun openTx(): Log.AtomicProducer.Tx<M> {
                 producer.beginTransaction()
 
-                return object : AtomicProducer.Tx<M> {
-                    private val futures = mutableListOf<CompletableFuture<MessageMetadata>>()
+                return object : Log.AtomicProducer.Tx<M> {
+                    private val futures = mutableListOf<CompletableFuture<Log.MessageMetadata>>()
                     private var isOpen = true
 
-                    override fun appendMessage(message: M): CompletableFuture<MessageMetadata> {
+                    override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> {
                         check(isOpen) { "Transaction already closed" }
-                        val future = CompletableFuture<MessageMetadata>()
+                        val future = CompletableFuture<Log.MessageMetadata>()
                         futures.add(future)
                         producer.send(ProducerRecord(topic, null, Unit, codec.encode(message))) { recordMetadata, e ->
                             if (e == null) {
                                 future.complete(
-                                    MessageMetadata(
+                                    Log.MessageMetadata(
                                         epoch,
                                         recordMetadata.offset(),
-                                        Instant.ofEpochMilli(recordMetadata.timestamp())
+                                        ofEpochMilli(recordMetadata.timestamp())
                                     )
                                 )
                             } else {
@@ -274,141 +272,105 @@ class KafkaCluster(
             }
         }
 
-        private fun tailAll(
-            kafkaConsumer: KafkaConsumer<*, ByteArray>,
-            processor: RecordProcessor<M>,
-        ): Subscription {
-            val job = scope.launch {
-                kafkaConsumer.use { c ->
-                    runInterruptible(Dispatchers.IO) {
-                        while (true) {
-                            val records = try {
-                                c.poll(pollDuration).records(topic)
-                            } catch (_: InterruptException) {
-                                throw InterruptedException()
-                            }
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private inner class PollingConsumer(private val c: KafkaConsumer<*, ByteArray>) : Log.Consumer<M> {
 
-                            processor.processRecords(
-                                records.mapNotNull { record ->
-                                    codec.decode(record.value())
-                                        ?.let { msg ->
-                                            Log.Record(
-                                                epoch,
-                                                record.offset(),
-                                                Instant.ofEpochMilli(record.timestamp()),
-                                                msg
-                                            )
-                                        }
-                                }
-                            )
-                        }
+            private val tp = TopicPartition(topic, 0)
+            private val controlChannel = Channel<ConsumerControl<M>>()
+            private var currentProcessor: Log.RecordProcessor<M>? = null
+
+            private fun handleControl(msg: ConsumerControl<M>) {
+                when (msg) {
+                    is ConsumerControl.TailAll -> {
+                        currentProcessor = msg.processor
+                        val afterOffset = afterMsgIdToOffset(epoch, msg.afterMsgId)
+                        c.seek(tp, afterOffset + 1)
+                        c.resume(listOf(tp))
+                    }
+
+                    is ConsumerControl.StopTailing -> {
+                        c.pause(listOf(tp))
+                        currentProcessor = null
+                        msg.onStop.complete(Unit)
                     }
                 }
             }
 
-            return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
-        }
-
-        override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
-            override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
-                val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
-                val c = kafkaConfigMap.openConsumer()
-                TopicPartition(topic, 0).also { tp ->
-                    c.assign(listOf(tp))
-                    c.seek(tp, afterOffset + 1)
-                }
-                return tailAll(c, processor)
-            }
-
-            override fun close() {}
-        }
-
-        override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<M> {
-            val consumerConfig = kafkaConfigMap + mapOf("group.id" to groupId)
-
-            val c = consumerConfig.openConsumer()
-            val tp = TopicPartition(topic, 0)
-            val controlChannel = Channel<GroupConsumerControl>(Channel.UNLIMITED)
-
-            c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
-                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                    listener.onPartitionsRevoked(partitions.map { it.partition() })
-
-                // onPartitionsAssigned is called from the poll thread, so pause is safe here
-                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
-                    c.pause(partitions)
-                    listener.onPartitionsAssigned(partitions.map { it.partition() })
-                }
-
-                override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
-                    listener.onPartitionsLost(partitions.map { it.partition() })
-            })
-
-            val pollingJob = scope.launch(Dispatchers.IO) {
-                var currentProcessor: RecordProcessor<M>? = null
-
-                fun handleControl(msg: GroupConsumerControl) {
-                    when (msg) {
-                        is GroupConsumerControl.TailAll -> {
-                            @Suppress("UNCHECKED_CAST")
-                            currentProcessor = msg.processor as RecordProcessor<M>
-                            val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, msg.afterMsgId)
-                            c.seek(tp, afterOffset + 1)
-                            c.resume(listOf(tp))
-                        }
-                        is GroupConsumerControl.StopTailing -> {
-                            c.pause(listOf(tp))
-                            currentProcessor = null
-                        }
-                    }
-                }
-
+            private val pollingJob = scope.launch(Dispatchers.IO) {
                 while (isActive) {
                     select {
                         controlChannel.onReceive { msg -> handleControl(msg) }
 
                         onTimeout(0) {
-                            val records = runInterruptible {
-                                try {
+                            runInterruptible {
+                                val records = try {
                                     c.poll(pollDuration).records(topic)
+                                        .mapNotNull { rec ->
+                                            val msg = codec.decode(rec.value()) ?: return@mapNotNull null
+
+                                            Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg)
+                                        }
                                 } catch (_: InterruptException) {
                                     throw InterruptedException()
                                 }
-                            }
 
-                            currentProcessor?.processRecords(
-                                records.mapNotNull { record ->
-                                    codec.decode(record.value())
-                                        ?.let { msg ->
-                                            Log.Record(
-                                                epoch,
-                                                record.offset(),
-                                                Instant.ofEpochMilli(record.timestamp()),
-                                                msg
-                                            )
-                                        }
-                                }
-                            )
+                                currentProcessor?.processRecords(records)
+                            }
                         }
                     }
                 }
             }
 
-            return object : Log.Consumer<M> {
-                override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
-                    controlChannel.trySend(GroupConsumerControl.TailAll(afterMsgId, processor))
+            override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
+                runBlocking {
+                    controlChannel.send(ConsumerControl.TailAll(afterMsgId, processor))
 
-                    return Subscription {
-                        controlChannel.trySend(GroupConsumerControl.StopTailing)
+                    Log.Subscription {
+                        runBlocking {
+                            val ack = CompletableDeferred<Unit>()
+                            controlChannel.send(ConsumerControl.StopTailing(ack))
+                            ack.await()
+                        }
                     }
                 }
 
-                override fun close() {
-                    runBlocking { withTimeout(5.seconds) { pollingJob.cancelAndJoin() } }
+            override fun close() {
+                runBlocking {
+                    withTimeout(30.seconds) { pollingJob.cancelAndJoin() }
                     c.close()
                 }
             }
         }
+
+        override fun openConsumer(): Log.Consumer<M> =
+            kafkaConfigMap.openConsumer().closeOnCatch { c ->
+                val tp = listOf(TopicPartition(topic, 0))
+                c.assign(tp)
+                c.pause(tp)
+
+                PollingConsumer(c)
+            }
+
+        override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> =
+            kafkaConfigMap.plus(mapOf("group.id" to groupId))
+                .openConsumer()
+                .closeOnCatch { c ->
+                    c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                        // onPartitionsAssigned is called from the poll thread, so pause is safe here
+                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
+                            c.pause(partitions)
+                            listener.onPartitionsAssigned(partitions.map { it.partition() })
+                        }
+
+                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+
+                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
+                            listener.onPartitionsLost(partitions.map { it.partition() })
+                    })
+
+                    PollingConsumer(c)
+                }
 
         override fun close() = Unit
     }
@@ -423,7 +385,7 @@ class KafkaCluster(
         var autoCreateTopic: Boolean = true,
         var epoch: Int = 0,
         var groupId: String = "xtdb-$topic"
-    ) : Factory {
+    ) : Log.Factory {
 
         fun replicaCluster(replicaCluster: LogClusterAlias) = apply { this.replicaCluster = replicaCluster }
         fun replicaTopic(replicaTopic: String) = apply { this.replicaTopic = replicaTopic }
@@ -431,7 +393,7 @@ class KafkaCluster(
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
         fun groupId(groupId: String) = apply { this.groupId = groupId }
 
-        override fun openSourceLog(clusters: Map<LogClusterAlias, Cluster>): Log<SourceMessage> {
+        override fun openSourceLog(clusters: Map<LogClusterAlias, Log.Cluster>): Log<SourceMessage> {
             val clusterAlias = this.cluster
             val cluster = requireNotNull(clusters[clusterAlias] as? KafkaCluster) {
                 "missing Kafka cluster: '$clusterAlias'"
@@ -443,13 +405,13 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(SourceMessage.Codec, clusterAlias, topic, epoch, groupId)
+            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch, groupId)
         }
 
-        override fun openReadOnlySourceLog(clusters: Map<LogClusterAlias, Cluster>) =
+        override fun openReadOnlySourceLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
             ReadOnlyLog(openSourceLog(clusters))
 
-        override fun openReplicaLog(clusters: Map<LogClusterAlias, Cluster>): Log<ReplicaMessage> {
+        override fun openReplicaLog(clusters: Map<LogClusterAlias, Log.Cluster>): Log<ReplicaMessage> {
             val clusterAlias = this.replicaCluster
             val cluster = requireNotNull(clusters[clusterAlias] as? KafkaCluster) {
                 "missing Kafka cluster: '$clusterAlias'"
@@ -461,10 +423,10 @@ class KafkaCluster(
                 admin.ensureTopicExists(replicaTopic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(ReplicaMessage.Codec, clusterAlias, replicaTopic, epoch, groupId)
+            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch, groupId)
         }
 
-        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Cluster>) =
+        override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
             ReadOnlyLog(openReplicaLog(clusters))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
