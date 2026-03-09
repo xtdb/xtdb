@@ -15,6 +15,10 @@ import xtdb.util.warn
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
+@ParameterizedTest(name = "[iteration {0}]")
+@MethodSource("xtdb.SimulationTestBase#iterationSource")
+annotation class RepeatableSimulationTest
+
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class WithSeed(val seed: Int)

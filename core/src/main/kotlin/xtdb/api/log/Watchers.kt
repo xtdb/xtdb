@@ -2,6 +2,7 @@ package xtdb.api.log
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.future.future
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers.Event.*
@@ -45,7 +46,7 @@ class Watchers @JvmOverloads constructor(
                     for (watcher in watchers) {
                         if (watcher.msgId > event.msgId) break
                         watchers.remove(watcher)
-                        watcher.onDone.complete(event.result)
+                        watcher.onDone.complete(event.result?.takeIf { it.txId == watcher.msgId })
                     }
                 }
 
@@ -91,12 +92,20 @@ class Watchers @JvmOverloads constructor(
         }
     }
 
+    internal suspend fun notify0(msgId: MessageId, result: TransactionResult?) {
+        channel.send(Notify(msgId, result))
+    }
+
     fun notify(msgId: MessageId, result: TransactionResult?) {
-        channel.trySend(Notify(msgId, result)).getOrThrow()
+        runBlocking { notify0(msgId, result) }
+    }
+
+    internal suspend fun notify0(msgId: MessageId, exception: Throwable) {
+        channel.send(NotifyException(msgId, exception))
     }
 
     fun notify(msgId: MessageId, exception: Throwable) {
-        channel.trySend(NotifyException(msgId, exception)).getOrThrow()
+        runBlocking { notify0(msgId, exception) }
     }
 
     internal suspend fun await0(msgId: MessageId): TransactionResult? {
@@ -104,9 +113,12 @@ class Watchers @JvmOverloads constructor(
         if (currentMsgId >= msgId) return null
 
         val res = CompletableDeferred<TransactionResult?>()
-        val sendRes = channel.trySend(NewWatcher(Watcher(msgId, res)))
-        if (sendRes.isClosed) throw InterruptedException()
-        sendRes.getOrThrow()
+
+        try {
+            channel.send(NewWatcher(Watcher(msgId, res)))
+        } catch (_: ClosedSendChannelException) {
+            throw InterruptedException()
+        }
 
         return res.await()
     }

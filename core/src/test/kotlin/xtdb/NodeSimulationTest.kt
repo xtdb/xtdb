@@ -23,7 +23,6 @@ import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
 import xtdb.compactor.CompactorMockDriver
-import xtdb.compactor.RepeatableSimulationTest
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -69,10 +68,6 @@ data class MockDatabase(
 fun BufferPool.listTrieNames(tableRef: TableRef): List<String> =
     listAllObjects("tables/public\$${tableRef.tableName}/data/".asPath)
         .map { it.key.fileName.toString().removeSuffix(".arrow") }
-
-@ParameterizedTest(name = "[iteration {0}]")
-@MethodSource("xtdb.SimulationTestBase#iterationSource")
-annotation class RepeatableSimulationTest
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
@@ -426,7 +421,6 @@ class NodeSimulationTest : SimulationTestBase() {
         assertEquals(1, allTrieSets.distinct().size, "All systems should have converged to the same trie set")
         assertEquals(expectedL2Tries.toSet(), allTrieSets.first(), "Final state should only contain L2 tries")
     }
-
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 10, unit = TimeUnit.SECONDS)

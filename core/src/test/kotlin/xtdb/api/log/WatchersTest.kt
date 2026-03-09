@@ -53,33 +53,38 @@ class WatchersTest {
 
     @Test
     fun `handles ingestion stopped`() = runTest(timeout = 1.seconds) {
-        Watchers(3).use { watchers ->
-            val await4 = async(SupervisorJob()) { watchers.await0(4) }
+        supervisorScope {
+            Watchers(3).use { watchers ->
+                val await4 = async { watchers.await0(4) }
 
-            assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
+                assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
-            val ex = Exception("test")
-            watchers.notify(4, ex)
+                val ex = Exception("test")
+                watchers.notify(4, ex)
 
-            assertThrows<IngestionStoppedException> { await4.await() }
-                .also { assertEquals(ex, it.cause) }
+                assertThrows<IngestionStoppedException> { await4.await() }
+                    .also { assertEquals(ex, it.cause) }
 
-            assertThrows<IngestionStoppedException> { watchers.await0(5) }
-                .also { assertEquals(ex, it.cause) }
+                assertThrows<IngestionStoppedException> { watchers.await0(5) }
+                    .also { assertEquals(ex, it.cause) }
+            }
+
         }
     }
 
     @Test
     fun `closes watchers on close`() = runTest(timeout = 1.seconds) {
-        val (watchers, await4) = Watchers(3).use { watchers ->
-            val await4 = async(SupervisorJob()) { watchers.await0(4) }
+        supervisorScope {
+            val (watchers, await4) = Watchers(3).use { watchers ->
+                val await4 = async { watchers.await0(4) }
 
-            assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
+                assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
-            Pair(watchers, await4)
+                Pair(watchers, await4)
+            }
+
+            assertThrows<InterruptedException> { await4.await() }
+            assertThrows<InterruptedException> { watchers.await0(5) }
         }
-
-        assertThrows<InterruptedException> { await4.await() }
-        assertThrows<InterruptedException> { watchers.await0(5) }
     }
 }

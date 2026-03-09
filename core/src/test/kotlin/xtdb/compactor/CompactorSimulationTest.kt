@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
+import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.L0TrieKeys
 import xtdb.SimulationTestUtils.Companion.L1TrieKeys
@@ -239,10 +240,6 @@ annotation class WithCompactorDriverConfig(
     val baseTime: String = "2020-01-01T00:00:00Z",
     val blocksPerWeek: Long = 14
 )
-
-@ParameterizedTest(name = "[iteration {0}]")
-@MethodSource("xtdb.SimulationTestBase#iterationSource")
-annotation class RepeatableSimulationTest
 
 class DriverConfigExtension : BeforeEachCallback {
     override fun beforeEach(context: ExtensionContext) {
