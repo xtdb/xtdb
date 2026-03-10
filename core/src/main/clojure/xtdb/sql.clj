@@ -1281,11 +1281,13 @@
     (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain ctx))))
           matches (find-cols scope chain)]
       (when-let [sym (case (count matches)
-                       0 (do (add-warning! env (->ColumnNotFound chain))
-                             (when !unresolved-cr
-                               (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
-                                 (.add !unresolved-cr sym)
-                                 sym)))
+                       0 (if (= chain '(user))
+                           '(current-user)
+                           (do (add-warning! env (->ColumnNotFound chain))
+                               (when !unresolved-cr
+                                 (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
+                                   (.add !unresolved-cr sym)
+                                   sym))))
                        1 (first matches)
                        (add-err! env (->AmbiguousColumnReference chain))) ]
         (some-> !ob-col-refs (.add sym))

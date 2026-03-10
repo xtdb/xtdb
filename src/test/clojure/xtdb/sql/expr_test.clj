@@ -1571,6 +1571,45 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 3}]
              (xt/q tu/*node* "SELECT docs.x FROM docs WHERE has_table_privilege('docs', 'select') ")))))
 
+(t/deftest test-bare-user-keyword
+  (t/testing "bare USER falls back to CURRENT_USER when no column in scope"
+    (t/is (= [{:u "xtdb"}]
+             (xt/q tu/*node* "SELECT USER AS u"))))
+
+  (t/testing "bare USER resolves as column reference when column exists"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs (_id, user) VALUES (1, 'alice')"]])
+    (t/is (= [{:user "alice"}]
+             (xt/q tu/*node* "SELECT user FROM docs"))))
+
+  (t/testing "bare USER falls back to CURRENT_USER when table has no user column"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id, name) VALUES (1, 'alice')"]])
+    (t/is (= [{:u "xtdb"}]
+             (xt/q tu/*node* "SELECT user AS u FROM foo"))))
+
+  (t/testing "bare USER fallback works with GROUP BY"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT user AS user FROM foo GROUP BY user"))))
+
+  (t/testing "bare USER fallback in subquery"
+    (t/is (= [{:u "xtdb"}]
+             (xt/q tu/*node* "SELECT user AS u FROM (SELECT 1 AS x) AS sub"))))
+
+  (t/testing "bare USER resolves to column in JOIN when column exists on one side"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO bar (_id, val) VALUES (1, 'baz')"]])
+    (t/is (= [{:user "alice"}]
+             (xt/q tu/*node* "SELECT user FROM docs JOIN bar ON docs._id = bar._id"))))
+
+  (t/testing "bare USER fallback in WHERE clause"
+    (t/is (= [{:name "alice"}]
+             (xt/q tu/*node* "SELECT name FROM foo WHERE user = 'xtdb'"))))
+
+  (t/testing "bare USER fallback in CTE"
+    (t/is (= [{:u "xtdb"}]
+             (xt/q tu/*node* "WITH t AS (SELECT 1 AS x) SELECT user AS u FROM t"))))
+
+  (t/testing "bare USER fallback in UNION with column resolution"
+    (t/is (= #{{:user "alice"} {:user "xtdb"}}
+             (set (xt/q tu/*node* "SELECT user FROM docs UNION ALL SELECT user AS user FROM foo"))))))
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
     (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
