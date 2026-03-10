@@ -39,6 +39,11 @@
     (t/is (= [{:x 2}]
              (xt/q tu/*node* "SELECT array_length(string_to_array('a,b', ','), 1) AS x")))))
 
+(t/deftest array-upper-test
+  (t/testing "array_upper returns the upper bound (same as length for 1-indexed arrays)"
+    (t/is (= [{:x 2}]
+             (xt/q tu/*node* "SELECT array_upper(string_to_array('a,b', ','), 1) AS x")))))
+
 (t/deftest parse-ident-test
   (t/testing "parse_ident splits a qualified identifier"
     (t/is (= [{:x ["public" "foo"]}]

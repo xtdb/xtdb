@@ -2074,6 +2074,16 @@
                                                {:dim ~dim})))
                      (int 1)))})
 
+(defmethod codegen-call [:array_upper :list :i64] [_]
+  {:return-type #xt/type :i32
+   :->call-code (fn [[arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_UPPER for dimension != 1"
+                                               {:dim ~dim})))
+                     (.size ~arr)))})
+
 (defmethod codegen-call [:array_length :list :i64] [_]
   {:return-type #xt/type :i32
    :->call-code (fn [[arr dim]]
