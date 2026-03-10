@@ -117,7 +117,7 @@
                             :status :open}]]
 
                          (when seller-id
-                           [[:sql "UPDATE user SET balance = balance - 1 WHERE _id = ? "
+                           [[:sql "UPDATE \"user\" SET balance = balance - 1 WHERE _id = ? "
                              [seller-id]]])))))
 
 (defn random-item
@@ -243,7 +243,7 @@
 (defn get-user-info [node user-id {:keys [seller-items? buyer-items? feedback?]}]
   [(xt/q node ["SELECT u._id user_id, rating, created, balance,
                        sattr0, sattr1, sattr2, sattr3, sattr4, r.name AS region
-                FROM user u JOIN region r ON (u.region_id = r._id)
+                FROM \"user\" u JOIN region r ON (u.region_id = r._id)
                 WHERE u._id = ?"
                user-id])
 
@@ -272,7 +272,7 @@
                          u._id user_id, u.rating, u.sattr0, u.sattr1
                   FROM item_feedback AS if
                     JOIN item i ON (if.item_id = i._id)
-                    JOIN user u ON (i.user_id = u._id)
+                    JOIN \"user\" u ON (i.user_id = u._id)
                   WHERE if.buyer_id = ?
                   ORDER BY if.date DESC
                   LIMIT 10"

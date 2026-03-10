@@ -34,8 +34,8 @@ Hello World!
 statement ok
 INSERT INTO people (_id, name, friends)
 	VALUES (5678, 'Sarah',
-			[{user: 'Dan'},
-			 {user: 'Kath'}])
+			[{"user": 'Dan'},
+			 {"user": 'Kath'}])
 
 query T nosort
 SELECT people.friends FROM people
@@ -49,7 +49,7 @@ SELECT people.friends[2] FROM people
 
 #Field Access works here but not in the general case, not on the a5
 query T nosort
-SELECT people.friends[2].user FROM people
+SELECT people.friends[2]."user" FROM people
 ----
 Kath
 

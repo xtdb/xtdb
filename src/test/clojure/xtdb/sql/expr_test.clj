@@ -1032,9 +1032,8 @@
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
 (t/deftest test-current-setting-server-version-num
-  (with-redefs [xtdb.expression/xtdb-server-version (fn [] "2.0.4-SNAPSHOT")]
-    (t/is (= [{:v 2000004}]
-             (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v"))))
+  (t/is (= [{:v "160000"}]
+           (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v")))
 
   (t/is (anomalous? [:unsupported ::expr/unsupported-setting]
                     (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
