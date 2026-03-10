@@ -1556,6 +1556,40 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{:x 3}]
              (xt/q tu/*node* "SELECT docs.x FROM docs WHERE has_table_privilege('docs', 'select') ")))))
 
+(t/deftest test-postgres-compat-functions
+  (t/is (= [{:x "foo"}]
+           (xt/q tu/*node* "SELECT quote_ident('foo') AS x"))
+        "quote_ident returns its input")
+
+  (t/is (= [{:x ["public" "foo"]}]
+           (xt/q tu/*node* "SELECT parse_ident('public.foo') AS x"))
+        "parse_ident splits a qualified identifier")
+
+  (t/is (= [{:x ["a" " b" " c"]}]
+           (xt/q tu/*node* "SELECT string_to_array('a, b, c', ',') AS x"))
+        "string_to_array splits by delimiter")
+
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT array_lower(string_to_array('a,b', ','), 1) AS x"))
+        "array_lower returns 1 for dimension 1")
+
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* "SELECT array_length(string_to_array('a,b', ','), 1) AS x"))
+        "array_length returns the length of a list")
+
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* "SELECT array_upper(string_to_array('a,b', ','), 1) AS x"))
+        "array_upper returns the upper bound")
+
+  (t/is (= [{:sp "public"}]
+           (xt/q tu/*node* "SELECT current_setting('search_path') AS sp"))
+        "current_setting('search_path') returns public"))
+
+(t/deftest test-bare-user-keyword
+  (t/is (= [{:u "xtdb"}]
+           (xt/q tu/*node* "SELECT USER AS u"))
+        "bare USER is a synonym for CURRENT_USER per SQL spec"))
+
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
     (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))
