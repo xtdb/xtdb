@@ -143,7 +143,7 @@ identifier
         | 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ERASE'
         | 'SETTING'
         | 'ROLE'
-        | 'USER' | 'PASSWORD'
+        | 'PASSWORD'
         | 'VARBINARY' | 'BYTEA'
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
@@ -345,7 +345,7 @@ exprPrimary
     | 'REPLACE' '(' source=expr ',' pattern=expr ',' replacement=expr ')' # ReplaceFunction
     | 'REGEXP_REPLACE' '(' source=expr ',' pattern=characterString ',' replacement=characterString (',' start=integerLiteral ( ',' n=integerLiteral )? )? (',' flags=characterString)? ')' # RegexpReplaceFunction
 
-    | (identifier '.')? 'CURRENT_USER' # CurrentUserFunction
+    | (identifier '.')? ('CURRENT_USER' | 'USER') # CurrentUserFunction
     | (identifier '.')? 'CURRENT_SCHEMA' ('(' ')')? # CurrentSchemaFunction
     | (identifier '.')? 'CURRENT_SCHEMAS' '(' expr ')' # CurrentSchemasFunction
     | (identifier '.')? 'CURRENT_CATALOG' ('(' ')')? # CurrentCatalogFunction
