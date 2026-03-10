@@ -148,6 +148,9 @@ identifier
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
+        | 'BIGINT' | 'BOOLEAN' | 'CHAR' | 'DATE' | 'DOUBLE' | 'FLOAT'
+        | 'INT' | 'INTEGER' | 'INTERVAL' | 'NUMERIC' | 'REAL' | 'SMALLINT'
+        | 'TEXT' | 'TIME' | 'TIMESTAMP' | 'TIMESTAMPTZ' | 'VARCHAR'
         | METADATA
         | setFunctionType )
         # RegularIdentifier
@@ -155,11 +158,6 @@ identifier
     ;
 
 columnName : identifier ;
-
-columnLabel
-    : identifier
-    | 'CURRENT_USER'
-    ;
 
 // §6 Scalar Expressions
 
@@ -655,6 +653,63 @@ excludeClause
 
 derivedColumn : expr asClause? ;
 asClause : 'AS'? columnLabel ;
+
+// column alias label — identifier plus every keyword token, so any keyword can be a column alias
+columnLabel
+    : identifier
+    | 'ALL' | 'ALTER' | ANALYZE | 'AND' | 'ANY' | 'ARRAY_AGG' | 'ARRAY' | 'AS' | 'ASC'
+    | 'ASSERT' | 'ASYMMETRIC' | ASYNC | 'AT' | 'AVG' | AWAIT_TOKEN
+    | 'BEGIN' | 'BEGIN_FRAME' | 'BEGIN_PARTITION' | 'BETWEEN' | 'BIGINT' | 'BOOL_AND' | 'BOOL_OR'
+    | 'BOOLEAN' | 'BOTH' | 'BY'
+    | 'CASE' | 'CAST' | 'CENTURY' | 'CHAR_LENGTH' | 'CHAR' | 'CHARACTER_LENGTH' | 'CHARACTERS'
+    | 'CHARACTERISTICS' | 'CLOCK_TIME' | 'COALESCE' | 'COMMIT' | 'CONTAINS' | 'COUNT' | 'CREATE'
+    | 'CROSS' | 'CUME_DIST'
+    | 'CURRENT_CATALOG' | 'CURRENT_DATE' | 'CURRENT_ROW' | 'CURRENT_SCHEMA' | 'CURRENT_SCHEMAS'
+    | 'CURRENT_SETTING' | 'CURRENT_TIME' | 'CURRENT_TIMESTAMP' | 'CURRENT_USER' | 'CURRENT'
+    | 'DATE_BIN' | 'DATE_TRUNC' | 'DATE' | 'DAY' | 'DEC' | 'DECADE' | 'DECIMAL' | 'DEFAULT'
+    | 'DENSE_RANK' | 'DESC' | 'DISTINCT' | 'DOUBLE' | 'DOW' | 'DOY' | 'DURATION'
+    | 'ELSE' | 'END_FRAME' | 'END_PARTITION' | 'EPOCH' | 'EQUALS' | 'ESCAPE' | 'EVERY'
+    | 'EXCEPT' | 'EXCLUDE' | 'EXECUTE' | 'EXISTS' | 'EXPLAIN' | 'EXTRACT'
+    | 'FALSE' | 'FETCH' | 'FIRST_VALUE' | 'FIRST' | 'FLAG' | 'FLOAT' | 'FOLLOWING'
+    | 'FOR' | 'FRAME_ROW' | 'FROM' | 'FULL'
+    | 'GENERATE_SERIES' | 'GROUP' | 'GROUPS'
+    | 'HAS_ANY_COLUMN_PRIVILEGE' | 'HAS_SCHEMA_PRIVILEGE' | 'HAS_TABLE_PRIVILEGE'
+    | 'HAVING' | 'HOUR'
+    | 'IGNORE' | 'IMMEDIATELY' | 'IN' | 'INNER' | 'INT' | 'INTEGER' | 'INTERSECT' | 'INTERVAL'
+    | 'INTO' | 'IS' | 'ISODOW' | 'ISOLATION'
+    | 'JOIN'
+    | 'KEYWORD'
+    | 'LAG' | 'LAGS' | 'LAST_VALUE' | 'LAST' | 'LATERAL' | 'LEAD' | 'LEADING' | 'LEADS'
+    | 'LEFT' | 'LEVEL' | 'LIKE_REGEX' | 'LIKE' | 'LIMIT' | 'LOCAL'
+    | LOCAL_DATE | LOCAL_TIME | LOCAL_TIMESTAMP
+    | MATERIALIZED | 'MAX' | METADATA | 'MICROSECOND' | 'MILLENNIUM' | 'MILLISECOND' | 'MIN'
+    | 'MINUTE' | 'MONTH'
+    | 'NANOSECOND' | 'NATURAL' | 'NEST_MANY' | 'NEST_ONE' | 'NEXT' | 'NO' | NONE | 'NOT' | 'NOW'
+    | 'NTH_VALUE' | 'NTILE' | 'NULL' | 'NULLIF' | 'NULLS' | 'NUMERIC'
+    | 'OBJECT' | 'OCTETS' | 'OF' | OFF | 'OFFSET' | 'ON' | 'ONLY' | 'OR' | 'ORDER'
+    | 'ORDINALITY' | 'OTHERS' | 'OUTER' | 'OVER' | 'OVERLAPS' | 'OVERLAY'
+    | 'PARTITION' | PATCH | 'PERCENTILE_CONT' | 'PERCENTILE_DISC' | 'PERCENT_RANK' | 'PERIOD'
+    | '_PG_EXPANDARRAY' | 'PG_GET_EXPR' | 'PG_GET_INDEXDEF' | 'PG_GET_USERBYID'
+    | PG_SLEEP | PG_SLEEP_FOR | 'PG_TABLE_IS_VISIBLE'
+    | 'PLACING' | 'PORTION' | 'POSITION' | 'PRECEDES' | 'PRECEDING' | 'PRECISION' | PREPARE
+    | 'QUARTER'
+    | 'RANGE_BINS' | 'RANGE' | 'RANK' | 'READ' | 'REAL' | 'RECORD' | 'RECORDS'
+    | 'RECURSIVE' | 'REGCLASS' | 'REGEXP_REPLACE' | 'REGPROC' | 'RENAME' | 'REPEATABLE'
+    | 'REPLACE' | 'RESPECT' | 'RETURNING' | 'RIGHT' | 'ROLLBACK' | 'ROW_NUMBER' | 'ROW' | 'ROWS'
+    | 'SECOND' | 'SERIALIZABLE' | SESSION | 'SET' | SHOW | 'SMALLINT' | 'SNAPSHOT_TIME'
+    | 'SNAPSHOT_TOKEN' | 'SOME' | 'STDDEV_POP' | 'STDDEV_SAMP' | STDIN | 'STRICTLY'
+    | 'SUBSTRING' | 'SUCCEEDS' | 'SUM' | 'SYMMETRIC'
+    | 'TEXT' | 'THEN' | 'TIES' | 'TIME' | 'TIMESTAMP' | 'TIMESTAMPTZ' | 'TIMEZONE_HOUR'
+    | 'TIMEZONE_MINUTE' | 'TO' | 'TRAILING' | 'TRANSACTION' | 'TRIM_ARRAY' | 'TRIM' | 'TRUE'
+    | 'TSTZRANGE'
+    | 'UNBOUNDED' | 'UNION' | 'UNKNOWN' | 'UNNEST' | 'URI_FRAGMENT' | 'URI_HOST' | 'URI_PATH'
+    | 'URI_PORT' | 'URI_QUERY' | 'URI_SCHEME' | 'URI_USER_INFO' | 'USER' | 'USING' | 'UUID'
+    | 'VALUE_OF' | 'VALUES' | 'VAR_POP' | 'VAR_SAMP' | 'VARCHAR'
+    | 'WEEK' | 'WHEN' | 'WHERE' | 'WINDOW' | 'WITH' | 'WITHIN' | 'WITHOUT' | 'WRITE'
+    | 'XTQL'
+    | 'YEAR'
+    | 'ZONE'
+    ;
 
 /// §7.13 <query expression>
 

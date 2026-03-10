@@ -3237,3 +3237,278 @@ UNION ALL
 
   (t/is (= [{:x "a", :xt/id 1} {:x "b", :xt/id 2} {:x "d", :xt/id 4}]
            (xt/q tu/*node* "SELECT _id, x FROM foo WHERE _id = 1 OR _id = 4 OR _id = 2 ORDER BY _id"))))
+
+(t/deftest reserved-keywords-as-column-aliases
+  (t/testing "aliasKeyword: safe as bare aliases (without AS)"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT CURRENT_USER user")))
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT 1 time")))
+    (t/is (= [{:timestamp 1}]
+             (xt/q tu/*node* "SELECT 1 timestamp")))
+    (t/is (= [{:date 1}]
+             (xt/q tu/*node* "SELECT 1 date")))
+    (t/is (= [{:integer 1}]
+             (xt/q tu/*node* "SELECT 1 integer")))
+    (t/is (= [{:text "hello"}]
+             (xt/q tu/*node* "SELECT 'hello' text")))
+    (t/is (= [{:boolean true}]
+             (xt/q tu/*node* "SELECT true boolean"))))
+
+  (t/testing "aliasKeyword: also work with explicit AS"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT USER AS user")))
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT 1 AS time")))
+    (t/is (= [{:date 1}]
+             (xt/q tu/*node* "SELECT 1 AS date"))))
+
+  (t/testing "clause-starting keywords work with explicit AS"
+    (t/is (= [{:from 1}]
+             (xt/q tu/*node* "SELECT 1 AS from")))
+    (t/is (= [{:where 1}]
+             (xt/q tu/*node* "SELECT 1 AS where")))
+    (t/is (= [{:order 1}]
+             (xt/q tu/*node* "SELECT 1 AS order")))
+    (t/is (= [{:limit 1}]
+             (xt/q tu/*node* "SELECT 1 AS limit")))
+    (t/is (= [{:offset 1}]
+             (xt/q tu/*node* "SELECT 1 AS offset"))))
+
+  (t/testing "identifier keywords still work as bare aliases"
+    (t/is (= [{:version 1}]
+             (xt/q tu/*node* "SELECT 1 version"))))
+
+  (t/testing "expression-continuing keywords as bare aliases"
+    (t/is (= [{:not 1}]
+             (xt/q tu/*node* "SELECT 1 not"))
+          "NOT as bare alias")
+    (t/is (= [{:in 1}]
+             (xt/q tu/*node* "SELECT 1 in"))
+          "IN as bare alias")
+    (t/is (= [{:between 1}]
+             (xt/q tu/*node* "SELECT 1 between"))
+          "BETWEEN as bare alias")
+    (t/is (= [{:like 1}]
+             (xt/q tu/*node* "SELECT 1 like"))
+          "LIKE as bare alias")
+    (t/is (= [{:is 1}]
+             (xt/q tu/*node* "SELECT 1 is"))
+          "IS as bare alias")
+    (t/is (= [{:and 1}]
+             (xt/q tu/*node* "SELECT 1 and"))
+          "AND as bare alias")
+    (t/is (= [{:or 1}]
+             (xt/q tu/*node* "SELECT 1 or"))
+          "OR as bare alias"))
+
+  (t/testing "keyword expression followed by keyword alias"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT user user"))
+          "USER expr then USER alias"))
+
+  (t/testing "multiple bare keyword aliases in select list"
+    (t/is (= [{:time 1, :date 2}]
+             (xt/q tu/*node* "SELECT 1 time, 2 date"))))
+
+  (t/testing "bare alias after complex expressions"
+    (t/is (= [{:time 3}]
+             (xt/q tu/*node* "SELECT 1 + 2 time"))
+          "alias after binary expression")
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT CASE WHEN true THEN 1 END time"))
+          "alias after CASE expression"))
+
+  (t/testing "literal keywords as bare aliases"
+    (t/is (= [{:null 1}]
+             (xt/q tu/*node* "SELECT 1 null"))
+          "NULL as bare alias")
+    (t/is (= [{:true 1}]
+             (xt/q tu/*node* "SELECT 1 true"))
+          "TRUE as bare alias")
+    (t/is (= [{:false 1}]
+             (xt/q tu/*node* "SELECT 1 false"))
+          "FALSE as bare alias"))
+
+  (t/testing "keyword aliases referenceable in ORDER BY"
+    (t/is (= [{:time 2} {:time 1}]
+             (xt/q tu/*node* "SELECT x AS time FROM (VALUES (1), (2)) AS t(x) ORDER BY time DESC"))))
+
+  (t/testing "keyword aliases referenceable in GROUP BY"
+    (t/is (= [{:time "a", :cnt 2} {:time "b", :cnt 1}]
+             (xt/q tu/*node* "SELECT x AS time, COUNT(*) AS cnt FROM (VALUES ('a'), ('a'), ('b')) AS t(x) GROUP BY time ORDER BY cnt DESC"))))
+
+  (t/testing "data type keywords still work in their type roles"
+    (t/is (= [1] (mapv (comp val first) (xt/q tu/*node* "SELECT CAST(1 AS integer)")))
+          "CAST with data type keyword still works")
+    (t/is (= [{:xt/column-1 #xt/date "2024-01-01"}]
+             (xt/q tu/*node* "SELECT DATE '2024-01-01'"))
+          "DATE literal syntax still works")
+    (t/is (= [{:xt/column-1 #xt/date-time "2024-01-01T00:00:00"}]
+             (xt/q tu/*node* "SELECT TIMESTAMP '2024-01-01T00:00:00'"))
+          "TIMESTAMP literal syntax still works")
+    (t/is (= [{:xt/column-1 #xt/time "12:00:00"}]
+             (xt/q tu/*node* "SELECT TIME '12:00:00'"))
+          "TIME literal syntax still works")))
+
+(defn- sql-identifier->clojure-keyword [s]
+  "Convert a SQL identifier string to a Clojure keyword, replacing underscores with dashes.
+   Identifiers starting with _ get prefixed with 'xt/' namespace."
+  (if (str/starts-with? s "_")
+    (keyword "xt" (str/replace (subs s 1) "_" "-"))
+    (keyword (str/replace s "_" "-"))))
+
+
+(defn- extract-rule-keywords
+  "Extract keyword tokens from a named rule in the ANTLR grammar text.
+   Returns a set of lowercase keyword strings.
+   Parses both quoted tokens like 'KEYWORD' and unquoted lexer token references like METADATA."
+  [grammar-text rule-name]
+  (let [;; find the rule body between the rule name and the terminating semicolon
+        rule-pattern (re-pattern (str "(?m)^" rule-name "\\s*\\n([^;]+);"))
+        rule-body (second (re-find rule-pattern grammar-text))
+        ;; extract quoted keywords: 'SOME_KEYWORD'
+        quoted (set (map second (re-seq #"'([A-Z_][A-Z_0-9]*)'" rule-body)))
+        ;; extract unquoted uppercase token references: SOME_TOKEN
+        ;; these are lexer token refs that aren't wrapped in quotes
+        unquoted (set (map first (re-seq #"\b([A-Z][A-Z_0-9]*)\b" rule-body)))
+        ;; filter out known non-keyword references
+        non-keywords #{"REGULAR_IDENTIFIER" "DELIMITED_IDENTIFIER" "ASTERISK"
+                       "UNSIGNED_INTEGER" "ALL" "DISTINCT" "NOT" "ASYMMETRIC" "SYMMETRIC"}]
+    (->> (into quoted unquoted)
+         (remove non-keywords)
+         (map str/lower-case)
+         set)))
+
+(t/deftest systematic-keyword-alias-test
+  ;; Extract keywords directly from the grammar so this test stays in sync automatically.
+  (let [grammar-text (slurp "core/src/main/antlr/xtdb/antlr/Sql.g4")
+        set-fn-keywords (extract-rule-keywords grammar-text "setFunctionType")
+        identifier-keywords (into (extract-rule-keywords grammar-text "identifier")
+                                  set-fn-keywords)
+        ;; columnLabel = identifier | <keyword tokens> — extract the non-identifier keywords
+        column-label-keywords (disj (extract-rule-keywords grammar-text "columnLabel")
+                                    "identifier")]
+
+    (t/testing "identifier keywords work with explicit AS"
+      (doseq [kw (sort identifier-keywords)]
+        (t/testing (str "SELECT 1 AS " kw)
+          (let [result (xt/q tu/*node* (str "SELECT 1 AS " kw))]
+            (t/is (= 1 (get (first result) (sql-identifier->clojure-keyword kw)))
+                  (str "identifier keyword '" kw "' should work with AS"))))))
+
+    (t/testing "columnLabel keywords work as bare aliases"
+      (doseq [kw (sort column-label-keywords)]
+        (t/testing (str "SELECT 1 " kw " (bare)")
+          (let [result (xt/q tu/*node* (str "SELECT 1 " kw))]
+            (t/is (some? result)
+                  (str "columnLabel keyword '" kw "' should parse as bare alias"))))))
+
+    (t/testing "columnLabel keywords work with explicit AS"
+      (doseq [kw (sort column-label-keywords)]
+        (t/testing (str "SELECT 1 AS " kw)
+          (let [result (xt/q tu/*node* (str "SELECT 1 AS " kw))]
+            (t/is (= 1 (get (first result) (sql-identifier->clojure-keyword kw)))
+                  (str "columnLabel keyword '" kw "' should work with AS"))))))
+
+    (t/testing "keywords retain their structural roles outside alias position"
+      (xt/execute-tx tu/*node* [[:sql "INSERT INTO t1 (_id) VALUES (1)"]
+                                [:sql "INSERT INTO t2 (_id) VALUES (1)"]])
+
+      (t/testing "join keywords still start joins"
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 JOIN t2 ON t1._id = t2._id"))
+              "JOIN starts a join, not an alias")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 LEFT JOIN t2 ON t1._id = t2._id"))
+              "LEFT starts a left join")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 RIGHT JOIN t2 ON t1._id = t2._id"))
+              "RIGHT starts a right join")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 FULL JOIN t2 ON t1._id = t2._id"))
+              "FULL starts a full join")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 CROSS JOIN t2"))
+              "CROSS starts a cross join")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 INNER JOIN t2 ON t1._id = t2._id"))
+              "INNER starts an inner join")
+        (t/is (= [{:xt/id 1}]
+                  (xt/q tu/*node* "SELECT t1._id FROM t1 NATURAL JOIN t2"))
+              "NATURAL starts a natural join"))
+
+      (t/testing "operators still work as operators"
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 1 IN (1, 2)"))
+              "IN works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 1 BETWEEN 0 AND 2"))
+              "BETWEEN works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 1 = 1 AND 2 = 2"))
+              "AND works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 1 = 1 OR 2 = 3"))
+              "OR works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE NOT false"))
+              "NOT works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 1 IS NOT NULL"))
+              "IS works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE 'foo' LIKE 'f%'"))
+              "LIKE works as operator")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 WHERE EXISTS (SELECT 1)"))
+              "EXISTS works as operator"))
+
+      (t/testing "CASE/WHEN/THEN/ELSE still work as control flow"
+        (t/is (= [{:x 1}]
+                  (xt/q tu/*node* "SELECT CASE WHEN true THEN 1 ELSE 2 END AS x"))
+              "CASE expression works"))
+
+      (t/testing "clause-start keywords still start clauses"
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 FROM (VALUES (1)) AS t(x)"))
+              "FROM starts a from clause")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 FROM (VALUES (1)) AS t(x) WHERE true"))
+              "WHERE starts a where clause")
+        (t/is (= [{:x 1}]
+                  (xt/q tu/*node* "SELECT x FROM (VALUES (1)) AS t(x) GROUP BY x"))
+              "GROUP starts a group-by clause")
+        (t/is (= [{:x 1}]
+                  (xt/q tu/*node* "SELECT x FROM (VALUES (1)) AS t(x) ORDER BY x"))
+              "ORDER starts an order-by clause")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 FROM (VALUES (1)) AS t(x) LIMIT 1"))
+              "LIMIT starts a limit clause")
+        (t/is (= [{:xt/column-1 1}]
+                  (xt/q tu/*node* "SELECT 1 FROM (VALUES (1)) AS t(x) OFFSET 0"))
+              "OFFSET starts an offset clause")
+        (t/is (some? (xt/q tu/*node* "SELECT 1 UNION SELECT 2"))
+              "UNION starts a set operation")
+        (t/is (some? (xt/q tu/*node* "SELECT 1 INTERSECT SELECT 1"))
+              "INTERSECT starts a set operation")
+        (t/is (some? (xt/q tu/*node* "SELECT 1 EXCEPT SELECT 2"))
+              "EXCEPT starts a set operation"))
+
+      (t/testing "identifier keywords work as aliases referenceable in ORDER BY and GROUP BY"
+        (doseq [[kw-name kw] [["time" "time"] ["date" "date"] ["boolean" "boolean"]
+                               ["integer" "integer"] ["timestamp" "timestamp"]]]
+          (t/testing (str kw-name " in ORDER BY")
+            (t/is (= [{(keyword kw) 2} {(keyword kw) 1}]
+                      (xt/q tu/*node* (str "SELECT x AS " kw " FROM (VALUES (1), (2)) AS t(x) ORDER BY " kw " DESC")))
+                  (str kw-name " alias referenceable in ORDER BY")))
+          (t/testing (str kw-name " in GROUP BY")
+            (t/is (some? (xt/q tu/*node* (str "SELECT x AS " kw ", COUNT(*) AS cnt FROM (VALUES ('a'), ('a'), ('b')) AS t(x) GROUP BY " kw)))
+                  (str kw-name " alias referenceable in GROUP BY")))))
+
+      (t/testing "clause-starting keyword aliases are NOT referenceable unquoted in ORDER BY"
+        (doseq [kw ["having" "from" "where" "order" "group" "limit" "offset"]]
+          (t/testing (str kw " in ORDER BY should fail")
+            (t/is (thrown? Exception
+                          (xt/q tu/*node* (str "SELECT 1 AS " kw " ORDER BY " kw)))
+                  (str "unquoted " kw " should not resolve in ORDER BY"))))))))

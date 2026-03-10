@@ -848,8 +848,8 @@
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
                                                                                                    (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                         out-col-name (.columnLabel (.asClause rename-pair))]
-                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                                                                         out-col-name (identifier-sym (.asClause rename-pair))]
+                                                                                                     (MapEntry/create sym (->col-sym out-col-name))))
                                                                                                  (into {}))]
                                                                                 (->> table-cols
                                                                                      (into [] (map-indexed (fn [col-idx sym]
@@ -864,10 +864,10 @@
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnLabel (.asClause rename-pair))
+                                                                 out-col-name (identifier-sym (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
-                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                             (MapEntry/create sym (->col-sym out-col-name))))
                                                          (into {}))
 
                                             excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)
