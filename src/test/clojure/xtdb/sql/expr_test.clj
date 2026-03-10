@@ -1032,9 +1032,8 @@
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
 (t/deftest test-current-setting-server-version-num
-  (with-redefs [xtdb.expression/xtdb-server-version (fn [] "2.0.4-SNAPSHOT")]
-    (t/is (= [{:v 2000004}]
-             (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v"))))
+  (t/is (= [{:v "160000"}]
+           (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v")))
 
   (t/is (anomalous? [:unsupported ::expr/unsupported-setting]
                     (xt/q tu/*node* "SELECT current_setting('block_size') AS v"))))
@@ -1600,6 +1599,11 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:sp "public"}]
            (xt/q tu/*node* "SELECT current_setting('search_path') AS sp"))
         "current_setting('search_path') returns public"))
+
+(t/deftest test-bare-user-keyword
+  (t/is (= [{:u "xtdb"}]
+           (xt/q tu/*node* "SELECT USER AS u"))
+        "bare USER is a synonym for CURRENT_USER per SQL spec"))
 
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
