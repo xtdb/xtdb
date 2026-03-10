@@ -52,7 +52,11 @@
 (t/deftest current-user-test
   (t/testing "CURRENT_USER returns current user"
     (t/is (= [{:u "xtdb"}]
-             (xt/q tu/*node* "SELECT CURRENT_USER AS u")))))
+             (xt/q tu/*node* "SELECT CURRENT_USER AS u"))))
+
+  (t/testing "bare USER is a synonym for CURRENT_USER per SQL spec"
+    (t/is (= [{:u "xtdb"}]
+             (xt/q tu/*node* "SELECT USER AS u")))))
 
 (t/deftest grafana-table-discovery-test
   (t/testing "Grafana's table discovery query (simplified) runs without error"
