@@ -3237,3 +3237,110 @@ UNION ALL
 
   (t/is (= [{:x "a", :xt/id 1} {:x "b", :xt/id 2} {:x "d", :xt/id 4}]
            (xt/q tu/*node* "SELECT _id, x FROM foo WHERE _id = 1 OR _id = 4 OR _id = 2 ORDER BY _id"))))
+
+(t/deftest reserved-keywords-as-column-aliases
+  (t/testing "aliasKeyword: safe as bare aliases (without AS)"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT CURRENT_USER user")))
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT 1 time")))
+    (t/is (= [{:timestamp 1}]
+             (xt/q tu/*node* "SELECT 1 timestamp")))
+    (t/is (= [{:date 1}]
+             (xt/q tu/*node* "SELECT 1 date")))
+    (t/is (= [{:integer 1}]
+             (xt/q tu/*node* "SELECT 1 integer")))
+    (t/is (= [{:text "hello"}]
+             (xt/q tu/*node* "SELECT 'hello' text")))
+    (t/is (= [{:boolean true}]
+             (xt/q tu/*node* "SELECT true boolean"))))
+
+  (t/testing "aliasKeyword: also work with explicit AS"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT USER AS user")))
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT 1 AS time")))
+    (t/is (= [{:date 1}]
+             (xt/q tu/*node* "SELECT 1 AS date"))))
+
+  (t/testing "explicitAsKeyword: clause-starting keywords require AS"
+    (t/is (= [{:from 1}]
+             (xt/q tu/*node* "SELECT 1 AS from")))
+    (t/is (= [{:where 1}]
+             (xt/q tu/*node* "SELECT 1 AS where")))
+    (t/is (= [{:order 1}]
+             (xt/q tu/*node* "SELECT 1 AS order")))
+    (t/is (= [{:limit 1}]
+             (xt/q tu/*node* "SELECT 1 AS limit")))
+    (t/is (= [{:offset 1}]
+             (xt/q tu/*node* "SELECT 1 AS offset"))))
+
+  (t/testing "clause-starting keywords without AS parse as clauses, not aliases"
+    (t/is (= [{:xt/column-1 1}]
+             (xt/q tu/*node* "SELECT 1 FROM (VALUES (1)) AS t(x)"))
+          "FROM is not treated as an alias"))
+
+  (t/testing "identifier keywords still work as bare aliases"
+    (t/is (= [{:version 1}]
+             (xt/q tu/*node* "SELECT 1 version"))))
+
+  (t/testing "expression-continuing keywords as bare aliases"
+    (t/is (= [{:not 1}]
+             (xt/q tu/*node* "SELECT 1 not"))
+          "NOT as bare alias")
+    (t/is (= [{:in 1}]
+             (xt/q tu/*node* "SELECT 1 in"))
+          "IN as bare alias")
+    (t/is (= [{:between 1}]
+             (xt/q tu/*node* "SELECT 1 between"))
+          "BETWEEN as bare alias")
+    (t/is (= [{:like 1}]
+             (xt/q tu/*node* "SELECT 1 like"))
+          "LIKE as bare alias")
+    (t/is (= [{:is 1}]
+             (xt/q tu/*node* "SELECT 1 is"))
+          "IS as bare alias")
+    (t/is (= [{:and 1}]
+             (xt/q tu/*node* "SELECT 1 and"))
+          "AND as bare alias")
+    (t/is (= [{:or 1}]
+             (xt/q tu/*node* "SELECT 1 or"))
+          "OR as bare alias"))
+
+  (t/testing "keyword expression followed by keyword alias"
+    (t/is (= [{:user "xtdb"}]
+             (xt/q tu/*node* "SELECT user user"))
+          "USER expr then USER alias"))
+
+  (t/testing "multiple bare keyword aliases in select list"
+    (t/is (= [{:time 1, :date 2}]
+             (xt/q tu/*node* "SELECT 1 time, 2 date"))))
+
+  (t/testing "bare alias after complex expressions"
+    (t/is (= [{:time 3}]
+             (xt/q tu/*node* "SELECT 1 + 2 time"))
+          "alias after binary expression")
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT CASE WHEN true THEN 1 END time"))
+          "alias after CASE expression"))
+
+  (t/testing "literal keywords as bare aliases"
+    (t/is (= [{:null 1}]
+             (xt/q tu/*node* "SELECT 1 null"))
+          "NULL as bare alias")
+    (t/is (= [{:true 1}]
+             (xt/q tu/*node* "SELECT 1 true"))
+          "TRUE as bare alias")
+    (t/is (= [{:false 1}]
+             (xt/q tu/*node* "SELECT 1 false"))
+          "FALSE as bare alias"))
+
+  (t/testing "data type keywords still work in their type roles"
+    (t/is (= [1] (mapv (comp val first) (xt/q tu/*node* "SELECT CAST(1 AS integer)")))
+          "CAST with data type keyword still works")
+    (t/is (some? (xt/q tu/*node* "SELECT DATE '2024-01-01'"))
+          "DATE literal syntax still works")
+    (t/is (some? (xt/q tu/*node* "SELECT TIMESTAMP '2024-01-01T00:00:00'"))
+          "TIMESTAMP literal syntax still works")
+    (t/is (some? (xt/q tu/*node* "SELECT TIME '12:00:00'"))
+          "TIME literal syntax still works")))

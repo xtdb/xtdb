@@ -156,11 +156,6 @@ identifier
 
 columnName : identifier ;
 
-columnLabel
-    : identifier
-    | 'CURRENT_USER'
-    ;
-
 // §6 Scalar Expressions
 
 /// §6.1 Data Types
@@ -401,7 +396,7 @@ columnReference : identifierChain ;
 
 /// generate_series function
 
-generateSeries : (identifier '.')? ('GENERATE_SERIES' | 'RANGE') '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
+generateSeries : (identifier '.')? 'GENERATE_SERIES' '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
 
 /// §6.10 <window function>
 
@@ -654,7 +649,53 @@ excludeClause
     ;
 
 derivedColumn : expr asClause? ;
-asClause : 'AS'? columnLabel ;
+asClause : 'AS' columnAliasAfterAs | columnAlias ;
+
+columnAliasAfterAs
+    : columnAlias
+    | explicitAsKeyword
+    ;
+
+columnAlias
+    : columnName
+    | aliasKeyword
+    ;
+
+// clause-starting keywords that are ambiguous as bare aliases — require explicit AS
+explicitAsKeyword
+    : 'EXCEPT' | 'FETCH' | 'FOR' | 'FROM' | 'GROUP' | 'HAVING'
+    | 'INTERSECT' | 'INTO'
+    | 'LIMIT'
+    | 'OFFSET' | 'ORDER'
+    | 'UNION'
+    | 'WHERE' | 'WINDOW' | 'WITH' | 'WITHOUT'
+    ;
+
+// keywords safe as bare column aliases (don't start any clause after a select expression)
+aliasKeyword
+    : 'ALL' | 'AND' | 'ANY' | 'ARRAY' | 'AS' | 'ASC'
+    | 'BETWEEN' | 'BOTH' | 'BY'
+    | 'CASE' | 'CAST' | 'CROSS' | 'CURRENT' | 'CURRENT_DATE' | 'CURRENT_TIME' | 'CURRENT_TIMESTAMP' | 'CURRENT_USER'
+    | 'DEFAULT' | 'DESC' | 'DISTINCT'
+    | 'ELSE' | 'ESCAPE' | 'EXISTS' | 'EXTRACT'
+    | 'FALSE' | 'FIRST' | 'FULL'
+    | 'IN' | 'INNER' | 'IS'
+    | 'JOIN'
+    | 'LAST' | 'LATERAL' | 'LEADING' | 'LEFT' | 'LIKE' | 'LOCAL'
+    | 'NATURAL' | 'NOT' | 'NULL' | 'NULLIF' | 'NULLS'
+    | 'ON' | 'ONLY' | 'OR' | 'OUTER' | 'OVER'
+    | 'PARTITION' | 'POSITION' | 'PRECISION'
+    | 'RANGE' | 'RECURSIVE' | 'RIGHT' | 'ROW' | 'ROWS'
+    | 'SET' | 'SOME' | 'SUBSTRING' | 'SYMMETRIC'
+    | 'THEN' | 'TO' | 'TRAILING' | 'TRIM' | 'TRUE'
+    | 'UNKNOWN' | 'UNNEST' | 'USER' | 'USING'
+    | 'VALUE_OF' | 'VALUES'
+    | 'WHEN'
+    // data type keywords
+    | 'BIGINT' | 'BOOLEAN' | 'CHAR' | 'DATE' | 'DOUBLE' | 'FLOAT'
+    | 'INT' | 'INTEGER' | 'INTERVAL' | 'NUMERIC' | 'REAL' | 'SMALLINT'
+    | 'TEXT' | 'TIME' | 'TIMESTAMP' | 'TIMESTAMPTZ' | 'VARCHAR'
+    ;
 
 /// §7.13 <query expression>
 

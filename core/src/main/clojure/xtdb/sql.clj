@@ -53,12 +53,20 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitAsClause [this ctx] (-> (.columnLabel ctx) (.accept this)))
+                     (visitAsClause [this ctx]
+                       (if-let [after-as (.columnAliasAfterAs ctx)]
+                         (.accept after-as this)
+                         (-> (.columnAlias ctx) (.accept this))))
 
-                     (visitColumnLabel [this ctx]
-                       (if-let [id (.identifier ctx)]
-                         (.accept id this)
-                         (symbol (util/str->normal-form-str (.getText ctx)))))
+                     (visitColumnAliasAfterAs [this ctx]
+                       (if-let [ca (.columnAlias ctx)]
+                         (.accept ca this)
+                         (symbol (util/str->normal-form-str (.getText (.explicitAsKeyword ctx))))))
+
+                     (visitColumnAlias [this ctx]
+                       (if-let [cn (.columnName ctx)]
+                         (.accept cn this)
+                         (symbol (util/str->normal-form-str (.getText (.aliasKeyword ctx))))))
 
                      (visitTargetTable [this ctx]
                        (let [tn (-> (.tableName ctx) (.accept this))]
@@ -848,8 +856,8 @@
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
                                                                                                    (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                         out-col-name (.columnLabel (.asClause rename-pair))]
-                                                                                                     (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                                                                         out-col-name (identifier-sym (.asClause rename-pair))]
+                                                                                                     (MapEntry/create sym (->col-sym out-col-name))))
                                                                                                  (into {}))]
                                                                                 (->> table-cols
                                                                                      (into [] (map-indexed (fn [col-idx sym]
@@ -864,10 +872,10 @@
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnLabel (.asClause rename-pair))
+                                                                 out-col-name (identifier-sym (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
-                                                             (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
+                                                             (MapEntry/create sym (->col-sym out-col-name))))
                                                          (into {}))
 
                                             excludes (set/union (into #{} (map (comp symbol name :col-sym)) explicitly-projected-cols)
@@ -2185,8 +2193,7 @@
 
 (defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms
-                                     & {:keys [gb-expr-to-col select-expr-to-col]
-                                        :or {gb-expr-to-col {}, select-expr-to-col {}}}]
+                                     & {:keys [gb-expr-to-col] :or {gb-expr-to-col {}}}]
   (let [outer-cols (->> outer-col-syms
                         (into {} (mapcat (juxt (juxt identity identity)
                                                (juxt (comp symbol name) identity)))))
@@ -2233,8 +2240,6 @@
 
                          (contains? outer-cols expr) {:order-by-spec [expr ob-opts]}
 
-                         (get select-expr-to-col expr) {:order-by-spec [(get select-expr-to-col expr) ob-opts]}
-
                          :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
                                  {:order-by-spec [in-sym ob-opts]
                                   :in-projection {in-sym expr}})))))))))
@@ -2257,21 +2262,18 @@
         plan))))
 
 (defn- wrap-integrated-ob [plan projected-cols ob-specs]
-  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))
-        extend-projs (not-empty (into [] (filter map?) (map :projection projected-cols)))]
+  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
     (as-> plan plan
-      (if extend-projs
-        [:map {:projections extend-projs} plan]
-        plan)
-
-      (if in-projs
-        [:map {:projections in-projs} plan]
-        plan)
+      [:project {:projections (into (mapv :projection projected-cols)
+                      in-projs)}
+       plan]
 
       [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
-      [:project {:projections (mapv :col-sym projected-cols)} plan])))
+      (if in-projs
+        [:project {:projections (mapv :col-sym projected-cols)} plan]
+        plan))))
 
 (defn- wrap-windows [plan windows]
   (when (> (count windows) 1)
@@ -2519,16 +2521,10 @@
                                 (w/postwalk #(get gb-expr-to-col % %) pred)))
                       having-plan)
 
-        ob-select-expr-to-col (into {} (for [{:keys [projection col-sym]} projected-cols
-                                           :when (map? projection)
-                                           :let [[_ expr] (first projection)]]
-                                       [expr col-sym]))
-
         ob-plan (some-> order-by-clause
                         (plan-order-by env scope
                                        (mapv :col-sym projected-cols)
-                                       :gb-expr-to-col gb-expr-to-col
-                                       :select-expr-to-col ob-select-expr-to-col))]
+                                       :gb-expr-to-col gb-expr-to-col))]
 
     (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
       (doseq [col dup-cols]
