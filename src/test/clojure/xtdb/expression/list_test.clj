@@ -20,8 +20,8 @@
                           (.writeTo res out-vec 0 (.getSize res))
                           (vec (.getAsList out-vec))))}))]
     (t/is (= {:vec-type #xt/type :i64
-              :size 10
-              :value [1 2 3 4 5 6 7 8 9 10]}
+              :size 11
+              :value [1 2 3 4 5 6 7 8 9 10 11]}
              (run-test '(generate_series 1 11 1) {}))
           "happy case with generate_series")
 

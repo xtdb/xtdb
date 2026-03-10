@@ -51,8 +51,8 @@
 
 (t/deftest generate-series-2-arg-test
   (t/testing "generate_series with 2 args defaults step to 1"
-    (t/is (= [{:x 1} {:x 2} {:x 3}]
-             (xt/q tu/*node* "SELECT x FROM generate_series(1, 3) AS s(x)")))))
+    (t/is (= [{:x 1} {:x 2} {:x 3} {:x 4}]
+             (xt/q tu/*node* "SELECT x FROM generate_series(1, 4) AS s(x)")))))
 
 (t/deftest current-user-test
   (t/testing "CURRENT_USER returns current user"

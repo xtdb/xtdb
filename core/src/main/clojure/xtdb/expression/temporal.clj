@@ -2178,7 +2178,7 @@
         res (->> (iterate (fn [^LocalDate acc]
                             (.plusMonths acc months))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while #(not (pos? (compare % to))))))]
 
     (reify ListValueReader
       (size [_]
@@ -2215,7 +2215,7 @@
         res (->> (iterate (fn [^LocalDateTime acc]
                             (-> acc (.plus period) (.plus duration)))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while #(not (pos? (compare % to))))))]
 
     (reify ListValueReader
       (size [_] (count res))
@@ -2252,7 +2252,7 @@
         res (->> (iterate (fn [^ZonedDateTime acc]
                             (-> acc (.plus period) (.plus duration)))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while #(not (pos? (compare % to))))))]
 
     (reify ListValueReader
       (size [_] (count res))
