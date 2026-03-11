@@ -1,61 +1,73 @@
 [:project
- {:projections [{o_orderpriority o.1/o_orderpriority} order_count]}
+ {:projections
+  [{o_orderpriority o.1/o_orderpriority} {order_count order_count}]}
  [:order-by
-  {:order-specs [[o.1/o_orderpriority {:direction :asc, :null-ordering :nulls-last}]]}
-  [:project
-   {:projections [o.1/o_orderpriority {order_count _row_count_5}]}
+  {:order-specs
+   [[o.1/o_orderpriority
+     {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections [{order_count _row_count_5}]}
    [:group-by
     {:columns [o.1/o_orderpriority {_row_count_5 (row-count)}]}
     [:map
      {:projections [{_sq_2 true}]}
      [:semi-join
       {:conditions [{o.1/_id l_orderkey}]}
-      [:rename {:prefix o.1} [:scan
-        {:table #xt/table orders, :columns [o_orderpriority
-         _id
-         {o_orderdate
-          (and
-           (<
-            o_orderdate
-            (+
-             #xt/date "1993-07-01"
-             (single-field-interval "3" "MONTH" 2 6)))
-           (>= o_orderdate #xt/date "1993-07-01"))}]}]]
+      [:rename
+       {:prefix o.1}
+       [:scan
+        {:table #xt/table orders,
+         :columns
+         [o_orderpriority
+          _id
+          {o_orderdate
+           (and
+            (<
+             o_orderdate
+             (+
+              #xt/date "1993-07-01"
+              (single-field-interval "3" "MONTH" 2 6)))
+            (>= o_orderdate #xt/date "1993-07-01"))}]}]]
       [:project
-       {:projections [{_id l.3/_id}
-        {l_comment l.3/l_comment}
-        {l_commitdate l.3/l_commitdate}
-        {l_discount l.3/l_discount}
-        {l_extendedprice l.3/l_extendedprice}
-        {l_linenumber l.3/l_linenumber}
-        {l_linestatus l.3/l_linestatus}
-        {l_orderkey l.3/l_orderkey}
-        {l_partkey l.3/l_partkey}
-        {l_quantity l.3/l_quantity}
-        {l_receiptdate l.3/l_receiptdate}
-        {l_returnflag l.3/l_returnflag}
-        {l_shipdate l.3/l_shipdate}
-        {l_shipinstruct l.3/l_shipinstruct}
-        {l_shipmode l.3/l_shipmode}
-        {l_suppkey l.3/l_suppkey}
-        {l_tax l.3/l_tax}]}
-       [:rename {:prefix l.3} [:select
+       {:projections
+        [{_id l.3/_id}
+         {l_comment l.3/l_comment}
+         {l_commitdate l.3/l_commitdate}
+         {l_discount l.3/l_discount}
+         {l_extendedprice l.3/l_extendedprice}
+         {l_linenumber l.3/l_linenumber}
+         {l_linestatus l.3/l_linestatus}
+         {l_orderkey l.3/l_orderkey}
+         {l_partkey l.3/l_partkey}
+         {l_quantity l.3/l_quantity}
+         {l_receiptdate l.3/l_receiptdate}
+         {l_returnflag l.3/l_returnflag}
+         {l_shipdate l.3/l_shipdate}
+         {l_shipinstruct l.3/l_shipinstruct}
+         {l_shipmode l.3/l_shipmode}
+         {l_suppkey l.3/l_suppkey}
+         {l_tax l.3/l_tax}]}
+       [:rename
+        {:prefix l.3}
+        [:select
          {:predicate (< l_commitdate l_receiptdate)}
          [:scan
-          {:table #xt/table lineitem, :columns [l_linestatus
-           l_receiptdate
-           l_commitdate
-           l_tax
-           l_orderkey
-           l_shipdate
-           l_comment
-           _id
-           l_returnflag
-           l_extendedprice
-           l_linenumber
-           l_quantity
-           l_shipinstruct
-           l_suppkey
-           l_shipmode
-           l_discount
-           l_partkey]}]]]]]]]]]]
+          {:table #xt/table lineitem,
+           :columns
+           [l_linestatus
+            l_receiptdate
+            l_commitdate
+            l_tax
+            l_orderkey
+            l_shipdate
+            l_comment
+            _id
+            l_returnflag
+            l_extendedprice
+            l_linenumber
+            l_quantity
+            l_shipinstruct
+            l_suppkey
+            l_shipmode
+            l_discount
+            l_partkey]}]]]]]]]]]]

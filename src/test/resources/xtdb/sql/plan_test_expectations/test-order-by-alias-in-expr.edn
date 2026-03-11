@@ -1,0 +1,11 @@
+[:project
+ {:projections [{y y}]}
+ [:order-by
+  {:order-specs [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections [{_ob2 (* y 2)}]}
+   [:map
+    {:projections [{y (+ t.1/x 1)}]}
+    [:rename
+     {:prefix t.1}
+     [:scan {:table #xt/table t, :columns [x]}]]]]]]

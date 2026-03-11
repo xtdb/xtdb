@@ -1,62 +1,74 @@
 [:top
  {:skip nil, :limit 20}
  [:project
-  {:projections [c_custkey
-   {c_name c.1/c_name}
-   revenue
-   {c_acctbal c.1/c_acctbal}
-   {n_name n.4/n_name}
-   {c_address c.1/c_address}
-   {c_phone c.1/c_phone}
-   {c_comment c.1/c_comment}]}
+  {:projections
+   [{c_custkey c_custkey}
+    {c_name c.1/c_name}
+    {revenue revenue}
+    {c_acctbal c.1/c_acctbal}
+    {n_name n.4/n_name}
+    {c_address c.1/c_address}
+    {c_phone c.1/c_phone}
+    {c_comment c.1/c_comment}]}
   [:order-by
-   {:order-specs [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
-   [:project
-    {:projections [{c_custkey c.1/_id}
-     c.1/c_name
-     {revenue _sum_out_5}
-     c.1/c_acctbal
-     n.4/n_name
-     c.1/c_address
-     c.1/c_phone
-     c.1/c_comment]}
+   {:order-specs
+    [[revenue {:direction :desc, :null-ordering :nulls-first}]]}
+   [:map
+    {:projections [{c_custkey c.1/_id} {revenue _sum_out_5}]}
     [:group-by
-     {:columns [n.4/n_name
-      c.1/_id
-      c.1/c_comment
-      c.1/c_acctbal
-      c.1/c_phone
-      c.1/c_name
-      c.1/c_address
-      {_sum_out_5 (sum _sum_in_6)}]}
+     {:columns
+      [n.4/n_name
+       c.1/_id
+       c.1/c_comment
+       c.1/c_acctbal
+       c.1/c_phone
+       c.1/c_name
+       c.1/c_address
+       {_sum_out_5 (sum _sum_in_6)}]}
      [:map
-      {:projections [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
+      {:projections
+       [{_sum_in_6 (* l.3/l_extendedprice (- 1 l.3/l_discount))}]}
       [:mega-join
-       {:conditions [{c.1/c_nationkey n.4/_id}
-        {o.2/_id l.3/l_orderkey}
-        {c.1/_id o.2/o_custkey}]}
-       [[:rename {:prefix n.4} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-        [:rename {:prefix l.3} [:scan
-          {:table #xt/table lineitem, :columns [l_orderkey
-           {l_returnflag (== l_returnflag "R")}
-           l_extendedprice
-           l_discount]}]]
-        [:rename {:prefix c.1} [:scan
-          {:table #xt/table customer, :columns [c_phone
-           c_acctbal
-           c_address
-           c_nationkey
-           _id
-           c_comment
-           c_name]}]]
-        [:rename {:prefix o.2} [:scan
-          {:table #xt/table orders, :columns [_id
-           {o_orderdate
-            (and
-             (<
-              o_orderdate
-              (+
-               #xt/date "1993-10-01"
-               (single-field-interval "3" "MONTH" 2 6)))
-             (>= o_orderdate #xt/date "1993-10-01"))}
-           o_custkey]}]]]]]]]]]]
+       {:conditions
+        [{c.1/c_nationkey n.4/_id}
+         {o.2/_id l.3/l_orderkey}
+         {c.1/_id o.2/o_custkey}]}
+       [[:rename
+         {:prefix n.4}
+         [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+        [:rename
+         {:prefix l.3}
+         [:scan
+          {:table #xt/table lineitem,
+           :columns
+           [l_orderkey
+            {l_returnflag (== l_returnflag "R")}
+            l_extendedprice
+            l_discount]}]]
+        [:rename
+         {:prefix c.1}
+         [:scan
+          {:table #xt/table customer,
+           :columns
+           [c_phone
+            c_acctbal
+            c_address
+            c_nationkey
+            _id
+            c_comment
+            c_name]}]]
+        [:rename
+         {:prefix o.2}
+         [:scan
+          {:table #xt/table orders,
+           :columns
+           [_id
+            {o_orderdate
+             (and
+              (<
+               o_orderdate
+               (+
+                #xt/date "1993-10-01"
+                (single-field-interval "3" "MONTH" 2 6)))
+              (>= o_orderdate #xt/date "1993-10-01"))}
+            o_custkey]}]]]]]]]]]]

@@ -2246,18 +2246,21 @@
         plan))))
 
 (defn- wrap-integrated-ob [plan projected-cols ob-specs]
-  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
+  (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))
+        extend-projs (not-empty (into [] (filter map?) (map :projection projected-cols)))]
     (as-> plan plan
-      [:project {:projections (into (mapv :projection projected-cols)
-                      in-projs)}
-       plan]
+      (if extend-projs
+        [:map {:projections extend-projs} plan]
+        plan)
+
+      (if in-projs
+        [:map {:projections in-projs} plan]
+        plan)
 
       [:order-by {:order-specs (mapv :order-by-spec ob-specs)}
        plan]
 
-      (if in-projs
-        [:project {:projections (mapv :col-sym projected-cols)} plan]
-        plan))))
+      [:project {:projections (mapv :col-sym projected-cols)} plan])))
 
 (defn- wrap-windows [plan windows]
   (when (> (count windows) 1)

@@ -1,11 +1,13 @@
-[:order-by
- {:order-specs [[cat {:direction :asc, :null-ordering :nulls-last}]]}
- [:project
-  {:projections [cat {cnt _row_count_2}]}
-  [:group-by
-   {:columns [cat {_row_count_2 (row-count)}]}
-   [:map
-    {:projections [{cat (upper products.1/category)}]}
-    [:rename
-     {:prefix products.1}
-     [:scan {:table #xt/table products, :columns [category]}]]]]]]
+[:project
+ {:projections [{cat cat} {cnt cnt}]}
+ [:order-by
+  {:order-specs [[cat {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections [{cnt _row_count_2}]}
+   [:group-by
+    {:columns [cat {_row_count_2 (row-count)}]}
+    [:map
+     {:projections [{cat (upper products.1/category)}]}
+     [:rename
+      {:prefix products.1}
+      [:scan {:table #xt/table products, :columns [category]}]]]]]]]

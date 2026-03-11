@@ -1,44 +1,56 @@
 [:top
  {:skip nil, :limit 100}
  [:project
-  {:projections [{c_name c.1/c_name}
-   c_custkey
-   o_orderkey
-   {o_orderdate o.2/o_orderdate}
-   {o_totalprice o.2/o_totalprice}
-   sum_qty]}
+  {:projections
+   [{c_name c.1/c_name}
+    {c_custkey c_custkey}
+    {o_orderkey o_orderkey}
+    {o_orderdate o.2/o_orderdate}
+    {o_totalprice o.2/o_totalprice}
+    {sum_qty sum_qty}]}
   [:order-by
-   {:order-specs [[o.2/o_totalprice {:direction :desc, :null-ordering :nulls-first}]
-    [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
-   [:project
-    {:projections [c.1/c_name
-     {c_custkey c.1/_id}
-     {o_orderkey o.2/_id}
-     o.2/o_orderdate
-     o.2/o_totalprice
-     {sum_qty _sum_out_7}]}
+   {:order-specs
+    [[o.2/o_totalprice {:direction :desc, :null-ordering :nulls-first}]
+     [o.2/o_orderdate {:direction :asc, :null-ordering :nulls-last}]]}
+   [:map
+    {:projections
+     [{c_custkey c.1/_id} {o_orderkey o.2/_id} {sum_qty _sum_out_7}]}
     [:group-by
-     {:columns [c.1/c_name
-      c.1/_id
-      o.2/_id
-      o.2/o_orderdate
-      o.2/o_totalprice
-      {_sum_out_7 (sum l.3/l_quantity)}]}
+     {:columns
+      [c.1/c_name
+       c.1/_id
+       o.2/_id
+       o.2/o_orderdate
+       o.2/o_totalprice
+       {_sum_out_7 (sum l.3/l_quantity)}]}
      [:map
       {:projections [{_sq_4 true}]}
       [:mega-join
        {:conditions [{o.2/_id l.3/l_orderkey} {c.1/_id o.2/o_custkey}]}
-       [[:rename {:prefix l.3} [:scan {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]
-        [:rename {:prefix c.1} [:scan {:table #xt/table customer, :columns [_id c_name]}]]
+       [[:rename
+         {:prefix l.3}
+         [:scan
+          {:table #xt/table lineitem,
+           :columns [l_orderkey l_quantity]}]]
+        [:rename
+         {:prefix c.1}
+         [:scan {:table #xt/table customer, :columns [_id c_name]}]]
         [:semi-join
          {:conditions [{o.2/_id l_orderkey}]}
-         [:rename {:prefix o.2} [:scan
-           {:table #xt/table orders, :columns [o_totalprice _id o_orderdate o_custkey]}]]
+         [:rename
+          {:prefix o.2}
+          [:scan
+           {:table #xt/table orders,
+            :columns [o_totalprice _id o_orderdate o_custkey]}]]
          [:project
           {:projections [{l_orderkey l.5/l_orderkey}]}
           [:select
            {:predicate (> _sum_out_6 300)}
            [:group-by
-            {:columns [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]}
-            [:rename {:prefix l.5} [:scan
-              {:table #xt/table lineitem, :columns [l_orderkey l_quantity]}]]]]]]]]]]]]]]
+            {:columns
+             [l.5/l_orderkey {_sum_out_6 (sum l.5/l_quantity)}]}
+            [:rename
+             {:prefix l.5}
+             [:scan
+              {:table #xt/table lineitem,
+               :columns [l_orderkey l_quantity]}]]]]]]]]]]]]]]

@@ -1,42 +1,53 @@
 [:project
  {:projections [{s_name s.1/s_name} {s_address s.1/s_address}]}
  [:order-by
-  {:order-specs [[s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
-  [:project
-   {:projections [s.1/s_name s.1/s_address]}
-   [:map
-    {:projections [{_sq_3 true}]}
-    [:mega-join
-     {:conditions [{s.1/s_nationkey n.2/_id}]}
-     [[:semi-join
-       {:conditions [{s.1/_id ps_suppkey}]}
-       [:rename {:prefix s.1} [:scan
-         {:table #xt/table supplier, :columns [s_name s_address _id s_nationkey]}]]
-       [:project
-        {:projections [{ps_suppkey ps.4/ps_suppkey}]}
-        [:map
-         {:projections [{_sq_5 true}]}
-         [:semi-join
-          {:conditions [{ps.4/ps_partkey _id}]}
-          [:select
-           {:predicate (> ps.4/ps_availqty _sq_7)}
-           [:map
-            {:projections [{_sq_7 (* 0.5 _sum_out_11)}]}
-            [:group-by
-             {:columns [ps.4/ps_partkey
+  {:order-specs
+   [[s.1/s_name {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections [{_sq_3 true}]}
+   [:mega-join
+    {:conditions [{s.1/s_nationkey n.2/_id}]}
+    [[:semi-join
+      {:conditions [{s.1/_id ps_suppkey}]}
+      [:rename
+       {:prefix s.1}
+       [:scan
+        {:table #xt/table supplier,
+         :columns [s_name s_address _id s_nationkey]}]]
+      [:project
+       {:projections [{ps_suppkey ps.4/ps_suppkey}]}
+       [:map
+        {:projections [{_sq_5 true}]}
+        [:semi-join
+         {:conditions [{ps.4/ps_partkey _id}]}
+         [:select
+          {:predicate (> ps.4/ps_availqty _sq_7)}
+          [:map
+           {:projections [{_sq_7 (* 0.5 _sum_out_11)}]}
+           [:group-by
+            {:columns
+             [ps.4/ps_partkey
               ps.4/ps_availqty
               ps.4/ps_suppkey
               _row_number_0
               {_sum_out_11 (sum l.8/l_quantity)}]}
-             [:left-outer-join
-              {:conditions [{ps.4/ps_partkey l.8/l_partkey}
+            [:left-outer-join
+             {:conditions
+              [{ps.4/ps_partkey l.8/l_partkey}
                {ps.4/ps_suppkey l.8/l_suppkey}]}
-              [:map
-               {:projections [{_row_number_0 (row-number)}]}
-               [:rename {:prefix ps.4} [:scan
-                 {:table #xt/table partsupp, :columns [ps_partkey ps_availqty ps_suppkey]}]]]
-              [:rename {:prefix l.8} [:scan
-                {:table #xt/table lineitem, :columns [{l_shipdate
+             [:map
+              {:projections [{_row_number_0 (row-number)}]}
+              [:rename
+               {:prefix ps.4}
+               [:scan
+                {:table #xt/table partsupp,
+                 :columns [ps_partkey ps_availqty ps_suppkey]}]]]
+             [:rename
+              {:prefix l.8}
+              [:scan
+               {:table #xt/table lineitem,
+                :columns
+                [{l_shipdate
                   (and
                    (<
                     l_shipdate
@@ -47,9 +58,15 @@
                  l_quantity
                  l_suppkey
                  l_partkey]}]]]]]]
-          [:project
-           {:projections [{_id p.6/_id}]}
-           [:rename {:prefix p.6} [:scan
-             {:table #xt/table part, :columns [_id {p_name (like p_name "forest%")}]}]]]]]]]
-      [:rename {:prefix n.2} [:scan
-        {:table #xt/table nation, :columns [_id {n_name (== n_name "CANADA")}]}]]]]]]]]
+         [:project
+          {:projections [{_id p.6/_id}]}
+          [:rename
+           {:prefix p.6}
+           [:scan
+            {:table #xt/table part,
+             :columns [_id {p_name (like p_name "forest%")}]}]]]]]]]
+     [:rename
+      {:prefix n.2}
+      [:scan
+       {:table #xt/table nation,
+        :columns [_id {n_name (== n_name "CANADA")}]}]]]]]]]

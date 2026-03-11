@@ -5,7 +5,8 @@
   [:select
    {:predicate (> _row_count_2 1)}
    [:group-by
-    {:columns [cat {_row_count_3 (row-count)} {_row_count_2 (row-count)}]}
+    {:columns
+     [cat {_row_count_3 (row-count)} {_row_count_2 (row-count)}]}
     [:map
      {:projections [{cat (upper products.1/category)}]}
      [:rename

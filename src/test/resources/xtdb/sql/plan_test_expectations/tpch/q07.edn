@@ -1,50 +1,70 @@
 [:project
- {:projections [{supp_nation shipping.7/supp_nation}
-  {cust_nation shipping.7/cust_nation}
-  {l_year shipping.7/l_year}
-  revenue]}
+ {:projections
+  [{supp_nation shipping.7/supp_nation}
+   {cust_nation shipping.7/cust_nation}
+   {l_year shipping.7/l_year}
+   {revenue revenue}]}
  [:order-by
-  {:order-specs [[shipping.7/supp_nation
-    {:direction :asc, :null-ordering :nulls-last}]
-   [shipping.7/cust_nation
-    {:direction :asc, :null-ordering :nulls-last}]
-   [shipping.7/l_year {:direction :asc, :null-ordering :nulls-last}]]}
-  [:project
-   {:projections [shipping.7/supp_nation
-    shipping.7/cust_nation
-    shipping.7/l_year
-    {revenue _sum_out_8}]}
+  {:order-specs
+   [[shipping.7/supp_nation
+     {:direction :asc, :null-ordering :nulls-last}]
+    [shipping.7/cust_nation
+     {:direction :asc, :null-ordering :nulls-last}]
+    [shipping.7/l_year {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections [{revenue _sum_out_8}]}
    [:group-by
-    {:columns [shipping.7/supp_nation
-     shipping.7/cust_nation
-     shipping.7/l_year
-     {_sum_out_8 (sum shipping.7/volume)}]}
-    [:rename {:prefix shipping.7} [:project
-      {:projections [{supp_nation n1.5/n_name}
-       {cust_nation n2.6/n_name}
-       {l_year (extract "YEAR" l.2/l_shipdate)}
-       {volume (* l.2/l_extendedprice (- 1 l.2/l_discount))}]}
+    {:columns
+     [shipping.7/supp_nation
+      shipping.7/cust_nation
+      shipping.7/l_year
+      {_sum_out_8 (sum shipping.7/volume)}]}
+    [:rename
+     {:prefix shipping.7}
+     [:project
+      {:projections
+       [{supp_nation n1.5/n_name}
+        {cust_nation n2.6/n_name}
+        {l_year (extract "YEAR" l.2/l_shipdate)}
+        {volume (* l.2/l_extendedprice (- 1 l.2/l_discount))}]}
       [:mega-join
-       {:conditions [{c.4/c_nationkey n2.6/_id}
-        (or
-         (and (== n1.5/n_name "FRANCE") (== n2.6/n_name "GERMANY"))
-         (and (== n1.5/n_name "GERMANY") (== n2.6/n_name "FRANCE")))
-        {s.1/s_nationkey n1.5/_id}
-        {o.3/o_custkey c.4/_id}
-        {l.2/l_orderkey o.3/_id}
-        {s.1/_id l.2/l_suppkey}]}
-       [[:rename {:prefix n2.6} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-        [:rename {:prefix n1.5} [:scan {:table #xt/table nation, :columns [_id n_name]}]]
-        [:rename {:prefix c.4} [:scan {:table #xt/table customer, :columns [c_nationkey _id]}]]
-        [:rename {:prefix o.3} [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
-        [:rename {:prefix s.1} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]
-        [:rename {:prefix l.2} [:scan
-          {:table #xt/table lineitem, :columns [l_orderkey
-           {l_shipdate
-            (between
-             l_shipdate
-             #xt/date "1995-01-01"
-             #xt/date "1996-12-31")}
-           l_extendedprice
-           l_suppkey
-           l_discount]}]]]]]]]]]]
+       {:conditions
+        [{c.4/c_nationkey n2.6/_id}
+         (or
+          (and (== n1.5/n_name "FRANCE") (== n2.6/n_name "GERMANY"))
+          (and (== n1.5/n_name "GERMANY") (== n2.6/n_name "FRANCE")))
+         {s.1/s_nationkey n1.5/_id}
+         {o.3/o_custkey c.4/_id}
+         {l.2/l_orderkey o.3/_id}
+         {s.1/_id l.2/l_suppkey}]}
+       [[:rename
+         {:prefix n2.6}
+         [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+        [:rename
+         {:prefix n1.5}
+         [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+        [:rename
+         {:prefix c.4}
+         [:scan
+          {:table #xt/table customer, :columns [c_nationkey _id]}]]
+        [:rename
+         {:prefix o.3}
+         [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
+        [:rename
+         {:prefix s.1}
+         [:scan
+          {:table #xt/table supplier, :columns [_id s_nationkey]}]]
+        [:rename
+         {:prefix l.2}
+         [:scan
+          {:table #xt/table lineitem,
+           :columns
+           [l_orderkey
+            {l_shipdate
+             (between
+              l_shipdate
+              #xt/date "1995-01-01"
+              #xt/date "1996-12-31")}
+            l_extendedprice
+            l_suppkey
+            l_discount]}]]]]]]]]]]

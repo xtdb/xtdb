@@ -1,26 +1,34 @@
 [:project
  {:projections [{promo_revenue (/ (* 100.0 _sum_out_3) _sum_out_5)}]}
  [:group-by
-  {:columns [{_sum_out_5 (sum _sum_in_6)} {_sum_out_3 (sum _sum_in_4)}]}
+  {:columns
+   [{_sum_out_5 (sum _sum_in_6)} {_sum_out_3 (sum _sum_in_4)}]}
   [:map
-   {:projections [{_sum_in_6 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
-    {_sum_in_4
-     (cond
-      (like p.2/p_type "PROMO%")
-      (* l.1/l_extendedprice (- 1 l.1/l_discount))
-      0)}]}
+   {:projections
+    [{_sum_in_6 (* l.1/l_extendedprice (- 1 l.1/l_discount))}
+     {_sum_in_4
+      (cond
+       (like p.2/p_type "PROMO%")
+       (* l.1/l_extendedprice (- 1 l.1/l_discount))
+       0)}]}
    [:mega-join
     {:conditions [{l.1/l_partkey p.2/_id}]}
-    [[:rename {:prefix l.1} [:scan
-       {:table #xt/table lineitem, :columns [{l_shipdate
-         (and
-          (<
-           l_shipdate
-           (+
-            #xt/date "1995-09-01"
-            (single-field-interval "1" "MONTH" 2 6)))
-          (>= l_shipdate #xt/date "1995-09-01"))}
-        l_extendedprice
-        l_discount
-        l_partkey]}]]
-     [:rename {:prefix p.2} [:scan {:table #xt/table part, :columns [_id p_type]}]]]]]]]
+    [[:rename
+      {:prefix l.1}
+      [:scan
+       {:table #xt/table lineitem,
+        :columns
+        [{l_shipdate
+          (and
+           (<
+            l_shipdate
+            (+
+             #xt/date "1995-09-01"
+             (single-field-interval "1" "MONTH" 2 6)))
+           (>= l_shipdate #xt/date "1995-09-01"))}
+         l_extendedprice
+         l_discount
+         l_partkey]}]]
+     [:rename
+      {:prefix p.2}
+      [:scan {:table #xt/table part, :columns [_id p_type]}]]]]]]]

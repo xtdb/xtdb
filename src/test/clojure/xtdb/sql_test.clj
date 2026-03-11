@@ -994,6 +994,29 @@
     (t/is (= [{:x 1.0 :cnt 1} {:x 2.0 :cnt 1} {:x 3.0 :cnt 1}]
              (xt/q tu/*node* "SELECT (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 AS x, COUNT(*) AS cnt FROM orders GROUP BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ORDER BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ASC")))))
 
+(t/deftest test-order-by-alias
+  (t/testing "alias within expression - plan"
+    (t/is (=plan-file
+           "test-order-by-alias-in-expr"
+           (sql/plan "SELECT x + 1 AS y FROM t ORDER BY y * 2 ASC"
+                     {:table-info {#xt/table t #{"x"}}}))))
+
+  (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id 1 :x 10}]
+                           [:put-docs :t {:xt/id 2 :x 20}]
+                           [:put-docs :t {:xt/id 3 :x 30}]])
+
+  (t/testing "bare alias reference"
+    (t/is (= [{:y 31} {:y 21} {:y 11}]
+             (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY y DESC"))))
+
+  (t/testing "alias within expression"
+    (t/is (= [{:y 11} {:y 21} {:y 31}]
+             (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY y * 2 ASC"))))
+
+  (t/testing "subquery in ORDER BY - not yet supported"
+    (t/is (thrown-with-msg? Exception #"Subqueries are not allowed in this context"
+             (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY (SELECT 1)")))))
+
 (t/deftest test-ordered-set-aggregates
   (t/is (=plan-file
          "test-percentile-cont"

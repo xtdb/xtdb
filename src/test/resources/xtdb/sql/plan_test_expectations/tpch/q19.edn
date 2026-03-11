@@ -3,43 +3,45 @@
  [:group-by
   {:columns [{_sum_out_15 (sum _sum_in_16)}]}
   [:map
-   {:projections [{_sum_in_16 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
+   {:projections
+    [{_sum_in_16 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
    [:select
-    {:predicate (or
-                 (or
-                  (and
-                   (and
-                    (and
-                     (and
-                      (and
-                       (and (== p.2/p_brand "Brand#12") _sq_3)
-                       (>= l.1/l_quantity 1))
-                      (<= l.1/l_quantity (+ 1 10)))
-                     (between p.2/p_size 1 5))
-                    _sq_5)
-                   (== l.1/l_shipinstruct "DELIVER IN PERSON"))
-                  (and
-                   (and
-                    (and
-                     (and
-                      (and
-                       (and (== p.2/p_brand "Brand#23") _sq_7)
-                       (>= l.1/l_quantity 10))
-                      (<= l.1/l_quantity (+ 10 10)))
-                     (between p.2/p_size 1 10))
-                    _sq_9)
-                   (== l.1/l_shipinstruct "DELIVER IN PERSON")))
-                 (and
-                  (and
-                   (and
-                    (and
-                     (and
-                      (and (== p.2/p_brand "Brand#34") _sq_11)
-                      (>= l.1/l_quantity 20))
-                     (<= l.1/l_quantity (+ 20 10)))
-                    (between p.2/p_size 1 15))
-                   _sq_13)
-                  (== l.1/l_shipinstruct "DELIVER IN PERSON")))}
+    {:predicate
+     (or
+      (or
+       (and
+        (and
+         (and
+          (and
+           (and
+            (and (== p.2/p_brand "Brand#12") _sq_3)
+            (>= l.1/l_quantity 1))
+           (<= l.1/l_quantity (+ 1 10)))
+          (between p.2/p_size 1 5))
+         _sq_5)
+        (== l.1/l_shipinstruct "DELIVER IN PERSON"))
+       (and
+        (and
+         (and
+          (and
+           (and
+            (and (== p.2/p_brand "Brand#23") _sq_7)
+            (>= l.1/l_quantity 10))
+           (<= l.1/l_quantity (+ 10 10)))
+          (between p.2/p_size 1 10))
+         _sq_9)
+        (== l.1/l_shipinstruct "DELIVER IN PERSON")))
+      (and
+       (and
+        (and
+         (and
+          (and
+           (and (== p.2/p_brand "Brand#34") _sq_11)
+           (>= l.1/l_quantity 20))
+          (<= l.1/l_quantity (+ 20 10)))
+         (between p.2/p_size 1 15))
+        _sq_13)
+       (== l.1/l_shipinstruct "DELIVER IN PERSON")))}
     [:mark-join
      {:mark-spec {_sq_13 [{l.1/l_shipmode xt.values.14/_column_1}]}}
      [:mark-join
@@ -51,21 +53,65 @@
         [:mark-join
          {:mark-spec {_sq_7 [{p.2/p_container xt.values.8/_column_1}]}}
          [:mark-join
-          {:mark-spec {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}}
+          {:mark-spec
+           {_sq_9 [{l.1/l_shipmode xt.values.10/_column_1}]}}
           [:mega-join
            {:conditions [{l.1/l_partkey p.2/_id}]}
-           [[:rename {:prefix l.1} [:scan
-              {:table #xt/table lineitem, :columns [l_extendedprice
-               l_quantity
-               l_shipinstruct
-               l_shipmode
-               l_discount
-               l_partkey]}]]
-            [:rename {:prefix p.2} [:scan
-              {:table #xt/table part, :columns [_id p_brand p_size p_container]}]]]]
-          [:rename {:prefix xt.values.10} [:table {:output-cols [_column_1], :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]
-         [:rename {:prefix xt.values.8} [:table {:output-cols [_column_1], :rows [{:_column_1 "MED BAG"} {:_column_1 "MED BOX"} {:_column_1 "MED PKG"} {:_column_1 "MED PACK"}]}]]]
-        [:rename {:prefix xt.values.4} [:table {:output-cols [_column_1], :rows [{:_column_1 "SM CASE"} {:_column_1 "SM BOX"} {:_column_1 "SM PACK"} {:_column_1 "SM PKG"}]}]]]
-       [:rename {:prefix xt.values.6} [:table {:output-cols [_column_1], :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]
-      [:rename {:prefix xt.values.12} [:table {:output-cols [_column_1], :rows [{:_column_1 "LG CASE"} {:_column_1 "LG BOX"} {:_column_1 "LG PACK"} {:_column_1 "LG PKG"}]}]]]
-     [:rename {:prefix xt.values.14} [:table {:output-cols [_column_1], :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]]]]]
+           [[:rename
+             {:prefix l.1}
+             [:scan
+              {:table #xt/table lineitem,
+               :columns
+               [l_extendedprice
+                l_quantity
+                l_shipinstruct
+                l_shipmode
+                l_discount
+                l_partkey]}]]
+            [:rename
+             {:prefix p.2}
+             [:scan
+              {:table #xt/table part,
+               :columns [_id p_brand p_size p_container]}]]]]
+          [:rename
+           {:prefix xt.values.10}
+           [:table
+            {:output-cols [_column_1],
+             :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]
+         [:rename
+          {:prefix xt.values.8}
+          [:table
+           {:output-cols [_column_1],
+            :rows
+            [{:_column_1 "MED BAG"}
+             {:_column_1 "MED BOX"}
+             {:_column_1 "MED PKG"}
+             {:_column_1 "MED PACK"}]}]]]
+        [:rename
+         {:prefix xt.values.4}
+         [:table
+          {:output-cols [_column_1],
+           :rows
+           [{:_column_1 "SM CASE"}
+            {:_column_1 "SM BOX"}
+            {:_column_1 "SM PACK"}
+            {:_column_1 "SM PKG"}]}]]]
+       [:rename
+        {:prefix xt.values.6}
+        [:table
+         {:output-cols [_column_1],
+          :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]
+      [:rename
+       {:prefix xt.values.12}
+       [:table
+        {:output-cols [_column_1],
+         :rows
+         [{:_column_1 "LG CASE"}
+          {:_column_1 "LG BOX"}
+          {:_column_1 "LG PACK"}
+          {:_column_1 "LG PKG"}]}]]]
+     [:rename
+      {:prefix xt.values.14}
+      [:table
+       {:output-cols [_column_1],
+        :rows [{:_column_1 "AIR"} {:_column_1 "AIR REG"}]}]]]]]]]

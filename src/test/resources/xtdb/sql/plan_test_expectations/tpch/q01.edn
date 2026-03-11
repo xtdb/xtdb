@@ -1,55 +1,62 @@
 [:project
- {:projections [{l_returnflag l.1/l_returnflag}
-  {l_linestatus l.1/l_linestatus}
-  sum_qty
-  sum_base_price
-  sum_disc_price
-  sum_charge
-  avg_qty
-  avg_price
-  avg_disc
-  count_order]}
+ {:projections
+  [{l_returnflag l.1/l_returnflag}
+   {l_linestatus l.1/l_linestatus}
+   {sum_qty sum_qty}
+   {sum_base_price sum_base_price}
+   {sum_disc_price sum_disc_price}
+   {sum_charge sum_charge}
+   {avg_qty avg_qty}
+   {avg_price avg_price}
+   {avg_disc avg_disc}
+   {count_order count_order}]}
  [:order-by
-  {:order-specs [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
-   [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]}
-  [:project
-   {:projections [l.1/l_returnflag
-    l.1/l_linestatus
-    {sum_qty _sum_out_2}
-    {sum_base_price _sum_out_3}
-    {sum_disc_price _sum_out_4}
-    {sum_charge _sum_out_6}
-    {avg_qty _avg_out_8}
-    {avg_price _avg_out_9}
-    {avg_disc _avg_out_10}
-    {count_order _row_count_11}]}
+  {:order-specs
+   [[l.1/l_returnflag {:direction :asc, :null-ordering :nulls-last}]
+    [l.1/l_linestatus {:direction :asc, :null-ordering :nulls-last}]]}
+  [:map
+   {:projections
+    [{sum_qty _sum_out_2}
+     {sum_base_price _sum_out_3}
+     {sum_disc_price _sum_out_4}
+     {sum_charge _sum_out_6}
+     {avg_qty _avg_out_8}
+     {avg_price _avg_out_9}
+     {avg_disc _avg_out_10}
+     {count_order _row_count_11}]}
    [:group-by
-    {:columns [l.1/l_returnflag
-     l.1/l_linestatus
-     {_avg_out_10 (avg l.1/l_discount)}
-     {_avg_out_8 (avg l.1/l_quantity)}
-     {_row_count_11 (row-count)}
-     {_sum_out_6 (sum _sum_in_7)}
-     {_sum_out_4 (sum _sum_in_5)}
-     {_sum_out_2 (sum l.1/l_quantity)}
-     {_sum_out_3 (sum l.1/l_extendedprice)}
-     {_avg_out_9 (avg l.1/l_extendedprice)}]}
+    {:columns
+     [l.1/l_returnflag
+      l.1/l_linestatus
+      {_avg_out_10 (avg l.1/l_discount)}
+      {_avg_out_8 (avg l.1/l_quantity)}
+      {_row_count_11 (row-count)}
+      {_sum_out_6 (sum _sum_in_7)}
+      {_sum_out_4 (sum _sum_in_5)}
+      {_sum_out_2 (sum l.1/l_quantity)}
+      {_sum_out_3 (sum l.1/l_extendedprice)}
+      {_avg_out_9 (avg l.1/l_extendedprice)}]}
     [:map
-     {:projections [{_sum_in_7
-       (*
-        (* l.1/l_extendedprice (- 1 l.1/l_discount))
-        (+ 1 l.1/l_tax))}
-      {_sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
-     [:rename {:prefix l.1} [:scan
-       {:table #xt/table lineitem, :columns [l_linestatus
-        l_tax
-        {l_shipdate
-         (<=
-          l_shipdate
-          (-
-           #xt/date "1998-12-01"
-           (single-field-interval "90" "DAY" 2 6)))}
-        l_returnflag
-        l_extendedprice
-        l_quantity
-        l_discount]}]]]]]]]
+     {:projections
+      [{_sum_in_7
+        (*
+         (* l.1/l_extendedprice (- 1 l.1/l_discount))
+         (+ 1 l.1/l_tax))}
+       {_sum_in_5 (* l.1/l_extendedprice (- 1 l.1/l_discount))}]}
+     [:rename
+      {:prefix l.1}
+      [:scan
+       {:table #xt/table lineitem,
+        :columns
+        [l_linestatus
+         l_tax
+         {l_shipdate
+          (<=
+           l_shipdate
+           (-
+            #xt/date "1998-12-01"
+            (single-field-interval "90" "DAY" 2 6)))}
+         l_returnflag
+         l_extendedprice
+         l_quantity
+         l_discount]}]]]]]]]

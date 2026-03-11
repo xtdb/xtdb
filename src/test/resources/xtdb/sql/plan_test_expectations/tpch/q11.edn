@@ -1,38 +1,64 @@
 [:project
- {:projections [{ps_partkey ps.1/ps_partkey} value]}
+ {:projections [{ps_partkey ps.1/ps_partkey} {value value}]}
  [:order-by
-  {:order-specs [[value {:direction :desc, :null-ordering :nulls-first}]]}
-  [:project
-   {:projections [ps.1/ps_partkey {value _sum_out_12}]}
+  {:order-specs
+   [[value {:direction :desc, :null-ordering :nulls-first}]]}
+  [:map
+   {:projections [{value _sum_out_12}]}
    [:select
     {:predicate (> _sum_out_4 _sq_6)}
     [:single-join
      {:conditions []}
      [:group-by
-      {:columns [ps.1/ps_partkey
-       {_sum_out_12 (sum _sum_in_13)}
-       {_sum_out_4 (sum _sum_in_5)}]}
+      {:columns
+       [ps.1/ps_partkey
+        {_sum_out_12 (sum _sum_in_13)}
+        {_sum_out_4 (sum _sum_in_5)}]}
       [:map
-       {:projections [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
-        {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]}
+       {:projections
+        [{_sum_in_13 (* ps.1/ps_supplycost ps.1/ps_availqty)}
+         {_sum_in_5 (* ps.1/ps_supplycost ps.1/ps_availqty)}]}
        [:mega-join
-        {:conditions [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]}
-        [[:rename {:prefix n.3} [:scan
-           {:table #xt/table nation, :columns [_id {n_name (== n_name "GERMANY")}]}]]
-         [:rename {:prefix ps.1} [:scan
-           {:table #xt/table partsupp, :columns [ps_partkey ps_supplycost ps_availqty ps_suppkey]}]]
-         [:rename {:prefix s.2} [:scan {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]
+        {:conditions
+         [{s.2/s_nationkey n.3/_id} {ps.1/ps_suppkey s.2/_id}]}
+        [[:rename
+          {:prefix n.3}
+          [:scan
+           {:table #xt/table nation,
+            :columns [_id {n_name (== n_name "GERMANY")}]}]]
+         [:rename
+          {:prefix ps.1}
+          [:scan
+           {:table #xt/table partsupp,
+            :columns
+            [ps_partkey ps_supplycost ps_availqty ps_suppkey]}]]
+         [:rename
+          {:prefix s.2}
+          [:scan
+           {:table #xt/table supplier,
+            :columns [_id s_nationkey]}]]]]]]
      [:project
       {:projections [{_sq_6 (* _sum_out_10 1.0E-4)}]}
       [:group-by
        {:columns [{_sum_out_10 (sum _sum_in_11)}]}
        [:map
-        {:projections [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]}
+        {:projections
+         [{_sum_in_11 (* ps.7/ps_supplycost ps.7/ps_availqty)}]}
         [:mega-join
-         {:conditions [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]}
-         [[:rename {:prefix n.9} [:scan
-            {:table #xt/table nation, :columns [_id {n_name (== n_name "GERMANY")}]}]]
-          [:rename {:prefix ps.7} [:scan
-            {:table #xt/table partsupp, :columns [ps_supplycost ps_availqty ps_suppkey]}]]
-          [:rename {:prefix s.8} [:scan
-            {:table #xt/table supplier, :columns [_id s_nationkey]}]]]]]]]]]]]]
+         {:conditions
+          [{s.8/s_nationkey n.9/_id} {ps.7/ps_suppkey s.8/_id}]}
+         [[:rename
+           {:prefix n.9}
+           [:scan
+            {:table #xt/table nation,
+             :columns [_id {n_name (== n_name "GERMANY")}]}]]
+          [:rename
+           {:prefix ps.7}
+           [:scan
+            {:table #xt/table partsupp,
+             :columns [ps_supplycost ps_availqty ps_suppkey]}]]
+          [:rename
+           {:prefix s.8}
+           [:scan
+            {:table #xt/table supplier,
+             :columns [_id s_nationkey]}]]]]]]]]]]]]
