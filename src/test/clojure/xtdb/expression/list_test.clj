@@ -25,6 +25,18 @@
              (run-test '(generate_series 1 11 1) {}))
           "happy case with generate_series")
 
+    (t/is (= {:vec-type #xt/type :i64
+              :size 11
+              :value [1 2 3 4 5 6 7 8 9 10 11]}
+             (run-test '(generate_series 1 11 1 true) {}))
+          "inclusive")
+
+    (t/is (= {:vec-type #xt/type :i64
+              :size 10
+              :value [1 2 3 4 5 6 7 8 9 10]}
+             (run-test '(generate_series 1 11 1 false) {}))
+          "explicit exclusive")
+
     (t/is (= {:vec-type #xt/type :null
               :size nil
               :value nil}
