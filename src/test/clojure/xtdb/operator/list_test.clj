@@ -9,6 +9,14 @@
   (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
            (tu/query-ra [:list {:columns '{a (generate_series 1 6 1)}}])))
 
+  (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5} {:a 6}]
+           (tu/query-ra [:list {:columns '{a (generate_series 1 6 1 true)}}]))
+        "inclusive")
+
+  (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
+           (tu/query-ra [:list {:columns '{a (generate_series 1 6 1 false)}}]))
+        "explicit exclusive")
+
   (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
            (tu/query-ra [:top {:limit 5}
                          [:list {:columns '{a (generate_series 1 2000000000 1)}}]]))
@@ -27,7 +35,23 @@
   (t/is (= [{:a 2} {:a 3} {:a 4}]
            (tu/query-ra [:list {:columns '{a (generate_series ?start ?stop ?step)}}]
                         {:args {:start 2 :stop 5 :step 1}}))
-        "generate_series with parameterised start, stop, step"))
+        "generate_series with parameterised start, stop, step")
+
+  (t/is (= [{:a 5} {:a 4} {:a 3} {:a 2}]
+           (tu/query-ra [:list {:columns '{a (generate_series 5 1 -1)}}]))
+        "negative step, exclusive")
+
+  (t/is (= [{:a 5} {:a 4} {:a 3} {:a 2} {:a 1}]
+           (tu/query-ra [:list {:columns '{a (generate_series 5 1 -1 true)}}]))
+        "negative step, inclusive")
+
+  (t/is (= [{:a 10} {:a 7} {:a 4}]
+           (tu/query-ra [:list {:columns '{a (generate_series 10 3 -3)}}]))
+        "negative step with stride")
+
+  (t/is (= []
+           (tu/query-ra [:list {:columns '{a (generate_series 1 5 -1)}}]))
+        "negative step, wrong direction"))
 
 (t/deftest test-batch-boundaries
   (binding [ol/*batch-size* 3]
@@ -56,4 +80,9 @@
     (t/is (= []
              (tu/query-ra [:list {:columns '{a (generate_series 1 1 1)}}]
                           {:preserve-pages? true}))
-          "Should yield no pages with empty list")))
+          "Should yield no pages with empty list")
+
+    (t/is (= [[{:a 1}]]
+             (tu/query-ra [:list {:columns '{a (generate_series 1 1 1 true)}}]
+                          {:preserve-pages? true}))
+          "Inclusive: start == end yields single element")))
