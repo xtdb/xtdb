@@ -2177,7 +2177,8 @@
 
 (defn- plan-sort-specification-list [^Sql$SortSpecificationListContext ctx
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms
-                                     & {:keys [gb-expr-to-col] :or {gb-expr-to-col {}}}]
+                                     & {:keys [gb-expr-to-col select-expr-to-col]
+                                        :or {gb-expr-to-col {}, select-expr-to-col {}}}]
   (let [outer-cols (->> outer-col-syms
                         (into {} (mapcat (juxt (juxt identity identity)
                                                (juxt (comp symbol name) identity)))))
@@ -2223,6 +2224,8 @@
                                            (add-err! env (->InvalidOrderByOrdinal outer-col-syms expr)))
 
                          (contains? outer-cols expr) {:order-by-spec [expr ob-opts]}
+
+                         (get select-expr-to-col expr) {:order-by-spec [(get select-expr-to-col expr) ob-opts]}
 
                          :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
                                  {:order-by-spec [in-sym ob-opts]
@@ -2508,10 +2511,16 @@
                                 (w/postwalk #(get gb-expr-to-col % %) pred)))
                       having-plan)
 
+        ob-select-expr-to-col (into {} (for [{:keys [projection col-sym]} projected-cols
+                                           :when (map? projection)
+                                           :let [[_ expr] (first projection)]]
+                                       [expr col-sym]))
+
         ob-plan (some-> order-by-clause
                         (plan-order-by env scope
                                        (mapv :col-sym projected-cols)
-                                       :gb-expr-to-col gb-expr-to-col))]
+                                       :gb-expr-to-col gb-expr-to-col
+                                       :select-expr-to-col ob-select-expr-to-col))]
 
     (when-let [dup-cols (not-empty (dups (mapv :col-sym projected-cols)))]
       (doseq [col dup-cols]

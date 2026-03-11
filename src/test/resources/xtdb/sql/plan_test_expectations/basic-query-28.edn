@@ -1,11 +1,9 @@
 [:project
  {:projections [{_column_1 _column_1}]}
  [:order-by
-  {:order-specs [[_ob2 {:direction :asc, :null-ordering :nulls-last}]]}
+  {:order-specs [[_column_1 {:direction :asc, :null-ordering :nulls-last}]]}
   [:map
-   {:projections [{_ob2 (== si.1/year "foo")}]}
-   [:map
-    {:projections [{_column_1 (== si.1/year "foo")}]}
-    [:rename
-     {:prefix si.1}
-     [:scan {:table #xt/table stars_in, :columns [year]}]]]]]]
+   {:projections [{_column_1 (== si.1/year "foo")}]}
+   [:rename
+    {:prefix si.1}
+    [:scan {:table #xt/table stars_in, :columns [year]}]]]]]

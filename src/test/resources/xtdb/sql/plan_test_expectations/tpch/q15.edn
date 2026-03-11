@@ -33,33 +33,31 @@
     {total_revenue revenue.6/total_revenue}]}
   [:order-by
    {:order-specs
-    [[_ob10 {:direction :asc, :null-ordering :nulls-last}]]}
+    [[s_suppkey {:direction :asc, :null-ordering :nulls-last}]]}
    [:map
-    {:projections [{_ob10 s.5/_id}]}
-    [:map
-     {:projections [{s_suppkey s.5/_id}]}
-     [:select
-      {:predicate (== revenue.6/total_revenue _sq_7)}
-      [:single-join
-       {:conditions []}
-       [:mega-join
-        {:conditions [{s.5/_id revenue.6/supplier_no}]}
-        [[:rename
-          {:prefix s.5}
-          [:scan
-           {:table #xt/table supplier,
-            :columns [s_name s_address s_phone _id]}]]
-         [:rename
-          {:prefix revenue.6}
-          [:relation
-           {:cte-id revenue.4,
-            :col-names [supplier_no total_revenue]}]]]]
-       [:project
-        {:projections [{_sq_7 _max_out_9}]}
-        [:group-by
-         {:columns [{_max_out_9 (max revenue.8/total_revenue)}]}
-         [:rename
-          {:prefix revenue.8}
-          [:relation
-           {:cte-id revenue.4,
-            :col-names [supplier_no total_revenue]}]]]]]]]]]]]
+    {:projections [{s_suppkey s.5/_id}]}
+    [:select
+     {:predicate (== revenue.6/total_revenue _sq_7)}
+     [:single-join
+      {:conditions []}
+      [:mega-join
+       {:conditions [{s.5/_id revenue.6/supplier_no}]}
+       [[:rename
+         {:prefix s.5}
+         [:scan
+          {:table #xt/table supplier,
+           :columns [s_name s_address s_phone _id]}]]
+        [:rename
+         {:prefix revenue.6}
+         [:relation
+          {:cte-id revenue.4,
+           :col-names [supplier_no total_revenue]}]]]]
+      [:project
+       {:projections [{_sq_7 _max_out_9}]}
+       [:group-by
+        {:columns [{_max_out_9 (max revenue.8/total_revenue)}]}
+        [:rename
+         {:prefix revenue.8}
+         [:relation
+          {:cte-id revenue.4,
+           :col-names [supplier_no total_revenue]}]]]]]]]]]]
