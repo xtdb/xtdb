@@ -18,10 +18,8 @@ import xtdb.database.DatabaseStorage
 import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
-import xtdb.time.InstantUtil
 import xtdb.util.*
 import xtdb.util.StringUtil.asLexDec
-import xtdb.util.TransitFormat.MSGPACK
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.ZoneId
@@ -68,8 +66,11 @@ class LeaderLogProcessor(
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
-    override fun close() {
-        allocator.close()
+    private fun maybeFlushBlock() {
+        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
+            val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
+            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).get().msgId
+        }
     }
 
     private fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
@@ -111,32 +112,44 @@ class LeaderLogProcessor(
             }
         }
 
+    private fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+        val txId = resolvedTx.txId
+        val systemTime = resolvedTx.systemTime
+
+        val result =
+            if (resolvedTx.committed)
+                TransactionCommitted(txId, systemTime)
+            else
+                TransactionAborted(txId, systemTime, resolvedTx.error)
+
+        watchers.notify(txId, result)
+    }
+
     private fun finishBlock(latestProcessedMsgId: MessageId) {
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg)
     }
 
+    private fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+        val txId = resolvedTx.txId
+
+        appendToReplica(resolvedTx)
+        notifyTx(resolvedTx)
+
+        if (liveIndex.isFull())
+            finishBlock(txId)
+    }
+
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
-        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
-            val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).get().msgId
-        }
+        maybeFlushBlock()
 
         for (record in records) {
             val msgId = record.msgId
 
             try {
                 when (val msg = record.message) {
-                    is SourceMessage.Tx -> {
-                        val resolvedTx = resolveTx(msgId, record, msg)
-                        appendToReplica(resolvedTx)
-                        notifyTx(msgId, resolvedTx)
-
-                        if (liveIndex.isFull()) {
-                            finishBlock(msgId)
-                        }
-                    }
+                    is SourceMessage.Tx -> handleResolvedTx(resolveTx(msgId, record, msg))
 
                     is SourceMessage.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx
@@ -216,15 +229,7 @@ class LeaderLogProcessor(
         }
     }
 
-    private fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
-        val systemTime = resolvedTx.systemTime
-
-        val result =
-            if (resolvedTx.committed)
-                TransactionCommitted(resolvedTx.txId, systemTime)
-            else
-                TransactionAborted(resolvedTx.txId, systemTime, resolvedTx.error)
-
-        watchers.notify(msgId, result)
+    override fun close() {
+        allocator.close()
     }
 }

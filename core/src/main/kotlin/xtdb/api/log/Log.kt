@@ -14,7 +14,6 @@ import xtdb.DurationSerde
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
-import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.asPath
 import xtdb.util.closeOnCatch
