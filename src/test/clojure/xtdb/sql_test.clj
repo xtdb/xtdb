@@ -931,6 +931,12 @@
            (sql/plan "SELECT a, COUNT(*) AS cnt FROM t GROUP BY UPPER(b)"
                      {:table-info {#xt/table t #{"a" "b"}}}))))
 
+  (t/testing "alias within GROUP BY expression - invalid as cat is not a grouping col"
+    ;; could produce a better error here by rejecting alias refences in group by expressions during planning
+    (t/is (thrown-with-msg? Exception #"Missing grouping columns:.*category"
+           (sql/plan "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY cat + 1"
+                     {:table-info {#xt/table products #{"category"}}}))))
+
   (t/testing "execution"
     (xt/submit-tx tu/*node* [[:put-docs :products {:xt/id 1 :category "food"}]
                               [:put-docs :products {:xt/id 2 :category "food"}]
