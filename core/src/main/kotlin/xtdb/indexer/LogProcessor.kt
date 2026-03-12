@@ -3,8 +3,6 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withTimeoutOrNull
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log.Companion.tailAll
@@ -16,9 +14,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
 import xtdb.util.logger
-import xtdb.util.trace
 import kotlin.math.max
-import kotlin.time.Duration.Companion.seconds
 
 private val LOG = LogProcessor::class.logger
 
@@ -42,7 +38,7 @@ class LogProcessor(
     private val replicaLog = dbStorage.replicaLog
 
     interface ProcessorFactory {
-        fun openLeader(replicaProducer: Log.AtomicProducer<ReplicaMessage>): LeaderProcessor
+        fun openLeaderSystem(replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterMsgId: MessageId): SubSystem
 
         fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers
@@ -51,18 +47,15 @@ class LogProcessor(
         fun openFollower(replicaWatchers: Watchers): FollowerProcessor
     }
 
-    sealed class SubSystem : AutoCloseable {
-        abstract val proc: AutoCloseable
-        abstract val sub: Log.Subscription
+    sealed interface SubSystem : AutoCloseable
+    interface LeaderSystem : SubSystem
 
+    private class FollowerSystem(val proc: FollowerProcessor, private val sub: Log.Subscription) : SubSystem {
         override fun close() {
             sub.close()
             proc.close()
         }
     }
-
-    private class LeaderSystem(override val proc: LeaderProcessor, override val sub: Log.Subscription) : SubSystem()
-    private class FollowerSystem(override val proc: FollowerProcessor, override val sub: Log.Subscription) : SubSystem()
 
     private val replicaWatchers =
         Watchers(max(dbState.blockCatalog.boundaryReplicaMsgId ?: -1, offsetToMsgId(replicaLog.epoch, -1)))
@@ -131,17 +124,13 @@ class LogProcessor(
                             transition.processRecords(pendingBlock.bufferedRecords)
                         }
 
+                        LOG.debug("transition: syncing watchers")
+                        val latestProcessedMsgId = runBlocking { watchers.sync() }
+
                         LOG.debug("transition: opening leader processor")
-                        procFactory.openLeader(replicaProducer).closeOnCatch { proc ->
-                            LOG.debug("transition: syncing watchers")
-                            val latestProcessedMsgId = runBlocking { watchers.sync() }
-                            val sub = dbStorage.sourceLog.tailAll(latestProcessedMsgId, proc)
-                            val newSys = LeaderSystem(proc, sub)
 
-                            LOG.info("leader startup complete, resuming after $latestProcessedMsgId")
-
-                            newSys
-                        }
+                        procFactory.openLeaderSystem(replicaProducer, latestProcessedMsgId)
+                            .also { LOG.info("leader startup complete, resuming after $latestProcessedMsgId") }
                     }
                 }
             }

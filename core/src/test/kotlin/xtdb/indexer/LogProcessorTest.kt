@@ -11,8 +11,11 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
+import xtdb.api.log.MessageId
+import xtdb.util.closeOnCatch
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
@@ -54,7 +57,7 @@ class LogProcessorTest {
 
     private fun procFactory(allocator: RootAllocator, bufferPool: BufferPool, dbState: DatabaseState, dbStorage: DatabaseStorage) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeader(replicaProducer: Log.AtomicProducer<ReplicaMessage>): LogProcessor.LeaderProcessor {
+            override fun openLeaderSystem(replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterMsgId: MessageId): LogProcessor.LeaderSystem {
                 val watchers = Watchers(-1)
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
@@ -62,7 +65,15 @@ class LogProcessorTest {
                     allocator, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), watchers,
                     emptySet(), null, blockFinisher
-                )
+                ).closeOnCatch { proc ->
+                    val sub = dbStorage.sourceLog.tailAll(afterMsgId, proc)
+                    object : LogProcessor.LeaderSystem {
+                        override fun close() {
+                            sub.close()
+                            proc.close()
+                        }
+                    }
+                }
             }
 
             override fun openTransition(
