@@ -5,7 +5,8 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
-import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.*
@@ -19,6 +20,10 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
 private val logger = LoggerFactory.getLogger(DebeziumLog::class.java)
+
+object UnitDeserializer : Deserializer<Unit> {
+    override fun deserialize(topic: String?, data: ByteArray) = Unit
+}
 
 class DebeziumLog @JvmOverloads constructor(
     private val kafkaConfig: Map<String, String>,
@@ -54,12 +59,12 @@ class DebeziumLog @JvmOverloads constructor(
             val ch = kotlinx.coroutines.channels.Channel<List<Log.Record<SourceMessage>>>(10)
 
             val producerJob = scope.launch {
-                KafkaConsumer<String, String>(
+                KafkaConsumer(
                     kafkaConfig + mapOf(
                         ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
-                        ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
-                        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java.name,
-                    )
+                    ),
+                    UnitDeserializer,
+                    ByteArrayDeserializer()
                 ).use { c ->
                     TopicPartition(topic, 0).also { tp ->
                         c.assign(listOf(tp))
@@ -80,7 +85,7 @@ class DebeziumLog @JvmOverloads constructor(
                                             epoch,
                                             record.offset(),
                                             Instant.ofEpochMilli(record.timestamp()),
-                                            SourceMessage.Tx(value.toByteArray()),
+                                            SourceMessage.Tx(value),
                                         )
                                     }
                                 }
