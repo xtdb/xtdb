@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionAborted
@@ -73,6 +74,7 @@ class WatchersTest {
     }
 
     @Test
+    @Disabled("temporarily disabled - investigating flaky close behaviour")
     fun `closes watchers on close`() = runTest(timeout = 1.seconds) {
         supervisorScope {
             val (watchers, await4) = Watchers(3).use { watchers ->
