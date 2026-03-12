@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
@@ -25,6 +27,7 @@ class LogProcessor(
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockFinisher: BlockFinisher,
+    private val meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener, AutoCloseable {
 
     interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable
@@ -70,6 +73,15 @@ class LogProcessor(
 
     @Volatile
     private var sys: SubSystem = openFollowerSystem(replicaWatchers.currentMsgId)
+
+    init {
+        meterRegistry?.let { reg ->
+            Gauge.builder("xtdb.log.leader", this) { if (it.sys is LeaderSystem) 1.0 else 0.0 }
+                .description("1 if this node is the log leader, 0 if follower")
+                .tag("db", dbState.name)
+                .register(reg)
+        }
+    }
 
     override fun onPartitionsAssigned(partitions: Collection<Int>) {
         if (partitions != listOf(0)) return
