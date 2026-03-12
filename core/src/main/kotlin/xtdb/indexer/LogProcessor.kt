@@ -71,6 +71,8 @@ class LogProcessor(
     private var sys: SubSystem = openFollowerSystem(replicaWatchers.currentMsgId)
 
     override fun onPartitionsAssigned(partitions: Collection<Int>) {
+        if (partitions != listOf(0)) return
+
         this.sys = when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("partitions assigned: $partitions — already leader, no transition needed")
@@ -118,6 +120,8 @@ class LogProcessor(
     }
 
     override fun onPartitionsRevoked(partitions: Collection<Int>) {
+        if (partitions != listOf(0)) return
+
         LOG.debug("partitions revoked: $partitions — transitioning to follower")
         this.sys = when (val oldSys = sys) {
             is LeaderSystem -> {
