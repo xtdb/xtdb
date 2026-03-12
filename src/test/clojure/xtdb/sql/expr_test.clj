@@ -1531,7 +1531,22 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
            (xt/q tu/*node* "SELECT current_schemas(false) v")))
 
   (t/is (= [{:v ["pg_catalog" "public"]} {:v ["public"]}]
-           (xt/q tu/*node* "SELECT current_schemas(a) v FROM (VALUES (true), (false)) AS x(a)"))))
+           (xt/q tu/*node* "SELECT current_schemas(a) v FROM (VALUES (true), (false)) AS x(a)")))
+
+  (t/is (= [{:current-user 1}]
+           (xt/q tu/*node* "SELECT 1 AS current_user")))
+
+  (t/is (= [{:current-user 1}]
+           (xt/q tu/*node* "SELECT 1 AS current_user ORDER BY current_user || 'x'")))
+
+  (t/is (= [{:current-user 1}]
+           (xt/q tu/*node* "SELECT x.\"current_user\" FROM (SELECT 1 AS current_user) x")))
+
+  (t/is (= [{:xt/column-1 "xtdb"}]
+           (xt/q tu/*node* "SELECT current_user FROM (SELECT 1 AS current_user) x")))
+
+  (t/is (= [{:current-user 1}]
+           (xt/q tu/*node* "SELECT \"current_user\" FROM (SELECT 1 AS current_user) x"))))
 
 (t/deftest test-postgres-access-control-functions
   ;; These current functions should always should return true

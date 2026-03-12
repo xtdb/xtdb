@@ -53,7 +53,12 @@
 (defn identifier-sym [^ParserRuleContext ctx]
   (some-> ctx
           (.accept (reify SqlVisitor
-                     (visitAsClause [this ctx] (-> (.columnName ctx) (.accept this)))
+                     (visitAsClause [this ctx] (-> (.columnLabel ctx) (.accept this)))
+
+                     (visitColumnLabel [this ctx]
+                       (if-let [id (.identifier ctx)]
+                         (.accept id this)
+                         (symbol (util/str->normal-form-str (.getText ctx)))))
 
                      (visitTargetTable [this ctx]
                        (let [tn (-> (.tableName ctx) (.accept this))]
@@ -843,7 +848,7 @@
                                                                               (let [renames (->> (for [^Sql$QualifiedRenameColumnContext rename-pair (some-> (.qualifiedRenameClause ctx)
                                                                                                                                                              (.qualifiedRenameColumn))]
                                                                                                    (let [sym (find-col scope [(identifier-sym (.identifier rename-pair)) table-name])
-                                                                                                         out-col-name (.columnName (.asClause rename-pair))]
+                                                                                                         out-col-name (.columnLabel (.asClause rename-pair))]
                                                                                                      (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))
                                                                                                  (into {}))]
                                                                                 (->> table-cols
@@ -859,7 +864,7 @@
                                       (let [renames (->> (for [^Sql$RenameColumnContext rename-pair (some-> (.renameClause star-ctx)
                                                                                                             (.renameColumn))]
                                                            (let [chain (rseq (mapv identifier-sym (.identifier (.identifierChain (.columnReference rename-pair)))))
-                                                                 out-col-name (.columnName (.asClause rename-pair))
+                                                                 out-col-name (.columnLabel (.asClause rename-pair))
                                                                  sym (find-col scope chain)]
 
                                                              (MapEntry/create sym (->col-sym (identifier-sym out-col-name)))))

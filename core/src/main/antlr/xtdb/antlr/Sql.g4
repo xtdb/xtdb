@@ -156,6 +156,11 @@ identifier
 
 columnName : identifier ;
 
+columnLabel
+    : identifier
+    | 'CURRENT_USER'
+    ;
+
 // §6 Scalar Expressions
 
 /// §6.1 Data Types
@@ -649,7 +654,7 @@ excludeClause
     ;
 
 derivedColumn : expr asClause? ;
-asClause : 'AS'? columnName ;
+asClause : 'AS'? columnLabel ;
 
 /// §7.13 <query expression>
 
