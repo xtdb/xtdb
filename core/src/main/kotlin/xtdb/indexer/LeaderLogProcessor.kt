@@ -146,6 +146,7 @@ class LeaderLogProcessor(
 
         for (record in records) {
             val msgId = record.msgId
+            LOG.trace { "leader: message $msgId (${record.message::class.simpleName})" }
 
             try {
                 when (val msg = record.message) {
@@ -165,6 +166,7 @@ class LeaderLogProcessor(
                             dbCatalog!!.attach(msg.dbName, msg.config)
                             null
                         } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "leader: attach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -186,6 +188,7 @@ class LeaderLogProcessor(
                             dbCatalog!!.detach(msg.dbName)
                             null
                         } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "leader: detach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -223,6 +226,7 @@ class LeaderLogProcessor(
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
+                LOG.error(e, "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})")
                 watchers.notify(msgId, e)
                 throw e
             }

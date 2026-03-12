@@ -9,6 +9,7 @@ val KClass<*>.logger: Logger get() = System.getLogger(qualifiedName)
 
 fun Logger.trace(message: String) = log(TRACE, message)
 fun Logger.trace(throwable: Throwable, message: String) = log(TRACE, message, throwable)
+fun Logger.trace(message: Supplier<String>) = log(TRACE, message)
 
 fun Logger.debug(message: String) = log(DEBUG, message)
 fun Logger.debug(throwable: Throwable, message: String) = log(DEBUG, message, throwable)

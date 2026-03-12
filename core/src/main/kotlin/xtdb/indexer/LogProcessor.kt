@@ -13,6 +13,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.trace
 import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
 
@@ -83,28 +84,36 @@ class LogProcessor(
                 LOG.info("partitions assigned: $partitions — transitioning to leader")
 
                 // Fence: open atomic producer on replica log.
+                LOG.debug("transition: opening atomic producer on replica log")
                 replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
                     // Send a NoOp to get a known msgId we can await —
                     // we can't use latestSubmittedMsgId because Kafka's endOffsets
                     // includes transaction marker offsets that consumers never deliver.
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.get().msgId
+                    LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (currently at ${replicaWatchers.currentMsgId})")
                     runBlocking { replicaWatchers.await0(replayTarget) }
+                    LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc
                     val pendingBlock = followerProc.pendingBlock
+                    LOG.debug("transition: closing follower system (pendingBlock=${pendingBlock != null})")
                     oldSys.close()
 
                     procFactory.openTransition(replicaProducer, replicaWatchers).use { transition ->
                         if (pendingBlock != null) {
+                            LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                             blockFinisher.finishBlock(
                                 replicaProducer,
                                 pendingBlock.boundaryMsgId,
                                 pendingBlock.boundaryMessage
                             )
+                            LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                             transition.processRecords(pendingBlock.bufferedRecords)
                         }
 
+                        LOG.debug("transition: opening leader processor")
                         procFactory.openLeader(replicaProducer).closeOnCatch { proc ->
+                            LOG.debug("transition: syncing watchers")
                             val latestProcessedMsgId = runBlocking { watchers.sync() }
                             val sub = dbStorage.sourceLog.tailAll(latestProcessedMsgId, proc)
                             val newSys = LeaderSystem(proc, sub)
@@ -126,8 +135,11 @@ class LogProcessor(
         this.sys = when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
+                LOG.debug("revocation: closing leader system")
                 oldSys.close()
-                openFollowerSystem(replicaLog.latestSubmittedMsgId)
+                val latestSubmitted = replicaLog.latestSubmittedMsgId
+                LOG.debug("revocation: opening follower system from $latestSubmitted")
+                openFollowerSystem(latestSubmitted)
             }
 
             is FollowerSystem -> {

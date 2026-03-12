@@ -13,9 +13,7 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
-import xtdb.util.error
-import xtdb.util.logger
-import xtdb.util.warn
+import xtdb.util.*
 
 private val LOG = TransitionLogProcessor::class.logger
 
@@ -36,8 +34,11 @@ class TransitionLogProcessor(
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
 
     override fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+        LOG.debug("transition: processing ${records.size} records")
+
         for (record in records) {
             val msgId = record.msgId
+            LOG.trace { "transition: message $msgId (${record.message::class.simpleName})" }
 
             try {
                 val res = when (val msg = record.message) {

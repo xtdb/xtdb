@@ -72,7 +72,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             val record = queue.removeFirst()
 
             val msg = record.message
-            LOG.trace("message ${record.msgId} (${msg::class.simpleName})")
+            LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
 
             try {
 
@@ -95,6 +95,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                         this.pendingBlock = null
                         continue
                     } else {
+                        LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
                         pendingBlock += record
                         continue
                     }

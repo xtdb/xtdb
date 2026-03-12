@@ -25,9 +25,7 @@ import xtdb.table.TableRef
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
-import xtdb.util.debug
-import xtdb.util.logger
-import xtdb.util.warn
+import xtdb.util.*
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.Instant
@@ -244,6 +242,7 @@ class SourceLogProcessor(
                         && msg.blockIndex == pendingBlockIdx
                         && msg.storageEpoch == bufferPool.epoch
                     ) {
+                        LOG.debug("read-only: block 'b${pendingBlockIdx!!.asLexHex}' uploaded, replaying ${bufferedRecords.size + 1} buffered records")
                         compactor.signalBlock()
                         pendingBlockIdx = null
 
@@ -253,10 +252,13 @@ class SourceLogProcessor(
                         bufferedRecords.clear()
                         continue
                     } else {
+                        LOG.trace { "read-only: buffering message $msgId (${msg::class.simpleName}) during pending block b${pendingBlockIdx!!.asLexHex} (${bufferedRecords.size + 1} buffered)" }
                         bufferedRecords.add(record)
                         continue
                     }
                 }
+
+                LOG.trace { "source: message $msgId (${record.message::class.simpleName})" }
 
                 when (val msg = record.message) {
                     is SourceMessage.Tx -> {
@@ -282,7 +284,10 @@ class SourceLogProcessor(
                         val error = try {
                             dbCatalog!!.attach(msg.dbName, msg.config)
                             null
-                        } catch (e: Anomaly.Caller) { e }
+                        } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "source: attach database '${msg.dbName}' failed at $msgId" }
+                            e
+                        }
 
                         indexer.addTxRow(txKey, error)
 
@@ -298,7 +303,10 @@ class SourceLogProcessor(
                         val error = try {
                             dbCatalog!!.detach(msg.dbName)
                             null
-                        } catch (e: Anomaly.Caller) { e }
+                        } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "source: detach database '${msg.dbName}' failed at $msgId" }
+                            e
+                        }
 
                         indexer.addTxRow(txKey, error)
 
@@ -322,7 +330,12 @@ class SourceLogProcessor(
                     }
                 }
             }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: xtdb.error.Interrupted) {
+            throw e
         } catch (e: Throwable) {
+            LOG.error(e, "source: failed to process log record with msgId $lastMsgId")
             watchers.notify(lastMsgId, e)
             throw e
         }
