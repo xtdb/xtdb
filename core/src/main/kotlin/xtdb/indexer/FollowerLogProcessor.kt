@@ -3,6 +3,7 @@ package xtdb.indexer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.storage.Storage
 import xtdb.block.proto.Block.parseFrom
@@ -65,92 +66,95 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
+    private fun handleRecord(record: Log.Record<ReplicaMessage>): TransactionResult? {
+        val msg = record.message
+        LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
+
+        pendingBlock?.let { pendingBlock ->
+            val pendingBlockIdx = pendingBlock.blockIdx
+            if (msg is ReplicaMessage.BlockUploaded
+                && msg.blockIndex == pendingBlockIdx
+                && msg.storageEpoch == bufferPool.epoch
+            ) {
+                LOG.debug("follower: block transition for 'b${msg.blockIndex.asLexHex}'")
+                val blockFile = bufferPool.allBlockFiles.lastOrNull()
+                val block = blockFile?.key?.let { parseFrom(bufferPool.getByteArray(it)) }
+
+                blockCatalog.refresh(block)
+                liveIndex.nextBlock()
+                compactor.signalBlock()
+
+                val bufferedRecords = pendingBlock.bufferedRecords
+                this.pendingBlock = null
+
+                // replay buffered records — already notified to replicaWatchers when first consumed
+                for (buffered in bufferedRecords) {
+                    handleRecord(buffered)
+                }
+
+                return null
+            } else {
+                LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
+                pendingBlock += record
+                return null
+            }
+        }
+
+        return when (msg) {
+            is ReplicaMessage.ResolvedTx -> {
+                val latestTxId = liveIndex.latestCompletedTx?.txId
+                if (latestTxId != null && msg.txId <= latestTxId) return null
+
+                liveIndex.importTx(msg)
+
+                val systemTime = msg.systemTime
+                val result = if (msg.committed) {
+                    when (val dbOp = msg.dbOp) {
+                        is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                        is DbOp.Detach -> dbCatalog!!.detach(dbOp.dbName)
+                        null -> {}
+                    }
+
+                    TransactionCommitted(msg.txId, systemTime)
+                } else TransactionAborted(msg.txId, systemTime, msg.error)
+
+                sourceWatchers.notify(msg.txId, result)
+                result
+            }
+
+            is ReplicaMessage.TriesAdded -> {
+                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                    addTries(msg.tries, record.logTimestamp)
+                null
+            }
+
+            is ReplicaMessage.BlockBoundary -> {
+                pendingBlock = PendingBlock(record.msgId, msg)
+                LOG.debug("follower: waiting for block 'b${msg.blockIndex.asLexHex}' via BlockUploaded...")
+                null
+            }
+
+            is ReplicaMessage.BlockUploaded -> {
+                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                    addTries(msg.tries, record.logTimestamp)
+                null
+            }
+
+            is ReplicaMessage.NoOp -> null
+        }
+    }
+
     override fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
-        val queue = ArrayDeque(records)
-
-        while (queue.isNotEmpty()) {
-            val record = queue.removeFirst()
-
-            val msg = record.message
-            LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
-
+        for (record in records) {
             try {
-
-                pendingBlock?.let { pendingBlock ->
-                    val pendingBlockIdx = pendingBlock.blockIdx
-                    if (msg is ReplicaMessage.BlockUploaded
-                        && msg.blockIndex == pendingBlockIdx
-                        && msg.storageEpoch == bufferPool.epoch
-                    ) {
-                        LOG.debug("follower: block transition for 'b${msg.blockIndex.asLexHex}'")
-                        val blockFile = bufferPool.allBlockFiles.lastOrNull()
-                        val block = blockFile?.key?.let { parseFrom(bufferPool.getByteArray(it)) }
-
-                        blockCatalog.refresh(block)
-                        liveIndex.nextBlock()
-                        compactor.signalBlock()
-
-                        // prepend buffered records to the queue for replay
-                        queue.addAll(0, pendingBlock.bufferedRecords)
-                        this.pendingBlock = null
-                        continue
-                    } else {
-                        LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
-                        pendingBlock += record
-                        continue
-                    }
-                }
-
-                val res = when (msg) {
-                    is ReplicaMessage.ResolvedTx -> {
-                        val latestTxId = liveIndex.latestCompletedTx?.txId
-                        if (latestTxId != null && msg.txId <= latestTxId) continue
-
-                        liveIndex.importTx(msg)
-
-                        val systemTime = msg.systemTime
-                        val result = if (msg.committed) {
-                            when (val dbOp = msg.dbOp) {
-                                is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                                is DbOp.Detach -> dbCatalog!!.detach(dbOp.dbName)
-                                null -> {}
-                            }
-
-                            TransactionCommitted(msg.txId, systemTime)
-                        } else TransactionAborted(msg.txId, systemTime, msg.error)
-
-                        sourceWatchers.notify(msg.txId, result)
-                        result
-                    }
-
-                    is ReplicaMessage.TriesAdded -> {
-                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                            addTries(msg.tries, record.logTimestamp)
-                        null
-                    }
-
-                    is ReplicaMessage.BlockBoundary -> {
-                        pendingBlock = PendingBlock(record.msgId, msg)
-                        LOG.debug("follower: waiting for block 'b${msg.blockIndex.asLexHex}' via BlockUploaded...")
-                        null
-                    }
-
-                    is ReplicaMessage.BlockUploaded -> {
-                        if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                            addTries(msg.tries, record.logTimestamp)
-                        null
-                    }
-
-                    is ReplicaMessage.NoOp -> null
-                }
-
+                val res = handleRecord(record)
                 replicaWatchers.notify(record.msgId, res)
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
-                LOG.error(e, "follower: failed to process log record with msgId ${record.msgId} (${msg::class.simpleName})")
+                LOG.error(e, "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})")
                 sourceWatchers.notify(record.msgId, e) // strictly speaking, a replica msgId.
                 replicaWatchers.notify(record.msgId, e)
                 throw e
