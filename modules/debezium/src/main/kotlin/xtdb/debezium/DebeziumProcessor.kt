@@ -1,6 +1,5 @@
 package xtdb.debezium
 
-import kotlinx.serialization.json.*
 import org.apache.arrow.memory.BufferAllocator
 import org.slf4j.LoggerFactory
 import xtdb.api.Xtdb
@@ -20,15 +19,7 @@ class DebeziumProcessor(
     override fun processRecords(records: List<Log.Record<SourceMessage>>) {
         for (record in records) {
             try {
-                val json = String((record.message as SourceMessage.Tx).payload)
-
-                val event = try {
-                    val envelope = Json.parseToJsonElement(json).jsonObject
-                    CdcEvent.fromJson(envelope)
-                } catch (e: IllegalArgumentException) {
-                    // Covers JsonDecodingException (malformed JSON) and .jsonObject on non-objects
-                    throw Incorrect("Invalid CDC message: ${e.message}", cause = e)
-                }
+                val event = CdcEvent.fromJson((record.message as SourceMessage.Tx).payload)
 
                 event.toTxOp(allocator).use { txOp ->
                     val metadata = event.metadata + ("kafka_offset" to record.logOffset)

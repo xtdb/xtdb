@@ -73,7 +73,12 @@ sealed class CdcEvent {
             else -> throw Incorrect("'$field' must be a TIMESTAMPTZ string, got ${value::class.simpleName}")
         }
 
-        fun fromJson(envelope: JsonObject): CdcEvent {
+        fun fromJson(bytes: ByteArray): CdcEvent {
+            val envelope = try {
+                Json.parseToJsonElement(String(bytes)).jsonObject
+            } catch (e: IllegalArgumentException) {
+                throw Incorrect("Invalid CDC message: ${e.message}", cause = e)
+            }
             // Auto-detect JsonConverter envelope (schemas.enable=true wraps in {schema, payload}).
             // TODO: revisit when we add schema management — may want to use the schema field.
             val payload = envelope["payload"]?.jsonObject ?: envelope

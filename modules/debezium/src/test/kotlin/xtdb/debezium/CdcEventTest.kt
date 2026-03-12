@@ -39,7 +39,7 @@ class CdcEventTest {
         tsNs: Long = 1700000000000000000L,
         lsn: Long = 12345L,
         wrapInPayload: Boolean = true,
-    ): JsonObject {
+    ): ByteArray {
         val cdcPayload = buildJsonObject {
             put("op", op)
             if (before != null) put("before", before) else put("before", JsonNull)
@@ -52,7 +52,8 @@ class CdcEventTest {
             }
         }
 
-        return if (wrapInPayload) buildJsonObject { put("payload", cdcPayload) } else cdcPayload
+        val envelope = if (wrapInPayload) buildJsonObject { put("payload", cdcPayload) } else cdcPayload
+        return envelope.toString().toByteArray()
     }
 
     // -- JSON conversion tests --
@@ -157,7 +158,7 @@ class CdcEventTest {
                 putJsonObject("after") { put("_id", 1) }
                 putJsonObject("source") { put("table", "t") }
             }
-        }
+        }.toString().toByteArray()
         val ex = assertThrows(Incorrect::class.java) {
             CdcEvent.fromJson(envelope)
         }
@@ -172,7 +173,7 @@ class CdcEventTest {
                 putJsonObject("after") { put("_id", 1) }
                 putJsonObject("source") { put("schema", "public") }
             }
-        }
+        }.toString().toByteArray()
         val ex = assertThrows(Incorrect::class.java) {
             CdcEvent.fromJson(envelope)
         }
