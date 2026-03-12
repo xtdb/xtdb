@@ -11,6 +11,7 @@ import xtdb.api.log.Log.Companion.tailAll
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.util.MsgIdUtil.offsetToMsgId
+import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
@@ -75,6 +76,13 @@ class LogProcessor(
     private var sys: SubSystem = openFollowerSystem(replicaWatchers.currentMsgId)
 
     init {
+        val blockCatalog = dbState.blockCatalog
+        LOG.info(
+            "starting follower — block: ${blockCatalog.currentBlockIndex?.asLexHex}, " +
+                "source: ${blockCatalog.latestProcessedMsgId}, " +
+                "replica: ${blockCatalog.boundaryReplicaMsgId}"
+        )
+
         meterRegistry?.let { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.sys is LeaderSystem) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
@@ -102,7 +110,7 @@ class LogProcessor(
                     // we can't use latestSubmittedMsgId because Kafka's endOffsets
                     // includes transaction marker offsets that consumers never deliver.
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.get().msgId
-                    LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (currently at ${replicaWatchers.currentMsgId})")
+                    LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (replica latest: ${replicaLog.latestSubmittedMsgId})")
                     runBlocking { replicaWatchers.await0(replayTarget) }
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 

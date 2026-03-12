@@ -14,6 +14,7 @@ import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.util.*
+import xtdb.util.StringUtil.asLexHex
 
 private val LOG = TransitionLogProcessor::class.logger
 
@@ -75,6 +76,7 @@ class TransitionLogProcessor(
                     }
 
                     is ReplicaMessage.BlockBoundary -> {
+                        LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
                         blockFinisher.finishBlock(replicaProducer, msgId, msg)
                         null
                     }

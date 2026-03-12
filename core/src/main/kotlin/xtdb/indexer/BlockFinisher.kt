@@ -76,7 +76,7 @@ class BlockFinisher(
         blockCatalog.refresh(block)
 
         // Now signal followers that the block is available.
-        replicaProducer.withTx { tx ->
+        val uploadedMsgId = replicaProducer.withTx { tx ->
             tx.appendMessage(
                 BlockUploaded(
                     Storage.VERSION, bufferPool.epoch,
@@ -84,7 +84,9 @@ class BlockFinisher(
                     addedTries
                 )
             )
-        }
+        }.get().msgId
+
+        LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
 
         liveIndex.nextBlock()
         compactor.signalBlock()

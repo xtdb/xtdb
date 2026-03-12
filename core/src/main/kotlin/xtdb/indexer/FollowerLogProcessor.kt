@@ -76,7 +76,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 && msg.blockIndex == pendingBlockIdx
                 && msg.storageEpoch == bufferPool.epoch
             ) {
-                LOG.debug("follower: block transition for 'b${msg.blockIndex.asLexHex}'")
+                LOG.debug("block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
                 val blockFile = bufferPool.allBlockFiles.lastOrNull()
                 val block = blockFile?.key?.let { parseFrom(bufferPool.getByteArray(it)) }
 
@@ -130,7 +130,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg)
-                LOG.debug("follower: waiting for block 'b${msg.blockIndex.asLexHex}' via BlockUploaded...")
+                LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
                 null
             }
 

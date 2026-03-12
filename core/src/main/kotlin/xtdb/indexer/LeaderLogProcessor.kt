@@ -20,6 +20,7 @@ import xtdb.error.Interrupted
 import xtdb.table.TableRef
 import xtdb.util.*
 import xtdb.util.StringUtil.asLexDec
+import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.ZoneId
@@ -128,6 +129,7 @@ class LeaderLogProcessor(
     private fun finishBlock(latestProcessedMsgId: MessageId) {
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
+        LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg)
     }
 
