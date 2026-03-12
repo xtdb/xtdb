@@ -74,10 +74,10 @@
                                                {:keys [meter-registry]} :base}]
   (when (.getEnabled indexer-conf)
     (let [proc-factory (reify LogProcessor$ProcessorFactory
-                         (openFollower [_ replica-watchers]
+                         (openFollower [_ replica-watchers pending-block]
                            (FollowerLogProcessor. allocator buffer-pool db-state compactor-for-db
                                                   watchers replica-watchers
-                                                  db-catalog))
+                                                  db-catalog pending-block))
 
                          (openLeaderSystem [_ replica-producer after-msg-id]
                            (util/with-close-on-catch [proc (LeaderLogProcessor. allocator
@@ -89,6 +89,7 @@
                                                                                 meter-registry)
                                                       sub (Log/tailAll (.getSourceLog db-storage) after-msg-id proc)]
                              (reify LogProcessor$LeaderSystem
+                               (getPendingBlock [_] (.getPendingBlock proc))
                                (close [_]
                                  (.close sub)
                                  (.close proc)))))

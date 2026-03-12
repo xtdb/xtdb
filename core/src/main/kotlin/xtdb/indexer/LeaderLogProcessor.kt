@@ -65,6 +65,8 @@ class LeaderLogProcessor(
                 }
             }
 
+    var pendingBlock: PendingBlock? = null
+
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
     private fun maybeFlushBlock() {
@@ -130,7 +132,9 @@ class LeaderLogProcessor(
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
+        pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
         blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg)
+        pendingBlock = null
     }
 
     private fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {

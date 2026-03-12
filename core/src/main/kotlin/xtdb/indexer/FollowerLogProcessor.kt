@@ -11,7 +11,6 @@ import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
-import xtdb.error.Fault
 import xtdb.error.Interrupted
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -32,33 +31,15 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val sourceWatchers: Watchers,
     private val replicaWatchers: Watchers,
     private val dbCatalog: Database.Catalog?,
+    override var pendingBlock: PendingBlock?,
     private val maxBufferedRecords: Int = 1024,
 ) : LogProcessor.FollowerProcessor {
-
-    inner class PendingBlock(val boundaryMsgId: MessageId, val boundaryMessage: ReplicaMessage.BlockBoundary) {
-        val blockIdx get() = boundaryMessage.blockIndex
-        private val _bufferedRecords = mutableListOf<Log.Record<ReplicaMessage>>()
-        val bufferedRecords: List<Log.Record<ReplicaMessage>> get() = _bufferedRecords
-
-        operator fun plusAssign(record: Log.Record<ReplicaMessage>) {
-            if (_bufferedRecords.size >= maxBufferedRecords) {
-                throw Fault(
-                    "Follower buffer overflow: buffered $maxBufferedRecords records while waiting for BlockUploaded(b${blockIdx.asLexHex})",
-                    "xtdb.indexer/follower-buffer-overflow",
-                    mapOf("pending-block-idx" to blockIdx, "max-buffered-records" to maxBufferedRecords)
-                )
-            }
-            _bufferedRecords += record
-        }
-    }
 
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
     private val liveIndex = dbState.liveIndex
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
-
-    override var pendingBlock: PendingBlock? = null
 
     private fun addTries(tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
         tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
@@ -129,7 +110,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             }
 
             is ReplicaMessage.BlockBoundary -> {
-                pendingBlock = PendingBlock(record.msgId, msg)
+                pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
                 null
             }

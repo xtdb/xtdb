@@ -68,6 +68,7 @@ class LogProcessorTest {
                 ).closeOnCatch { proc ->
                     val sub = dbStorage.sourceLog.tailAll(afterMsgId, proc)
                     object : LogProcessor.LeaderSystem {
+                        override val pendingBlock: PendingBlock? get() = proc.pendingBlock
                         override fun close() {
                             sub.close()
                             proc.close()
@@ -85,10 +86,10 @@ class LogProcessorTest {
                     replicaProducer, replicaWatchers, Watchers(-1), dbCatalog = null
                 )
 
-            override fun openFollower(replicaWatchers: Watchers): LogProcessor.FollowerProcessor =
+            override fun openFollower(replicaWatchers: Watchers, pendingBlock: PendingBlock?): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
                     allocator, bufferPool, dbState,
-                    mockk(relaxed = true), Watchers(-1), replicaWatchers, null
+                    mockk(relaxed = true), Watchers(-1), replicaWatchers, null, pendingBlock
                 )
         }
 
