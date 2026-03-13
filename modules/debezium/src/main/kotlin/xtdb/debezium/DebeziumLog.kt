@@ -56,7 +56,6 @@ class DebeziumLog @JvmOverloads constructor(
     override fun openConsumer(): Log.Consumer<SourceMessage> = object : Log.Consumer<SourceMessage> {
         override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
             val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
-            val ch = kotlinx.coroutines.channels.Channel<List<Log.Record<SourceMessage>>>(10)
 
             val producerJob = scope.launch {
                 KafkaConsumer(
@@ -73,13 +72,7 @@ class DebeziumLog @JvmOverloads constructor(
                     runInterruptible(Dispatchers.IO) {
                         while (true) {
                             val records = try {
-                                c.poll(pollDuration).records(topic)
-                            } catch (_: InterruptException) {
-                                throw InterruptedException()
-                            }
-
-                            ch.trySend(
-                                records.mapNotNull { record ->
+                                c.poll(pollDuration).records(topic).mapNotNull { record ->
                                     record.value()?.let { value ->
                                         Log.Record(
                                             epoch,
@@ -89,24 +82,17 @@ class DebeziumLog @JvmOverloads constructor(
                                         )
                                     }
                                 }
-                            )
+                            } catch (_: InterruptException) {
+                                throw InterruptedException()
+                            }
+
+                            processor.processRecords(records)
                         }
                     }
                 }
             }
 
-            val consumerJob = scope.launch {
-                try {
-                    while (isActive) {
-                        val records = ch.receive()
-                        if (records.isNotEmpty()) runInterruptible { processor.processRecords(records) }
-                    }
-                } finally {
-                    producerJob.cancelAndJoin()
-                }
-            }
-
-            return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
+            return Log.Subscription { runBlocking { withTimeout(5.seconds) { producerJob.cancelAndJoin() } } }
         }
 
         override fun close() {}
