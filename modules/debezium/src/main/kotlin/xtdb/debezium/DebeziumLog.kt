@@ -69,8 +69,8 @@ class DebeziumLog @JvmOverloads constructor(
                         c.assign(listOf(tp))
                         c.seek(tp, afterOffset + 1)
                     }
-                    runInterruptible(Dispatchers.IO) {
-                        while (true) {
+                    while (isActive) {
+                        runInterruptible(Dispatchers.IO) {
                             val records = try {
                                 c.poll(pollDuration).records(topic).mapNotNull { record ->
                                     record.value()?.let { value ->
