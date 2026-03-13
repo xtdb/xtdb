@@ -34,7 +34,7 @@ class TransitionLogProcessor(
 
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
 
-    override fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         LOG.debug("transition: processing ${records.size} records")
 
         for (record in records) {

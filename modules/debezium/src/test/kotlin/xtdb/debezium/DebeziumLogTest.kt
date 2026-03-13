@@ -77,7 +77,7 @@ class DebeziumLogTest {
 
         val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
         val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
                 received.addAll(records)
             }
         }
@@ -113,7 +113,7 @@ class DebeziumLogTest {
 
         val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
         val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
                 received.addAll(records)
             }
         }
@@ -139,7 +139,7 @@ class DebeziumLogTest {
 
         val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
         val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
                 received.addAll(records)
             }
         }

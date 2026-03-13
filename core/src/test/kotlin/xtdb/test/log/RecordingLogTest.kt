@@ -1,5 +1,6 @@
 package xtdb.test.log
 
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.log.SourceMessage
@@ -15,10 +16,10 @@ class RecordingLogTest {
     }
 
     @Test
-    fun `readLastMessage returns the message after appending one`() {
+    fun `readLastMessage returns the message after appending one`() = runTest {
         val log = RecordingLog.Factory().openSourceLog(emptyMap())
 
-        log.appendMessage(txMessage(1)).get()
+        log.appendMessage(txMessage(1)).await()
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
@@ -27,12 +28,12 @@ class RecordingLogTest {
     }
 
     @Test
-    fun `readLastMessage returns the last message after appending multiple`() {
+    fun `readLastMessage returns the last message after appending multiple`() = runTest {
         val log = RecordingLog.Factory().openSourceLog(emptyMap())
 
-        log.appendMessage(txMessage(1)).get()
-        log.appendMessage(txMessage(2)).get()
-        log.appendMessage(txMessage(3)).get()
+        log.appendMessage(txMessage(1)).await()
+        log.appendMessage(txMessage(2)).await()
+        log.appendMessage(txMessage(3)).await()
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)

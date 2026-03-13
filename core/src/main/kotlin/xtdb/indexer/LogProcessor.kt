@@ -2,7 +2,6 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.runBlocking
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log.Companion.tailAll
@@ -89,7 +88,7 @@ class LogProcessor(
         }
     }
 
-    override fun onPartitionsAssigned(partitions: Collection<Int>) {
+    override suspend fun onPartitionsAssigned(partitions: Collection<Int>) {
         if (partitions != listOf(0)) return
 
         this.sys = when (val oldSys = sys) {
@@ -107,9 +106,9 @@ class LogProcessor(
                     // Send a NoOp to get a known msgId we can await —
                     // we can't use latestSubmittedMsgId because Kafka's endOffsets
                     // includes transaction marker offsets that consumers never deliver.
-                    val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.get().msgId
+                    val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
                     LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (replica latest: ${replicaLog.latestSubmittedMsgId})")
-                    runBlocking { replicaWatchers.await0(replayTarget) }
+                    replicaWatchers.await0(replayTarget)
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc
@@ -130,7 +129,7 @@ class LogProcessor(
                         }
 
                         LOG.debug("transition: syncing watchers")
-                        val latestProcessedMsgId = runBlocking { watchers.sync() }
+                        val latestProcessedMsgId = watchers.sync()
 
                         LOG.debug("transition: opening leader processor")
 
@@ -142,7 +141,7 @@ class LogProcessor(
         }
     }
 
-    override fun onPartitionsRevoked(partitions: Collection<Int>) {
+    override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
         if (partitions != listOf(0)) return
 
         LOG.debug("partitions revoked: $partitions — transitioning to follower")

@@ -1,5 +1,6 @@
 package xtdb.api.log
 
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
@@ -47,7 +48,7 @@ class KafkaClusterTest {
         val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
 
         val subscriber = mockk<RecordProcessor<SourceMessage>> {
-            every { processRecords(capture(msgs)) } returns Unit
+            coEvery { processRecords(capture(msgs)) } returns Unit
         }
 
         fun trieDetails(key: String, size: Long) =

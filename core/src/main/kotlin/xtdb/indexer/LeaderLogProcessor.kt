@@ -69,15 +69,15 @@ class LeaderLogProcessor(
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
-    private fun maybeFlushBlock() {
+    private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).get().msgId
+            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).await().msgId
         }
     }
 
-    private fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
-        replicaProducer.withTx { tx -> tx.appendMessage(message) }.get()
+    private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
+        replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
@@ -128,7 +128,7 @@ class LeaderLogProcessor(
         watchers.notify(txId, result)
     }
 
-    private fun finishBlock(latestProcessedMsgId: MessageId) {
+    private suspend fun finishBlock(latestProcessedMsgId: MessageId) {
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
@@ -137,7 +137,7 @@ class LeaderLogProcessor(
         pendingBlock = null
     }
 
-    private fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+    private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txId = resolvedTx.txId
 
         appendToReplica(resolvedTx)
@@ -147,7 +147,7 @@ class LeaderLogProcessor(
             finishBlock(txId)
     }
 
-    override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
         for (record in records) {

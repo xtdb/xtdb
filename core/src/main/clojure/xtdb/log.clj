@@ -15,7 +15,7 @@
            java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
            (xtdb.api TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Cluster$Factory Log$Factory SourceMessage$Tx Log$MessageMetadata)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory SourceMessage$Tx)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
            (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
@@ -241,11 +241,11 @@
         log (.getSourceLog db)
         default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
-      (let [^Log$MessageMetadata message-meta @(.appendMessage log
-                                                               (SourceMessage$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
-                                                                                                  (-> (select-keys opts [:authn :default-db])
-                                                                                                      (assoc :default-tz (:default-tz opts default-tz)
-                                                                                                             :system-time (some-> system-time time/expect-instant))))))]
+      (let [message-meta (.appendMessageBlocking log
+                                                 (SourceMessage$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
+                                                                                      (-> (select-keys opts [:authn :default-db])
+                                                                                          (assoc :default-tz (:default-tz opts default-tz)
+                                                                                                 :system-time (some-> system-time time/expect-instant))))))]
         (.getMsgId message-meta)))))
 
 

@@ -9,7 +9,6 @@ package xtdb.api.log
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.future.future
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.serialization.SerialName
@@ -43,7 +42,6 @@ import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant.ofEpochMilli
 import java.util.*
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
@@ -175,25 +173,23 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
 
-        override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> =
-            scope.future {
-                CompletableDeferred<Log.MessageMetadata>()
-                    .also { res ->
-                        producer.send(
-                            ProducerRecord(topic, null, Unit, codec.encode(message))
-                        ) { recordMetadata, e ->
-                            if (e == null) res.complete(
-                                Log.MessageMetadata(
-                                    epoch,
-                                    recordMetadata.offset(),
-                                    ofEpochMilli(recordMetadata.timestamp())
-                                )
-                            ) else res.completeExceptionally(e)
-                        }
+        override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> =
+            CompletableDeferred<Log.MessageMetadata>()
+                .also { res ->
+                    producer.send(
+                        ProducerRecord(topic, null, Unit, codec.encode(message))
+                    ) { recordMetadata, e ->
+                        if (e == null) {
+                            val metadata = Log.MessageMetadata(
+                                epoch,
+                                recordMetadata.offset(),
+                                ofEpochMilli(recordMetadata.timestamp())
+                            )
+                            latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(metadata.logOffset) }
+                            res.complete(metadata)
+                        } else res.completeExceptionally(e)
                     }
-                    .await()
-                    .also { messageMetadata -> latestSubmittedOffset0.updateAndGet { it.coerceAtLeast(messageMetadata.logOffset) } }
-            }
+                }
 
         override fun readLastMessage(): M? =
             kafkaConfigMap.openConsumer().use { c ->
@@ -222,16 +218,16 @@ class KafkaCluster(
                 producer.beginTransaction()
 
                 return object : Log.AtomicProducer.Tx<M> {
-                    private val futures = mutableListOf<CompletableFuture<Log.MessageMetadata>>()
+                    private val futures = mutableListOf<CompletableDeferred<Log.MessageMetadata>>()
                     private var isOpen = true
 
-                    override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> {
+                    override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
                         check(isOpen) { "Transaction already closed" }
-                        val future = CompletableFuture<Log.MessageMetadata>()
-                        futures.add(future)
+                        val deferred = CompletableDeferred<Log.MessageMetadata>()
+                        futures.add(deferred)
                         producer.send(ProducerRecord(topic, null, Unit, codec.encode(message))) { recordMetadata, e ->
                             if (e == null) {
-                                future.complete(
+                                deferred.complete(
                                     Log.MessageMetadata(
                                         epoch,
                                         recordMetadata.offset(),
@@ -239,19 +235,20 @@ class KafkaCluster(
                                     )
                                 )
                             } else {
-                                future.completeExceptionally(e)
+                                deferred.completeExceptionally(e)
                             }
                         }
-                        return future
+                        return deferred
                     }
 
+                    @OptIn(ExperimentalCoroutinesApi::class)
                     override fun commit() {
                         check(isOpen) { "Transaction already closed" }
                         isOpen = false
-                        // commitTransaction flushes all pending sends, so futures are already complete
+                        // commitTransaction flushes all pending sends, so deferreds are already complete
                         producer.commitTransaction()
                         futures.forEach {
-                            latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.join().logOffset) }
+                            latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.getCompleted().logOffset) }
                         }
                     }
 
@@ -302,8 +299,8 @@ class KafkaCluster(
                         controlChannel.onReceive { msg -> handleControl(msg) }
 
                         onTimeout(0) {
-                            runInterruptible {
-                                val records = try {
+                            val records = runInterruptible {
+                                try {
                                     c.poll(pollDuration).records(topic)
                                         .mapNotNull { rec ->
                                             val msg = codec.decode(rec.value()) ?: return@mapNotNull null
@@ -313,9 +310,9 @@ class KafkaCluster(
                                 } catch (_: InterruptException) {
                                     throw InterruptedException()
                                 }
-
-                                currentProcessor?.processRecords(records)
                             }
+
+                            currentProcessor?.processRecords(records)
                         }
                     }
                 }
@@ -359,14 +356,14 @@ class KafkaCluster(
                         // onPartitionsAssigned is called from the poll thread, so pause is safe here
                         override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
                             c.pause(partitions)
-                            listener.onPartitionsAssigned(partitions.map { it.partition() })
+                            listener.onPartitionsAssignedSync(partitions.map { it.partition() })
                         }
 
                         override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsRevoked(partitions.map { it.partition() })
+                            listener.onPartitionsRevokedSync(partitions.map { it.partition() })
 
                         override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsLost(partitions.map { it.partition() })
+                            listener.onPartitionsLostSync(partitions.map { it.partition() })
                     })
 
                     PollingConsumer(c)

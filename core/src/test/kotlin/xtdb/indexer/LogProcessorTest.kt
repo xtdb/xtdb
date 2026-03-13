@@ -3,21 +3,14 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
+import xtdb.api.log.*
 import xtdb.api.log.Log.Companion.tailAll
-import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.SourceMessage
-import xtdb.api.log.MessageId
-import xtdb.util.closeOnCatch
-import xtdb.api.log.Watchers
-import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -25,6 +18,7 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
+import xtdb.util.closeOnCatch
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 
@@ -55,9 +49,17 @@ class LogProcessorTest {
             liveIndex
         )
 
-    private fun procFactory(allocator: RootAllocator, bufferPool: BufferPool, dbState: DatabaseState, dbStorage: DatabaseStorage) =
+    private fun procFactory(
+        allocator: RootAllocator,
+        bufferPool: BufferPool,
+        dbState: DatabaseState,
+        dbStorage: DatabaseStorage
+    ) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeaderSystem(replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterMsgId: MessageId): LogProcessor.LeaderSystem {
+            override fun openLeaderSystem(
+                replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                afterMsgId: MessageId
+            ): LogProcessor.LeaderSystem {
                 val watchers = Watchers(-1)
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
@@ -143,7 +145,7 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `leader replays existing replica messages during transition`() {
+    fun `leader replays existing replica messages during transition`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
@@ -157,10 +159,7 @@ class LogProcessorTest {
 
         // Pre-populate the replica log with a transaction
         val replicaProducer = replicaLog.openAtomicProducer("setup")
-        val future = replicaLog.appendMessage(
-            ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())
-        )
-        future.get()
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())).await()
         replicaProducer.close()
 
         val logProc = LogProcessor(
@@ -181,7 +180,7 @@ class LogProcessorTest {
     }
 
     @Test
-    fun `leader replays existing replica messages with non-zero epoch`() {
+    fun `leader replays existing replica messages with non-zero epoch`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
@@ -194,10 +193,7 @@ class LogProcessorTest {
         val blockFinisher = BlockFinisher(dbStorage, dbState, mockk(relaxed = true), null)
 
         // Pre-populate the replica log
-        val future = replicaLog.appendMessage(
-            ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())
-        )
-        future.get()
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())).await()
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage),

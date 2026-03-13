@@ -16,7 +16,7 @@ class DebeziumProcessor(
     private val allocator: BufferAllocator,
 ) : Log.RecordProcessor<SourceMessage>, AutoCloseable {
 
-    override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         for (record in records) {
             try {
                 val event = CdcEvent.fromJson((record.message as SourceMessage.Tx).payload)

@@ -6,7 +6,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.future.future
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
@@ -30,7 +29,6 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
 import java.time.InstantSource
-import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
@@ -201,30 +199,34 @@ class LocalLog<M>(
     }
 
     override fun appendMessage(message: M) =
-        scope.future {
-            val onCommit = CompletableDeferred<Record<M>>()
-            appendCh.send(NewMessage(message, onCommit))
-            val record = onCommit.await()
-            MessageMetadata(epoch, record.logOffset, record.logTimestamp)
-        }
+        CompletableDeferred<MessageMetadata>()
+            .also { res ->
+                scope.launch {
+                    val onCommit = CompletableDeferred<Record<M>>()
+                    appendCh.send(NewMessage(message, onCommit))
+                    val record = onCommit.await()
+                    res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
+                }
+            }
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
         override fun openTx() = object : AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableFuture<MessageMetadata>>>()
+            private val buffer = mutableListOf<Pair<M, CompletableDeferred<MessageMetadata>>>()
             private var isOpen = true
 
-            override fun appendMessage(message: M): CompletableFuture<MessageMetadata> {
+            override fun appendMessage(message: M): CompletableDeferred<MessageMetadata> {
                 check(isOpen) { "Transaction already closed" }
-                val future = CompletableFuture<MessageMetadata>()
-                buffer.add(message to future)
-                return future
+                return CompletableDeferred<MessageMetadata>()
+                    .also { buffer.add(message to it) }
             }
 
             override fun commit() {
                 check(isOpen) { "Transaction already closed" }
                 isOpen = false
-                for ((message, future) in buffer) {
-                    future.complete(this@LocalLog.appendMessage(message).join())
+                runBlocking {
+                    for ((message, res) in buffer) {
+                        res.complete(this@LocalLog.appendMessage(message).await())
+                    }
                 }
             }
 
@@ -309,7 +311,7 @@ class LocalLog<M>(
                     val msg = withTimeoutOrNull(1.minutes) {
                         ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
                     }
-                    if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
+                    if (msg != null) processor.processRecords(listOf(msg))
                 }
             }
 
@@ -320,14 +322,15 @@ class LocalLog<M>(
     }
 
     override fun openGroupConsumer(listener: SubscriptionListener): Consumer<M> {
-        listener.onPartitionsAssigned(listOf(0))
+        listener.onPartitionsAssignedSync(listOf(0))
         val inner = openConsumer()
         return object : Consumer<M> {
             override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
                 inner.tailAll(afterMsgId, processor)
+
             override fun close() {
                 inner.close()
-                listener.onPartitionsRevoked(listOf(0))
+                listener.onPartitionsRevokedSync(listOf(0))
             }
         }
     }

@@ -220,10 +220,10 @@ class SourceLogProcessor(
         LOG.debug("read-only: waiting for block 'b${blockIdx.asLexHex}' via BlockUploaded...")
     }
 
-    override fun processRecords(records: List<Log.Record<SourceMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            flusher.flushedTxId = log.appendMessage(flushMessage).get().msgId
+            flusher.flushedTxId = log.appendMessage(flushMessage).await().msgId
         }
 
         var lastMsgId: MessageId = latestProcessedMsgId

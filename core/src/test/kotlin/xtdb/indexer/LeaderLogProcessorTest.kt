@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.apache.arrow.memory.RootAllocator
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.log.InMemoryLog
@@ -53,7 +54,7 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `TriesAdded forwarded to replica log`() {
+    fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = mockk<TrieCatalog>(relaxed = true)
         val lp = leaderProc(replicaLog = replicaLog, trieCatalog = trieCatalog)
@@ -77,7 +78,7 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `FlushBlock triggers block finish when CAS matches`() {
+    fun `FlushBlock triggers block finish when CAS matches`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { finishBlock(any()) } returns emptyMap()
@@ -116,7 +117,7 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `FlushBlock ignored when CAS does not match`() {
+    fun `FlushBlock ignored when CAS does not match`() = runTest {
         val liveIndex = mockk<LiveIndex>(relaxed = true)
         val lp = leaderProc(liveIndex = liveIndex)
 
@@ -129,7 +130,7 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `block finishing writes BlockBoundary + BlockUploaded to replica log`() {
+    fun `block finishing writes BlockBoundary + BlockUploaded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val finishedBlock = LiveTable.FinishedBlock(
             vecTypes = emptyMap(),

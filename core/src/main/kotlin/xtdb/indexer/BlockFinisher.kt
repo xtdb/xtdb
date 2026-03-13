@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import xtdb.api.log.Log
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.MessageId
@@ -76,6 +77,7 @@ class BlockFinisher(
         blockCatalog.refresh(block)
 
         // Now signal followers that the block is available.
+        @OptIn(ExperimentalCoroutinesApi::class)
         val uploadedMsgId = replicaProducer.withTx { tx ->
             tx.appendMessage(
                 BlockUploaded(
@@ -84,7 +86,7 @@ class BlockFinisher(
                     addedTries
                 )
             )
-        }.get().msgId
+        }.getCompleted().msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
 

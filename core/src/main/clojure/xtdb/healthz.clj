@@ -83,7 +83,7 @@
                                          :post (fn [{:keys [^Database db]}]
                                                  (try
                                                    (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))
-                                                         msg-id @(.appendMessage (.getSourceLog db) flush-msg)]
+                                                         msg-id (.appendMessageBlocking (.getSourceLog db) flush-msg)]
                                                      {:status 200, :body "Block flush message sent successfully."
                                                       :headers {"X-XTDB-Message-Id" (str msg-id)}})
                                                    (catch Exception e

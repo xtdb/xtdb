@@ -4,6 +4,7 @@ import io.mockk.*
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionKey
@@ -65,7 +66,7 @@ class FollowerLogProcessorTest {
         Log.Record(0, offset, Instant.now(), message)
 
     @Test
-    fun `buffer overflow stops ingestion`() {
+    fun `buffer overflow stops ingestion`() = runTest {
         val proc = makeProcessor(maxBufferedRecords = 2)
 
         val records = listOf(
@@ -80,7 +81,7 @@ class FollowerLogProcessorTest {
     }
 
     @Test
-    fun `ResolvedTx skips already-applied transactions`() {
+    fun `ResolvedTx skips already-applied transactions`() = runTest {
         every { liveIndex.latestCompletedTx } returns TransactionKey(42, Instant.now())
 
         val proc = makeProcessor()
