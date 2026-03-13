@@ -198,7 +198,7 @@ class LocalLog<M>(
         }
     }
 
-    override fun appendMessage(message: M): Deferred<MessageMetadata> =
+    override fun appendMessage(message: M) =
         CompletableDeferred<MessageMetadata>()
             .also { res ->
                 scope.launch {
