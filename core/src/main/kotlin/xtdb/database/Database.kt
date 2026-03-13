@@ -28,7 +28,6 @@ import xtdb.trie.ColumnName
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.compactor.Compactor
-import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata

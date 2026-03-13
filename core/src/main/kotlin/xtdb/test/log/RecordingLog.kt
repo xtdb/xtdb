@@ -11,6 +11,7 @@ import xtdb.api.log.LogOffset
 import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.InstantSource
@@ -47,7 +48,7 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
+    override fun appendMessage(message: M): Deferred<Log.MessageMetadata> {
         messages.add(message)
 
         val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()

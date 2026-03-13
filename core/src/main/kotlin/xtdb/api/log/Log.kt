@@ -3,6 +3,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
@@ -148,7 +149,7 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
-    fun appendMessage(message: M): CompletableDeferred<MessageMetadata>
+    fun appendMessage(message: M): Deferred<MessageMetadata>
 
     fun appendMessageBlocking(message: M): MessageMetadata = runBlocking { appendMessage(message).await() }
 

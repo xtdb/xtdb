@@ -93,7 +93,7 @@ class ReadOnlyLocalLog<M>(
     override val latestSubmittedOffset: LogOffset
         get() = readLatestSubmittedOffset(logFilePath)
 
-    override fun appendMessage(message: M) =
+    override fun appendMessage(message: M): Deferred<MessageMetadata> =
         throw Incorrect("Cannot append to read-only database log")
 
     override fun openAtomicProducer(transactionalId: String) =

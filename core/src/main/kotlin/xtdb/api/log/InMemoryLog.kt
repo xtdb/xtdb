@@ -3,7 +3,6 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.future.future
 import kotlinx.coroutines.selects.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -12,11 +11,9 @@ import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil
 import xtdb.database.proto.inMemoryLog
-import xtdb.error.Interrupted
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
-import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -80,7 +77,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override fun appendMessage(message: M) =
+    override fun appendMessage(message: M): Deferred<MessageMetadata> =
         CompletableDeferred<MessageMetadata>()
             .also { scope.launch { appendCh.send(NewMessage(message, it)) } }
 
