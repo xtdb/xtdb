@@ -220,7 +220,7 @@ class LeaderLogProcessor(
                                 )
                             }
                         }
-                        appendToReplica(ReplicaMessage.TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries))
+                        appendToReplica(ReplicaMessage.TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId))
                         watchers.notify(msgId, null)
                     }
 

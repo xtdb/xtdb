@@ -106,6 +106,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesAdded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
+
+                sourceWatchers.notify(msg.sourceMsgId, null)
+
                 null
             }
 
