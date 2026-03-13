@@ -151,9 +151,9 @@ class LogProcessor(
                 val pendingBlock = oldSys.pendingBlock
                 LOG.debug("revocation: closing leader system (pendingBlock=${pendingBlock != null})")
                 oldSys.close()
-                val latestSubmitted = replicaLog.latestSubmittedMsgId
-                LOG.debug("revocation: opening follower system from $latestSubmitted")
-                openFollowerSystem(latestSubmitted, pendingBlock)
+                val startMsgId = pendingBlock?.boundaryMsgId ?: replicaLog.latestSubmittedMsgId
+                LOG.debug("revocation: opening follower system from $startMsgId (pendingBlock=${pendingBlock != null})")
+                openFollowerSystem(startMsgId, pendingBlock)
             }
 
             is FollowerSystem -> {
