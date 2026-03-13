@@ -1,15 +1,12 @@
 package xtdb.debezium
 
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
+import kotlinx.serialization.json.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.Xtdb
+import xtdb.api.log.Log
 import xtdb.api.log.Log.Record
 import xtdb.api.log.SourceMessage
 import java.time.Instant
@@ -89,8 +86,7 @@ class DebeziumProcessorTest {
         }
     }
 
-    private fun dlqTxs(node: Xtdb): List<Map<String, Any?>> = xtQuery(
-        node,
+    private fun dlqTxs(node: Xtdb): List<Map<String, Any?>> = xtQuery(node,
         """SELECT (user_metadata).error, (user_metadata).kafka_offset
            FROM xt.txs
            WHERE (user_metadata).source = 'debezium'
@@ -99,7 +95,7 @@ class DebeziumProcessorTest {
     )
 
     @Test
-    fun `invalid JSON goes to DLQ`() = runTest {
+    fun `invalid JSON goes to DLQ`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -114,7 +110,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `JSON array goes to DLQ`() = runTest {
+    fun `JSON array goes to DLQ`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -128,7 +124,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `unknown op goes to DLQ`() = runTest {
+    fun `unknown op goes to DLQ`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -150,7 +146,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `missing _id goes to DLQ`() = runTest {
+    fun `missing _id goes to DLQ`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -172,7 +168,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `empty record list is a no-op`() = runTest {
+    fun `empty record list is a no-op`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -184,7 +180,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `valid records in batch still processed when others fail`() = runTest {
+    fun `valid records in batch still processed when others fail`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -213,7 +209,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `node failure propagates out of processRecords`() = runTest {
+    fun `node failure propagates out of processRecords`() {
         val node = Xtdb.openNode { server { port = 0 }; flightSql = null }
         val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -229,7 +225,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `batch of mixed ops processes all records`() = runTest {
+    fun `batch of mixed ops processes all records`() {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
 
@@ -244,8 +240,7 @@ class DebeziumProcessorTest {
 
             awaitTxs(node, 4)
 
-            val rows = xtQuery(
-                node,
+            val rows = xtQuery(node,
                 """SELECT _id, name, _valid_from, _valid_to
                    FROM public.test
                    FOR ALL VALID_TIME

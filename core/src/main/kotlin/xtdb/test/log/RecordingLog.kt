@@ -10,11 +10,10 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.LogOffset
 import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.CompletableFuture
 
 class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M>) : Log<M> {
     override val epoch = 0
@@ -47,12 +46,12 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
+    override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> {
         messages.add(message)
 
         val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
 
-        return CompletableDeferred(
+        return CompletableFuture.completedFuture(
             Log.MessageMetadata(
                 epoch,
                 ++latestSubmittedOffset,
@@ -65,22 +64,21 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
 
     override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer<M> {
         override fun openTx() = object : Log.AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<Log.MessageMetadata>>>()
+            private val buffer = mutableListOf<Pair<M, CompletableFuture<Log.MessageMetadata>>>()
             private var isOpen = true
 
-            override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
+            override fun appendMessage(message: M): CompletableFuture<Log.MessageMetadata> {
                 check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<Log.MessageMetadata>()
-                    .also { buffer.add(message to it) }
+                val future = CompletableFuture<Log.MessageMetadata>()
+                buffer.add(message to future)
+                return future
             }
 
             override fun commit() {
                 check(isOpen) { "Transaction already closed" }
                 isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@RecordingLog.appendMessage(message).await())
-                    }
+                for ((message, future) in buffer) {
+                    future.complete(this@RecordingLog.appendMessage(message).join())
                 }
             }
 

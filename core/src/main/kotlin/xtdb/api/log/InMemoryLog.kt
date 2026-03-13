@@ -81,27 +81,29 @@ class InMemoryLog<M> @JvmOverloads constructor(
         private set
 
     override fun appendMessage(message: M) =
-        CompletableDeferred<MessageMetadata>()
-            .also { scope.launch { appendCh.send(NewMessage(message, it)) } }
+        scope.future {
+            val res = CompletableDeferred<MessageMetadata>()
+            appendCh.send(NewMessage(message, res))
+            res.await()
+        }
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
         override fun openTx() = object : AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<MessageMetadata>>>()
+            private val buffer = mutableListOf<Pair<M, CompletableFuture<MessageMetadata>>>()
             private var isOpen = true
 
-            override fun appendMessage(message: M): CompletableDeferred<MessageMetadata> {
+            override fun appendMessage(message: M): CompletableFuture<MessageMetadata> {
                 check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<MessageMetadata>()
-                    .also { buffer.add(message to it) }
+                val future = CompletableFuture<MessageMetadata>()
+                buffer.add(message to future)
+                return future
             }
 
             override fun commit() {
                 check(isOpen) { "Transaction already closed" }
                 isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@InMemoryLog.appendMessage(message).await())
-                    }
+                for ((message, future) in buffer) {
+                    future.complete(this@InMemoryLog.appendMessage(message).join())
                 }
             }
 
@@ -145,8 +147,13 @@ class InMemoryLog<M> @JvmOverloads constructor(
                         @OptIn(ExperimentalCoroutinesApi::class)
                         onTimeout(1.minutes) { emptyList() }
                     }
-
-                    processor.processRecords(records)
+                    if (records.isNotEmpty()) runInterruptible {
+                        try {
+                            processor.processRecords(records)
+                        } catch (_: Interrupted) {
+                            throw InterruptedException()
+                        }
+                    }
                 }
             }
 
@@ -157,7 +164,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
     }
 
     override fun openGroupConsumer(listener: SubscriptionListener): Consumer<M> {
-        listener.onPartitionsAssignedSync(listOf(0))
+        listener.onPartitionsAssigned(listOf(0))
         val inner = openConsumer()
         return object : Consumer<M> {
             override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
@@ -165,7 +172,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
 
             override fun close() {
                 inner.close()
-                listener.onPartitionsRevokedSync(listOf(0))
+                listener.onPartitionsRevoked(listOf(0))
             }
         }
     }

@@ -15,6 +15,7 @@ import xtdb.api.log.SourceMessage
 import xtdb.util.MsgIdUtil
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
@@ -41,7 +42,7 @@ class DebeziumLog @JvmOverloads constructor(
     override val latestSubmittedOffset: Long get() = -1
     override val epoch: Int get() = 0
 
-    override fun appendMessage(message: SourceMessage): Nothing =
+    override fun appendMessage(message: SourceMessage): CompletableFuture<MessageMetadata> =
         throw UnsupportedOperationException("CDC log is read-only")
 
     override fun openAtomicProducer(transactionalId: String): AtomicProducer<SourceMessage> =
@@ -56,9 +57,11 @@ class DebeziumLog @JvmOverloads constructor(
         override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
             val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-            val job = scope.launch {
+            val producerJob = scope.launch {
                 KafkaConsumer(
-                    kafkaConfig.plus(mapOf(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false")),
+                    kafkaConfig + mapOf(
+                        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
+                    ),
                     UnitDeserializer,
                     ByteArrayDeserializer()
                 ).use { c ->
@@ -67,8 +70,8 @@ class DebeziumLog @JvmOverloads constructor(
                         c.seek(tp, afterOffset + 1)
                     }
                     while (isActive) {
-                        val records = runInterruptible(Dispatchers.IO) {
-                            try {
+                        runInterruptible(Dispatchers.IO) {
+                            val records = try {
                                 c.poll(pollDuration).records(topic).mapNotNull { record ->
                                     record.value()?.let { value ->
                                         Log.Record(
@@ -82,14 +85,14 @@ class DebeziumLog @JvmOverloads constructor(
                             } catch (_: InterruptException) {
                                 throw InterruptedException()
                             }
-                        }
 
-                        processor.processRecords(records)
+                            processor.processRecords(records)
+                        }
                     }
                 }
             }
 
-            return Log.Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+            return Log.Subscription { runBlocking { withTimeout(5.seconds) { producerJob.cancelAndJoin() } } }
         }
 
         override fun close() {}

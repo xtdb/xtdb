@@ -154,7 +154,7 @@ class ReadOnlyLocalLog<M>(
                         val msg = withTimeoutOrNull(1.minutes) {
                             ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
                         }
-                        if (msg != null) processor.processRecords(listOf(msg))
+                        if (msg != null) runInterruptible { processor.processRecords(listOf(msg)) }
                     }
                 } finally {
                     producerJob.cancelAndJoin()
@@ -168,15 +168,14 @@ class ReadOnlyLocalLog<M>(
     }
 
     override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> {
-        listener.onPartitionsAssignedSync(listOf(0))
+        listener.onPartitionsAssigned(listOf(0))
         val inner = openConsumer()
         return object : Log.Consumer<M> {
             override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
                 inner.tailAll(afterMsgId, processor)
-
             override fun close() {
                 inner.close()
-                listener.onPartitionsRevokedSync(listOf(0))
+                listener.onPartitionsRevoked(listOf(0))
             }
         }
     }

@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
@@ -21,6 +20,7 @@ import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
@@ -87,7 +87,7 @@ interface Log<M> : AutoCloseable {
     }
 
     fun interface RecordProcessor<in M> {
-        suspend fun processRecords(records: List<Record<M>>)
+        fun processRecords(records: List<Record<M>>)
     }
 
     interface Consumer<M> : AutoCloseable {
@@ -148,9 +148,7 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
-    fun appendMessage(message: M): CompletableDeferred<MessageMetadata>
-
-    fun appendMessageBlocking(message: M): MessageMetadata = runBlocking { appendMessage(message).await() }
+    fun appendMessage(message: M): CompletableFuture<MessageMetadata>
 
     /**
      * @param transactionalId uniquely identifies this producer for Kafka's transaction coordinator.
@@ -162,7 +160,7 @@ interface Log<M> : AutoCloseable {
         fun openTx(): Tx<M>
 
         interface Tx<M> : AutoCloseable {
-            fun appendMessage(message: M): CompletableDeferred<MessageMetadata>
+            fun appendMessage(message: M): CompletableFuture<MessageMetadata>
             fun commit()
             fun abort()
         }
@@ -186,12 +184,9 @@ interface Log<M> : AutoCloseable {
     fun openGroupConsumer(listener: SubscriptionListener): Consumer<M>
 
     interface SubscriptionListener {
-        suspend fun onPartitionsAssigned(partitions: Collection<Int>)
-        fun onPartitionsAssignedSync(partitions: Collection<Int>) = runBlocking { onPartitionsAssigned(partitions) }
-        suspend fun onPartitionsRevoked(partitions: Collection<Int>)
-        fun onPartitionsRevokedSync(partitions: Collection<Int>) = runBlocking { onPartitionsRevoked(partitions) }
-        suspend fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
-        fun onPartitionsLostSync(partitions: Collection<Int>) = runBlocking { onPartitionsLost(partitions) }
+        fun onPartitionsAssigned(partitions: Collection<Int>)
+        fun onPartitionsRevoked(partitions: Collection<Int>)
+        fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
     }
 
     class Record<out M>(

@@ -26,7 +26,7 @@ class LocalLogTest {
         val subscription = log.tailAll(
             -1L,
             object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Record<SourceMessage>>) {
+                override fun processRecords(records: List<Record<SourceMessage>>) {
                     records.forEach { receivedRecords.add(it) }
                 }
             }
@@ -50,10 +50,10 @@ class LocalLogTest {
     }
 
     @Test
-    fun `readLastMessage returns the message after appending one`() = runTest {
+    fun `readLastMessage returns the message after appending one`() {
         val log = LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap())
         log.use {
-            log.appendMessage(txMessage(1)).await()
+            log.appendMessage(txMessage(1)).get()
 
             val lastMessage = log.readLastMessage()
             assertNotNull(lastMessage)
@@ -63,12 +63,12 @@ class LocalLogTest {
     }
 
     @Test
-    fun `readLastMessage returns the last message after appending multiple`() = runTest {
+    fun `readLastMessage returns the last message after appending multiple`() {
         val log = LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap())
         log.use {
-            log.appendMessage(txMessage(1)).await()
-            log.appendMessage(txMessage(2)).await()
-            log.appendMessage(txMessage(3)).await()
+            log.appendMessage(txMessage(1)).get()
+            log.appendMessage(txMessage(2)).get()
+            log.appendMessage(txMessage(3)).get()
 
             val lastMessage = log.readLastMessage()
             assertNotNull(lastMessage)

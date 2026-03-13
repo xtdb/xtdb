@@ -128,7 +128,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+    override fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
                 val res = handleRecord(record)

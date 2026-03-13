@@ -306,7 +306,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -371,7 +371,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -433,7 +433,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -515,7 +515,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -577,7 +577,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -642,7 +642,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -692,7 +692,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
@@ -750,7 +750,7 @@ class DebeziumIntegrationTest {
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
             val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                override fun processRecords(records: List<Log.Record<SourceMessage>>) {
                     processor.processRecords(records)
                     received.addAll(records)
                 }
