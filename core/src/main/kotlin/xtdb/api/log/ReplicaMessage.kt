@@ -58,7 +58,7 @@ sealed interface ReplicaMessage {
                         }
 
                         ReplicaLogMessage.MessageCase.TRIES_ADDED -> msg.triesAdded.let {
-                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList, it.sourceMsgId)
+                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList)
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> msg.blockBoundary.let {
@@ -123,15 +123,13 @@ sealed interface ReplicaMessage {
     }
 
     data class TriesAdded(
-        val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>,
-        val sourceMsgId: MessageId = 0,
+        val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             triesAdded = triesAdded {
                 storageVersion = this@TriesAdded.storageVersion
                 storageEpoch = this@TriesAdded.storageEpoch
                 tries.addAll(this@TriesAdded.tries)
-                sourceMsgId = this@TriesAdded.sourceMsgId
             }
         }
     }

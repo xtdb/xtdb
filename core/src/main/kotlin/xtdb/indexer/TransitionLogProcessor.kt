@@ -72,7 +72,6 @@ class TransitionLogProcessor(
                                 )
                             }
                         }
-                        sourceWatchers.notify(msg.sourceMsgId, null)
                         null
                     }
 

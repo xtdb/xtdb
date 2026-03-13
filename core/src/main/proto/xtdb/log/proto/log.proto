@@ -34,7 +34,6 @@ message TriesAdded {
     int32 storage_version = 2;
     int32 storage_epoch = 3;
     repeated TrieDetails tries = 1;
-    int64 source_msg_id = 4;
 }
 
 message TemporalMetadata {
