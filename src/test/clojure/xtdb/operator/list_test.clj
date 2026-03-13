@@ -6,7 +6,7 @@
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-generate-series
-  (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
+  (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5} {:a 6}]
            (tu/query-ra [:list {:columns '{a (generate_series 1 6 1)}}])))
 
   (t/is (= [{:a 1} {:a 2} {:a 3} {:a 4} {:a 5}]
@@ -24,7 +24,7 @@
                          [:list {:columns '{a (generate_series 1 2000000000 1)}}]]))
         "large generate_series with skip + limit")
 
-  (t/is (= [{:a 2} {:a 3} {:a 4}]
+  (t/is (= [{:a 2} {:a 3} {:a 4} {:a 5}]
            (tu/query-ra [:list {:columns '{a (generate_series ?start ?stop ?step)}}]
                         {:args {:start 2 :stop 5 :step 1}}))
         "generate_series with parameterised start, stop, step"))
@@ -32,28 +32,40 @@
 (t/deftest test-batch-boundaries
   (binding [ol/*batch-size* 3]
     (t/is (= [[{:a 1} {:a 2}]]
-             (tu/query-ra [:list {:columns '{a (generate_series 1 3 1)}}]
+             (tu/query-ra [:list {:columns '{a (generate_series 1 2 1)}}]
                           {:preserve-pages? true}))
-          "Should handle size smaller than a single batch")
+          "smaller than a batch")
 
     (t/is (= [[{:a 1} {:a 2} {:a 3}]]
+             (tu/query-ra [:list {:columns '{a (generate_series 1 3 1)}}]
+                          {:preserve-pages? true}))
+          "exactly one full batch")
+
+    (t/is (= [[{:a 1} {:a 2} {:a 3}]
+              [{:a 4}]]
              (tu/query-ra [:list {:columns '{a (generate_series 1 4 1)}}]
                           {:preserve-pages? true}))
-          "Should handle size of a single full batch")
+          "one batch plus remainder")
 
     (t/is (= [[{:a 1} {:a 2} {:a 3}]
               [{:a 4} {:a 5} {:a 6}]]
-             (tu/query-ra [:list {:columns '{a (generate_series 1 7 1)}}]
-                          {:preserve-pages? true}))
-          "Should yield two full batches")
-
-    (t/is (= [[{:a 1} {:a 2} {:a 3}]
-              [{:a 4} {:a 5}]]
              (tu/query-ra [:list {:columns '{a (generate_series 1 6 1)}}]
                           {:preserve-pages? true}))
-          "Should yield one full batch and one partial batch")
+          "exactly two full batches")
 
-    (t/is (= []
+    (t/is (= [[{:a 1} {:a 2} {:a 3}]
+              [{:a 4} {:a 5} {:a 6}]
+              [{:a 7}]]
+             (tu/query-ra [:list {:columns '{a (generate_series 1 7 1)}}]
+                          {:preserve-pages? true}))
+          "two full batches plus remainder")
+
+    (t/is (= [[{:a 1}]]
              (tu/query-ra [:list {:columns '{a (generate_series 1 1 1)}}]
                           {:preserve-pages? true}))
-          "Should yield no pages with empty list")))
+          "single element (start == end)")
+
+    (t/is (= []
+             (tu/query-ra [:list {:columns '{a (generate_series 1 0 1)}}]
+                          {:preserve-pages? true}))
+          "empty series (start > end)")))

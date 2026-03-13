@@ -2426,7 +2426,7 @@ UNION ALL
              (xt/q tu/*node* q)))))
 
 (t/deftest test-generate-series-3212
-  (t/is (= [1 2 3]
+  (t/is (= [1 2 3 4]
            (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 4) xs (x)")
                 (mapv :x))))
 
@@ -2436,7 +2436,12 @@ UNION ALL
 
   (t/is (empty? (xt/q tu/*node* "SELECT x FROM generate_series(10, 3) xs (x)")))
 
-  (t/is (empty? (-> (xt/q tu/*node* "SELECT x FROM generate_series(1, 1) xs (x)"))))
+  (t/is (= [1] (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 1) xs (x)")
+                    (mapv :x)))
+        "start == end returns single element (inclusive)")
+
+  (t/is (empty? (xt/q tu/*node* "SELECT x FROM generate_series(1, 0) xs (x)"))
+        "start > end with 2-arg form returns empty")
 
   (t/is (= [1]
            (->> (xt/q tu/*node* "SELECT x FROM generate_series(1, 2, 2) xs (x)")
@@ -2446,10 +2451,12 @@ UNION ALL
 
   (t/is (= [{:xt/id 2, :x 4}
             {:xt/id 2, :x 5}
+            {:xt/id 2, :x 6}
             {:xt/id 1, :x -1}
             {:xt/id 1, :x 0}
             {:xt/id 1, :x 1}
-            {:xt/id 1, :x 2}]
+            {:xt/id 1, :x 2}
+            {:xt/id 1, :x 3}]
            (-> (xt/q tu/*node* "SELECT _id, x FROM foo, generate_series(start, end) xs (x)")))))
 
 (t/deftest star-goes-at-end-too-3706
