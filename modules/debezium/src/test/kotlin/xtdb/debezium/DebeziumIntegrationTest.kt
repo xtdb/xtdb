@@ -18,9 +18,11 @@ import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
+import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.SourceMessage
+import java.util.UUID
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -144,7 +146,11 @@ class DebeziumIntegrationTest {
         }
     }
 
-    private fun openNode(): Xtdb = Xtdb.openNode { server { port = 0 }; flightSql = null }
+    private fun openNodeOnSourceTopic(sourceTopic: String): Xtdb = Xtdb.openNode {
+        server { port = 0 }; flightSql = null
+        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+        log(KafkaCluster.LogFactory("kafka", sourceTopic))
+    }
 
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
         xtQueryDb(node, "xtdb", sql)
@@ -302,7 +308,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -367,7 +374,8 @@ class DebeziumIntegrationTest {
             "value.converter.schemas.enable" to "false",
         ))
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -429,7 +437,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -511,7 +520,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -573,7 +583,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -638,7 +649,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait(schemas = "inventory")
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -681,7 +693,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             // Attach a secondary database
             node.getConnection().use { conn ->
                 conn.createStatement().use { stmt ->
@@ -746,7 +759,8 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        openNode().use { node ->
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
