@@ -742,8 +742,10 @@
 (defn- recall-with-cast3
   ([expr cast1 cast2 cast3] (recall-with-cast3 expr cast1 cast2 cast3 expr/codegen-call))
 
-  ([{[t1 t2 t3] :arg-types, :as expr} cast1 cast2 cast3 f]
-   (let [cast1-vec (if (instance? VectorType cast1) cast1 (types/->type cast1))
+  ([{arg-types :arg-types, :as expr} cast1 cast2 cast3 f]
+   (let [rest-types (subvec (vec arg-types) 3)
+         [t1 t2 t3] arg-types
+         cast1-vec (if (instance? VectorType cast1) cast1 (types/->type cast1))
          cast2-vec (if (instance? VectorType cast2) cast2 (types/->type cast2))
          cast3-vec (if (instance? VectorType cast3) cast3 (types/->type cast3))
          {ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code}
@@ -753,11 +755,13 @@
          {ret3 :return-type, bb3 :batch-bindings, ->cc3 :->call-code}
          (expr/codegen-cast {:source-type t3, :target-type cast3-vec})
          {ret :return-type, bb :batch-bindings, ->cc :->call-code}
-         (f (assoc expr :arg-types [ret1 ret2 ret3]))]
+         (f (assoc expr :arg-types (into [ret1 ret2 ret3] rest-types)))]
      {:return-type ret
       :batch-bindings (concat bb1 bb2 bb3 bb)
-      :->call-code (fn [[a1 a2 a3]]
-                     (->cc [(->cc1 [a1]) (->cc2 [a2]) (->cc3 [a3])]))})))
+      :->call-code (fn [args]
+                     (let [[a1 a2 a3] args
+                           rest-args (subvec (vec args) 3)]
+                       (->cc (into [(->cc1 [a1]) (->cc2 [a2]) (->cc3 [a3])] rest-args))))})))
 
 (defn- recall-with-flipped-args [expr]
   (let [{ret-type :return-type, bb :batch-bindings, ->cc :->call-code}
@@ -2165,20 +2169,23 @@
      :->call-code (fn [[i-code from-code to-code origin-code]]
                     (->call-code [i-code (->from-code [from-code]) (->to-code [to-code]) (->origin-code [origin-code])]))}))
 
-(defn date-series [^LocalDate from, ^LocalDate to, ^PeriodDuration stride]
+(defn date-series [^LocalDate from, ^LocalDate to, ^PeriodDuration stride, inclusive?]
   (assert (= Duration/ZERO (.getDuration stride))
           "date-series only supports zero-duration strides")
 
   (let [period (.getPeriod stride)
         months (+ (* (.getYears period) 12) (.getMonths period))
         el-box (ValueBox.)
+        pred (if inclusive?
+               #(not (pos? (compare % to)))
+               #(neg? (compare % to)))
 
         ;; we eagerly evaluate here because (unlike the ints version)
         ;; every entry will need to calculate the one before anyway
         res (->> (iterate (fn [^LocalDate acc]
                             (.plusMonths acc months))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while pred)))]
 
     (reify ListValueReader
       (size [_]
@@ -2188,7 +2195,10 @@
         (doto el-box
           (.writeLong (.toEpochDay ^LocalDate (nth res idx))))))))
 
-(defmethod expr/codegen-call [:generate_series :date :date :interval] [{[from-type to-type ^VectorType$Mono i-type-vec] :arg-types, :as expr}]
+(defmethod expr/codegen-call [:generate_series :date :date :interval] [expr]
+  (expr/delegate-exclusive-default expr))
+
+(defmethod expr/codegen-call [:generate_series :date :date :interval :bool] [{[from-type to-type ^VectorType$Mono i-type-vec] :arg-types, :as expr}]
   (let [from-unit (st/date-type->unit from-type)
         to-unit (st/date-type->unit to-type)
         i-unit (st/interval-type->unit i-type-vec)]
@@ -2200,22 +2210,25 @@
 
     (case i-unit
       :year-month {:return-type #xt/type [:list [:date :day]]
-                   :->call-code (fn [[x-arg y-arg stride]]
-                                  `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride))}
+                   :->call-code (fn [[x-arg y-arg stride inclusive?]]
+                                  `(date-series (LocalDate/ofEpochDay ~x-arg) (LocalDate/ofEpochDay ~y-arg) ~stride (boolean ~inclusive?)))}
       :month-day-micro (recall-with-cast3 expr [:timestamp-local :micro] [:timestamp-local :micro] [:interval :month-day-micro])
       :month-day-nano (recall-with-cast3 expr [:timestamp-local :nano] [:timestamp-local :nano] [:interval :month-day-nano]))))
 
-(defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt]
+(defn ts-series [^LocalDateTime from, ^LocalDateTime to, ^PeriodDuration stride, write-ldt, inclusive?]
   (let [period (.getPeriod stride)
         duration (.getDuration stride)
         el-box (ValueBox.)
+        pred (if inclusive?
+               #(not (pos? (compare % to)))
+               #(neg? (compare % to)))
 
         ;; we eagerly evaluate here because (unlike the ints version)
         ;; every entry will need to calculate the one before anyway
         res (->> (iterate (fn [^LocalDateTime acc]
                             (-> acc (.plus period) (.plus duration)))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while pred)))]
 
     (reify ListValueReader
       (size [_] (count res))
@@ -2224,7 +2237,10 @@
         (doto el-box
           (write-ldt (nth res idx)))))))
 
-(defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
+(defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval] [expr]
+  (expr/delegate-exclusive-default expr))
+
+(defmethod expr/codegen-call [:generate_series :timestamp-local :timestamp-local :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
   (let [from-unit (st/timestamp-type->unit from-type)
         to-unit (st/timestamp-type->unit to-type)
         i-unit (st/interval-type->unit i-type)
@@ -2234,25 +2250,29 @@
                                            :month-day-nano :nano
                                            :month-day-micro :micro))]
     {:return-type (st/->type [:list [:timestamp-local out-unit]])
-     :->call-code (fn [[from-arg to-arg i-arg]]
+     :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
                     (-> `(ts-series ~(ts->ldt from-arg from-unit)
                                     ~(ts->ldt to-arg to-unit)
                                     ~i-arg
                                     ~(let [ldt-sym (gensym 'ldt)]
                                        `(fn ~'write-ldt [^ValueBox box#, ~(-> ldt-sym (expr/with-tag LocalDateTime))]
-                                          (.writeLong box# ~(ldt->ts ldt-sym out-unit)))))))}))
+                                          (.writeLong box# ~(ldt->ts ldt-sym out-unit))))
+                                    (boolean ~inclusive?))))}))
 
-(defn tstz-series [^ZonedDateTime from, ^ZonedDateTime to, ^PeriodDuration stride, write-zdt]
+(defn tstz-series [^ZonedDateTime from, ^ZonedDateTime to, ^PeriodDuration stride, write-zdt, inclusive?]
   (let [period (.getPeriod stride)
         duration (.getDuration stride)
         el-box (ValueBox.)
+        pred (if inclusive?
+               #(not (pos? (compare % to)))
+               #(neg? (compare % to)))
 
         ;; we eagerly evaluate here because (unlike the ints version)
         ;; every entry will need to calculate the one before anyway
         res (->> (iterate (fn [^ZonedDateTime acc]
                             (-> acc (.plus period) (.plus duration)))
                           from)
-                 (into [] (take-while #(neg? (compare % to)))))]
+                 (into [] (take-while pred)))]
 
     (reify ListValueReader
       (size [_] (count res))
@@ -2261,7 +2281,10 @@
         (doto el-box
           (write-zdt (nth res idx)))))))
 
-(defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
+(defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval] [expr]
+  (expr/delegate-exclusive-default expr))
+
+(defmethod expr/codegen-call [:generate_series :timestamp-tz :timestamp-tz :interval :bool] [{[^VectorType$Mono from-type, ^VectorType$Mono to-type, ^VectorType$Mono i-type] :arg-types}]
   (let [from-unit (st/timestamp-type->unit from-type)
         to-unit (st/timestamp-type->unit to-type)
         from-tz (st/timestamp-type->tz from-type)
@@ -2276,12 +2299,13 @@
         out-tz (if (= from-tz to-tz) from-tz "UTC")]
     {:return-type (st/->type [:list [:timestamp-tz out-unit out-tz]])
      :batch-bindings [[out-tz-sym (ZoneId/of out-tz)]]
-     :->call-code (fn [[from-arg to-arg i-arg]]
+     :->call-code (fn [[from-arg to-arg i-arg inclusive?]]
                     (-> `(tstz-series ~(ts->zdt from-arg from-unit out-tz-sym)
                                       ~(ts->zdt to-arg to-unit out-tz-sym)
                                       ~i-arg
                                       ~(let [zdt-sym (gensym 'zdt)]
                                          `(fn ~'write-zdt [^ValueBox box#, ~(-> zdt-sym (expr/with-tag ZonedDateTime))]
-                                            (.writeLong box# ~(zdt->ts zdt-sym out-unit)))))))}))
+                                            (.writeLong box# ~(zdt->ts zdt-sym out-unit))))
+                                      (boolean ~inclusive?))))}))
 
 

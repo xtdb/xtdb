@@ -25,7 +25,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            xtdb.table.TableRef
            xtdb.util.StringUtil))
 
@@ -1791,10 +1791,12 @@
     (.accept (.generateSeries ctx) this))
 
   (visitGenerateSeries [this ctx]
-    (xt/template (generate_series ~(.accept (.seriesStart ctx) this)
-                                  ~(.accept (.seriesEnd ctx) this)
-                                  ~(or (some-> (.seriesStep ctx) (.accept this))
-                                       1))))
+    (let [inclusive? (not= SqlLexer/RANGE (.getType (.fn ctx)))]
+      (xt/template (generate_series ~(.accept (.seriesStart ctx) this)
+                                    ~(.accept (.seriesEnd ctx) this)
+                                    ~(or (some-> (.seriesStep ctx) (.accept this))
+                                         1)
+                                    ~inclusive?))))
 
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 
