@@ -144,6 +144,8 @@ class DebeziumIntegrationTest {
         }
     }
 
+    private fun openNode(): Xtdb = Xtdb.openNode { server { port = 0 }; flightSql = null }
+
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
         xtQueryDb(node, "xtdb", sql)
 
@@ -300,7 +302,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -365,7 +367,7 @@ class DebeziumIntegrationTest {
             "value.converter.schemas.enable" to "false",
         ))
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -427,7 +429,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -509,7 +511,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -571,7 +573,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -636,7 +638,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait(schemas = "inventory")
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
@@ -679,7 +681,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             // Attach a secondary database
             node.getConnection().use { conn ->
                 conn.createStatement().use { stmt ->
@@ -744,7 +746,7 @@ class DebeziumIntegrationTest {
 
         registerConnectorAndAwait()
 
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
+        openNode().use { node ->
             val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
             val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
