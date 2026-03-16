@@ -100,6 +100,22 @@ class CdcEventTest {
 
     // -- CdcEvent parsing tests --
 
+    @Test
+    fun `invalid JSON throws`() {
+        val ex = assertThrows(Incorrect::class.java) {
+            CdcEvent.fromJson("not json at all".toByteArray())
+        }
+        assertTrue(ex.message!!.contains("Invalid CDC message"), "Got: ${ex.message}")
+    }
+
+    @Test
+    fun `JSON array throws`() {
+        val ex = assertThrows(Incorrect::class.java) {
+            CdcEvent.fromJson("[1, 2, 3]".toByteArray())
+        }
+        assertTrue(ex.message!!.contains("Invalid CDC message"), "Got: ${ex.message}")
+    }
+
     @ParameterizedTest
     @ValueSource(strings = ["c", "r", "u"])
     fun `create, read and update ops produce Put event`(op: String) {

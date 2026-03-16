@@ -114,64 +114,6 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `JSON array goes to DLQ`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
-            processor.processRecords(listOf(rawRecord("[1, 2, 3]")))
-
-            awaitTxs(node, 1)
-
-            val dlq = dlqTxs(node)
-            assertEquals(1, dlq.size)
-        }
-    }
-
-    @Test
-    fun `unknown op goes to DLQ`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
-            val envelope = buildJsonObject {
-                putJsonObject("payload") {
-                    put("op", "x")
-                    putJsonObject("after") { put("_id", 1) }
-                    putJsonObject("source") { put("schema", "public"); put("table", "t") }
-                }
-            }
-            processor.processRecords(listOf(rawRecord(envelope.toString())))
-
-            awaitTxs(node, 1)
-
-            val dlq = dlqTxs(node)
-            assertEquals(1, dlq.size)
-            assertTrue((dlq[0]["error"] as String).contains("Unknown CDC op"))
-        }
-    }
-
-    @Test
-    fun `missing _id goes to DLQ`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
-            val envelope = buildJsonObject {
-                putJsonObject("payload") {
-                    put("op", "c")
-                    putJsonObject("after") { put("name", "no id") }
-                    putJsonObject("source") { put("schema", "public"); put("table", "t") }
-                }
-            }
-            processor.processRecords(listOf(rawRecord(envelope.toString())))
-
-            awaitTxs(node, 1)
-
-            val dlq = dlqTxs(node)
-            assertEquals(1, dlq.size)
-            assertTrue((dlq[0]["error"] as String).contains("_id"))
-        }
-    }
-
-    @Test
     fun `empty record list is a no-op`() = runTest {
         Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
             val processor = DebeziumProcessor(node, "xtdb", node.allocator)
