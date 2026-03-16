@@ -61,7 +61,7 @@
             :buffer-pool (ig/ref :xtdb/buffer-pool)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
-            :watchers (ig/ref :xtdb.db-catalog/watchers)
+            :source-watchers (ig/ref :xtdb.db-catalog/watchers)
             :compactor-for-db (ig/ref :xtdb.compactor/for-db)
             :indexer-for-db (ig/ref :xtdb.indexer/for-db)
             :block-finisher (ig/ref :xtdb.log.processor/block-finisher)}
@@ -69,20 +69,20 @@
 
 (defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
                                                       ^IndexerConfig indexer-conf ^Database$Mode mode
-                                                      compactor-for-db watchers db-catalog
+                                                      compactor-for-db source-watchers db-catalog
                                                       buffer-pool indexer-for-db ^BlockFinisher block-finisher]
                                                {:keys [meter-registry]} :base}]
   (when (.getEnabled indexer-conf)
     (let [proc-factory (reify LogProcessor$ProcessorFactory
                          (openFollower [_ replica-watchers pending-block]
                            (FollowerLogProcessor. allocator buffer-pool db-state compactor-for-db
-                                                  watchers replica-watchers
+                                                  source-watchers replica-watchers
                                                   db-catalog pending-block))
 
-                         (openLeaderSystem [_ replica-producer after-msg-id]
+                         (openLeaderSystem [_ replica-producer replica-watchers after-msg-id]
                            (util/with-close-on-catch [proc (LeaderLogProcessor. allocator
                                                                                 db-storage replica-producer db-state
-                                                                                indexer-for-db watchers
+                                                                                indexer-for-db source-watchers replica-watchers
                                                                                 (set (.getSkipTxs indexer-conf))
                                                                                 db-catalog block-finisher
                                                                                 (.getFlushDuration indexer-conf)
@@ -100,9 +100,9 @@
                                                     (.getLiveIndex db-state)
                                                     block-finisher
                                                     replica-producer
-                                                    watchers replica-watchers db-catalog)))
+                                                    source-watchers replica-watchers db-catalog)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state watchers block-finisher meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state source-watchers block-finisher meter-registry)]
 
       {:log-processor log-processor
        :consumer (when-not (= mode Database$Mode/READ_ONLY)

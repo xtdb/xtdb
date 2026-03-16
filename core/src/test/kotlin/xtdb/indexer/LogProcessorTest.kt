@@ -58,14 +58,15 @@ class LogProcessorTest {
         object : LogProcessor.ProcessorFactory {
             override fun openLeaderSystem(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                replicaWatchers: Watchers,
                 afterMsgId: MessageId
             ): LogProcessor.LeaderSystem {
-                val watchers = Watchers(-1)
+                val sourceWatchers = Watchers(-1)
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
                 return LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
-                    dbState, mockk(relaxed = true), watchers,
+                    dbState, mockk(relaxed = true), sourceWatchers, replicaWatchers,
                     emptySet(), null, blockFinisher
                 ).closeOnCatch { proc ->
                     val sub = dbStorage.sourceLog.tailAll(afterMsgId, proc)

@@ -34,7 +34,8 @@ class LeaderLogProcessor(
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
-    private val watchers: Watchers,
+    private val sourceWatchers: Watchers,
+    private val replicaWatchers: Watchers,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     private val blockFinisher: BlockFinisher,
@@ -78,6 +79,7 @@ class LeaderLogProcessor(
 
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
+            .also { replicaWatchers.notify(it.msgId, null) }
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
@@ -125,7 +127,7 @@ class LeaderLogProcessor(
             else
                 TransactionAborted(txId, systemTime, resolvedTx.error)
 
-        watchers.notify(txId, result)
+        sourceWatchers.notify(txId, result)
     }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId) {
@@ -133,7 +135,7 @@ class LeaderLogProcessor(
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
-        blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg)
+        blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
         pendingBlock = null
     }
 
@@ -163,7 +165,7 @@ class LeaderLogProcessor(
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
                             finishBlock(msgId)
                         }
-                        watchers.notify(msgId, null)
+                        sourceWatchers.notify(msgId, null)
                     }
 
                     is SourceMessage.AttachDatabase -> {
@@ -182,9 +184,9 @@ class LeaderLogProcessor(
                         appendToReplica(resolvedTx)
 
                         if (error == null) {
-                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
+                            sourceWatchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
                         } else {
-                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
+                            sourceWatchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
                         }
                     }
 
@@ -204,9 +206,9 @@ class LeaderLogProcessor(
                         appendToReplica(resolvedTx)
 
                         if (error == null) {
-                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
+                            sourceWatchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
                         } else {
-                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
+                            sourceWatchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
                         }
                     }
 
@@ -221,11 +223,11 @@ class LeaderLogProcessor(
                             }
                         }
                         appendToReplica(ReplicaMessage.TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId))
-                        watchers.notify(msgId, null)
+                        sourceWatchers.notify(msgId, null)
                     }
 
                     // TODO this one's going before release
-                    is SourceMessage.BlockUploaded -> watchers.notify(msgId, null)
+                    is SourceMessage.BlockUploaded -> sourceWatchers.notify(msgId, null)
                 }
             } catch (e: InterruptedException) {
                 throw e
@@ -233,7 +235,7 @@ class LeaderLogProcessor(
                 throw e
             } catch (e: Throwable) {
                 LOG.error(e, "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})")
-                watchers.notify(msgId, e)
+                sourceWatchers.notify(msgId, e)
                 throw e
             }
         }

@@ -78,7 +78,7 @@ class TransitionLogProcessor(
 
                     is ReplicaMessage.BlockBoundary -> {
                         LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
-                        blockFinisher.finishBlock(replicaProducer, msgId, msg)
+                        blockFinisher.finishBlock(replicaProducer, msgId, msg, replicaWatchers)
                         null
                     }
 

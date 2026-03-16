@@ -37,7 +37,7 @@ class LogProcessor(
     private val replicaLog = dbStorage.replicaLog
 
     interface ProcessorFactory {
-        fun openLeaderSystem(replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterMsgId: MessageId): SubSystem
+        fun openLeaderSystem(replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers, afterMsgId: MessageId): SubSystem
 
         fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers
@@ -122,7 +122,8 @@ class LogProcessor(
                             blockFinisher.finishBlock(
                                 replicaProducer,
                                 pendingBlock.boundaryMsgId,
-                                pendingBlock.boundaryMessage
+                                pendingBlock.boundaryMessage,
+                                replicaWatchers,
                             )
                             LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                             transition.processRecords(pendingBlock.bufferedRecords)
@@ -133,7 +134,7 @@ class LogProcessor(
 
                         LOG.debug("transition: opening leader processor")
 
-                        procFactory.openLeaderSystem(replicaProducer, latestProcessedMsgId)
+                        procFactory.openLeaderSystem(replicaProducer, replicaWatchers, latestProcessedMsgId)
                             .also { LOG.info("leader startup complete, resuming after $latestProcessedMsgId") }
                     }
                 }
@@ -151,9 +152,9 @@ class LogProcessor(
                 val pendingBlock = oldSys.pendingBlock
                 LOG.debug("revocation: closing leader system (pendingBlock=${pendingBlock != null})")
                 oldSys.close()
-                val latestSubmitted = replicaLog.latestSubmittedMsgId
-                LOG.debug("revocation: opening follower system from $latestSubmitted")
-                openFollowerSystem(latestSubmitted, pendingBlock)
+                val latestReplica = replicaWatchers.sync()
+                LOG.debug("revocation: opening follower system from $latestReplica")
+                openFollowerSystem(latestReplica, pendingBlock)
             }
 
             is FollowerSystem -> {

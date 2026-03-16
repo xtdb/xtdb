@@ -7,6 +7,7 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
+import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
@@ -34,7 +35,8 @@ class BlockFinisher(
     private val tableCatalog = dbState.tableCatalog
 
     fun finishBlock(
-        replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary
+        replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
+        replicaWatchers: Watchers? = null,
     ) {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
@@ -89,6 +91,7 @@ class BlockFinisher(
         }.getCompleted().msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
+        replicaWatchers?.notify(uploadedMsgId, null)
 
         liveIndex.nextBlock()
         compactor.signalBlock()
