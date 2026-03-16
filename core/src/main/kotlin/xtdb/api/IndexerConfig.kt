@@ -15,7 +15,8 @@ data class IndexerConfig(
     var rowsPerBlock: Long = 102400L,
     var flushDuration: Duration = Duration.ofHours(4),
     var skipTxs: List<MessageId> = System.getenv("XTDB_SKIP_TXS")?.let(::parseSkipTxsEnv).orEmpty(),
-    var enabled: Boolean = true
+    var enabled: Boolean = true,
+    var leaderHandoffTimeout: Duration = Duration.ofSeconds(30),
 ) {
     fun logLimit(logLimit: Long) = apply { this.logLimit = logLimit }
     fun pageLimit(pageLimit: Long) = apply { this.pageLimit = pageLimit }
@@ -23,6 +24,7 @@ data class IndexerConfig(
     fun flushDuration(flushDuration: Duration) = apply { this.flushDuration = flushDuration }
     fun skipTxs(skipTxs: List<MessageId>) = apply { this.skipTxs = skipTxs.sorted() }
     fun enabled(enabled: Boolean) = apply { this.enabled = enabled }
+    fun leaderHandoffTimeout(leaderHandoffTimeout: Duration) = apply { this.leaderHandoffTimeout = leaderHandoffTimeout }
 
     companion object {
         private fun parseSkipTxsEnv(skipTxs: String): List<MessageId> =

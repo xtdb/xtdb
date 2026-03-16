@@ -102,7 +102,8 @@
                                                     replica-producer
                                                     watchers replica-watchers db-catalog)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state watchers block-finisher meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state watchers block-finisher
+                                       meter-registry (.getLeaderHandoffTimeout indexer-conf))]
 
       {:log-processor log-processor
        :consumer (when-not (= mode Database$Mode/READ_ONLY)

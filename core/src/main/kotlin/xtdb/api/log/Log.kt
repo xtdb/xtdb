@@ -4,7 +4,6 @@ package xtdb.api.log
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
@@ -21,7 +20,6 @@ import java.nio.file.Path
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.CompletableFuture
-import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -112,10 +110,7 @@ interface Log<M> : AutoCloseable {
             openConsumer().closeOnCatch { c ->
                 c.tailAll(afterMsgId, processor).closeOnCatch { subs ->
                     Subscription {
-                        runBlocking {
-                            withTimeoutOrNull(5.seconds) { runInterruptible { subs.close() } }
-                        }
-
+                        runBlocking { runInterruptible { subs.close() } }
                         c.close()
                     }
                 }

@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
@@ -14,7 +15,11 @@ import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.warn
+import xtdb.util.runBlockingWithTimeout
+import java.time.Duration
 import kotlin.math.max
+import kotlin.time.Duration.Companion.seconds
 
 private val LOG = LogProcessor::class.logger
 
@@ -25,6 +30,7 @@ class LogProcessor(
     private val watchers: Watchers,
     private val blockFinisher: BlockFinisher,
     meterRegistry: MeterRegistry? = null,
+    private val leaderHandoffTimeout: Duration = Duration.ofMinutes(4),
 ) : Log.SubscriptionListener, AutoCloseable {
 
     interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable
@@ -115,7 +121,7 @@ class LogProcessor(
                     val followerProc = oldSys.proc
                     val pendingBlock = followerProc.pendingBlock
                     LOG.debug("transition: closing follower system (pendingBlock=${pendingBlock != null})")
-                    oldSys.close()
+                    runBlockingWithTimeout(leaderHandoffTimeout) { oldSys.close() }
 
                     procFactory.openTransition(replicaProducer, replicaWatchers).use { transition ->
                         if (pendingBlock != null) {
@@ -151,7 +157,7 @@ class LogProcessor(
                 LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
                 val pendingBlock = oldSys.pendingBlock
                 LOG.debug("revocation: closing leader system (pendingBlock=${pendingBlock != null})")
-                oldSys.close()
+                runBlockingWithTimeout(leaderHandoffTimeout) { oldSys.close() }
                 val startMsgId = pendingBlock?.boundaryMsgId ?: replicaLog.latestSubmittedMsgId
                 LOG.debug("revocation: opening follower system from $startMsgId (pendingBlock=${pendingBlock != null})")
                 openFollowerSystem(startMsgId, pendingBlock)
@@ -165,7 +171,11 @@ class LogProcessor(
     }
 
     override fun close() {
-        sys.close()
+        try {
+            runBlockingWithTimeout(10.seconds) { sys.close() }
+        } catch (e: TimeoutCancellationException) {
+            LOG.warn(e, "close timed out")
+        }
         replicaWatchers.close()
     }
 }
