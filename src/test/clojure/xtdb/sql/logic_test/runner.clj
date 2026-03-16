@@ -302,8 +302,7 @@
                                 [(ex-message t) :lines]
                                 #(conj % (:line record))))))
 
-                      (if (or (and (str/includes? (or (ex-message t) "") "Missing grouping columns")
-                                   (contains? (set (:skipif record)) "postgresql"))
+                      (if (or (contains? (set (:skipif record)) "postgresql")
                               (str/includes? (or (ex-message t) "") "Duplicate column projection"))
                         (update ctx :queries-run + (if (= :query (:type record))
                                                      1
