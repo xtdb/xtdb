@@ -28,24 +28,16 @@ class DebeziumProcessor(
                 }
             } catch (e: Incorrect) {
                 logger.error("Failed to process CDC record at offset {}: {}", record.logOffset, e.message, e)
-                submitDlq(e.message ?: "Unknown error", record.logOffset)
+                val metadata = mapOf(
+                    "source" to "debezium",
+                    "error" to (e.message ?: "Unknown error"),
+                    "kafka_offset" to record.logOffset,
+                )
+                // TODO: Currently: DLQ txs have committed=true and error in the user metadata.
+                //       In the future we will mark these transactions as errors in the usual way
+                node.submitTx(dbName, emptyList(), TxOpts(userMetadata = metadata))
             }
         }
-    }
-
-    // TODO: Currently: DLQ txs have committed=true and error in the user metadata.
-    //       In the future we will fail somewhere in the indexer so that the error shows there.
-    private fun submitDlq(errorMessage: String, logOffset: Long) {
-        node.submitTx(
-            dbName, emptyList(),
-            TxOpts(
-                userMetadata = mapOf(
-                    "source" to "debezium",
-                    "error" to errorMessage,
-                    "kafka_offset" to logOffset,
-                )
-            )
-        )
     }
 
     override fun close() {}
