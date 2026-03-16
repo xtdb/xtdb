@@ -254,26 +254,25 @@
   [config-file-opt
    ["-k" "--kafka-cluster ALIAS" "Kafka cluster alias (from node config log-clusters)"
     :id :kafka-cluster]
-   ["-t" "--topic TOPIC" "Kafka topic to consume CDC events from"
-    :id :topic]
-   ["-d" "--db-name DB_NAME" "XTDB database name"
-    :id :db-name
-    :default "xtdb"]
+   ["-s" "--source-topic TOPIC" "XTDB source log topic to write transactions to"
+    :id :source-topic]
+   ["-t" "--debezium-topic TOPIC" "Kafka topic to consume CDC events from"
+    :id :debezium-topic]
    ["-h" "--help"]])
 
 (defn- start-debezium-cdc [args]
-  (let [{{:keys [file kafka-cluster topic db-name]} :options}
+  (let [{{:keys [file kafka-cluster source-topic debezium-topic]} :options}
         (-> (parse-args args debezium-cdc-cli-spec)
             (handling-arg-errors-or-help))]
-    (when-not (and kafka-cluster topic)
+    (when-not (and kafka-cluster source-topic debezium-topic)
       (binding [*out* *err*]
-        (println "Required: --kafka-cluster and --topic")
+        (println "Required: --kafka-cluster, --source-topic and --debezium-topic")
         (System/exit 2)))
     (util/with-open [_cdc ((requiring-resolve 'xtdb.debezium/start!)
                            (file->node-opts file)
                            {:kafka-cluster kafka-cluster
-                            :topic topic
-                            :db-name db-name})]
+                            :source-topic source-topic
+                            :debezium-topic debezium-topic})]
       @(shutdown-hook-promise))))
 
 (defn -main [& args]

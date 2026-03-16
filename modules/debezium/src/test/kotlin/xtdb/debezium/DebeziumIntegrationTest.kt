@@ -22,7 +22,9 @@ import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.SourceMessage
+import org.apache.arrow.memory.RootAllocator
 import java.util.UUID
+import java.time.ZoneOffset
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -150,6 +152,23 @@ class DebeziumIntegrationTest {
         server { port = 0 }; flightSql = null
         logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
+    }
+
+    private suspend fun <R> withSourceProducer(
+        sourceTopic: String,
+        block: suspend (DebeziumProcessor) -> R,
+    ): R {
+        val cluster = KafkaCluster.ClusterFactory(kafka.bootstrapServers).open()
+        return cluster.use {
+            KafkaCluster.LogFactory("kafka", sourceTopic)
+                .openSourceLog(mapOf("kafka" to cluster)).use { sourceLog ->
+                    sourceLog.openAtomicProducer("test-debezium-$sourceTopic").use { producer ->
+                        RootAllocator().use { allocator ->
+                            block(DebeziumProcessor(producer, allocator, ZoneOffset.UTC))
+                        }
+                    }
+                }
+        }
     }
 
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
@@ -310,30 +329,31 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                        "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
-                        "DELETE FROM cdc_users WHERE _id = 2",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                            "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
+                            "DELETE FROM cdc_users WHERE _id = 2",
+                        )
 
-                    // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                    while (received.size < 4) delay(100)
+                        // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
+                        while (received.size < 4) delay(100)
 
-                    // Allow indexing to complete
-                    delay(2000)
+                        // Allow indexing to complete
+                        delay(2000)
+                    }
                 }
             }
 
@@ -376,28 +396,29 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                        "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
-                        "DELETE FROM cdc_no_envelope WHERE _id = 2",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                            "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
+                            "DELETE FROM cdc_no_envelope WHERE _id = 2",
+                        )
 
-                    // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                    while (received.size < 4) delay(100)
-                    delay(2000)
+                        // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
+                        while (received.size < 4) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -439,32 +460,33 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
-                           VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
-                        """INSERT INTO timed_docs (_id, name, _valid_from)
-                           VALUES (2, 'from-only', '2024-06-01T00:00:00Z')""",
-                        """INSERT INTO timed_docs (_id, name, _valid_to)
-                           VALUES (3, 'to-only', '2025-06-01T00:00:00Z')""",
-                        """INSERT INTO timed_docs (_id, name)
-                           VALUES (4, 'neither')""",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
+                            VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
+                            """INSERT INTO timed_docs (_id, name, _valid_from)
+                            VALUES (2, 'from-only', '2024-06-01T00:00:00Z')""",
+                            """INSERT INTO timed_docs (_id, name, _valid_to)
+                            VALUES (3, 'to-only', '2025-06-01T00:00:00Z')""",
+                            """INSERT INTO timed_docs (_id, name)
+                            VALUES (4, 'neither')""",
+                        )
 
-                    while (received.size < 4) delay(100)
-                    delay(2000)
+                        while (received.size < 4) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -522,26 +544,27 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
+                        )
 
-                    // snapshot + insert = 2 records, both should fail and go to DLQ
-                    while (received.size < 2) delay(100)
-                    delay(2000)
+                        // snapshot + insert = 2 records, both should fail and go to DLQ
+                        while (received.size < 2) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -585,29 +608,30 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
-                           VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
-                                   ARRAY['admin', 'user'], NULL)""",
-                        """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
-                           VALUES (2, 'Bob', NULL, false, NULL, NULL, 'some notes')""",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
+                            VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
+                                    ARRAY['admin', 'user'], NULL)""",
+                            """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
+                            VALUES (2, 'Bob', NULL, false, NULL, NULL, 'some notes')""",
+                        )
 
-                    while (received.size < 2) delay(100)
-                    delay(2000)
+                        while (received.size < 2) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -651,25 +675,26 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
+                        )
 
-                    while (received.size < 1) delay(100)
-                    delay(2000)
+                        while (received.size < 1) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -694,34 +719,40 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val secondarySourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            // Attach a secondary database
+            // Attach a secondary database with its own source topic
             node.getConnection().use { conn ->
                 conn.createStatement().use { stmt ->
-                    stmt.execute("ATTACH DATABASE cdc_secondary")
+                    stmt.execute("""ATTACH DATABASE cdc_secondary WITH $$
+                        log: !Kafka
+                          cluster: kafka
+                          topic: $secondarySourceTopic
+                    $$""")
                 }
             }
 
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test")
-            val processor = DebeziumProcessor(node, "cdc_secondary", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(secondarySourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    pgExecute(
-                        "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        pgExecute(
+                            "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                        )
 
-                    // snapshot(Alice) + insert(Bob) = 2 records
-                    while (received.size < 2) delay(100)
-                    delay(2000)
+                        // snapshot(Alice) + insert(Bob) = 2 records
+                        while (received.size < 2) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 
@@ -761,32 +792,33 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-            val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+            withSourceProducer(sourceTopic) { processor ->
+                val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
+                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
-            val capturing = object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                    processor.processRecords(records)
-                    received.addAll(records)
+                val capturing = object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+                        processor.processRecords(records)
+                        received.addAll(records)
+                    }
                 }
-            }
 
-            log.use {
-                log.tailAll(-1, capturing).use {
-                    // TIMESTAMP (no tz) → Debezium sends as Long, not a string
-                    pgExecute(
-                        """INSERT INTO bad_times (_id, name, _valid_from)
-                           VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
-                    )
-                    // TEXT with non-ISO content → string that won't parse
-                    pgExecute(
-                        """INSERT INTO bad_times (_id, name, _valid_to)
-                           VALUES (2, 'bad-string', 'not-a-date')""",
-                    )
+                log.use {
+                    log.tailAll(-1, capturing).use {
+                        // TIMESTAMP (no tz) → Debezium sends as Long, not a string
+                        pgExecute(
+                            """INSERT INTO bad_times (_id, name, _valid_from)
+                            VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
+                        )
+                        // TEXT with non-ISO content → string that won't parse
+                        pgExecute(
+                            """INSERT INTO bad_times (_id, name, _valid_to)
+                            VALUES (2, 'bad-string', 'not-a-date')""",
+                        )
 
-                    while (received.size < 2) delay(100)
-                    delay(2000)
+                        while (received.size < 2) delay(100)
+                        delay(2000)
+                    }
                 }
             }
 

@@ -1,22 +1,57 @@
 package xtdb.debezium
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import org.apache.arrow.memory.RootAllocator
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.api.Xtdb
+import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.api.log.KafkaCluster
+import xtdb.api.log.Log
+import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.Record
 import xtdb.api.log.SourceMessage
+import xtdb.api.query.IKeyFn
+import xtdb.arrow.Relation
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.*
+import java.util.Collections.synchronizedList
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
+@Tag("integration")
 class DebeziumProcessorTest {
+
+    companion object {
+        private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
+
+        @JvmStatic @BeforeAll
+        fun startKafka() { kafka.start() }
+
+        @JvmStatic @AfterAll
+        fun stopKafka() { kafka.stop() }
+    }
+
+    private lateinit var allocator: RootAllocator
+
+    @BeforeEach
+    fun setUp() { allocator = RootAllocator() }
+
+    @AfterEach
+    fun tearDown() { allocator.close() }
 
     private fun putRecord(
         id: Int,
@@ -60,76 +95,69 @@ class DebeziumProcessorTest {
         return Record(0, offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
     }
 
-    private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> {
-        return node.getConnection().use { conn ->
-            conn.createStatement().use { stmt ->
-                stmt.executeQuery(sql).use { rs ->
-                    val metadata = rs.metaData
-                    val cols = (1..metadata.columnCount).map { metadata.getColumnName(it) }
-                    buildList {
-                        while (rs.next()) {
-                            add(cols.associateWith { rs.getObject(it) })
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private fun rawRecord(payload: String, offset: Long = 0): Record<SourceMessage> =
         Record(0, offset, Instant.now(), SourceMessage.Tx(payload.toByteArray()))
 
-    private fun awaitTxs(node: Xtdb, expected: Int, timeout: kotlin.time.Duration = 10.seconds) {
-        val start = TimeSource.Monotonic.markNow()
-        while (true) {
-            val count = xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs")[0]["cnt"] as Long
-            if (count >= expected) return
-            check(start.elapsedNow() < timeout) { "Timed out waiting for $expected txs (got $count)" }
-            Thread.sleep(50)
+    private suspend fun <R> withDebeziumProducer(
+        defaultTz: ZoneId = ZoneOffset.UTC,
+        block: suspend (DebeziumProcessor, MutableList<Record<SourceMessage>>) -> R,
+    ): R {
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val received = synchronizedList(mutableListOf<Record<SourceMessage>>())
+
+        val cluster = KafkaCluster.ClusterFactory(kafka.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open()
+
+        return cluster.use {
+            KafkaCluster.LogFactory("kafka", sourceTopic)
+                .openSourceLog(mapOf("kafka" to cluster)).use { log ->
+                    log.tailAll(-1) { records -> received.addAll(records) }.use {
+                        log.openAtomicProducer("test-debezium").use { producer ->
+                            val processor = DebeziumProcessor(producer, allocator, defaultTz)
+                            block(processor, received)
+                        }
+                    }
+                }
         }
     }
 
-    private fun dlqTxs(node: Xtdb): List<Map<String, Any?>> = xtQuery(
-        node,
-        """SELECT (user_metadata).error, (user_metadata).kafka_offset
-           FROM xt.txs
-           WHERE (user_metadata).source = 'debezium'
-             AND (user_metadata).error IS NOT NULL
-           ORDER BY _id"""
-    )
+    private fun decodeTx(msg: SourceMessage.Tx): Map<*, *> =
+        Relation.openFromArrowStream(allocator, msg.payload).use { rel ->
+            rel.toMaps(IKeyFn.KeyFn.SNAKE_CASE_STRING).first()
+        }
 
     @Test
-    fun `invalid JSON goes to DLQ`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
+    fun `invalid JSON goes to DLQ`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
             processor.processRecords(listOf(rawRecord("not json at all", offset = 42)))
 
-            awaitTxs(node, 1)
+            while (received.size < 1) delay(100)
 
-            val dlq = dlqTxs(node)
-            assertEquals(1, dlq.size)
-            assertEquals(42L, (dlq[0]["kafka_offset"] as Number).toLong())
+            assertEquals(1, received.size)
+
+            val tx = decodeTx(received[0].message as SourceMessage.Tx)
+            val metadata = tx["user-metadata"] as Map<*, *>
+            assertEquals("debezium", metadata["source"])
+            assertTrue((metadata["error"] as String).contains("Invalid CDC message"))
+            assertEquals(42L, metadata["kafka_offset"])
         }
     }
 
     @Test
-    fun `empty record list is a no-op`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
+    fun `empty record list is a no-op`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
             processor.processRecords(emptyList())
 
-            val txs = xtQuery(node, "SELECT * FROM xt.txs")
-            assertEquals(0, txs.size)
+            delay(1000)
+
+            assertEquals(0, received.size)
         }
     }
 
     @Test
-    fun `valid records in batch still processed when others fail`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
+    fun `valid records in batch still processed when others fail`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
             val batch = listOf(
                 putRecord(1, "Alice", offset = 0),
                 rawRecord("not json", offset = 1),
@@ -138,43 +166,46 @@ class DebeziumProcessorTest {
 
             processor.processRecords(batch)
 
-            // 3 txs: Alice, DLQ for invalid, Bob
-            awaitTxs(node, 3)
+            while (received.size < 3) delay(100)
 
-            // Alice and Bob should be ingested
-            val rows = xtQuery(node, "SELECT _id, name FROM public.test ORDER BY _id")
-            assertEquals(2, rows.size)
-            assertEquals("Alice", rows[0]["name"])
-            assertEquals("Bob", rows[1]["name"])
+            assertEquals(3, received.size)
 
-            // Invalid record should be in DLQ
-            val dlq = dlqTxs(node)
-            assertEquals(1, dlq.size)
-            assertEquals(1L, (dlq[0]["kafka_offset"] as Number).toLong())
+            // Alice — valid tx
+            val tx0 = decodeTx(received[0].message as SourceMessage.Tx)
+            assertTrue((tx0["tx-ops"] as List<*>).isNotEmpty())
+            assertEquals(0L, (tx0["user-metadata"] as Map<*, *>)["kafka_offset"])
+
+            // Invalid JSON — DLQ tx
+            val tx1 = decodeTx(received[1].message as SourceMessage.Tx)
+            assertTrue((tx1["tx-ops"] as List<*>).isEmpty())
+            val dlqMetadata = tx1["user-metadata"] as Map<*, *>
+            assertEquals("debezium", dlqMetadata["source"])
+            assertEquals(1L, dlqMetadata["kafka_offset"])
+
+            // Bob — valid tx
+            val tx2 = decodeTx(received[2].message as SourceMessage.Tx)
+            assertTrue((tx2["tx-ops"] as List<*>).isNotEmpty())
+            assertEquals(2L, (tx2["user-metadata"] as Map<*, *>)["kafka_offset"])
         }
     }
 
     @Test
-    fun `node failure propagates out of processRecords`() = runTest {
-        val node = Xtdb.openNode { server { port = 0 }; flightSql = null }
-        val processor = DebeziumProcessor(node, "xtdb", node.allocator)
+    fun `node failure propagates out of processRecords`() = runTest(timeout = 61.seconds) {
+        val failingProducer = object : Log.AtomicProducer<SourceMessage> {
+            override fun openTx(): Log.AtomicProducer.Tx<SourceMessage> =
+                throw RuntimeException("Kafka unavailable")
+            override fun close() {}
+        }
 
-        // Close the node — submitTx will now fail
-        node.close()
-
-        val record = putRecord(1, "Alice")
-
-        // Infrastructure error should propagate, NOT be caught by DLQ handler
+        val processor = DebeziumProcessor(failingProducer, allocator, ZoneOffset.UTC)
         assertThrows<Exception> {
-            processor.processRecords(listOf(record))
+            processor.processRecords(listOf(rawRecord("doesn't matter")))
         }
     }
 
     @Test
-    fun `batch of mixed ops processes all records`() = runTest {
-        Xtdb.openNode { server { port = 0 }; flightSql = null }.use { node ->
-            val processor = DebeziumProcessor(node, "xtdb", node.allocator)
-
+    fun `batch of mixed ops processes all records`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
             val batch = listOf(
                 putRecord(1, "Alice", op = "c", offset = 0),
                 putRecord(2, "Bob", op = "c", offset = 1),
@@ -184,29 +215,29 @@ class DebeziumProcessorTest {
 
             processor.processRecords(batch)
 
-            awaitTxs(node, 4)
+            while (received.size < 4) delay(100)
 
-            val rows = xtQuery(
-                node,
-                """SELECT _id, name, _valid_from, _valid_to
-                   FROM public.test
-                   FOR ALL VALID_TIME
-                   ORDER BY _id, _valid_from"""
-            )
+            assertEquals(4, received.size)
 
-            // Alice: created then updated = 2 rows
-            // Bob: created then deleted = 1 row with valid_to
-            assertEquals(3, rows.size, "Expected 3 history rows")
+            received.forEachIndexed { idx, record ->
+                val tx = decodeTx(record.message as SourceMessage.Tx)
+                assertTrue((tx["tx-ops"] as List<*>).isNotEmpty())
+                assertEquals(idx.toLong(), (tx["user-metadata"] as Map<*, *>)["kafka_offset"])
+            }
+        }
+    }
 
-            assertEquals(1L, (rows[0]["_id"] as Number).toLong())
-            assertEquals("Alice", rows[0]["name"])
+    @Test
+    fun `defaultTz is preserved in transaction`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer(defaultTz = ZoneId.of("America/Los_Angeles")) { processor, received ->
+            processor.processRecords(listOf(putRecord(1, "Alice")))
 
-            assertEquals(1L, (rows[1]["_id"] as Number).toLong())
-            assertEquals("Alice Updated", rows[1]["name"])
+            while (received.size < 1) delay(100)
 
-            assertEquals(2L, (rows[2]["_id"] as Number).toLong())
-            assertEquals("Bob", rows[2]["name"])
-            assertTrue(rows[2]["_valid_to"] != null)
+            assertEquals(1, received.size)
+
+            val tx = decodeTx(received[0].message as SourceMessage.Tx)
+            assertEquals("America/Los_Angeles", tx["default-tz"])
         }
     }
 }
