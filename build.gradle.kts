@@ -477,6 +477,7 @@ dependencies {
     projectDep(":xtdb-main")
 
     projectDep(":modules:xtdb-kafka")
+    projectDep(":modules:xtdb-debezium")
     projectDep(":modules:xtdb-aws")
     projectDep(":modules:xtdb-azure")
     projectDep(":modules:xtdb-google-cloud")
