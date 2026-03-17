@@ -2,17 +2,13 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]
-            [xtdb.node :as xtn]
-            [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge Gauge$Builder MeterRegistry Tag Timer Timer$Sample)
-           (io.micrometer.core.instrument.binder MeterBinder)
-           (io.micrometer.core.instrument.binder.jvm ClassLoaderMetrics JvmGcMetrics JvmHeapPressureMetrics JvmMemoryMetrics JvmThreadMetrics)
-           (io.micrometer.core.instrument.binder.system ProcessorMetrics)
-           (io.micrometer.prometheusmetrics PrometheusConfig PrometheusMeterRegistry)
+            [xtdb.node :as xtn])
+  (:import (io.micrometer.core.instrument Counter Gauge Gauge$Builder MeterRegistry Timer Timer$Sample)
+           (io.micrometer.prometheusmetrics PrometheusMeterRegistry)
            (io.micrometer.tracing Tracer Span)
-           java.util.List
            (java.util.stream Stream)
-           (org.apache.arrow.memory BufferAllocator)))
+           (org.apache.arrow.memory BufferAllocator)
+           xtdb.Metrics))
 
 (defn add-counter
   (^io.micrometer.core.instrument.Counter [reg name] (add-counter reg name {}))
@@ -111,33 +107,11 @@
            (end-span span#))))
      (do ~@body)))
 
-(defn direct-memory-pool ^java.lang.management.BufferPoolMXBean []
-  (->> (java.lang.management.ManagementFactory/getPlatformMXBeans java.lang.management.BufferPoolMXBean)
-       (some #(when (= (.getName ^java.lang.management.BufferPoolMXBean %) "direct") %))))
-
 (defmethod ig/expand-key ::registry [k _]
   {k {:config (ig/ref :xtdb/config)}})
 
 (defmethod ig/init-key ::registry [_ {{:keys [node-id]} :config}]
-  (let [reg (PrometheusMeterRegistry. PrometheusConfig/DEFAULT)]
-
-    ;; Add common tag for the node
-    (let [^List tags [(Tag/of "node-id" node-id)]]
-      (log/infof "tagging all metrics with node-id: %s" node-id)
-      (-> (.config reg)
-          (.commonTags tags)))
-
-    (doseq [^MeterBinder metric [(ClassLoaderMetrics.) (JvmMemoryMetrics.) (JvmHeapPressureMetrics.)
-                                 (JvmGcMetrics.) (ProcessorMetrics.) (JvmThreadMetrics.)]]
-      (.bindTo metric reg))
-
-    (add-gauge reg "jvm.memory.netty.bytes" #(util/used-netty-memory) {:unit "bytes"})
-
-    (when-let [direct-pool (direct-memory-pool)]
-      (add-gauge reg "jvm.memory.direct.bytes"
-                 #(.getMemoryUsed direct-pool)
-                 {:unit "bytes"}))
-    reg))
+  (Metrics/openRegistry node-id))
 
 (defmethod ig/halt-key! ::registry [_ ^PrometheusMeterRegistry reg]
   (.clear reg)
