@@ -108,7 +108,7 @@ class LogProcessor(
                     // includes transaction marker offsets that consumers never deliver.
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
                     LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (replica latest: ${replicaLog.latestSubmittedMsgId})")
-                    replicaWatchers.await0(replayTarget)
+                    replicaWatchers.await(replayTarget)
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc

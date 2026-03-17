@@ -34,7 +34,7 @@ class BlockFinisher(
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
 
-    fun finishBlock(
+    suspend fun finishBlock(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
         replicaWatchers: Watchers? = null,
     ) {
@@ -91,7 +91,9 @@ class BlockFinisher(
         }.getCompleted().msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
-        replicaWatchers?.notify(uploadedMsgId, null)
+        if (replicaWatchers != null) {
+            replicaWatchers.notify(uploadedMsgId, null)
+        }
 
         liveIndex.nextBlock()
         compactor.signalBlock()

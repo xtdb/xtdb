@@ -77,10 +77,8 @@
         (metrics/wrap-query query-timer))))
 
 (defn- await-msg-result [node ^Database db msg-id]
-  (or (let [^TransactionResult tx-res (-> @(.awaitSourceMessageAsync db msg-id)
-                                          (util/rethrowing-cause))]
-        (when (and tx-res
-                   (= (.getTxId tx-res) msg-id))
+  (or (when-let [tx-res (.awaitSourceMessageBlocking db msg-id nil)]
+        (when (= (.getTxId tx-res) msg-id)
           tx-res))
 
       (with-open [res (xtp/open-sql-query node "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"

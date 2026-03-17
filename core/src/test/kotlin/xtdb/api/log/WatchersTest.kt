@@ -17,7 +17,7 @@ class WatchersTest {
     @Test
     fun `test ready already`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            val job = async { it.await0(2) }
+            val job = async { it.await(2) }
             while (!job.isCompleted) yield()
             assertNull(job.await())
         }
@@ -26,15 +26,15 @@ class WatchersTest {
     @Test
     fun `test awaits`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            assertThrows<TimeoutCancellationException> { withTimeout(500) { it.await0(4) } }
+            assertThrows<TimeoutCancellationException> { withTimeout(500) { it.await(4) } }
         }
     }
 
     @Test
     fun `notifies watchers of completion`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            val await5 = async { it.await0(5) }
-            val await4 = async { it.await0(4) }
+            val await5 = async { it.await(5) }
+            val await4 = async { it.await(4) }
 
             assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
             assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
@@ -56,7 +56,7 @@ class WatchersTest {
     fun `handles ingestion stopped`() = runTest(timeout = 1.seconds) {
         supervisorScope {
             Watchers(3).use { watchers ->
-                val await4 = async { watchers.await0(4) }
+                val await4 = async { watchers.await(4) }
 
                 assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
@@ -66,7 +66,7 @@ class WatchersTest {
                 assertThrows<IngestionStoppedException> { await4.await() }
                     .also { assertEquals(ex, it.cause) }
 
-                assertThrows<IngestionStoppedException> { watchers.await0(5) }
+                assertThrows<IngestionStoppedException> { watchers.await(5) }
                     .also { assertEquals(ex, it.cause) }
             }
 
@@ -78,7 +78,7 @@ class WatchersTest {
     fun `closes watchers on close`() = runTest(timeout = 1.seconds) {
         supervisorScope {
             val (watchers, await4) = Watchers(3).use { watchers ->
-                val await4 = async { watchers.await0(4) }
+                val await4 = async { watchers.await(4) }
 
                 assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
@@ -86,7 +86,7 @@ class WatchersTest {
             }
 
             assertThrows<InterruptedException> { await4.await() }
-            assertThrows<InterruptedException> { watchers.await0(5) }
+            assertThrows<InterruptedException> { watchers.await(5) }
         }
     }
 }

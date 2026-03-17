@@ -79,7 +79,9 @@ class LeaderLogProcessor(
 
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
-            .also { replicaWatchers.notify(it.msgId, null) }
+            .also {
+                replicaWatchers.notify(it.msgId, null)
+            }
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
@@ -117,7 +119,7 @@ class LeaderLogProcessor(
             }
         }
 
-    private fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+    private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txId = resolvedTx.txId
         val systemTime = resolvedTx.systemTime
 
@@ -222,19 +224,31 @@ class LeaderLogProcessor(
                                 )
                             }
                         }
-                        appendToReplica(ReplicaMessage.TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId))
+                        appendToReplica(
+                            ReplicaMessage.TriesAdded(
+                                msg.storageVersion,
+                                msg.storageEpoch,
+                                msg.tries,
+                                sourceMsgId = msgId
+                            )
+                        )
                         sourceWatchers.notify(msgId, null)
                     }
 
                     // TODO this one's going before release
-                    is SourceMessage.BlockUploaded -> sourceWatchers.notify(msgId, null)
+                    is SourceMessage.BlockUploaded -> {
+                        sourceWatchers.notify(msgId, null)
+                    }
                 }
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
-                LOG.error(e, "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})")
+                LOG.error(
+                    e,
+                    "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
+                )
                 sourceWatchers.notify(msgId, e)
                 throw e
             }

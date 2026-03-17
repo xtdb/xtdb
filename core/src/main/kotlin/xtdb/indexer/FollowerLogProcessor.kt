@@ -47,7 +47,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    private fun handleRecord(record: Log.Record<ReplicaMessage>): TransactionResult? {
+    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>): TransactionResult? {
         val msg = record.message
         LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
 
@@ -138,8 +138,12 @@ class FollowerLogProcessor @JvmOverloads constructor(
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
-                LOG.error(e, "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})")
-                sourceWatchers.notify(record.msgId, e) // strictly speaking, a replica msgId.
+                LOG.error(
+                    e,
+                    "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
+                )
+                sourceWatchers.notify(record.msgId, e)
+                // strictly speaking, a replica msgId.
                 replicaWatchers.notify(record.msgId, e)
                 throw e
             }

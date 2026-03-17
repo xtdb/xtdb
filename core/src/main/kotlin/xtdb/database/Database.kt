@@ -2,7 +2,6 @@ package xtdb.database
 
 import clojure.lang.*
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -36,7 +35,6 @@ import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import java.time.Duration
 import java.util.*
-import java.util.concurrent.CompletableFuture
 
 data class Database(
     val allocator: BufferAllocator,
@@ -67,10 +65,11 @@ data class Database(
     val latestProcessedMsgId: MessageId get() = watchers.currentMsgId
     val ingestionError: Throwable? get() = watchers.exception
 
-    fun awaitSourceMessageAsync(sourceMsgId: MessageId): CompletableFuture<TransactionResult?> {
-        check(isIndexing) { "log processor not initialised" }
-        return watchers.awaitAsync(sourceMsgId)
-    }
+    fun awaitSourceMessageBlocking(sourceMsgId: MessageId, timeout: Duration? = null): TransactionResult? =
+        runBlocking { 
+            check(isIndexing) { "log processor not initialised" }
+            if (timeout == null) watchers.await(sourceMsgId) else withTimeout(timeout) { watchers.await(sourceMsgId) }
+        }
 
     override fun equals(other: Any?): Boolean =
         this === other || (other is Database && name == other.name)
@@ -145,10 +144,7 @@ data class Database(
 
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
-            private suspend fun Database.await(msgId: MessageId) {
-                awaitSourceMessageAsync(msgId).await()
-            }
-
+            private suspend fun Database.await(msgId: MessageId) = watchers.await(msgId)
             private suspend fun Database.sync() = await(sourceLog.latestSubmittedMsgId)
 
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {

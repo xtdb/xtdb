@@ -8,7 +8,6 @@ import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.withTimeout
 import xtdb.api.log.SourceMessage.TriesAdded
@@ -137,7 +136,7 @@ interface Compactor : AutoCloseable {
 
                         override suspend fun publishTries(triesAdded: TriesAdded) {
                             val msgId = log.appendMessage(triesAdded).await().msgId
-                            watchers.awaitAsync(msgId).await()
+                            watchers.await(msgId)
                         }
 
                         override fun close() {

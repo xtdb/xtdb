@@ -95,8 +95,12 @@ class TransitionLogProcessor(
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
-                LOG.error(e, "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})")
-                sourceWatchers.notify(msgId, e) // strictly speaking, a replica msgId.
+                LOG.error(
+                    e,
+                    "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
+                )
+                sourceWatchers.notify(msgId, e)
+                // strictly speaking, a replica msgId.
                 replicaWatchers.notify(msgId, e)
                 throw e
             }

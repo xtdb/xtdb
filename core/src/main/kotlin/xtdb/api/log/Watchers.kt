@@ -3,7 +3,6 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.future.future
 import xtdb.api.TransactionResult
 import xtdb.api.log.Watchers.Event.*
 import java.util.concurrent.PriorityBlockingQueue
@@ -92,23 +91,15 @@ class Watchers @JvmOverloads constructor(
         }
     }
 
-    internal suspend fun notify0(msgId: MessageId, result: TransactionResult?) {
+    suspend fun notify(msgId: MessageId, result: TransactionResult?) {
         channel.send(Notify(msgId, result))
     }
 
-    fun notify(msgId: MessageId, result: TransactionResult?) {
-        runBlocking { notify0(msgId, result) }
-    }
-
-    internal suspend fun notify0(msgId: MessageId, exception: Throwable) {
+    suspend fun notify(msgId: MessageId, exception: Throwable) {
         channel.send(NotifyException(msgId, exception))
     }
 
-    fun notify(msgId: MessageId, exception: Throwable) {
-        runBlocking { notify0(msgId, exception) }
-    }
-
-    internal suspend fun await0(msgId: MessageId): TransactionResult? {
+    suspend fun await(msgId: MessageId): TransactionResult? {
         exception?.let { throw it }
         if (currentMsgId >= msgId) return null
 
@@ -122,8 +113,6 @@ class Watchers @JvmOverloads constructor(
 
         return res.await()
     }
-
-    fun awaitAsync(msgId: MessageId) = scope.future { await0(msgId) }
 
     suspend fun sync(): MessageId {
         val res = CompletableDeferred<MessageId>()

@@ -250,8 +250,7 @@
 
 
 (defn await-db [^Database db, ^long msg-id, ^Duration timeout]
-  @(cond-> (.awaitSourceMessageAsync db msg-id)
-     timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
+  (.awaitSourceMessageBlocking db msg-id timeout))
 
 (defn sync-db [^Database db, ^Duration timeout]
   (let [msg-id (.getLatestSubmittedMsgId (.getSourceLog db))]

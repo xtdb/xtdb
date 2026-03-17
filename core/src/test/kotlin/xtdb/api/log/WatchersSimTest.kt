@@ -1,6 +1,5 @@
 package xtdb.api.log
 
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
@@ -36,11 +35,11 @@ class WatchersSimTest : SimulationTestBase() {
                 val res = try {
                     resolver.resolve(i, systemTime(i))
                 } catch (e: Exception) {
-                    watchers.notify0(i, e)
+                    watchers.notify(i, e)
                     break
                 }
 
-                watchers.notify0(i, res)
+                watchers.notify(i, res)
             }
         }
     }
@@ -52,7 +51,7 @@ class WatchersSimTest : SimulationTestBase() {
             for (i in 0L..<10L) {
                 yield()
                 val msgId = rand.nextLong(i - 2, i + 4).coerceIn(0, 9)
-                res += Pair(msgId, runCatching { watchers.await0(msgId) })
+                res += Pair(msgId, runCatching { watchers.await(msgId) })
             }
         }
     }

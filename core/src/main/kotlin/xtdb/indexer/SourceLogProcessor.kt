@@ -320,7 +320,11 @@ class SourceLogProcessor(
                     is SourceMessage.TriesAdded -> {
                         if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                             msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                                trieCatalog.addTries(TableRef.parse(dbState.name, tableName), tries, record.logTimestamp)
+                                trieCatalog.addTries(
+                                    TableRef.parse(dbState.name, tableName),
+                                    tries,
+                                    record.logTimestamp
+                                )
                             }
                         watchers.notify(msgId, null)
                     }
@@ -341,7 +345,7 @@ class SourceLogProcessor(
         }
     }
 
-    private fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
+    private suspend fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
         val result = if (resolvedTx.committed) {
             TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
         } else {
