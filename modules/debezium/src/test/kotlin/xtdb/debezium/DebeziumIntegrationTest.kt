@@ -171,6 +171,17 @@ class DebeziumIntegrationTest {
         }
     }
 
+    private suspend fun awaitTxs(node: Xtdb, expected: Int, db: String = "xtdb", timeout: Long = 10_000) {
+        val deadline = System.currentTimeMillis() + timeout
+        var count = 0L
+        while (System.currentTimeMillis() < deadline) {
+            count = xtQueryDb(node, db, "SELECT count(*) AS cnt FROM xt.txs")[0]["cnt"] as Long
+            if (count >= expected) return
+            delay(200)
+        }
+        throw AssertionError("Timed out waiting for $expected txs on db '$db' (got $count)")
+    }
+
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
         xtQueryDb(node, "xtdb", sql)
 
@@ -351,8 +362,7 @@ class DebeziumIntegrationTest {
                         // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
                         while (received.size < 4) delay(100)
 
-                        // Allow indexing to complete
-                        delay(2000)
+                        awaitTxs(node, 4)
                     }
                 }
             }
@@ -417,7 +427,7 @@ class DebeziumIntegrationTest {
 
                         // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
                         while (received.size < 4) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 4)
                     }
                 }
             }
@@ -485,7 +495,7 @@ class DebeziumIntegrationTest {
                         )
 
                         while (received.size < 4) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 4)
                     }
                 }
             }
@@ -563,7 +573,7 @@ class DebeziumIntegrationTest {
 
                         // snapshot + insert = 2 records, both should fail and go to DLQ
                         while (received.size < 2) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 2)
                     }
                 }
             }
@@ -630,7 +640,7 @@ class DebeziumIntegrationTest {
                         )
 
                         while (received.size < 2) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 2)
                     }
                 }
             }
@@ -693,7 +703,7 @@ class DebeziumIntegrationTest {
                         )
 
                         while (received.size < 1) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 1)
                     }
                 }
             }
@@ -751,7 +761,7 @@ class DebeziumIntegrationTest {
 
                         // snapshot(Alice) + insert(Bob) = 2 records
                         while (received.size < 2) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 2, db = "cdc_secondary")
                     }
                 }
             }
@@ -817,7 +827,7 @@ class DebeziumIntegrationTest {
                         )
 
                         while (received.size < 2) delay(100)
-                        delay(2000)
+                        awaitTxs(node, 2)
                     }
                 }
             }
