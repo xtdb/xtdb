@@ -149,11 +149,10 @@ class LogProcessor(
         this.sys = when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
-                val pendingBlock = oldSys.pendingBlock
-                LOG.debug("revocation: closing leader system (pendingBlock=${pendingBlock != null})")
                 oldSys.close()
+                val pendingBlock = oldSys.pendingBlock
                 val latestReplica = replicaWatchers.sync()
-                LOG.debug("revocation: opening follower system from $latestReplica")
+                LOG.debug("revocation: pending block: ${pendingBlock != null}, opening follower system from $latestReplica")
                 openFollowerSystem(latestReplica, pendingBlock)
             }
 
