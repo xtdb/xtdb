@@ -4,7 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.TransactionAborted
@@ -73,8 +73,7 @@ class WatchersTest {
         }
     }
 
-    @Test
-    @Disabled("temporarily disabled - investigating flaky close behaviour")
+    @RepeatedTest(1000)
     fun `closes watchers on close`() = runTest(timeout = 1.seconds) {
         supervisorScope {
             val (watchers, await4) = Watchers(3).use { watchers ->
@@ -85,8 +84,8 @@ class WatchersTest {
                 Pair(watchers, await4)
             }
 
-            assertThrows<InterruptedException> { await4.await() }
-            assertThrows<InterruptedException> { watchers.await(5) }
+            assertThrows<CancellationException> { await4.await() }
+            assertThrows<CancellationException> { watchers.await(5) }
         }
     }
 }
