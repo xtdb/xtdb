@@ -353,17 +353,25 @@ class KafkaCluster(
                 .openConsumer()
                 .closeOnCatch { c ->
                     c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                        private fun launderInterruptedException(block: () -> Unit) =
+                            try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
+
                         // onPartitionsAssigned is called from the poll thread, so pause is safe here
-                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
-                            c.pause(partitions)
-                            listener.onPartitionsAssignedSync(partitions.map { it.partition() })
-                        }
+                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                            launderInterruptedException {
+                                c.pause(partitions)
+                                listener.onPartitionsAssignedSync(partitions.map { it.partition() })
+                            }
 
                         override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsRevokedSync(partitions.map { it.partition() })
+                            launderInterruptedException {
+                                listener.onPartitionsRevokedSync(partitions.map { it.partition() })
+                            }
 
                         override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
-                            listener.onPartitionsLostSync(partitions.map { it.partition() })
+                            launderInterruptedException {
+                                listener.onPartitionsLostSync(partitions.map { it.partition() })
+                            }
                     })
 
                     PollingConsumer(c)
