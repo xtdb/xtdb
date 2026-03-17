@@ -112,9 +112,9 @@ class LogProcessor(
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc
-                    val pendingBlock = followerProc.pendingBlock
-                    LOG.debug("transition: closing follower system (pendingBlock=${pendingBlock != null})")
+                    LOG.debug("transition: closing follower system")
                     oldSys.close()
+                    val pendingBlock = followerProc.pendingBlock
 
                     procFactory.openTransition(replicaProducer, replicaWatchers).use { transition ->
                         if (pendingBlock != null) {
