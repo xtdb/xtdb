@@ -160,7 +160,7 @@ class DebeziumIntegrationTest {
     ): R {
         val cluster = KafkaCluster.ClusterFactory(kafka.bootstrapServers).open()
         return cluster.use {
-            KafkaCluster.LogFactory("kafka", sourceTopic)
+            KafkaCluster.LogFactory("kafka", sourceTopic, groupId = "xtdb-$sourceTopic-debezium")
                 .openSourceLog(mapOf("kafka" to cluster)).use { sourceLog ->
                     sourceLog.openAtomicProducer("test-debezium-$sourceTopic").use { producer ->
                         RootAllocator().use { allocator ->

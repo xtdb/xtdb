@@ -110,7 +110,7 @@ class DebeziumProcessorTest {
             .open()
 
         return cluster.use {
-            KafkaCluster.LogFactory("kafka", sourceTopic)
+            KafkaCluster.LogFactory("kafka", sourceTopic, groupId = "xtdb-$sourceTopic-debezium")
                 .openSourceLog(mapOf("kafka" to cluster)).use { log ->
                     log.tailAll(-1) { records -> received.addAll(records) }.use {
                         log.openAtomicProducer("test-debezium").use { producer ->
