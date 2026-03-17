@@ -17,6 +17,7 @@ import xtdb.util.HLL
 import xtdb.util.combine
 import xtdb.util.toHLL
 import java.nio.ByteBuffer
+import java.nio.channels.ClosedByInterruptException
 
 class TableCatalog(
     private val blockCatalog: BlockCatalog,
@@ -152,10 +153,14 @@ class TableCatalog(
 
             return TableBlock.newBuilder()
                 .apply {
-                    this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessage())
-                    this.rowCount = rowCount
-                    putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
-                    addAllPartitions(partitions)
+                    try {
+                        this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessage())
+                        this.rowCount = rowCount
+                        putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
+                        addAllPartitions(partitions)
+                    } catch (_: ClosedByInterruptException) {
+                        throw InterruptedException()
+                    }
                 }
                 .build()
         }
