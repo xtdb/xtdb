@@ -59,7 +59,7 @@ class DebeziumProcessorTest {
         op: String = "c",
         offset: Long = 0,
         table: String = "test",
-    ): Record<SourceMessage> {
+    ): Record<DebeziumMessage> {
         val envelope = buildJsonObject {
             putJsonObject("payload") {
                 put("op", op)
@@ -72,14 +72,14 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(0, offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
+        return Record(0, offset, Instant.now(), DebeziumMessage(envelope.toString().toByteArray()))
     }
 
     private fun deleteRecord(
         id: Int,
         offset: Long = 0,
         table: String = "test",
-    ): Record<SourceMessage> {
+    ): Record<DebeziumMessage> {
         val envelope = buildJsonObject {
             putJsonObject("payload") {
                 put("op", "d")
@@ -92,11 +92,11 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(0, offset, Instant.now(), SourceMessage.Tx(envelope.toString().toByteArray()))
+        return Record(0, offset, Instant.now(), DebeziumMessage(envelope.toString().toByteArray()))
     }
 
-    private fun rawRecord(payload: String, offset: Long = 0): Record<SourceMessage> =
-        Record(0, offset, Instant.now(), SourceMessage.Tx(payload.toByteArray()))
+    private fun rawRecord(payload: String, offset: Long = 0): Record<DebeziumMessage> =
+        Record(0, offset, Instant.now(), DebeziumMessage(payload.toByteArray()))
 
     private suspend fun <R> withDebeziumProducer(
         defaultTz: ZoneId = ZoneOffset.UTC,

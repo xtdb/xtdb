@@ -17,13 +17,13 @@ class DebeziumProcessor(
     private val producer: Log.AtomicProducer<SourceMessage>,
     private val allocator: BufferAllocator,
     private val defaultTz: ZoneId,
-) : Log.RecordProcessor<SourceMessage>, AutoCloseable {
+) : Log.RecordProcessor<DebeziumMessage>, AutoCloseable {
 
-    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<DebeziumMessage>>) {
         for (record in records) {
             producer.withTx { tx ->
                 try {
-                    val event = CdcEvent.fromJson((record.message as SourceMessage.Tx).payload)
+                    val event = CdcEvent.fromJson((record.message).payload)
 
                     event.toTxOp(allocator).use { txOp ->
                         val metadata = event.metadata + ("kafka_offset" to record.logOffset)

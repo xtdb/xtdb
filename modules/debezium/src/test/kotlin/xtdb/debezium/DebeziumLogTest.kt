@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log
 import xtdb.api.log.Log.Companion.tailAll
-import xtdb.api.log.SourceMessage
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
@@ -64,8 +63,8 @@ class DebeziumLogTest {
         }
     }
 
-    private fun capturingProcessor(): Pair<Log.RecordProcessor<SourceMessage>, List<Log.Record<SourceMessage>>> {
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+    private fun capturingProcessor(): Pair<Log.RecordProcessor<DebeziumMessage>, List<Log.Record<DebeziumMessage>>> {
+        val received = Collections.synchronizedList(mutableListOf<Log.Record<DebeziumMessage>>())
 
         val capturing = Log.RecordProcessor { records ->
             received.addAll(records)
@@ -99,12 +98,12 @@ class DebeziumLogTest {
 
         // Verify message contents match Charlie and Dave
         val charlie = Json.parseToJsonElement(
-            String((received[0].message as SourceMessage.Tx).payload)
+            String((received[0].message).payload)
         ).jsonObject
         assertEquals("Charlie", charlie["payload"]!!.jsonObject["after"]!!.jsonObject["name"]!!.jsonPrimitive.content)
 
         val dave = Json.parseToJsonElement(
-            String((received[1].message as SourceMessage.Tx).payload)
+            String((received[1].message).payload)
         ).jsonObject
         assertEquals("Dave", dave["payload"]!!.jsonObject["after"]!!.jsonObject["name"]!!.jsonPrimitive.content)
     }

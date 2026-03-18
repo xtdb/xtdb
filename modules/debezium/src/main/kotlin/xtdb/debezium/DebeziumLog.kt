@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
 import xtdb.api.log.Log.*
 import xtdb.api.log.MessageId
-import xtdb.api.log.SourceMessage
 import xtdb.util.MsgIdUtil
 import java.time.Duration
 import java.time.Instant
@@ -24,12 +23,16 @@ object UnitDeserializer : Deserializer<Unit> {
     override fun deserialize(topic: String?, data: ByteArray) = Unit
 }
 
+class DebeziumMessage(
+    val payload: ByteArray,
+)
+
 class DebeziumLog @JvmOverloads constructor(
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),
     coroutineContext: CoroutineContext = Dispatchers.Default,
-) : Log<SourceMessage> {
+) : Log<DebeziumMessage> {
 
     // TODO: non-deterministic failures (e.g. node down) currently kill this coroutine silently.
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -41,19 +44,19 @@ class DebeziumLog @JvmOverloads constructor(
     override val latestSubmittedOffset: Long get() = -1
     override val epoch: Int get() = 0
 
-    override suspend fun appendMessage(message: SourceMessage): MessageMetadata =
+    override suspend fun appendMessage(message: DebeziumMessage): MessageMetadata =
         throw UnsupportedOperationException("CDC log is read-only")
 
-    override fun openAtomicProducer(transactionalId: String): AtomicProducer<SourceMessage> =
+    override fun openAtomicProducer(transactionalId: String): AtomicProducer<DebeziumMessage> =
         throw UnsupportedOperationException("CDC log is read-only")
 
-    override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<SourceMessage> =
+    override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<DebeziumMessage> =
         throw UnsupportedOperationException("CDC log does not support group subscription")
 
-    override fun readLastMessage(): SourceMessage? = null
+    override fun readLastMessage(): DebeziumMessage? = null
 
-    override fun openConsumer(): Log.Consumer<SourceMessage> = object : Log.Consumer<SourceMessage> {
-        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<SourceMessage>): Log.Subscription {
+    override fun openConsumer(): Log.Consumer<DebeziumMessage> = object : Log.Consumer<DebeziumMessage> {
+        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
             val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
             val job = scope.launch {
@@ -75,7 +78,7 @@ class DebeziumLog @JvmOverloads constructor(
                                             epoch,
                                             record.offset(),
                                             Instant.ofEpochMilli(record.timestamp()),
-                                            SourceMessage.Tx(value),
+                                            DebeziumMessage(value),
                                         )
                                     }
                                 }

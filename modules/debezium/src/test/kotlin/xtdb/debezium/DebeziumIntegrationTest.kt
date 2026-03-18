@@ -233,9 +233,9 @@ class DebeziumIntegrationTest {
         this["payload"]?.jsonObject ?: fail("Expected 'payload' key in message")
 
     private fun capturingProcessor(
-        processor: Log.RecordProcessor<SourceMessage>
-    ): Pair<Log.RecordProcessor<SourceMessage>, List<Log.Record<SourceMessage>>> {
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+        processor: Log.RecordProcessor<DebeziumMessage>
+    ): Pair<Log.RecordProcessor<DebeziumMessage>, List<Log.Record<DebeziumMessage>>> {
+        val received = Collections.synchronizedList(mutableListOf<Log.Record<DebeziumMessage>>())
 
         val capturing = Log.RecordProcessor { records ->
             processor.processRecords(records)
