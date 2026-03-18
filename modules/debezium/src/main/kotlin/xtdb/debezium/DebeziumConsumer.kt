@@ -9,7 +9,6 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
 import xtdb.api.log.Log
-import xtdb.api.log.Log.*
 import xtdb.api.log.MessageId
 import xtdb.util.MsgIdUtil
 import java.time.Duration
@@ -17,7 +16,7 @@ import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
-private val logger = LoggerFactory.getLogger(DebeziumLog::class.java)
+private val logger = LoggerFactory.getLogger(DebeziumConsumer::class.java)
 
 object UnitDeserializer : Deserializer<Unit> {
     override fun deserialize(topic: String?, data: ByteArray) = Unit
@@ -27,7 +26,7 @@ class DebeziumMessage(
     val payload: ByteArray,
 )
 
-class DebeziumLog @JvmOverloads constructor(
+class DebeziumConsumer @JvmOverloads constructor(
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),

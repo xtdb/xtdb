@@ -9,15 +9,13 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log
-import xtdb.api.log.Log.Companion.tailAll
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
-class DebeziumLogTest {
+class DebeziumConsumerTest {
 
     private lateinit var kafka: ConfluentKafkaContainer
 
@@ -84,7 +82,7 @@ class DebeziumLogTest {
         produceMessages(topic, messages)
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumLog(kafkaConfig(), topic)
+        val log = DebeziumConsumer(kafkaConfig(), topic)
         log.use {
             // Resume from offset 1 — should skip records 0 and 1, receive 2 and 3
             log.tailAll(1, subscriber).use {
@@ -114,7 +112,7 @@ class DebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumLog(kafkaConfig(), topic)
+        val log = DebeziumConsumer(kafkaConfig(), topic)
         log.use {
             log.tailAll(-1, subscriber).use {
                 while (received.isEmpty()) delay(100)
@@ -134,7 +132,7 @@ class DebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumLog(kafkaConfig(), topic)
+        val log = DebeziumConsumer(kafkaConfig(), topic)
 
         val subscription = log.tailAll(-1, subscriber)
         while (received.isEmpty()) delay(100)

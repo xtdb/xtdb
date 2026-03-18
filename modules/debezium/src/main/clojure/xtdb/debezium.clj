@@ -4,7 +4,7 @@
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            (xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory)
-           (xtdb.debezium DebeziumLog DebeziumProcessor)))
+           (xtdb.debezium DebeziumConsumer DebeziumProcessor)))
 
 (defn start!
   "Starts a CDC ingestion node, returns an AutoCloseable."
@@ -16,7 +16,7 @@
                                      (.groupId (str "xtdb-" source-topic "-debezium")))
                                    {kafka-cluster cluster})
         producer (.openAtomicProducer source-log (str "debezium-" source-topic))
-        debezium-log (DebeziumLog. kafka-config debezium-topic)
+        debezium-log (DebeziumConsumer. kafka-config debezium-topic)
         allocator (RootAllocator.)
         processor (DebeziumProcessor. producer allocator (.getDefaultTz cfg))
         subscription (.tailAll debezium-log -1 processor)]

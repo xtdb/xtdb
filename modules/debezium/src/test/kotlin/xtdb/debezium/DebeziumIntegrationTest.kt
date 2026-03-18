@@ -20,8 +20,6 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
-import xtdb.api.log.Log.Companion.tailAll
-import xtdb.api.log.SourceMessage
 import org.apache.arrow.memory.RootAllocator
 import java.util.UUID
 import java.time.ZoneOffset
@@ -353,7 +351,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_users")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -412,7 +410,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_no_envelope")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -469,7 +467,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.timed_docs")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -546,7 +544,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.no_id_table")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -603,7 +601,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.typed_docs")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -663,7 +661,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.inventory.products")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -713,7 +711,7 @@ class DebeziumIntegrationTest {
             }
 
             withSourceProducer(secondarySourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_secondary_test")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -766,7 +764,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.bad_times")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
