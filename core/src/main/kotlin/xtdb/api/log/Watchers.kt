@@ -29,7 +29,7 @@ class Watchers @JvmOverloads constructor(
 
     private sealed interface Event {
         data class Notify(val msgId: MessageId, val result: TransactionResult?) : Event
-        data class NotifyException(val msgId: MessageId, val exception: Throwable) : Event
+        data class NotifyException(val msgId: MessageId?, val exception: Throwable) : Event
         data class NewWatcher(val watcher: Watcher) : Event
         data class Sync(val cont: CancellableContinuation<MessageId>) : Event
     }
@@ -110,7 +110,7 @@ class Watchers @JvmOverloads constructor(
         channel.send(Notify(msgId, result))
     }
 
-    suspend fun notify(msgId: MessageId, exception: Throwable) {
+    suspend fun notify(msgId: MessageId?, exception: Throwable) {
         channel.send(NotifyException(msgId, exception))
     }
 

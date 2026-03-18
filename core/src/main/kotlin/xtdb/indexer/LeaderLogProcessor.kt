@@ -250,6 +250,7 @@ class LeaderLogProcessor(
                     "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 sourceWatchers.notify(msgId, e)
+                replicaWatchers.notify(null, e)
                 throw e
             }
         }

@@ -100,8 +100,7 @@ class TransitionLogProcessor(
                     "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 sourceWatchers.notify(msgId, e)
-                // strictly speaking, a replica msgId.
-                replicaWatchers.notify(msgId, e)
+                replicaWatchers.notify(null, e)
                 throw e
             }
         }

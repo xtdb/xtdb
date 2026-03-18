@@ -142,8 +142,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     e,
                     "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
-                sourceWatchers.notify(record.msgId, e)
-                // strictly speaking, a replica msgId.
+                sourceWatchers.notify(null, e)
                 replicaWatchers.notify(record.msgId, e)
                 throw e
             }
