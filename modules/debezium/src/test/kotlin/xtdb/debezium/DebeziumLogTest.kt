@@ -64,6 +64,15 @@ class DebeziumLogTest {
         }
     }
 
+    private fun capturingProcessor(): Pair<Log.RecordProcessor<SourceMessage>, List<Log.Record<SourceMessage>>> {
+        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+
+        val capturing = Log.RecordProcessor { records ->
+            received.addAll(records)
+        }
+        return (capturing to received)
+    }
+
     @Test
     fun `tailAll resumes from offset`() = runTest(timeout = 30.seconds) {
         val topic = "test-resume"
@@ -75,13 +84,7 @@ class DebeziumLogTest {
         )
         produceMessages(topic, messages)
 
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-        val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                received.addAll(records)
-            }
-        }
-
+        val (subscriber, received) = capturingProcessor()
         val log = DebeziumLog(kafkaConfig(), topic)
         log.use {
             // Resume from offset 1 — should skip records 0 and 1, receive 2 and 3
@@ -111,13 +114,7 @@ class DebeziumLogTest {
         val topic = "test-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-        val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                received.addAll(records)
-            }
-        }
-
+        val (subscriber, received) = capturingProcessor()
         val log = DebeziumLog(kafkaConfig(), topic)
         log.use {
             log.tailAll(-1, subscriber).use {
@@ -137,13 +134,7 @@ class DebeziumLogTest {
         val topic = "test-log-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-        val subscriber = object : Log.RecordProcessor<SourceMessage> {
-            override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                received.addAll(records)
-            }
-        }
-
+        val (subscriber, received) = capturingProcessor()
         val log = DebeziumLog(kafkaConfig(), topic)
 
         val subscription = log.tailAll(-1, subscriber)

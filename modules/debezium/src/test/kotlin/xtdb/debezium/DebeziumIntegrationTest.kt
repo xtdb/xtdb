@@ -232,6 +232,18 @@ class DebeziumIntegrationTest {
     private fun JsonObject.payload(): JsonObject =
         this["payload"]?.jsonObject ?: fail("Expected 'payload' key in message")
 
+    private fun capturingProcessor(
+        processor: Log.RecordProcessor<SourceMessage>
+    ): Pair<Log.RecordProcessor<SourceMessage>, List<Log.Record<SourceMessage>>> {
+        val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
+
+        val capturing = Log.RecordProcessor { records ->
+            processor.processRecords(records)
+            received.addAll(records)
+        }
+        return (capturing to received)
+    }
+
     @Test
     fun `debezium captures full CDC lifecycle`() = runTest(timeout = 120.seconds) {
         fun assertCdcEvent(message: JsonObject, expectedOp: String, after: JsonObject? = null) {
@@ -342,14 +354,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_users")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -408,14 +413,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -472,14 +470,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.timed_docs")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -556,14 +547,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.no_id_table")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -620,14 +604,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.typed_docs")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -687,14 +664,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.inventory.products")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -744,14 +714,7 @@ class DebeziumIntegrationTest {
 
             withSourceProducer(secondarySourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
@@ -804,14 +767,7 @@ class DebeziumIntegrationTest {
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
                 val log = DebeziumLog(kafkaConfig(), "testdb.public.bad_times")
-                val received = Collections.synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
-
-                val capturing = object : Log.RecordProcessor<SourceMessage> {
-                    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-                        processor.processRecords(records)
-                        received.addAll(records)
-                    }
-                }
+                val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
                     log.tailAll(-1, capturing).use {
