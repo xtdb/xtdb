@@ -307,8 +307,8 @@ class KafkaCluster(
 
                                             Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg)
                                         }
-                                } catch (_: InterruptException) {
-                                    throw InterruptedException()
+                                } catch (e: InterruptException) {
+                                    throw InterruptedException().initCause(e)
                                 }
                             }
 
