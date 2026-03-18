@@ -12,7 +12,7 @@ class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() 
     private data class DispatchJob(val context: CoroutineContext, val block: Runnable)
 
 
-    private val jobs = mutableSetOf<DispatchJob>()
+    private val jobs = mutableListOf<DispatchJob>()
 
     @Volatile
     private var running = false
@@ -22,9 +22,9 @@ class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() 
 
         if (!running) {
             running = true
-            while (true) {
-                val job = jobs.randomOrNull(rand) ?: break
-                jobs.remove(job)
+            while (jobs.isNotEmpty()) {
+                val idx = rand.nextInt(jobs.size)
+                val job = jobs.removeAt(idx)
                 job.block.run()
             }
             running = false
