@@ -86,10 +86,8 @@ inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMapIndexed(block: (Int
         els
     }
 
-@PublishedApi
-internal class SafelyOpeningScope {
-    @PublishedApi
-    internal val openedResources = mutableListOf<AutoCloseable>()
+class SafelyOpeningScope {
+    val openedResources = mutableListOf<AutoCloseable>()
 
     fun <C : AutoCloseable?> open(block: () -> C): C =
         block().also { if (it != null) openedResources.add(it) }
@@ -99,6 +97,11 @@ internal class SafelyOpeningScope {
 
     fun <K, C : AutoCloseable> openAllMap(block: () -> Map<K, C>): Map<K, C> =
         block().also { openedResources.addAll(it.values) }
+
+    fun openTempFile(prefix: String, suffix: String): Path =
+        createTempFile(prefix, suffix).also { path ->
+            openedResources.add(AutoCloseable { path.deleteIfExists() })
+        }
 }
 
 inline fun <R> safelyOpening(block: SafelyOpeningScope.() -> R): R {
