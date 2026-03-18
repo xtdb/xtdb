@@ -13,9 +13,8 @@ import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
-import xtdb.util.closeAllOnCatch
-import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
+import xtdb.util.safelyOpening
 import java.nio.ByteBuffer
 import org.apache.arrow.vector.complex.DenseUnionVector as ArrowDenseUnionVector
 
@@ -113,14 +112,12 @@ class DenseUnionVector private constructor(
         override fun select(startIdx: Int, len: Int): VectorReader =
             select(IntArray(len) { startIdx + it })
 
-        override fun openSlice(al: BufferAllocator): VectorReader =
-            typeBuffer.openSlice(al).closeOnCatch { typeBuffer ->
-                offsetBuffer.openSlice(al).closeOnCatch { offsetBuffer ->
-                    inner.openSlice(al).closeOnCatch { inner ->
-                        LegReader(valueCount, typeBuffer, offsetBuffer, true, typeId, inner, nested)
-                    }
-                }
-            }
+        override fun openSlice(al: BufferAllocator): VectorReader = safelyOpening {
+            val typeSlice = open { typeBuffer.openSlice(al) }
+            val offsetSlice = open { offsetBuffer.openSlice(al) }
+            val innerSlice = open { inner.openSlice(al) }
+            LegReader(valueCount, typeSlice, offsetSlice, true, typeId, innerSlice, nested)
+        }
 
         override val metadataFlavours get() = inner.metadataFlavours
 
@@ -427,18 +424,12 @@ class DenseUnionVector private constructor(
         valueCount = vc
     }
 
-    override fun openSlice(al: BufferAllocator) =
-        legVectors.safeMap { it.openSlice(al) }.closeAllOnCatch { legSlices ->
-            typeBuffer.openSlice(al).closeOnCatch { typeSlice ->
-                offsetBuffer.openSlice(al).closeOnCatch { offsetSlice ->
-                    DenseUnionVector(
-                        al, name, legSlices,
-                        typeSlice, offsetSlice,
-                        valueCount
-                    )
-                }
-            }
-        }
+    override fun openSlice(al: BufferAllocator) = safelyOpening {
+        val legSlices = openAll { legVectors.safeMap { it.openSlice(al) } }
+        val typeSlice = open { typeBuffer.openSlice(al) }
+        val offsetSlice = open { offsetBuffer.openSlice(al) }
+        DenseUnionVector(al, name, legSlices.toList(), typeSlice, offsetSlice, valueCount)
+    }
 
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean) = apply {
         if (targetType != arrowType)

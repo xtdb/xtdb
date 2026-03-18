@@ -1,7 +1,6 @@
 package xtdb.util
 
 import java.nio.channels.FileChannel
-import java.nio.channels.SeekableByteChannel
 import java.nio.channels.WritableByteChannel
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,15 +13,6 @@ import kotlin.io.path.deleteIfExists
 
 internal fun Path.openReadableChannel(): FileChannel = FileChannel.open(this, READ)
 internal fun Path.openWritableChannel(): WritableByteChannel = Files.newByteChannel(this, WRITE, CREATE)
-
-internal fun <R> useTempFile(prefix: String, suffix: String, block: (Path) -> R): R =
-    createTempFile(prefix, suffix).let {
-        try {
-            block(it)
-        } finally {
-            it.deleteIfExists()
-        }
-    }
 
 val String.asPath: Path
     get() = Path.of(this)
@@ -95,3 +85,28 @@ inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMapIndexed(block: (Int
 
         els
     }
+
+@PublishedApi
+internal class SafelyOpeningScope {
+    @PublishedApi
+    internal val openedResources = mutableListOf<AutoCloseable>()
+
+    fun <C : AutoCloseable?> open(block: () -> C): C =
+        block().also { if (it != null) openedResources.add(it) }
+
+    fun <C : AutoCloseable> openAll(block: () -> Iterable<C>): Iterable<C> =
+        block().also { openedResources.addAll(it) }
+
+    fun <K, C : AutoCloseable> openAllMap(block: () -> Map<K, C>): Map<K, C> =
+        block().also { openedResources.addAll(it.values) }
+}
+
+inline fun <R> safelyOpening(block: SafelyOpeningScope.() -> R): R {
+    val scope = SafelyOpeningScope()
+    return try {
+        scope.block()
+    } catch (e: Throwable) {
+        scope.openedResources.closeAll()
+        throw e
+    }
+}
