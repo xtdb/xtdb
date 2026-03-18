@@ -3,7 +3,7 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
-           (xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory Log)
+           (xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory)
            (xtdb.debezium DebeziumLog DebeziumProcessor)))
 
 (defn start!
@@ -19,7 +19,7 @@
         debezium-log (DebeziumLog. kafka-config debezium-topic)
         allocator (RootAllocator.)
         processor (DebeziumProcessor. producer allocator (.getDefaultTz cfg))
-        subscription (Log/tailAll debezium-log -1 processor)]
+        subscription (.tailAll debezium-log -1 processor)]
     (log/info "Debezium CDC process started"
               {:kafka-cluster kafka-cluster
                :source-topic source-topic

@@ -32,7 +32,7 @@ class DebeziumLog @JvmOverloads constructor(
     private val topic: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),
     coroutineContext: CoroutineContext = Dispatchers.Default,
-) : Log<DebeziumMessage> {
+) : Log.Consumer<DebeziumMessage> {
 
     // TODO: non-deterministic failures (e.g. node down) currently kill this coroutine silently.
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -40,62 +40,45 @@ class DebeziumLog @JvmOverloads constructor(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)
+    val epoch: Int get() = 0
 
-    override val latestSubmittedOffset: Long get() = -1
-    override val epoch: Int get() = 0
+    override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
+        val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-    override suspend fun appendMessage(message: DebeziumMessage): MessageMetadata =
-        throw UnsupportedOperationException("CDC log is read-only")
-
-    override fun openAtomicProducer(transactionalId: String): AtomicProducer<DebeziumMessage> =
-        throw UnsupportedOperationException("CDC log is read-only")
-
-    override fun openGroupConsumer(listener: SubscriptionListener): Log.Consumer<DebeziumMessage> =
-        throw UnsupportedOperationException("CDC log does not support group subscription")
-
-    override fun readLastMessage(): DebeziumMessage? = null
-
-    override fun openConsumer(): Log.Consumer<DebeziumMessage> = object : Log.Consumer<DebeziumMessage> {
-        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
-            val afterOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
-
-            val job = scope.launch {
-                KafkaConsumer(
-                    kafkaConfig.plus(mapOf(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false")),
-                    UnitDeserializer,
-                    ByteArrayDeserializer()
-                ).use { c ->
-                    TopicPartition(topic, 0).also { tp ->
-                        c.assign(listOf(tp))
-                        c.seek(tp, afterOffset + 1)
-                    }
-                    while (isActive) {
-                        val records = runInterruptible(Dispatchers.IO) {
-                            try {
-                                c.poll(pollDuration).records(topic).mapNotNull { record ->
-                                    record.value()?.let { value ->
-                                        Log.Record(
-                                            epoch,
-                                            record.offset(),
-                                            Instant.ofEpochMilli(record.timestamp()),
-                                            DebeziumMessage(value),
-                                        )
-                                    }
+        val job = scope.launch {
+            KafkaConsumer(
+                kafkaConfig.plus(mapOf(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false")),
+                UnitDeserializer,
+                ByteArrayDeserializer()
+            ).use { c ->
+                TopicPartition(topic, 0).also { tp ->
+                    c.assign(listOf(tp))
+                    c.seek(tp, afterOffset + 1)
+                }
+                while (isActive) {
+                    val records = runInterruptible(Dispatchers.IO) {
+                        try {
+                            c.poll(pollDuration).records(topic).mapNotNull { record ->
+                                record.value()?.let { value ->
+                                    Log.Record(
+                                        epoch,
+                                        record.offset(),
+                                        Instant.ofEpochMilli(record.timestamp()),
+                                        DebeziumMessage(value),
+                                    )
                                 }
-                            } catch (_: InterruptException) {
-                                throw InterruptedException()
                             }
+                        } catch (_: InterruptException) {
+                            throw InterruptedException()
                         }
-
-                        processor.processRecords(records)
                     }
+
+                    processor.processRecords(records)
                 }
             }
-
-            return Log.Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
         }
 
-        override fun close() {}
+        return Log.Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
     }
 
     override fun close() {
