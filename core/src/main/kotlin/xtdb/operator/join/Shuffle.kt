@@ -10,9 +10,7 @@ import xtdb.expression.map.IndexHasher.Companion.hasher
 import xtdb.trie.ColumnName
 import xtdb.arrow.VectorType.Companion.I32
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.util.closeOnCatch
-import xtdb.util.deleteOnCatch
-import java.nio.file.Files.createTempFile
+import xtdb.util.safelyOpening
 import java.nio.file.Path
 import kotlin.io.path.deleteIfExists
 
@@ -115,34 +113,24 @@ class Shuffle private constructor(
     }
 
     companion object {
-        // my kingdom for `util/with-close-on-catch` in Kotlin
-        // y'all need macros. or monads.
-
         fun open(
             al: BufferAllocator, inDataRel: Relation, hashColNames: List<ColumnName>,
             rowCount: Long, blockCount: Int, minParts: Int = 1
-        ): Shuffle =
-            createTempFile("xtdb-build-side-shuffle-", ".arrow").deleteOnCatch { dataFile ->
-                Relation(al, inDataRel.schema).closeOnCatch { outDataRel ->
-                    outDataRel.startUnload(dataFile).closeOnCatch { dataUnloader ->
+        ): Shuffle = safelyOpening {
+            val dataFile = openTempFile("xtdb-build-side-shuffle-", ".arrow")
+            val outDataRel = open { Relation(al, inDataRel.schema) }
+            val dataUnloader = open { outDataRel.startUnload(dataFile) }
 
-                        createTempFile("xtdb-build-side-shuffle-hash-", ".arrow").deleteOnCatch { hashFile ->
-                            Relation(al, HASH_COL_NAME ofType I32).closeOnCatch { outHashRel ->
-                                outHashRel.startUnload(hashFile).closeOnCatch { hashUnloader ->
+            val hashFile = openTempFile("xtdb-build-side-shuffle-hash-", ".arrow")
+            val outHashRel = open { Relation(al, HASH_COL_NAME ofType I32) }
+            val hashUnloader = open { outHashRel.startUnload(hashFile) }
 
-                                    Shuffle(
-                                        al, inDataRel, hashColNames,
-                                        dataFile, outDataRel, dataUnloader,
-                                        hashFile, outHashRel, hashUnloader,
-                                        rowCount, blockCount, minParts
-                                    )
-
-                                }
-                            }
-                        }
-
-                    }
-                }
-            }
+            Shuffle(
+                al, inDataRel, hashColNames,
+                dataFile, outDataRel, dataUnloader,
+                hashFile, outHashRel, hashUnloader,
+                rowCount, blockCount, minParts
+            )
+        }
     }
 }

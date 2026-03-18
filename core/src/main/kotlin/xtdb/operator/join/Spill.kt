@@ -2,8 +2,7 @@ package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.Relation
-import xtdb.util.closeOnCatch
-import xtdb.util.deleteOnCatch
+import xtdb.util.safelyOpening
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -47,11 +46,10 @@ internal class Spill(
     }
 
     companion object {
-        fun open(al: BufferAllocator, dataRel: Relation): Spill =
-            Files.createTempFile("xtdb-build-side-", ".arrow").deleteOnCatch { dataPath ->
-                dataRel.startUnload(dataPath).closeOnCatch { dataUnloader ->
-                    Spill(al, dataRel, dataPath, dataUnloader)
-                }
-            }
+        fun open(al: BufferAllocator, dataRel: Relation): Spill = safelyOpening {
+            val dataPath = openTempFile("xtdb-build-side-", ".arrow")
+            val dataUnloader = open { dataRel.startUnload(dataPath) }
+            Spill(al, dataRel, dataPath, dataUnloader)
+        }
     }
 }
