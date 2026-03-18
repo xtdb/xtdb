@@ -41,6 +41,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.safeMapIndexed
 import xtdb.util.logger
 import xtdb.util.requiringResolve
+import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
 import java.io.ByteArrayOutputStream
 import java.nio.channels.Channels
@@ -375,7 +376,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                                 (0 until pq.paramCount).map { idx ->
                                     "$$idx" ofType VectorType.fromLegs()
                                 }
-                            ).serializeAsMessage()
+                            ).serializeAsMessageInterruptibly()
                         )
                     )
                     .build()

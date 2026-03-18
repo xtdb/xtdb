@@ -15,6 +15,8 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.HLL
 import xtdb.util.combine
+import xtdb.util.deserializeMessageAsSchemaInterruptibly
+import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.toHLL
 import java.nio.ByteBuffer
 
@@ -84,7 +86,7 @@ class TableCatalog(
         private fun parseTableBlock(tableBlock: TableBlock) =
             TableMeta(
                 tableBlock.arrowSchema.toByteArray()
-                    .let { Schema.deserializeMessage(ByteBuffer.wrap(it)) }
+                    .let { ByteBuffer.wrap(it).deserializeMessageAsSchemaInterruptibly() }
                     .fields.associate { field -> field.name to field.asType },
                 tableBlock.rowCount,
                 tableBlock.columnNameToHllMap.mapValues { (_, bs) -> toHLL(bs.toByteArray()) }
@@ -152,7 +154,7 @@ class TableCatalog(
 
             return TableBlock.newBuilder()
                 .apply {
-                    this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessage())
+                    this.arrowSchema = ByteString.copyFrom(schema.serializeAsMessageInterruptibly())
                     this.rowCount = rowCount
                     putAllColumnNameToHll(hlls.mapValues { (_, hll) -> ByteString.copyFrom(hll.duplicate()) })
                     addAllPartitions(partitions)
