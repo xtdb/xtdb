@@ -110,7 +110,7 @@
                  ::database opts}
 
           (single-writer?)
-          (assoc :xtdb.log.processor/block-finisher (cond-> opts
+          (assoc :xtdb.log.processor/block-uploader (cond-> opts
                                                       (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
                  :xtdb.log/processor (cond-> opts
                                        (:db-catalog base) (assoc :db-catalog (:db-catalog base))))

@@ -23,7 +23,7 @@ class TransitionLogProcessor(
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
     private val liveIndex: LiveIndex,
-    private val blockFinisher: BlockFinisher,
+    private val blockUploader: BlockUploader,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val sourceWatchers: Watchers,
     private val replicaWatchers: Watchers,
@@ -78,7 +78,7 @@ class TransitionLogProcessor(
 
                     is ReplicaMessage.BlockBoundary -> {
                         LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
-                        blockFinisher.finishBlock(replicaProducer, msgId, msg, replicaWatchers)
+                        blockUploader.uploadBlock(replicaProducer, msgId, msg, replicaWatchers)
                         null
                     }
 

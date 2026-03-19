@@ -4,7 +4,7 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer BlockFinisher FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
+           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
            [xtdb.util MsgIdUtil]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
@@ -46,15 +46,15 @@
   (util/close subscription)
   (util/close source-processor))
 
-(defmethod ig/expand-key :xtdb.log.processor/block-finisher [k opts]
+(defmethod ig/expand-key :xtdb.log.processor/block-uploader [k opts]
   {k (into {:db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
             :compactor-for-db (ig/ref :xtdb.compactor/for-db)}
            opts)})
 
-(defmethod ig/init-key :xtdb.log.processor/block-finisher [_ {:keys [^DatabaseStorage db-storage ^DatabaseState db-state
+(defmethod ig/init-key :xtdb.log.processor/block-uploader [_ {:keys [^DatabaseStorage db-storage ^DatabaseState db-state
                                                                      compactor-for-db db-catalog]}]
-  (BlockFinisher. db-storage db-state compactor-for-db db-catalog))
+  (BlockUploader. db-storage db-state compactor-for-db db-catalog))
 
 (defmethod ig/expand-key :xtdb.log/processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
@@ -64,13 +64,13 @@
             :source-watchers (ig/ref :xtdb.db-catalog/watchers)
             :compactor-for-db (ig/ref :xtdb.compactor/for-db)
             :indexer-for-db (ig/ref :xtdb.indexer/for-db)
-            :block-finisher (ig/ref :xtdb.log.processor/block-finisher)}
+            :block-uploader (ig/ref :xtdb.log.processor/block-uploader)}
            opts)})
 
 (defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
                                                       ^IndexerConfig indexer-conf ^Database$Mode mode
                                                       compactor-for-db source-watchers db-catalog
-                                                      buffer-pool indexer-for-db ^BlockFinisher block-finisher]
+                                                      buffer-pool indexer-for-db ^BlockUploader block-uploader]
                                                {:keys [meter-registry]} :base}]
   (when (.getEnabled indexer-conf)
     (let [proc-factory (reify LogProcessor$ProcessorFactory
@@ -84,7 +84,7 @@
                                                                                 db-storage replica-producer db-state
                                                                                 indexer-for-db source-watchers replica-watchers
                                                                                 (set (.getSkipTxs indexer-conf))
-                                                                                db-catalog block-finisher
+                                                                                db-catalog block-uploader
                                                                                 (.getFlushDuration indexer-conf)
                                                                                 meter-registry)
                                                       sub (Log/tailAll (.getSourceLog db-storage) after-msg-id proc)]
@@ -98,11 +98,11 @@
                            (TransitionLogProcessor. allocator
                                                     buffer-pool db-state
                                                     (.getLiveIndex db-state)
-                                                    block-finisher
+                                                    block-uploader
                                                     replica-producer
                                                     source-watchers replica-watchers db-catalog)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state source-watchers block-finisher meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state source-watchers block-uploader meter-registry)]
 
       {:log-processor log-processor
        :consumer (when-not (= mode Database$Mode/READ_ONLY)

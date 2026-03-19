@@ -22,7 +22,7 @@ class LogProcessor(
     dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val watchers: Watchers,
-    private val blockFinisher: BlockFinisher,
+    private val blockUploader: BlockUploader,
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener, AutoCloseable {
 
@@ -119,7 +119,7 @@ class LogProcessor(
                     procFactory.openTransition(replicaProducer, replicaWatchers).use { transition ->
                         if (pendingBlock != null) {
                             LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                            blockFinisher.finishBlock(
+                            blockUploader.uploadBlock(
                                 replicaProducer,
                                 pendingBlock.boundaryMsgId,
                                 pendingBlock.boundaryMessage,

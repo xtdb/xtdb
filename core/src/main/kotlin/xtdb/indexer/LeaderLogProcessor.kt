@@ -38,7 +38,7 @@ class LeaderLogProcessor(
     private val replicaWatchers: Watchers,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    private val blockFinisher: BlockFinisher,
+    private val blockUploader: BlockUploader,
     flushTimeout: Duration = Duration.ofMinutes(5),
     meterRegistry: MeterRegistry? = null,
 ) : LogProcessor.LeaderProcessor {
@@ -137,7 +137,7 @@ class LeaderLogProcessor(
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
-        blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
+        blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
         pendingBlock = null
     }
 

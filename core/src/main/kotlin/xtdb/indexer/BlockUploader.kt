@@ -21,9 +21,9 @@ import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.time.Instant
 
-private val LOG = BlockFinisher::class.logger
+private val LOG = BlockUploader::class.logger
 
-class BlockFinisher(
+class BlockUploader(
     dbStorage: DatabaseStorage, dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
@@ -34,7 +34,7 @@ class BlockFinisher(
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
 
-    suspend fun finishBlock(
+    suspend fun uploadBlock(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
         replicaWatchers: Watchers? = null,
     ) {
@@ -91,9 +91,7 @@ class BlockFinisher(
         }.getCompleted().msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
-        if (replicaWatchers != null) {
-            replicaWatchers.notify(uploadedMsgId, null)
-        }
+        replicaWatchers?.notify(uploadedMsgId, null)
 
         liveIndex.nextBlock()
         compactor.signalBlock()
