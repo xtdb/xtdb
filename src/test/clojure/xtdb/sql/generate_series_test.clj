@@ -135,6 +135,33 @@
               {:ts #xt/zoned-date-time "2020-03-30T00:00+01:00[Europe/London]", :idx 3}]
              (xt/q tu/*node* "FROM generate_series(TIMESTAMP '2020-03-28T00:00:00Z[Europe/London]', TIMESTAMP '2020-03-31T00:00:00+01:00[Europe/London]', INTERVAL 'P1D') WITH ORDINALITY timestamps (ts, idx)")))))
 
+(t/deftest test-range
+  (t/is (= [{:xs [1 2 3]}]
+           (xt/q tu/*node* "SELECT range(1, 4) xs")))
+
+  (t/is (= [{:xs [1 4 7]}]
+           (xt/q tu/*node* "SELECT range(1, 8, 3) xs")))
+
+  (t/is (= [{:xs []}]
+           (xt/q tu/*node* "SELECT range(10, 3) xs")))
+
+  (t/is (= [{:xs []}]
+           (xt/q tu/*node* "SELECT range(1, 1) xs")))
+
+  (t/testing "DATE"
+    (t/is (= [{:dates [#xt/date-time "2020-01-01T00:00", #xt/date-time "2020-01-02T00:00", #xt/date-time "2020-01-03T00:00"]}]
+             (xt/q tu/*node* "SELECT range(DATE '2020-01-01', DATE '2020-01-04', INTERVAL 'P1D') dates"))))
+
+  (t/testing "TIMESTAMP"
+    (t/is (= [{:timestamps [#xt/date-time "2020-01-01T00:00"
+                            #xt/date-time "2020-01-01T01:00"
+                            #xt/date-time "2020-01-01T02:00"]}]
+             (xt/q tu/*node* "SELECT range(TIMESTAMP '2020-01-01 00:00:00', TIMESTAMP '2020-01-01 03:00:00', INTERVAL 'PT1H') timestamps"))))
+
+  (t/testing "as table source"
+    (t/is (= [{:x 1} {:x 2} {:x 3}]
+             (xt/q tu/*node* "SELECT x FROM range(1, 4) xs (x)")))))
+
 (t/deftest test-generate-series-limit-batching-4412
   (t/is (= [{:xt/id 1}
             {:xt/id 2}

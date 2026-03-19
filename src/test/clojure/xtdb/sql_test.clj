@@ -2452,6 +2452,15 @@ UNION ALL
             {:xt/id 1, :x 2}]
            (-> (xt/q tu/*node* "SELECT _id, x FROM foo, generate_series(start, end) xs (x)")))))
 
+(t/deftest test-range-alias
+  (t/is (= [1 2 3]
+           (->> (xt/q tu/*node* "SELECT x FROM range(1, 4) xs (x)")
+                (mapv :x))))
+
+  (t/is (= (sql/plan "SELECT x FROM generate_series(1, 4) xs (x)")
+           (sql/plan "SELECT x FROM range(1, 4) xs (x)"))
+        "RANGE produces the same plan as GENERATE_SERIES"))
+
 (t/deftest star-goes-at-end-too-3706
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"]])
 

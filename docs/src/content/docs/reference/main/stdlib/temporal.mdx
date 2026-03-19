@@ -280,6 +280,10 @@ The below functions operate on periods:
 
   This timezone-aware behaviour is an extension to PostgreSQL's `generate_series` function - XTDB maintains and stores any TZ information you provide.
 
+`RANGE(start, end [, stride])`
+
+: Alias for `GENERATE_SERIES` — generates a series of values from the given start (inclusive) to the given end (exclusive), with an optional stride.
+
 `RANGE_BINS(stride, period [, origin])`
 
 : Aligns the given period within bins of the given 'stride' interval, optionally relative to the given origin (or '1970-01-01' if not supplied).

@@ -401,7 +401,7 @@ columnReference : identifierChain ;
 
 /// generate_series function
 
-generateSeries : (identifier '.')? 'GENERATE_SERIES' '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
+generateSeries : (identifier '.')? ('GENERATE_SERIES' | 'RANGE') '(' seriesStart=expr ',' seriesEnd=expr (',' seriesStep=expr)? ')' ;
 
 /// §6.10 <window function>
 
