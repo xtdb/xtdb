@@ -4,7 +4,7 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
+           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor]
            [xtdb.util MsgIdUtil]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
@@ -94,16 +94,9 @@
                                (getLatestReplicaMsgId [_] (.getLatestReplicaMsgId proc))
                                (close [_]
                                  (.close sub)
-                                 (.close proc)))))
+                                 (.close proc))))))
 
-                         (openTransition [_ replica-producer replica-watchers after-source-msg-id]
-                           (TransitionLogProcessor. allocator
-                                                    buffer-pool db-state
-                                                    (.getLiveIndex db-state)
-                                                    block-uploader
-                                                    replica-producer
-                                                    source-watchers replica-watchers db-catalog
-                                                    after-source-msg-id)))
+
 
           log-processor (LogProcessor. proc-factory db-storage db-state block-uploader meter-registry)]
 

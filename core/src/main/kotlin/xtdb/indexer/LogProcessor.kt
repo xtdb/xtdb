@@ -27,13 +27,10 @@ class LogProcessor(
 
     interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable
 
-    interface TransitionProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
-        val latestSourceMsgId: MessageId
-    }
-
     interface FollowerProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
         val pendingBlock: PendingBlock?
         val latestSourceMsgId: MessageId
+        suspend fun replayBuffered()
     }
 
     private val replicaLog = dbStorage.replicaLog
@@ -43,10 +40,6 @@ class LogProcessor(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers,
             afterSourceMsgId: MessageId, afterReplicaMsgId: MessageId,
         ): SubSystem
-
-        fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers, afterSourceMsgId: MessageId
-        ): TransitionProcessor
 
         fun openFollower(
             replicaWatchers: Watchers, pendingBlock: PendingBlock?, afterSourceMsgId: MessageId
@@ -64,8 +57,17 @@ class LogProcessor(
     private class FollowerSystem(val proc: FollowerProcessor, private val sub: Log.Subscription) : SubSystem {
         override val pendingBlock: PendingBlock? get() = proc.pendingBlock
 
+        private var unsubscribed = false
+
+        fun unsubscribe() {
+            if (!unsubscribed) {
+                unsubscribed = true
+                sub.close()
+            }
+        }
+
         override fun close() {
-            sub.close()
+            unsubscribe()
             proc.close()
         }
     }
@@ -129,35 +131,22 @@ class LogProcessor(
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc
+
+                    followerProc.pendingBlock?.let { b ->
+                        LOG.debug("transition: unsubscribing follower")
+                        oldSys.unsubscribe()
+                        LOG.debug("transition: uploading pending block b${b.blockIdx} with ${b.bufferedRecords.size} buffered records")
+                        blockUploader.uploadBlock(replicaProducer, b.boundaryMsgId, b.boundaryMessage, replicaWatchers)
+                        LOG.debug("transition: replaying ${b.bufferedRecords.size} buffered records through follower processor")
+                        followerProc.replayBuffered()
+                    }
+
+                    val latestSourceMsgId = followerProc.latestSourceMsgId
                     LOG.debug("transition: closing follower system")
                     oldSys.close()
-                    val pendingBlock = followerProc.pendingBlock
 
-                    procFactory.openTransition(replicaProducer, replicaWatchers, followerProc.latestSourceMsgId)
-                        .use { transition ->
-                            if (pendingBlock != null) {
-                                LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                                blockUploader.uploadBlock(
-                                    replicaProducer,
-                                    pendingBlock.boundaryMsgId,
-                                    pendingBlock.boundaryMessage,
-                                    replicaWatchers,
-                                )
-                                LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                                transition.processRecords(pendingBlock.bufferedRecords)
-                            }
-
-                            val latestSourceMsgId = transition.latestSourceMsgId
-                            LOG.debug("transition: opening leader processor")
-
-                            procFactory.openLeaderSystem(
-                                replicaProducer,
-                                replicaWatchers,
-                                latestSourceMsgId,
-                                replayTarget
-                            )
-                                .also { LOG.info("leader startup complete, resuming after $latestSourceMsgId") }
-                        }
+                    procFactory.openLeaderSystem(replicaProducer, replicaWatchers, latestSourceMsgId, replayTarget)
+                        .also { LOG.info("leader startup complete, resuming after $latestSourceMsgId") }
                 }
             }
         }

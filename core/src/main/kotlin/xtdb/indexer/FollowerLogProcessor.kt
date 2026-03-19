@@ -54,6 +54,17 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
+    override suspend fun replayBuffered() {
+        pendingBlock?.let { b ->
+            this.pendingBlock = null
+
+            // replay buffered records — already notified to replicaWatchers when first consumed
+            for (buffered in b.bufferedRecords) {
+                handleRecord(buffered)
+            }
+        }
+    }
+
     private suspend fun handleRecord(record: Log.Record<ReplicaMessage>): TransactionResult? {
         val msg = record.message
         LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
@@ -72,13 +83,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 liveIndex.nextBlock()
                 compactor.signalBlock()
 
-                val bufferedRecords = pendingBlock.bufferedRecords
-                this.pendingBlock = null
-
-                // replay buffered records — already notified to replicaWatchers when first consumed
-                for (buffered in bufferedRecords) {
-                    handleRecord(buffered)
-                }
+                replayBuffered()
 
                 return null
             } else {

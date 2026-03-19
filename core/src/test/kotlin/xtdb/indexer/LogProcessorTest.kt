@@ -82,17 +82,6 @@ class LogProcessorTest {
                 }
             }
 
-            override fun openTransition(
-                replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers,
-                afterSourceMsgId: MessageId,
-            ): LogProcessor.TransitionProcessor =
-                TransitionLogProcessor(
-                    allocator, bufferPool, dbState, dbState.liveIndex,
-                    BlockUploader(dbStorage, dbState, mockk(relaxed = true), null),
-                    replicaProducer, replicaWatchers, Watchers(-1), dbCatalog = null,
-                    afterSourceMsgId = afterSourceMsgId,
-                )
-
             override fun openFollower(
                 replicaWatchers: Watchers, pendingBlock: PendingBlock?,
                 afterSourceMsgId: MessageId,
