@@ -1,10 +1,17 @@
 package xtdb.api.log
 
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
+import org.apache.kafka.clients.producer.KafkaProducer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -200,5 +207,79 @@ class KafkaAtomicProducerTest {
 
         val allMsgs = synchronized(msgs) { msgs.flatten() }
         assertEquals(1, allMsgs.size)
+    }
+
+    @Test
+    fun `sendOffsetsToTransaction commits consumer offsets atomically`() = runTest(timeout = 60.seconds) {
+        // [input topic] → [consumer] → [processor] → [output topic]
+        val outputTopic = "test-output-${UUID.randomUUID()}"
+        val inputTopic = "test-input-${UUID.randomUUID()}"
+        val consumerGroupId = "test-group-${UUID.randomUUID()}"
+        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
+
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
+            coEvery { processRecords(capture(msgs)) } returns Unit
+        }
+
+        KafkaProducer(
+            mapOf("bootstrap.servers" to container.bootstrapServers),
+            StringSerializer(),
+            StringSerializer()
+        ).use { inputProducer ->
+            inputProducer.send(ProducerRecord(inputTopic, "key", "value")).get()
+        }
+
+        val inputConsumerProps = mapOf(
+            ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to container.bootstrapServers,
+            ConsumerConfig.GROUP_ID_CONFIG to consumerGroupId,
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+            ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
+        )
+
+        KafkaConsumer(inputConsumerProps, StringDeserializer(), StringDeserializer()).use { inputConsumer ->
+            inputConsumer.subscribe(listOf(inputTopic))
+            var records = inputConsumer.poll(Duration.ofSeconds(5))
+            while (records.isEmpty) {
+                records = inputConsumer.poll(Duration.ofSeconds(5))
+            }
+            val record = records.first()
+            val offsets = mapOf(TopicPartition(record.topic(), record.partition()) to OffsetAndMetadata(record.offset() + 1))
+            val groupMetadata = inputConsumer.groupMetadata()
+
+            KafkaCluster.ClusterFactory(container.bootstrapServers)
+                .pollDuration(Duration.ofMillis(100))
+                .open().use { cluster ->
+                    KafkaCluster.LogFactory("my-cluster", outputTopic)
+                        .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
+                            log.tailAll(-1, subscriber).use {
+                                (log.openAtomicProducer("tx-producer-1") as KafkaCluster.AtomicProducer).use { producer ->
+                                    producer.openTx().use { tx ->
+                                        tx.appendMessage(txMessage(1))
+                                        tx.sendOffsetsToTransaction(offsets, groupMetadata)
+                                        tx.commit()
+                                    }
+                                }
+
+                                while (synchronized(msgs) { msgs.flatten().size } < 1) delay(100)
+                            }
+                        }
+                }
+        }
+
+        val allMsgs = synchronized(msgs) { msgs.flatten() }
+        assertEquals(1, allMsgs.size)
+        allMsgs[0].message.let {
+            check(it is SourceMessage.Tx)
+            assertArrayEquals(byteArrayOf(-1, 1), it.payload)
+        }
+
+        // New consumer in same group gets nothing — offsets were committed
+        KafkaConsumer(inputConsumerProps, StringDeserializer(), StringDeserializer()).use { c2 ->
+            c2.subscribe(listOf(inputTopic))
+            // Ensure we're assigned the topic before polling
+            while (c2.assignment().isEmpty()) c2.poll(Duration.ofMillis(100))
+            val records = c2.poll(Duration.ofSeconds(2))
+            assertEquals(0, records.count(), "No records should be re-delivered — offsets were committed")
+        }
     }
 }

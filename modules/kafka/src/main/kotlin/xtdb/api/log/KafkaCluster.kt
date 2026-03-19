@@ -18,8 +18,10 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -157,6 +159,17 @@ class KafkaCluster(
         override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, coroutineContext)
     }
 
+    interface AtomicProducer<M> : Log.AtomicProducer<M> {
+        override fun openTx(): Tx<M>
+
+        interface Tx<M> : Log.AtomicProducer.Tx<M> {
+            fun sendOffsetsToTransaction(
+                offsets: Map<TopicPartition, OffsetAndMetadata>,
+                groupMetadata: ConsumerGroupMetadata,
+            )
+        }
+    }
+
     private inner class KafkaLog<M>(
         private val codec: MessageCodec<M>,
         private val topic: String,
@@ -203,7 +216,7 @@ class KafkaCluster(
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
 
-        override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer<M> {
+        override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
             private val producer = KafkaProducer(
                 mapOf(
                     "enable.idempotence" to "true",
@@ -215,10 +228,10 @@ class KafkaCluster(
                 ByteArraySerializer()
             ).also { it.initTransactions() }
 
-            override fun openTx(): Log.AtomicProducer.Tx<M> {
+            override fun openTx(): AtomicProducer.Tx<M> {
                 producer.beginTransaction()
 
-                return object : Log.AtomicProducer.Tx<M> {
+                return object : AtomicProducer.Tx<M> {
                     private val futures = mutableListOf<CompletableDeferred<Log.MessageMetadata>>()
                     private var isOpen = true
 
@@ -251,6 +264,14 @@ class KafkaCluster(
                         futures.forEach {
                             latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.getCompleted().logOffset) }
                         }
+                    }
+
+                    override fun sendOffsetsToTransaction(
+                        offsets: Map<TopicPartition, OffsetAndMetadata>,
+                        groupMetadata: ConsumerGroupMetadata,
+                    ) {
+                        check(isOpen) { "Transaction already closed" }
+                        producer.sendOffsetsToTransaction(offsets, groupMetadata)
                     }
 
                     override fun abort() {
