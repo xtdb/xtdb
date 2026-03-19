@@ -75,7 +75,7 @@
         (metrics/wrap-query query-timer))))
 
 (defn- await-msg-result [node ^Database db msg-id]
-  (or (when-let [tx-res (.awaitSourceMessageBlocking db msg-id nil)]
+  (or (when-let [tx-res (.awaitTxBlocking db msg-id nil)]
         (when (= (.getTxId tx-res) msg-id)
           tx-res))
 

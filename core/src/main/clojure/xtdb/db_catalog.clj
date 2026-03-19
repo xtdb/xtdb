@@ -63,8 +63,15 @@
            opts)})
 
 (defmethod ig/init-key ::watchers [_ {:keys [^DatabaseStorage db-storage, ^DatabaseState db-state]}]
-  (Watchers. (max (or (.getLatestProcessedMsgId (.getBlockCatalog db-state)) -1)
-                  (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog db-storage)) -1))))
+  (let [block-cat (.getBlockCatalog db-state)
+        source-msg-id (max (or (.getLatestProcessedMsgId block-cat) -1)
+                           (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog db-storage)) -1))
+        replica-msg-id (max (or (.getBoundaryReplicaMsgId block-cat) -1)
+                            (MsgIdUtil/offsetToMsgId (.getEpoch (.getReplicaLog db-storage)) -1))]
+    (Watchers. source-msg-id source-msg-id replica-msg-id)))
+
+(defmethod ig/halt-key! ::watchers [_ ^Watchers watchers]
+  (util/close watchers))
 
 (defmethod ig/expand-key ::database [k opts]
   {k (into {:allocator (ig/ref ::allocator)

@@ -34,8 +34,7 @@ class LeaderLogProcessor(
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val dbState: DatabaseState,
     private val indexer: Indexer.ForDatabase,
-    private val sourceWatchers: Watchers,
-    private val replicaWatchers: Watchers,
+    private val watchers: Watchers,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     private val blockUploader: BlockUploader,
@@ -83,10 +82,7 @@ class LeaderLogProcessor(
 
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
-            .also {
-                latestReplicaMsgId = it.msgId
-                replicaWatchers.notify(it.msgId, null)
-            }
+            .also { latestReplicaMsgId = it.msgId }
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
@@ -124,7 +120,7 @@ class LeaderLogProcessor(
             }
         }
 
-    private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+    private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx, replicaMsgId: MessageId) {
         val txId = resolvedTx.txId
         val systemTime = resolvedTx.systemTime
 
@@ -134,7 +130,7 @@ class LeaderLogProcessor(
             else
                 TransactionAborted(txId, systemTime, resolvedTx.error)
 
-        sourceWatchers.notify(txId, result)
+        watchers.notifyTx(result, txId, replicaMsgId)
     }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId) {
@@ -142,15 +138,15 @@ class LeaderLogProcessor(
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
-        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
+        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
         pendingBlock = null
     }
 
     private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txId = resolvedTx.txId
 
-        appendToReplica(resolvedTx)
-        notifyTx(resolvedTx)
+        val replicaMsgId = appendToReplica(resolvedTx).msgId
+        notifyTx(resolvedTx, replicaMsgId)
 
         if (liveIndex.isFull())
             finishBlock(txId)
@@ -172,7 +168,7 @@ class LeaderLogProcessor(
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
                             finishBlock(msgId)
                         }
-                        sourceWatchers.notify(msgId, null)
+                        watchers.notifyMsg(msgId, null)
                     }
 
                     is SourceMessage.AttachDatabase -> {
@@ -188,13 +184,11 @@ class LeaderLogProcessor(
                         val resolvedTx = indexer.addTxRow(txKey, error)
                             .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
 
-                        appendToReplica(resolvedTx)
+                        val replicaMsgId = appendToReplica(resolvedTx).msgId
 
-                        if (error == null) {
-                            sourceWatchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
-                        } else {
-                            sourceWatchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
-                        }
+                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
+                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        watchers.notifyTx(result, msgId, replicaMsgId)
                     }
 
                     is SourceMessage.DetachDatabase -> {
@@ -210,13 +204,11 @@ class LeaderLogProcessor(
                         val resolvedTx = indexer.addTxRow(txKey, error)
                             .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
 
-                        appendToReplica(resolvedTx)
+                        val replicaMsgId = appendToReplica(resolvedTx).msgId
 
-                        if (error == null) {
-                            sourceWatchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
-                        } else {
-                            sourceWatchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
-                        }
+                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
+                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        watchers.notifyTx(result, msgId, replicaMsgId)
                     }
 
                     is SourceMessage.TriesAdded -> {
@@ -229,20 +221,20 @@ class LeaderLogProcessor(
                                 )
                             }
                         }
-                        appendToReplica(
+                        val replicaMsgId = appendToReplica(
                             ReplicaMessage.TriesAdded(
                                 msg.storageVersion,
                                 msg.storageEpoch,
                                 msg.tries,
                                 sourceMsgId = msgId
                             )
-                        )
-                        sourceWatchers.notify(msgId, null)
+                        ).msgId
+                        watchers.notifyMsg(msgId, replicaMsgId)
                     }
 
                     // TODO this one's going before release
                     is SourceMessage.BlockUploaded -> {
-                        sourceWatchers.notify(msgId, null)
+                        watchers.notifyMsg(msgId, null)
                     }
                 }
             } catch (e: InterruptedException) {
@@ -254,8 +246,7 @@ class LeaderLogProcessor(
                     e,
                     "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
-                sourceWatchers.notify(msgId, e)
-                replicaWatchers.notify(null, e)
+                watchers.notifyError(e)
                 throw e
             }
         }

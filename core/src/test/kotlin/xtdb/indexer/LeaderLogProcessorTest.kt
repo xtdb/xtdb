@@ -38,8 +38,7 @@ class LeaderLogProcessorTest {
         blockCatalog: BlockCatalog = BlockCatalog("test", null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
-        sourceWatchers: Watchers = Watchers(-1),
-        replicaWatchers: Watchers = Watchers(-1),
+        watchers: Watchers = Watchers(-1),
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
@@ -49,7 +48,7 @@ class LeaderLogProcessorTest {
 
         return LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
-            dbState, indexer, sourceWatchers, replicaWatchers,
+            dbState, indexer, watchers,
             emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
     }
@@ -102,7 +101,7 @@ class LeaderLogProcessorTest {
 
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), Watchers(-1), Watchers(-1),
+            dbState, mockk(relaxed = true), Watchers(-1),
             emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
 
@@ -166,7 +165,7 @@ class LeaderLogProcessorTest {
 
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), Watchers(-1), Watchers(-1),
+            dbState, mockk(relaxed = true), Watchers(-1),
             emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
 

@@ -291,11 +291,9 @@ class SourceLogProcessor(
 
                         indexer.addTxRow(txKey, error)
 
-                        if (error == null) {
-                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
-                        } else {
-                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
-                        }
+                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
+                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        watchers.notifyTx(result, msgId)
                     }
 
                     is SourceMessage.DetachDatabase -> {
@@ -310,11 +308,9 @@ class SourceLogProcessor(
 
                         indexer.addTxRow(txKey, error)
 
-                        if (error == null) {
-                            watchers.notify(msgId, TransactionCommitted(txKey.txId, txKey.systemTime))
-                        } else {
-                            watchers.notify(msgId, TransactionAborted(txKey.txId, txKey.systemTime, error))
-                        }
+                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
+                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        watchers.notifyTx(result, msgId)
                     }
 
                     is SourceMessage.TriesAdded -> {
@@ -326,11 +322,11 @@ class SourceLogProcessor(
                                     record.logTimestamp
                                 )
                             }
-                        watchers.notify(msgId, null)
+                        watchers.notifyMsg(msgId, null)
                     }
 
                     is SourceMessage.BlockUploaded -> {
-                        watchers.notify(msgId, null)
+                        watchers.notifyMsg(msgId, null)
                     }
                 }
             }
@@ -340,7 +336,7 @@ class SourceLogProcessor(
             throw e
         } catch (e: Throwable) {
             LOG.error(e, "source: failed to process log record with msgId $lastMsgId")
-            watchers.notify(lastMsgId, e)
+            watchers.notifyError(e)
             throw e
         }
     }
@@ -352,6 +348,6 @@ class SourceLogProcessor(
             TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error!!)
         }
 
-        watchers.notify(msgId, result)
+        watchers.notifyTx(result, msgId)
     }
 }

@@ -7,7 +7,6 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
-import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
@@ -34,9 +33,8 @@ class BlockUploader(
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
 
-    suspend fun uploadBlock(
+    fun uploadBlock(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
-        replicaWatchers: Watchers? = null,
     ): MessageId {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
@@ -91,7 +89,6 @@ class BlockUploader(
         }.getCompleted().msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
-        replicaWatchers?.notify(uploadedMsgId, null)
 
         liveIndex.nextBlock()
         compactor.signalBlock()

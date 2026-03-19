@@ -35,11 +35,15 @@ class WatchersSimTest : SimulationTestBase() {
                 val res = try {
                     resolver.resolve(i, systemTime(i))
                 } catch (e: Exception) {
-                    watchers.notify(i, e)
+                    watchers.notifyError(e)
                     break
                 }
 
-                watchers.notify(i, res)
+                if (res != null) {
+                    watchers.notifyTx(res, i)
+                } else {
+                    watchers.notifyMsg(i, null)
+                }
             }
         }
     }
@@ -51,7 +55,7 @@ class WatchersSimTest : SimulationTestBase() {
             for (i in 0L..<10L) {
                 yield()
                 val msgId = rand.nextLong(i - 2, i + 4).coerceIn(0, 9)
-                res += Pair(msgId, runCatching { watchers.await(msgId) })
+                res += Pair(msgId, runCatching { watchers.awaitTx(msgId) })
             }
         }
     }

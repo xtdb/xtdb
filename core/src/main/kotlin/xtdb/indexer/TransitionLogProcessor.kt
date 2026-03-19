@@ -26,8 +26,7 @@ class TransitionLogProcessor(
     private val liveIndex: LiveIndex,
     private val blockUploader: BlockUploader,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-    private val sourceWatchers: Watchers,
-    private val replicaWatchers: Watchers,
+    private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     afterSourceMsgId: MessageId,
 ) : LogProcessor.TransitionProcessor {
@@ -47,7 +46,7 @@ class TransitionLogProcessor(
             LOG.trace { "transition: message $msgId (${record.message::class.simpleName})" }
 
             try {
-                val res = when (val msg = record.message) {
+                when (val msg = record.message) {
                     is ReplicaMessage.ResolvedTx -> {
                         val latestTxId = liveIndex.latestCompletedTx?.txId
                         if (latestTxId == null || msg.txId > latestTxId) {
@@ -64,8 +63,7 @@ class TransitionLogProcessor(
                         } else TransactionAborted(msg.txId, msg.systemTime, msg.error)
 
                         latestSourceMsgId = msg.txId
-                        sourceWatchers.notify(msg.txId, result)
-                        result
+                        watchers.notifyTx(result, msg.txId, msgId)
                     }
 
                     is ReplicaMessage.TriesAdded -> {
@@ -79,24 +77,27 @@ class TransitionLogProcessor(
                             }
                         }
                         latestSourceMsgId = msg.sourceMsgId
-                        sourceWatchers.notify(msg.sourceMsgId, null)
-                        null
+                        watchers.notifyMsg(msg.sourceMsgId, msgId)
                     }
 
                     is ReplicaMessage.BlockBoundary -> {
                         LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
-                        blockUploader.uploadBlock(replicaProducer, msgId, msg, replicaWatchers)
-                        null
+                        blockUploader.uploadBlock(replicaProducer, msgId, msg)
+                        latestSourceMsgId = msg.latestProcessedMsgId
+                        watchers.notifyMsg(msg.latestProcessedMsgId, msgId)
                     }
 
                     // previously I errored here, but we need to just ignore them -
                     // the transition proc submits a BlockUploaded as part of finishing the BlockBoundary messages.
-                    is ReplicaMessage.BlockUploaded -> null
+                    is ReplicaMessage.BlockUploaded -> {
+                        latestSourceMsgId = msg.latestProcessedMsgId
+                        watchers.notifyMsg(msg.latestProcessedMsgId, msgId)
+                    }
 
-                    is ReplicaMessage.NoOp -> null
+                    is ReplicaMessage.NoOp -> {
+                        watchers.notifyMsg(null, msgId)
+                    }
                 }
-
-                replicaWatchers.notify(msgId, res)
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
@@ -106,8 +107,7 @@ class TransitionLogProcessor(
                     e,
                     "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
-                sourceWatchers.notify(msgId, e)
-                replicaWatchers.notify(null, e)
+                watchers.notifyError(e)
                 throw e
             }
         }

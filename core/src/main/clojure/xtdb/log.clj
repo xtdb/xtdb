@@ -241,12 +241,15 @@
                                                      (get-in opts [:authn :user]) (:user-metadata opts))))))))
 
 
-(defn await-db [^Database db, ^long msg-id, ^Duration timeout]
-  (.awaitSourceMessageBlocking db msg-id timeout))
+(defn await-tx [^Database db, ^long tx-id, ^Duration timeout]
+  (.awaitTxBlocking db tx-id timeout))
+
+(defn await-source [^Database db, ^long msg-id, ^Duration timeout]
+  (.awaitSourceBlocking db msg-id timeout))
 
 (defn sync-db [^Database db, ^Duration timeout]
   (let [msg-id (.getLatestSubmittedMsgId (.getSourceLog db))]
-    (await-db db msg-id timeout)))
+    (await-source db msg-id timeout)))
 
 (defn await-node [node token timeout]
   (.awaitAll (db/<-node node) token timeout))

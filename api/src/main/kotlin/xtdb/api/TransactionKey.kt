@@ -77,3 +77,5 @@ interface TransactionKey : Comparable<TransactionKey> {
             requiringResolve("xtdb.serde/->TxKey")(txId, systemTime) as TransactionKey
     }
 }
+
+typealias TxId = Long

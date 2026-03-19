@@ -53,21 +53,20 @@ class LogProcessorTest {
         allocator: RootAllocator,
         bufferPool: BufferPool,
         dbState: DatabaseState,
-        dbStorage: DatabaseStorage
+        dbStorage: DatabaseStorage,
+        watchers: Watchers,
     ) =
         object : LogProcessor.ProcessorFactory {
             override fun openLeaderSystem(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                replicaWatchers: Watchers,
                 afterSourceMsgId: MessageId,
                 afterReplicaMsgId: MessageId,
             ): LogProcessor.LeaderSystem {
-                val sourceWatchers = Watchers(-1)
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
                 return LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
-                    dbState, mockk(relaxed = true), sourceWatchers, replicaWatchers,
+                    dbState, mockk(relaxed = true), watchers,
                     emptySet(), null, blockUploader, afterReplicaMsgId
                 ).closeOnCatch { proc ->
                     val sub = dbStorage.sourceLog.tailAll(afterSourceMsgId, proc)
@@ -83,23 +82,23 @@ class LogProcessorTest {
             }
 
             override fun openTransition(
-                replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers,
+                replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                 afterSourceMsgId: MessageId,
             ): LogProcessor.TransitionProcessor =
                 TransitionLogProcessor(
                     allocator, bufferPool, dbState, dbState.liveIndex,
                     BlockUploader(dbStorage, dbState, mockk(relaxed = true), null),
-                    replicaProducer, replicaWatchers, Watchers(-1), dbCatalog = null,
+                    replicaProducer, watchers, dbCatalog = null,
                     afterSourceMsgId = afterSourceMsgId,
                 )
 
             override fun openFollower(
-                replicaWatchers: Watchers, pendingBlock: PendingBlock?,
+                pendingBlock: PendingBlock?,
                 afterSourceMsgId: MessageId,
             ): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
                     allocator, bufferPool, dbState,
-                    mockk(relaxed = true), Watchers(-1), replicaWatchers, null, pendingBlock,
+                    mockk(relaxed = true), watchers, null, pendingBlock,
                     afterSourceMsgId,
                 )
         }
@@ -112,10 +111,11 @@ class LogProcessorTest {
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val watchers = Watchers(-1)
 
         val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage),
-            dbStorage, dbState, blockUploader
+            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
+            dbStorage, dbState, blockUploader, watchers
         )
 
         // openGroupConsumer triggers onPartitionsAssigned synchronously
@@ -123,6 +123,7 @@ class LogProcessorTest {
 
         consumer.close()
         logProc.close()
+        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -135,16 +136,18 @@ class LogProcessorTest {
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val watchers = Watchers(-1)
 
         val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage),
-            dbStorage, dbState, blockUploader
+            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
+            dbStorage, dbState, blockUploader, watchers
         )
 
         val consumer = sourceLog.openGroupConsumer(logProc)
 
         consumer.close()
         logProc.close()
+        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -160,6 +163,7 @@ class LogProcessorTest {
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val watchers = Watchers(-1)
 
         // Pre-populate the replica log with a transaction
         val replicaProducer = replicaLog.openAtomicProducer("setup")
@@ -167,8 +171,8 @@ class LogProcessorTest {
         replicaProducer.close()
 
         val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage),
-            dbStorage, dbState, blockUploader
+            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
+            dbStorage, dbState, blockUploader, watchers
         )
 
         val consumer = sourceLog.openGroupConsumer(logProc)
@@ -178,6 +182,7 @@ class LogProcessorTest {
 
         consumer.close()
         logProc.close()
+        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -193,13 +198,14 @@ class LogProcessorTest {
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val watchers = Watchers(-1)
 
         // Pre-populate the replica log
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
 
         val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage),
-            dbStorage, dbState, blockUploader
+            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
+            dbStorage, dbState, blockUploader, watchers
         )
 
         val consumer = sourceLog.openGroupConsumer(logProc)
@@ -208,6 +214,7 @@ class LogProcessorTest {
 
         consumer.close()
         logProc.close()
+        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }

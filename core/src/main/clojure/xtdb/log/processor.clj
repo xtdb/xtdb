@@ -74,15 +74,15 @@
                                                {:keys [meter-registry]} :base}]
   (when (.getEnabled indexer-conf)
     (let [proc-factory (reify LogProcessor$ProcessorFactory
-                         (openFollower [_ replica-watchers pending-block after-source-msg-id]
+                         (openFollower [_ pending-block after-source-msg-id]
                            (FollowerLogProcessor. allocator buffer-pool db-state compactor-for-db
-                                                  source-watchers replica-watchers
+                                                  source-watchers
                                                   db-catalog pending-block after-source-msg-id))
 
-                         (openLeaderSystem [_ replica-producer replica-watchers after-source-msg-id after-replica-msg-id]
+                         (openLeaderSystem [_ replica-producer after-source-msg-id after-replica-msg-id]
                            (util/with-close-on-catch [proc (LeaderLogProcessor. allocator
                                                                                 db-storage replica-producer db-state
-                                                                                indexer-for-db source-watchers replica-watchers
+                                                                                indexer-for-db source-watchers
                                                                                 (set (.getSkipTxs indexer-conf))
                                                                                 db-catalog block-uploader
                                                                                 after-replica-msg-id
@@ -96,16 +96,16 @@
                                  (.close sub)
                                  (.close proc)))))
 
-                         (openTransition [_ replica-producer replica-watchers after-source-msg-id]
+                         (openTransition [_ replica-producer after-source-msg-id]
                            (TransitionLogProcessor. allocator
                                                     buffer-pool db-state
                                                     (.getLiveIndex db-state)
                                                     block-uploader
                                                     replica-producer
-                                                    source-watchers replica-watchers db-catalog
+                                                    source-watchers db-catalog
                                                     after-source-msg-id)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader source-watchers meter-registry)]
 
       {:log-processor log-processor
        :consumer (when-not (= mode Database$Mode/READ_ONLY)

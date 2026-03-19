@@ -66,13 +66,19 @@ data class Database(
 
     val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
-    val latestProcessedMsgId: MessageId get() = watchers.currentMsgId
+    val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
     val ingestionError: Throwable? get() = watchers.exception
 
-    fun awaitSourceMessageBlocking(sourceMsgId: MessageId, timeout: Duration? = null): TransactionResult? =
-        runBlocking { 
+    fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
+        runBlocking {
             check(isIndexing) { "log processor not initialised" }
-            if (timeout == null) watchers.await(sourceMsgId) else withTimeout(timeout) { watchers.await(sourceMsgId) }
+            if (timeout == null) watchers.awaitTx(txId) else withTimeout(timeout) { watchers.awaitTx(txId) }
+        }
+
+    fun awaitSourceBlocking(sourceMsgId: MessageId, timeout: Duration? = null) =
+        runBlocking {
+            check(isIndexing) { "log processor not initialised" }
+            if (timeout == null) watchers.awaitSource(sourceMsgId) else withTimeout(timeout) { watchers.awaitSource(sourceMsgId) }
         }
 
     override fun equals(other: Any?): Boolean =
@@ -154,8 +160,8 @@ data class Database(
 
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
-            private suspend fun Database.await(msgId: MessageId) = watchers.await(msgId)
-            private suspend fun Database.sync() = await(sourceLog.latestSubmittedMsgId)
+            private suspend fun Database.awaitSource(msgId: MessageId) = watchers.awaitSource(msgId)
+            private suspend fun Database.sync() = watchers.awaitSource(sourceLog.latestSubmittedMsgId)
 
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
                 val basis = token.decodeTxBasisToken()
@@ -163,7 +169,7 @@ data class Database(
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
                     .filter { it.isIndexing }
-                    .map { db -> launch { basis[db.name]?.first()?.let { db.await(it) } } }
+                    .map { db -> launch { basis[db.name]?.first()?.let { db.awaitSource(it) } } }
                     .joinAll()
             }
 

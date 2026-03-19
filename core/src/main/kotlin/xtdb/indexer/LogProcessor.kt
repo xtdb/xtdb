@@ -22,6 +22,7 @@ class LogProcessor(
     dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,
+    private val watchers: Watchers,
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener, AutoCloseable {
 
@@ -40,16 +41,16 @@ class LogProcessor(
 
     interface ProcessorFactory {
         fun openLeaderSystem(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers,
+            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterSourceMsgId: MessageId, afterReplicaMsgId: MessageId,
         ): SubSystem
 
         fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>, replicaWatchers: Watchers, afterSourceMsgId: MessageId
+            replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterSourceMsgId: MessageId
         ): TransitionProcessor
 
         fun openFollower(
-            replicaWatchers: Watchers, pendingBlock: PendingBlock?, afterSourceMsgId: MessageId
+            pendingBlock: PendingBlock?, afterSourceMsgId: MessageId
         ): FollowerProcessor
     }
 
@@ -70,11 +71,6 @@ class LogProcessor(
         }
     }
 
-    private val initialReplicaMsgId =
-        max(dbState.blockCatalog.boundaryReplicaMsgId ?: -1, offsetToMsgId(replicaLog.epoch, -1))
-
-    private val replicaWatchers = Watchers(initialReplicaMsgId)
-
     private val afterSourceMsgId: MessageId = dbState.blockCatalog.latestProcessedMsgId ?: -1
 
     private fun openFollowerSystem(
@@ -82,12 +78,12 @@ class LogProcessor(
         pendingBlock: PendingBlock? = null,
         afterSourceMsgId: MessageId = this.afterSourceMsgId
     ): FollowerSystem =
-        procFactory.openFollower(replicaWatchers, pendingBlock, afterSourceMsgId).closeOnCatch { proc ->
+        procFactory.openFollower(pendingBlock, afterSourceMsgId).closeOnCatch { proc ->
             FollowerSystem(proc, replicaLog.tailAll(latestReplicaMsgId, proc))
         }
 
     @Volatile
-    private var sys: SubSystem = openFollowerSystem(initialReplicaMsgId)
+    private var sys: SubSystem = openFollowerSystem(watchers.latestReplicaMsgId)
 
     init {
         val blockCatalog = dbState.blockCatalog
@@ -125,7 +121,7 @@ class LogProcessor(
                     // includes transaction marker offsets that consumers never deliver.
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
                     LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (replica latest: ${replicaLog.latestSubmittedMsgId})")
-                    replicaWatchers.await(replayTarget)
+                    watchers.awaitReplica(replayTarget)
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
                     val followerProc = oldSys.proc
@@ -133,7 +129,7 @@ class LogProcessor(
                     oldSys.close()
                     val pendingBlock = followerProc.pendingBlock
 
-                    procFactory.openTransition(replicaProducer, replicaWatchers, followerProc.latestSourceMsgId)
+                    procFactory.openTransition(replicaProducer, followerProc.latestSourceMsgId)
                         .use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
@@ -141,7 +137,6 @@ class LogProcessor(
                                     replicaProducer,
                                     pendingBlock.boundaryMsgId,
                                     pendingBlock.boundaryMessage,
-                                    replicaWatchers,
                                 )
                                 LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                                 transition.processRecords(pendingBlock.bufferedRecords)
@@ -152,7 +147,6 @@ class LogProcessor(
 
                             procFactory.openLeaderSystem(
                                 replicaProducer,
-                                replicaWatchers,
                                 latestSourceMsgId,
                                 replayTarget
                             )
@@ -186,6 +180,5 @@ class LogProcessor(
 
     override fun close() {
         sys.close()
-        replicaWatchers.close()
     }
 }

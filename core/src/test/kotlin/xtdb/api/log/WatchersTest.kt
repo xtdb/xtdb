@@ -15,40 +15,82 @@ import kotlin.time.Duration.Companion.seconds
 class WatchersTest {
 
     @Test
-    fun `test ready already`() = runTest(timeout = 1.seconds) {
+    fun `test awaitTx ready already`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            val job = async { it.await(2) }
+            val job = async { it.awaitTx(2) }
             while (!job.isCompleted) yield()
             assertNull(job.await())
         }
     }
 
     @Test
-    fun `test awaits`() = runTest(timeout = 1.seconds) {
+    fun `test awaitTx waits`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            assertThrows<TimeoutCancellationException> { withTimeout(500) { it.await(4) } }
+            assertThrows<TimeoutCancellationException> { withTimeout(500) { it.awaitTx(4) } }
         }
     }
 
     @Test
-    fun `notifies watchers of completion`() = runTest(timeout = 1.seconds) {
+    fun `notifyTx resumes tx watchers`() = runTest(timeout = 1.seconds) {
         Watchers(3).use {
-            val await5 = async { it.await(5) }
-            val await4 = async { it.await(4) }
+            val await5 = async { it.awaitTx(5) }
+            val await4 = async { it.awaitTx(4) }
 
             assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
             assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
             val res4 = TransactionCommitted(4, Instant.parse("2021-01-01T00:00:00Z"))
-            it.notify(4, res4)
+            it.notifyTx(res4, 4)
 
             assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
             assertEquals(res4, await4.await())
 
             val res5 = TransactionAborted(5, Instant.parse("2021-01-02T00:00:00Z"), Exception("test"))
-            it.notify(5, res5)
+            it.notifyTx(res5, 5)
 
             assertEquals(res5, await5.await())
+        }
+    }
+
+    @Test
+    fun `notifyTx with replicaMsgId advances all watermarks`() = runTest(timeout = 1.seconds) {
+        Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1).use {
+            val awaitTx = async { it.awaitTx(0) }
+            val awaitSource = async { it.awaitSource(0) }
+            val awaitReplica = async { it.awaitReplica(10) }
+
+            assertThrows<TimeoutCancellationException> { withTimeout(50) { awaitTx.await() } }
+
+            val res = TransactionCommitted(0, Instant.parse("2021-01-01T00:00:00Z"))
+            it.notifyTx(result = res, srcMsgId = 0, replicaMsgId = 10)
+
+            assertEquals(res, awaitTx.await())
+            awaitSource.await()
+            awaitReplica.await()
+        }
+    }
+
+    @Test
+    fun `notifyMsg advances specified watermarks`() = runTest(timeout = 1.seconds) {
+        Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1).use {
+            // source-only: advances source, not tx or replica
+            val awaitSource1 = async { it.awaitSource(5) }
+            it.notifyMsg(5, null)
+            awaitSource1.await()
+            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitTx(5) } }
+            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitReplica(0) } }
+
+            // both: advances source + replica, not tx
+            val awaitSource2 = async { it.awaitSource(8) }
+            val awaitReplica = async { it.awaitReplica(10) }
+            it.notifyMsg(8, 10)
+            awaitSource2.await()
+            awaitReplica.await()
+            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitTx(8) } }
+
+            // replica-only: advances replica, not source
+            it.notifyMsg(null, 15)
+            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitSource(9) } }
         }
     }
 
@@ -56,36 +98,45 @@ class WatchersTest {
     fun `handles ingestion stopped`() = runTest(timeout = 1.seconds) {
         supervisorScope {
             Watchers(3).use { watchers ->
-                val await4 = async { watchers.await(4) }
+                val awaitTx = async { watchers.awaitTx(4) }
+                val awaitSource = async { watchers.awaitSource(4) }
 
-                assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
+                assertThrows<TimeoutCancellationException> { withTimeout(50) { awaitTx.await() } }
 
                 val ex = Exception("test")
-                watchers.notify(4, ex)
+                watchers.notifyError(ex)
 
-                assertThrows<IngestionStoppedException> { await4.await() }
+                assertThrows<IngestionStoppedException> { awaitTx.await() }
                     .also { assertEquals(ex, it.cause) }
 
-                assertThrows<IngestionStoppedException> { watchers.await(5) }
+                assertThrows<IngestionStoppedException> { awaitSource.await() }
+                    .also { assertEquals(ex, it.cause) }
+
+                assertThrows<IngestionStoppedException> { watchers.awaitTx(5) }
+                    .also { assertEquals(ex, it.cause) }
+
+                assertThrows<IngestionStoppedException> { watchers.awaitSource(5) }
+                    .also { assertEquals(ex, it.cause) }
+
+                assertThrows<IngestionStoppedException> { watchers.awaitReplica(5) }
                     .also { assertEquals(ex, it.cause) }
             }
-
         }
     }
 
     @RepeatedTest(1000)
     fun `closes watchers on close`() = runTest(timeout = 1.seconds) {
         supervisorScope {
-            val (watchers, await4) = Watchers(3).use { watchers ->
-                val await4 = async { watchers.await(4) }
+            val (watchers, awaitTx) = Watchers(3).use { watchers ->
+                val awaitTx = async { watchers.awaitTx(4) }
 
-                assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
+                assertThrows<TimeoutCancellationException> { withTimeout(50) { awaitTx.await() } }
 
-                Pair(watchers, await4)
+                Pair(watchers, awaitTx)
             }
 
-            assertThrows<CancellationException> { await4.await() }
-            assertThrows<CancellationException> { watchers.await(5) }
+            assertThrows<CancellationException> { awaitTx.await() }
+            assertThrows<CancellationException> { watchers.awaitTx(5) }
         }
     }
 }

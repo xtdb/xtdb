@@ -3,7 +3,6 @@ package xtdb.indexer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
-import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.storage.Storage
 import xtdb.block.proto.Block.parseFrom
@@ -28,8 +27,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
-    private val sourceWatchers: Watchers,
-    private val replicaWatchers: Watchers,
+    private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
     afterSourceMsgId: MessageId,
@@ -54,7 +52,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>): TransactionResult? {
+    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
         LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
 
@@ -75,23 +73,30 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 val bufferedRecords = pendingBlock.bufferedRecords
                 this.pendingBlock = null
 
-                // replay buffered records — already notified to replicaWatchers when first consumed
+                // replay buffered records — their typed notifications advance the watermarks
                 for (buffered in bufferedRecords) {
                     handleRecord(buffered)
                 }
 
-                return null
+                // advance replica watermark past the BlockUploaded record
+                // (source watermark already advanced by replayed records above)
+                watchers.notifyMsg(null, record.msgId)
+
+                return
             } else {
                 LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
                 pendingBlock += record
-                return null
+                return
             }
         }
 
-        return when (msg) {
+        when (msg) {
             is ReplicaMessage.ResolvedTx -> {
                 val latestTxId = liveIndex.latestCompletedTx?.txId
-                if (latestTxId != null && msg.txId <= latestTxId) return null
+                if (latestTxId != null && msg.txId <= latestTxId) {
+                    watchers.notifyMsg(null, record.msgId)
+                    return
+                }
 
                 liveIndex.importTx(msg)
 
@@ -107,8 +112,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 } else TransactionAborted(msg.txId, systemTime, msg.error)
 
                 latestSourceMsgId = msg.txId
-                sourceWatchers.notify(msg.txId, result)
-                result
+                watchers.notifyTx(result, msg.txId, record.msgId)
             }
 
             is ReplicaMessage.TriesAdded -> {
@@ -116,32 +120,32 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     addTries(msg.tries, record.logTimestamp)
 
                 latestSourceMsgId = msg.sourceMsgId
-                sourceWatchers.notify(msg.sourceMsgId, null)
-
-                null
+                watchers.notifyMsg(msg.sourceMsgId, record.msgId)
             }
 
             is ReplicaMessage.BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
-                null
+                latestSourceMsgId = msg.latestProcessedMsgId
+                watchers.notifyMsg(msg.latestProcessedMsgId, record.msgId)
             }
 
             is ReplicaMessage.BlockUploaded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
-                null
+                watchers.notifyMsg(msg.latestProcessedMsgId, record.msgId)
             }
 
-            is ReplicaMessage.NoOp -> null
+            is ReplicaMessage.NoOp -> {
+                watchers.notifyMsg(null, record.msgId)
+            }
         }
     }
 
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
-                val res = handleRecord(record)
-                replicaWatchers.notify(record.msgId, res)
+                handleRecord(record)
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
@@ -151,8 +155,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     e,
                     "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
-                sourceWatchers.notify(null, e)
-                replicaWatchers.notify(record.msgId, e)
+                watchers.notifyError(e)
                 throw e
             }
         }

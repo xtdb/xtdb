@@ -26,8 +26,7 @@ class FollowerLogProcessorTest {
     private lateinit var bufferPool: BufferPool
     private lateinit var liveIndex: LiveIndex
     private lateinit var compactor: Compactor.ForDatabase
-    private lateinit var sourceWatchers: Watchers
-    private lateinit var replicaWatchers: Watchers
+    private lateinit var watchers: Watchers
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
@@ -43,23 +42,21 @@ class FollowerLogProcessorTest {
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
         dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        sourceWatchers = Watchers(-1)
-        replicaWatchers = Watchers(-1)
+        watchers = Watchers(-1)
 
         every { bufferPool.epoch } returns 1
     }
 
     @AfterEach
     fun tearDown() {
-        sourceWatchers.close()
-        replicaWatchers.close()
+        watchers.close()
         allocator.close()
     }
 
     private fun makeProcessor(maxBufferedRecords: Int = 1024) =
         FollowerLogProcessor(
             allocator, bufferPool, dbState,
-            compactor, sourceWatchers, replicaWatchers, null, null, afterSourceMsgId = -1L, maxBufferedRecords
+            compactor, watchers, null, null, afterSourceMsgId = -1L, maxBufferedRecords
         )
 
     private fun <M> record(offset: Long, message: M) =
