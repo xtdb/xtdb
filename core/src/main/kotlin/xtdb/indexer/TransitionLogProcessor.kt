@@ -5,6 +5,7 @@ import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -28,7 +29,11 @@ class TransitionLogProcessor(
     private val sourceWatchers: Watchers,
     private val replicaWatchers: Watchers,
     private val dbCatalog: Database.Catalog?,
+    afterSourceMsgId: MessageId,
 ) : LogProcessor.TransitionProcessor {
+
+    override var latestSourceMsgId: MessageId = afterSourceMsgId
+        private set
 
     private val trieCatalog = dbState.trieCatalog
 
@@ -58,6 +63,7 @@ class TransitionLogProcessor(
                             TransactionCommitted(msg.txId, msg.systemTime)
                         } else TransactionAborted(msg.txId, msg.systemTime, msg.error)
 
+                        latestSourceMsgId = msg.txId
                         sourceWatchers.notify(msg.txId, result)
                         result
                     }
@@ -72,6 +78,7 @@ class TransitionLogProcessor(
                                 )
                             }
                         }
+                        latestSourceMsgId = msg.sourceMsgId
                         sourceWatchers.notify(msg.sourceMsgId, null)
                         null
                     }
