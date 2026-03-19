@@ -41,6 +41,7 @@
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
+           (xtdb.tx TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
@@ -332,6 +333,11 @@
 
 (defn open-live-table ^xtdb.indexer.LiveTable [table]
   (LiveTable. *allocator* BufferPool/UNUSED table (RowCounter.)))
+
+(defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
+                               {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
+  (util/with-open [ops (util/safe-mapv #(xt-log/open-tx-op % allocator opts) tx-ops)]
+    (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user user-metadata))))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key) ]

@@ -35,11 +35,10 @@
 
         (with-open [live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                     query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])
-                    tx-ops-rel (Relation/openFromArrowStream al (xt-log/serialize-tx-ops al
-                                                                                         (mapv tx-ops/parse-tx-op tx-ops)
-                                                                                         {:default-db "xtdb"
-                                                                                          :system-time #xt/zdt "1970-01-01T00:00Z[UTC]"
-                                                                                          :default-tz (ZoneId/of "Europe/London")}))]
+                    tx-ops-rel (Relation/openFromArrowStream al (tu/serialize-tx-ops al (mapv tx-ops/parse-tx-op tx-ops)
+                                                                                     {:default-db "xtdb"
+                                                                                      :system-time #xt/zdt "1970-01-01T00:00Z[UTC]"
+                                                                                      :default-tz (ZoneId/of "Europe/London")}))]
           (let [live-table-tx (.liveTable live-idx-tx #xt/table foo)
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
             (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0

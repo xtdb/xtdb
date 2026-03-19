@@ -25,7 +25,7 @@
   ([file tx-ops opts]
    (binding [*print-namespace-maps* false]
      (let [file (io/as-file file)
-           actual-bytes (log/serialize-tx-ops tu/*allocator*
+           actual-bytes (tu/serialize-tx-ops tu/*allocator*
                                               (for [tx-op tx-ops]
                                                 (cond-> tx-op
                                                   (not (record? tx-op)) tx-ops/parse-tx-op))
@@ -128,7 +128,7 @@
 ;; This was never caught because the API path converts :patch-docs to SQL
 ;; via pgwire, bypassing PatchDocsWriter entirely. See #5232.
 (t/deftest can-serialize-patch-docs
-  (let [actual-bytes (log/serialize-tx-ops tu/*allocator*
+  (let [actual-bytes (tu/serialize-tx-ops tu/*allocator*
                                            (for [tx-op [[:patch-docs :foo {:xt/id 1, :v 2} {:xt/id 3, :x "hello"}]]]
                                              (cond-> tx-op
                                                (not (record? tx-op)) tx-ops/parse-tx-op))

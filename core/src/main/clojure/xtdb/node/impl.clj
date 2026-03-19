@@ -24,13 +24,11 @@
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
-           (xtdb.api.log SourceMessage$Tx)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
            xtdb.table.TableRef
-           (xtdb.query IQuerySource PreparedQuery)
-           (xtdb.tx TxWriter)))
+           (xtdb.query IQuerySource PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -166,13 +164,9 @@
     (try
       (let [^Database db (or (.databaseOrNull db-cat db-name)
                              (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                                   {:db-name db-name})))
-            log (.getSourceLog db)
-            tx-opts (.withFallbackTz tx-opts default-tz)]
+                                                   {:db-name db-name})))]
         (util/rethrowing-cause
-         (let [tx-msg (SourceMessage$Tx. (TxWriter/serializeTxOps tx-ops allocator tx-opts))
-               message-meta (.appendMessageBlocking log tx-msg)]
-           (Xtdb$SubmittedTx. (.getMsgId message-meta)))))
+         (.submitTxBlocking db tx-ops (.withFallbackTz tx-opts default-tz))))
       (catch Anomaly e
         (when tx-error-counter
           (.increment tx-error-counter))

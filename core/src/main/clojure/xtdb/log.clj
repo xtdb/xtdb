@@ -15,12 +15,12 @@
            java.util.concurrent.TimeUnit
            org.apache.arrow.memory.BufferAllocator
            (xtdb.api TransactionKey Xtdb$Config)
-           (xtdb.api.log Log Log$Cluster$Factory Log$Factory SourceMessage$Tx)
+           (xtdb.api.log Log Log$Cluster$Factory Log$Factory)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
            (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
            xtdb.table.TableRef
-           (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts TxWriter)
+           (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs)
            (xtdb.util MsgIdUtil)))
 
@@ -91,10 +91,6 @@
     (TxOp$EraseDocs. (or (namespace table-name) "public") (name table-name)
                      (Vector/fromList al "_id" doc-ids))))
 
-(defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
-                               {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
-  (util/with-open [ops (util/safe-mapv #(open-tx-op % allocator opts) tx-ops)]
-    (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user user-metadata))))
 
 (defmulti ->log-cluster-factory
   (fn [k _opts]
@@ -238,15 +234,11 @@
   (let [^Database db (or (.databaseOrNull db-cat default-db)
                          (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)
                                                {:db-name default-db})))
-        log (.getSourceLog db)
         default-tz (:default-tz opts default-tz)]
     (util/rethrowing-cause
-      (let [message-meta (.appendMessageBlocking log
-                                                 (SourceMessage$Tx. (serialize-tx-ops allocator (->TxOps tx-ops)
-                                                                                      (-> (select-keys opts [:authn :default-db])
-                                                                                          (assoc :default-tz (:default-tz opts default-tz)
-                                                                                                 :system-time (some-> system-time time/expect-instant))))))]
-        (.getMsgId message-meta)))))
+      (util/with-open [ops (util/safe-mapv #(open-tx-op % allocator opts) (->TxOps tx-ops))]
+        (.getTxId (.submitTxBlocking db ops (TxOpts. default-tz (some-> system-time time/expect-instant)
+                                                     (get-in opts [:authn :user]) (:user-metadata opts))))))))
 
 
 (defn await-db [^Database db, ^long msg-id, ^Duration timeout]

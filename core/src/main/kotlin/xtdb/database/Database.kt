@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionResult
+import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -26,6 +27,9 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
+import xtdb.tx.TxOp
+import xtdb.tx.TxOpts
+import xtdb.tx.toBytes
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.Snapshot
@@ -75,6 +79,12 @@ data class Database(
         this === other || (other is Database && name == other.name)
 
     override fun hashCode() = Objects.hash(name)
+
+    fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
+        val txMsg = SourceMessage.Tx(ops.toBytes(allocator, opts))
+        val meta = sourceLog.appendMessageBlocking(txMsg)
+        return Xtdb.SubmittedTx(meta.msgId)
+    }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
         sourceLog.appendMessage(SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)).await()
