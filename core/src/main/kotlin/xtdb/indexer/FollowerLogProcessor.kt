@@ -31,9 +31,16 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val sourceWatchers: Watchers,
     private val replicaWatchers: Watchers,
     private val dbCatalog: Database.Catalog?,
-    override var pendingBlock: PendingBlock?,
+    pendingBlock: PendingBlock?,
+    afterSourceMsgId: MessageId,
     private val maxBufferedRecords: Int = 1024,
 ) : LogProcessor.FollowerProcessor {
+
+    override var pendingBlock: PendingBlock? = pendingBlock
+        private set
+
+    override var latestSourceMsgId: MessageId = afterSourceMsgId
+        private set
 
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
@@ -99,6 +106,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     TransactionCommitted(msg.txId, systemTime)
                 } else TransactionAborted(msg.txId, systemTime, msg.error)
 
+                latestSourceMsgId = msg.txId
                 sourceWatchers.notify(msg.txId, result)
                 result
             }
@@ -107,6 +115,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
 
+                latestSourceMsgId = msg.sourceMsgId
                 sourceWatchers.notify(msg.sourceMsgId, null)
 
                 null
@@ -142,8 +151,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     e,
                     "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
-                sourceWatchers.notify(record.msgId, e)
-                // strictly speaking, a replica msgId.
+                sourceWatchers.notify(null, e)
                 replicaWatchers.notify(record.msgId, e)
                 throw e
             }

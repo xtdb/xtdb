@@ -59,7 +59,7 @@ class FollowerLogProcessorTest {
     private fun makeProcessor(maxBufferedRecords: Int = 1024) =
         FollowerLogProcessor(
             allocator, bufferPool, dbState,
-            compactor, sourceWatchers, replicaWatchers, null, null, maxBufferedRecords
+            compactor, sourceWatchers, replicaWatchers, null, null, afterSourceMsgId = -1L, maxBufferedRecords
         )
 
     private fun <M> record(offset: Long, message: M) =

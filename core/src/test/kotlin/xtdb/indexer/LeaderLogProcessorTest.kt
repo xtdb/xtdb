@@ -45,12 +45,12 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         return LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, indexer, sourceWatchers, replicaWatchers,
-            emptySet(), null, blockFinisher
+            emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
     }
 
@@ -98,12 +98,12 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, mockk(relaxed = true), Watchers(-1), Watchers(-1),
-            emptySet(), null, blockFinisher
+            emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
 
         val now = Instant.now()
@@ -162,12 +162,12 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockFinisher = BlockFinisher(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, mockk(relaxed = true), Watchers(-1), Watchers(-1),
-            emptySet(), null, blockFinisher
+            emptySet(), null, blockUploader, afterReplicaMsgId = -1
         )
 
         val now = Instant.now()

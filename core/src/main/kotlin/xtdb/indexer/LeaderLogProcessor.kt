@@ -38,7 +38,8 @@ class LeaderLogProcessor(
     private val replicaWatchers: Watchers,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    private val blockFinisher: BlockFinisher,
+    private val blockUploader: BlockUploader,
+    afterReplicaMsgId: MessageId,
     flushTimeout: Duration = Duration.ofMinutes(5),
     meterRegistry: MeterRegistry? = null,
 ) : LogProcessor.LeaderProcessor {
@@ -68,6 +69,9 @@ class LeaderLogProcessor(
 
     var pendingBlock: PendingBlock? = null
 
+    var latestReplicaMsgId: MessageId = afterReplicaMsgId
+        private set
+
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
     private suspend fun maybeFlushBlock() {
@@ -80,6 +84,7 @@ class LeaderLogProcessor(
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
             .also {
+                latestReplicaMsgId = it.msgId
                 replicaWatchers.notify(it.msgId, null)
             }
 
@@ -137,7 +142,7 @@ class LeaderLogProcessor(
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
-        blockFinisher.finishBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
+        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg, replicaWatchers)
         pendingBlock = null
     }
 
@@ -250,6 +255,7 @@ class LeaderLogProcessor(
                     "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 sourceWatchers.notify(msgId, e)
+                replicaWatchers.notify(null, e)
                 throw e
             }
         }

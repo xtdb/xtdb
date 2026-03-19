@@ -29,15 +29,13 @@ class Watchers @JvmOverloads constructor(
 
     private sealed interface Event {
         data class Notify(val msgId: MessageId, val result: TransactionResult?) : Event
-        data class NotifyException(val msgId: MessageId, val exception: Throwable) : Event
+        data class NotifyException(val msgId: MessageId?, val exception: Throwable) : Event
         data class NewWatcher(val watcher: Watcher) : Event
-        data class Sync(val cont: CancellableContinuation<MessageId>) : Event
     }
 
     private val channel = Channel<Event>(Channel.UNLIMITED, onUndeliveredElement = { ev ->
         when (ev) {
             is NewWatcher -> ev.watcher.cont.cancel()
-            is Sync -> ev.cont.cancel()
             else -> Unit
         }
     })
@@ -79,10 +77,6 @@ class Watchers @JvmOverloads constructor(
                             else -> watchers.add(watcher)
                         }
                     }
-
-                    is Sync -> {
-                        event.cont.resume(currentMsgId)
-                    }
                 }
             }
         } finally {
@@ -110,7 +104,7 @@ class Watchers @JvmOverloads constructor(
         channel.send(Notify(msgId, result))
     }
 
-    suspend fun notify(msgId: MessageId, exception: Throwable) {
+    suspend fun notify(msgId: MessageId?, exception: Throwable) {
         channel.send(NotifyException(msgId, exception))
     }
 
@@ -123,12 +117,6 @@ class Watchers @JvmOverloads constructor(
                 .onClosed { cont.cancel() }
         }
     }
-
-    suspend fun sync(): MessageId =
-        suspendCancellableCoroutine { cont ->
-            channel.trySend(Sync(cont))
-                .onClosed { cont.cancel() }
-        }
 
     override fun toString() =
         "(Watchers {watcherCount=${watchers.size}, firstWatcherMsgId=${watchers.firstOrNull()?.msgId}, currentMsgId=$currentMsgId, exception=$exception)})"

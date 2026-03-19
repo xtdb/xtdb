@@ -5,6 +5,7 @@ import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -23,12 +24,16 @@ class TransitionLogProcessor(
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
     private val liveIndex: LiveIndex,
-    private val blockFinisher: BlockFinisher,
+    private val blockUploader: BlockUploader,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val sourceWatchers: Watchers,
     private val replicaWatchers: Watchers,
     private val dbCatalog: Database.Catalog?,
+    afterSourceMsgId: MessageId,
 ) : LogProcessor.TransitionProcessor {
+
+    override var latestSourceMsgId: MessageId = afterSourceMsgId
+        private set
 
     private val trieCatalog = dbState.trieCatalog
 
@@ -58,6 +63,7 @@ class TransitionLogProcessor(
                             TransactionCommitted(msg.txId, msg.systemTime)
                         } else TransactionAborted(msg.txId, msg.systemTime, msg.error)
 
+                        latestSourceMsgId = msg.txId
                         sourceWatchers.notify(msg.txId, result)
                         result
                     }
@@ -72,13 +78,14 @@ class TransitionLogProcessor(
                                 )
                             }
                         }
+                        latestSourceMsgId = msg.sourceMsgId
                         sourceWatchers.notify(msg.sourceMsgId, null)
                         null
                     }
 
                     is ReplicaMessage.BlockBoundary -> {
                         LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
-                        blockFinisher.finishBlock(replicaProducer, msgId, msg, replicaWatchers)
+                        blockUploader.uploadBlock(replicaProducer, msgId, msg, replicaWatchers)
                         null
                     }
 
@@ -100,8 +107,7 @@ class TransitionLogProcessor(
                     "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 sourceWatchers.notify(msgId, e)
-                // strictly speaking, a replica msgId.
-                replicaWatchers.notify(msgId, e)
+                replicaWatchers.notify(null, e)
                 throw e
             }
         }
