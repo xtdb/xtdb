@@ -168,6 +168,18 @@ class KafkaCluster(
                 groupMetadata: ConsumerGroupMetadata,
             )
         }
+
+        companion object {
+            inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
+                openTx().use { tx ->
+                    try {
+                        block(tx).also { tx.commit() }
+                    } catch (e: Throwable) {
+                        tx.abort()
+                        throw e
+                    }
+                }
+        }
     }
 
     private inner class KafkaLog<M>(

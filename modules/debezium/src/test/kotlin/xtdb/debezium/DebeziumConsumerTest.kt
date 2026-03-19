@@ -71,50 +71,14 @@ class DebeziumConsumerTest {
     }
 
     @Test
-    fun `tailAll resumes from offset`() = runTest(timeout = 30.seconds) {
-        val topic = "test-resume"
-        val messages = listOf(
-            cdcMessage("c", 1, "Alice"),
-            cdcMessage("c", 2, "Bob"),
-            cdcMessage("c", 3, "Charlie"),
-            cdcMessage("c", 4, "Dave"),
-        )
-        produceMessages(topic, messages)
-
-        val (subscriber, received) = capturingProcessor()
-        val log = DebeziumConsumer(kafkaConfig(), topic)
-        log.use {
-            // Resume from offset 1 — should skip records 0 and 1, receive 2 and 3
-            log.tailAll(1, subscriber).use {
-                while (received.size < 2) delay(100)
-            }
-        }
-
-        assertEquals(2, received.size, "Should receive only records after offset 1")
-        assertEquals(2L, received[0].logOffset)
-        assertEquals(3L, received[1].logOffset)
-
-        // Verify message contents match Charlie and Dave
-        val charlie = Json.parseToJsonElement(
-            String((received[0].message).payload)
-        ).jsonObject
-        assertEquals("Charlie", charlie["payload"]!!.jsonObject["after"]!!.jsonObject["name"]!!.jsonPrimitive.content)
-
-        val dave = Json.parseToJsonElement(
-            String((received[1].message).payload)
-        ).jsonObject
-        assertEquals("Dave", dave["payload"]!!.jsonObject["after"]!!.jsonObject["name"]!!.jsonPrimitive.content)
-    }
-
-    @Test
     fun `subscription close cancels cleanly`() = runTest(timeout = 10.seconds) {
         val topic = "test-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumConsumer(kafkaConfig(), topic)
+        val log = DebeziumConsumer(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(-1, subscriber).use {
+            log.tailAll(subscriber).use {
                 while (received.isEmpty()) delay(100)
             }
             // Subscription closed — produce more messages
@@ -132,9 +96,9 @@ class DebeziumConsumerTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumConsumer(kafkaConfig(), topic)
+        val log = DebeziumConsumer(kafkaConfig(), topic, "test-group")
 
-        val subscription = log.tailAll(-1, subscriber)
+        val subscription = log.tailAll(subscriber)
         while (received.isEmpty()) delay(100)
 
         assertEquals(1, received.size, "Should have received Alice before closing")

@@ -2,8 +2,9 @@ package xtdb.debezium
 
 import org.apache.arrow.memory.BufferAllocator
 import org.slf4j.LoggerFactory
+import xtdb.api.log.KafkaCluster
+import xtdb.api.log.KafkaCluster.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log
-import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.SourceMessage
 import xtdb.error.Incorrect
 import xtdb.tx.TxOp
@@ -14,7 +15,7 @@ import java.time.ZoneId
 private val logger = LoggerFactory.getLogger(DebeziumProcessor::class.java)
 
 class DebeziumProcessor(
-    private val producer: Log.AtomicProducer<SourceMessage>,
+    private val producer: KafkaCluster.AtomicProducer<SourceMessage>,
     private val allocator: BufferAllocator,
     private val defaultTz: ZoneId,
 ) : Log.RecordProcessor<DebeziumMessage>, AutoCloseable {
@@ -23,6 +24,7 @@ class DebeziumProcessor(
         for (record in records) {
             producer.withTx { tx ->
                 try {
+                    tx.sendOffsetsToTransaction(record.message.offsets, record.message.consumerGroupMetadata)
                     val event = CdcEvent.fromJson((record.message).payload)
 
                     event.toTxOp(allocator).use { txOp ->

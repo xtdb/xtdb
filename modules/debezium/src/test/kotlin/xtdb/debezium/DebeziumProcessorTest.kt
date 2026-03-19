@@ -7,6 +7,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.apache.arrow.memory.RootAllocator
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -72,7 +73,16 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(0, offset, Instant.now(), DebeziumMessage(envelope.toString().toByteArray()))
+        return Record(
+            0,
+            offset,
+            Instant.now(),
+            DebeziumMessage(
+                envelope.toString().toByteArray(),
+                emptyMap(),
+                ConsumerGroupMetadata("test-group"),
+            )
+        )
     }
 
     private fun deleteRecord(
@@ -92,11 +102,29 @@ class DebeziumProcessorTest {
                 }
             }
         }
-        return Record(0, offset, Instant.now(), DebeziumMessage(envelope.toString().toByteArray()))
+        return Record(
+            0,
+            offset,
+            Instant.now(),
+            DebeziumMessage(
+                envelope.toString().toByteArray(),
+                emptyMap(),
+                ConsumerGroupMetadata("test-group"),
+            )
+        )
     }
 
     private fun rawRecord(payload: String, offset: Long = 0): Record<DebeziumMessage> =
-        Record(0, offset, Instant.now(), DebeziumMessage(payload.toByteArray()))
+        Record(
+            0,
+            offset,
+            Instant.now(),
+            DebeziumMessage(
+                payload.toByteArray(),
+                emptyMap(),
+                ConsumerGroupMetadata("test-group"),
+            )
+        )
 
     private suspend fun <R> withDebeziumProducer(
         defaultTz: ZoneId = ZoneOffset.UTC,
@@ -114,7 +142,7 @@ class DebeziumProcessorTest {
                 .openSourceLog(mapOf("kafka" to cluster)).use { log ->
                     log.tailAll(-1) { records -> received.addAll(records) }.use {
                         log.openAtomicProducer("test-debezium").use { producer ->
-                            val processor = DebeziumProcessor(producer, allocator, defaultTz)
+                            val processor = DebeziumProcessor(producer as KafkaCluster.AtomicProducer, allocator, defaultTz)
                             block(processor, received)
                         }
                     }
@@ -191,8 +219,8 @@ class DebeziumProcessorTest {
 
     @Test
     fun `node failure propagates out of processRecords`() = runTest(timeout = 61.seconds) {
-        val failingProducer = object : Log.AtomicProducer<SourceMessage> {
-            override fun openTx(): Log.AtomicProducer.Tx<SourceMessage> =
+        val failingProducer = object : KafkaCluster.AtomicProducer<SourceMessage> {
+            override fun openTx(): KafkaCluster.AtomicProducer.Tx<SourceMessage> =
                 throw RuntimeException("Kafka unavailable")
             override fun close() {}
         }

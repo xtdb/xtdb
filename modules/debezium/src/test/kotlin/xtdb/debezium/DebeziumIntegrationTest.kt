@@ -162,7 +162,7 @@ class DebeziumIntegrationTest {
                 .openSourceLog(mapOf("kafka" to cluster)).use { sourceLog ->
                     sourceLog.openAtomicProducer("test-debezium-$sourceTopic").use { producer ->
                         RootAllocator().use { allocator ->
-                            block(DebeziumProcessor(producer, allocator, ZoneOffset.UTC))
+                            block(DebeziumProcessor(producer as KafkaCluster.AtomicProducer, allocator, ZoneOffset.UTC))
                         }
                     }
                 }
@@ -351,11 +351,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_users")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_users", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                             "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
@@ -410,11 +410,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_no_envelope")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_no_envelope", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                             "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
@@ -467,11 +467,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.timed_docs")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.timed_docs", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
                             VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
@@ -544,11 +544,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.no_id_table")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.no_id_table", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
                         )
@@ -601,11 +601,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.typed_docs")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.typed_docs", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
                             VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
@@ -661,11 +661,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.inventory.products")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.inventory.products", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
                         )
@@ -711,11 +711,11 @@ class DebeziumIntegrationTest {
             }
 
             withSourceProducer(secondarySourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_secondary_test")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_secondary_test", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         pgExecute(
                             "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                         )
@@ -764,11 +764,11 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.bad_times")
+                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.bad_times", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(-1, capturing).use {
+                    log.tailAll(capturing).use {
                         // TIMESTAMP (no tz) → Debezium sends as Long, not a string
                         pgExecute(
                             """INSERT INTO bad_times (_id, name, _valid_from)
@@ -808,6 +808,65 @@ class DebeziumIntegrationTest {
                 (dlqTxs[1]["error"] as String).contains("_valid_to"),
                 "Second DLQ should mention _valid_to"
             )
+        }
+    }
+
+    @Test
+    fun `CDC consumer resumes from committed offset after restart`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS cdc_resume (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO cdc_resume (_id, name) VALUES (1, 'Alice')",
+        )
+
+        registerConnectorAndAwait()
+
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val debeziumTopic = "testdb.public.cdc_resume"
+        val debeziumGroupId = "test-debezium-group-${UUID.randomUUID()}"
+
+        // First run: process the snapshot record (Alice), committing offsets
+        openNodeOnSourceTopic(sourceTopic).use { node ->
+            withSourceProducer(sourceTopic) { processor ->
+                val debeziumConsumer = DebeziumConsumer(kafkaConfig(), debeziumTopic, debeziumGroupId)
+                val (capturing, received) = capturingProcessor(processor)
+
+                debeziumConsumer.use {
+                    debeziumConsumer.tailAll(capturing).use {
+                        while (received.size < 1) delay(100)
+                    }
+                }
+            }
+
+            awaitTxs(node, 1)
+
+            // Insert more data while consumer is stopped
+            pgExecute(
+                "INSERT INTO cdc_resume (_id, name) VALUES (2, 'Bob')",
+            )
+
+            // Second run: same group ID — should NOT re-process Alice, only Bob
+            withSourceProducer(sourceTopic) { processor ->
+                val debeziumConsumer = DebeziumConsumer(kafkaConfig(), debeziumTopic, debeziumGroupId)
+                val (capturing, received) = capturingProcessor(processor)
+
+                debeziumConsumer.use {
+                    debeziumConsumer.tailAll(capturing).use {
+                        while (received.size < 1) delay(100)
+                    }
+                }
+            }
+
+            awaitTxs(node, 2)
+
+            val txCount = xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs")[0]["cnt"] as Long
+            assertEquals(2L, txCount, "Should have exactly 2 transactions — Alice from first run, Bob from second")
+
+            val rows = xtQuery(node,
+                "SELECT _id, name FROM public.cdc_resume ORDER BY _id"
+            )
+            assertEquals(2, rows.size)
+            assertEquals("Alice", rows[0]["name"])
+            assertEquals("Bob", rows[1]["name"])
         }
     }
 }

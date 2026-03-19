@@ -16,10 +16,10 @@
                                      (.groupId (str "xtdb-" source-topic "-debezium")))
                                    {kafka-cluster cluster})
         producer (.openAtomicProducer source-log (str "debezium-" source-topic))
-        debezium-log (DebeziumConsumer. kafka-config debezium-topic)
+        debezium-log (DebeziumConsumer. kafka-config debezium-topic (str "xtdb-" debezium-topic "-debezium"))
         allocator (RootAllocator.)
         processor (DebeziumProcessor. producer allocator (.getDefaultTz cfg))
-        subscription (.tailAll debezium-log -1 processor)]
+        subscription (.tailAll debezium-log processor)]
     (log/info "Debezium CDC process started"
               {:kafka-cluster kafka-cluster
                :source-topic source-topic
