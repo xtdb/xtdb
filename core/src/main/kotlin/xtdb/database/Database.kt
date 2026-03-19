@@ -87,15 +87,15 @@ data class Database(
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)).await()
+        sourceLog.appendMessage(SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1))
     }
 
     fun sendAttachDbMessage(dbName: DatabaseName, config: Config): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.AttachDatabase(dbName, config)).await()
+        sourceLog.appendMessage(SourceMessage.AttachDatabase(dbName, config))
     }
 
     fun sendDetachDbMessage(dbName: DatabaseName): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.DetachDatabase(dbName)).await()
+        sourceLog.appendMessage(SourceMessage.DetachDatabase(dbName))
     }
 
     @Serializable

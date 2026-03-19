@@ -2996,7 +2996,7 @@ ORDER BY 1,2;")
     (xt/execute-tx conn [[:put-docs :foo {:xt/id 1}]])
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))
     (doto (.getSourceLog (db/primary-db tu/*node*))
-      (.appendMessage (SourceMessage$FlushBlock. 1)))
+      (.appendMessageBlocking (SourceMessage$FlushBlock. 1)))
     (t/is (= [{:xt/id 1}] (xt/q conn "SELECT * FROM foo")))))
 
 (t/deftest test-database-metadata

@@ -198,7 +198,7 @@ class LocalLog<M>(
         }
     }
 
-    override fun appendMessage(message: M): Deferred<MessageMetadata> =
+    override suspend fun appendMessage(message: M): MessageMetadata =
         CompletableDeferred<MessageMetadata>()
             .also { res ->
                 scope.launch {
@@ -208,6 +208,7 @@ class LocalLog<M>(
                     res.complete(MessageMetadata(epoch, record.logOffset, record.logTimestamp))
                 }
             }
+            .await()
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
         override fun openTx() = object : AtomicProducer.Tx<M> {
@@ -225,7 +226,7 @@ class LocalLog<M>(
                 isOpen = false
                 runBlocking {
                     for ((message, res) in buffer) {
-                        res.complete(this@LocalLog.appendMessage(message).await())
+                        res.complete(this@LocalLog.appendMessage(message))
                     }
                 }
             }

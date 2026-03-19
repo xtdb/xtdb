@@ -149,9 +149,9 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
-    fun appendMessage(message: M): Deferred<MessageMetadata>
+    suspend fun appendMessage(message: M): MessageMetadata
 
-    fun appendMessageBlocking(message: M): MessageMetadata = runBlocking { appendMessage(message).await() }
+    fun appendMessageBlocking(message: M): MessageMetadata = runBlocking { appendMessage(message) }
 
     /**
      * @param transactionalId uniquely identifies this producer for Kafka's transaction coordinator.

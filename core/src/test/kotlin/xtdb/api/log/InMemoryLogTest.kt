@@ -14,7 +14,7 @@ class InMemoryLogTest {
         log.use {
             assertNull(log.readLastMessage())
 
-            log.appendMessage(txMessage(1)).await()
+            log.appendMessage(txMessage(1))
 
             // Still null because InMemoryLog has no persistence
             assertNull(log.readLastMessage())

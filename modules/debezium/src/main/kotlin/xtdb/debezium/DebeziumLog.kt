@@ -41,7 +41,7 @@ class DebeziumLog @JvmOverloads constructor(
     override val latestSubmittedOffset: Long get() = -1
     override val epoch: Int get() = 0
 
-    override fun appendMessage(message: SourceMessage): Deferred<MessageMetadata> =
+    override suspend fun appendMessage(message: SourceMessage): MessageMetadata =
         throw UnsupportedOperationException("CDC log is read-only")
 
     override fun openAtomicProducer(transactionalId: String): AtomicProducer<SourceMessage> =

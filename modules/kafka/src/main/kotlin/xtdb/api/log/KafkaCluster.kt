@@ -173,7 +173,7 @@ class KafkaCluster(
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
         override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
 
-        override fun appendMessage(message: M): Deferred<Log.MessageMetadata> =
+        override suspend fun appendMessage(message: M): Log.MessageMetadata =
             CompletableDeferred<Log.MessageMetadata>()
                 .also { res ->
                     producer.send(
@@ -190,6 +190,7 @@ class KafkaCluster(
                         } else res.completeExceptionally(e)
                     }
                 }
+                .await()
 
         override fun readLastMessage(): M? =
             kafkaConfigMap.openConsumer().use { c ->

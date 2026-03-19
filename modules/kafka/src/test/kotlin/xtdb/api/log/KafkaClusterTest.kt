@@ -71,11 +71,11 @@ class KafkaClusterTest {
                     .use { log ->
                         log.tailAll(-1, subscriber).use { _ ->
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
-                            log.appendMessage(SourceMessage.Tx(txPayload)).await()
+                            log.appendMessage(SourceMessage.Tx(txPayload))
 
-                            log.appendMessage(SourceMessage.FlushBlock(12)).await()
+                            log.appendMessage(SourceMessage.FlushBlock(12))
 
-                            log.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, 0, addedTrieDetails)).await()
+                            log.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, 0, addedTrieDetails))
 
                             log.appendMessage(SourceMessage.AttachDatabase("foo", databaseConfig))
 
@@ -137,7 +137,7 @@ class KafkaClusterTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.appendMessage(txMessage(1)).await()
+                        log.appendMessage(txMessage(1))
 
                         val lastMessage = log.readLastMessage()
                         check(lastMessage is SourceMessage.Tx)
@@ -156,9 +156,9 @@ class KafkaClusterTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.appendMessage(txMessage(1)).await()
-                        log.appendMessage(txMessage(2)).await()
-                        log.appendMessage(txMessage(3)).await()
+                        log.appendMessage(txMessage(1))
+                        log.appendMessage(txMessage(2))
+                        log.appendMessage(txMessage(3))
 
                         val lastMessage = log.readLastMessage()
                         check(lastMessage is SourceMessage.Tx)

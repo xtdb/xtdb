@@ -11,7 +11,6 @@ import xtdb.api.log.LogOffset
 import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.InstantSource
@@ -48,17 +47,15 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override fun appendMessage(message: M): Deferred<Log.MessageMetadata> {
+    override suspend fun appendMessage(message: M): Log.MessageMetadata {
         messages.add(message)
 
         val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
 
-        return CompletableDeferred(
-            Log.MessageMetadata(
-                epoch,
-                ++latestSubmittedOffset,
-                ts.truncatedTo(ChronoUnit.MICROS)
-            )
+        return Log.MessageMetadata(
+            epoch,
+            ++latestSubmittedOffset,
+            ts.truncatedTo(ChronoUnit.MICROS)
         )
     }
 
@@ -80,7 +77,7 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
                 isOpen = false
                 runBlocking {
                     for ((message, res) in buffer) {
-                        res.complete(this@RecordingLog.appendMessage(message).await())
+                        res.complete(this@RecordingLog.appendMessage(message))
                     }
                 }
             }

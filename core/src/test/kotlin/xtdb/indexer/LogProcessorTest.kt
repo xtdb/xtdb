@@ -163,7 +163,7 @@ class LogProcessorTest {
 
         // Pre-populate the replica log with a transaction
         val replicaProducer = replicaLog.openAtomicProducer("setup")
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())).await()
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
         replicaProducer.close()
 
         val logProc = LogProcessor(
@@ -195,7 +195,7 @@ class LogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
 
         // Pre-populate the replica log
-        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap())).await()
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage),

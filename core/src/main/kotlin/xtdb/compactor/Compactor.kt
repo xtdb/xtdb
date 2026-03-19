@@ -135,7 +135,7 @@ interface Compactor : AutoCloseable {
                             }
 
                         override suspend fun publishTries(triesAdded: TriesAdded) {
-                            val msgId = log.appendMessage(triesAdded).await().msgId
+                            val msgId = log.appendMessage(triesAdded).msgId
                             watchers.await(msgId)
                         }
 

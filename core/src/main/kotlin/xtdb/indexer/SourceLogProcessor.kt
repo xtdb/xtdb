@@ -162,7 +162,7 @@ class SourceLogProcessor(
         }
     }
 
-    private fun finishBlock(systemTime: Instant) {
+    private suspend fun finishBlock(systemTime: Instant) {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
@@ -223,7 +223,7 @@ class SourceLogProcessor(
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         if (!readOnly && flusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            flusher.flushedTxId = log.appendMessage(flushMessage).await().msgId
+            flusher.flushedTxId = log.appendMessage(flushMessage).msgId
         }
 
         var lastMsgId: MessageId = latestProcessedMsgId

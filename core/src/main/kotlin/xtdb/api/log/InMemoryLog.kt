@@ -77,9 +77,10 @@ class InMemoryLog<M> @JvmOverloads constructor(
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override fun appendMessage(message: M): Deferred<MessageMetadata> =
+    override suspend fun appendMessage(message: M): MessageMetadata =
         CompletableDeferred<MessageMetadata>()
             .also { scope.launch { appendCh.send(NewMessage(message, it)) } }
+            .await()
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
         override fun openTx() = object : AtomicProducer.Tx<M> {
@@ -97,7 +98,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
                 isOpen = false
                 runBlocking {
                     for ((message, res) in buffer) {
-                        res.complete(this@InMemoryLog.appendMessage(message).await())
+                        res.complete(this@InMemoryLog.appendMessage(message))
                     }
                 }
             }

@@ -77,7 +77,7 @@ class LeaderLogProcessor(
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
             val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).await().msgId
+            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).msgId
         }
     }
 

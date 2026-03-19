@@ -19,7 +19,7 @@ class RecordingLogTest {
     fun `readLastMessage returns the message after appending one`() = runTest {
         val log = RecordingLog.Factory().openSourceLog(emptyMap())
 
-        log.appendMessage(txMessage(1)).await()
+        log.appendMessage(txMessage(1))
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
@@ -31,9 +31,9 @@ class RecordingLogTest {
     fun `readLastMessage returns the last message after appending multiple`() = runTest {
         val log = RecordingLog.Factory().openSourceLog(emptyMap())
 
-        log.appendMessage(txMessage(1)).await()
-        log.appendMessage(txMessage(2)).await()
-        log.appendMessage(txMessage(3)).await()
+        log.appendMessage(txMessage(1))
+        log.appendMessage(txMessage(2))
+        log.appendMessage(txMessage(3))
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
