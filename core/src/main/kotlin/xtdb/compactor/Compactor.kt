@@ -24,7 +24,6 @@ import xtdb.segment.BufferPoolSegment
 import xtdb.table.TableRef
 import xtdb.trie.*
 import xtdb.util.*
-import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.use
@@ -99,43 +98,34 @@ interface Compactor : AutoCloseable {
                                 .build()
 
                         override suspend fun executeJob(job: Job): TriesAdded =
-                            try {
-                                job.trieKeys.map { BufferPoolSegment(al, bp, mm, job.table, it) }.useAll { segs ->
-                                    val recencyPartitioning =
-                                        if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
-                                        else SegmentMerge.RecencyPartitioning.Preserve(job.outputTrieKey.recency)
+                            job.trieKeys.map { BufferPoolSegment(al, bp, mm, job.table, it) }.useAll { segs ->
+                                val recencyPartitioning =
+                                    if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
+                                    else SegmentMerge.RecencyPartitioning.Preserve(job.outputTrieKey.recency)
 
-                                    val addedTries =
-                                        segMerge.mergeSegments(segs, job.part, recencyPartitioning, recencyPartition)
-                                            .useAll { mergeRes ->
-                                                mergeRes.map {
-                                                    it.openForRead().use { mergeReadCh ->
-                                                        Relation.loader(al, mergeReadCh).use { loader ->
-                                                            val trieKey =
-                                                                job.outputTrieKey.copy(recency = it.recency).toString()
+                                val addedTries =
+                                    segMerge.mergeSegments(segs, job.part, recencyPartitioning, recencyPartition)
+                                        .useAll { mergeRes ->
+                                            mergeRes.map {
+                                                it.openForRead().use { mergeReadCh ->
+                                                    Relation.loader(al, mergeReadCh).use { loader ->
+                                                        val trieKey =
+                                                            job.outputTrieKey.copy(recency = it.recency).toString()
 
-                                                            val (dataFileSize, trieMetadata) =
-                                                                trieWriter.writePageTree(
-                                                                    job.table, trieKey,
-                                                                    loader, it.leaves.asTree,
-                                                                    pageSize
-                                                                )
+                                                        val (dataFileSize, trieMetadata) =
+                                                            trieWriter.writePageTree(
+                                                                job.table, trieKey,
+                                                                loader, it.leaves.asTree,
+                                                                pageSize
+                                                            )
 
-                                                            job.trieDetails(trieKey, dataFileSize, trieMetadata)
-                                                        }
+                                                        job.trieDetails(trieKey, dataFileSize, trieMetadata)
                                                     }
                                                 }
                                             }
+                                        }
 
-                                    TriesAdded(Storage.VERSION, bp.epoch, addedTries)
-                                }
-                            } catch (e: ClosedByInterruptException) {
-                                throw InterruptedException(e.message)
-                            } catch (e: InterruptedException) {
-                                throw e
-                            } catch (e: Throwable) {
-                                LOGGER.error(e) { "error running compaction job: ${job.table.sym}/${job.outputTrieKey}, files in job: '${job.trieKeys}'" }
-                                throw e
+                                TriesAdded(Storage.VERSION, bp.epoch, addedTries)
                             }
 
                         override suspend fun publishTries(triesAdded: TriesAdded) {
@@ -217,20 +207,20 @@ interface Compactor : AutoCloseable {
                                         // check it's still required
                                         val job = availableJobs[jobKey]
                                         if (job != null) {
-                                            LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
+                                            LOGGER.debugBlock("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}") {
+                                                val timer = meterRegistry?.let { Timer.start(it) }
+                                                val triesAdded = driver.executeJob(job)
+                                                jobTimer?.let { timer?.stop(it) }
+                                                driver.publishTries(triesAdded)
 
-                                            val timer = meterRegistry?.let { Timer.start(it) }
-                                            val triesAdded = driver.executeJob(job)
-                                            jobTimer?.let { timer?.stop(it) }
-                                            driver.publishTries(triesAdded)
-
-                                            LOGGER.debug {
-                                                buildString {
-                                                    append("compacted '${job.table.sym}'")
-                                                    append(" -> ")
-                                                    append(
-                                                        triesAdded.tries
-                                                            .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                                LOGGER.debug {
+                                                    buildString {
+                                                        append("compacted '${job.table.sym}'")
+                                                        append(" -> ")
+                                                        append(
+                                                            triesAdded.tries
+                                                                .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                                    }
                                                 }
                                             }
                                         }

@@ -1,7 +1,6 @@
 package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
-import org.slf4j.LoggerFactory
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
@@ -10,6 +9,7 @@ import xtdb.time.microsAsInstant
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
+import xtdb.util.*
 import java.io.Closeable
 import java.nio.file.Path
 import java.time.Duration
@@ -18,7 +18,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
-private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
+private val LOGGER = GarbageCollector::class.logger
 
 interface GarbageCollector : Closeable {
     fun openForDatabase(bufferPool: BufferPool, dbState: DatabaseState): ForDatabase
@@ -75,19 +75,18 @@ interface GarbageCollector : Closeable {
 
         init {
             if (enabled) {
-                LOGGER.debug(
-                    "Starting GarbageCollector for database with approxRunInterval: {}, blocksToKeep: {}",
-                    approxRunInterval, blocksToKeep
-                )
+                LOGGER.debug { "Starting GarbageCollector for database with approxRunInterval: $approxRunInterval, blocksToKeep: $blocksToKeep" }
 
                 CoroutineScope(coroutineCtx + parentJob).launch {
                     delay(Random.nextLong(approxRunInterval.toMillis()))
+
                     while (isActive) {
                         try {
-                            collectGarbage()
-                        } catch (e: Exception) {
-                            LOGGER.warn("Garbage collection cycle failed", e)
-                        }
+                            LOGGER.debugBlock("garbage collection cycle") {
+                                collectGarbage()
+                            }
+                        } catch (_: Exception) { /* already logged */ }
+
                         delay(approxRunInterval.toMillis())
                     }
                 }
@@ -107,33 +106,21 @@ interface GarbageCollector : Closeable {
         override suspend fun garbageCollectTries(garbageAsOf: Instant?) {
             val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
 
-            LOGGER.debug("Garbage collecting data older than {}", asOf)
-
-            try {
-                yieldIfSimulation()
-                LOGGER.debug("Starting trie garbage collection")
-                val tableNames = blockCatalog.allTables.shuffled().take(100)
-                for (tableName in tableNames) {
-                    val garbageTries = trieCatalog.garbageTries(tableName, asOf)
-                    for (garbageTrie in garbageTries) {
-                        driver.deletePath(tableName.metaFilePath(garbageTrie))
-                        driver.deletePath(tableName.dataFilePath(garbageTrie))
-                    }
-                    driver.deleteTries(tableName, garbageTries)
+            LOGGER.debug { "Garbage collecting data older than $asOf" }
+            yieldIfSimulation()
+            val tableNames = blockCatalog.allTables.shuffled().take(100)
+            for (tableName in tableNames) {
+                val garbageTries = trieCatalog.garbageTries(tableName, asOf)
+                for (garbageTrie in garbageTries) {
+                    driver.deletePath(tableName.metaFilePath(garbageTrie))
+                    driver.deletePath(tableName.dataFilePath(garbageTrie))
                 }
-                LOGGER.debug("Trie garbage collection completed")
-            } catch (e: Exception) {
-                LOGGER.warn("Trie garbage collection failed", e)
-            } catch (e: Throwable) {
-                throw RuntimeException("Error encountered during Trie garbage collection: ", e)
+                driver.deleteTries(tableName, garbageTries)
             }
         }
 
         override suspend fun collectGarbage() {
-            LOGGER.debug("Starting block garbage collection")
-            blockGc.garbageCollectBlocks()
-            LOGGER.debug("Block garbage collection completed")
-
+            runInterruptible { blockGc.garbageCollectBlocks() }
             garbageCollectTries()
         }
 
