@@ -66,9 +66,10 @@ class LeaderLogProcessor(
                 }
             }
 
-    var pendingBlock: PendingBlock? = null
+    override var pendingBlock: PendingBlock? = null
+        private set
 
-    var latestReplicaMsgId: MessageId = afterReplicaMsgId
+    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)

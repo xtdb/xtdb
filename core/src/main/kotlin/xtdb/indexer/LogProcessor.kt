@@ -23,7 +23,10 @@ class LogProcessor(
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
-    interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable
+    interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable {
+        val pendingBlock: PendingBlock?
+        val latestReplicaMsgId: MessageId
+    }
 
     interface TransitionProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
         val latestSourceMsgId: MessageId
@@ -40,7 +43,7 @@ class LogProcessor(
         fun openLeaderProcessor(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterReplicaMsgId: MessageId,
-        ): LeaderLogProcessor
+        ): LeaderProcessor
 
         fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterSourceMsgId: MessageId
@@ -53,7 +56,7 @@ class LogProcessor(
 
     private sealed interface SubSystem : AutoCloseable
 
-    private class LeaderSystem(val proc: LeaderLogProcessor) : SubSystem {
+    private class LeaderSystem(val proc: LeaderProcessor) : SubSystem {
         override fun close() = proc.close()
     }
 
