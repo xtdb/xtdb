@@ -528,36 +528,7 @@
         nil))))
 
 (defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t, user-metadata]
-  (let [tx-id (.getTxId tx-key)
-        system-time-µs (time/instant->micros (.getSystemTime tx-key))
-
-        live-table (.liveTable live-idx-tx (table/->ref db-name 'xt/txs))
-        doc-writer (.getDocWriter live-table)]
-
-    (.logPut live-table (ByteBuffer/wrap (util/->iid tx-id)) system-time-µs Long/MAX_VALUE
-             (fn write-doc! []
-               (doto (.vectorFor doc-writer "_id" #xt.arrow/type :i64 false)
-                 (.writeLong tx-id))
-
-               (doto (.vectorFor doc-writer "system_time" (st/->arrow-type types/temporal-col-type) false)
-                 (.writeLong system-time-µs))
-
-               (doto (.vectorFor doc-writer "committed" #xt.arrow/type :bool false)
-                 (.writeBoolean (nil? t)))
-
-               (doto (.vectorFor doc-writer "user_metadata" #xt.arrow/type :struct true)
-                 (.writeObject user-metadata))
-
-               (let [e-wtr (.vectorFor doc-writer "error" #xt.arrow/type :transit true)]
-                 (if (nil? t)
-                   (.writeNull e-wtr)
-                   (try
-                     (.writeObject e-wtr t)
-                     (catch Exception e
-                       (log/warnf (doto t (.addSuppressed e)) "Error serializing error, tx %d" tx-id)
-                       (.writeObject e-wtr (xt/->ClojureForm "error serializing error - see server logs"))))))
-
-               (.endStruct doc-writer)))))
+  (Indexer/addTxRow live-idx-tx db-name tx-key t user-metadata))
 
 (defmethod ig/expand-key :xtdb/indexer [k opts]
   {k (merge {:config (ig/ref :xtdb/config)
