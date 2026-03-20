@@ -6,7 +6,6 @@ import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.Record
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds

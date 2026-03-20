@@ -254,85 +254,76 @@ class LocalLog<M>(
         }
     }
 
-    override fun openConsumer(): Consumer<M> = object : Consumer<M> {
-        override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
-            var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
+    override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+        var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-            val ch = Channel<Record<M>>(100)
+        val ch = Channel<Record<M>>(100)
 
-            val subscription = scope.launch(SupervisorJob()) {
-                launch {
-                    committedCh
-                        .onSubscription {
-                            val targetOffset = mutex.withLock { latestSubmittedOffset }
-                            if (targetOffset < 0) return@onSubscription
+        val subscription = scope.launch(SupervisorJob()) {
+            launch {
+                committedCh
+                    .onSubscription {
+                        val targetOffset = mutex.withLock { latestSubmittedOffset }
+                        if (targetOffset < 0) return@onSubscription
 
-                            val catchUpRecords = runInterruptible {
-                                FileChannel.open(logFilePath).use { fileCh ->
-                                    val latestCompleted = latestCompletedOffset
-                                    if (latestCompleted >= 0) {
-                                        fileCh.position(latestCompleted)
-                                        fileCh.readMessage()
-                                    }
+                        val catchUpRecords = runInterruptible {
+                            FileChannel.open(logFilePath).use { fileCh ->
+                                val latestCompleted = latestCompletedOffset
+                                if (latestCompleted >= 0) {
+                                    fileCh.position(latestCompleted)
+                                    fileCh.readMessage()
+                                }
 
-                                    buildList {
-                                        while (fileCh.position() <= targetOffset) {
-                                            fileCh.readMessage()?.let { add(it) }
-                                        }
+                                buildList {
+                                    while (fileCh.position() <= targetOffset) {
+                                        fileCh.readMessage()?.let { add(it) }
                                     }
                                 }
                             }
-
-                            for (record in catchUpRecords) {
-                                ch.send(record)
-                            }
-
-                            latestCompletedOffset = targetOffset
                         }
-                        .onEach {
-                            if (it.logOffset > latestCompletedOffset) {
-                                latestCompletedOffset = it.logOffset
-                                ch.send(it)
-                            }
-                        }
-                        .onCompletion { ch.close() }
-                        .catch {
-                            try {
-                                throw it
-                            } catch (_: ClosedByInterruptException) {
-                                throw CancellationException()
-                            } catch (_: InterruptedException) {
-                                throw CancellationException()
-                            }
-                        }
-                        .collect()
-                }
 
-                while (isActive) {
-                    val msg = withTimeoutOrNull(1.minutes) {
-                        ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                        for (record in catchUpRecords) {
+                            ch.send(record)
+                        }
+
+                        latestCompletedOffset = targetOffset
                     }
-                    if (msg != null) processor.processRecords(listOf(msg))
-                }
+                    .onEach {
+                        if (it.logOffset > latestCompletedOffset) {
+                            latestCompletedOffset = it.logOffset
+                            ch.send(it)
+                        }
+                    }
+                    .onCompletion { ch.close() }
+                    .catch {
+                        try {
+                            throw it
+                        } catch (_: ClosedByInterruptException) {
+                            throw CancellationException()
+                        } catch (_: InterruptedException) {
+                            throw CancellationException()
+                        }
+                    }
+                    .collect()
             }
 
-            return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
+            while (isActive) {
+                val msg = withTimeoutOrNull(1.minutes) {
+                    ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                }
+                if (msg != null) processor.processRecords(listOf(msg))
+            }
         }
 
-        override fun close() {}
+        return Subscription { runBlocking { withTimeout(5.seconds) { subscription.cancelAndJoin() } } }
     }
 
-    override fun openGroupConsumer(listener: SubscriptionListener): Consumer<M> {
-        listener.onPartitionsAssignedSync(listOf(0))
-        val inner = openConsumer()
-        return object : Consumer<M> {
-            override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
-                inner.tailAll(afterMsgId, processor)
-
-            override fun close() {
-                inner.close()
-                listener.onPartitionsRevokedSync(listOf(0))
-            }
+    override fun openGroupSubscription(listener: SubscriptionListener<M>): Subscription {
+        val spec = listener.onPartitionsAssignedSync(listOf(0))
+        val sub = spec?.let { tailAll(it.afterMsgId, it.processor) }
+        return Subscription {
+            sub?.close()
+            listener.onPartitionsRevokedSync(listOf(0))
         }
     }
 

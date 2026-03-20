@@ -108,76 +108,67 @@ class ReadOnlyLocalLog<M>(
         }
     }
 
-    override fun openConsumer(): Log.Consumer<M> = object : Log.Consumer<M> {
-        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
-            val ch = Channel<Log.Record<M>>(100)
+    override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
+        val ch = Channel<Log.Record<M>>(100)
 
-            val producerJob = scope.launch(SupervisorJob()) {
-                var currentOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
+        val producerJob = scope.launch(SupervisorJob()) {
+            var currentOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-                FileSystems.getDefault().newWatchService().use { watchService ->
-                    rootPath.register(watchService, ENTRY_MODIFY)
+            FileSystems.getDefault().newWatchService().use { watchService ->
+                rootPath.register(watchService, ENTRY_MODIFY)
 
-                    try {
-                        readNewMessages(currentOffset, ch)?.let { currentOffset = it }
-
-                        while (true) {
-                            val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
-
-                            var logModified = false
-                            for (event in key.pollEvents()) {
-                                val changedPath = event.context() as? Path
-                                if (changedPath?.name == logFileName) {
-                                    logModified = true
-                                }
-                            }
-
-                            if (logModified) {
-                                readNewMessages(currentOffset, ch)?.let { currentOffset = it }
-                            }
-
-                            if (!key.reset()) {
-                                break
-                            }
-                        }
-                    } catch (_: ClosedByInterruptException) {
-                        cancel()
-                    } catch (_: InterruptedException) {
-                        cancel()
-                    }
-                }
-            }
-
-            val consumerJob = scope.launch(SupervisorJob()) {
                 try {
-                    while (isActive) {
-                        val msg = withTimeoutOrNull(1.minutes) {
-                            ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                    readNewMessages(currentOffset, ch)?.let { currentOffset = it }
+
+                    while (true) {
+                        val key: WatchKey = runInterruptible(Dispatchers.IO) { watchService.take() }
+
+                        var logModified = false
+                        for (event in key.pollEvents()) {
+                            val changedPath = event.context() as? Path
+                            if (changedPath?.name == logFileName) {
+                                logModified = true
+                            }
                         }
-                        if (msg != null) processor.processRecords(listOf(msg))
+
+                        if (logModified) {
+                            readNewMessages(currentOffset, ch)?.let { currentOffset = it }
+                        }
+
+                        if (!key.reset()) {
+                            break
+                        }
                     }
-                } finally {
-                    producerJob.cancelAndJoin()
+                } catch (_: ClosedByInterruptException) {
+                    cancel()
+                } catch (_: InterruptedException) {
+                    cancel()
                 }
             }
-
-            return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
         }
 
-        override fun close() {}
+        val consumerJob = scope.launch(SupervisorJob()) {
+            try {
+                while (isActive) {
+                    val msg = withTimeoutOrNull(1.minutes) {
+                        ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
+                    }
+                    if (msg != null) processor.processRecords(listOf(msg))
+                }
+            } finally {
+                producerJob.cancelAndJoin()
+            }
+        }
+
+        return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
     }
 
-    override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> {
-        listener.onPartitionsAssignedSync(listOf(0))
-        val inner = openConsumer()
-        return object : Log.Consumer<M> {
-            override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
-                inner.tailAll(afterMsgId, processor)
-
-            override fun close() {
-                inner.close()
-                listener.onPartitionsRevokedSync(listOf(0))
-            }
+    override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription {
+        val spec = listener.onPartitionsAssignedSync(listOf(0))
+        val sub = spec?.let { tailAll(it.afterMsgId, it.processor) }
+        return Subscription {
+            sub?.close()
+            listener.onPartitionsRevokedSync(listOf(0))
         }
     }
 

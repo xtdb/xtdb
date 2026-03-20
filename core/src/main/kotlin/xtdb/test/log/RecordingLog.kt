@@ -96,9 +96,9 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         override fun close() {}
     }
 
-    override fun openConsumer(): Log.Consumer<M> = error("openConsumer")
+    override fun tailAll(afterMsgId: Long, processor: Log.RecordProcessor<M>): Log.Subscription = error("tailAll")
 
-    override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> = error("openGroupConsumer")
+    override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription = error("openGroupSubscription")
 
     override fun close() = Unit
 }

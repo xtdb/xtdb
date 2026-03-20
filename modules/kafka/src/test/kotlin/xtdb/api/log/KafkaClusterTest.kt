@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
 import xtdb.database.Database

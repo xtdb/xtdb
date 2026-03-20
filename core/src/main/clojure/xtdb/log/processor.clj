@@ -4,7 +4,7 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
+           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
            [xtdb.util MsgIdUtil]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
@@ -23,7 +23,7 @@
 (defn- subscribe-source-log [^DatabaseStorage db-storage ^DatabaseState db-state ^SourceLogProcessor src-proc]
   (let [source-log (.getSourceLog db-storage)
         latest-processed-msg-id (or (.getLatestProcessedMsgId (.getBlockCatalog db-state)) -1)]
-    (Log/tailAll source-log latest-processed-msg-id src-proc)))
+    (.tailAll source-log latest-processed-msg-id src-proc)))
 
 (defmethod ig/expand-key :xtdb.log.processor/source [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
@@ -79,22 +79,15 @@
                                                   source-watchers
                                                   db-catalog pending-block after-source-msg-id))
 
-                         (openLeaderSystem [_ replica-producer after-source-msg-id after-replica-msg-id]
-                           (util/with-close-on-catch [proc (LeaderLogProcessor. allocator
-                                                                                db-storage replica-producer db-state
-                                                                                indexer-for-db source-watchers
-                                                                                (set (.getSkipTxs indexer-conf))
-                                                                                db-catalog block-uploader
-                                                                                after-replica-msg-id
-                                                                                (.getFlushDuration indexer-conf)
-                                                                                meter-registry)
-                                                      sub (Log/tailAll (.getSourceLog db-storage) after-source-msg-id proc)]
-                             (reify LogProcessor$LeaderSystem
-                               (getPendingBlock [_] (.getPendingBlock proc))
-                               (getLatestReplicaMsgId [_] (.getLatestReplicaMsgId proc))
-                               (close [_]
-                                 (.close sub)
-                                 (.close proc)))))
+                         (openLeaderProcessor [_ replica-producer after-replica-msg-id]
+                           (LeaderLogProcessor. allocator
+                                                db-storage replica-producer db-state
+                                                indexer-for-db source-watchers
+                                                (set (.getSkipTxs indexer-conf))
+                                                db-catalog block-uploader
+                                                after-replica-msg-id
+                                                (.getFlushDuration indexer-conf)
+                                                meter-registry))
 
                          (openTransition [_ replica-producer after-source-msg-id]
                            (TransitionLogProcessor. allocator
@@ -108,9 +101,9 @@
           log-processor (LogProcessor. proc-factory db-storage db-state block-uploader source-watchers meter-registry)]
 
       {:log-processor log-processor
-       :consumer (when-not (= mode Database$Mode/READ_ONLY)
-                   (.openGroupConsumer (.getSourceLog db-storage) log-processor))})))
+       :subscription (when-not (= mode Database$Mode/READ_ONLY)
+                       (.openGroupSubscription (.getSourceLog db-storage) log-processor))})))
 
-(defmethod ig/halt-key! :xtdb.log/processor [_ {:keys [consumer log-processor]}]
-  (util/close consumer)
+(defmethod ig/halt-key! :xtdb.log/processor [_ {:keys [subscription log-processor]}]
+  (util/close subscription)
   (util/close log-processor))

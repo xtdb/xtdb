@@ -175,14 +175,12 @@ class LeaderLogProcessorTest {
         ))
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        val consumer = replicaLog.openConsumer()
-        val sub = consumer.tailAll(-1) { records ->
+        val sub = replicaLog.tailAll(-1) { records ->
             replicaMessages.addAll(records.map { it.message })
         }
 
         Thread.sleep(200)
         sub.close()
-        consumer.close()
 
         assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
         assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)

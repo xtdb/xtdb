@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
-import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.Record
 import xtdb.api.log.Log.RecordProcessor
 import java.time.Duration

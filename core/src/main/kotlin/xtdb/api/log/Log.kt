@@ -3,10 +3,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
@@ -18,11 +15,9 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.asPath
-import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
-import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -91,10 +86,6 @@ interface Log<M> : AutoCloseable {
         suspend fun processRecords(records: List<Record<M>>)
     }
 
-    interface Consumer<M> : AutoCloseable {
-        fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription
-    }
-
     fun interface Subscription : AutoCloseable
 
     companion object {
@@ -107,20 +98,6 @@ interface Log<M> : AutoCloseable {
         @Suppress("unused")
         @JvmSynthetic
         fun localLog(path: Path, configure: LocalLog.Factory.() -> Unit) = localLog(path).also(configure)
-
-        @JvmStatic
-        fun <M> Log<M>.tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) =
-            openConsumer().closeOnCatch { c ->
-                c.tailAll(afterMsgId, processor).closeOnCatch { subs ->
-                    Subscription {
-                        runBlocking {
-                            withTimeoutOrNull(5.seconds) { runInterruptible { subs.close() } }
-                        }
-
-                        c.close()
-                    }
-                }
-            }
     }
 
     interface Registration {
@@ -183,17 +160,19 @@ interface Log<M> : AutoCloseable {
 
     fun readLastMessage(): M?
 
-    fun openConsumer(): Consumer<M>
-    fun openGroupConsumer(listener: SubscriptionListener): Consumer<M>
+    fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription
+    fun openGroupSubscription(listener: SubscriptionListener<M>): Subscription
 
-    interface SubscriptionListener {
-        suspend fun onPartitionsAssigned(partitions: Collection<Int>)
-        fun onPartitionsAssignedSync(partitions: Collection<Int>) = runBlocking { onPartitionsAssigned(partitions) }
+    interface SubscriptionListener<M> {
+        suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<M>?
+        fun onPartitionsAssignedSync(partitions: Collection<Int>): TailSpec<M>? = runBlocking { onPartitionsAssigned(partitions) }
         suspend fun onPartitionsRevoked(partitions: Collection<Int>)
         fun onPartitionsRevokedSync(partitions: Collection<Int>) = runBlocking { onPartitionsRevoked(partitions) }
         suspend fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
         fun onPartitionsLostSync(partitions: Collection<Int>) = runBlocking { onPartitionsLost(partitions) }
     }
+
+    data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)
 
     class Record<out M>(
         val epoch: Int,

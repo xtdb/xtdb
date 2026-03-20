@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import xtdb.api.log.*
-import xtdb.api.log.Log.Companion.tailAll
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -18,7 +17,6 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
-import xtdb.util.closeOnCatch
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
 
@@ -57,28 +55,17 @@ class LogProcessorTest {
         watchers: Watchers,
     ) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeaderSystem(
+            override fun openLeaderProcessor(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                afterSourceMsgId: MessageId,
                 afterReplicaMsgId: MessageId,
-            ): LogProcessor.LeaderSystem {
+            ): LeaderLogProcessor {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
                 return LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), watchers,
                     emptySet(), null, blockUploader, afterReplicaMsgId
-                ).closeOnCatch { proc ->
-                    val sub = dbStorage.sourceLog.tailAll(afterSourceMsgId, proc)
-                    object : LogProcessor.LeaderSystem {
-                        override val pendingBlock: PendingBlock? get() = proc.pendingBlock
-                        override val latestReplicaMsgId: MessageId get() = proc.latestReplicaMsgId
-                        override fun close() {
-                            sub.close()
-                            proc.close()
-                        }
-                    }
-                }
+                )
             }
 
             override fun openTransition(
@@ -118,10 +105,9 @@ class LogProcessorTest {
             dbStorage, dbState, blockUploader, watchers
         )
 
-        // openGroupConsumer triggers onPartitionsAssigned synchronously
-        val consumer = sourceLog.openGroupConsumer(logProc)
+        val subscription = sourceLog.openGroupSubscription(logProc)
 
-        consumer.close()
+        subscription.close()
         logProc.close()
         watchers.close()
         sourceLog.close()
@@ -143,9 +129,9 @@ class LogProcessorTest {
             dbStorage, dbState, blockUploader, watchers
         )
 
-        val consumer = sourceLog.openGroupConsumer(logProc)
+        val subscription = sourceLog.openGroupSubscription(logProc)
 
-        consumer.close()
+        subscription.close()
         logProc.close()
         watchers.close()
         sourceLog.close()
@@ -175,12 +161,12 @@ class LogProcessorTest {
             dbStorage, dbState, blockUploader, watchers
         )
 
-        val consumer = sourceLog.openGroupConsumer(logProc)
+        val subscription = sourceLog.openGroupSubscription(logProc)
 
         // The transition should have replayed the ResolvedTx
         verify { liveIndex.importTx(any()) }
 
-        consumer.close()
+        subscription.close()
         logProc.close()
         watchers.close()
         sourceLog.close()
@@ -208,11 +194,11 @@ class LogProcessorTest {
             dbStorage, dbState, blockUploader, watchers
         )
 
-        val consumer = sourceLog.openGroupConsumer(logProc)
+        val subscription = sourceLog.openGroupSubscription(logProc)
 
         verify { liveIndex.importTx(any()) }
 
-        consumer.close()
+        subscription.close()
         logProc.close()
         watchers.close()
         sourceLog.close()

@@ -20,7 +20,6 @@ import org.junit.jupiter.api.assertThrows
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
-import xtdb.api.log.Log.Companion.tailAll
 import xtdb.api.log.Log.Record
 import xtdb.api.log.SourceMessage
 import xtdb.api.query.IKeyFn

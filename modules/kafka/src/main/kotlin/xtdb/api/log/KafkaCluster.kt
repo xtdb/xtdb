@@ -8,9 +8,6 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.selects.onTimeout
-import kotlinx.coroutines.selects.select
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -27,6 +24,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
+import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
@@ -39,7 +37,6 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
-import xtdb.util.closeOnCatch
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant.ofEpochMilli
@@ -113,10 +110,6 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     }
 }
 
-private sealed interface ConsumerControl<out M> {
-    data class TailAll<M>(val afterMsgId: MessageId, val processor: Log.RecordProcessor<M>) : ConsumerControl<M>
-    data class StopTailing<M>(val onStop: CompletableDeferred<Unit>) : ConsumerControl<M>
-}
 
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
@@ -303,113 +296,80 @@ class KafkaCluster(
             }
         }
 
-        @OptIn(ExperimentalCoroutinesApi::class)
-        private inner class PollingConsumer(private val c: KafkaConsumer<*, ByteArray>) : Log.Consumer<M> {
-
-            private val tp = TopicPartition(topic, 0)
-            private val controlChannel = Channel<ConsumerControl<M>>()
-            private var currentProcessor: Log.RecordProcessor<M>? = null
-
-            private fun handleControl(msg: ConsumerControl<M>) {
-                when (msg) {
-                    is ConsumerControl.TailAll -> {
-                        currentProcessor = msg.processor
-                        val afterOffset = afterMsgIdToOffset(epoch, msg.afterMsgId)
-                        c.seek(tp, afterOffset + 1)
-                        c.resume(listOf(tp))
+        private fun KafkaConsumer<*, ByteArray>.pollRecords(): List<Log.Record<M>> =
+            try {
+                poll(pollDuration).records(topic)
+                    .mapNotNull { rec ->
+                        val msg = codec.decode(rec.value()) ?: return@mapNotNull null
+                        Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg)
                     }
-
-                    is ConsumerControl.StopTailing -> {
-                        c.pause(listOf(tp))
-                        currentProcessor = null
-                        msg.onStop.complete(Unit)
-                    }
-                }
+            } catch (_: WakeupException) {
+                emptyList()
+            } catch (e: InterruptException) {
+                throw InterruptedException().initCause(e)
             }
 
-            private val pollingJob = scope.launch(Dispatchers.IO) {
+        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
+            val c = kafkaConfigMap.openConsumer()
+            val tp = TopicPartition(topic, 0)
+            c.assign(listOf(tp))
+            c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
+
+            val pollingJob = scope.launch(Dispatchers.IO) {
                 while (isActive) {
-                    select {
-                        controlChannel.onReceive { msg -> handleControl(msg) }
-
-                        onTimeout(0) {
-                            val records = runInterruptible {
-                                try {
-                                    c.poll(pollDuration).records(topic)
-                                        .mapNotNull { rec ->
-                                            val msg = codec.decode(rec.value()) ?: return@mapNotNull null
-
-                                            Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg)
-                                        }
-                                } catch (e: InterruptException) {
-                                    throw InterruptedException().initCause(e)
-                                }
-                            }
-
-                            currentProcessor?.processRecords(records)
-                        }
-                    }
+                    val records = c.pollRecords()
+                    if (records.isNotEmpty()) processor.processRecords(records)
                 }
             }
 
-            override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
-                runBlocking {
-                    controlChannel.send(ConsumerControl.TailAll(afterMsgId, processor))
-
-                    Log.Subscription {
-                        runBlocking {
-                            val ack = CompletableDeferred<Unit>()
-                            controlChannel.send(ConsumerControl.StopTailing(ack))
-                            ack.await()
-                        }
-                    }
-                }
-
-            override fun close() {
-                runBlocking {
-                    withTimeout(30.seconds) { pollingJob.cancelAndJoin() }
-                    c.close()
-                }
+            return Log.Subscription {
+                c.wakeup()
+                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+                c.close()
             }
         }
 
-        override fun openConsumer(): Log.Consumer<M> =
-            kafkaConfigMap.openConsumer().closeOnCatch { c ->
-                val tp = listOf(TopicPartition(topic, 0))
-                c.assign(tp)
-                c.pause(tp)
+        override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription {
+            val c = kafkaConfigMap.plus(mapOf("group.id" to groupId)).openConsumer()
+            val tp = TopicPartition(topic, 0)
+            var currentProcessor: Log.RecordProcessor<M>? = null
 
-                PollingConsumer(c)
+            c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                private inline fun launderInterruptedException(block: () -> Unit) =
+                    try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
+
+                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                    launderInterruptedException {
+                        c.pause(partitions)
+
+                        listener.onPartitionsAssignedSync(partitions.map { it.partition() })
+                            ?.let { tailSpec ->
+                                currentProcessor = tailSpec.processor
+                                c.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
+                                c.resume(partitions)
+                            }
+                    }
+
+                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                    launderInterruptedException {
+                        listener.onPartitionsRevokedSync(partitions.map { it.partition() })
+                        currentProcessor = null
+                    }
+            })
+
+            val pollingJob = scope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    val records = c.pollRecords()
+                    if (records.isNotEmpty()) currentProcessor?.processRecords(records)
+                }
             }
 
-        override fun openGroupConsumer(listener: Log.SubscriptionListener): Log.Consumer<M> =
-            kafkaConfigMap.plus(mapOf("group.id" to groupId))
-                .openConsumer()
-                .closeOnCatch { c ->
-                    c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
-                        private fun launderInterruptedException(block: () -> Unit) =
-                            try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
-
-                        // onPartitionsAssigned is called from the poll thread, so pause is safe here
-                        override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
-                            launderInterruptedException {
-                                c.pause(partitions)
-                                listener.onPartitionsAssignedSync(partitions.map { it.partition() })
-                            }
-
-                        override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                            launderInterruptedException {
-                                listener.onPartitionsRevokedSync(partitions.map { it.partition() })
-                            }
-
-                        override fun onPartitionsLost(partitions: Collection<TopicPartition>) =
-                            launderInterruptedException {
-                                listener.onPartitionsLostSync(partitions.map { it.partition() })
-                            }
-                    })
-
-                    PollingConsumer(c)
-                }
+            return Log.Subscription {
+                c.wakeup()
+                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+                c.close()
+            }
+        }
 
         override fun close() = Unit
     }
