@@ -1,0 +1,17 @@
+edition = "2023";
+
+package xtdb.debezium.proto;
+
+option java_multiple_files = true;
+
+message KafkaDebeziumLogConfig {
+    string log_cluster = 1;
+    string table_topic = 2;
+    string group_id = 3;
+}
+
+message DebeziumSourceConfig {
+    oneof log {
+        KafkaDebeziumLogConfig kafka_log = 1;
+    }
+}

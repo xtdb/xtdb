@@ -15,7 +15,7 @@ import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
-class DebeziumConsumerTest {
+class KafkaDebeziumLogTest {
 
     private lateinit var kafka: ConfluentKafkaContainer
 
@@ -76,7 +76,7 @@ class DebeziumConsumerTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumConsumer(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
             log.tailAll(subscriber).use {
                 while (received.isEmpty()) delay(100)
@@ -96,7 +96,7 @@ class DebeziumConsumerTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = DebeziumConsumer(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
 
         val subscription = log.tailAll(subscriber)
         while (received.isEmpty()) delay(100)

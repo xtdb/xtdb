@@ -4,22 +4,23 @@
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            (xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory)
-           (xtdb.debezium DebeziumConsumer DebeziumProcessor)))
+           (xtdb.debezium DebeziumProcessor DebeziumSource KafkaDebeziumLog$Factory)))
 
 (defn start!
   "Starts a CDC ingestion node, returns an AutoCloseable."
   [node-opts {:keys [kafka-cluster source-topic debezium-topic]}]
   (let [cfg (xtn/->config node-opts)
         cluster (.open ^KafkaCluster$ClusterFactory (get (.getLogClusters cfg) kafka-cluster))
-        kafka-config (.getKafkaConfigMap cluster)
+        clusters {kafka-cluster cluster}
         source-log (.openSourceLog (doto (KafkaCluster$LogFactory. kafka-cluster source-topic)
                                      (.groupId (str "xtdb-" source-topic "-debezium")))
-                                   {kafka-cluster cluster})
+                                   clusters)
         producer (.openAtomicProducer source-log (str "debezium-" source-topic))
-        debezium-log (DebeziumConsumer. kafka-config debezium-topic (str "xtdb-" debezium-topic "-debezium"))
+        external-log (.open (DebeziumSource. (KafkaDebeziumLog$Factory. kafka-cluster debezium-topic (str "xtdb-" debezium-topic "-debezium")))
+                            clusters)
         allocator (RootAllocator.)
         processor (DebeziumProcessor. producer allocator (.getDefaultTz cfg))
-        subscription (.tailAll debezium-log processor)]
+        subscription (.tailAll external-log processor)]
     (log/info "Debezium CDC process started"
               {:kafka-cluster kafka-cluster
                :source-topic source-topic
@@ -30,7 +31,7 @@
         (util/close subscription)
         (util/close processor)
         (util/close allocator)
-        (util/close debezium-log)
+        (util/close external-log)
         (util/close producer)
         (util/close source-log)
         (util/close cluster)

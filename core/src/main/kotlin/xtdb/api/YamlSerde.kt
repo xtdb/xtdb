@@ -12,6 +12,7 @@ import kotlinx.serialization.modules.SerializersModule
 import xtdb.api.log.Log
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
+import xtdb.database.ExternalLog
 import java.net.InetAddress
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -149,6 +150,7 @@ val YAML_SERDE = Yaml(
         include(Log.Cluster.Factory.serializersModule)
         include(ObjectStore.Factory.serializersModule)
         include(XtdbModule.Factory.serializersModule)
+        include(ExternalLog.Factory.serializersModule)
     })
 
 /**

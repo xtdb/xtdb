@@ -18,7 +18,7 @@
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory)
            (xtdb.arrow Relation Vector)
            xtdb.catalog.BlockCatalog
-           (xtdb.database Database DatabaseStorage Database$Catalog Database$Mode)
+           (xtdb.database Database DatabaseStorage Database$Catalog Database$Config Database$Mode)
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs)
@@ -221,6 +221,14 @@
 
 (defmethod ig/halt-key! :xtdb/replica-log [_ ^Log log]
   (util/close log))
+
+(defmethod ig/init-key :xtdb/external-source-log [_ {:keys [^Database$Config db-config]
+                                                      {:keys [log-clusters]} :base}]
+  (some-> (.getExternalLog db-config)
+          (.open log-clusters)))
+
+(defmethod ig/halt-key! :xtdb/external-source-log [_ external-source-log]
+  (util/close external-source-log))
 
 (defn- ->TxOps [tx-ops]
   (->> tx-ops

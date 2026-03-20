@@ -1,8 +1,9 @@
 package xtdb.debezium
 
 import kotlinx.coroutines.*
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
@@ -10,49 +11,77 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
+import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
+import xtdb.api.log.LogClusterAlias
+import xtdb.debezium.proto.KafkaDebeziumLogConfig
+import xtdb.debezium.proto.kafkaDebeziumLogConfig
 import java.time.Duration
 import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
 
-private val logger = LoggerFactory.getLogger(DebeziumConsumer::class.java)
+private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
 
-object UnitDeserializer : Deserializer<Unit> {
-    override fun deserialize(topic: String?, data: ByteArray) = Unit
-}
-
-class DebeziumMessage(
-    val payload: ByteArray,
-    val offsets: Map<TopicPartition, OffsetAndMetadata>,
-    val consumerGroupMetadata: ConsumerGroupMetadata,
-)
-
-class DebeziumConsumer @JvmOverloads constructor(
+class KafkaDebeziumLog @JvmOverloads constructor(
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
     private val groupId: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),
     coroutineContext: CoroutineContext = Dispatchers.Default,
-) : AutoCloseable {
+) : DebeziumLog {
+
+    object UnitDeserializer : Deserializer<Unit> {
+        override fun deserialize(topic: String?, data: ByteArray) = Unit
+    }
+
+    @Serializable
+    @SerialName("!Kafka")
+    data class Factory(
+        val logCluster: LogClusterAlias, val tableTopic: String, val groupId: String
+    ) : DebeziumLog.Factory {
+
+        override fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>): DebeziumLog {
+            val cluster =
+                requireNotNull(clusters[logCluster] as? KafkaCluster) { "missing Kafka cluster: '${logCluster}'" }
+            return KafkaDebeziumLog(cluster.kafkaConfigMap, tableTopic, groupId)
+        }
+
+        fun toProto(): KafkaDebeziumLogConfig = kafkaDebeziumLogConfig {
+            this.logCluster = this@Factory.logCluster
+            this.tableTopic = this@Factory.tableTopic
+            this.groupId = this@Factory.groupId
+        }
+
+        companion object {
+            fun fromProto(proto: KafkaDebeziumLogConfig) =
+                Factory(
+                    logCluster = proto.logCluster,
+                    tableTopic = proto.tableTopic,
+                    groupId = proto.groupId,
+                )
+        }
+    }
 
     // TODO: non-deterministic failures (e.g. node down) currently kill this coroutine silently.
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        logger.error("Fatal error in CDC ingestion — ingestion has stopped", throwable)
+        LOG.error("Fatal error in CDC ingestion — ingestion has stopped", throwable)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)
     val epoch: Int get() = 0
 
-    fun tailAll(processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
+    override fun tailAll(processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
         val job = scope.launch {
             KafkaConsumer(
-                kafkaConfig.plus(mapOf(
-                    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
-                    ConsumerConfig.GROUP_ID_CONFIG to groupId,
-                    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
-                    ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
-                )),
+                kafkaConfig.plus(
+                    mapOf(
+                        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
+                        ConsumerConfig.GROUP_ID_CONFIG to groupId,
+                        ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+                        ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
+                    )
+                ),
                 UnitDeserializer,
                 ByteArrayDeserializer()
             ).use { c ->

@@ -41,11 +41,12 @@
 (defmethod ig/expand-key ::storage [k _opts]
   {k {:source-log (ig/ref :xtdb/source-log)
       :replica-log (ig/ref :xtdb/replica-log)
+      :external-source (ig/ref :xtdb/external-source-log)
       :buffer-pool (ig/ref :xtdb/buffer-pool)
       :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}})
 
-(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log buffer-pool metadata-manager]}]
-  (DatabaseStorage. source-log replica-log buffer-pool metadata-manager))
+(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log external-source buffer-pool metadata-manager]}]
+  (DatabaseStorage. source-log replica-log external-source buffer-pool metadata-manager))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base {:allocator (ig/ref :xtdb/allocator)
@@ -97,6 +98,7 @@
                  :xtdb/log (assoc opts :factory (.getLog db-config))
                  :xtdb/source-log opts
                  :xtdb/replica-log (assoc opts :factory (.getLog db-config))
+                 :xtdb/external-source-log opts
                  :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
 
                  ::storage opts

@@ -60,7 +60,7 @@ class MockDb(
     val bufferPool: BufferPool,
     val compactor: Compactor,
 ) {
-    val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, bufferPool, null)
+    val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, null, bufferPool, null)
     val dbState: DatabaseState get() = DatabaseState(name, null, null, trieCatalog, null)
 }
 

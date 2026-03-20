@@ -351,7 +351,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_users", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_users", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -410,7 +410,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_no_envelope", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -467,7 +467,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.timed_docs", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.timed_docs", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -544,7 +544,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.no_id_table", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.no_id_table", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -601,7 +601,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.typed_docs", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.typed_docs", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -661,7 +661,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.inventory.products", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.inventory.products", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -711,7 +711,7 @@ class DebeziumIntegrationTest {
             }
 
             withSourceProducer(secondarySourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.cdc_secondary_test", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -764,7 +764,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = DebeziumConsumer(kafkaConfig(), "testdb.public.bad_times", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.bad_times", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -827,11 +827,11 @@ class DebeziumIntegrationTest {
         // First run: process the snapshot record (Alice), committing offsets
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val debeziumConsumer = DebeziumConsumer(kafkaConfig(), debeziumTopic, debeziumGroupId)
+                val kafkaDebeziumLog = KafkaDebeziumLog(kafkaConfig(), debeziumTopic, debeziumGroupId)
                 val (capturing, received) = capturingProcessor(processor)
 
-                debeziumConsumer.use {
-                    debeziumConsumer.tailAll(capturing).use {
+                kafkaDebeziumLog.use {
+                    kafkaDebeziumLog.tailAll(capturing).use {
                         while (received.size < 1) delay(100)
                     }
                 }
@@ -846,11 +846,11 @@ class DebeziumIntegrationTest {
 
             // Second run: same group ID — should NOT re-process Alice, only Bob
             withSourceProducer(sourceTopic) { processor ->
-                val debeziumConsumer = DebeziumConsumer(kafkaConfig(), debeziumTopic, debeziumGroupId)
+                val kafkaDebeziumLog = KafkaDebeziumLog(kafkaConfig(), debeziumTopic, debeziumGroupId)
                 val (capturing, received) = capturingProcessor(processor)
 
-                debeziumConsumer.use {
-                    debeziumConsumer.tailAll(capturing).use {
+                kafkaDebeziumLog.use {
+                    kafkaDebeziumLog.tailAll(capturing).use {
                         while (received.size < 1) delay(100)
                     }
                 }

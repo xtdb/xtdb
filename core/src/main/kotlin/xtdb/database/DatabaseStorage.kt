@@ -9,6 +9,7 @@ import xtdb.storage.BufferPool
 data class DatabaseStorage(
     val sourceLogOrNull: Log<SourceMessage>?,
     val replicaLogOrNull: Log<ReplicaMessage>?,
+    val externalLog: ExternalLog<*>?,
     val bufferPoolOrNull: BufferPool?,
     val metadataManagerOrNull: PageMetadata.Factory?,
 ) {
