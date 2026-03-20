@@ -126,8 +126,10 @@ interface Compactor : AutoCloseable {
                                     TriesAdded(Storage.VERSION, bp.epoch, addedTries)
                                 }
                             } catch (e: ClosedByInterruptException) {
-                                throw InterruptedException(e.message)
+                                throw if (Thread.interrupted()) InterruptedException().initCause(e) else e
                             } catch (e: InterruptedException) {
+                                throw e
+                            } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Throwable) {
                                 LOGGER.error(e) { "error running compaction job: ${job.table.sym}/${job.outputTrieKey}, files in job: '${job.trieKeys}'" }
