@@ -324,8 +324,11 @@ class KafkaCluster(
 
             return Log.Subscription {
                 c.wakeup()
-                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
-                c.close()
+                try {
+                    runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+                } finally {
+                    c.close()
+                }
             }
         }
 
@@ -340,13 +343,10 @@ class KafkaCluster(
 
                 override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        c.pause(partitions)
-
                         listener.onPartitionsAssignedSync(partitions.map { it.partition() })
                             ?.let { tailSpec ->
                                 currentProcessor = tailSpec.processor
                                 c.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
-                                c.resume(partitions)
                             }
                     }
 
@@ -366,8 +366,11 @@ class KafkaCluster(
 
             return Log.Subscription {
                 c.wakeup()
-                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
-                c.close()
+                try {
+                    runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+                } finally {
+                    c.close()
+                }
             }
         }
 
