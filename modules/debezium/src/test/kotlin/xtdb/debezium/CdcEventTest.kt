@@ -126,7 +126,6 @@ class CdcEventTest {
         event as CdcEvent.Put
         assertEquals("public", event.schema)
         assertEquals("test_items", event.table)
-        assertEquals(12345L, event.lsn)
         assertEquals(1L, event.doc["_id"])
         assertEquals("Alice", event.doc["name"])
         assertNull(event.validFrom)

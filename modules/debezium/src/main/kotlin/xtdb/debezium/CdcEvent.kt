@@ -22,23 +22,12 @@ internal fun JsonObject.toJvmMap(): Map<String, Any?> =
 sealed class CdcEvent {
     abstract val schema: String
     abstract val table: String
-    abstract val lsn: Long?
-    abstract val txId: Long?
 
     abstract fun toTxOp(allocator: BufferAllocator): TxOp
-
-    val metadata: Map<String, Any?>
-        get() = buildMap {
-            put("source", "debezium")
-            lsn?.let { put("lsn", it) }
-            txId?.let { put("tx_id", it) }
-        }
 
     data class Put(
         override val schema: String,
         override val table: String,
-        override val lsn: Long?,
-        override val txId: Long?,
         val doc: Map<String, Any?>,
         val validFrom: Instant? = null,
         val validTo: Instant? = null,
@@ -52,8 +41,6 @@ sealed class CdcEvent {
     data class Delete(
         override val schema: String,
         override val table: String,
-        override val lsn: Long?,
-        override val txId: Long?,
         val id: Any,
     ) : CdcEvent() {
         override fun toTxOp(allocator: BufferAllocator): TxOp {
@@ -114,7 +101,7 @@ sealed class CdcEvent {
                         throw Incorrect("'_valid_to' requires '_valid_from'")
                     }
 
-                    Put(schema, table, lsn, txId, docMap, validFrom, validTo)
+                    Put(schema, table, docMap, validFrom, validTo)
                 }
 
                 "d" -> {
@@ -124,7 +111,7 @@ sealed class CdcEvent {
                     val id = before["_id"]?.toJvmValue()
                         ?: throw Incorrect("Missing '_id' in 'before' for delete")
 
-                    Delete(schema, table, lsn, txId, id)
+                    Delete(schema, table, id)
                 }
 
                 else -> throw Incorrect("Unknown CDC op: '$op'")

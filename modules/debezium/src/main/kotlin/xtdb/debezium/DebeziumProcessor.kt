@@ -28,8 +28,13 @@ class DebeziumProcessor(
                     val event = CdcEvent.fromJson((record.message).payload)
 
                     event.toTxOp(allocator).use { txOp ->
-                        val metadata = event.metadata + ("kafka_offset" to record.logOffset)
-                        val txOpts = TxOpts(defaultTz = defaultTz, userMetadata = metadata)
+                        val txOpts = TxOpts(
+                            defaultTz = defaultTz,
+                            userMetadata = mapOf(
+                                "source" to "debezium",
+                                "kafka_offset" to record.logOffset,
+                            )
+                        )
                         val txOps = listOf(txOp)
                         val message = SourceMessage.Tx(txOps.toBytes(allocator, txOpts))
                         tx.appendMessage(message)
