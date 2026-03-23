@@ -50,7 +50,7 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
     override suspend fun appendMessage(message: M): Log.MessageMetadata {
         messages.add(message)
 
-        val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
+        val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
 
         return Log.MessageMetadata(
             epoch,

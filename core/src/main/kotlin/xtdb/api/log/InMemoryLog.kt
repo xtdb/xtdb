@@ -65,7 +65,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         .map { (message, onCommit) ->
             // we only use the instantSource for Tx messages so that the tests
             // that check files can be deterministic
-            val ts = if (message is SourceMessage.Tx) instantSource.instant() else Instant.now()
+            val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
 
             val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
             onCommit.complete(MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS)))

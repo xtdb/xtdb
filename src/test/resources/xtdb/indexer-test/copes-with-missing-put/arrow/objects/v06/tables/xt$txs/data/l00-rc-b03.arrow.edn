@@ -20,7 +20,7 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 8185,
+                {:xt/id 4129,
                  :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "4a8129b82c639a9026d4a72f0cd87b74"}])}
+    :xt/iid #bytes "8d42a6ab1f136da2dce464d7a6af3f74"}])}

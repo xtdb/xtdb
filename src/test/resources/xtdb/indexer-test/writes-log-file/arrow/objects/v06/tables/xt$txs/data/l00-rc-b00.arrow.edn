@@ -20,10 +20,10 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 4122,
+                {:xt/id 2924,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "1eb93ff221a5172adc34f88893678c84"}
+    :xt/iid #bytes "0f79fcaf5860ef8b9cc35a64d2ea3297"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
@@ -38,9 +38,9 @@
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 2097,
+                {:xt/id 1494,
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
                  :committed false,
                  :error
                   #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2019-01-01T00:00:00Z"}]}],
-    :xt/iid #bytes "f59ce54916a45b2a0f92e501505baf7a"}])}
+    :xt/iid #bytes "a899a35cc9e439bc980af33e3bb7ef3f"}])}

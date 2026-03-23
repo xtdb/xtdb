@@ -15,33 +15,24 @@
                   "user_metadata" [:? :struct],
                   "error" [:? :transit]}]}]}),
  :batches
- ([{:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
-    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
-    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
-    :op
-    #xt/tagged [:put
-                {:xt/id 2849,
-                 :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
-                 :committed true}],
-    :xt/iid #bytes "093554b80140405775e1d53fbbcaeaec"}
-   {:xt/system-from #xt/zdt "2020-01-05T00:00Z[UTC]",
+ ([{:xt/system-from #xt/zdt "2020-01-05T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-05T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 11108,
+                {:xt/id 8688,
                  :system-time #xt/zdt "2020-01-05T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "49ffc0e6065d5cecf2d5c71b2f257967"}
+    :xt/iid #bytes "2ab2aa23c691af4343836338817fbc78"}
    {:xt/system-from #xt/zdt "2020-01-04T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-04T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 7995,
+                {:xt/id 6170,
                  :system-time #xt/zdt "2020-01-04T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "766f3d96205aa6374dcff51addf2591a"}
+    :xt/iid #bytes "675b12d8d03b917504a60d9757236992"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
@@ -51,23 +42,32 @@
                  :system-time #xt/zdt "2020-01-01T00:00Z[UTC]",
                  :committed true}],
     :xt/iid #bytes "a4e167a76a05add8a8654c169b07b044"}
+   {:xt/system-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-from #xt/zdt "2020-01-02T00:00Z[UTC]",
+    :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
+    :op
+    #xt/tagged [:put
+                {:xt/id 2246,
+                 :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
+                 :committed true}],
+    :xt/iid #bytes "de272fe03f150af939fbbff4d2e8f94a"}
    {:xt/system-from #xt/zdt "2020-01-06T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-06T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 12629,
+                {:xt/id 9582,
                  :system-time #xt/zdt "2020-01-06T00:00Z[UTC]",
                  :committed false,
                  :error
                   #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2019-01-01T00:00:00Z"}]}],
-    :xt/iid #bytes "c61922c1431d2c0d68541bc4ea8de7f2"}
+    :xt/iid #bytes "e5da7134eba8f732343467a088cbf375"}
    {:xt/system-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-03T00:00Z[UTC]",
     :xt/valid-to #xt/zdt "+294247-01-10T04:00:54.775807Z[UTC]",
     :op
     #xt/tagged [:put
-                {:xt/id 6186,
+                {:xt/id 4988,
                  :system-time #xt/zdt "2020-01-03T00:00Z[UTC]",
                  :committed true}],
-    :xt/iid #bytes "ce21225a59ecc8485e92aeec1e09d44f"}])}
+    :xt/iid #bytes "e9c5a179dc7bf1c8684b0b9aab38e145"}])}

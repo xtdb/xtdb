@@ -1,5 +1,6 @@
 package xtdb.api.log
 
+import com.google.protobuf.ByteString
 import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.log.proto.SourceLogMessage
@@ -10,9 +11,14 @@ import xtdb.log.proto.detachDatabase
 import xtdb.log.proto.flushBlock
 import xtdb.log.proto.sourceLogMessage
 import xtdb.log.proto.triesAdded
+import xtdb.log.proto.tx
 import xtdb.storage.StorageEpoch
+import xtdb.time.InstantUtil
+import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.BlockIndex
 import java.nio.ByteBuffer
+import java.time.Instant
+import java.time.ZoneId
 
 sealed interface SourceMessage {
 
@@ -30,7 +36,7 @@ sealed interface SourceMessage {
         @JvmStatic
         fun parse(bytes: ByteArray) =
             when (bytes[0]) {
-                TX_HEADER -> Tx(bytes)
+                TX_HEADER -> LegacyTx(bytes)
                 LEGACY_FLUSH_BLOCK_HEADER -> null
                 PROTOBUF_HEADER -> ProtobufMessage.parse(ByteBuffer.wrap(bytes).position(1))
 
@@ -38,7 +44,7 @@ sealed interface SourceMessage {
             }
     }
 
-    class Tx(val payload: ByteArray) : SourceMessage {
+    class LegacyTx(val payload: ByteArray) : SourceMessage {
         override fun encode(): ByteArray = payload
     }
 
@@ -55,7 +61,7 @@ sealed interface SourceMessage {
             }
 
         companion object {
-            fun parse(buffer: ByteBuffer): ProtobufMessage? =
+            fun parse(buffer: ByteBuffer): SourceMessage? =
                 SourceLogMessage.parseFrom(buffer.duplicate().position(1))
                     .let { msg ->
                         when (msg.messageCase) {
@@ -79,9 +85,54 @@ sealed interface SourceMessage {
                                 BlockUploaded(it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList)
                             }
 
+                            SourceLogMessage.MessageCase.TX -> msg.tx.let {
+                                Tx(
+                                    txOps = it.txOps.toByteArray(),
+                                    systemTime = if (it.hasSystemTimeMicros()) InstantUtil.fromMicros(it.systemTimeMicros) else null,
+                                    defaultTz = ZoneId.of(it.defaultTz),
+                                    user = if (it.hasUser()) it.user else null,
+                                    userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata.toByteArray()
+                                )
+                            }
+
                             else -> null
                         }
                     }
+        }
+    }
+
+    data class Tx(
+        val txOps: ByteArray,
+        val systemTime: Instant?,
+        val defaultTz: ZoneId,
+        val user: String?,
+        val userMetadata: ByteArray?
+    ) : ProtobufMessage() {
+        override fun toLogMessage() = sourceLogMessage {
+            tx = tx {
+                txOps = ByteString.copyFrom(this@Tx.txOps)
+                this@Tx.systemTime?.let { systemTimeMicros = it.asMicros }
+                defaultTz = this@Tx.defaultTz.id
+                this@Tx.user?.let { user = it }
+                this@Tx.userMetadata?.let { userMetadata = ByteString.copyFrom(it) }
+            }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other || (other is Tx
+                && txOps.contentEquals(other.txOps)
+                && systemTime == other.systemTime
+                && defaultTz == other.defaultTz
+                && user == other.user
+                && userMetadata.contentEquals(other.userMetadata))
+
+        override fun hashCode(): Int {
+            var result = txOps.contentHashCode()
+            result = 31 * result + (systemTime?.hashCode() ?: 0)
+            result = 31 * result + defaultTz.hashCode()
+            result = 31 * result + (user?.hashCode() ?: 0)
+            result = 31 * result + (userMetadata?.contentHashCode() ?: 0)
+            return result
         }
     }
 

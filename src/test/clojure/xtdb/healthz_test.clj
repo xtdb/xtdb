@@ -57,7 +57,7 @@
 
               (let [resp (clj-http/get (->healthz-url port "started")
                                        {:throw-exceptions false})
-                    msg-id (if (db/single-writer?) 2137 2502)]
+                    msg-id (if (db/single-writer?) 1541 1906)]
 
                 (case (long (:status resp))
                   503 (do
