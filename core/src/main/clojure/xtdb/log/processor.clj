@@ -74,29 +74,31 @@
                                                {:keys [meter-registry]} :base}]
   (when (.getEnabled indexer-conf)
     (let [proc-factory (reify LogProcessor$ProcessorFactory
-                         (openFollower [_ pending-block after-source-msg-id]
+                         (openFollower [_ pending-block after-source-msg-id after-replica-msg-id]
                            (FollowerLogProcessor. allocator buffer-pool db-state compactor-for-db
                                                   source-watchers
-                                                  db-catalog pending-block after-source-msg-id))
+                                                  db-catalog pending-block after-source-msg-id after-replica-msg-id))
 
-                         (openLeaderProcessor [_ replica-producer after-replica-msg-id]
+                         (openLeaderProcessor [_ replica-producer after-source-msg-id after-replica-msg-id]
                            (LeaderLogProcessor. allocator
                                                 db-storage replica-producer db-state
                                                 indexer-for-db source-watchers
                                                 (set (.getSkipTxs indexer-conf))
                                                 db-catalog block-uploader
+                                                after-source-msg-id
                                                 after-replica-msg-id
                                                 (.getFlushDuration indexer-conf)
                                                 meter-registry))
 
-                         (openTransition [_ replica-producer after-source-msg-id]
+                         (openTransition [_ replica-producer after-source-msg-id after-replica-msg-id]
                            (TransitionLogProcessor. allocator
                                                     buffer-pool db-state
                                                     (.getLiveIndex db-state)
                                                     block-uploader
                                                     replica-producer
                                                     source-watchers db-catalog
-                                                    after-source-msg-id)))
+                                                    after-source-msg-id
+                                                    after-replica-msg-id)))
 
           log-processor (LogProcessor. proc-factory db-storage db-state block-uploader source-watchers meter-registry)]
 

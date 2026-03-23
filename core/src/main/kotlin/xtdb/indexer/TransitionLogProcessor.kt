@@ -29,9 +29,13 @@ class TransitionLogProcessor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     afterSourceMsgId: MessageId,
+    afterReplicaMsgId: MessageId,
 ) : LogProcessor.TransitionProcessor {
 
     override var latestSourceMsgId: MessageId = afterSourceMsgId
+        private set
+
+    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
     private val trieCatalog = dbState.trieCatalog
@@ -98,6 +102,8 @@ class TransitionLogProcessor(
                         watchers.notifyMsg(null, msgId)
                     }
                 }
+
+                latestReplicaMsgId = msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {

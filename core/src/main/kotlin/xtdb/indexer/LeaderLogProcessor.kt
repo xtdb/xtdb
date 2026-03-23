@@ -38,6 +38,7 @@ class LeaderLogProcessor(
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     private val blockUploader: BlockUploader,
+    afterSourceMsgId: MessageId,
     afterReplicaMsgId: MessageId,
     flushTimeout: Duration = Duration.ofMinutes(5),
     meterRegistry: MeterRegistry? = null,
@@ -67,6 +68,9 @@ class LeaderLogProcessor(
             }
 
     override var pendingBlock: PendingBlock? = null
+        private set
+
+    override var latestSourceMsgId: MessageId = afterSourceMsgId
         private set
 
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
@@ -187,8 +191,9 @@ class LeaderLogProcessor(
 
                         val replicaMsgId = appendToReplica(resolvedTx).msgId
 
-                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
-                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        val result =
+                            if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
+                            else TransactionAborted(txKey.txId, txKey.systemTime, error)
                         watchers.notifyTx(result, msgId, replicaMsgId)
                     }
 
@@ -238,6 +243,8 @@ class LeaderLogProcessor(
                         watchers.notifyMsg(msgId, null)
                     }
                 }
+
+                latestSourceMsgId = msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {

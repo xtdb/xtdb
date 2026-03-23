@@ -6,7 +6,6 @@ import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
@@ -23,18 +22,19 @@ class LogProcessor(
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
-    interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable {
-        val pendingBlock: PendingBlock?
+    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
+        val latestSourceMsgId: MessageId
         val latestReplicaMsgId: MessageId
     }
 
-    interface TransitionProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
-        val latestSourceMsgId: MessageId
+    interface LeaderProcessor : Processor<SourceMessage> {
+        val pendingBlock: PendingBlock?
     }
 
-    interface FollowerProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
+    interface TransitionProcessor : Processor<ReplicaMessage>
+
+    interface FollowerProcessor : Processor<ReplicaMessage> {
         val pendingBlock: PendingBlock?
-        val latestSourceMsgId: MessageId
     }
 
     private val replicaLog = dbStorage.replicaLog
@@ -42,15 +42,20 @@ class LogProcessor(
     interface ProcessorFactory {
         fun openLeaderProcessor(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+            afterSourceMsgId: MessageId,
             afterReplicaMsgId: MessageId,
         ): LeaderProcessor
 
         fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterSourceMsgId: MessageId
+            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+            afterSourceMsgId: MessageId,
+            afterReplicaMsgId: MessageId,
         ): TransitionProcessor
 
         fun openFollower(
-            pendingBlock: PendingBlock?, afterSourceMsgId: MessageId
+            pendingBlock: PendingBlock?,
+            afterSourceMsgId: MessageId,
+            afterReplicaMsgId: MessageId,
         ): FollowerProcessor
     }
 
@@ -67,28 +72,29 @@ class LogProcessor(
         }
     }
 
-    private val afterSourceMsgId: MessageId = dbState.blockCatalog.latestProcessedMsgId ?: -1
-
     private fun openFollowerSystem(
+        latestSourceMsgId: MessageId,
         latestReplicaMsgId: MessageId,
         pendingBlock: PendingBlock? = null,
-        afterSourceMsgId: MessageId = this.afterSourceMsgId
     ): FollowerSystem =
-        procFactory.openFollower(pendingBlock, afterSourceMsgId).closeOnCatch { proc ->
+        procFactory.openFollower(pendingBlock, latestSourceMsgId, latestReplicaMsgId).closeOnCatch { proc ->
+            LOG.info {
+                buildString {
+                    append("starting follower: ")
+                    append("pending block: ${pendingBlock != null}, ")
+                    append("src: $latestSourceMsgId, ")
+                    append("replica: $latestReplicaMsgId")
+                }
+            }
+
             FollowerSystem(proc, replicaLog.tailAll(latestReplicaMsgId, proc))
         }
 
     @Volatile
-    private var sys: SubSystem = openFollowerSystem(watchers.latestReplicaMsgId)
+    private var sys: SubSystem =
+        dbState.blockCatalog.let { openFollowerSystem(it.latestProcessedMsgId ?: -1, it.boundaryReplicaMsgId ?: -1) }
 
     init {
-        val blockCatalog = dbState.blockCatalog
-        LOG.info(
-            "starting follower — block: ${blockCatalog.currentBlockIndex?.asLexHex}, " +
-                    "source: ${blockCatalog.latestProcessedMsgId}, " +
-                    "replica: ${blockCatalog.boundaryReplicaMsgId}"
-        )
-
         meterRegistry?.let { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.sys is LeaderSystem) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
@@ -125,14 +131,16 @@ class LogProcessor(
                     oldSys.close()
                     val pendingBlock = followerProc.pendingBlock
 
-                    procFactory.openTransition(replicaProducer, followerProc.latestSourceMsgId)
+                    procFactory.openTransition(
+                        replicaProducer,
+                        followerProc.latestSourceMsgId,
+                        followerProc.latestReplicaMsgId
+                    )
                         .use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                                 blockUploader.uploadBlock(
-                                    replicaProducer,
-                                    pendingBlock.boundaryMsgId,
-                                    pendingBlock.boundaryMessage,
+                                    replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
                                 )
                                 LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                                 transition.processRecords(pendingBlock.bufferedRecords)
@@ -141,8 +149,9 @@ class LogProcessor(
                             val latestSourceMsgId = transition.latestSourceMsgId
                             LOG.debug("transition: opening leader processor")
 
-                            val proc = procFactory.openLeaderProcessor(replicaProducer, replayTarget)
+                            val proc = procFactory.openLeaderProcessor(replicaProducer, latestSourceMsgId, replayTarget)
                             this.sys = LeaderSystem(proc)
+
                             LOG.info("leader startup complete, resuming after $latestSourceMsgId")
                             Log.TailSpec(latestSourceMsgId, proc)
                         }
@@ -154,20 +163,16 @@ class LogProcessor(
     override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
         if (partitions != listOf(0)) return
 
-        LOG.debug("partitions revoked: $partitions — transitioning to follower")
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
+                oldSys.close() // close first so no further processing can change the watermarks
                 val proc = oldSys.proc
-                val pendingBlock = proc.pendingBlock
-                val latestReplica = proc.latestReplicaMsgId
-                oldSys.close()
-                LOG.debug("revocation: pending block: ${pendingBlock != null}, opening follower system from $latestReplica")
-                this.sys = openFollowerSystem(latestReplica, pendingBlock)
+                this.sys = openFollowerSystem(proc.latestSourceMsgId, proc.latestReplicaMsgId, proc.pendingBlock)
             }
 
             is FollowerSystem -> {
-                LOG.info("partitions revoked: $partitions — already follower, no transition needed")
+                LOG.debug("partitions revoked: $partitions — already follower, no transition needed")
             }
         }
     }

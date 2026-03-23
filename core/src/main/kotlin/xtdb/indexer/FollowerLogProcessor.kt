@@ -31,6 +31,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
     afterSourceMsgId: MessageId,
+    afterReplicaMsgId: MessageId,
     private val maxBufferedRecords: Int = 1024,
 ) : LogProcessor.FollowerProcessor {
 
@@ -38,6 +39,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
         private set
 
     override var latestSourceMsgId: MessageId = afterSourceMsgId
+        private set
+
+    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
     private val blockCatalog = dbState.blockCatalog
@@ -146,6 +150,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         for (record in records) {
             try {
                 handleRecord(record)
+                latestReplicaMsgId = record.msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
