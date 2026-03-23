@@ -3335,6 +3335,14 @@ UNION ALL
              (xt/q tu/*node* "SELECT 1 false"))
           "FALSE as bare alias"))
 
+  (t/testing "keyword aliases referenceable in ORDER BY"
+    (t/is (= [{:time 2} {:time 1}]
+             (xt/q tu/*node* "SELECT x AS time FROM (VALUES (1), (2)) AS t(x) ORDER BY time DESC"))))
+
+  (t/testing "keyword aliases referenceable in GROUP BY"
+    (t/is (= [{:time "a", :cnt 2} {:time "b", :cnt 1}]
+             (xt/q tu/*node* "SELECT x AS time, COUNT(*) AS cnt FROM (VALUES ('a'), ('a'), ('b')) AS t(x) GROUP BY time ORDER BY cnt DESC"))))
+
   (t/testing "data type keywords still work in their type roles"
     (t/is (= [1] (mapv (comp val first) (xt/q tu/*node* "SELECT CAST(1 AS integer)")))
           "CAST with data type keyword still works")
