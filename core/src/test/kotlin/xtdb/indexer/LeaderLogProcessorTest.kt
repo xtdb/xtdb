@@ -49,7 +49,7 @@ class LeaderLogProcessorTest {
         return LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, indexer, watchers,
-            emptySet(), null, blockUploader, afterReplicaMsgId = -1
+            emptySet(), null, blockUploader
         )
     }
 
@@ -102,7 +102,7 @@ class LeaderLogProcessorTest {
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, mockk(relaxed = true), Watchers(-1),
-            emptySet(), null, blockUploader, afterReplicaMsgId = -1
+            emptySet(), null, blockUploader
         )
 
         val now = Instant.now()
@@ -166,7 +166,7 @@ class LeaderLogProcessorTest {
         val lp = LeaderLogProcessor(
             RootAllocator(), dbStorage, replicaProducer,
             dbState, mockk(relaxed = true), Watchers(-1),
-            emptySet(), null, blockUploader, afterReplicaMsgId = -1
+            emptySet(), null, blockUploader
         )
 
         val now = Instant.now()

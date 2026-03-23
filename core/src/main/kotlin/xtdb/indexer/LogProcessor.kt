@@ -25,16 +25,12 @@ class LogProcessor(
 
     interface LeaderProcessor : Log.RecordProcessor<SourceMessage>, AutoCloseable {
         val pendingBlock: PendingBlock?
-        val latestReplicaMsgId: MessageId
     }
 
-    interface TransitionProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
-        val latestSourceMsgId: MessageId
-    }
+    interface TransitionProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable
 
     interface FollowerProcessor : Log.RecordProcessor<ReplicaMessage>, AutoCloseable {
         val pendingBlock: PendingBlock?
-        val latestSourceMsgId: MessageId
     }
 
     private val replicaLog = dbStorage.replicaLog
@@ -42,15 +38,14 @@ class LogProcessor(
     interface ProcessorFactory {
         fun openLeaderProcessor(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-            afterReplicaMsgId: MessageId,
         ): LeaderProcessor
 
         fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>, afterSourceMsgId: MessageId
+            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         ): TransitionProcessor
 
         fun openFollower(
-            pendingBlock: PendingBlock?, afterSourceMsgId: MessageId
+            pendingBlock: PendingBlock?,
         ): FollowerProcessor
     }
 
@@ -67,19 +62,13 @@ class LogProcessor(
         }
     }
 
-    private val afterSourceMsgId: MessageId = dbState.blockCatalog.latestProcessedMsgId ?: -1
-
-    private fun openFollowerSystem(
-        latestReplicaMsgId: MessageId,
-        pendingBlock: PendingBlock? = null,
-        afterSourceMsgId: MessageId = this.afterSourceMsgId
-    ): FollowerSystem =
-        procFactory.openFollower(pendingBlock, afterSourceMsgId).closeOnCatch { proc ->
-            FollowerSystem(proc, replicaLog.tailAll(latestReplicaMsgId, proc))
+    private fun openFollowerSystem(pendingBlock: PendingBlock? = null): FollowerSystem =
+        procFactory.openFollower(pendingBlock).closeOnCatch { proc ->
+            FollowerSystem(proc, replicaLog.tailAll(watchers.latestReplicaMsgId, proc))
         }
 
     @Volatile
-    private var sys: SubSystem = openFollowerSystem(watchers.latestReplicaMsgId)
+    private var sys: SubSystem = openFollowerSystem()
 
     init {
         val blockCatalog = dbState.blockCatalog
@@ -120,28 +109,29 @@ class LogProcessor(
                     watchers.awaitReplica(replayTarget)
                     LOG.debug("transition: replica watchers caught up to $replayTarget")
 
-                    val followerProc = oldSys.proc
+                    val pendingBlock = oldSys.proc.pendingBlock
                     LOG.debug("transition: closing follower system")
                     oldSys.close()
-                    val pendingBlock = followerProc.pendingBlock
 
-                    procFactory.openTransition(replicaProducer, followerProc.latestSourceMsgId)
+                    procFactory.openTransition(replicaProducer)
                         .use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                                blockUploader.uploadBlock(
+                                val uploadedReplicaMsgId = blockUploader.uploadBlock(
                                     replicaProducer,
                                     pendingBlock.boundaryMsgId,
                                     pendingBlock.boundaryMessage,
                                 )
+                                watchers.notifyMsg(null, uploadedReplicaMsgId)
                                 LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                                 transition.processRecords(pendingBlock.bufferedRecords)
+                                watchers.sync()
                             }
 
-                            val latestSourceMsgId = transition.latestSourceMsgId
+                            val latestSourceMsgId = watchers.latestSourceMsgId
                             LOG.debug("transition: opening leader processor")
 
-                            val proc = procFactory.openLeaderProcessor(replicaProducer, replayTarget)
+                            val proc = procFactory.openLeaderProcessor(replicaProducer)
                             this.sys = LeaderSystem(proc)
                             LOG.info("leader startup complete, resuming after $latestSourceMsgId")
                             Log.TailSpec(latestSourceMsgId, proc)
@@ -158,12 +148,11 @@ class LogProcessor(
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
-                val proc = oldSys.proc
-                val pendingBlock = proc.pendingBlock
-                val latestReplica = proc.latestReplicaMsgId
+                val pendingBlock = oldSys.proc.pendingBlock
                 oldSys.close()
-                LOG.debug("revocation: pending block: ${pendingBlock != null}, opening follower system from $latestReplica")
-                this.sys = openFollowerSystem(latestReplica, pendingBlock)
+                watchers.sync()
+                LOG.debug("revocation: pending block: ${pendingBlock != null}, opening follower system")
+                this.sys = openFollowerSystem(pendingBlock)
             }
 
             is FollowerSystem -> {

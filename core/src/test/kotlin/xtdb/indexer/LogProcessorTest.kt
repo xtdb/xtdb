@@ -57,36 +57,31 @@ class LogProcessorTest {
         object : LogProcessor.ProcessorFactory {
             override fun openLeaderProcessor(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                afterReplicaMsgId: MessageId,
             ): LeaderLogProcessor {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
                 return LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), watchers,
-                    emptySet(), null, blockUploader, afterReplicaMsgId
+                    emptySet(), null, blockUploader,
                 )
             }
 
             override fun openTransition(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                afterSourceMsgId: MessageId,
             ): LogProcessor.TransitionProcessor =
                 TransitionLogProcessor(
                     allocator, bufferPool, dbState, dbState.liveIndex,
                     BlockUploader(dbStorage, dbState, mockk(relaxed = true), null),
                     replicaProducer, watchers, dbCatalog = null,
-                    afterSourceMsgId = afterSourceMsgId,
                 )
 
             override fun openFollower(
                 pendingBlock: PendingBlock?,
-                afterSourceMsgId: MessageId,
             ): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
                     allocator, bufferPool, dbState,
                     mockk(relaxed = true), watchers, null, pendingBlock,
-                    afterSourceMsgId,
                 )
         }
 
