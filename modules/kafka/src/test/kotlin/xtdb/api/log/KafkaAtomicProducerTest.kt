@@ -45,7 +45,7 @@ class KafkaAtomicProducerTest {
         }
     }
 
-    private fun txMessage(id: Byte) = SourceMessage.Tx(byteArrayOf(-1, id))
+    private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
     @Test
     fun `committed transaction messages are visible to subscribers`() = runTest(timeout = 60.seconds) {
@@ -78,11 +78,11 @@ class KafkaAtomicProducerTest {
         assertEquals(2, allMsgs.size)
 
         allMsgs[0].message.let {
-            check(it is SourceMessage.Tx)
+            check(it is SourceMessage.LegacyTx)
             assertArrayEquals(byteArrayOf(-1, 1), it.payload)
         }
         allMsgs[1].message.let {
-            check(it is SourceMessage.Tx)
+            check(it is SourceMessage.LegacyTx)
             assertArrayEquals(byteArrayOf(-1, 2), it.payload)
         }
     }
@@ -129,7 +129,7 @@ class KafkaAtomicProducerTest {
         assertEquals(1, allMsgs.size)
 
         allMsgs[0].message.let {
-            check(it is SourceMessage.Tx)
+            check(it is SourceMessage.LegacyTx)
             assertArrayEquals(byteArrayOf(-1, 3), it.payload)
         }
     }
@@ -167,7 +167,7 @@ class KafkaAtomicProducerTest {
         val allMsgs = synchronized(msgs) { msgs.flatten() }
         assertEquals(4, allMsgs.size)
 
-        val payloads = allMsgs.map { (it.message as SourceMessage.Tx).payload[1] }
+        val payloads = allMsgs.map { (it.message as SourceMessage.LegacyTx).payload[1] }
         assertEquals(listOf<Byte>(1, 2, 3, 4), payloads)
     }
 
@@ -268,7 +268,7 @@ class KafkaAtomicProducerTest {
         val allMsgs = synchronized(msgs) { msgs.flatten() }
         assertEquals(1, allMsgs.size)
         allMsgs[0].message.let {
-            check(it is SourceMessage.Tx)
+            check(it is SourceMessage.LegacyTx)
             assertArrayEquals(byteArrayOf(-1, 1), it.payload)
         }
 

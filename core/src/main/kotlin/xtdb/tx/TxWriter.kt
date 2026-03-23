@@ -4,6 +4,7 @@ package xtdb.tx
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
+import xtdb.arrow.asChannel
 import xtdb.arrow.IID_TYPE
 import xtdb.arrow.INSTANT_TYPE
 import xtdb.arrow.LIST_TYPE
@@ -24,13 +25,17 @@ import xtdb.util.asIid
 import java.time.Instant
 import java.time.ZoneId
 
-private val txSchema = schema(
+private val legacyTxSchema = schema(
     "tx-ops" ofType listTypeOf(fromLegs()),
     "system-time" ofType maybe(INSTANT),
     "default-tz" ofType UTF8,
     "user" ofType maybe(UTF8),
     "user-metadata" ofType Maybe(Struct(emptyMap()))
 )
+
+private val flatTxOpsSchema = schema("tx-ops" ofType fromLegs())
+
+private val userMetadataSchema = schema("user-metadata" ofType Maybe(Struct(emptyMap())))
 
 private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
 
@@ -198,9 +203,39 @@ data class TxOpts(
     fun withFallbackTz(defaultTz: ZoneId?) = if (this.defaultTz != null) this else copy(defaultTz = defaultTz)
 }
 
+private fun List<TxOp>.writeOpsInto(al: BufferAllocator, rel: Relation) {
+    val txOpVec = rel.vectorFor("tx-ops", UNION_TYPE, false)
+
+    val sqlWriter by lazy { SqlWriter(al, txOpVec) }
+    val putDocsWriter by lazy { PutDocsWriter(txOpVec) }
+    val patchDocsWriter by lazy { PatchDocsWriter(txOpVec) }
+    val deleteDocsWriter by lazy { DeleteDocsWriter(txOpVec) }
+    val eraseDocsWriter by lazy { EraseDocsWriter(txOpVec) }
+
+    for (op in this) {
+        when (op) {
+            is TxOp.PutDocs -> putDocsWriter.writeOp(op)
+            is TxOp.PatchDocs -> patchDocsWriter.writeOp(op)
+            is TxOp.DeleteDocs -> deleteDocsWriter.writeOp(op)
+            is TxOp.EraseDocs -> eraseDocsWriter.writeOp(op)
+            is TxOp.Sql -> sqlWriter.writeOp(op)
+            is TxOp.SqlBytes -> sqlWriter.writeOp(op)
+        }
+
+        if (txOpVec.valueCount > rel.rowCount) rel.endRow()
+    }
+}
+
+fun List<TxOp>.toArrowBytes(al: BufferAllocator): ByteArray =
+    Relation(al, flatTxOpsSchema).use { rel ->
+        writeOpsInto(al, rel)
+        rel.asArrowStream
+    }
+
+@Deprecated("legacy format - use toArrowBytes for the flat protobuf Tx format")
 @JvmName("serializeTxOps")
-fun List<TxOp>.toBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
-    Relation(al, txSchema).use { rel ->
+fun List<TxOp>.toLegacyBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
+    Relation(al, legacyTxSchema).use { rel ->
         val txOpsVec = rel["tx-ops"]
         val txOpVec = txOpsVec.getListElements(UNION_TYPE, false)
 
@@ -237,4 +272,21 @@ fun List<TxOp>.toBytes(al: BufferAllocator, opts: TxOpts): ByteArray =
         rel.endRow()
 
         rel.asArrowStream
+    }
+
+fun serializeUserMetadata(al: BufferAllocator, metadata: Map<*, *>): ByteArray =
+    Relation(al, userMetadataSchema).use { rel ->
+        rel["user-metadata"].writeObject(metadata)
+        rel.endRow()
+        rel.asArrowStream
+    }
+
+fun deserializeUserMetadata(al: BufferAllocator, bytes: ByteArray): Any? =
+    bytes.asChannel.use { ch ->
+        Relation.StreamLoader(al, ch).use { loader ->
+            Relation(al, loader.schema).use { rel ->
+                loader.loadNextPage(rel)
+                rel["user-metadata"].getObject(0)
+            }
+        }
     }

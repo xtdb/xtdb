@@ -18,6 +18,7 @@ import xtdb.database.DatabaseStorage
 import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.table.TableRef
+import xtdb.tx.deserializeUserMetadata
 import xtdb.util.*
 import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
@@ -90,40 +91,69 @@ class LeaderLogProcessor(
             .also { latestReplicaMsgId = it.msgId }
 
     private fun resolveTx(
-        msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
-    ): ReplicaMessage.ResolvedTx =
+        msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage
+    ): ReplicaMessage.ResolvedTx {
         if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
             LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
-            val skippedTxPath = "skipped-txs/${msgId.asLexDec}".asPath
-            bufferPool.putObject(skippedTxPath, ByteBuffer.wrap(msg.payload))
+            val payload = when (msg) {
+                is SourceMessage.Tx -> msg.encode()
+                is SourceMessage.LegacyTx -> msg.payload
+                else -> error("unexpected message type: ${msg::class}")
+            }
+            bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
 
-            indexer.indexTx(msgId, record.logTimestamp, null, null, null, null, null)
-        } else {
-            msg.payload.asChannel.use { txOpsCh ->
-                Relation.StreamLoader(allocator, txOpsCh).use { loader ->
-                    Relation(allocator, loader.schema).use { rel ->
-                        loader.loadNextPage(rel)
+            return indexer.indexTx(msgId, record.logTimestamp, null, null, null, null, null)
+        }
 
-                        val systemTime =
-                            (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+        return when (msg) {
+            is SourceMessage.Tx -> {
+                msg.txOps.asChannel.use { ch ->
+                    Relation.StreamLoader(allocator, ch).use { loader ->
+                        Relation(allocator, loader.schema).use { rel ->
+                            loader.loadNextPage(rel)
 
-                        val defaultTz =
-                            (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+                            val userMetadata = msg.userMetadata?.let { deserializeUserMetadata(allocator, it) }
 
-                        val user = rel["user"].getObject(0) as String?
-
-                        val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
-
-                        indexer.indexTx(
-                            msgId, record.logTimestamp,
-                            rel["tx-ops"].listElements,
-                            systemTime, defaultTz, user, userMetadata
-                        )
+                            indexer.indexTx(
+                                msgId, record.logTimestamp,
+                                rel["tx-ops"],
+                                msg.systemTime, msg.defaultTz, msg.user, userMetadata
+                            )
+                        }
                     }
                 }
             }
+
+            is SourceMessage.LegacyTx -> {
+                msg.payload.asChannel.use { txOpsCh ->
+                    Relation.StreamLoader(allocator, txOpsCh).use { loader ->
+                        Relation(allocator, loader.schema).use { rel ->
+                            loader.loadNextPage(rel)
+
+                            val systemTime =
+                                (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
+
+                            val defaultTz =
+                                (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
+
+                            val user = rel["user"].getObject(0) as String?
+
+                            val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
+
+                            indexer.indexTx(
+                                msgId, record.logTimestamp,
+                                rel["tx-ops"].listElements,
+                                systemTime, defaultTz, user, userMetadata
+                            )
+                        }
+                    }
+                }
+            }
+
+            else -> error("unexpected message type: ${msg::class}")
         }
+    }
 
     private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txId = resolvedTx.txId
@@ -167,7 +197,7 @@ class LeaderLogProcessor(
 
             try {
                 when (val msg = record.message) {
-                    is SourceMessage.Tx -> handleResolvedTx(resolveTx(msgId, record, msg))
+                    is SourceMessage.Tx, is SourceMessage.LegacyTx -> handleResolvedTx(resolveTx(msgId, record, msg))
 
                     is SourceMessage.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx

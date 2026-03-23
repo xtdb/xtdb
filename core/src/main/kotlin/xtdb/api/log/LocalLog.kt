@@ -126,7 +126,7 @@ class LocalLog<M>(
                 val (msg) = msgs[idx]
                 // we only use the instantSource for Tx messages so that the tests
                 // that check files can be deterministic
-                val ts = if (msg is SourceMessage.Tx || useInstantSourceForNonTx) instantSource.instant() else Instant.now()
+                val ts = if (msg is SourceMessage.Tx || msg is SourceMessage.LegacyTx || useInstantSourceForNonTx) instantSource.instant() else Instant.now()
                 val payload = codec.encode(msg)
                 val size = payload.size
                 val offset = logFileChannel.position()

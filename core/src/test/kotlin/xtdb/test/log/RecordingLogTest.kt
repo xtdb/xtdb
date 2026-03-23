@@ -7,7 +7,7 @@ import xtdb.api.log.SourceMessage
 
 class RecordingLogTest {
 
-    private fun txMessage(id: Byte) = SourceMessage.Tx(byteArrayOf(-1, id))
+    private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
     @Test
     fun `readLastMessage returns null when log is empty`() {
@@ -23,8 +23,8 @@ class RecordingLogTest {
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
-        assertTrue(lastMessage is SourceMessage.Tx)
-        assertArrayEquals(byteArrayOf(-1, 1), (lastMessage as SourceMessage.Tx).payload)
+        assertTrue(lastMessage is SourceMessage.LegacyTx)
+        assertArrayEquals(byteArrayOf(-1, 1), (lastMessage as SourceMessage.LegacyTx).payload)
     }
 
     @Test
@@ -37,8 +37,8 @@ class RecordingLogTest {
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
-        assertTrue(lastMessage is SourceMessage.Tx)
-        assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as SourceMessage.Tx).payload)
+        assertTrue(lastMessage is SourceMessage.LegacyTx)
+        assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as SourceMessage.LegacyTx).payload)
     }
 
     @Test
@@ -49,7 +49,7 @@ class RecordingLogTest {
 
         val lastMessage = log.readLastMessage()
         assertNotNull(lastMessage)
-        assertTrue(lastMessage is SourceMessage.Tx)
-        assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as SourceMessage.Tx).payload)
+        assertTrue(lastMessage is SourceMessage.LegacyTx)
+        assertArrayEquals(byteArrayOf(-1, 3), (lastMessage as SourceMessage.LegacyTx).payload)
     }
 }

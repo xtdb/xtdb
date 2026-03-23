@@ -30,7 +30,8 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
-import xtdb.tx.toBytes
+import xtdb.tx.toArrowBytes
+import xtdb.tx.serializeUserMetadata
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.Snapshot
@@ -88,7 +89,14 @@ data class Database(
     override fun hashCode() = Objects.hash(name)
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
-        val txMsg = SourceMessage.Tx(ops.toBytes(allocator, opts))
+        val defaultTz = checkNotNull(opts.defaultTz) { "missing defaultTz" }
+        val txMsg = SourceMessage.Tx(
+            txOps = ops.toArrowBytes(allocator),
+            systemTime = opts.systemTime,
+            defaultTz = defaultTz,
+            user = opts.user,
+            userMetadata = opts.userMetadata?.let { serializeUserMetadata(allocator, it) }
+        )
         val meta = sourceLog.appendMessageBlocking(txMsg)
         return Xtdb.SubmittedTx(meta.msgId)
     }

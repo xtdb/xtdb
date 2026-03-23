@@ -70,7 +70,7 @@ class KafkaClusterTest {
                     .use { log ->
                         log.tailAll(-1, subscriber).use { _ ->
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
-                            log.appendMessage(SourceMessage.Tx(txPayload))
+                            log.appendMessage(SourceMessage.LegacyTx(txPayload))
 
                             log.appendMessage(SourceMessage.FlushBlock(12))
 
@@ -88,7 +88,7 @@ class KafkaClusterTest {
         assertEquals(4, allMsgs.size)
 
         allMsgs[0].message.let {
-            check(it is SourceMessage.Tx)
+            check(it is SourceMessage.LegacyTx)
             assertEquals(42, ByteBuffer.wrap(it.payload).getLong(1))
         }
 
@@ -109,7 +109,7 @@ class KafkaClusterTest {
         }
     }
 
-    private fun txMessage(id: Byte) = SourceMessage.Tx(byteArrayOf(-1, id))
+    private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
     @Test
     fun `readLastMessage returns null when topic is empty`() = runTest(timeout = 30.seconds)  {
@@ -139,7 +139,7 @@ class KafkaClusterTest {
                         log.appendMessage(txMessage(1))
 
                         val lastMessage = log.readLastMessage()
-                        check(lastMessage is SourceMessage.Tx)
+                        check(lastMessage is SourceMessage.LegacyTx)
                         assertArrayEquals(byteArrayOf(-1, 1), lastMessage.payload)
                     }
             }
@@ -160,7 +160,7 @@ class KafkaClusterTest {
                         log.appendMessage(txMessage(3))
 
                         val lastMessage = log.readLastMessage()
-                        check(lastMessage is SourceMessage.Tx)
+                        check(lastMessage is SourceMessage.LegacyTx)
                         assertArrayEquals(byteArrayOf(-1, 3), lastMessage.payload)
                     }
             }

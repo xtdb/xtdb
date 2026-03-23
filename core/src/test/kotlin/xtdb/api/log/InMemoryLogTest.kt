@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 
 class InMemoryLogTest {
 
-    private fun txMessage(id: Byte) = SourceMessage.Tx(byteArrayOf(-1, id))
+    private fun txMessage(id: Byte) = SourceMessage.LegacyTx(byteArrayOf(-1, id))
 
     @Test
     fun `readLastMessage always returns null`() = runTest {

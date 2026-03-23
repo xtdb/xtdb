@@ -149,10 +149,15 @@ class DebeziumProcessorTest {
         }
     }
 
-    private fun decodeTx(msg: SourceMessage.Tx): Map<*, *> =
-        Relation.openFromArrowStream(allocator, msg.payload).use { rel ->
-            rel.toMaps(IKeyFn.KeyFn.SNAKE_CASE_STRING).first()
+    private fun decodeTx(msg: SourceMessage.Tx): Map<String, Any?> {
+        val txOps = Relation.openFromArrowStream(allocator, msg.txOps).use { rel ->
+            rel.toMaps(IKeyFn.KeyFn.SNAKE_CASE_STRING)
         }
+        val userMetadata = msg.userMetadata?.let {
+            xtdb.tx.deserializeUserMetadata(allocator, it)
+        }
+        return mapOf("tx-ops" to txOps, "user-metadata" to userMetadata)
+    }
 
     @Test
     fun `invalid JSON throws`() = runTest(timeout = 60.seconds) {
@@ -248,8 +253,8 @@ class DebeziumProcessorTest {
 
             assertEquals(1, received.size)
 
-            val tx = decodeTx(received[0].message as SourceMessage.Tx)
-            assertEquals("America/Los_Angeles", tx["default-tz"])
+            val msg = received[0].message as SourceMessage.Tx
+            assertEquals(ZoneId.of("America/Los_Angeles"), msg.defaultTz)
         }
     }
 }
