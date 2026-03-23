@@ -111,7 +111,8 @@
     ;; This is what Grafana actually sends — bare `AS time`, not `AS "time"`
     (let [results (xt/q tu/*node* "SELECT recorded_at AS time, value FROM readings ORDER BY time")]
       (t/is (= 1 (count results)))
-      (t/is (= 42.0 (:time (first results)))))))
+      (t/is (some? (:time (first results))))
+      (t/is (= 42.0 (:value (first results)))))))
 
 (t/deftest ^:grafana-rewrite grafana-iso-timestamp-filter-test
   (t/testing "Grafana $__timeFilter expands to bare ISO strings — XTDB needs TIMESTAMP literals"
