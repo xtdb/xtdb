@@ -57,6 +57,7 @@ class LogProcessorTest {
         object : LogProcessor.ProcessorFactory {
             override fun openLeaderProcessor(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                afterSourceMsgId: MessageId,
                 afterReplicaMsgId: MessageId,
             ): LeaderLogProcessor {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
@@ -64,29 +65,32 @@ class LogProcessorTest {
                 return LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), watchers,
-                    emptySet(), null, blockUploader, afterReplicaMsgId
+                    emptySet(), null, blockUploader, afterSourceMsgId, afterReplicaMsgId
                 )
             }
 
             override fun openTransition(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                 afterSourceMsgId: MessageId,
+                afterReplicaMsgId: MessageId,
             ): LogProcessor.TransitionProcessor =
                 TransitionLogProcessor(
                     allocator, bufferPool, dbState, dbState.liveIndex,
                     BlockUploader(dbStorage, dbState, mockk(relaxed = true), null),
                     replicaProducer, watchers, dbCatalog = null,
                     afterSourceMsgId = afterSourceMsgId,
+                    afterReplicaMsgId = afterReplicaMsgId,
                 )
 
             override fun openFollower(
                 pendingBlock: PendingBlock?,
                 afterSourceMsgId: MessageId,
+                afterReplicaMsgId: MessageId,
             ): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
                     allocator, bufferPool, dbState,
                     mockk(relaxed = true), watchers, null, pendingBlock,
-                    afterSourceMsgId,
+                    afterSourceMsgId, afterReplicaMsgId,
                 )
         }
 
@@ -102,7 +106,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -126,7 +130,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -158,7 +162,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -191,7 +195,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
