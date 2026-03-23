@@ -148,6 +148,9 @@ identifier
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE'
+        | 'BIGINT' | 'BOOLEAN' | 'CHAR' | 'DATE' | 'DOUBLE' | 'FLOAT'
+        | 'INT' | 'INTEGER' | 'INTERVAL' | 'NUMERIC' | 'REAL' | 'SMALLINT'
+        | 'TEXT' | 'TIME' | 'TIMESTAMP' | 'TIMESTAMPTZ' | 'VARCHAR'
         | METADATA
         | setFunctionType )
         # RegularIdentifier
