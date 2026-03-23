@@ -38,6 +38,7 @@ class LeaderLogProcessor(
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     private val blockUploader: BlockUploader,
+    afterReplicaMsgId: MessageId,
     flushTimeout: Duration = Duration.ofMinutes(5),
     meterRegistry: MeterRegistry? = null,
 ) : LogProcessor.LeaderProcessor {
@@ -68,6 +69,9 @@ class LeaderLogProcessor(
     override var pendingBlock: PendingBlock? = null
         private set
 
+    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
+        private set
+
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
     private suspend fun maybeFlushBlock() {
@@ -79,6 +83,7 @@ class LeaderLogProcessor(
 
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
+            .also { latestReplicaMsgId = it.msgId }
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage.Tx
@@ -131,18 +136,11 @@ class LeaderLogProcessor(
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId) {
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
-
-        // pendingBlock must be set atomically with the boundary write —
-        // if we're interrupted after the write but before setting pendingBlock,
-        // the transition won't know to finish the block upload.
-        pendingBlock = appendToReplica(boundaryMsg)
-            .also { LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=${it.msgId}") }
-            .let { PendingBlock(it.msgId, boundaryMsg) }
-
-        val uploadedReplicaMsgId = blockUploader.uploadBlock(replicaProducer, pendingBlock!!.boundaryMsgId, boundaryMsg)
+        val boundaryMsgId = appendToReplica(boundaryMsg).msgId
+        LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
+        pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
+        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
         pendingBlock = null
-
-        watchers.notifyMsg(null, uploadedReplicaMsgId)
     }
 
     private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx) {

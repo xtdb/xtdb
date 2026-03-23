@@ -25,11 +25,9 @@ class Watchers @JvmOverloads constructor(
      */
     @JvmOverloads
     constructor(
-        latestSourceMsgId: MessageId, coroutineContext: CoroutineContext = Dispatchers.Default
-    ) : this(
-        latestTxId = latestSourceMsgId, latestSourceMsgId = latestSourceMsgId, latestReplicaMsgId = -1,
-        coroutineContext
-    )
+        latestSourceMsgId: MessageId,
+        coroutineContext: CoroutineContext = Dispatchers.Default
+    ) : this(latestSourceMsgId, latestSourceMsgId, latestSourceMsgId, coroutineContext)
 
     @Volatile
     var latestTxId: TxId = latestTxId
@@ -43,6 +41,9 @@ class Watchers @JvmOverloads constructor(
     var latestReplicaMsgId: MessageId = latestReplicaMsgId
         private set
 
+    /** Backward compat for metrics/status. */
+    val latestProcessedMsgId: MessageId get() = latestSourceMsgId
+
     @Volatile
     var exception: IngestionStoppedException? = null
         private set
@@ -54,7 +55,6 @@ class Watchers @JvmOverloads constructor(
     data class TxWatcher(val txId: TxId, override val cont: CancellableContinuation<TransactionResult?>) : Watcher
     data class SourceWatcher(val msgId: MessageId, override val cont: CancellableContinuation<Unit>) : Watcher
     data class ReplicaWatcher(val msgId: MessageId, override val cont: CancellableContinuation<Unit>) : Watcher
-    data class SyncWatcher(override val cont: CancellableContinuation<Unit>) : Watcher
 
     private sealed interface Event {
         data class NotifyTx(
@@ -165,8 +165,6 @@ class Watchers @JvmOverloads constructor(
                             is ReplicaWatcher ->
                                 if (latestReplicaMsgId >= watcher.msgId) watcher.cont.resume(Unit)
                                 else replicaWatchers.add(watcher)
-
-                            is SyncWatcher -> watcher.cont.resume(Unit)
                         }
                     }
                 }
@@ -238,17 +236,6 @@ class Watchers @JvmOverloads constructor(
 
         suspendCancellableCoroutine { cont ->
             channel.trySend(NewWatcher(ReplicaWatcher(replicaMsgId, cont)))
-                .onClosed { cont.cancel() }
-        }
-    }
-
-    /**
-     * Flushes the event channel — ensures all prior notifications have been applied
-     * before returning, so that [latestSourceMsgId]/[latestReplicaMsgId] reflect the latest state.
-     */
-    suspend fun sync() {
-        suspendCancellableCoroutine { cont ->
-            channel.trySend(NewWatcher(SyncWatcher(cont)))
                 .onClosed { cont.cancel() }
         }
     }

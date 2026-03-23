@@ -30,10 +30,14 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
+    afterSourceMsgId: MessageId,
     private val maxBufferedRecords: Int = 1024,
 ) : LogProcessor.FollowerProcessor {
 
     override var pendingBlock: PendingBlock? = pendingBlock
+        private set
+
+    override var latestSourceMsgId: MessageId = afterSourceMsgId
         private set
 
     private val blockCatalog = dbState.blockCatalog
@@ -107,6 +111,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     TransactionCommitted(msg.txId, systemTime)
                 } else TransactionAborted(msg.txId, systemTime, msg.error)
 
+                latestSourceMsgId = msg.txId
                 watchers.notifyTx(result, msg.txId, record.msgId)
             }
 
@@ -114,12 +119,14 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
 
+                latestSourceMsgId = msg.sourceMsgId
                 watchers.notifyMsg(msg.sourceMsgId, record.msgId)
             }
 
             is ReplicaMessage.BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
+                latestSourceMsgId = msg.latestProcessedMsgId
                 watchers.notifyMsg(msg.latestProcessedMsgId, record.msgId)
             }
 
