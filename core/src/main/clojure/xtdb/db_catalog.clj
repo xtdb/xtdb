@@ -69,8 +69,7 @@
                            (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog db-storage)) -1))]
     (Watchers. source-msg-id source-msg-id)))
 
-(defmethod ig/halt-key! ::watchers [_ ^Watchers watchers]
-  (util/close watchers))
+(defmethod ig/halt-key! ::watchers [_ _])
 
 (defmethod ig/expand-key ::database [k opts]
   {k (into {:allocator (ig/ref ::allocator)

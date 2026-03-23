@@ -13,6 +13,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
+import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
@@ -67,7 +68,7 @@ data class Database(
     val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
 
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
-    val ingestionError: Throwable? get() = watchers.exception
+    val ingestionError: IngestionStoppedException? get() = watchers.exception
 
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {

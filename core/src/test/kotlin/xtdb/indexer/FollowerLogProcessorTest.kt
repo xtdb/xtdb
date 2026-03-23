@@ -49,7 +49,6 @@ class FollowerLogProcessorTest {
 
     @AfterEach
     fun tearDown() {
-        watchers.close()
         allocator.close()
     }
 

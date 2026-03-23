@@ -113,7 +113,6 @@ class LogProcessorTest {
 
         subscription.close()
         logProc.close()
-        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -137,7 +136,6 @@ class LogProcessorTest {
 
         subscription.close()
         logProc.close()
-        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -172,7 +170,6 @@ class LogProcessorTest {
 
         subscription.close()
         logProc.close()
-        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -204,7 +201,6 @@ class LogProcessorTest {
 
         subscription.close()
         logProc.close()
-        watchers.close()
         sourceLog.close()
         replicaLog.close()
     }

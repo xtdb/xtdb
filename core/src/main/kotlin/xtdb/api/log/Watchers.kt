@@ -1,202 +1,84 @@
 package xtdb.api.log
 
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.onClosed
-import xtdb.api.TxId
+import kotlinx.coroutines.flow.*
 import xtdb.api.TransactionResult
-import xtdb.api.log.Watchers.Event.*
-import java.util.Queue
-import java.util.concurrent.PriorityBlockingQueue
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.time.Duration.Companion.seconds
+import xtdb.api.TxId
 
-class Watchers @JvmOverloads constructor(
-    latestTxId: TxId,
-    latestSourceMsgId: MessageId,
-    coroutineContext: CoroutineContext = Dispatchers.Default
-) : AutoCloseable {
+class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId) {
 
     /**
      * Backward-compat constructor for setups where tx-id is always a src msg-id.
      */
-    @JvmOverloads
-    constructor(
-        latestSourceMsgId: MessageId,
-        coroutineContext: CoroutineContext = Dispatchers.Default
-    ) : this(latestTxId = latestSourceMsgId, latestSourceMsgId = latestSourceMsgId, coroutineContext)
+    constructor(latestSourceMsgId: MessageId) : this(latestSourceMsgId, latestSourceMsgId)
 
-    @Volatile
-    var latestTxId: TxId = latestTxId
-        private set
+    private sealed interface State
 
-    @Volatile
-    var latestSourceMsgId: MessageId = latestSourceMsgId
-        private set
+    private data class Active(
+        val latestSourceMsgId: MessageId, val latestTxId: TxId, val latestTxResult: TransactionResult?
+    ) : State
 
-    @Volatile
-    var exception: IngestionStoppedException? = null
-        private set
+    private data class Failed(val exception: IngestionStoppedException) : State
 
-    sealed interface Watcher {
-        val cont: CancellableContinuation<*>
+    private val state = MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null))
+
+    private fun State.activeOrThrow(): Active = when (this) {
+        is Active -> this
+        is Failed -> throw exception
     }
 
-    data class TxWatcher(val txId: TxId, override val cont: CancellableContinuation<TransactionResult?>) : Watcher
-    data class SourceWatcher(val msgId: MessageId, override val cont: CancellableContinuation<Unit>) : Watcher
+    private val activeState: Flow<Active> get() = state.map { it.activeOrThrow() }
 
-    private sealed interface Event {
-        data class NotifyTx(val result: TransactionResult, val srcMsgId: MessageId) : Event
-        data class NotifyMsg(val srcMsgId: MessageId) : Event
-        data class NotifyError(val exception: Throwable) : Event
-        data class NewWatcher(val watcher: Watcher) : Event
-    }
-
-    private val channel = Channel<Event>(Channel.UNLIMITED, onUndeliveredElement = { ev ->
-        if (ev is NewWatcher) ev.watcher.cont.cancel()
-        else Unit
-    })
-
-    private val txWatchers = PriorityBlockingQueue<TxWatcher>(16) { a, b -> a.txId.compareTo(b.txId) }
-    private val sourceWatchers = PriorityBlockingQueue<SourceWatcher>(16) { a, b -> a.msgId.compareTo(b.msgId) }
-
-    private fun Queue<out Watcher>.resumeWithException(ex: Throwable) {
-        for (watcher in this) watcher.cont.resumeWithException(ex)
-    }
-
-    private fun Queue<out Watcher>.cancel() {
-        for (watcher in this) watcher.cont.cancel()
-        this.clear()
-    }
-
-    private fun handleNotifySource(srcMsgId: MessageId) {
-        // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
-        // when the block was triggered by isFull() (no FlushBlock in between)
-        check(srcMsgId >= latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId $latestSourceMsgId" }
-        if (srcMsgId == latestSourceMsgId) return
-        latestSourceMsgId = srcMsgId
-
-        for (watcher in sourceWatchers) {
-            if (watcher.msgId > srcMsgId) break
-            sourceWatchers.remove(watcher)
-            watcher.cont.resume(Unit)
-        }
-    }
-
-    private fun handleNotifyTx(result: TransactionResult) {
-        val txId = result.txId
-        check(txId > latestTxId) { "txId $txId <= latestTxId $latestTxId" }
-        latestTxId = txId
-
-        for (watcher in txWatchers) {
-            if (watcher.txId > txId) break
-            txWatchers.remove(watcher)
-            watcher.cont.resume(result.takeIf { it.txId == watcher.txId })
-        }
-    }
-
-    private suspend fun processEvents() {
-        try {
-            for (event in channel) {
-                when (event) {
-                    is NotifyTx -> {
-                        handleNotifyTx(event.result)
-                        handleNotifySource(event.srcMsgId)
-                    }
-
-                    is NotifyMsg -> {
-                        handleNotifySource(event.srcMsgId)
-                    }
-
-                    is NotifyError -> {
-                        val ex = event.exception
-                            .let { it as? IngestionStoppedException ?: IngestionStoppedException(null, it) }
-                            .also { exception = it }
-
-                        txWatchers.resumeWithException(ex)
-                        sourceWatchers.resumeWithException(ex)
-                    }
-
-                    is NewWatcher -> {
-                        exception?.let { ex ->
-                            event.watcher.cont.resumeWithException(ex)
-                            continue
-                        }
-
-                        when (val watcher = event.watcher) {
-                            is TxWatcher ->
-                                if (latestTxId >= watcher.txId) watcher.cont.resume(null)
-                                else txWatchers.add(watcher)
-
-                            is SourceWatcher ->
-                                if (latestSourceMsgId >= watcher.msgId) watcher.cont.resume(Unit)
-                                else sourceWatchers.add(watcher)
-                        }
-                    }
-                }
-            }
-        } finally {
-            txWatchers.cancel()
-            sourceWatchers.cancel()
-        }
-    }
-
-    private val scope = CoroutineScope(coroutineContext)
-    private val processJob = scope.launch { processEvents() }
-
-    override fun close() {
-        runBlocking {
-            withTimeout(5.seconds) {
-                channel.cancel()
-                processJob.cancelAndJoin()
+    private inline fun MutableStateFlow<State>.updateIfActive(block: (Active) -> State) {
+        update {
+            when (it) {
+                is Active -> block(it)
+                is Failed -> it
             }
         }
     }
+
+    val latestSourceMsgId get() = state.value.activeOrThrow().latestSourceMsgId
+
+    val exception
+        get() = when (val v = state.value) {
+            is Active -> null
+            is Failed -> v.exception
+        }
 
     // --- notify methods ---
 
-    suspend fun notifyTx(result: TransactionResult, srcMsgId: MessageId) {
-        channel.send(NotifyTx(result, srcMsgId))
-    }
-
-    suspend fun notifyMsg(srcMsgId: MessageId) {
-        channel.send(NotifyMsg(srcMsgId))
-    }
-
-    suspend fun notifyError(exception: Throwable) {
-        channel.send(NotifyError(exception))
-    }
-
-    // --- await methods ---
-
-    suspend fun awaitTx(txId: TxId): TransactionResult? {
-        exception?.let { throw it }
-        if (latestTxId >= txId) return null
-
-        return suspendCancellableCoroutine { cont ->
-            channel.trySend(NewWatcher(TxWatcher(txId, cont)))
-                .onClosed { cont.cancel() }
+    fun notifyTx(result: TransactionResult, srcMsgId: MessageId) {
+        state.updateIfActive {
+            check(result.txId > it.latestTxId) { "txId ${result.txId} <= latestTxId ${it.latestTxId}" }
+            // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
+            // when the block was triggered by isFull() (no FlushBlock in between)
+            check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
+            it.copy(latestSourceMsgId = srcMsgId, latestTxId = result.txId, latestTxResult = result)
         }
     }
+
+    fun notifyMsg(srcMsgId: MessageId) {
+        state.updateIfActive {
+            // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
+            // when the block was triggered by isFull() (no FlushBlock in between)
+            check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
+            it.copy(latestSourceMsgId = srcMsgId)
+        }
+    }
+
+    fun notifyError(exception: Throwable) {
+        state.updateIfActive {
+            Failed(exception as? IngestionStoppedException ?: IngestionStoppedException(null, exception))
+        }
+    }
+
+    suspend fun awaitTx(txId: TxId) =
+        activeState.first { it.latestTxId >= txId }
+            .latestTxResult?.takeIf { it.txId == txId }
 
     suspend fun awaitSource(srcMsgId: MessageId) {
-        exception?.let { throw it }
-        if (latestSourceMsgId >= srcMsgId) return
-
-        suspendCancellableCoroutine { cont ->
-            channel.trySend(NewWatcher(SourceWatcher(srcMsgId, cont)))
-                .onClosed { cont.cancel() }
-        }
+        activeState.first { it.latestSourceMsgId >= srcMsgId }
     }
 
-    override fun toString() =
-        listOf(
-            "txWatchers=${txWatchers.size}",
-            "sourceWatchers=${sourceWatchers.size}",
-            "latestTxId=$latestTxId",
-            "latestSourceMsgId=$latestSourceMsgId",
-            "exception=$exception"
-        ).joinToString(", ", "(Watchers {", "})")
+    override fun toString() = state.toString()
 }
