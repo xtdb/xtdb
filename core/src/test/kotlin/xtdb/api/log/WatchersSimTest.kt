@@ -42,7 +42,7 @@ class WatchersSimTest : SimulationTestBase() {
                 if (res != null) {
                     watchers.notifyTx(res, i)
                 } else {
-                    watchers.notifyMsg(i, null)
+                    watchers.notifyMsg(i)
                 }
             }
         }

@@ -100,7 +100,7 @@
                                                     after-source-msg-id
                                                     after-replica-msg-id)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader source-watchers meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader meter-registry)]
 
       {:log-processor log-processor
        :subscription (when-not (= mode Database$Mode/READ_ONLY)

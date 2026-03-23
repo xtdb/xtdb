@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
@@ -41,8 +43,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
     override var latestSourceMsgId: MessageId = afterSourceMsgId
         private set
 
-    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
-        private set
+    private val latestSeenReplicaMsgId = MutableStateFlow(afterReplicaMsgId)
+
+    override val latestReplicaMsgId: MessageId get() = latestSeenReplicaMsgId.value
 
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
@@ -78,27 +81,19 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 this.pendingBlock = null
 
                 // replay buffered records — their typed notifications advance the watermarks
-                for (buffered in bufferedRecords) {
-                    handleRecord(buffered)
-                }
-
-                // advance replica watermark past the BlockUploaded record
-                // (source watermark already advanced by replayed records above)
-                watchers.notifyMsg(null, record.msgId)
-
-                return
+                bufferedRecords.forEach { handleRecord(it) }
             } else {
                 LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
                 pendingBlock += record
-                return
             }
+
+            return
         }
 
         when (msg) {
             is ReplicaMessage.ResolvedTx -> {
                 val latestTxId = liveIndex.latestCompletedTx?.txId
                 if (latestTxId != null && msg.txId <= latestTxId) {
-                    watchers.notifyMsg(null, record.msgId)
                     return
                 }
 
@@ -116,7 +111,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 } else TransactionAborted(msg.txId, systemTime, msg.error)
 
                 latestSourceMsgId = msg.txId
-                watchers.notifyTx(result, msg.txId, record.msgId)
+                watchers.notifyTx(result, msg.txId)
             }
 
             is ReplicaMessage.TriesAdded -> {
@@ -124,25 +119,23 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     addTries(msg.tries, record.logTimestamp)
 
                 latestSourceMsgId = msg.sourceMsgId
-                watchers.notifyMsg(msg.sourceMsgId, record.msgId)
+                watchers.notifyMsg(msg.sourceMsgId)
             }
 
             is ReplicaMessage.BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
                 latestSourceMsgId = msg.latestProcessedMsgId
-                watchers.notifyMsg(msg.latestProcessedMsgId, record.msgId)
+                watchers.notifyMsg(msg.latestProcessedMsgId)
             }
 
             is ReplicaMessage.BlockUploaded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
-                watchers.notifyMsg(msg.latestProcessedMsgId, record.msgId)
+                watchers.notifyMsg(msg.latestProcessedMsgId)
             }
 
-            is ReplicaMessage.NoOp -> {
-                watchers.notifyMsg(null, record.msgId)
-            }
+            is ReplicaMessage.NoOp -> Unit
         }
     }
 
@@ -150,7 +143,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
         for (record in records) {
             try {
                 handleRecord(record)
-                latestReplicaMsgId = record.msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
@@ -162,8 +154,16 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 )
                 watchers.notifyError(e)
                 throw e
+            } finally {
+                latestSeenReplicaMsgId.value = record.msgId
             }
         }
+    }
+
+    override suspend fun awaitReplicaMsgId(target: MessageId) {
+        LOG.debug("transition: awaiting replica watcher catch-up to $target")
+        latestSeenReplicaMsgId.first { it >= target }
+        LOG.debug("transition: replica watchers caught up to $target")
     }
 
     override fun close() {

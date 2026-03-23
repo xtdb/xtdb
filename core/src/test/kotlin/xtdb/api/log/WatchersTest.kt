@@ -53,44 +53,19 @@ class WatchersTest {
     }
 
     @Test
-    fun `notifyTx with replicaMsgId advances all watermarks`() = runTest(timeout = 1.seconds) {
-        Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1).use {
-            val awaitTx = async { it.awaitTx(0) }
-            val awaitSource = async { it.awaitSource(0) }
-            val awaitReplica = async { it.awaitReplica(10) }
-
-            assertThrows<TimeoutCancellationException> { withTimeout(50) { awaitTx.await() } }
-
-            val res = TransactionCommitted(0, Instant.parse("2021-01-01T00:00:00Z"))
-            it.notifyTx(result = res, srcMsgId = 0, replicaMsgId = 10)
-
-            assertEquals(res, awaitTx.await())
-            awaitSource.await()
-            awaitReplica.await()
-        }
-    }
-
-    @Test
     fun `notifyMsg advances specified watermarks`() = runTest(timeout = 1.seconds) {
-        Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1).use {
-            // source-only: advances source, not tx or replica
+        Watchers(latestTxId = -1, latestSourceMsgId = -1).use {
+            // source-only: advances source, not tx
             val awaitSource1 = async { it.awaitSource(5) }
-            it.notifyMsg(5, null)
+            it.notifyMsg(5)
             awaitSource1.await()
             assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitTx(5) } }
-            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitReplica(0) } }
 
-            // both: advances source + replica, not tx
+            // both: advances source, not tx
             val awaitSource2 = async { it.awaitSource(8) }
-            val awaitReplica = async { it.awaitReplica(10) }
-            it.notifyMsg(8, 10)
+            it.notifyMsg(8)
             awaitSource2.await()
-            awaitReplica.await()
             assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitTx(8) } }
-
-            // replica-only: advances replica, not source
-            it.notifyMsg(null, 15)
-            assertThrows<TimeoutCancellationException> { withTimeout(50) { it.awaitSource(9) } }
         }
     }
 
@@ -116,9 +91,6 @@ class WatchersTest {
                     .also { assertEquals(ex, it.cause) }
 
                 assertThrows<IngestionStoppedException> { watchers.awaitSource(5) }
-                    .also { assertEquals(ex, it.cause) }
-
-                assertThrows<IngestionStoppedException> { watchers.awaitReplica(5) }
                     .also { assertEquals(ex, it.cause) }
             }
         }

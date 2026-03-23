@@ -322,11 +322,11 @@ class SourceLogProcessor(
                                     record.logTimestamp
                                 )
                             }
-                        watchers.notifyMsg(msgId, null)
+                        watchers.notifyMsg(msgId)
                     }
 
                     is SourceMessage.BlockUploaded -> {
-                        watchers.notifyMsg(msgId, null)
+                        watchers.notifyMsg(msgId)
                     }
                 }
             }

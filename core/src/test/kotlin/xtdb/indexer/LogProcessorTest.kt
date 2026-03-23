@@ -106,7 +106,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -130,7 +130,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -162,7 +162,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)
@@ -195,7 +195,7 @@ class LogProcessorTest {
 
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, watchers
+            dbStorage, dbState, blockUploader
         )
 
         val subscription = sourceLog.openGroupSubscription(logProc)

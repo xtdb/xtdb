@@ -18,7 +18,6 @@ class LogProcessor(
     dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,
-    private val watchers: Watchers,
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
@@ -35,6 +34,7 @@ class LogProcessor(
 
     interface FollowerProcessor : Processor<ReplicaMessage> {
         val pendingBlock: PendingBlock?
+        suspend fun awaitReplicaMsgId(target: MessageId)
     }
 
     private val replicaLog = dbStorage.replicaLog
@@ -115,20 +115,18 @@ class LogProcessor(
             is FollowerSystem -> {
                 LOG.info("partitions assigned: $partitions — transitioning to leader")
 
-                // Fence: open atomic producer on replica log.
-                LOG.debug("transition: opening atomic producer on replica log")
                 replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
+                    val followerProc = oldSys.proc
+
                     // Send a NoOp to get a known msgId we can await —
                     // we can't use latestSubmittedMsgId because Kafka's endOffsets
                     // includes transaction marker offsets that consumers never deliver.
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
-                    LOG.debug("transition: awaiting replica watcher catch-up to $replayTarget (replica latest: ${replicaLog.latestSubmittedMsgId})")
-                    watchers.awaitReplica(replayTarget)
-                    LOG.debug("transition: replica watchers caught up to $replayTarget")
 
-                    val followerProc = oldSys.proc
+                    followerProc.awaitReplicaMsgId(replayTarget)
                     LOG.debug("transition: closing follower system")
                     oldSys.close()
+
                     val pendingBlock = followerProc.pendingBlock
 
                     procFactory.openTransition(

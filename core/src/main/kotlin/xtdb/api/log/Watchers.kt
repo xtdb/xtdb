@@ -16,18 +16,17 @@ import kotlin.time.Duration.Companion.seconds
 class Watchers @JvmOverloads constructor(
     latestTxId: TxId,
     latestSourceMsgId: MessageId,
-    latestReplicaMsgId: MessageId,
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : AutoCloseable {
 
     /**
-     * Backward-compat constructor for source-only (no replica) setups.
+     * Backward-compat constructor for setups where tx-id is always a src msg-id.
      */
     @JvmOverloads
     constructor(
         latestSourceMsgId: MessageId,
         coroutineContext: CoroutineContext = Dispatchers.Default
-    ) : this(latestSourceMsgId, latestSourceMsgId, latestSourceMsgId, coroutineContext)
+    ) : this(latestTxId = latestSourceMsgId, latestSourceMsgId = latestSourceMsgId, coroutineContext)
 
     @Volatile
     var latestTxId: TxId = latestTxId
@@ -36,13 +35,6 @@ class Watchers @JvmOverloads constructor(
     @Volatile
     var latestSourceMsgId: MessageId = latestSourceMsgId
         private set
-
-    @Volatile
-    var latestReplicaMsgId: MessageId = latestReplicaMsgId
-        private set
-
-    /** Backward compat for metrics/status. */
-    val latestProcessedMsgId: MessageId get() = latestSourceMsgId
 
     @Volatile
     var exception: IngestionStoppedException? = null
@@ -54,15 +46,10 @@ class Watchers @JvmOverloads constructor(
 
     data class TxWatcher(val txId: TxId, override val cont: CancellableContinuation<TransactionResult?>) : Watcher
     data class SourceWatcher(val msgId: MessageId, override val cont: CancellableContinuation<Unit>) : Watcher
-    data class ReplicaWatcher(val msgId: MessageId, override val cont: CancellableContinuation<Unit>) : Watcher
 
     private sealed interface Event {
-        data class NotifyTx(
-            // replica only nullable until SourceLogProcessor goes
-            val result: TransactionResult, val srcMsgId: MessageId, val replicaMsgId: MessageId?
-        ) : Event
-
-        data class NotifyMsg(val srcMsgId: MessageId?, val replicaMsgId: MessageId?) : Event
+        data class NotifyTx(val result: TransactionResult, val srcMsgId: MessageId) : Event
+        data class NotifyMsg(val srcMsgId: MessageId) : Event
         data class NotifyError(val exception: Throwable) : Event
         data class NewWatcher(val watcher: Watcher) : Event
     }
@@ -74,7 +61,6 @@ class Watchers @JvmOverloads constructor(
 
     private val txWatchers = PriorityBlockingQueue<TxWatcher>(16) { a, b -> a.txId.compareTo(b.txId) }
     private val sourceWatchers = PriorityBlockingQueue<SourceWatcher>(16) { a, b -> a.msgId.compareTo(b.msgId) }
-    private val replicaWatchers = PriorityBlockingQueue<ReplicaWatcher>(16) { a, b -> a.msgId.compareTo(b.msgId) }
 
     private fun Queue<out Watcher>.resumeWithException(ex: Throwable) {
         for (watcher in this) watcher.cont.resumeWithException(ex)
@@ -99,17 +85,6 @@ class Watchers @JvmOverloads constructor(
         }
     }
 
-    private fun handleNotifyReplica(replicaMsgId: MessageId) {
-        check(replicaMsgId > latestReplicaMsgId) { "replicaMsgId $replicaMsgId <= latestReplicaMsgId $latestReplicaMsgId" }
-        latestReplicaMsgId = replicaMsgId
-
-        for (watcher in replicaWatchers) {
-            if (watcher.msgId > replicaMsgId) break
-            replicaWatchers.remove(watcher)
-            watcher.cont.resume(Unit)
-        }
-    }
-
     private fun handleNotifyTx(result: TransactionResult) {
         val txId = result.txId
         check(txId > latestTxId) { "txId $txId <= latestTxId $latestTxId" }
@@ -129,12 +104,10 @@ class Watchers @JvmOverloads constructor(
                     is NotifyTx -> {
                         handleNotifyTx(event.result)
                         handleNotifySource(event.srcMsgId)
-                        event.replicaMsgId?.let { handleNotifyReplica(it) }
                     }
 
                     is NotifyMsg -> {
-                        event.srcMsgId?.let { handleNotifySource(it) }
-                        event.replicaMsgId?.let { handleNotifyReplica(it) }
+                        handleNotifySource(event.srcMsgId)
                     }
 
                     is NotifyError -> {
@@ -144,7 +117,6 @@ class Watchers @JvmOverloads constructor(
 
                         txWatchers.resumeWithException(ex)
                         sourceWatchers.resumeWithException(ex)
-                        replicaWatchers.resumeWithException(ex)
                     }
 
                     is NewWatcher -> {
@@ -161,10 +133,6 @@ class Watchers @JvmOverloads constructor(
                             is SourceWatcher ->
                                 if (latestSourceMsgId >= watcher.msgId) watcher.cont.resume(Unit)
                                 else sourceWatchers.add(watcher)
-
-                            is ReplicaWatcher ->
-                                if (latestReplicaMsgId >= watcher.msgId) watcher.cont.resume(Unit)
-                                else replicaWatchers.add(watcher)
                         }
                     }
                 }
@@ -172,7 +140,6 @@ class Watchers @JvmOverloads constructor(
         } finally {
             txWatchers.cancel()
             sourceWatchers.cancel()
-            replicaWatchers.cancel()
         }
     }
 
@@ -190,18 +157,12 @@ class Watchers @JvmOverloads constructor(
 
     // --- notify methods ---
 
-    /** Source-only path (no replica) — advances tx + source watermarks. */
     suspend fun notifyTx(result: TransactionResult, srcMsgId: MessageId) {
-        channel.send(NotifyTx(result, srcMsgId, replicaMsgId = null))
+        channel.send(NotifyTx(result, srcMsgId))
     }
 
-    /** Leader/follower path — advances tx + source + replica watermarks. */
-    suspend fun notifyTx(result: TransactionResult, srcMsgId: MessageId, replicaMsgId: MessageId) {
-        channel.send(NotifyTx(result, srcMsgId, replicaMsgId))
-    }
-
-    suspend fun notifyMsg(srcMsgId: MessageId?, replicaMsgId: MessageId?) {
-        channel.send(NotifyMsg(srcMsgId, replicaMsgId))
+    suspend fun notifyMsg(srcMsgId: MessageId) {
+        channel.send(NotifyMsg(srcMsgId))
     }
 
     suspend fun notifyError(exception: Throwable) {
@@ -230,17 +191,12 @@ class Watchers @JvmOverloads constructor(
         }
     }
 
-    suspend fun awaitReplica(replicaMsgId: MessageId) {
-        exception?.let { throw it }
-        if (latestReplicaMsgId >= replicaMsgId) return
-
-        suspendCancellableCoroutine { cont ->
-            channel.trySend(NewWatcher(ReplicaWatcher(replicaMsgId, cont)))
-                .onClosed { cont.cancel() }
-        }
-    }
-
     override fun toString() =
-        "(Watchers {txWatchers=${txWatchers.size}, sourceWatchers=${sourceWatchers.size}, replicaWatchers=${replicaWatchers.size}, " +
-                "latestTxId=$latestTxId, latestSourceMsgId=$latestSourceMsgId, latestReplicaMsgId=$latestReplicaMsgId, exception=$exception)})"
+        listOf(
+            "txWatchers=${txWatchers.size}",
+            "sourceWatchers=${sourceWatchers.size}",
+            "latestTxId=$latestTxId",
+            "latestSourceMsgId=$latestSourceMsgId",
+            "exception=$exception"
+        ).joinToString(", ", "(Watchers {", "})")
 }
