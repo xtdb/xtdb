@@ -68,9 +68,12 @@ class BlockUploader(
         }
         val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
 
+        val externalSourceToken = boundary.externalSourceToken
+
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock
+            boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock,
+            externalSourceToken
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
@@ -83,7 +86,7 @@ class BlockUploader(
                 BlockUploaded(
                     Storage.VERSION, bufferPool.epoch,
                     blockIdx, latestProcessedMsgId,
-                    addedTries
+                    addedTries, externalSourceToken
                 )
             )
         }.getCompleted().msgId

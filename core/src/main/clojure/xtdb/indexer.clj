@@ -552,6 +552,7 @@
                               committed?
                               error
                               table-data
+                              nil
                               nil))
 
 (defn- commit [tx-key ^LiveIndex$Tx live-idx-tx committed? error]

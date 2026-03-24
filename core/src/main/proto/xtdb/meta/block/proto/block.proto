@@ -43,4 +43,7 @@ message Block {
 
     // the replica-log message ID of the BlockBoundary message for this block
     int64 boundary_replica_msg_id = 6;
+
+    // opaque token tracking how far the leader consumed an external source (e.g. CDC offset)
+    google.protobuf.Any external_source_token = 7;
 }

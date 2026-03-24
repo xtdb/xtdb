@@ -15,3 +15,11 @@ message DebeziumSourceConfig {
         KafkaDebeziumLogConfig kafka_log = 1;
     }
 }
+
+message PartitionOffsets {
+    repeated int64 offsets = 1;
+}
+
+message DebeziumOffsetToken {
+    map<string, PartitionOffsets> dbzm_topic_offsets = 1;
+}

@@ -111,7 +111,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 } else TransactionAborted(msg.txId, systemTime, msg.error)
 
                 latestSourceMsgId = msg.txId
-                watchers.notifyTx(result, msg.txId)
+                watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
             }
 
             is ReplicaMessage.TriesAdded -> {

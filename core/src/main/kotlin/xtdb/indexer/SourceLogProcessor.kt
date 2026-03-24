@@ -228,7 +228,8 @@ class SourceLogProcessor(
 
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            boundaryReplicaMsgId = null, tableBlocks.keys, secondaryDatabasesForBlock
+            boundaryReplicaMsgId = null, tableBlocks.keys, secondaryDatabasesForBlock,
+            externalSourceToken = null
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
@@ -291,7 +292,10 @@ class SourceLogProcessor(
 
                 when (val msg = record.message) {
                     is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
-                        val resolvedTx = resolveTx(msgId, record, msg)
+                        val token = (msg as? SourceMessage.Tx)?.externalSourceToken
+                        val resolvedTx = resolveTx(msgId, record, msg).let {
+                            if (token != null) it.copy(externalSourceToken = token) else it
+                        }
                         notifyTx(msgId, resolvedTx)
 
                         if (liveIndex.isFull()) {
@@ -322,7 +326,7 @@ class SourceLogProcessor(
 
                         val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                         else TransactionAborted(txKey.txId, txKey.systemTime, error)
-                        watchers.notifyTx(result, msgId)
+                        watchers.notifyTx(result, msgId, null)
                     }
 
                     is SourceMessage.DetachDatabase -> {
@@ -339,7 +343,7 @@ class SourceLogProcessor(
 
                         val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                         else TransactionAborted(txKey.txId, txKey.systemTime, error)
-                        watchers.notifyTx(result, msgId)
+                        watchers.notifyTx(result, msgId, null)
                     }
 
                     is SourceMessage.TriesAdded -> {
@@ -377,6 +381,6 @@ class SourceLogProcessor(
             TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error!!)
         }
 
-        watchers.notifyTx(result, msgId)
+        watchers.notifyTx(result, msgId, resolvedTx.externalSourceToken)
     }
 }

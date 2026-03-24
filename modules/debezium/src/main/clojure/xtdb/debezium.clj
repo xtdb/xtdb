@@ -20,7 +20,7 @@
                             clusters)
         allocator (RootAllocator.)
         processor (DebeziumProcessor. producer allocator (.getDefaultTz cfg))
-        subscription (.tailAll external-log processor)]
+        subscription (.tailAll external-log nil processor)]
     (log/info "Debezium CDC process started"
               {:kafka-cluster kafka-cluster
                :source-topic source-topic

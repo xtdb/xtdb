@@ -9,9 +9,11 @@ import xtdb.database.proto.DatabaseConfig
 import java.util.*
 import com.google.protobuf.Any as ProtoAny
 
+typealias ExternalSourceToken = ProtoAny
+
 interface ExternalLog<M> : AutoCloseable {
 
-    fun tailAll(processor: Log.RecordProcessor<M>): Log.Subscription
+    fun tailAll(afterToken: ExternalSourceToken?, processor: Log.RecordProcessor<M>): Log.Subscription
 
     interface Factory {
         fun writeTo(dbConfig: DatabaseConfig.Builder)

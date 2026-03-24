@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.database.ExternalSourceToken
 import xtdb.api.TransactionAborted
 import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
@@ -165,11 +166,11 @@ class LeaderLogProcessor(
             else
                 TransactionAborted(txId, systemTime, resolvedTx.error)
 
-        watchers.notifyTx(result, txId)
+        watchers.notifyTx(result, txId, resolvedTx.externalSourceToken)
     }
 
-    private suspend fun finishBlock(latestProcessedMsgId: MessageId) {
-        val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId)
+    private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
+        val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
@@ -185,7 +186,7 @@ class LeaderLogProcessor(
         notifyTx(resolvedTx)
 
         if (liveIndex.isFull())
-            finishBlock(txId)
+            finishBlock(txId, resolvedTx.externalSourceToken)
     }
 
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
@@ -197,12 +198,17 @@ class LeaderLogProcessor(
 
             try {
                 when (val msg = record.message) {
-                    is SourceMessage.Tx, is SourceMessage.LegacyTx -> handleResolvedTx(resolveTx(msgId, record, msg))
+                    is SourceMessage.Tx -> {
+                        val resolved = resolveTx(msgId, record, msg)
+                        handleResolvedTx(msg.externalSourceToken?.let { resolved.copy(externalSourceToken = it) } ?: resolved)
+                    }
+
+                    is SourceMessage.LegacyTx -> handleResolvedTx(resolveTx(msgId, record, msg))
 
                     is SourceMessage.FlushBlock -> {
                         val expectedBlockIdx = msg.expectedBlockIdx
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                            finishBlock(msgId)
+                            finishBlock(msgId, watchers.externalSourceToken)
                         }
                         watchers.notifyMsg(msgId)
                     }
@@ -225,7 +231,7 @@ class LeaderLogProcessor(
                         val result =
                             if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                             else TransactionAborted(txKey.txId, txKey.systemTime, error)
-                        watchers.notifyTx(result, msgId)
+                        watchers.notifyTx(result, msgId, null)
                     }
 
                     is SourceMessage.DetachDatabase -> {
@@ -245,7 +251,7 @@ class LeaderLogProcessor(
 
                         val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                         else TransactionAborted(txKey.txId, txKey.systemTime, error)
-                        watchers.notifyTx(result, msgId)
+                        watchers.notifyTx(result, msgId, null)
                     }
 
                     is SourceMessage.TriesAdded -> {

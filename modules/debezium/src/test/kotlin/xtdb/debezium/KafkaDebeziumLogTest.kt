@@ -78,7 +78,7 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(subscriber).use {
+            log.tailAll(null, subscriber).use {
                 while (received.isEmpty()) delay(100)
             }
             // Subscription closed — produce more messages
@@ -98,7 +98,7 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
 
-        val subscription = log.tailAll(subscriber)
+        val subscription = log.tailAll(null, subscriber)
         while (received.isEmpty()) delay(100)
 
         assertEquals(1, received.size, "Should have received Alice before closing")

@@ -38,13 +38,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
         val res4 = TransactionCommitted(4, Instant.parse("2021-01-01T00:00:00Z"))
-        watchers.notifyTx(res4, 4)
+        watchers.notifyTx(res4, 4, null)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
         val res5 = TransactionAborted(5, Instant.parse("2021-01-02T00:00:00Z"), Exception("test"))
-        watchers.notifyTx(res5, 5)
+        watchers.notifyTx(res5, 5, null)
 
         assertEquals(res5, await5.await())
     }

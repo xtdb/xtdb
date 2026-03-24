@@ -188,7 +188,7 @@
 
                          {:system-time tick-at}))
 
-        (c/compact-all! node #xt/duration "PT1S")
+        (c/compact-all! node #xt/duration "PT5S")
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/readings")))
                                  (table-path node "public$readings")

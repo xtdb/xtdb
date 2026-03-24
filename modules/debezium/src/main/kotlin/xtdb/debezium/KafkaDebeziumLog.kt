@@ -14,8 +14,10 @@ import org.slf4j.LoggerFactory
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
+import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.KafkaDebeziumLogConfig
 import xtdb.debezium.proto.kafkaDebeziumLogConfig
+import xtdb.database.ExternalSourceToken
 import java.time.Duration
 import java.time.Instant
 import kotlin.coroutines.CoroutineContext
@@ -77,7 +79,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
     private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)
     val epoch: Int get() = 0
 
-    override fun tailAll(processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
+    override fun tailAll(afterToken: ExternalSourceToken?, processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
         val job = scope.launch {
             KafkaConsumer(
                 kafkaConfig.plus(
@@ -91,7 +93,22 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 UnitDeserializer,
                 ByteArrayDeserializer()
             ).use { c ->
-                c.subscribe(listOf(topic))
+                val partitionOffsets = afterToken?.let { tok ->
+                    val token = tok.unpack(DebeziumOffsetToken::class.java)
+                    token.dbzmTopicOffsetsMap[topic]?.offsetsList
+                        ?.mapIndexedNotNull { partition, offset ->
+                            if (offset >= 0) TopicPartition(topic, partition) to offset else null
+                        }
+                        ?.takeIf { it.isNotEmpty() }
+                }
+
+                if (partitionOffsets != null) {
+                    c.assign(partitionOffsets.map { it.first })
+                    partitionOffsets.forEach { (tp, offset) -> c.seek(tp, offset + 1) }
+                } else {
+                    c.subscribe(listOf(topic))
+                }
+
                 while (isActive) {
                     val records = runInterruptible(Dispatchers.IO) {
                         try {

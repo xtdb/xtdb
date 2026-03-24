@@ -2,6 +2,7 @@ edition = "2023";
 
 package xtdb.log.proto;
 
+import "google/protobuf/any.proto";
 import "xtdb/database/proto/db.proto";
 
 option java_multiple_files = true;
@@ -25,6 +26,7 @@ message Tx {
     string default_tz = 3;
     string user = 4;
     bytes user_metadata = 5;
+    google.protobuf.Any external_source_token = 6;
 }
 
 message BlockUploaded {
@@ -33,6 +35,7 @@ message BlockUploaded {
     int64 block_index = 3;
     int64 latest_processed_msg_id = 4;
     repeated TrieDetails tries = 5;
+    google.protobuf.Any external_source_token = 6;
 }
 
 message FlushBlock {

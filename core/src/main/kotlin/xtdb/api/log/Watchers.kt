@@ -3,8 +3,9 @@ package xtdb.api.log
 import kotlinx.coroutines.flow.*
 import xtdb.api.TransactionResult
 import xtdb.api.TxId
+import xtdb.database.ExternalSourceToken
 
-class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId) {
+class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceToken: ExternalSourceToken? = null) {
 
     /**
      * Backward-compat constructor for setups where tx-id is always a src msg-id.
@@ -14,12 +15,13 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId) {
     private sealed interface State
 
     private data class Active(
-        val latestSourceMsgId: MessageId, val latestTxId: TxId, val latestTxResult: TransactionResult?
+        val latestSourceMsgId: MessageId, val latestTxId: TxId, val latestTxResult: TransactionResult?,
+        val externalSourceToken: ExternalSourceToken? = null,
     ) : State
 
     private data class Failed(val exception: IngestionStoppedException) : State
 
-    private val state = MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null))
+    private val state = MutableStateFlow<State>(Active(latestSourceMsgId, latestTxId, null, externalSourceToken))
 
     private fun State.activeOrThrow(): Active = when (this) {
         is Active -> this
@@ -38,6 +40,7 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId) {
     }
 
     val latestSourceMsgId get() = state.value.activeOrThrow().latestSourceMsgId
+    val externalSourceToken: ExternalSourceToken? get() = state.value.activeOrThrow().externalSourceToken
 
     val exception
         get() = when (val v = state.value) {
@@ -47,13 +50,16 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId) {
 
     // --- notify methods ---
 
-    fun notifyTx(result: TransactionResult, srcMsgId: MessageId) {
+    fun notifyTx(result: TransactionResult, srcMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
         state.updateIfActive {
             check(result.txId > it.latestTxId) { "txId ${result.txId} <= latestTxId ${it.latestTxId}" }
             // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
             // when the block was triggered by isFull() (no FlushBlock in between)
             check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
-            it.copy(latestSourceMsgId = srcMsgId, latestTxId = result.txId, latestTxResult = result)
+            it.copy(
+                latestSourceMsgId = srcMsgId, latestTxId = result.txId, latestTxResult = result,
+                externalSourceToken = externalSourceToken ?: it.externalSourceToken,
+            )
         }
     }
 

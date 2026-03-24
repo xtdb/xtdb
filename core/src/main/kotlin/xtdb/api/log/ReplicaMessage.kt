@@ -1,6 +1,7 @@
 package xtdb.api.log
 
 import com.google.protobuf.ByteString
+import xtdb.database.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.log.proto.ReplicaLogMessage
 import xtdb.log.proto.TrieDetails
@@ -53,7 +54,8 @@ sealed interface ReplicaMessage {
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
                                 },
                                 it.tableDataMap.mapValues { (_, v) -> v.toByteArray() },
-                                dbOp
+                                dbOp,
+                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }
                             )
                         }
 
@@ -62,11 +64,17 @@ sealed interface ReplicaMessage {
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> msg.blockBoundary.let {
-                            BlockBoundary(it.blockIndex, it.latestProcessedMsgId)
+                            BlockBoundary(
+                                it.blockIndex, it.latestProcessedMsgId,
+                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }
+                            )
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
-                            BlockUploaded(it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList)
+                            BlockUploaded(
+                                it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
+                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }
+                            )
                         }
 
                         ReplicaLogMessage.MessageCase.NO_OP -> NoOp
@@ -95,7 +103,8 @@ sealed interface ReplicaMessage {
         val committed: Boolean,
         val error: Throwable?,
         val tableData: Map<String, ByteArray>,
-        val dbOp: DbOp? = null
+        val dbOp: DbOp? = null,
+        val externalSourceToken: ExternalSourceToken? = null,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
@@ -118,6 +127,7 @@ sealed interface ReplicaMessage {
 
                     null -> {}
                 }
+                this@ResolvedTx.externalSourceToken?.let { externalSourceToken = it }
             }
         }
     }
@@ -136,11 +146,15 @@ sealed interface ReplicaMessage {
         }
     }
 
-    data class BlockBoundary(val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId) : ProtobufMessage() {
+    data class BlockBoundary(
+        val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
+        val externalSourceToken: ExternalSourceToken? = null
+    ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockBoundary = blockBoundary {
                 this.blockIndex = this@BlockBoundary.blockIndex
                 this.latestProcessedMsgId = this@BlockBoundary.latestProcessedMsgId
+                this@BlockBoundary.externalSourceToken?.let { this.externalSourceToken = it }
             }
         }
     }
@@ -148,7 +162,8 @@ sealed interface ReplicaMessage {
     data class BlockUploaded(
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
-        val tries: List<TrieDetails>
+        val tries: List<TrieDetails>,
+        val externalSourceToken: ExternalSourceToken? = null
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockUploaded = blockUploaded {
@@ -157,6 +172,7 @@ sealed interface ReplicaMessage {
                 this.blockIndex = this@BlockUploaded.blockIndex
                 this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                 tries.addAll(this@BlockUploaded.tries)
+                this@BlockUploaded.externalSourceToken?.let { this.externalSourceToken = it }
             }
         }
     }

@@ -67,7 +67,7 @@ class TransitionLogProcessor(
                         } else TransactionAborted(msg.txId, msg.systemTime, msg.error)
 
                         latestSourceMsgId = msg.txId
-                        watchers.notifyTx(result, msg.txId)
+                        watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
                     }
 
                     is ReplicaMessage.TriesAdded -> {

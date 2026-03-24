@@ -1,5 +1,6 @@
 package xtdb.catalog
 
+import xtdb.database.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.api.log.MessageId
 import xtdb.api.storage.ObjectStore
@@ -62,7 +63,8 @@ class BlockCatalog(
         latestProcessedMsgId: MessageId,
         boundaryReplicaMsgId: MessageId?,
         tables: Collection<TableRef>,
-        secondaryDatabases: Map<String, DatabaseConfig>?
+        secondaryDatabases: Map<String, DatabaseConfig>?,
+        externalSourceToken: ExternalSourceToken? = null
     ): Block {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
@@ -81,6 +83,7 @@ class BlockCatalog(
             boundaryReplicaMsgId?.let { this.boundaryReplicaMsgId = it }
             this.tableNames.addAll(tables.map { it.sym.toString() })
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
+            externalSourceToken?.let { this.externalSourceToken = it }
         }
     }
 
@@ -98,6 +101,9 @@ class BlockCatalog(
 
     val boundaryReplicaMsgId: MessageId?
         get() = latestBlock?.let { block -> block.boundaryReplicaMsgId.takeIf { block.hasBoundaryReplicaMsgId() } }
+
+    val externalSourceToken: ExternalSourceToken?
+        get() = latestBlock?.takeIf { it.hasExternalSourceToken() }?.externalSourceToken
 
     val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
 

@@ -67,7 +67,7 @@
   (let [block-cat (.getBlockCatalog db-state)
         source-msg-id (max (or (.getLatestProcessedMsgId block-cat) -1)
                            (MsgIdUtil/offsetToMsgId (.getEpoch (.getSourceLog db-storage)) -1))]
-    (Watchers. source-msg-id source-msg-id)))
+    (Watchers. source-msg-id source-msg-id (.getExternalSourceToken block-cat))))
 
 (defmethod ig/halt-key! ::watchers [_ _])
 

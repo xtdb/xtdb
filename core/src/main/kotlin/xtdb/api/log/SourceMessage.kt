@@ -1,6 +1,7 @@
 package xtdb.api.log
 
 import com.google.protobuf.ByteString
+import xtdb.database.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.log.proto.SourceLogMessage
@@ -82,7 +83,10 @@ sealed interface SourceMessage {
                             SourceLogMessage.MessageCase.DETACH_DATABASE -> DetachDatabase(msg.detachDatabase.dbName)
 
                             SourceLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
-                                BlockUploaded(it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList)
+                                BlockUploaded(
+                                    it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
+                                    it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }
+                                )
                             }
 
                             SourceLogMessage.MessageCase.TX -> msg.tx.let {
@@ -91,7 +95,8 @@ sealed interface SourceMessage {
                                     systemTime = if (it.hasSystemTimeMicros()) InstantUtil.fromMicros(it.systemTimeMicros) else null,
                                     defaultTz = ZoneId.of(it.defaultTz),
                                     user = if (it.hasUser()) it.user else null,
-                                    userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata.toByteArray()
+                                    userMetadata = if (it.userMetadata.isEmpty) null else it.userMetadata.toByteArray(),
+                                    externalSourceToken = it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }
                                 )
                             }
 
@@ -106,7 +111,8 @@ sealed interface SourceMessage {
         val systemTime: Instant?,
         val defaultTz: ZoneId,
         val user: String?,
-        val userMetadata: ByteArray?
+        val userMetadata: ByteArray?,
+        val externalSourceToken: ExternalSourceToken? = null
     ) : ProtobufMessage() {
         override fun toLogMessage() = sourceLogMessage {
             tx = tx {
@@ -115,6 +121,7 @@ sealed interface SourceMessage {
                 defaultTz = this@Tx.defaultTz.id
                 this@Tx.user?.let { user = it }
                 this@Tx.userMetadata?.let { userMetadata = ByteString.copyFrom(it) }
+                this@Tx.externalSourceToken?.let { externalSourceToken = it }
             }
         }
 
@@ -124,7 +131,8 @@ sealed interface SourceMessage {
                 && systemTime == other.systemTime
                 && defaultTz == other.defaultTz
                 && user == other.user
-                && userMetadata.contentEquals(other.userMetadata))
+                && userMetadata.contentEquals(other.userMetadata)
+                && externalSourceToken == other.externalSourceToken)
 
         override fun hashCode(): Int {
             var result = txOps.contentHashCode()
@@ -132,6 +140,7 @@ sealed interface SourceMessage {
             result = 31 * result + defaultTz.hashCode()
             result = 31 * result + (user?.hashCode() ?: 0)
             result = 31 * result + (userMetadata?.contentHashCode() ?: 0)
+            result = 31 * result + (externalSourceToken?.hashCode() ?: 0)
             return result
         }
     }
@@ -174,7 +183,8 @@ sealed interface SourceMessage {
     data class BlockUploaded(
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
-        val tries: List<TrieDetails>
+        val tries: List<TrieDetails>,
+        val externalSourceToken: ExternalSourceToken? = null
     ) : ProtobufMessage() {
         override fun toLogMessage() = sourceLogMessage {
             blockUploaded = blockUploaded {
@@ -183,6 +193,7 @@ sealed interface SourceMessage {
                 this.blockIndex = this@BlockUploaded.blockIndex
                 this.latestProcessedMsgId = this@BlockUploaded.latestProcessedMsgId
                 tries.addAll(this@BlockUploaded.tries)
+                this@BlockUploaded.externalSourceToken?.let { this.externalSourceToken = it }
             }
         }
     }
