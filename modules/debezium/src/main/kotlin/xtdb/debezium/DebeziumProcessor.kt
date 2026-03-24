@@ -65,7 +65,7 @@ class DebeziumProcessor(
                 tx.sendOffsetsToTransaction(record.message.offsets, record.message.consumerGroupMetadata)
                 val token = buildOffsetToken(record.message.offsets)
 
-                record.message.ops.safeMap { CdcEvent.fromJson(it).toTxOp(allocator) }.useAll { txOps ->
+                record.message.ops.safeMap { it.toTxOp(allocator) }.useAll { txOps ->
                     val metadata = mapOf(
                         "source" to "debezium",
                         "kafka_offset" to record.logOffset,

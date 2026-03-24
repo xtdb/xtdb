@@ -2,10 +2,6 @@ package xtdb.debezium
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.junit.jupiter.api.AfterAll
@@ -53,56 +49,25 @@ class DebeziumProcessorTest {
     @AfterEach
     fun tearDown() { allocator.close() }
 
-    private fun putEnvelope(
-        id: Int,
-        name: String,
-        op: String = "c",
-        table: String = "test",
-    ): ByteArray = buildJsonObject {
-        putJsonObject("payload") {
-            put("op", op)
-            putJsonObject("after") { put("_id", id); put("name", name) }
-            put("before", JsonNull)
-            putJsonObject("source") {
-                put("schema", "public")
-                put("table", table)
-                put("lsn", 100)
-            }
-        }
-    }.toString().toByteArray()
+    private fun putEvent(id: Int, name: String, table: String = "test") =
+        CdcEvent.Put("public", table, mapOf("_id" to id, "name" to name))
 
-    private fun deleteEnvelope(
-        id: Int,
-        table: String = "test",
-    ): ByteArray = buildJsonObject {
-        putJsonObject("payload") {
-            put("op", "d")
-            put("after", JsonNull)
-            putJsonObject("before") { put("_id", id) }
-            putJsonObject("source") {
-                put("schema", "public")
-                put("table", table)
-                put("lsn", 100)
-            }
-        }
-    }.toString().toByteArray()
+    private fun deleteEvent(id: Int, table: String = "test") =
+        CdcEvent.Delete("public", table, id)
 
     private fun messageRecord(
-        ops: List<ByteArray>,
+        ops: List<CdcEvent>,
         offset: Long = 0,
     ): Record<DebeziumMessage> = Record(
         0, offset, Instant.now(),
         DebeziumMessage(ops, emptyMap(), ConsumerGroupMetadata("test-group"))
     )
 
-    private fun putRecord(id: Int, name: String, op: String = "c", offset: Long = 0, table: String = "test") =
-        messageRecord(listOf(putEnvelope(id, name, op, table)), offset)
+    private fun putRecord(id: Int, name: String, offset: Long = 0, table: String = "test") =
+        messageRecord(listOf(putEvent(id, name, table)), offset)
 
     private fun deleteRecord(id: Int, offset: Long = 0, table: String = "test") =
-        messageRecord(listOf(deleteEnvelope(id, table)), offset)
-
-    private fun rawRecord(payload: String, offset: Long = 0) =
-        messageRecord(listOf(payload.toByteArray()), offset)
+        messageRecord(listOf(deleteEvent(id, table)), offset)
 
     private suspend fun <R> withDebeziumProducer(
         defaultTz: ZoneId = ZoneOffset.UTC,
@@ -139,17 +104,6 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `invalid JSON throws`() = runTest(timeout = 60.seconds) {
-        withDebeziumProducer { processor, received ->
-            assertThrows<Exception> {
-                processor.processRecords(listOf(rawRecord("not json at all", offset = 42)))
-            }
-
-            assertEquals(0, received.size)
-        }
-    }
-
-    @Test
     fun `empty record list is a no-op`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             processor.processRecords(emptyList())
@@ -157,31 +111,6 @@ class DebeziumProcessorTest {
             delay(1000)
 
             assertEquals(0, received.size)
-        }
-    }
-
-    @Test
-    fun `invalid record aborts but prior records are committed`() = runTest(timeout = 60.seconds) {
-        withDebeziumProducer { processor, received ->
-            val batch = listOf(
-                putRecord(1, "Alice", offset = 0),
-                rawRecord("not json", offset = 1),
-                putRecord(2, "Bob", offset = 2),
-            )
-
-            assertThrows<Exception> {
-                processor.processRecords(batch)
-            }
-
-            while (received.size < 1) delay(100)
-
-            // Alice committed in her own transaction before the invalid record
-            assertEquals(1, received.size)
-            val tx0 = decodeTx(received[0].message as SourceMessage.Tx)
-            assertTrue((tx0["tx-ops"] as List<*>).isNotEmpty())
-            assertEquals(0L, (tx0["user-metadata"] as Map<*, *>)["kafka_offset"])
-
-            // Bob was never processed — invalid record aborted and stopped processing
         }
     }
 
@@ -195,7 +124,7 @@ class DebeziumProcessorTest {
 
         val processor = DebeziumProcessor(failingProducer, allocator, ZoneOffset.UTC)
         assertThrows<Exception> {
-            processor.processRecords(listOf(rawRecord("doesn't matter")))
+            processor.processRecords(listOf(putRecord(1, "Alice")))
         }
     }
 
@@ -203,9 +132,9 @@ class DebeziumProcessorTest {
     fun `batch of mixed ops processes all records`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             val batch = listOf(
-                putRecord(1, "Alice", op = "c", offset = 0),
-                putRecord(2, "Bob", op = "c", offset = 1),
-                putRecord(1, "Alice Updated", op = "u", offset = 2),
+                putRecord(1, "Alice", offset = 0),
+                putRecord(2, "Bob", offset = 1),
+                putRecord(1, "Alice Updated", offset = 2),
                 deleteRecord(2, offset = 3),
             )
 
@@ -254,7 +183,7 @@ class DebeziumProcessorTest {
     fun `multi-op message produces single transaction`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             val record = messageRecord(
-                listOf(putEnvelope(1, "Alice"), putEnvelope(2, "Bob")),
+                listOf(putEvent(1, "Alice"), putEvent(2, "Bob")),
                 offset = 0
             )
             processor.processRecords(listOf(record))
@@ -271,7 +200,7 @@ class DebeziumProcessorTest {
     fun `multi-op message with mixed put and delete`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             val record = messageRecord(
-                listOf(putEnvelope(1, "Alice"), deleteEnvelope(2)),
+                listOf(putEvent(1, "Alice"), deleteEvent(2)),
                 offset = 0
             )
             processor.processRecords(listOf(record))
@@ -284,19 +213,4 @@ class DebeziumProcessorTest {
         }
     }
 
-    @Test
-    fun `multi-op with invalid second op throws and cleans up`() = runTest(timeout = 60.seconds) {
-        withDebeziumProducer { processor, received ->
-            val record = messageRecord(
-                listOf(putEnvelope(1, "Alice"), "not json".toByteArray()),
-                offset = 0
-            )
-            assertThrows<Exception> {
-                processor.processRecords(listOf(record))
-            }
-
-            delay(500)
-            assertEquals(0, received.size)
-        }
-    }
 }

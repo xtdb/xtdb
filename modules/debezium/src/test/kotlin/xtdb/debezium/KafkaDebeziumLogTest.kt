@@ -9,6 +9,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.Log
 import java.util.Collections
@@ -88,6 +89,13 @@ class KafkaDebeziumLogTest {
 
         // Should only have the first message — subscription was closed before Bob
         assertEquals(1, received.size, "Should not receive messages after subscription close")
+
+        // Verify the Log parsed the raw bytes into a CdcEvent
+        val event = received[0].message.ops[0] as CdcEvent.Put
+        assertEquals("public", event.schema)
+        assertEquals("test", event.table)
+        assertEquals(1L, event.doc["_id"])
+        assertEquals("Alice", event.doc["name"])
     }
 
     @Test
@@ -113,5 +121,36 @@ class KafkaDebeziumLogTest {
 
         // Closing subscription after log close should not throw
         subscription.close()
+    }
+
+    @Test
+    fun `invalid JSON halts ingestion`() = runTest(timeout = 10.seconds) {
+        val topic = "test-invalid-json"
+        produceMessages(topic, listOf("not json at all"))
+
+        val (subscriber, _) = capturingProcessor()
+        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        log.use {
+            log.tailAll(null, subscriber)
+            val error = log.awaitError()
+            assertTrue(error is Exception, "Expected an exception from invalid JSON")
+        }
+    }
+
+    @Test
+    fun `invalid record after valid records halts ingestion`() = runTest(timeout = 10.seconds) {
+        val topic = "test-valid-then-invalid"
+        produceMessages(topic, listOf(
+            cdcMessage("c", 1, "Alice"),
+            "not json",
+        ))
+
+        val (subscriber, _) = capturingProcessor()
+        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        log.use {
+            log.tailAll(null, subscriber)
+            val error = log.awaitError()
+            assertTrue(error is Exception)
+        }
     }
 }

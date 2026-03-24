@@ -5,7 +5,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 
 class DebeziumMessage(
-    val ops: List<ByteArray>,
+    val ops: List<CdcEvent>,
     val offsets: Map<TopicPartition, OffsetAndMetadata>,
     val consumerGroupMetadata: ConsumerGroupMetadata,
 )

@@ -120,7 +120,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                                         record.offset(),
                                         Instant.ofEpochMilli(record.timestamp()),
                                         DebeziumMessage(
-                                            listOf(value),
+                                            listOf(CdcEvent.fromJson(value)),
                                             mapOf(tp to OffsetAndMetadata(record.offset() + 1)),
                                             // TODO: groupMetadata captured at poll-time may become stale if a rebalance
                                             //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
