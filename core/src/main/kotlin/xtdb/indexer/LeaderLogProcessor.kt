@@ -57,15 +57,7 @@ class LeaderLogProcessor(
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
 
-    private val allocator =
-        allocator.newChildAllocator("leader-log-processor", 0, Long.MAX_VALUE)
-            .also { alloc ->
-                if (meterRegistry != null) {
-                    Gauge.builder("watcher.allocator.allocated_memory", alloc) { it.allocatedMemory.toDouble() }
-                        .baseUnit("bytes")
-                        .register(meterRegistry)
-                }
-            }
+    private val allocator = allocator.newChildAllocator("leader-log-processor", 0, Long.MAX_VALUE)
 
     override var pendingBlock: PendingBlock? = null
         private set
