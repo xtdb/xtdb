@@ -13,6 +13,8 @@ import xtdb.debezium.proto.partitionOffsets
 import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.tx.serializeUserMetadata
+import xtdb.util.safeMap
+import xtdb.util.useAll
 import java.time.ZoneId
 import xtdb.database.ExternalSourceToken
 import com.google.protobuf.Any as ProtoAny
@@ -61,17 +63,16 @@ class DebeziumProcessor(
         for (record in records) {
             producer.withTx { tx ->
                 tx.sendOffsetsToTransaction(record.message.offsets, record.message.consumerGroupMetadata)
-                val event = CdcEvent.fromJson((record.message).payload)
                 val token = buildOffsetToken(record.message.offsets)
 
-                event.toTxOp(allocator).use { txOp ->
+                record.message.ops.safeMap { CdcEvent.fromJson(it).toTxOp(allocator) }.useAll { txOps ->
                     val metadata = mapOf(
                         "source" to "debezium",
                         "kafka_offset" to record.logOffset,
                     )
-                    val message = buildTxMessage(listOf(txOp), metadata, externalSourceToken = token)
+                    val message = buildTxMessage(txOps, metadata, externalSourceToken = token)
                     tx.appendMessage(message)
-                    logger.debug("Submitted tx at offset {}", record.logOffset)
+                    logger.debug("Submitted tx with {} ops at offset {}", txOps.size, record.logOffset)
                 }
             }
         }

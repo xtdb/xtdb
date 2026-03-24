@@ -53,77 +53,56 @@ class DebeziumProcessorTest {
     @AfterEach
     fun tearDown() { allocator.close() }
 
-    private fun putRecord(
+    private fun putEnvelope(
         id: Int,
         name: String,
         op: String = "c",
-        offset: Long = 0,
         table: String = "test",
-    ): Record<DebeziumMessage> {
-        val envelope = buildJsonObject {
-            putJsonObject("payload") {
-                put("op", op)
-                putJsonObject("after") { put("_id", id); put("name", name) }
-                put("before", JsonNull)
-                putJsonObject("source") {
-                    put("schema", "public")
-                    put("table", table)
-                    put("lsn", 100)
-                }
+    ): ByteArray = buildJsonObject {
+        putJsonObject("payload") {
+            put("op", op)
+            putJsonObject("after") { put("_id", id); put("name", name) }
+            put("before", JsonNull)
+            putJsonObject("source") {
+                put("schema", "public")
+                put("table", table)
+                put("lsn", 100)
             }
         }
-        return Record(
-            0,
-            offset,
-            Instant.now(),
-            DebeziumMessage(
-                envelope.toString().toByteArray(),
-                emptyMap(),
-                ConsumerGroupMetadata("test-group"),
-            )
-        )
-    }
+    }.toString().toByteArray()
 
-    private fun deleteRecord(
+    private fun deleteEnvelope(
         id: Int,
-        offset: Long = 0,
         table: String = "test",
-    ): Record<DebeziumMessage> {
-        val envelope = buildJsonObject {
-            putJsonObject("payload") {
-                put("op", "d")
-                put("after", JsonNull)
-                putJsonObject("before") { put("_id", id) }
-                putJsonObject("source") {
-                    put("schema", "public")
-                    put("table", table)
-                    put("lsn", 100)
-                }
+    ): ByteArray = buildJsonObject {
+        putJsonObject("payload") {
+            put("op", "d")
+            put("after", JsonNull)
+            putJsonObject("before") { put("_id", id) }
+            putJsonObject("source") {
+                put("schema", "public")
+                put("table", table)
+                put("lsn", 100)
             }
         }
-        return Record(
-            0,
-            offset,
-            Instant.now(),
-            DebeziumMessage(
-                envelope.toString().toByteArray(),
-                emptyMap(),
-                ConsumerGroupMetadata("test-group"),
-            )
-        )
-    }
+    }.toString().toByteArray()
 
-    private fun rawRecord(payload: String, offset: Long = 0): Record<DebeziumMessage> =
-        Record(
-            0,
-            offset,
-            Instant.now(),
-            DebeziumMessage(
-                payload.toByteArray(),
-                emptyMap(),
-                ConsumerGroupMetadata("test-group"),
-            )
-        )
+    private fun messageRecord(
+        ops: List<ByteArray>,
+        offset: Long = 0,
+    ): Record<DebeziumMessage> = Record(
+        0, offset, Instant.now(),
+        DebeziumMessage(ops, emptyMap(), ConsumerGroupMetadata("test-group"))
+    )
+
+    private fun putRecord(id: Int, name: String, op: String = "c", offset: Long = 0, table: String = "test") =
+        messageRecord(listOf(putEnvelope(id, name, op, table)), offset)
+
+    private fun deleteRecord(id: Int, offset: Long = 0, table: String = "test") =
+        messageRecord(listOf(deleteEnvelope(id, table)), offset)
+
+    private fun rawRecord(payload: String, offset: Long = 0) =
+        messageRecord(listOf(payload.toByteArray()), offset)
 
     private suspend fun <R> withDebeziumProducer(
         defaultTz: ZoneId = ZoneOffset.UTC,
@@ -255,6 +234,69 @@ class DebeziumProcessorTest {
 
             val msg = received[0].message as SourceMessage.Tx
             assertEquals(ZoneId.of("America/Los_Angeles"), msg.defaultTz)
+        }
+    }
+
+    @Test
+    fun `empty ops list produces empty transaction`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
+            processor.processRecords(listOf(messageRecord(emptyList())))
+
+            while (received.size < 1) delay(100)
+
+            assertEquals(1, received.size)
+            val tx = decodeTx(received[0].message as SourceMessage.Tx)
+            assertTrue((tx["tx-ops"] as List<*>).isEmpty())
+        }
+    }
+
+    @Test
+    fun `multi-op message produces single transaction`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
+            val record = messageRecord(
+                listOf(putEnvelope(1, "Alice"), putEnvelope(2, "Bob")),
+                offset = 0
+            )
+            processor.processRecords(listOf(record))
+
+            while (received.size < 1) delay(100)
+
+            assertEquals(1, received.size)
+            val tx = decodeTx(received[0].message as SourceMessage.Tx)
+            assertEquals(2, (tx["tx-ops"] as List<*>).size)
+        }
+    }
+
+    @Test
+    fun `multi-op message with mixed put and delete`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
+            val record = messageRecord(
+                listOf(putEnvelope(1, "Alice"), deleteEnvelope(2)),
+                offset = 0
+            )
+            processor.processRecords(listOf(record))
+
+            while (received.size < 1) delay(100)
+
+            assertEquals(1, received.size)
+            val tx = decodeTx(received[0].message as SourceMessage.Tx)
+            assertEquals(2, (tx["tx-ops"] as List<*>).size)
+        }
+    }
+
+    @Test
+    fun `multi-op with invalid second op throws and cleans up`() = runTest(timeout = 60.seconds) {
+        withDebeziumProducer { processor, received ->
+            val record = messageRecord(
+                listOf(putEnvelope(1, "Alice"), "not json".toByteArray()),
+                offset = 0
+            )
+            assertThrows<Exception> {
+                processor.processRecords(listOf(record))
+            }
+
+            delay(500)
+            assertEquals(0, received.size)
         }
     }
 }
