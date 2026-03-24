@@ -4,6 +4,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
+import xtdb.debezium.proto.DebeziumOffsetToken
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -60,7 +61,7 @@ class DebeziumProcessorTest {
         offset: Long = 0,
     ): Record<DebeziumMessage> = Record(
         0, offset, Instant.now(),
-        DebeziumMessage(ops, emptyMap(), ConsumerGroupMetadata("test-group"))
+        DebeziumMessage(ops, DebeziumOffsetToken.getDefaultInstance(), ConsumerGroupMetadata("test-group"))
     )
 
     private fun putRecord(id: Int, name: String, offset: Long = 0, table: String = "test") =

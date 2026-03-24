@@ -8,8 +8,6 @@ import xtdb.api.log.KafkaCluster
 import xtdb.api.log.KafkaCluster.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log
 import xtdb.api.log.SourceMessage
-import xtdb.debezium.proto.debeziumOffsetToken
-import xtdb.debezium.proto.partitionOffsets
 import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.tx.serializeUserMetadata
@@ -27,25 +25,6 @@ class DebeziumProcessor(
     private val defaultTz: ZoneId,
 ) : Log.RecordProcessor<DebeziumMessage>, AutoCloseable {
 
-    companion object {
-        fun buildOffsetToken(kafkaOffsets: Map<TopicPartition, OffsetAndMetadata>): ExternalSourceToken {
-            // OffsetAndMetadata stores next-to-read (offset+1); token stores last-seen
-            val byTopic = kafkaOffsets.entries.groupBy({ it.key.topic() }, { it.key.partition() to (it.value.offset() - 1) })
-            val token = debeziumOffsetToken {
-                for ((topic, partitionEntries) in byTopic) {
-                    val maxPartition = partitionEntries.maxOf { it.first }
-                    val offsetArray = LongArray(maxPartition + 1) { partition ->
-                        partitionEntries.firstOrNull { it.first == partition }?.second ?: -1L
-                    }
-                    dbzmTopicOffsets[topic] = partitionOffsets {
-                        offsets += offsetArray.toList()
-                    }
-                }
-            }
-            return ProtoAny.pack(token, "xtdb.debezium")
-        }
-    }
-
     private fun buildTxMessage(
         txOps: List<TxOp>, userMetadata: Map<String, Any>,
         externalSourceToken: ExternalSourceToken? = null
@@ -62,8 +41,14 @@ class DebeziumProcessor(
     override suspend fun processRecords(records: List<Log.Record<DebeziumMessage>>) {
         for (record in records) {
             producer.withTx { tx ->
-                tx.sendOffsetsToTransaction(record.message.offsets, record.message.consumerGroupMetadata)
-                val token = buildOffsetToken(record.message.offsets)
+                val msg = record.message
+                val kafkaOffsets = msg.offsets.dbzmTopicOffsetsMap.flatMap { (topic, partOffsets) ->
+                    partOffsets.offsetsList.mapIndexedNotNull { partition, offset ->
+                        if (offset >= 0) TopicPartition(topic, partition) to OffsetAndMetadata(offset + 1) else null
+                    }
+                }.toMap()
+                tx.sendOffsetsToTransaction(kafkaOffsets, msg.consumerGroupMetadata)
+                val token = ProtoAny.pack(msg.offsets, "xtdb.debezium")
 
                 record.message.ops.safeMap { it.toTxOp(allocator) }.useAll { txOps ->
                     val metadata = mapOf(

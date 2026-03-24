@@ -1,11 +1,10 @@
 package xtdb.debezium
 
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
-import org.apache.kafka.common.TopicPartition
+import xtdb.debezium.proto.DebeziumOffsetToken
 
 class DebeziumMessage(
     val ops: List<CdcEvent>,
-    val offsets: Map<TopicPartition, OffsetAndMetadata>,
+    val offsets: DebeziumOffsetToken,
     val consumerGroupMetadata: ConsumerGroupMetadata,
 )

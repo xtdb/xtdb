@@ -5,7 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -16,7 +15,9 @@ import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.KafkaDebeziumLogConfig
+import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.kafkaDebeziumLogConfig
+import xtdb.debezium.proto.partitionOffsets
 import xtdb.database.ExternalSourceToken
 import java.time.Duration
 import java.time.Instant
@@ -114,14 +115,20 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                         try {
                             c.poll(pollDuration).records(topic).mapNotNull { record ->
                                 record.value()?.let { value ->
-                                    val tp = TopicPartition(record.topic(), record.partition())
+                                    val offsets = debeziumOffsetToken {
+                                        dbzmTopicOffsets[record.topic()] = partitionOffsets {
+                                            val arr = LongArray(record.partition() + 1) { -1L }
+                                            arr[record.partition()] = record.offset()
+                                            offsets += arr.toList()
+                                        }
+                                    }
                                     Log.Record(
                                         epoch,
                                         record.offset(),
                                         Instant.ofEpochMilli(record.timestamp()),
                                         DebeziumMessage(
                                             listOf(CdcEvent.fromJson(value)),
-                                            mapOf(tp to OffsetAndMetadata(record.offset() + 1)),
+                                            offsets,
                                             // TODO: groupMetadata captured at poll-time may become stale if a rebalance
                                             //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
                                             //  Acceptable for single-consumer setups; no data loss (transaction aborts).
