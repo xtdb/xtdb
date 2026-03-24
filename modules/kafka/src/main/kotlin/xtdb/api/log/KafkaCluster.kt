@@ -169,11 +169,15 @@ class KafkaCluster(
             inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
                 openTx().use { tx ->
                     try {
-                        block(tx).also { tx.commit() }
+                        block(tx)
                     } catch (e: Throwable) {
-                        tx.abort()
+                        try {
+                            tx.abort()
+                        } catch (abortEx: Throwable) {
+                            e.addSuppressed(abortEx)
+                        }
                         throw e
-                    }
+                    }.also { tx.commit() }
                 }
         }
     }
