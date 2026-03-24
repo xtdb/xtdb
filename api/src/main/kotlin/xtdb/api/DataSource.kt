@@ -42,7 +42,7 @@ interface DataSource : javax.sql.DataSource {
             DriverManager.getConnection(
                 "jdbc:xtdb://$host:$port/$database",
                 Properties().also { props ->
-                    user?.let { props["user"] = it }
+                    props["user"] = user ?: "xtdb"
                     password?.let { props["password"] = it }
                     opts.forEach { (k, v) -> props[k] = v.toString() }
                 }
