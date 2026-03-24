@@ -282,23 +282,23 @@
                                    :tx-error-counter (metrics/add-counter metrics-registry "tx.error"))))]
 
     (doto metrics-registry
-      (metrics/add-gauge "node.tx.latestCompletedTxId"
-                         (fn []
+      (metrics/add-gauge "node.tx.latestCompletedTxId" node
+                         (fn [node]
                            (-> (xtp/latest-completed-txs node)
                                (get-in ["xtdb" 0 :tx-id] -1))))
 
-      (metrics/add-gauge "node.tx.latestSubmittedMsgId"
-                         (fn []
+      (metrics/add-gauge "node.tx.latestSubmittedMsgId" node
+                         (fn [node]
                            (-> (xtp/latest-submitted-msg-ids node)
                                (get-in ["xtdb" 0] -1))))
 
-      (metrics/add-gauge "node.tx.latestProcessedMsgId"
-                         (fn []
+      (metrics/add-gauge "node.tx.latestProcessedMsgId" node
+                         (fn [node]
                            (-> (xtp/latest-processed-msg-ids node)
                                (get-in ["xtdb" 0] -1))))
 
-      (metrics/add-gauge "node.tx.lag.MsgId"
-                         (fn []
+      (metrics/add-gauge "node.tx.lag.MsgId" node
+                         (fn [node]
                            (max (- (long (-> (xtp/latest-submitted-msg-ids node)
                                              (get-in ["xtdb" 0] -1)))
                                    (long (-> (xtp/latest-processed-msg-ids node)

@@ -1939,8 +1939,8 @@
            server (assoc server :accept-thread accept-thread)]
 
        (when metrics-registry
-         (metrics/add-gauge metrics-registry "pgwire.active_connections"
-                            (fn []
+         (metrics/add-gauge metrics-registry "pgwire.active_connections" server
+                            (fn [server]
                               (count (:connections @(:server-state server))))))
        (.start accept-thread)
        server))))

@@ -34,10 +34,10 @@
      (.onClose stream# (fn [] (.stop sample# ~timer)))))
 
 (defn add-gauge
-  ([reg meter-name f] (add-gauge reg meter-name f {}))
-  ([^MeterRegistry reg meter-name f {:keys [unit tag]}]
+  ([reg meter-name obj f] (add-gauge reg meter-name obj f {}))
+  ([^MeterRegistry reg meter-name obj f {:keys [unit tag]}]
    (let [[tag-key tag-value] tag]
-     (-> (Gauge/builder meter-name f)
+     (-> (Gauge/builder meter-name obj f)
          (cond->
              unit (.baseUnit (str unit))
              tag (.tag tag-key tag-value))
