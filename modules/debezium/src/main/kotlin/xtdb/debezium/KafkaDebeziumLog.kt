@@ -23,6 +23,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class KafkaDebeziumLog @JvmOverloads constructor(
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
@@ -63,9 +64,14 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         }
     }
 
+    private val _error = CompletableDeferred<Throwable>()
+    val error: Throwable? get() = if (_error.isCompleted) _error.getCompleted() else null
+    suspend fun awaitError(): Throwable = _error.await()
+
     // TODO: non-deterministic failures (e.g. node down) currently kill this coroutine silently.
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         LOG.error("Fatal error in CDC ingestion — ingestion has stopped", throwable)
+        _error.complete(throwable)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)

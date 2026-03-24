@@ -155,19 +155,13 @@ class DebeziumProcessorTest {
         }
 
     @Test
-    fun `invalid JSON goes to DLQ`() = runTest(timeout = 60.seconds) {
+    fun `invalid JSON throws`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
-            processor.processRecords(listOf(rawRecord("not json at all", offset = 42)))
+            assertThrows<Exception> {
+                processor.processRecords(listOf(rawRecord("not json at all", offset = 42)))
+            }
 
-            while (received.size < 1) delay(100)
-
-            assertEquals(1, received.size)
-
-            val tx = decodeTx(received[0].message as SourceMessage.Tx)
-            val metadata = tx["user-metadata"] as Map<*, *>
-            assertEquals("debezium", metadata["source"])
-            assertTrue((metadata["error"] as String).contains("Invalid CDC message"))
-            assertEquals(42L, metadata["kafka_offset"])
+            assertEquals(0, received.size)
         }
     }
 
@@ -183,7 +177,7 @@ class DebeziumProcessorTest {
     }
 
     @Test
-    fun `valid records in batch still processed when others fail`() = runTest(timeout = 60.seconds) {
+    fun `invalid record aborts but prior records are committed`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             val batch = listOf(
                 putRecord(1, "Alice", offset = 0),
@@ -191,28 +185,19 @@ class DebeziumProcessorTest {
                 putRecord(2, "Bob", offset = 2),
             )
 
-            processor.processRecords(batch)
+            assertThrows<Exception> {
+                processor.processRecords(batch)
+            }
 
-            while (received.size < 3) delay(100)
+            while (received.size < 1) delay(100)
 
-            assertEquals(3, received.size)
-
-            // Alice — valid tx
+            // Alice committed in her own transaction before the invalid record
+            assertEquals(1, received.size)
             val tx0 = decodeTx(received[0].message as SourceMessage.Tx)
             assertTrue((tx0["tx-ops"] as List<*>).isNotEmpty())
             assertEquals(0L, (tx0["user-metadata"] as Map<*, *>)["kafka_offset"])
 
-            // Invalid JSON — DLQ tx
-            val tx1 = decodeTx(received[1].message as SourceMessage.Tx)
-            assertTrue((tx1["tx-ops"] as List<*>).isEmpty())
-            val dlqMetadata = tx1["user-metadata"] as Map<*, *>
-            assertEquals("debezium", dlqMetadata["source"])
-            assertEquals(1L, dlqMetadata["kafka_offset"])
-
-            // Bob — valid tx
-            val tx2 = decodeTx(received[2].message as SourceMessage.Tx)
-            assertTrue((tx2["tx-ops"] as List<*>).isNotEmpty())
-            assertEquals(2L, (tx2["user-metadata"] as Map<*, *>)["kafka_offset"])
+            // Bob was never processed — invalid record aborted and stopped processing
         }
     }
 

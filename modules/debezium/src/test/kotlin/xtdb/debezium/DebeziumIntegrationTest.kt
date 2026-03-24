@@ -477,14 +477,11 @@ class DebeziumIntegrationTest {
                             VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
                             """INSERT INTO timed_docs (_id, name, _valid_from)
                             VALUES (2, 'from-only', '2024-06-01T00:00:00Z')""",
-                            """INSERT INTO timed_docs (_id, name, _valid_to)
-                            VALUES (3, 'to-only', '2025-06-01T00:00:00Z')""",
                             """INSERT INTO timed_docs (_id, name)
-                            VALUES (4, 'neither')""",
+                            VALUES (3, 'neither')""",
                         )
 
-                        while (received.size < 4) delay(100)
-                        awaitTxs(node, 4)
+                        awaitTxs(node, 3)
                     }
                 }
             }
@@ -496,7 +493,6 @@ class DebeziumIntegrationTest {
                    ORDER BY _id"""
             )
 
-            // 3 rows ingested — _id=3 (to-only) rejected to DLQ
             assertEquals(3, rows.size)
 
             // Both bounds set
@@ -512,28 +508,60 @@ class DebeziumIntegrationTest {
             assertNull(rows[1]["_valid_to"], "Should have no valid_to")
 
             // Neither — system-assigned valid_from, no valid_to
-            assertEquals(4L, (rows[2]["_id"] as Number).toLong())
+            assertEquals(3L, (rows[2]["_id"] as Number).toLong())
             assertEquals("neither", rows[2]["name"])
             assertTrue(rows[2]["_valid_from"] != null, "Should have system-assigned valid_from")
             assertNull(rows[2]["_valid_to"], "Should have no valid_to")
-
-            // _valid_to without _valid_from → DLQ
-            val dlqTxs = xtQuery(node,
-                """SELECT (user_metadata).error
-                   FROM xt.txs
-                   WHERE (user_metadata).source = 'debezium'
-                     AND (user_metadata).error IS NOT NULL"""
-            )
-            assertEquals(1, dlqTxs.size, "Expected 1 DLQ transaction for to-only record")
-            assertTrue(
-                (dlqTxs[0]["error"] as String).contains("_valid_from"),
-                "DLQ error should mention _valid_from"
-            )
         }
     }
 
     @Test
-    fun `table without _id column sends records to DLQ`() = runTest(timeout = 120.seconds) {
+    fun `_valid_to without _valid_from halts ingestion`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            """CREATE TABLE IF NOT EXISTS bad_valid_to (
+                _id INT PRIMARY KEY,
+                name TEXT,
+                _valid_from TIMESTAMPTZ,
+                _valid_to TIMESTAMPTZ
+            )""",
+            "INSERT INTO bad_valid_to (_id, name, _valid_from) VALUES (1, 'Alice', '2024-01-01T00:00:00Z')",
+        )
+
+        registerConnectorAndAwait()
+
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
+            withSourceProducer(sourceTopic) { processor ->
+                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.bad_valid_to", "test-group")
+                val (capturing, received) = capturingProcessor(processor)
+
+                log.use {
+                    log.tailAll(capturing).use {
+                        // Alice (valid) is ingested first
+                        awaitTxs(node, 1)
+
+                        // Now insert a record with _valid_to but no _valid_from — halts ingestion
+                        pgExecute(
+                            """INSERT INTO bad_valid_to (_id, name, _valid_to)
+                            VALUES (2, 'bad', '2025-01-01T00:00:00Z')""",
+                        )
+
+                        log.awaitError()
+                    }
+                }
+            }
+
+            // Alice should be ingested
+            val rows = xtQuery(node,
+                "SELECT _id, name FROM public.bad_valid_to ORDER BY _id"
+            )
+            assertEquals(1, rows.size, "Only Alice should be ingested — bad record halted ingestion")
+            assertEquals("Alice", rows[0]["name"])
+        }
+    }
+
+    @Test
+    fun `table without _id column halts ingestion`() = runTest(timeout = 120.seconds) {
         pgExecute(
             "CREATE TABLE IF NOT EXISTS no_id_table (id INT PRIMARY KEY, name TEXT)",
             "INSERT INTO no_id_table (id, name) VALUES (1, 'pre-existing')",
@@ -553,32 +581,16 @@ class DebeziumIntegrationTest {
                             "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
                         )
 
-                        // snapshot + insert = 2 records, both should fail and go to DLQ
-                        while (received.size < 2) delay(100)
-                        awaitTxs(node, 2)
+                        // snapshot record lacks _id — processor crashes, no records ingested
+                        log.awaitError()
                     }
                 }
             }
 
-            // No rows should be ingested — all went to DLQ
             val rows = xtQuery(node,
                 "SELECT * FROM public.no_id_table FOR ALL VALID_TIME"
             )
-            assertEquals(0, rows.size, "No rows should be ingested — all records lack _id")
-
-            // DLQ txs have source=debezium and error in user_metadata
-            val dlqTxs = xtQuery(node,
-                """SELECT _id, (user_metadata).source, (user_metadata).error
-                   FROM xt.txs
-                   WHERE (user_metadata).source = 'debezium'
-                     AND (user_metadata).error IS NOT NULL
-                   ORDER BY _id"""
-            )
-            assertEquals(2, dlqTxs.size, "Expected 2 DLQ transactions, got ${dlqTxs.size}")
-            assertTrue(
-                (dlqTxs[0]["error"] as String).contains("_id"),
-                "DLQ error should mention missing _id"
-            )
+            assertEquals(0, rows.size, "No rows should be ingested — records lack _id")
         }
     }
 
@@ -749,7 +761,7 @@ class DebeziumIntegrationTest {
     }
 
     @Test
-    fun `non-TIMESTAMPTZ _valid_from goes to DLQ`() = runTest(timeout = 120.seconds) {
+    fun `non-TIMESTAMPTZ _valid_from halts ingestion`() = runTest(timeout = 120.seconds) {
         pgExecute(
             """CREATE TABLE IF NOT EXISTS bad_times (
                 _id INT PRIMARY KEY,
@@ -780,34 +792,16 @@ class DebeziumIntegrationTest {
                             VALUES (2, 'bad-string', 'not-a-date')""",
                         )
 
-                        while (received.size < 2) delay(100)
-                        awaitTxs(node, 2)
+                        // invalid valid time types — processor crashes, no records ingested
+                        log.awaitError()
                     }
                 }
             }
 
-            // Neither row should be ingested
             val rows = xtQuery(node,
                 "SELECT * FROM public.bad_times FOR ALL VALID_TIME"
             )
             assertEquals(0, rows.size, "No rows should be ingested — both have invalid valid time")
-
-            val dlqTxs = xtQuery(node,
-                """SELECT (user_metadata).error
-                   FROM xt.txs
-                   WHERE (user_metadata).source = 'debezium'
-                     AND (user_metadata).error IS NOT NULL
-                   ORDER BY _id"""
-            )
-            assertEquals(2, dlqTxs.size, "Expected 2 DLQ transactions")
-            assertTrue(
-                (dlqTxs[0]["error"] as String).contains("_valid_from"),
-                "First DLQ should mention _valid_from"
-            )
-            assertTrue(
-                (dlqTxs[1]["error"] as String).contains("_valid_to"),
-                "Second DLQ should mention _valid_to"
-            )
         }
     }
 
