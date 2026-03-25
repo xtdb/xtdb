@@ -24,7 +24,7 @@ import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 class LiveTable
 @JvmOverloads
 constructor(
-    private val al: BufferAllocator, bp: BufferPool,
+    private val al: BufferAllocator,
     private val table: TableRef,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
@@ -49,7 +49,6 @@ constructor(
     private val deleteVec = opVec["delete"]
     private val eraseVec = opVec["erase"]
 
-    private val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
     private val trieMetadataCalculator = TrieMetadataCalculator(
         iidVec, validFromVec, validToVec, systemFromVec
     )
@@ -231,12 +230,13 @@ constructor(
         val hllDeltas: Map<FieldName, HLL>
     )
 
-    fun finishBlock(blockIdx: BlockIndex): FinishedBlock? {
+    fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock? {
         val rowCount = liveRelation.rowCount
         if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
+            val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 vecTypes = liveRelation.types.orEmpty(),
@@ -251,13 +251,13 @@ constructor(
 
     companion object {
         @JvmStatic
-        fun Map<TableRef, LiveTable>.finishBlock(blockIdx: BlockIndex): Map<TableRef, FinishedBlock> =
+        fun Map<TableRef, LiveTable>.finishBlock(bp: BufferPool, blockIdx: BlockIndex): Map<TableRef, FinishedBlock> =
             // migrated here because of #5107 - may migrate the rest later.
             runBlocking {
                 this@finishBlock
                     .map { (tableName, liveTable) ->
                         async(Dispatchers.IO) {
-                            tableName to liveTable.finishBlock(blockIdx)
+                            tableName to liveTable.finishBlock(bp, blockIdx)
                         }
                     }
                     .awaitAll()

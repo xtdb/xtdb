@@ -19,7 +19,7 @@ class LiveTableTest {
             val table = TableRef("test", "public", "docs")
             val rowCounter = RowCounter()
 
-            LiveTable(allocator, BufferPool.UNUSED, table, rowCounter).use { liveTable ->
+            LiveTable(allocator, table, rowCounter).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     sourceRel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     sourceRel["_system_from"].writeLong(1000L)
@@ -59,7 +59,7 @@ class LiveTableTest {
             val table = TableRef("test", "public", "docs")
             val rowCounter = RowCounter()
 
-            LiveTable(allocator, BufferPool.UNUSED, table, rowCounter).use { liveTable ->
+            LiveTable(allocator, table, rowCounter).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { rel ->
                     rel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     rel["_system_from"].writeLong(1000L)

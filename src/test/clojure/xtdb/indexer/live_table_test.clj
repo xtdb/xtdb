@@ -38,7 +38,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
             (let [doc-wtr (.getDocWriter live-table-tx)]
@@ -71,7 +71,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.))]
+                         live-table (LiveTable. allocator #xt/table foo (RowCounter.))]
           (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
             (let [doc-wtr (.getDocWriter live-table-tx)]
 
@@ -116,7 +116,7 @@
     (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
-                     live-table (LiveTable. allocator bp #xt/table foo rc)]
+                     live-table (LiveTable. allocator #xt/table foo rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 

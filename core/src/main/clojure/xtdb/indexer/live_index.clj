@@ -17,11 +17,8 @@
            (java.io ByteArrayInputStream)
            (xtdb.api IndexerConfig TransactionKey)
            (xtdb.api.log ReplicaMessage$ResolvedTx)
-           xtdb.storage.BufferPool
            (xtdb.arrow Relation Relation$StreamLoader)
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.database DatabaseState DatabaseStorage)
-           xtdb.NodeBase
            (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.table TableRef)
            (xtdb.util RefCounter RowCounter)))
@@ -49,7 +46,7 @@
               (update-vals (some-> live-index-snap (.getAllColumnTypes))
                            (comp set keys))))
 
-(deftype LiveIndex [^BufferAllocator allocator, ^BufferPool buffer-pool
+(deftype LiveIndex [^BufferAllocator allocator
                     ^BlockCatalog block-cat, table-cat
                     ^String db-name
 
@@ -78,7 +75,7 @@
                               (let [live-table (.liveTable this-idx table)
                                     new-live-table? (nil? live-table)
                                     ^LiveTable live-table (or live-table
-                                                              (LiveTable. allocator buffer-pool table row-counter
+                                                              (LiveTable. allocator table row-counter
                                                                           (partial trie/->live-trie log-limit page-limit)))]
 
                                 (.startTx live-table tx-key new-live-table?)))))
@@ -135,7 +132,7 @@
         (doseq [[schema-and-table ^bytes ipc-bytes] (.getTableData resolved-tx)]
           (let [table-ref (TableRef/parse db-name schema-and-table)
                 ^LiveTable live-table (or (.get tables table-ref)
-                                         (let [lt (LiveTable. allocator buffer-pool table-ref row-counter
+                                         (let [lt (LiveTable. allocator table-ref row-counter
                                                               (partial trie/->live-trie log-limit page-limit))]
                                            (.put tables table-ref lt)
                                            lt))]
@@ -166,9 +163,9 @@
   (isFull [_]
     (>= (.getBlockRowCount row-counter) rows-per-block))
 
-  (finishBlock [_ block-idx]
+  (finishBlock [_ bp block-idx]
     ;; Return FinishedBlock map directly - SourceLogProcessor handles I/O (log append, trie-cat.addTries)
-    (LiveTable/finishBlock tables block-idx))
+    (LiveTable/finishBlock tables bp block-idx))
 
   (nextBlock [this]
     (.nextBlock row-counter)
@@ -203,7 +200,6 @@
 
 (defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :storage (ig/ref :xtdb.db-catalog/storage)
             :block-cat (ig/ref :xtdb/block-catalog)
             :table-cat (ig/ref :xtdb/table-catalog)}
            (assoc (dissoc opts :indexer-conf)
@@ -212,14 +208,14 @@
                   :page-limit (.getPageLimit indexer-conf)
                   :skip-txs (.getSkipTxs indexer-conf)))})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^DatabaseStorage storage
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator
                                                            ^BlockCatalog block-cat ^TableCatalog table-cat
                                                            db-name
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
   (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (let [tables (HashMap.)]
-        (->LiveIndex allocator (.getBufferPool storage)
+        (->LiveIndex allocator
                      block-cat table-cat
                      db-name
                      latest-completed-tx
