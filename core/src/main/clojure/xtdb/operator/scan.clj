@@ -114,7 +114,7 @@
 
 (defn tables-with-cols [^Snapshot$Source snap-src]
   (with-open [snap (.openSnapshot snap-src)]
-    (.getSchema snap)))
+    (update-vals (.getSchema snap) set)))
 
 (defn- eid-select->eid [eid-select]
   (cond (= '_id (second eid-select))

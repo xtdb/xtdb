@@ -7,7 +7,7 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.indexer.crash-logger :refer [with-crash-log]]
-            [xtdb.indexer.live-index :as li]
+            [xtdb.indexer.live-index]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
@@ -610,7 +610,7 @@
                                                      (openSnapshot [_]
                                                        (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
                                                          (Snapshot. tx-key live-index-snap
-                                                                    (li/->schema live-index-snap table-catalog))))))
+                                                                    (update-vals (LiveIndex/buildSchema live-index-snap table-catalog) set))))))
 
                       tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                                :current-time system-time

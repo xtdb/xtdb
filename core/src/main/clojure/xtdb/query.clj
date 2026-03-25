@@ -332,7 +332,7 @@
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
                                         (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat db-name))]
-                                          (.getSchema snap)))))))
+                                          (update-vals (.getSchema snap) set)))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]

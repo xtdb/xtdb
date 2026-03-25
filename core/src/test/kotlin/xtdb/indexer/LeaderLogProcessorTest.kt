@@ -81,7 +81,7 @@ class LeaderLogProcessorTest {
     fun `FlushBlock triggers block finish when CAS matches`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { finishBlock(any()) } returns emptyMap()
+            every { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
@@ -110,7 +110,7 @@ class LeaderLogProcessorTest {
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
 
-        verify { liveIndex.finishBlock(0) }
+        verify { liveIndex.finishBlock(any(), eq(0)) }
         verify { liveIndex.nextBlock() }
         verify { compactor.signalBlock() }
         assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have block messages")
@@ -126,7 +126,7 @@ class LeaderLogProcessorTest {
             Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
         ))
 
-        verify(exactly = 0) { liveIndex.finishBlock(any()) }
+        verify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
     }
 
     @Test
@@ -143,7 +143,7 @@ class LeaderLogProcessorTest {
         val tableRef = TableRef.parse("test", "public/foo")
 
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { finishBlock(any()) } returns mapOf(tableRef to finishedBlock)
+            every { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
             every { latestCompletedTx } returns null
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {

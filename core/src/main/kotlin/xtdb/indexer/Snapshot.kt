@@ -1,12 +1,13 @@
 package xtdb.indexer
 
 import xtdb.api.TransactionKey
+import xtdb.table.TableRef
 import java.util.concurrent.atomic.AtomicInteger
 
 class Snapshot(
     val txBasis: TransactionKey?,
     val liveIndex: LiveIndex.Snapshot?,
-    val schema: Map<String, Any>
+    val schema: Map<TableRef, Any>
 ) : AutoCloseable {
     interface Source {
         fun openSnapshot(): Snapshot

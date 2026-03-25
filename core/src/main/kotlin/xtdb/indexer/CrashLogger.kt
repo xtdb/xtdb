@@ -59,10 +59,10 @@ class CrashLogger @JvmOverloads constructor(
 
         bufferPool.putObject(crashDir.resolve("crash.edn"), ByteBuffer.wrap(crashEdn.toByteArray()))
 
-        val liveTable = liveIndex.liveTable(table)
+        val liveTable = liveIndex.liveTable(table) ?: return
 
         bufferPool.putObject(
-            crashDir.resolve("live-trie.binpb"), 
+            crashDir.resolve("live-trie.binpb"),
             ByteBuffer.wrap(liveTable.liveTrie.asProto)
         )
 

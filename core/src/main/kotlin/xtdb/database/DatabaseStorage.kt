@@ -3,6 +3,8 @@ package xtdb.database
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
+import xtdb.api.log.Log
+import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.LogOffset
 import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage

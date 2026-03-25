@@ -7,7 +7,7 @@
             xtdb.indexer.live-index
             [xtdb.main :as xt-main]
             [xtdb.node :as xtn])
-  (:import (xtdb.indexer.live_index LiveIndex)))
+  (:import xtdb.indexer.LiveIndex))
 
 (def xtdb-cli-edn
   (io/resource "xtdb/cli-test.edn"))
@@ -95,7 +95,7 @@
   (t/testing "node opts passed to start-node passes through yaml file and starts node"
     (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml))]))]
       (let [^LiveIndex live-idx (.getLiveIndex (db/primary-db node))]
-        (t/is (= 65 (.log-limit live-idx))
+        (t/is (= 65 (.logLimit live-idx))
               "using provided config"))
       (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])
       (t/is (= [{:e :foo}] (xt/q node '(from :docs [{:xt/id e}])))))))
@@ -112,7 +112,7 @@
   (t/testing "YAML with multiple dots in the filename starts node"
     (with-open [node (xtn/start-node (->node-opts ["-f" (str (io/as-file xtdb-cli-yaml-multi-dot))]))]
       (let [^LiveIndex live-idx (.getLiveIndex (db/primary-db node))]
-        (t/is (= 65 (.log-limit live-idx))
+        (t/is (= 65 (.logLimit live-idx))
               "using provided config"))
       (xt/submit-tx node [[:put-docs :docs {:xt/id :foo}]])
       (t/is (= [{:e :foo}] (xt/q node '(from :docs [{:xt/id e}])))))))

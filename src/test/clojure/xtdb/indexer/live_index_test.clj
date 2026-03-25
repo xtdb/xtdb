@@ -18,6 +18,7 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
+           (xtdb.api IndexerConfig)
            (xtdb.indexer LiveIndex)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
@@ -366,15 +367,9 @@
           tables (HashMap.)
           live-index-allocator (util/->child-allocator allocator "live-index")]
 
-      (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp
-                                                             block-cat table-catalog
-                                                             "xtdb"
-                                                             nil tables
-                                                             nil (StampedLock.)
-                                                             (RefCounter.)
-                                                             (RowCounter.) 102400
-                                                             64 1024
-                                                             [])]
+      (util/with-open [live-index (LiveIndex/open live-index-allocator
+                                                                      block-cat table-catalog
+                                                                      "xtdb")]
         (let [table #xt/table test-table
               iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
@@ -387,7 +382,7 @@
           (t/is (some? (.liveTable live-index table))
                 "Table should exist after commit")
 
-          (.finishBlock live-index 0)
+          (.finishBlock live-index bp 0)
           (.nextBlock live-index)
 
           (t/is (nil? (.liveTable live-index table))
