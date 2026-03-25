@@ -5,6 +5,7 @@
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
+           xtdb.NodeBase
            xtdb.api.IndexerConfig
            xtdb.api.Xtdb$Config
            [xtdb.api.log Watchers]
@@ -49,14 +50,9 @@
   (DatabaseStorage. source-log replica-log external-source buffer-pool metadata-manager))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
-  {k {:base {:allocator (ig/ref :xtdb/allocator)
-             :config (ig/ref :xtdb/config)
-             :mem-cache (ig/ref :xtdb.cache/memory)
-             :disk-cache (ig/ref :xtdb.cache/disk)
-             :meter-registry (ig/ref :xtdb.metrics/registry)
-             :log-clusters (ig/ref :xtdb.log/clusters)
-             :indexer (ig/ref :xtdb/indexer)
-             :compactor (ig/ref :xtdb/compactor)}}})
+  {k {:base (ig/ref :xtdb/base)
+      :indexer (ig/ref :xtdb/indexer)
+      :compactor (ig/ref :xtdb/compactor)}})
 
 (defmethod ig/expand-key ::watchers [k opts]
   {k (into {:db-storage (ig/ref ::storage)
@@ -87,7 +83,7 @@
   (some-> (System/getenv "XTDB_SINGLE_WRITER") Boolean/parseBoolean))
 
 (defn- db-system [db-name base ^Database$Config db-config]
-  (let [^Xtdb$Config conf (get-in base [:config :config])
+  (let [^Xtdb$Config conf (:config base)
         indexer-conf (.getIndexer conf)
         opts {:base base, :db-name db-name, :mode (.getMode db-config), :db-config db-config, :indexer-conf indexer-conf}]
     (-> (cond-> {::allocator opts
@@ -123,7 +119,7 @@
 
           (not (single-writer?))
           (assoc :xtdb.log.processor/source (cond-> (assoc opts
-                                                            :block-flush-duration (.getFlushDuration indexer-conf))
+                                                           :block-flush-duration (.getFlushDuration indexer-conf))
                                               (:db-catalog base) (assoc :db-catalog (:db-catalog base)))))
         (doto ig/load-namespaces))))
 
@@ -146,68 +142,78 @@
 
       (throw (ex-cause e)))))
 
-(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [base]}]
-  (util/with-close-on-catch [!dbs (HashMap.)]
-    (let [^Xtdb$Config conf (get-in base [:config :config])
-          db-cat (reify
-                   Database$Catalog
-                   (getDatabaseNames [_] (set (keys !dbs)))
+(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base indexer compactor]}]
+  (let [^Xtdb$Config conf (.getConfig base)
+        base {:allocator (.getAllocator base)
+              :config conf
+              :node-id (.getNodeId conf)
+              :default-tz (.getDefaultTz conf)
+              :mem-cache (.getMemoryCache base)
+              :disk-cache (.getDiskCache base)
+              :meter-registry (.getMeterRegistry base)
+              :log-clusters (.getLogClusters base)
+              :indexer indexer
+              :compactor compactor}]
+    (util/with-close-on-catch [!dbs (HashMap.)]
+      (let [db-cat (reify
+                     Database$Catalog
+                     (getDatabaseNames [_] (set (keys !dbs)))
 
-                   (databaseOrNull [_ db-name]
-                     (::database (.get !dbs db-name)))
+                     (databaseOrNull [_ db-name]
+                       (::database (.get !dbs db-name)))
 
-                   (attach [_ db-name db-config]
-                     (when (.containsKey !dbs db-name)
-                       (throw (err/conflict :xtdb/db-exists "Database already exists" {:db-name db-name})))
+                     (attach [_ db-name db-config]
+                       (when (.containsKey !dbs db-name)
+                         (throw (err/conflict :xtdb/db-exists "Database already exists" {:db-name db-name})))
 
-                     (util/with-close-on-catch [db (try
-                                                     (open-db db-name base (or db-config (Database$Config.)))
-                                                     (catch Throwable t
-                                                       (log/debug "Failed to open database"
-                                                                 {:db-name db-name
-                                                                  :exception (class t)
-                                                                  :message (.getMessage t)})
-                                                       (when-let [cause (.getCause t)]
-                                                         (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
-                                                       (when-let [root-cause (and (.getCause t) (.getCause (.getCause t)))]
-                                                         (log/debug "Root cause:" {:class (class root-cause), :message (.getMessage root-cause)}))
-                                                       (throw (err/incorrect ::invalid-db-config "Failed to open database"
-                                                                             {::err/cause t}))))]
-                       (.put !dbs db-name db)
-                       (::database db)))
+                       (util/with-close-on-catch [db (try
+                                                       (open-db db-name base (or db-config (Database$Config.)))
+                                                       (catch Throwable t
+                                                         (log/debug "Failed to open database"
+                                                                    {:db-name db-name
+                                                                     :exception (class t)
+                                                                     :message (.getMessage t)})
+                                                         (when-let [cause (.getCause t)]
+                                                           (log/debug "Cause:" {:class (class cause), :message (.getMessage cause)}))
+                                                         (when-let [root-cause (and (.getCause t) (.getCause (.getCause t)))]
+                                                           (log/debug "Root cause:" {:class (class root-cause), :message (.getMessage root-cause)}))
+                                                         (throw (err/incorrect ::invalid-db-config "Failed to open database"
+                                                                               {::err/cause t}))))]
+                         (.put !dbs db-name db)
+                         (::database db)))
 
-                   (detach [_ db-name]
-                     (when (= "xtdb" db-name)
-                       (throw (err/incorrect :xtdb/cannot-detach-primary "Cannot detach the primary 'xtdb' database" {:db-name db-name})))
+                     (detach [_ db-name]
+                       (when (= "xtdb" db-name)
+                         (throw (err/incorrect :xtdb/cannot-detach-primary "Cannot detach the primary 'xtdb' database" {:db-name db-name})))
 
-                     (when-not (.containsKey !dbs db-name)
-                       (throw (err/not-found :xtdb/no-such-db "Database does not exist" {:db-name db-name})))
+                       (when-not (.containsKey !dbs db-name)
+                         (throw (err/not-found :xtdb/no-such-db "Database does not exist" {:db-name db-name})))
 
-                     (when-some [sys (.remove !dbs db-name)]
-                       (ig/halt! sys)))
+                       (when-some [sys (.remove !dbs db-name)]
+                         (ig/halt! sys)))
 
-                   AutoCloseable
-                   (close [_]
-                     (doseq [[_ sys] !dbs]
-                       (ig/halt! sys))))]
+                     AutoCloseable
+                     (close [_]
+                       (doseq [[_ sys] !dbs]
+                         (ig/halt! sys))))]
 
-      (let [xtdb-db-config (cond-> (-> (Database$Config.)
-                                       (.log (.getLog conf))
-                                       (.storage (.getStorage conf)))
-                             (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
-        (util/with-close-on-catch [xtdb-sys (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
-          (.put !dbs "xtdb" xtdb-sys)
+        (let [xtdb-db-config (cond-> (-> (Database$Config.)
+                                         (.log (.getLog conf))
+                                         (.storage (.getStorage conf)))
+                               (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
+          (util/with-close-on-catch [xtdb-sys (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
+            (.put !dbs "xtdb" xtdb-sys)
 
-          (let [^Database xtdb-db (::database xtdb-sys)]
-            (doseq [[db-name ^Database$Config db-config] (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
-                                                             (update-vals Database$Config/fromProto))
-                    :when (not= db-name "xtdb")]
-              (let [db-config (cond-> db-config
-                                (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
-                (util/with-close-on-catch [db (open-db db-name base db-config)]
-                  (.put !dbs db-name db)))))))
+            (let [^Database xtdb-db (::database xtdb-sys)]
+              (doseq [[db-name ^Database$Config db-config] (-> (.getSecondaryDatabases (.getBlockCatalog xtdb-db))
+                                                               (update-vals Database$Config/fromProto))
+                      :when (not= db-name "xtdb")]
+                (let [db-config (cond-> db-config
+                                  (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
+                  (util/with-close-on-catch [db (open-db db-name base db-config)]
+                    (.put !dbs db-name db)))))))
 
-      db-cat)))
+        db-cat))))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

@@ -6,15 +6,14 @@
             [xtdb.test-util :as tu]
             [xtdb.types]
             [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge Timer)
-           io.micrometer.core.instrument.MeterRegistry))
+  (:import (io.micrometer.core.instrument Counter Gauge Timer)))
 
 (t/use-fixtures :each tu/with-mock-clock)
 
 (t/deftest test-error-and-warning-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+        registry (.getMeterRegistry (util/node-base node))]
 
     ;; it's only the runtime errors that increment the error counter
     (t/is (thrown? Exception (xt/q node "SLECT 1"))
@@ -39,7 +38,7 @@
 (t/deftest test-transaction-exception-counter
   (let [node (xtn/start-node tu/*node-opts*)
         conn (jdbc/get-connection node)
-        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+        registry (.getMeterRegistry (util/node-base node))]
     (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via pgwire")
 
@@ -59,7 +58,7 @@
 
 (t/deftest test-transaction-exception-counter-on-submit-tx
   (let [node (xtn/start-node tu/*node-opts*)
-        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+        registry (.getMeterRegistry (util/node-base node))]
     (t/is (anomalous? [:incorrect :missing-id] (xt/submit-tx node ["INSERT INTO foo (a) VALUES (42)"]))
           "presubmit error via the node (submit-tx)")
 
@@ -74,7 +73,7 @@
 
 (t/deftest test-total-and-active-connections
   (let [node (xtn/start-node tu/*node-opts*)
-        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+        registry (.getMeterRegistry (util/node-base node))]
 
     (with-open [conn1 (jdbc/get-connection node)]
       (jdbc/execute! conn1 ["SELECT 1"]))
@@ -86,7 +85,7 @@
 
 (t/deftest test-query-timer
   (let [node (xtn/start-node tu/*node-opts*)
-        ^MeterRegistry registry (util/component node :xtdb.metrics/registry)]
+        registry (.getMeterRegistry (util/node-base node))]
 
     (with-open [conn (jdbc/get-connection node)]
       (t/testing "normal pgwire queries should be added to timer"

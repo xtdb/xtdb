@@ -24,6 +24,7 @@
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
+           xtdb.NodeBase
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)))
 
 (defn name->oid [s]
@@ -466,12 +467,12 @@
   (table-template [info-schema table-ref]))
 
 (defmethod ig/expand-key :xtdb/information-schema [k opts]
-  {k (into {:allocator (ig/ref :xtdb/allocator)
-            :metrics-registry (ig/ref :xtdb.metrics/registry)}
+  {k (into {:base (ig/ref :xtdb/base)}
            opts)})
 
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [allocator metrics-registry]}]
-  (let [pg-user (pg-user-template-page+trie allocator)]
+(defmethod ig/init-key :xtdb/information-schema [_ {:keys [^NodeBase base]}]
+  (let [metrics-registry (.getMeterRegistry base)
+        pg-user (pg-user-template-page+trie (.getAllocator base))]
     (reify InfoSchema
       (table-template [_ table-ref]
         (when (= 'pg_catalog/pg_user (table/ref->schema+table table-ref))

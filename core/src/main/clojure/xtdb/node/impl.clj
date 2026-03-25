@@ -20,7 +20,8 @@
            (java.io Closeable Writer)
            (java.util HashMap)
            [java.util.concurrent.atomic AtomicReference]
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator)
+           xtdb.NodeBase
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
@@ -32,33 +33,14 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod ig/expand-key :xtdb/config [k ^Xtdb$Config config]
-  {k {:config config
-      :node-id (.getNodeId config)
-      :default-tz (.getDefaultTz config)}})
+(defmethod ig/expand-key :xtdb/base [k ^Xtdb$Config config]
+  {k {:config config}})
 
-(defmethod ig/init-key :xtdb/config [_ cfg] cfg)
+(defmethod ig/init-key :xtdb/base [_ {:keys [^Xtdb$Config config]}]
+  (NodeBase/open config))
 
-(defmethod ig/expand-key :xtdb/allocator [k ^Xtdb$Config config]
-  {k {:allocator (.getAllocator config)
-      :meter-registry (ig/ref ::metrics/registry)}})
-
-(defmethod ig/init-key :xtdb/allocator [_ {:keys [allocator meter-registry]}]
-  (if allocator
-    {:allocator allocator, :close? false}
-    {:allocator (let [limit (long (* 0.9 (util/max-direct-memory)))]
-                  (if meter-registry
-                    (doto (RootAllocator. (metrics/root-allocator-listener meter-registry) limit)
-                      (->> (metrics/register-root-allocator-meters! meter-registry)))
-                    (RootAllocator. limit)))
-     :close? true}))
-
-(defmethod ig/resolve-key :xtdb/allocator [_ {:keys [allocator]}]
-  allocator)
-
-(defmethod ig/halt-key! :xtdb/allocator [_ {:keys [allocator close?]}]
-  (when close?
-    (util/close allocator)))
+(defmethod ig/halt-key! :xtdb/base [_ ^NodeBase base]
+  (.close base))
 
 (defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
   (-> (into {:default-tz default-tz,
@@ -280,18 +262,19 @@
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
 (defmethod ig/expand-key :xtdb/node [k opts]
-  {k (merge {:allocator (ig/ref :xtdb/allocator)
-             :config (ig/ref :xtdb/config)
+  {k (merge {:base (ig/ref :xtdb/base)
              :q-src (ig/ref :xtdb.query/query-source)
              :db-cat (ig/ref :xtdb/db-catalog)
-             :metrics-registry (ig/ref :xtdb.metrics/registry)
              :authn (ig/ref :xtdb/authn)}
             opts)})
 
-(defmethod ig/init-key :xtdb/node [_ {:keys [metrics-registry config] :as deps}]
-  (let [node (map->Node (-> deps
-                            (dissoc :config)
-                            (assoc :default-tz (:default-tz config)
+(defmethod ig/init-key :xtdb/node [_ {:keys [^NodeBase base] :as deps}]
+  (let [metrics-registry (.getMeterRegistry base)
+        node (map->Node (-> deps
+                            (dissoc :base)
+                            (assoc :allocator (.getAllocator base)
+                                   :metrics-registry metrics-registry
+                                   :default-tz (.getDefaultTz (.getConfig base))
                                    :!await-token (AtomicReference. nil))
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"})
@@ -343,23 +326,16 @@
 (defn node-system [^Xtdb$Config opts]
   (let [srv-config (.getServer opts)
         flight-sql-config (.getFlightSql opts)
-        healthz (.getHealthz opts)
-        tracer (.getTracer opts)]
+        healthz (.getHealthz opts)]
     (-> {:xtdb/node {}
-         :xtdb/config opts
-         :xtdb/allocator opts
+         :xtdb/base opts
          :xtdb/indexer {}
          :xtdb/information-schema {}
          :xtdb.operator.scan/scan-emitter {}
          :xtdb.query/query-source {}
          :xtdb/compactor (.getCompactor opts)
-         :xtdb.metrics/registry {}
-         :xtdb/tracer tracer
-         :xtdb.log/clusters (.getLogClusters opts)
          :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
-         :xtdb.cache/memory (.getMemoryCache opts)
-         :xtdb.cache/disk (.getDiskCache opts)
          :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
@@ -378,8 +354,7 @@
       (-> (:xtdb/node system)
           (assoc :system system
                  :close-fn #(when (compare-and-set! !closing false true)
-                              (ig/halt! system)
-                              #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system)))))))
+                              (ig/halt! system)))))
     (catch clojure.lang.ExceptionInfo e
       (try
         (ig/halt! (:system (ex-data e)))

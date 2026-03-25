@@ -18,6 +18,7 @@
            (xtdb.api.metrics HealthzConfig)
            xtdb.api.Xtdb$Config
            (xtdb.database Database Database$Catalog)
+           xtdb.NodeBase
            xtdb.storage.BufferPoolKt))
 
 (defn get-ingestion-error [^Database db]
@@ -117,13 +118,13 @@
 (defmethod ig/expand-key :xtdb/healthz [k ^HealthzConfig config]
   {k {:host (.getHost config)
       :port (.getPort config)
-      :meter-registry (ig/ref :xtdb.metrics/registry)
+      :base (ig/ref :xtdb/base)
       :db-cat (ig/ref :xtdb/db-catalog)
       :node (ig/ref :xtdb/node)}})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, meter-registry, ^Database$Catalog db-cat]}]
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, ^NodeBase base, ^Database$Catalog db-cat]}]
   (let [db (.getPrimary db-cat)
-        ^Server server (-> (handler {:meter-registry meter-registry
+        ^Server server (-> (handler {:meter-registry (.getMeterRegistry base)
                                      :db db
                                      :initial-target-message-id (.getLatestSubmittedMsgId (.getSourceLog db))
                                      :node node})

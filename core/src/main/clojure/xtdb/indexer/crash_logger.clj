@@ -33,8 +33,8 @@
             :buffer-pool (ig/ref :xtdb/buffer-pool)}
            opts)})
 
-(defmethod ig/init-key :xtdb.indexer/crash-logger [_ {{:keys [config]} :base
+(defmethod ig/init-key :xtdb.indexer/crash-logger [_ {{:keys [node-id]} :base
                                                        :keys [allocator buffer-pool]}]
-  (CrashLogger. allocator buffer-pool (:node-id config)))
+  (CrashLogger. allocator buffer-pool node-id))
 
 (defmethod ig/halt-key! :xtdb.indexer/crash-logger [_ _])

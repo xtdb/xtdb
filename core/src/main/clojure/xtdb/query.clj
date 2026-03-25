@@ -50,6 +50,7 @@
            (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer Snapshot)
+           xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.util.RefCounter))
@@ -463,19 +464,21 @@
 
 (defmethod ig/expand-key ::query-source [k opts]
   {k (merge opts
-            {:allocator (ig/ref :xtdb/allocator)
-             :metrics-registry (ig/ref :xtdb.metrics/registry)
+            {:base (ig/ref :xtdb/base)
              :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)})})
 
 ;; Estimated 400MB max size given large SLT queries, observed during SLT between/10/ run.
 ;; with an inferred value of roughly 100KB per parsed query.
-(defn ->query-source [{:keys [allocator metrics-registry] :as deps}]
-  (let [ref-ctr (RefCounter.)
-        allocator (util/->child-allocator allocator "query-source")
+(defn ->query-source [{:keys [^NodeBase base allocator metrics-registry] :as deps}]
+  (let [allocator (util/->child-allocator (if base (.getAllocator base) allocator) "query-source")
+        metrics-registry (if base (.getMeterRegistry base) metrics-registry)
+        ref-ctr (RefCounter.)
         deps (-> deps
+                 (dissoc :base)
                  (assoc :ref-ctr ref-ctr
-                        :query-warning-counter (some-> metrics-registry (metrics/add-counter "query.warning"))
                         :allocator allocator
+                        :metrics-registry metrics-registry
+                        :query-warning-counter (some-> metrics-registry (metrics/add-counter "query.warning"))
                         :plan-cache (-> (Caffeine/newBuilder)
                                         (.maximumSize 4096)
                                         (.build))))]

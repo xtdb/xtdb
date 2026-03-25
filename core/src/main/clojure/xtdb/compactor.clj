@@ -6,20 +6,21 @@
   (:import xtdb.api.CompactorConfig
            xtdb.api.log.Watchers
            (xtdb.compactor Compactor Compactor$Driver Compactor$Impl)
-           (xtdb.database Database$Mode)))
+           (xtdb.database Database$Mode)
+           xtdb.NodeBase))
 
 (def ^:dynamic *ignore-signal-block?* false)
 (def ^:dynamic *recency-partition* nil)
 
 (defmethod ig/expand-key :xtdb/compactor [k ^CompactorConfig config]
   {k {:threads (.getThreads config)
-      :metrics-registry (ig/ref :xtdb.metrics/registry)}})
+      :base (ig/ref :xtdb/base)}})
 
 (def ^:dynamic *page-size* 1024)
 
-(defn- open-compactor [{:keys [metrics-registry threads]}]
+(defn- open-compactor [{:keys [^NodeBase base threads]}]
   (Compactor$Impl. (Compactor$Driver/real *page-size* *recency-partition*)
-                   metrics-registry
+                   (.getMeterRegistry base)
                    (jc/->JobCalculator)
                    *ignore-signal-block?* threads))
 

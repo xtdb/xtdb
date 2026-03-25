@@ -115,17 +115,6 @@
     (.logCluster config (str (symbol cluster-alias)) (->log-cluster-factory tag opts)))
   config)
 
-(defmethod ig/init-key ::clusters [_ clusters]
-  (util/with-close-on-catch [!clusters (HashMap.)]
-    (doseq [[cluster-alias ^Log$Cluster$Factory factory] clusters]
-      (.put !clusters
-            (str (symbol cluster-alias))
-            (.open factory)))
-    (into {} !clusters)))
-
-(defmethod ig/halt-key! ::clusters [_ clusters]
-  (util/close clusters))
-
 (defmulti ->log-factory
   (fn [k _opts]
     (when-let [ns (namespace k)]
