@@ -3,7 +3,9 @@
             [integrant.core :as ig]
             [xtdb.error :as err])
   (:import (xtdb.arrow RelationReader VectorReader)
+           xtdb.database.DatabaseStorage
            (xtdb.error Anomaly$Caller Interrupted)
+           xtdb.NodeBase
            (xtdb.indexer CrashLogger LiveIndex LiveTable$Tx)
            (xtdb.table TableRef)))
 
@@ -30,11 +32,10 @@
 
 (defmethod ig/expand-key :xtdb.indexer/crash-logger [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)}
+            :storage (ig/ref :xtdb.db-catalog/storage)}
            opts)})
 
-(defmethod ig/init-key :xtdb.indexer/crash-logger [_ {{:keys [node-id]} :base
-                                                       :keys [allocator buffer-pool]}]
-  (CrashLogger. allocator buffer-pool node-id))
+(defmethod ig/init-key :xtdb.indexer/crash-logger [_ {:keys [allocator ^NodeBase base ^DatabaseStorage storage]}]
+  (CrashLogger. allocator (.getBufferPool storage) (.getNodeId (.getConfig base))))
 
 (defmethod ig/halt-key! :xtdb.indexer/crash-logger [_ _])

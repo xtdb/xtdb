@@ -4,15 +4,15 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
+           xtdb.NodeBase
            [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
            [xtdb.util MsgIdUtil]))
 
-(defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
+(defn- open-source-processor [{:keys [^NodeBase base allocator ^DatabaseStorage db-storage ^DatabaseState db-state
                                       indexer-for-db compactor-for-db watchers db-catalog
-                                      ^IndexerConfig indexer-conf block-flush-duration]
-                               {:keys [meter-registry]} :base}
+                                      ^IndexerConfig indexer-conf block-flush-duration]}
                               read-only?]
-  (SourceLogProcessor. allocator meter-registry
+  (SourceLogProcessor. allocator (.getMeterRegistry base)
                        db-storage db-state
                        indexer-for-db (.getLiveIndex db-state)
                        watchers compactor-for-db (set (.getSkipTxs indexer-conf))
@@ -27,7 +27,6 @@
 
 (defmethod ig/expand-key :xtdb.log.processor/source [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
             :watchers (ig/ref :xtdb.db-catalog/watchers)
@@ -58,7 +57,6 @@
 
 (defmethod ig/expand-key :xtdb.log/processor [k opts]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
             :source-watchers (ig/ref :xtdb.db-catalog/watchers)
@@ -67,13 +65,13 @@
             :block-uploader (ig/ref :xtdb.log.processor/block-uploader)}
            opts)})
 
-(defmethod ig/init-key :xtdb.log/processor [_ {:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
+(defmethod ig/init-key :xtdb.log/processor [_ {:keys [^NodeBase base allocator ^DatabaseStorage db-storage ^DatabaseState db-state
                                                       ^IndexerConfig indexer-conf ^Database$Mode mode
                                                       compactor-for-db source-watchers db-catalog
-                                                      buffer-pool indexer-for-db ^BlockUploader block-uploader]
-                                               {:keys [meter-registry]} :base}]
+                                                      indexer-for-db ^BlockUploader block-uploader]}]
   (when (.getEnabled indexer-conf)
-    (let [proc-factory (reify LogProcessor$ProcessorFactory
+    (let [buffer-pool (.getBufferPool db-storage)
+          proc-factory (reify LogProcessor$ProcessorFactory
                          (openFollower [_ pending-block after-source-msg-id after-replica-msg-id]
                            (FollowerLogProcessor. allocator buffer-pool db-state compactor-for-db
                                                   source-watchers
@@ -88,7 +86,7 @@
                                                            after-source-msg-id
                                                            after-replica-msg-id
                                                            (.getFlushDuration indexer-conf)
-                                                           meter-registry)]
+                                                           (.getMeterRegistry base))]
                              (reify LogProcessor$LeaderSystem
                                (getProc [_] proc)
                                (close [_] (.close proc)))))
@@ -103,7 +101,7 @@
                                                     after-source-msg-id
                                                     after-replica-msg-id)))
 
-          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader meter-registry)]
+          log-processor (LogProcessor. proc-factory db-storage db-state block-uploader (.getMeterRegistry base))]
 
       {:log-processor log-processor
        :subscription (when-not (= mode Database$Mode/READ_ONLY)

@@ -39,7 +39,7 @@
             :watchers (ig/ref :xtdb.db-catalog/watchers)}
            opts)})
 
-(defmethod ig/init-key ::for-db [_ {{:keys [^Compactor compactor]} :base, :keys [allocator storage state ^Database$Mode mode ^Watchers watchers]}]
+(defmethod ig/init-key ::for-db [_ {:keys [^Compactor compactor allocator storage state ^Database$Mode mode ^Watchers watchers]}]
   (if (= mode Database$Mode/READ_ONLY)
     (.openForDatabase Compactor/NOOP allocator storage state watchers)
     (.openForDatabase compactor allocator storage state watchers)))

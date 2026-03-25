@@ -12,7 +12,8 @@
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
            (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.storage BufferPool)
+           xtdb.database.DatabaseStorage
+           xtdb.storage.BufferPool
            xtdb.table.TableRef
            xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
@@ -95,11 +96,11 @@
            (into {})))))
 
 (defmethod ig/expand-key :xtdb/table-catalog [k opts]
-  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
+  {k (into {:storage (ig/ref :xtdb.db-catalog/storage)
             :block-cat (ig/ref :xtdb/block-catalog)}
            opts)})
 
-(defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
+(defmethod ig/init-key :xtdb/table-catalog [_ {:keys [^DatabaseStorage storage block-cat]}]
   (let [block-idx (.getCurrentBlockIndex block-cat)]
-    (doto (TableCatalog. block-cat buffer-pool)
+    (doto (TableCatalog. block-cat (.getBufferPool storage))
       (.refresh (or block-idx -1)))))

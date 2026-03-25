@@ -2,7 +2,6 @@
   (:require [clojure.string :as str]
             [integrant.core :as ig]
             [xtdb.authn.crypt :as authn.crypt]
-            [xtdb.metadata]
             [xtdb.serde.types :as st]
             [xtdb.table :as table]
             [xtdb.trie :as trie]

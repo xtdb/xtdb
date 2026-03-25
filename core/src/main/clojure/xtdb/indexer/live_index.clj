@@ -20,7 +20,8 @@
            xtdb.storage.BufferPool
            (xtdb.arrow Relation Relation$StreamLoader)
            (xtdb.catalog BlockCatalog TableCatalog)
-           xtdb.database.DatabaseState
+           (xtdb.database DatabaseState DatabaseStorage)
+           xtdb.NodeBase
            (xtdb.indexer LiveIndex$Snapshot LiveIndex$Tx LiveTable LiveTable$Snapshot LiveTable$Tx Snapshot)
            (xtdb.table TableRef)
            (xtdb.util RefCounter RowCounter)))
@@ -202,7 +203,7 @@
 
 (defmethod ig/expand-key :xtdb.indexer/live-index [k {:keys [^IndexerConfig indexer-conf] :as opts}]
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :buffer-pool (ig/ref :xtdb/buffer-pool)
+            :storage (ig/ref :xtdb.db-catalog/storage)
             :block-cat (ig/ref :xtdb/block-catalog)
             :table-cat (ig/ref :xtdb/table-catalog)}
            (assoc (dissoc opts :indexer-conf)
@@ -211,17 +212,14 @@
                   :page-limit (.getPageLimit indexer-conf)
                   :skip-txs (.getSkipTxs indexer-conf)))})
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {{:keys [meter-registry]} :base,
-                                                    :keys [allocator, ^DatabaseState db-state, buffer-pool
-                                                           block-cat table-cat
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator, ^DatabaseStorage storage
+                                                           ^BlockCatalog block-cat ^TableCatalog table-cat
                                                            db-name
                                                            ^long rows-per-block, ^long log-limit, ^long page-limit, skip-txs]}]
-  (let [block-cat (or block-cat (.getBlockCatalog db-state))
-        table-cat (or table-cat (.getTableCatalog db-state))
-        latest-completed-tx (.getLatestCompletedTx block-cat)]
+  (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
       (let [tables (HashMap.)]
-        (->LiveIndex allocator buffer-pool
+        (->LiveIndex allocator (.getBufferPool storage)
                      block-cat table-cat
                      db-name
                      latest-completed-tx

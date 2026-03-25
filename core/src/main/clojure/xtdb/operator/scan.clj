@@ -8,7 +8,6 @@
             xtdb.indexer.live-index
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
-            [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.table :as table]
             [xtdb.time :as time]

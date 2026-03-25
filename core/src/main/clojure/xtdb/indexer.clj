@@ -698,12 +698,8 @@
             :crash-logger (ig/ref ::crash-logger)}
            opts)})
 
-(defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
-                                    :keys [allocator db-storage db-state ^LiveIndex live-index ^CrashLogger crash-logger]}]
+(defmethod ig/init-key ::for-db [_ {:keys [^Indexer indexer allocator db-storage db-state ^LiveIndex live-index ^CrashLogger crash-logger]}]
   (.openForDatabase indexer allocator db-storage db-state live-index crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))
-
-(defn <-node ^xtdb.indexer.Indexer [node]
-  (util/component node :xtdb/indexer))

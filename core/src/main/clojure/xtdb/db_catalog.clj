@@ -23,8 +23,8 @@
 ;; Dependencies flow inward: Services → State, Services → Storage
 ;; State will eventually have no I/O dependencies at runtime (only at startup to hydrate).
 
-(defmethod ig/init-key ::allocator [_ {{:keys [allocator]} :base, :keys [db-name]}]
-  (util/->child-allocator allocator (format "database/%s" db-name)))
+(defmethod ig/init-key ::allocator [_ {:keys [^NodeBase base db-name]}]
+  (util/->child-allocator (.getAllocator base) (format "database/%s" db-name)))
 
 (defmethod ig/halt-key! ::allocator [_ allocator]
   (util/close allocator))
@@ -39,15 +39,14 @@
 (defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
   (DatabaseState. db-name block-cat table-cat trie-cat live-index))
 
-(defmethod ig/expand-key ::storage [k _opts]
-  {k {:source-log (ig/ref :xtdb/source-log)
-      :replica-log (ig/ref :xtdb/replica-log)
-      :external-source (ig/ref :xtdb/external-source-log)
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :metadata-manager (ig/ref :xtdb.metadata/metadata-manager)}})
+(defmethod ig/expand-key ::storage [k opts]
+  {k (into {:allocator (ig/ref ::allocator)} opts)})
 
-(defmethod ig/init-key ::storage [_ {:keys [source-log replica-log external-source buffer-pool metadata-manager]}]
-  (DatabaseStorage. source-log replica-log external-source buffer-pool metadata-manager))
+(defmethod ig/init-key ::storage [_ {:keys [allocator ^NodeBase base ^Database$Config db-config db-name]}]
+  (DatabaseStorage/open allocator base db-name db-config))
+
+(defmethod ig/halt-key! ::storage [_ ^DatabaseStorage storage]
+  (.close storage))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
   {k {:base (ig/ref :xtdb/base)
@@ -82,17 +81,12 @@
 (defn single-writer? []
   (some-> (System/getenv "XTDB_SINGLE_WRITER") Boolean/parseBoolean))
 
-(defn- db-system [db-name base ^Database$Config db-config]
-  (let [^Xtdb$Config conf (:config base)
+(defn- db-system [db-name ^NodeBase base {:keys [indexer compactor db-catalog]} ^Database$Config db-config]
+  (let [^Xtdb$Config conf (.getConfig base)
         indexer-conf (.getIndexer conf)
-        opts {:base base, :db-name db-name, :mode (.getMode db-config), :db-config db-config, :indexer-conf indexer-conf}]
+        opts {:base base, :indexer indexer, :compactor compactor
+              :db-name db-name, :mode (.getMode db-config), :db-config db-config, :indexer-conf indexer-conf}]
     (-> (cond-> {::allocator opts
-                 :xtdb.metadata/metadata-manager opts
-                 :xtdb/log (assoc opts :factory (.getLog db-config))
-                 :xtdb/source-log opts
-                 :xtdb/replica-log (assoc opts :factory (.getLog db-config))
-                 :xtdb/external-source-log opts
-                 :xtdb/buffer-pool (assoc opts :factory (.getStorage db-config))
 
                  ::storage opts
 
@@ -113,19 +107,19 @@
 
           (single-writer?)
           (assoc :xtdb.log.processor/block-uploader (cond-> opts
-                                                      (:db-catalog base) (assoc :db-catalog (:db-catalog base)))
+                                                      db-catalog (assoc :db-catalog db-catalog))
                  :xtdb.log/processor (cond-> opts
-                                       (:db-catalog base) (assoc :db-catalog (:db-catalog base))))
+                                       db-catalog (assoc :db-catalog db-catalog)))
 
           (not (single-writer?))
           (assoc :xtdb.log.processor/source (cond-> (assoc opts
                                                            :block-flush-duration (.getFlushDuration indexer-conf))
-                                              (:db-catalog base) (assoc :db-catalog (:db-catalog base)))))
+                                              db-catalog (assoc :db-catalog db-catalog))))
         (doto ig/load-namespaces))))
 
-(defn- open-db [db-name base db-config]
+(defn- open-db [db-name base node-components db-config]
   (try
-    (-> (db-system db-name base db-config)
+    (-> (db-system db-name base node-components db-config)
         ig/expand
         ig/init)
     (catch clojure.lang.ExceptionInfo e
@@ -144,16 +138,7 @@
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base indexer compactor]}]
   (let [^Xtdb$Config conf (.getConfig base)
-        base {:allocator (.getAllocator base)
-              :config conf
-              :node-id (.getNodeId conf)
-              :default-tz (.getDefaultTz conf)
-              :mem-cache (.getMemoryCache base)
-              :disk-cache (.getDiskCache base)
-              :meter-registry (.getMeterRegistry base)
-              :log-clusters (.getLogClusters base)
-              :indexer indexer
-              :compactor compactor}]
+        node-components {:indexer indexer, :compactor compactor}]
     (util/with-close-on-catch [!dbs (HashMap.)]
       (let [db-cat (reify
                      Database$Catalog
@@ -167,7 +152,7 @@
                          (throw (err/conflict :xtdb/db-exists "Database already exists" {:db-name db-name})))
 
                        (util/with-close-on-catch [db (try
-                                                       (open-db db-name base (or db-config (Database$Config.)))
+                                                       (open-db db-name base node-components (or db-config (Database$Config.)))
                                                        (catch Throwable t
                                                          (log/debug "Failed to open database"
                                                                     {:db-name db-name
@@ -201,7 +186,7 @@
                                          (.log (.getLog conf))
                                          (.storage (.getStorage conf)))
                                (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
-          (util/with-close-on-catch [xtdb-sys (open-db "xtdb" (assoc base :db-catalog db-cat) xtdb-db-config)]
+          (util/with-close-on-catch [xtdb-sys (open-db "xtdb" base (assoc node-components :db-catalog db-cat) xtdb-db-config)]
             (.put !dbs "xtdb" xtdb-sys)
 
             (let [^Database xtdb-db (::database xtdb-sys)]
@@ -210,7 +195,7 @@
                       :when (not= db-name "xtdb")]
                 (let [db-config (cond-> db-config
                                   (.getReadOnlyDatabases conf) (.mode Database$Mode/READ_ONLY))]
-                  (util/with-close-on-catch [db (open-db db-name base db-config)]
+                  (util/with-close-on-catch [db (open-db db-name base node-components db-config)]
                     (.put !dbs db-name db)))))))
 
         db-cat))))

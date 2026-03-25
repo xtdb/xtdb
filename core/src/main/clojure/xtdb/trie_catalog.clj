@@ -15,6 +15,7 @@
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)
+           xtdb.database.DatabaseStorage
            (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
 
@@ -509,7 +510,7 @@
                   (reset->l0 table-cat))))))
 
 (defmethod ig/expand-key :xtdb/trie-catalog [k opts]
-  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
+  {k (into {:storage (ig/ref :xtdb.db-catalog/storage)
             :block-cat (ig/ref :xtdb/block-catalog)}
            opts)})
 
@@ -542,9 +543,10 @@
         (.addTries cat table tries now))
       (:table-cats @(:!state cat)))))
 
-(defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
+(defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^DatabaseStorage storage, ^BlockCatalog block-cat]}]
   (log/debug "starting trie catalog...")
-  (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
+  (let [buffer-pool (.getBufferPool storage)
+        table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
         block-idx (or (.getCurrentBlockIndex block-cat) -1)
         cat (TrieCatalog. buffer-pool block-cat
                           (volatile! {:block-idx block-idx
