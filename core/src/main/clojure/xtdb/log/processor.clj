@@ -4,7 +4,7 @@
   (:import [xtdb.api IndexerConfig]
            [xtdb.api.log Log]
            [xtdb.database Database$Mode DatabaseState DatabaseStorage]
-           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
+           [xtdb.indexer BlockUploader FollowerLogProcessor LeaderLogProcessor LogProcessor LogProcessor$LeaderSystem LogProcessor$ProcessorFactory SourceLogProcessor TransitionLogProcessor]
            [xtdb.util MsgIdUtil]))
 
 (defn- open-source-processor [{:keys [allocator ^DatabaseStorage db-storage ^DatabaseState db-state
@@ -79,16 +79,19 @@
                                                   source-watchers
                                                   db-catalog pending-block after-source-msg-id after-replica-msg-id))
 
-                         (openLeaderProcessor [_ replica-producer after-source-msg-id after-replica-msg-id]
-                           (LeaderLogProcessor. allocator
-                                                db-storage replica-producer db-state
-                                                indexer-for-db source-watchers
-                                                (set (.getSkipTxs indexer-conf))
-                                                db-catalog block-uploader
-                                                after-source-msg-id
-                                                after-replica-msg-id
-                                                (.getFlushDuration indexer-conf)
-                                                meter-registry))
+                         (openLeaderSystem [_ replica-producer after-source-msg-id after-replica-msg-id]
+                           (let [proc (LeaderLogProcessor. allocator
+                                                           db-storage replica-producer db-state
+                                                           indexer-for-db source-watchers
+                                                           (set (.getSkipTxs indexer-conf))
+                                                           db-catalog block-uploader
+                                                           after-source-msg-id
+                                                           after-replica-msg-id
+                                                           (.getFlushDuration indexer-conf)
+                                                           meter-registry)]
+                             (reify LogProcessor$LeaderSystem
+                               (getProc [_] proc)
+                               (close [_] (.close proc)))))
 
                          (openTransition [_ replica-producer after-source-msg-id after-replica-msg-id]
                            (TransitionLogProcessor. allocator

@@ -55,18 +55,22 @@ class LogProcessorTest {
         watchers: Watchers,
     ) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeaderProcessor(
+            override fun openLeaderSystem(
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                 afterSourceMsgId: MessageId,
                 afterReplicaMsgId: MessageId,
-            ): LeaderLogProcessor {
+            ): LogProcessor.LeaderSystem {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
-                return LeaderLogProcessor(
+                val proc = LeaderLogProcessor(
                     allocator, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), watchers,
                     emptySet(), null, blockUploader, afterSourceMsgId, afterReplicaMsgId
                 )
+                return object : LogProcessor.LeaderSystem {
+                    override val proc get() = proc
+                    override fun close() = proc.close()
+                }
             }
 
             override fun openTransition(

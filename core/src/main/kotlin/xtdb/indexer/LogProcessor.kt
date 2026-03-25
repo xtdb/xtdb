@@ -40,11 +40,11 @@ class LogProcessor(
     private val replicaLog = dbStorage.replicaLog
 
     interface ProcessorFactory {
-        fun openLeaderProcessor(
+        fun openLeaderSystem(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterSourceMsgId: MessageId,
             afterReplicaMsgId: MessageId,
-        ): LeaderProcessor
+        ): LeaderSystem
 
         fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -59,10 +59,10 @@ class LogProcessor(
         ): FollowerProcessor
     }
 
-    private sealed interface SubSystem : AutoCloseable
+    sealed interface SubSystem : AutoCloseable
 
-    private class LeaderSystem(val proc: LeaderProcessor) : SubSystem {
-        override fun close() = proc.close()
+    interface LeaderSystem : SubSystem {
+        val proc: LeaderProcessor
     }
 
     private class FollowerSystem(val proc: FollowerProcessor, private val sub: Log.Subscription) : SubSystem {
@@ -147,11 +147,11 @@ class LogProcessor(
                             val latestSourceMsgId = transition.latestSourceMsgId
                             LOG.debug("transition: opening leader processor")
 
-                            val proc = procFactory.openLeaderProcessor(replicaProducer, latestSourceMsgId, replayTarget)
-                            this.sys = LeaderSystem(proc)
+                            val sys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
+                            this.sys = sys
 
                             LOG.info("leader startup complete, resuming after $latestSourceMsgId")
-                            Log.TailSpec(latestSourceMsgId, proc)
+                            Log.TailSpec(latestSourceMsgId, sys.proc)
                         }
                 }
             }
