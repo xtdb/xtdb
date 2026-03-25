@@ -6,7 +6,6 @@
             [xtdb.check-pbuf :as cpb]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
-            [xtdb.indexer.live-index :as li]
             xtdb.node.impl
             [xtdb.object-store :as os]
             [xtdb.serde :as serde]

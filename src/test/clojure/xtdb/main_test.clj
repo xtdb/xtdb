@@ -4,7 +4,6 @@
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
-            xtdb.indexer.live-index
             [xtdb.main :as xt-main]
             [xtdb.node :as xtn])
   (:import xtdb.indexer.LiveIndex))

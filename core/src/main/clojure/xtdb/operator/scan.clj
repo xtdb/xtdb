@@ -5,7 +5,6 @@
             [xtdb.basis :as basis]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
-            xtdb.indexer.live-index
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
             xtdb.object-store

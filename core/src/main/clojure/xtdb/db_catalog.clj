@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.error :as err]
+            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.util HashMap]
@@ -30,14 +31,16 @@
   (util/close allocator))
 
 (defmethod ig/expand-key ::state [k opts]
-  {k (into {:block-cat (ig/ref :xtdb/block-catalog)
-            :table-cat (ig/ref :xtdb/table-catalog)
-            :trie-cat (ig/ref :xtdb/trie-catalog)
-            :live-index (ig/ref :xtdb.indexer/live-index)}
+  {k (into {:allocator (ig/ref ::allocator)
+            :storage (ig/ref ::storage)}
            opts)})
 
-(defmethod ig/init-key ::state [_ {:keys [db-name block-cat table-cat trie-cat live-index]}]
-  (DatabaseState. db-name block-cat table-cat trie-cat live-index))
+(defmethod ig/init-key ::state [_ {:keys [allocator ^DatabaseStorage storage db-name
+                                          ^IndexerConfig indexer-conf]}]
+  (DatabaseState/open allocator storage db-name (trie-cat/->factory) indexer-conf))
+
+(defmethod ig/halt-key! ::state [_ ^DatabaseState state]
+  (.close state))
 
 (defmethod ig/expand-key ::storage [k opts]
   {k (into {:allocator (ig/ref ::allocator)} opts)})
@@ -90,10 +93,6 @@
 
                  ::storage opts
 
-                 :xtdb/block-catalog opts
-                 :xtdb/table-catalog opts
-                 :xtdb/trie-catalog opts
-                 :xtdb.indexer/live-index opts
                  ::state opts
 
                  ::watchers opts

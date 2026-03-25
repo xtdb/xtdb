@@ -3,7 +3,6 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
-            [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]

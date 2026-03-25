@@ -7,7 +7,6 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.indexer.crash-logger :refer [with-crash-log]]
-            [xtdb.indexer.live-index]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
@@ -31,6 +30,7 @@
            (xtdb.api.log ReplicaMessage$ResolvedTx)
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
+           (xtdb.database DatabaseState)
            (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            xtdb.NodeBase
@@ -694,12 +694,11 @@
   {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
             :db-storage (ig/ref :xtdb.db-catalog/storage)
             :db-state (ig/ref :xtdb.db-catalog/state)
-            :live-index (ig/ref :xtdb.indexer/live-index)
             :crash-logger (ig/ref ::crash-logger)}
            opts)})
 
-(defmethod ig/init-key ::for-db [_ {:keys [^Indexer indexer allocator db-storage db-state ^LiveIndex live-index ^CrashLogger crash-logger]}]
-  (.openForDatabase indexer allocator db-storage db-state live-index crash-logger))
+(defmethod ig/init-key ::for-db [_ {:keys [^Indexer indexer allocator db-storage ^DatabaseState db-state ^CrashLogger crash-logger]}]
+  (.openForDatabase indexer allocator db-storage db-state (.getLiveIndex db-state) crash-logger))
 
 (defmethod ig/halt-key! ::for-db [_ indexer-for-db]
   (util/close indexer-for-db))

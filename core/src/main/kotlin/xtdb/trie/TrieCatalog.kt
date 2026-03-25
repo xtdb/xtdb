@@ -1,7 +1,9 @@
 package xtdb.trie
 
 import xtdb.block.proto.Partition
+import xtdb.catalog.BlockCatalog
 import xtdb.log.proto.TrieDetails
+import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import java.time.Instant
 
@@ -22,4 +24,8 @@ interface TrieCatalog {
     fun getPartitions(table: TableRef): List<Partition>
 
     fun refresh(blockIndex: Long)
+
+    fun interface Factory {
+        fun openTrieCatalog(bufferPool: BufferPool, blockCatalog: BlockCatalog): TrieCatalog
+    }
 }
