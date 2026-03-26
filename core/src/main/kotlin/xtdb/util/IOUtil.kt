@@ -86,7 +86,7 @@ inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMapIndexed(block: (Int
         els
     }
 
-class SafelyOpeningScope: AutoCloseable {
+class SafelyOpeningScope : AutoCloseable {
     val openedResources = mutableListOf<AutoCloseable>()
 
     fun <C : AutoCloseable?> open(block: () -> C): C =
@@ -104,16 +104,9 @@ class SafelyOpeningScope: AutoCloseable {
         }
 
     override fun close() {
-        openedResources.closeAll()
+        openedResources.reversed().closeAll()
     }
 }
 
-inline fun <R> safelyOpening(block: SafelyOpeningScope.() -> R): R {
-    val scope = SafelyOpeningScope()
-    return try {
-        scope.block()
-    } catch (e: Throwable) {
-        scope.openedResources.closeAll()
-        throw e
-    }
-}
+inline fun <R> safelyOpening(block: SafelyOpeningScope.() -> R): R =
+    SafelyOpeningScope().closeOnCatch { it.block() }
