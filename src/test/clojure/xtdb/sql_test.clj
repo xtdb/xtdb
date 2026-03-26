@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.db-catalog :as db]
             [xtdb.logical-plan :as lp]
             [xtdb.next.jdbc :as xt-jdbc]
             [xtdb.serde :as serde]
@@ -17,7 +18,7 @@
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
-))
+           (xtdb.api.log IngestionStoppedException)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -3237,3 +3238,32 @@ UNION ALL
 
   (t/is (= [{:x "a", :xt/id 1} {:x "b", :xt/id 2} {:x "d", :xt/id 4}]
            (xt/q tu/*node* "SELECT _id, x FROM foo WHERE _id = 1 OR _id = 4 OR _id = 2 ORDER BY _id"))))
+
+(t/deftest multi-writer-block-resets-replica-offset-test
+  (let [node-dir (util/->path "target/multi-writer-block-resets-replica-offset")]
+    (util/delete-dir node-dir)
+
+    (t/testing "single-writer node writes txs and finishes a block"
+      (with-open [node (tu/->local-node {:node-dir node-dir :single-writer? true})]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :v "a"}]])
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 2 :v "b"}]])
+        (tu/flush-block! node)
+
+        (t/is (= #{{:xt/id 1 :v "a"} {:xt/id 2 :v "b"}}
+                 (set (xt/q node "SELECT * FROM docs"))))))
+
+    (t/testing "multi-writer node writes txs and finishes a block (writes boundaryReplicaMsgId=null)"
+      (with-open [node (tu/->local-node {:node-dir node-dir :single-writer? false})]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id 3 :v "c"}]])
+        (tu/flush-block! node)
+
+        (t/is (= #{{:xt/id 1 :v "a"} {:xt/id 2 :v "b"} {:xt/id 3 :v "c"}}
+                 (set (xt/q node "SELECT * FROM docs"))))))
+
+    (t/testing "single-writer node should not get IngestionStoppedException"
+      (with-open [node (tu/->local-node {:node-dir node-dir :single-writer? true})]
+        (t/is (nil? (.getIngestionError (db/primary-db node))))
+
+        (t/is (= #{{:xt/id 1 :v "a"} {:xt/id 2 :v "b"} {:xt/id 3 :v "c"}}
+                 (set (xt/q node "SELECT * FROM docs"))))))))
+
