@@ -15,6 +15,7 @@ import xtdb.util.info
 import xtdb.util.logger
 import java.lang.management.BufferPoolMXBean
 import java.lang.management.ManagementFactory.getPlatformMXBeans
+import java.util.concurrent.ConcurrentHashMap
 
 object Metrics {
     private val LOG = Metrics::class.logger
@@ -52,17 +53,21 @@ object Metrics {
 
     private fun MeterRegistry.registerAllocatorGauges(
         al: BufferAllocator, name: String, vararg tags: Pair<String, String>
-    ) {
-        Gauge.builder("$name.allocated", al) { it.allocatedMemory.toDouble() }
-            .baseUnit("bytes")
-            .withTags(tags)
-            .register(this)
-
-        if (al.limit < Long.MAX_VALUE) {
-            Gauge.builder("$name.limit", al) { it.limit.toDouble() }
+    ): List<Gauge> = buildList {
+        add(
+            Gauge.builder("$name.allocated", al) { it.allocatedMemory.toDouble() }
                 .baseUnit("bytes")
                 .withTags(tags)
-                .register(this)
+                .register(this@registerAllocatorGauges)
+        )
+
+        if (al.limit < Long.MAX_VALUE) {
+            add(
+                Gauge.builder("$name.limit", al) { it.limit.toDouble() }
+                    .baseUnit("bytes")
+                    .withTags(tags)
+                    .register(this@registerAllocatorGauges)
+            )
         }
     }
 
@@ -77,6 +82,8 @@ object Metrics {
      */
     @JvmStatic
     fun MeterRegistry.rootAllocatorListener() = object : AllocationListener {
+        private val registeredGauges = ConcurrentHashMap<BufferAllocator, List<Gauge>>()
+
         override fun onChildAdded(parent: BufferAllocator, child: BufferAllocator) {
             val parentParts = parent.name.split("/", limit = 2)
             val parentName = parentParts[0]
@@ -84,8 +91,12 @@ object Metrics {
             val childName = child.name.split("/", limit = 2)[0]
 
             if ((parent is RootAllocator && childName != "database") || parentName == "database") {
-                registerAllocatorGauges(child, "xtdb.allocator.memory", "allocator" to childName, "database" to dbName)
+                registeredGauges[child] = registerAllocatorGauges(child, "xtdb.allocator.memory", "allocator" to childName, "database" to dbName)
             }
+        }
+
+        override fun onChildRemoved(parent: BufferAllocator, child: BufferAllocator) {
+            registeredGauges.remove(child)?.forEach { remove(it) }
         }
     }
 }
