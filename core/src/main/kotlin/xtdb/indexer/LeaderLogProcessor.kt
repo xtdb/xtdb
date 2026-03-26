@@ -52,6 +52,7 @@ class LeaderLogProcessor(
         }
     }
 
+    private val dbName = dbState.name
     private val sourceLog = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
     private val liveIndex = dbState.liveIndex
@@ -95,7 +96,7 @@ class LeaderLogProcessor(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage
     ): ReplicaMessage.ResolvedTx {
         if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-            LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+            LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
             val payload = when (msg) {
                 is SourceMessage.Tx -> msg.encode()
@@ -172,7 +173,7 @@ class LeaderLogProcessor(
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
         val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
-        LOG.debug("block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
+        LOG.debug("[$dbName] block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
 
         latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
@@ -194,7 +195,7 @@ class LeaderLogProcessor(
 
         for (record in records) {
             val msgId = record.msgId
-            LOG.trace { "leader: message $msgId (${record.message::class.simpleName})" }
+            LOG.trace { "[$dbName] leader: message $msgId (${record.message::class.simpleName})" }
 
             try {
                 when (val msg = record.message) {
@@ -219,7 +220,7 @@ class LeaderLogProcessor(
                             dbCatalog!!.attach(msg.dbName, msg.config)
                             null
                         } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "leader: attach database '${msg.dbName}' failed at $msgId" }
+                            LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -240,7 +241,7 @@ class LeaderLogProcessor(
                             dbCatalog!!.detach(msg.dbName)
                             null
                         } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "leader: detach database '${msg.dbName}' failed at $msgId" }
+                            LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -288,7 +289,7 @@ class LeaderLogProcessor(
             } catch (e: Throwable) {
                 LOG.error(
                     e,
-                    "leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
+                    "[$dbName] leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 watchers.notifyError(e)
                 throw e

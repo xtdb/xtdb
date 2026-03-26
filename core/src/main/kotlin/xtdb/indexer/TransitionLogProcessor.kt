@@ -38,16 +38,17 @@ class TransitionLogProcessor(
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
+    private val dbName = dbState.name
     private val trieCatalog = dbState.trieCatalog
 
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
 
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
-        LOG.debug("transition: processing ${records.size} records")
+        LOG.debug("[$dbName] transition: processing ${records.size} records")
 
         for (record in records) {
             val msgId = record.msgId
-            LOG.trace { "transition: message $msgId (${record.message::class.simpleName})" }
+            LOG.trace { "[$dbName] transition: message $msgId (${record.message::class.simpleName})" }
 
             try {
                 when (val msg = record.message) {
@@ -85,7 +86,7 @@ class TransitionLogProcessor(
                     }
 
                     is ReplicaMessage.BlockBoundary -> {
-                        LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
+                        LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
                         blockUploader.uploadBlock(replicaProducer, msgId, msg)
                         latestSourceMsgId = msg.latestProcessedMsgId
                         watchers.notifyMsg(msg.latestProcessedMsgId)
@@ -109,7 +110,7 @@ class TransitionLogProcessor(
             } catch (e: Throwable) {
                 LOG.error(
                     e,
-                    "transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
+                    "[$dbName] transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
                 )
                 watchers.notifyError(e)
                 throw e

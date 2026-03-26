@@ -64,6 +64,7 @@ class SourceLogProcessor(
         }
     }
 
+    private val dbName = dbState.name
     private val log = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
 
@@ -130,7 +131,7 @@ class SourceLogProcessor(
 
     private fun resolveTx(msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage): ReplicaMessage.ResolvedTx {
         if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-            LOG.warn("Skipping transaction id $msgId - within XTDB_SKIP_TXS")
+            LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
             val payload = when (msg) {
                 is SourceMessage.Tx -> msg.encode()
@@ -193,7 +194,7 @@ class SourceLogProcessor(
 
     private suspend fun finishBlock(systemTime: Instant) {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
-        LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
+        LOG.debug("[$dbName] finishing block: 'b${blockIdx.asLexHex}'...")
 
         val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
@@ -240,14 +241,14 @@ class SourceLogProcessor(
 
         liveIndex.nextBlock()
         compactor.signalBlock()
-        LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
+        LOG.debug("[$dbName] finished block: 'b${blockIdx.asLexHex}'.")
     }
 
     private fun enterPendingBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         pendingBlockIdx = blockIdx
         liveIndex.nextBlock()
-        LOG.debug("read-only: waiting for block 'b${blockIdx.asLexHex}' via BlockUploaded...")
+        LOG.debug("[$dbName] read-only: waiting for block 'b${blockIdx.asLexHex}' via BlockUploaded...")
     }
 
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
@@ -272,7 +273,7 @@ class SourceLogProcessor(
                         && msg.blockIndex == pendingBlockIdx
                         && msg.storageEpoch == bufferPool.epoch
                     ) {
-                        LOG.debug("read-only: block 'b${pendingBlockIdx!!.asLexHex}' uploaded, replaying ${bufferedRecords.size + 1} buffered records")
+                        LOG.debug("[$dbName] read-only: block 'b${pendingBlockIdx!!.asLexHex}' uploaded, replaying ${bufferedRecords.size + 1} buffered records")
                         compactor.signalBlock()
                         pendingBlockIdx = null
 
@@ -282,13 +283,13 @@ class SourceLogProcessor(
                         bufferedRecords.clear()
                         continue
                     } else {
-                        LOG.trace { "read-only: buffering message $msgId (${msg::class.simpleName}) during pending block b${pendingBlockIdx!!.asLexHex} (${bufferedRecords.size + 1} buffered)" }
+                        LOG.trace { "[$dbName] read-only: buffering message $msgId (${msg::class.simpleName}) during pending block b${pendingBlockIdx!!.asLexHex} (${bufferedRecords.size + 1} buffered)" }
                         bufferedRecords.add(record)
                         continue
                     }
                 }
 
-                LOG.trace { "source: message $msgId (${record.message::class.simpleName})" }
+                LOG.trace { "[$dbName] source: message $msgId (${record.message::class.simpleName})" }
 
                 when (val msg = record.message) {
                     is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
@@ -318,7 +319,7 @@ class SourceLogProcessor(
                             dbCatalog!!.attach(msg.dbName, msg.config)
                             null
                         } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "source: attach database '${msg.dbName}' failed at $msgId" }
+                            LOG.debug(e) { "[$dbName] source: attach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -335,7 +336,7 @@ class SourceLogProcessor(
                             dbCatalog!!.detach(msg.dbName)
                             null
                         } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "source: detach database '${msg.dbName}' failed at $msgId" }
+                            LOG.debug(e) { "[$dbName] source: detach database '${msg.dbName}' failed at $msgId" }
                             e
                         }
 
@@ -368,7 +369,7 @@ class SourceLogProcessor(
         } catch (e: xtdb.error.Interrupted) {
             throw e
         } catch (e: Throwable) {
-            LOG.error(e, "source: failed to process log record with msgId $lastMsgId")
+            LOG.error(e, "[$dbName] source: failed to process log record with msgId $lastMsgId")
             watchers.notifyError(e)
             throw e
         }

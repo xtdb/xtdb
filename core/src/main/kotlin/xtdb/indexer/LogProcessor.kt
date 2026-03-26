@@ -37,6 +37,7 @@ class LogProcessor(
         suspend fun awaitReplicaMsgId(target: MessageId)
     }
 
+    private val dbName = dbState.name
     private val replicaLog = dbStorage.replicaLog
 
     interface ProcessorFactory {
@@ -80,7 +81,7 @@ class LogProcessor(
         procFactory.openFollower(pendingBlock, latestSourceMsgId, latestReplicaMsgId).closeOnCatch { proc ->
             LOG.info {
                 buildString {
-                    append("starting follower: ")
+                    append("[$dbName] starting follower: ")
                     append("pending block: ${pendingBlock != null}, ")
                     append("src: $latestSourceMsgId, ")
                     append("replica: $latestReplicaMsgId")
@@ -108,12 +109,12 @@ class LogProcessor(
 
         return when (val oldSys = sys) {
             is LeaderSystem -> {
-                LOG.info("partitions assigned: $partitions — already leader, no transition needed")
+                LOG.info("[$dbName] partitions assigned: $partitions — already leader, no transition needed")
                 null
             }
 
             is FollowerSystem -> {
-                LOG.info("partitions assigned: $partitions — transitioning to leader")
+                LOG.info("[$dbName] partitions assigned: $partitions — transitioning to leader")
 
                 replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
                     val followerProc = oldSys.proc
@@ -124,7 +125,7 @@ class LogProcessor(
                     val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
 
                     followerProc.awaitReplicaMsgId(replayTarget)
-                    LOG.debug("transition: closing follower system")
+                    LOG.debug("[$dbName] transition: closing follower system")
                     oldSys.close()
 
                     val pendingBlock = followerProc.pendingBlock
@@ -136,21 +137,21 @@ class LogProcessor(
                     )
                         .use { transition ->
                             if (pendingBlock != null) {
-                                LOG.debug("transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+                                LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                                 blockUploader.uploadBlock(
                                     replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
                                 )
-                                LOG.debug("transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
+                                LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                                 transition.processRecords(pendingBlock.bufferedRecords)
                             }
 
                             val latestSourceMsgId = transition.latestSourceMsgId
-                            LOG.debug("transition: opening leader processor")
+                            LOG.debug("[$dbName] transition: opening leader processor")
 
                             val sys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
                             this.sys = sys
 
-                            LOG.info("leader startup complete, resuming after $latestSourceMsgId")
+                            LOG.info("[$dbName] leader startup complete, resuming after $latestSourceMsgId")
                             Log.TailSpec(latestSourceMsgId, sys.proc)
                         }
                 }
@@ -163,14 +164,14 @@ class LogProcessor(
 
         when (val oldSys = sys) {
             is LeaderSystem -> {
-                LOG.info("partitions revoked: $partitions — was leader, transitioning to follower")
+                LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
                 oldSys.close() // close first so no further processing can change the watermarks
                 val proc = oldSys.proc
                 this.sys = openFollowerSystem(proc.latestSourceMsgId, proc.latestReplicaMsgId, proc.pendingBlock)
             }
 
             is FollowerSystem -> {
-                LOG.debug("partitions revoked: $partitions — already follower, no transition needed")
+                LOG.debug("[$dbName] partitions revoked: $partitions — already follower, no transition needed")
             }
         }
     }

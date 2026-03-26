@@ -47,6 +47,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     override val latestReplicaMsgId: MessageId get() = latestSeenReplicaMsgId.value
 
+    private val dbName = dbState.name
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
     private val liveIndex = dbState.liveIndex
@@ -61,7 +62,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
-        LOG.trace { "follower: message ${record.msgId} (${msg::class.simpleName})" }
+        LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 
         pendingBlock?.let { pendingBlock ->
             val pendingBlockIdx = pendingBlock.blockIdx
@@ -69,7 +70,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 && msg.blockIndex == pendingBlockIdx
                 && msg.storageEpoch == bufferPool.epoch
             ) {
-                LOG.debug("block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
+                LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
                 val blockFile = bufferPool.allBlockFiles.lastOrNull()
                 val block = blockFile?.key?.let { parseFrom(bufferPool.getByteArray(it)) }
 
@@ -83,7 +84,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 // replay buffered records — their typed notifications advance the watermarks
                 bufferedRecords.forEach { handleRecord(it) }
             } else {
-                LOG.trace { "follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
+                LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
                 pendingBlock += record
             }
 
@@ -124,7 +125,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
-                LOG.debug("block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
+                LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
                 latestSourceMsgId = msg.latestProcessedMsgId
                 watchers.notifyMsg(msg.latestProcessedMsgId)
             }
@@ -150,7 +151,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             } catch (e: Throwable) {
                 LOG.error(
                     e,
-                    "follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
+                    "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
                 watchers.notifyError(e)
                 throw e
@@ -161,9 +162,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
     }
 
     override suspend fun awaitReplicaMsgId(target: MessageId) {
-        LOG.debug("transition: awaiting replica watcher catch-up to $target")
+        LOG.debug("[$dbName] transition: awaiting replica watcher catch-up to $target")
         latestSeenReplicaMsgId.first { it >= target }
-        LOG.debug("transition: replica watchers caught up to $target")
+        LOG.debug("[$dbName] transition: replica watchers caught up to $target")
     }
 
     override fun close() {
