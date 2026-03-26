@@ -45,14 +45,15 @@
 (defmethod apply-config! :disk-cache [config _ opts]
   (apply-config! config :xtdb.cache/disk opts))
 
-(defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-block page-limit log-limit flush-duration skip-txs enabled?]}]
+(defmethod apply-config! :indexer [^Xtdb$Config config _ {:keys [rows-per-block page-limit log-limit flush-duration skip-txs enabled? single-writer?]}]
   (cond-> (.getIndexer config)
     rows-per-block (.rowsPerBlock rows-per-block)
     page-limit (.pageLimit page-limit)
     log-limit (.logLimit log-limit)
     flush-duration (.flushDuration (time/->duration flush-duration))
     skip-txs (.skipTxs skip-txs)
-    (some? enabled?) (.enabled enabled?)))
+    (some? enabled?) (.enabled enabled?)
+    (some? single-writer?) (.singleWriter single-writer?)))
 
 (defmethod apply-config! :compactor [^Xtdb$Config config _ {:keys [threads]}]
   (cond-> (.getCompactor config)
