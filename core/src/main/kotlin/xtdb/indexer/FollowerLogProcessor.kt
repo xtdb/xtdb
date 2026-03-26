@@ -60,43 +60,18 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
-        val msg = record.message
-        LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
-
-        pendingBlock?.let { pendingBlock ->
-            val pendingBlockIdx = pendingBlock.blockIdx
-            if (msg is ReplicaMessage.BlockUploaded
-                && msg.blockIndex == pendingBlockIdx
-                && msg.storageEpoch == bufferPool.epoch
-            ) {
-                LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
-                val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
-
-                blockCatalog.refresh(block)
-                liveIndex.nextBlock()
-                compactor.signalBlock()
-
-                val bufferedRecords = pendingBlock.bufferedRecords
-                this.pendingBlock = null
-
-                // replay buffered records — their typed notifications advance the watermarks
-                bufferedRecords.forEach { handleRecord(it) }
-            } else {
-                LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
-                pendingBlock += record
-            }
-
-            return
+    private val ReplicaMessage.stale get() =
+        when (this) {
+            is ReplicaMessage.ResolvedTx -> txId <= latestSourceMsgId
+            is ReplicaMessage.TriesAdded -> sourceMsgId <= latestSourceMsgId
+            is ReplicaMessage.BlockBoundary -> latestProcessedMsgId <= latestSourceMsgId
+            is ReplicaMessage.BlockUploaded -> latestProcessedMsgId <= latestSourceMsgId
+            is ReplicaMessage.NoOp -> false
         }
 
-        when (msg) {
+    private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
+        when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {
-                val latestTxId = liveIndex.latestCompletedTx?.txId
-                if (latestTxId != null && msg.txId <= latestTxId) {
-                    return
-                }
-
                 liveIndex.importTx(msg)
 
                 val systemTime = msg.systemTime
@@ -137,6 +112,39 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.NoOp -> Unit
         }
+    }
+
+    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
+        val msg = record.message
+        LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
+
+        pendingBlock?.let { pendingBlock ->
+            val pendingBlockIdx = pendingBlock.blockIdx
+            if (msg is ReplicaMessage.BlockUploaded
+                && msg.blockIndex == pendingBlockIdx
+                && msg.storageEpoch == bufferPool.epoch
+            ) {
+                LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
+                val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
+
+                blockCatalog.refresh(block)
+                liveIndex.nextBlock()
+                compactor.signalBlock()
+
+                val bufferedRecords = pendingBlock.bufferedRecords
+                this.pendingBlock = null
+
+                // replay buffered records — their typed notifications advance the watermarks
+                bufferedRecords.forEach { handleRecord(it) }
+            } else {
+                LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
+                pendingBlock += record
+            }
+
+            return
+        }
+
+        if (!msg.stale) processRecord(record)
     }
 
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {

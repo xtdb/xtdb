@@ -52,10 +52,10 @@ class FollowerLogProcessorTest {
         allocator.close()
     }
 
-    private fun makeProcessor(maxBufferedRecords: Int = 1024) =
+    private fun makeProcessor(afterSourceMsgId: Long = -1L, maxBufferedRecords: Int = 1024) =
         FollowerLogProcessor(
             allocator, bufferPool, dbState,
-            compactor, watchers, null, null, afterSourceMsgId = -1L, afterReplicaMsgId = -1L, maxBufferedRecords
+            compactor, watchers, null, null, afterSourceMsgId = afterSourceMsgId, afterReplicaMsgId = -1L, maxBufferedRecords
         )
 
     private fun <M> record(offset: Long, message: M) =
@@ -78,9 +78,9 @@ class FollowerLogProcessorTest {
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {
-        every { liveIndex.latestCompletedTx } returns TransactionKey(42, Instant.now())
+        watchers = Watchers(42)
+        val proc = makeProcessor(afterSourceMsgId = 42)
 
-        val proc = makeProcessor()
         val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap())
         val tx42 = ReplicaMessage.ResolvedTx(42, Instant.now(), true, null, emptyMap())
         val tx43 = ReplicaMessage.ResolvedTx(43, Instant.now(), true, null, emptyMap())
@@ -90,6 +90,50 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.importTx(tx40) }
         verify(exactly = 0) { liveIndex.importTx(tx42) }
         verify { liveIndex.importTx(tx43) }
+
+        proc.close()
+    }
+
+    @Test
+    fun `skips stale messages when starting ahead of replica log`() = runTest {
+        // simulates MW block with latestProcessedMsgId=1000, no boundaryReplicaMsgId,
+        // replaying a replica log that has old SW-era messages
+        watchers = Watchers(1000)
+        val proc = makeProcessor(afterSourceMsgId = 1000)
+
+        val staleRecords = listOf(
+            record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap())),
+            record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600)),
+            record(2, ReplicaMessage.BlockBoundary(1, 700)),
+            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList())),
+            // at the boundary — should also be skipped
+            record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap())),
+        )
+
+        proc.processRecords(staleRecords)
+
+        verify(exactly = 0) { liveIndex.importTx(any()) }
+        assert(proc.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
+
+        proc.close()
+    }
+
+    @Test
+    fun `processes messages after skipping stale ones`() = runTest {
+        watchers = Watchers(1000)
+        val proc = makeProcessor(afterSourceMsgId = 1000)
+
+        val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap())
+
+        proc.processRecords(listOf(
+            // stale
+            record(0, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 500)),
+            // current
+            record(1, tx1001),
+        ))
+
+        verify { liveIndex.importTx(tx1001) }
+        assert(proc.latestSourceMsgId == 1001L)
 
         proc.close()
     }
