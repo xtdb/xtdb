@@ -8,7 +8,7 @@ import xtdb.api.TransactionCommitted
 import xtdb.api.log.*
 import xtdb.api.storage.Storage
 import xtdb.block.proto.Block.parseFrom
-import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
+import xtdb.catalog.BlockCatalog.Companion.blockFilePath
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
@@ -71,8 +71,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 && msg.storageEpoch == bufferPool.epoch
             ) {
                 LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
-                val blockFile = bufferPool.allBlockFiles.lastOrNull()
-                val block = blockFile?.key?.let { parseFrom(bufferPool.getByteArray(it)) }
+                val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
 
                 blockCatalog.refresh(block)
                 liveIndex.nextBlock()
