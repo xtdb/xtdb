@@ -136,9 +136,6 @@ class Database(
     }
 
     companion object {
-        private val singleWriter: Boolean =
-            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() ?: false
-
         @JvmStatic
         fun open(
             base: NodeBase,
@@ -150,6 +147,7 @@ class Database(
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
+            val singleWriter = indexerConfig.singleWriter
             val readOnly = dbConfig.isReadOnly
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
