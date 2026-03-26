@@ -1,7 +1,6 @@
 (ns xtdb.expression.metadata
   (:require [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
-            [xtdb.metadata :as meta]
             [xtdb.serde.types :as st]
             [xtdb.types :as types]
             [xtdb.util :as util])

@@ -10,39 +10,43 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.NodeBase
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
-import xtdb.api.log.MessageId
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.applyStorage
-import xtdb.catalog.BlockCatalog
 import xtdb.arrow.VectorType
+import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
-import xtdb.table.TableRef
-import xtdb.trie.ColumnName
+import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
-import xtdb.tx.TxOp
-import xtdb.tx.TxOpts
-import xtdb.tx.toArrowBytes
-import xtdb.tx.serializeUserMetadata
-import xtdb.compactor.Compactor
-import xtdb.indexer.LiveIndex
-import xtdb.indexer.Snapshot
+import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
+import xtdb.table.DatabaseName
+import xtdb.table.TableRef
+import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
+import xtdb.tx.TxOp
+import xtdb.tx.TxOpts
+import xtdb.tx.serializeUserMetadata
+import xtdb.tx.toArrowBytes
+import xtdb.util.MsgIdUtil.offsetToMsgId
+import xtdb.util.closeAll
+import xtdb.util.safelyOpening
 import java.time.Duration
 import java.util.*
 
-data class Database(
+class Database(
     val allocator: BufferAllocator,
     val config: Config,
     override val storage: DatabaseStorage,
@@ -50,7 +54,10 @@ data class Database(
     val isIndexing: Boolean,
     private val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
-) : IQuerySource.QueryDatabase {
+    private val subscription: Log.Subscription? = null,
+    private val processor: AutoCloseable? = null,
+    private val indexerForDb: Indexer.ForDatabase? = null,
+) : IQuerySource.QueryDatabase, AutoCloseable {
     val name: DatabaseName get() = queryState.name
     override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
 
@@ -88,6 +95,10 @@ data class Database(
 
     override fun hashCode() = Objects.hash(name)
 
+    override fun close() {
+        listOf(subscription, processor, compactorOrNull, indexerForDb, queryState, storage, allocator).closeAll()
+    }
+
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
         val defaultTz = checkNotNull(opts.defaultTz) { "missing defaultTz" }
         val txMsg = SourceMessage.Tx(
@@ -111,6 +122,129 @@ data class Database(
 
     fun sendDetachDbMessage(dbName: DatabaseName): Log.MessageMetadata = runBlocking {
         sourceLog.appendMessage(SourceMessage.DetachDatabase(dbName))
+    }
+
+    companion object {
+        private val singleWriter: Boolean =
+            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() ?: false
+
+        @JvmStatic
+        fun open(
+            base: NodeBase,
+            dbName: DatabaseName,
+            dbConfig: Config,
+            indexer: Indexer,
+            compactor: Compactor,
+            trieCatalogFactory: TrieCatalog.Factory,
+            dbCatalog: Catalog? = null,
+        ): Database = safelyOpening {
+            val indexerConfig = base.config.indexer
+            val readOnly = dbConfig.isReadOnly
+
+            val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
+            val storage = open { DatabaseStorage.open(allocator, base, dbName, dbConfig) }
+            val state = open { DatabaseState.open(allocator, storage, dbName, trieCatalogFactory, indexerConfig) }
+
+            val blockCatalog = state.blockCatalog
+            val sourceMsgId = maxOf(
+                blockCatalog.latestProcessedMsgId ?: -1,
+                offsetToMsgId(storage.sourceLog.epoch, -1)
+            )
+            val watchers = Watchers(sourceMsgId, sourceMsgId, blockCatalog.externalSourceToken)
+
+            val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
+            val indexerForDb = open { indexer.openForDatabase(allocator, storage, state, state.liveIndex, crashLogger) }
+
+            val compactorForDb = open {
+                if (readOnly) Compactor.NOOP.openForDatabase(allocator, storage, state, watchers)
+                else compactor.openForDatabase(allocator, storage, state, watchers)
+            }
+
+            var processor: AutoCloseable? = null
+            var subscription: Log.Subscription? = null
+
+            if (indexerConfig.enabled) {
+                if (singleWriter) {
+                    val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog)
+
+                    val procFactory = object : LogProcessor.ProcessorFactory {
+                        override fun openFollower(
+                            pendingBlock: PendingBlock?,
+                            afterSourceMsgId: MessageId,
+                            afterReplicaMsgId: MessageId,
+                        ) = FollowerLogProcessor(
+                            allocator, storage.bufferPool, state, compactorForDb,
+                            watchers, dbCatalog, pendingBlock, afterSourceMsgId, afterReplicaMsgId
+                        )
+
+                        override fun openLeaderSystem(
+                            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                            afterSourceMsgId: MessageId,
+                            afterReplicaMsgId: MessageId,
+                        ): LogProcessor.LeaderSystem {
+                            val leaderProc = LeaderLogProcessor(
+                                allocator, storage, replicaProducer, state,
+                                indexerForDb, watchers,
+                                indexerConfig.skipTxs.toSet(),
+                                dbCatalog, blockUploader,
+                                afterSourceMsgId, afterReplicaMsgId,
+                                indexerConfig.flushDuration,
+                                base.meterRegistry,
+                            )
+                            return object : LogProcessor.LeaderSystem {
+                                override val proc get() = leaderProc
+                                override fun close() = leaderProc.close()
+                            }
+                        }
+
+                        override fun openTransition(
+                            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                            afterSourceMsgId: MessageId,
+                            afterReplicaMsgId: MessageId,
+                        ) = TransitionLogProcessor(
+                            allocator, storage.bufferPool, state, state.liveIndex,
+                            blockUploader, replicaProducer,
+                            watchers, dbCatalog,
+                            afterSourceMsgId, afterReplicaMsgId
+                        )
+                    }
+
+                    val lp = LogProcessor(procFactory, storage, state, blockUploader, base.meterRegistry)
+                    processor = lp
+
+                    if (!readOnly) {
+                        subscription = storage.sourceLog.openGroupSubscription(lp)
+                    }
+                } else {
+                    val srcProc = SourceLogProcessor(
+                        allocator, base.meterRegistry ?: error("no meter registry"),
+                        storage, state,
+                        indexerForDb, state.liveIndex,
+                        watchers, compactorForDb,
+                        indexerConfig.skipTxs.toSet(),
+                        readOnly, dbCatalog,
+                        indexerConfig.flushDuration,
+                    )
+                    processor = srcProc
+
+                    val latestProcessedMsgId = blockCatalog.latestProcessedMsgId ?: -1
+                    subscription = storage.sourceLog.tailAll(latestProcessedMsgId, srcProc)
+                }
+            }
+
+            Database(
+                allocator = allocator,
+                config = dbConfig,
+                storage = storage,
+                queryState = state,
+                isIndexing = indexerConfig.enabled,
+                watchers = watchers,
+                compactorOrNull = compactorForDb,
+                subscription = subscription,
+                processor = processor,
+                indexerForDb = indexerForDb,
+            )
+        }
     }
 
     @Serializable

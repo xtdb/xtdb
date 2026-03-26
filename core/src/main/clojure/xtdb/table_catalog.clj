@@ -1,6 +1,5 @@
 (ns xtdb.table-catalog
-  (:require [integrant.core :as ig]
-            [xtdb.trie :as trie]
+  (:require [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.time :as time])
@@ -11,8 +10,8 @@
            [java.nio.file Path]
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
-           (xtdb.catalog BlockCatalog TableCatalog)
-           (xtdb.storage BufferPool)
+           (xtdb.catalog BlockCatalog)
+           xtdb.storage.BufferPool
            xtdb.table.TableRef
            xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
@@ -94,12 +93,3 @@
                                         (dissoc :fields))))
            (into {})))))
 
-(defmethod ig/expand-key :xtdb/table-catalog [k opts]
-  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
-            :block-cat (ig/ref :xtdb/block-catalog)}
-           opts)})
-
-(defmethod ig/init-key :xtdb/table-catalog [_ {:keys [buffer-pool block-cat]}]
-  (let [block-idx (.getCurrentBlockIndex block-cat)]
-    (doto (TableCatalog. block-cat buffer-pool)
-      (.refresh (or block-idx -1)))))

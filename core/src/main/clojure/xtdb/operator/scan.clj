@@ -5,10 +5,8 @@
             [xtdb.basis :as basis]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
-            xtdb.indexer.live-index
             [xtdb.information-schema :as info-schema]
             [xtdb.logical-plan :as lp]
-            [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.table :as table]
             [xtdb.time :as time]
@@ -115,7 +113,7 @@
 
 (defn tables-with-cols [^Snapshot$Source snap-src]
   (with-open [snap (.openSnapshot snap-src)]
-    (.getSchema snap)))
+    (update-vals (.getSchema snap) set)))
 
 (defn- eid-select->eid [eid-select]
   (cond (= '_id (second eid-select))
@@ -200,8 +198,7 @@
 
 (defmethod ig/expand-key ::scan-emitter [k opts]
   {k (merge opts
-            {:allocator (ig/ref :xtdb/allocator)
-             :info-schema (ig/ref :xtdb/information-schema)})})
+            {:info-schema (ig/ref :xtdb/information-schema)})})
 
 (defn scan-vec-types [db-catalog, snaps, scan-cols]
   (letfn [(->vec-type [[^TableRef table col-name]]

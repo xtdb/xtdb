@@ -51,6 +51,7 @@
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
+           xtdb.NodeBase
            (xtdb.query PreparedQuery)
            (xtdb.tx TxOpts)
            (xtdb.tx_ops Sql)))
@@ -1882,7 +1883,7 @@
   :playground? (default false) - if true, the server will create a new in-memory database if it doesn't already exist.
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry tracer read-only? playground?]
+  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry tracer query-tracing? read-only? playground?]
                   :or {host (InetAddress/getLoopbackAddress)
                        port 0
                        num-threads 42
@@ -1925,7 +1926,7 @@
            server (assoc server
                          :query-error-counter query-error-counter
                          :query-timer query-timer
-                         :query-tracer (when (:query-tracing? tracer) (:tracer tracer))
+                         :query-tracer (when query-tracing? tracer)
                          :tx-error-counter tx-error-counter
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
@@ -1977,20 +1978,22 @@
 
 (defmethod ig/expand-key ::server [k config]
   {k (into {:node (ig/ref :xtdb/node)
-            :allocator (ig/ref :xtdb/allocator)
-            :metrics-registry (ig/ref :xtdb.metrics/registry)
-            :tracer (ig/ref :xtdb/tracer)}
+            :base (ig/ref :xtdb/base)}
            (<-config config))})
 
-(defmethod ig/init-key ::server [_ {:keys [host node allocator port ro-port] :as opts}]
-  (let [opts (dissoc opts :port :ro-port)]
+(defmethod ig/init-key ::server [_ {:keys [host node ^NodeBase base port ro-port] :as opts}]
+  (let [opts (-> opts
+                 (dissoc :port :ro-port :base)
+                 (assoc :metrics-registry (.getMeterRegistry base)
+                        :tracer (.getTracer base)
+                        :query-tracing? (.getQueryTracing (.getTracer (.getConfig base)))))]
     (letfn [(start-server [port read-only?]
               (when-not (neg? port)
                 (let [{:keys [^InetAddress host port] :as srv} (serve node (-> opts
                                                                                (assoc :host host
                                                                                       :port port
                                                                                       :read-only? read-only?
-                                                                                      :allocator (util/->child-allocator allocator "pgwire"))))]
+                                                                                      :allocator (util/->child-allocator (.getAllocator base) "pgwire"))))]
                   (log/infof "%s started at postgres://%s:%d"
                              (if read-only? "Read-only server" "Server")
                              (.getHostAddress host)

@@ -195,7 +195,7 @@ class SourceLogProcessor(
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
 
-        val finishedBlocks = liveIndex.finishBlock(blockIdx)
+        val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
         val addedTries = finishedBlocks.map { (table, fb) ->
             TrieDetails.newBuilder()

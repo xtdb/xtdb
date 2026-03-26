@@ -7,7 +7,6 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.indexer.crash-logger :refer [with-crash-log]]
-            [xtdb.indexer.live-index :as li]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
@@ -31,8 +30,10 @@
            (xtdb.api.log ReplicaMessage$ResolvedTx)
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
+           (xtdb.database DatabaseState)
            (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
+           xtdb.NodeBase
            (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedQuery)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -531,10 +532,8 @@
   (Indexer/addTxRow live-idx-tx db-name tx-key t user-metadata))
 
 (defmethod ig/expand-key :xtdb/indexer [k opts]
-  {k (merge {:config (ig/ref :xtdb/config)
-             :q-src (ig/ref ::q/query-source)
-             :metrics-registry (ig/ref :xtdb.metrics/registry)
-             :tracer (ig/ref :xtdb/tracer)}
+  {k (merge {:base (ig/ref :xtdb/base)
+             :q-src (ig/ref ::q/query-source)}
             opts)})
 
 (defn- build-table-data [^LiveIndex$Tx live-idx-tx]
@@ -611,7 +610,7 @@
                                                      (openSnapshot [_]
                                                        (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
                                                          (Snapshot. tx-key live-index-snap
-                                                                    (li/->schema live-index-snap table-catalog))))))
+                                                                    (update-vals (LiveIndex/buildSchema live-index-snap table-catalog) set))))))
 
                       tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                                :current-time system-time
@@ -669,8 +668,10 @@
       (add-tx-row! db-name live-idx-tx tx-key e {})
       (commit tx-key live-idx-tx (nil? e) e))))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [config, q-src, metrics-registry, tracer]}]
-  (let [^Tracer tracer (when (:transaction-tracing? tracer) (:tracer tracer))
+(defmethod ig/init-key :xtdb/indexer [_ {:keys [^NodeBase base, q-src]}]
+  (let [config (.getConfig base)
+        metrics-registry (.getMeterRegistry base)
+        ^Tracer tracer (when (.getTransactionTracing (.getTracer config)) (.getTracer base))
         tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                     {:description "indicates the timing and number of transactions"})
         tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
@@ -678,7 +679,7 @@
       (openForDatabase [_ allocator db-storage db-state live-index crash-logger]
         (let [db-name (.getName db-state)]
           (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
-            (->IndexerForDatabase allocator (:node-id config) q-src
+            (->IndexerForDatabase allocator (.getNodeId config) q-src
                                   db-name db-storage db-state
                                   live-index (.getTableCatalog db-state)
                                   crash-logger
@@ -689,20 +690,3 @@
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
 
-(defmethod ig/expand-key ::for-db [k opts]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :db-state (ig/ref :xtdb.db-catalog/state)
-            :live-index (ig/ref :xtdb.indexer/live-index)
-            :crash-logger (ig/ref ::crash-logger)}
-           opts)})
-
-(defmethod ig/init-key ::for-db [_ {{:keys [^Indexer indexer]} :base
-                                    :keys [allocator db-storage db-state ^LiveIndex live-index ^CrashLogger crash-logger]}]
-  (.openForDatabase indexer allocator db-storage db-state live-index crash-logger))
-
-(defmethod ig/halt-key! ::for-db [_ indexer-for-db]
-  (util/close indexer-for-db))
-
-(defn <-node ^xtdb.indexer.Indexer [node]
-  (util/component node :xtdb/indexer))

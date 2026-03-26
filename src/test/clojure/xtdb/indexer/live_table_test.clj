@@ -3,7 +3,6 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
-            [xtdb.indexer.live-index :as li]
             [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
@@ -13,6 +12,7 @@
            (java.util Arrays HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
+           (xtdb.api IndexerConfig)
            (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
@@ -38,7 +38,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
             (let [doc-wtr (.getDocWriter live-table-tx)]
@@ -60,7 +60,7 @@
                 (t/is (= (reverse (range n))
                          (vec (.getData leaf)))))
 
-              (.finishBlock live-table 0)
+              (.finishBlock live-table bp 0)
 
               (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
                                        (.resolve path "objects")))))))
@@ -71,7 +71,7 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator bp #xt/table foo (RowCounter.))]
+                         live-table (LiveTable. allocator #xt/table foo (RowCounter.))]
           (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
             (let [doc-wtr (.getDocWriter live-table-tx)]
 
@@ -92,7 +92,7 @@
                 (t/is (= (reverse (range n))
                          (vec (.getData leaf)))))
 
-              (.finishBlock live-table 0)
+              (.finishBlock live-table bp 0)
 
               (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
                                        (.resolve path "objects")))))))))
@@ -116,7 +116,7 @@
     (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
-                     live-table (LiveTable. allocator bp #xt/table foo rc)]
+                     live-table (LiveTable. allocator #xt/table foo rc)]
       (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
             doc-wtr (.getDocWriter live-table-tx)]
 
@@ -130,7 +130,7 @@
         (util/with-open [live-table-snap (.openSnapshot live-table)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
-            (.finishBlock live-table 0)
+            (.finishBlock live-table bp 0)
             (.close live-table-tx)
 
             (let [live-table-after (live-table-snap->data live-table-snap)]
@@ -150,15 +150,9 @@
             block-cat (.getBlockCatalog db)
             table-catalog (.getTableCatalog db)
             live-index-allocator (util/->child-allocator allocator "live-index")]
-        (util/with-open [^LiveIndex live-index (li/->LiveIndex live-index-allocator bp
-                                                               block-cat table-catalog
-                                                               "xtdb"
-                                                               nil (HashMap.)
-                                                               nil (StampedLock.)
-                                                               (RefCounter.)
-                                                               (RowCounter.) 102400
-                                                               64 1024
-                                                               [])]
+        (util/with-open [live-index (LiveIndex/open live-index-allocator
+                                                                        block-cat table-catalog
+                                                                        "xtdb")]
           (with-open [live-index-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
             (let [live-table-tx (.liveTable live-index-tx table)
                   doc-wtr (.getDocWriter live-table-tx)]
@@ -174,7 +168,7 @@
                 (let [live-index-snap (.getLiveIndex snap)
                       live-table-before (live-table-snap->data (.liveTable live-index-snap table))]
 
-                  (.finishBlock live-index 0)
+                  (.finishBlock live-index bp 0)
 
                   (let [live-table-after (live-table-snap->data (.liveTable live-index-snap table))]
 

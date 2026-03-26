@@ -4,7 +4,6 @@
             [xtdb.authn :as authn]
             [xtdb.authn-test :as authn-test]
             [xtdb.db-catalog :as db]
-            [xtdb.indexer.live-index :as li]
             [xtdb.pgwire :as pgwire]
             [xtdb.pgwire.io :as pgio]
             [xtdb.test-util :as tu]

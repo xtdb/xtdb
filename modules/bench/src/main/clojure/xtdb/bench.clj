@@ -494,9 +494,10 @@
         (log/info "Running node from config file:" config-file)
         (try
           (with-open [node (xtn/start-node config-file)]
-            (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                      *registry* (util/component node :xtdb.metrics/registry)]
-              (benchmark-fn node)))
+            (let [base (util/node-base node)]
+              (binding [tu/*allocator* (.getAllocator base)
+                        *registry* (.getMeterRegistry base)]
+                (benchmark-fn node))))
           (catch Throwable t
             (if @shutting-down?
               (log/warn t "Error during shutdown (ignored):")
@@ -508,9 +509,10 @@
                                                       tracing-endpoint (assoc :tracer {:enabled? true
                                                                                        :endpoint tracing-endpoint
                                                                                        :service-name "xtdb-bench"})))]
-                    (binding [tu/*allocator* (util/component node :xtdb/allocator)
-                              *registry* (util/component node :xtdb.metrics/registry)]
-                      (benchmark-fn node)))
+                    (let [base (util/node-base node)]
+                      (binding [tu/*allocator* (.getAllocator base)
+                                *registry* (.getMeterRegistry base)]
+                        (benchmark-fn node))))
                   (catch Throwable t
                     (if @shutting-down?
                       (log/warn t "Error during shutdown (ignored):")

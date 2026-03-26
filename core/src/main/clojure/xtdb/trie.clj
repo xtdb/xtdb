@@ -1,6 +1,5 @@
 (ns xtdb.trie
-  (:require [xtdb.buffer-pool]
-            [xtdb.table :as table]
+  (:require [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import com.carrotsearch.hppc.ByteArrayList

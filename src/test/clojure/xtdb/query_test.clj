@@ -5,7 +5,6 @@
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.expression.metadata :as expr.meta]
-            [xtdb.metadata :as meta]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]

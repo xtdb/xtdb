@@ -8,6 +8,9 @@ import io.micrometer.core.instrument.binder.system.ProcessorMetrics
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.netty.util.internal.PlatformDependent
+import org.apache.arrow.memory.AllocationListener
+import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.RootAllocator
 import xtdb.util.info
 import xtdb.util.logger
 import java.lang.management.BufferPoolMXBean
@@ -41,4 +44,48 @@ object Metrics {
                         .register(reg)
                 }
         }
+
+    private fun <T : Any> Gauge.Builder<T>.withTags(tags: Array<out Pair<String, String>>) = apply {
+        for ((k, v) in tags) tag(k, v)
+    }
+
+
+    private fun MeterRegistry.registerAllocatorGauges(
+        al: BufferAllocator, name: String, vararg tags: Pair<String, String>
+    ) {
+        Gauge.builder("$name.allocated", al) { it.allocatedMemory.toDouble() }
+            .baseUnit("bytes")
+            .withTags(tags)
+            .register(this)
+
+        if (al.limit < Long.MAX_VALUE) {
+            Gauge.builder("$name.limit", al) { it.limit.toDouble() }
+                .baseUnit("bytes")
+                .withTags(tags)
+                .register(this)
+        }
+    }
+
+    @JvmStatic
+    fun MeterRegistry.registerRootAllocatorMeters(alloc: RootAllocator) {
+        registerAllocatorGauges(alloc, "xtdb.allocator.root.memory")
+    }
+
+    /**
+     * Returns an AllocationListener that registers memory-usage meters for child allocators.
+     * Database allocator is expected to be named 'database/<db-name>'.
+     */
+    @JvmStatic
+    fun MeterRegistry.rootAllocatorListener() = object : AllocationListener {
+        override fun onChildAdded(parent: BufferAllocator, child: BufferAllocator) {
+            val parentParts = parent.name.split("/", limit = 2)
+            val parentName = parentParts[0]
+            val dbName = parentParts.getOrElse(1) { "" }
+            val childName = child.name.split("/", limit = 2)[0]
+
+            if ((parent is RootAllocator && childName != "database") || parentName == "database") {
+                registerAllocatorGauges(child, "xtdb.allocator.memory", "database" to dbName)
+            }
+        }
+    }
 }

@@ -2,7 +2,6 @@
   (:require [clojure.tools.logging :as log]
             [integrant.core :as ig]
             [xtdb.api :as xt]
-            [xtdb.block-catalog :as block-cat]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.node :as xtn]
@@ -17,8 +16,7 @@
            (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Cluster$Factory Log$Factory)
            (xtdb.arrow Relation Vector)
-           xtdb.catalog.BlockCatalog
-           (xtdb.database Database DatabaseStorage Database$Catalog Database$Config Database$Mode)
+           (xtdb.database Database DatabaseStorage Database$Catalog Database$Config)
            xtdb.table.TableRef
            (xtdb.tx TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
            (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs)
@@ -115,17 +113,6 @@
     (.logCluster config (str (symbol cluster-alias)) (->log-cluster-factory tag opts)))
   config)
 
-(defmethod ig/init-key ::clusters [_ clusters]
-  (util/with-close-on-catch [!clusters (HashMap.)]
-    (doseq [[cluster-alias ^Log$Cluster$Factory factory] clusters]
-      (.put !clusters
-            (str (symbol cluster-alias))
-            (.open factory)))
-    (into {} !clusters)))
-
-(defmethod ig/halt-key! ::clusters [_ clusters]
-  (util/close clusters))
-
 (defmulti ->log-factory
   (fn [k _opts]
     (when-let [ns (namespace k)]
@@ -160,17 +147,6 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-(defmethod ig/expand-key :xtdb/log [k {:keys [base factory mode]}]
-  {k {:base base
-      :buffer-pool (ig/ref :xtdb/buffer-pool)
-      :factory factory
-      :mode mode}})
-
-(defmethod ig/expand-key :xtdb/source-log [k _]
-  {k (ig/ref :xtdb/log)})
-
-(defmethod ig/expand-key :xtdb/replica-log [k {:keys [base factory mode]}]
-  {k {:base base :factory factory :mode mode}})
 
 (def out-of-sync-log-message
   "Node failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
@@ -196,39 +172,6 @@
           (< latest-submitted-offset latest-completed-offset)
           (throw (->out-of-sync-exception latest-completed-offset latest-submitted-offset epoch)))
         (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
-
-(defmethod ig/init-key :xtdb/log [_ {:keys [buffer-pool, ^Log$Factory factory, ^Database$Mode mode]
-                                     {:keys [log-clusters]} :base}]
-  (let [log (if (= mode Database$Mode/READ_ONLY)
-              (.openReadOnlySourceLog factory log-clusters)
-              (.openSourceLog factory log-clusters))
-        latest-completed-tx (some-> (BlockCatalog/getLatestBlock buffer-pool)
-                                    (.getLatestCompletedTx)
-                                    (block-cat/<-TxKey))]
-    (validate-offsets log latest-completed-tx)
-    log))
-
-(defmethod ig/halt-key! :xtdb/log [_ ^Log log]
-  (util/close log))
-
-(defmethod ig/init-key :xtdb/source-log [_ log] log)
-
-(defmethod ig/init-key :xtdb/replica-log [_ {:keys [^Log$Factory factory ^Database$Mode mode]
-                                              {:keys [log-clusters]} :base}]
-  (if (= mode Database$Mode/READ_ONLY)
-    (.openReadOnlyReplicaLog factory log-clusters)
-    (.openReplicaLog factory log-clusters)))
-
-(defmethod ig/halt-key! :xtdb/replica-log [_ ^Log log]
-  (util/close log))
-
-(defmethod ig/init-key :xtdb/external-source-log [_ {:keys [^Database$Config db-config]
-                                                      {:keys [log-clusters]} :base}]
-  (some-> (.getExternalLog db-config)
-          (.open log-clusters)))
-
-(defmethod ig/halt-key! :xtdb/external-source-log [_ external-source-log]
-  (util/close external-source-log))
 
 (defn- ->TxOps [tx-ops]
   (->> tx-ops

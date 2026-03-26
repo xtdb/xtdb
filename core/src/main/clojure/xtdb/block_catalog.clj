@@ -1,17 +1,8 @@
 (ns xtdb.block-catalog
-  (:require [integrant.core :as ig]
-            [xtdb.db-catalog :as db]
+  (:require [xtdb.db-catalog :as db]
             [xtdb.serde :as serde]
             [xtdb.time :as time])
-  (:import (xtdb.block.proto Block TxKey)
-           (xtdb.catalog BlockCatalog)))
-
-(defmethod ig/expand-key :xtdb/block-catalog [k opts]
-  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)}
-           opts)})
-
-(defmethod ig/init-key :xtdb/block-catalog [_ {:keys [db-name buffer-pool]}]
-  (BlockCatalog. db-name (BlockCatalog/getLatestBlock buffer-pool)))
+  (:import (xtdb.block.proto Block TxKey)))
 
 (defn <-TxKey [^TxKey tx-key]
   (serde/->TxKey (.getTxId tx-key) (time/micros->instant (.getSystemTime tx-key))))

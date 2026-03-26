@@ -19,6 +19,8 @@ object Tracer {
     @JvmStatic
     @JvmName("open")
     fun TracerConfig.openTracer(): OtelTracer? = try {
+        if (!enabled) return null
+
         val resource =
             Resource.getDefault().merge(Resource.create(Attributes.builder().put("service.name", serviceName).build()))
 

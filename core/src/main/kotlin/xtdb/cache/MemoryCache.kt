@@ -202,7 +202,7 @@ class MemoryCache @JvmOverloads internal constructor(
                 for (req in fetchCh)
                     req.handle(fetchReqs)
             } catch (t: Throwable) {
-                fetchReqs.values.flatMap { it }.forEach { it.cancel() }
+                fetchReqs.values.flatten().forEach { it.cancel() }
                 throw t
             }
         }

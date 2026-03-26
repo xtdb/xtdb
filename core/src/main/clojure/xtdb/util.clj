@@ -233,6 +233,9 @@
 (defn component [node k]
   (some-> (:system node) (ig/find-derived k) first val))
 
+(defn node-base ^xtdb.NodeBase [node]
+  (component node :xtdb/base))
+
 ;;; IO
 
 (defn enum->kw [^Enum enum-value]

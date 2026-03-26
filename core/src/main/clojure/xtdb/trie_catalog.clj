@@ -1,7 +1,6 @@
 (ns xtdb.trie-catalog
   (:require [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [integrant.core :as ig]
             [xtdb.table-catalog :as table-cat]
             [xtdb.time :as time]
             [xtdb.trie :as trie]
@@ -508,10 +507,6 @@
                 (fn [_table table-cat]
                   (reset->l0 table-cat))))))
 
-(defmethod ig/expand-key :xtdb/trie-catalog [k opts]
-  {k (into {:buffer-pool (ig/ref :xtdb/buffer-pool)
-            :block-cat (ig/ref :xtdb/block-catalog)}
-           opts)})
 
 (defn load-tries ^java.util.Map [table->table-block file-size-target]
   ;; We need to check one trie-details message from every table as table block files might come from different nodes. #4664
@@ -542,13 +537,15 @@
         (.addTries cat table tries now))
       (:table-cats @(:!state cat)))))
 
-(defmethod ig/init-key :xtdb/trie-catalog [_ {:keys [^BufferPool buffer-pool, ^BlockCatalog block-cat]}]
-  (log/debug "starting trie catalog...")
-  (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
-        block-idx (or (.getCurrentBlockIndex block-cat) -1)
-        cat (TrieCatalog. buffer-pool block-cat
-                          (volatile! {:block-idx block-idx
-                                      :table-cats (load-tries table->table-block *file-size-target*)})
-                          *file-size-target*)]
-    (log/debug "trie catalog started")
-    cat))
+(defn ->factory ^xtdb.trie.TrieCatalog$Factory []
+  (reify xtdb.trie.TrieCatalog$Factory
+    (openTrieCatalog [_ buffer-pool block-cat]
+      (log/debug "starting trie catalog...")
+      (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
+            block-idx (or (.getCurrentBlockIndex ^BlockCatalog block-cat) -1)
+            cat (TrieCatalog. buffer-pool block-cat
+                              (volatile! {:block-idx block-idx
+                                          :table-cats (load-tries table->table-block *file-size-target*)})
+                              *file-size-target*)]
+        (log/debug "trie catalog started")
+        cat))))
