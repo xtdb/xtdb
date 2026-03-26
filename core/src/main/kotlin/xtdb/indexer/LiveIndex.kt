@@ -185,7 +185,6 @@ class LiveIndex private constructor(
 
         val stamp = snapLock.writeLock()
         try {
-            sharedSnap?.close()
             tables.values.closeAll()
             tables.clear()
 
