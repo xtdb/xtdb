@@ -79,13 +79,7 @@ class SourceLogProcessor(
     private var pendingBlockIdx: Long? = null
     private val bufferedRecords: MutableList<Log.Record<SourceMessage>> = mutableListOf()
 
-    private val allocator =
-        allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
-            .also { alloc ->
-                Gauge.builder("watcher.allocator.allocated_memory", alloc) { it.allocatedMemory.toDouble() }
-                    .baseUnit("bytes")
-                    .register(meterRegistry)
-            }
+    private val allocator = allocator.newChildAllocator("log-processor", 0, Long.MAX_VALUE)
 
     override fun close() {
         allocator.close()
