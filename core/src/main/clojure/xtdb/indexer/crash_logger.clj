@@ -1,11 +1,8 @@
 (ns xtdb.indexer.crash-logger
   (:require [clojure.pprint :as pp]
-            [integrant.core :as ig]
             [xtdb.error :as err])
   (:import (xtdb.arrow RelationReader VectorReader)
-           xtdb.database.DatabaseStorage
            (xtdb.error Anomaly$Caller Interrupted)
-           xtdb.NodeBase
            (xtdb.indexer CrashLogger LiveIndex LiveTable$Tx)
            (xtdb.table TableRef)))
 
@@ -29,13 +26,3 @@
              (.addSuppressed e# t#)))
 
          (throw (ex-info ~msg data# e#))))))
-
-(defmethod ig/expand-key :xtdb.indexer/crash-logger [k opts]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :storage (ig/ref :xtdb.db-catalog/storage)}
-           opts)})
-
-(defmethod ig/init-key :xtdb.indexer/crash-logger [_ {:keys [allocator ^NodeBase base ^DatabaseStorage storage]}]
-  (CrashLogger. allocator (.getBufferPool storage) (.getNodeId (.getConfig base))))
-
-(defmethod ig/halt-key! :xtdb.indexer/crash-logger [_ _])

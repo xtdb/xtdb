@@ -690,15 +690,3 @@
 (defmethod ig/halt-key! :xtdb/indexer [_ indexer]
   (util/close indexer))
 
-(defmethod ig/expand-key ::for-db [k opts]
-  {k (into {:allocator (ig/ref :xtdb.db-catalog/allocator)
-            :db-storage (ig/ref :xtdb.db-catalog/storage)
-            :db-state (ig/ref :xtdb.db-catalog/state)
-            :crash-logger (ig/ref ::crash-logger)}
-           opts)})
-
-(defmethod ig/init-key ::for-db [_ {:keys [^Indexer indexer allocator db-storage ^DatabaseState db-state ^CrashLogger crash-logger]}]
-  (.openForDatabase indexer allocator db-storage db-state (.getLiveIndex db-state) crash-logger))
-
-(defmethod ig/halt-key! ::for-db [_ indexer-for-db]
-  (util/close indexer-for-db))
