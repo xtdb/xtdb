@@ -75,6 +75,7 @@ private fun KafkaConfigMap.openConsumer() =
             "enable.auto.commit" to "false",
             "isolation.level" to "read_committed",
             "auto.offset.reset" to "latest",
+            "partition.assignment.strategy" to "org.apache.kafka.clients.consumer.CooperativeStickyAssignor",
         ) + this,
         UnitDeserializer,
         ByteArrayDeserializer()
