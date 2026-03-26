@@ -84,7 +84,7 @@ object Metrics {
             val childName = child.name.split("/", limit = 2)[0]
 
             if ((parent is RootAllocator && childName != "database") || parentName == "database") {
-                registerAllocatorGauges(child, "xtdb.allocator.memory", "database" to dbName)
+                registerAllocatorGauges(child, "xtdb.allocator.memory", "allocator" to childName, "database" to dbName)
             }
         }
     }
