@@ -224,31 +224,27 @@ class KafkaCluster(
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
 
-        override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Log.Record<M>> {
-            if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return emptyList()
+        override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId) = sequence {
+            if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return@sequence
             val fromOffset = msgIdToOffset(fromMsgId)
             val toOffset = msgIdToOffset(toMsgId)
-            if (fromOffset >= toOffset) return emptyList()
+            if (fromOffset >= toOffset) return@sequence
 
-            return kafkaConfigMap.openConsumer().use { c ->
+            kafkaConfigMap.openConsumer().use { c ->
                 val tp = TopicPartition(topic, 0)
                 c.assign(listOf(tp))
 
                 val endOffset = c.endOffsets(listOf(tp))[tp] ?: 0
                 val effectiveToOffset = minOf(toOffset, endOffset)
-                if (fromOffset >= effectiveToOffset) return emptyList()
+                if (fromOffset >= effectiveToOffset) return@sequence
 
                 c.seek(tp, fromOffset)
 
-                buildList {
-                    while (c.position(tp) < effectiveToOffset) {
-                        val batch = c.poll(pollDuration).records(topic).toList()
-
-                        for (rec in batch) {
-                            if (rec.offset() >= effectiveToOffset) return@buildList
-                            val msg = codec.decode(rec.value()) ?: continue
-                            add(Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg))
-                        }
+                while (c.position(tp) < effectiveToOffset) {
+                    for (rec in c.poll(pollDuration).records(topic)) {
+                        if (rec.offset() >= effectiveToOffset) return@sequence
+                        val msg = codec.decode(rec.value()) ?: continue
+                        yield(Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg))
                     }
                 }
             }

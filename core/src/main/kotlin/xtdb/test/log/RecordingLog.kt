@@ -63,11 +63,14 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
 
     override fun readLastMessage(): M? = messages.lastOrNull()
 
-    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Log.Record<M>> {
-        if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return emptyList()
+    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId) = sequence {
+        if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return@sequence
         val fromOffset = msgIdToOffset(fromMsgId)
         val toOffset = msgIdToOffset(toMsgId)
-        return records.filter { it.logOffset in fromOffset until toOffset }
+        for (rec in records) {
+            if (rec.logOffset >= toOffset) break
+            if (rec.logOffset >= fromOffset) yield(rec)
+        }
     }
 
     override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer<M> {

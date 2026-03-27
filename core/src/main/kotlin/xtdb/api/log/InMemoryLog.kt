@@ -13,7 +13,6 @@ import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.database.proto.inMemoryLog
-import java.util.concurrent.CopyOnWriteArrayList
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
@@ -63,8 +62,6 @@ class InMemoryLog<M> @JvmOverloads constructor(
         val onCommit: CompletableDeferred<MessageMetadata>
     )
 
-    private val allRecords = CopyOnWriteArrayList<Record<M>>()
-
     private val appendCh: Channel<NewMessage<M>> = Channel(100)
     private val committedCh = appendCh.receiveAsFlow()
         .map { (message, onCommit) ->
@@ -73,11 +70,14 @@ class InMemoryLog<M> @JvmOverloads constructor(
             val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
 
             val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
-            allRecords.add(record)
             onCommit.complete(MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS)))
             record
         }
-        .shareIn(scope, SharingStarted.Eagerly, 100)
+        .shareIn(scope, SharingStarted.Eagerly, REPLAY_BUFFER_SIZE)
+
+    companion object {
+        private const val REPLAY_BUFFER_SIZE = 4096
+    }
 
     @Volatile
     override var latestSubmittedOffset: LogOffset = -1
@@ -125,11 +125,14 @@ class InMemoryLog<M> @JvmOverloads constructor(
 
     override fun readLastMessage(): M? = null
 
-    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Record<M>> {
-        if (MsgIdUtil.msgIdToEpoch(fromMsgId) != epoch || MsgIdUtil.msgIdToEpoch(toMsgId) != epoch) return emptyList()
+    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId) = sequence {
+        if (MsgIdUtil.msgIdToEpoch(fromMsgId) != epoch || MsgIdUtil.msgIdToEpoch(toMsgId) != epoch) return@sequence
         val fromOffset = msgIdToOffset(fromMsgId)
         val toOffset = msgIdToOffset(toMsgId)
-        return allRecords.filter { it.logOffset in fromOffset until toOffset }
+        for (rec in committedCh.replayCache) {
+            if (rec.logOffset >= toOffset) break
+            if (rec.logOffset >= fromOffset) yield(rec)
+        }
     }
 
     override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {

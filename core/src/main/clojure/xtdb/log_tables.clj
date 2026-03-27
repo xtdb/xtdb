@@ -186,10 +186,51 @@
 
           nil)))))
 
+(def ^:private ^:const batch-size 1024)
+
+(defn- take-batch
+  "Takes up to `n` elements from an Iterator, returning a vector."
+  [^java.util.Iterator iter ^long n]
+  (loop [acc (transient []), i 0]
+    (if (and (< i n) (.hasNext iter))
+      (recur (conj! acc (.next iter)) (inc i))
+      (persistent! acc))))
+
+(defn- records->rows [records source? decode-tx-ops? allocator]
+  (if source?
+    (mapv (fn [^Log$Record rec]
+            (let [msg (.getMessage rec)]
+              {"msg_id" (.getMsgId rec)
+               "log_offset" (.getLogOffset rec)
+               "log_timestamp" (.getLogTimestamp rec)
+               "msg" (source-msg->edn msg)
+               "tx_ops" (when (and decode-tx-ops? (instance? SourceMessage$Tx msg))
+                          (decode-tx-ops allocator (.getTxOps ^SourceMessage$Tx msg)))}))
+          records)
+    (mapv (fn [^Log$Record rec]
+            {"msg_id" (.getMsgId rec)
+             "log_offset" (.getLogOffset rec)
+             "log_timestamp" (.getLogTimestamp rec)
+             "msg" (replica-msg->edn (.getMessage rec))})
+          records)))
+
+(defn- emit-batch
+  "Writes a batch of row maps into a Relation, applies col-preds, and yields to the consumer."
+  [^BufferAllocator allocator derived-table-schema col-names col-preds schema args rows c]
+  (util/with-open [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
+    (.writeRows out-rel (into-array java.util.Map rows))
+    (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
+                                 (.select rel (.select col-pred allocator rel schema args)))
+                               (-> out-rel
+                                   (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
+                                   (vr/rel-reader (.getRowCount out-rel))
+                                   (vr/with-absent-cols allocator col-names))
+                               (vals col-preds))]
+      (.accept c out-rel-view))))
+
 (defn ->cursor
-  "Creates a cursor for log table queries.
-  Extracts msg_id bounds from selects, reads the bounded range from the appropriate log,
-  and returns rows as an InformationSchemaCursor."
+  "Creates a streaming cursor for log table queries.
+  Pulls records from the log in batches of ~1024, converting each batch to a Relation."
   [^Database db ^BufferAllocator allocator ^TableRef table
    col-names col-preds selects schema args]
   (let [table-sym (table/ref->schema+table table)
@@ -203,47 +244,18 @@
                             "Queries on log tables require msg_id bounds (e.g. WHERE msg_id BETWEEN x AND y)")))
 
     (let [[^long from-msg-id ^long to-msg-id] bounds
-          records (.readRecords log from-msg-id to-msg-id)
-          decode-tx-ops? (and source? (contains? col-names "tx_ops"))
-          rows (if source?
-                 (mapv (fn [^Log$Record rec]
-                         (let [msg (.getMessage rec)]
-                           {"msg_id" (.getMsgId rec)
-                            "log_offset" (.getLogOffset rec)
-                            "log_timestamp" (.getLogTimestamp rec)
-                            "msg" (source-msg->edn msg)
-                            "tx_ops" (when (and decode-tx-ops? (instance? SourceMessage$Tx msg))
-                                       (decode-tx-ops allocator (.getTxOps ^SourceMessage$Tx msg)))}))
-                       records)
-                 (mapv (fn [^Log$Record rec]
-                         {"msg_id" (.getMsgId rec)
-                          "log_offset" (.getLogOffset rec)
-                          "log_timestamp" (.getLogTimestamp rec)
-                          "msg" (replica-msg->edn (.getMessage rec))})
-                       records))]
+          record-seq (.readRecords log from-msg-id to-msg-id)
+          record-iter (.iterator record-seq)
+          decode-tx-ops? (and source? (contains? col-names "tx_ops"))]
 
-      (util/with-close-on-catch [out-rel (Relation. allocator ^Map (update-keys derived-table-schema str))]
-        (.writeRows out-rel (into-array java.util.Map rows))
-
-        (let [out-rel-view (reduce (fn [^RelationReader rel ^SelectionSpec col-pred]
-                                     (.select rel (.select col-pred allocator rel schema args)))
-                                   (-> out-rel
-                                       (->> (filter (comp (set col-names) #(.getName ^VectorReader %))))
-                                       (vr/rel-reader (.getRowCount out-rel))
-                                       (vr/with-absent-cols allocator col-names))
-                                   (vals col-preds))
-              !out-rel (volatile! out-rel)]
-          (reify ICursor
-            (getCursorType [_] "log-table")
-            (getChildCursors [_] [])
-            (tryAdvance [_ c]
-              (boolean
-               (when-let [rel @!out-rel]
-                 (try
-                   (vreset! !out-rel nil)
-                   (.accept c out-rel-view)
-                   true
-                   (finally
-                     (util/close rel))))))
-            (close [_]
-              (some-> @!out-rel util/close))))))))
+      (reify ICursor
+        (getCursorType [_] "log-table")
+        (getChildCursors [_] [])
+        (tryAdvance [_ c]
+          (boolean
+           (when (.hasNext record-iter)
+             (let [batch (take-batch record-iter batch-size)
+                   rows (records->rows batch source? decode-tx-ops? allocator)]
+               (emit-batch allocator derived-table-schema col-names col-preds schema args rows c)
+               true))))
+        (close [_])))))
