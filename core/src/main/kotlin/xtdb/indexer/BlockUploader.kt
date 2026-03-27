@@ -7,6 +7,7 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
+import xtdb.api.log.SourceMessage
 import xtdb.api.storage.Storage
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
@@ -27,13 +28,14 @@ class BlockUploader(
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
 ) {
+    private val sourceLog = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
     private val liveIndex = dbState.liveIndex
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
 
-    fun uploadBlock(
+    suspend fun uploadBlock(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
     ): MessageId {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
@@ -56,6 +58,10 @@ class BlockUploader(
 
                 trieDetails
             }
+
+        // Publish L0 tries to source log so that all nodes (including concurrent MW nodes)
+        // see the L0 before any compaction L1C on the source log — see #5395.
+        sourceLog.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries))
 
         val allTables = finishedBlocks.keys + blockCatalog.allTables
         val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
