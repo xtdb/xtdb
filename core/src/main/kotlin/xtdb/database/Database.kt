@@ -1,11 +1,10 @@
 package xtdb.database
 
 import clojure.lang.*
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import kotlinx.coroutines.time.withTimeout
+import xtdb.util.logger
+import xtdb.util.warn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -45,6 +44,8 @@ import xtdb.util.closeAll
 import xtdb.util.safelyOpening
 import java.time.Duration
 import java.util.*
+
+private val LOG = Database::class.logger
 
 class Database(
     val allocator: BufferAllocator,
@@ -87,7 +88,8 @@ class Database(
     fun awaitSourceBlocking(sourceMsgId: MessageId, timeout: Duration? = null) =
         runBlocking {
             check(isIndexing) { "log processor not initialised" }
-            if (timeout == null) watchers.awaitSource(sourceMsgId) else withTimeout(timeout) { watchers.awaitSource(sourceMsgId) }
+            if (timeout == null) watchers.awaitSource(sourceMsgId)
+            else withTimeout(timeout) { watchers.awaitSource(sourceMsgId) }
         }
 
     override fun equals(other: Any?): Boolean =
@@ -251,6 +253,7 @@ class Database(
     enum class Mode {
         @SerialName("read-write")
         READ_WRITE,
+
         @SerialName("read-only")
         READ_ONLY;
 
@@ -364,7 +367,22 @@ class Database(
 
         fun awaitAll(token: String?, timeout: Duration?) = runBlocking {
             if (token != null)
-                if (timeout == null) awaitAll0(token) else withTimeout(timeout) { awaitAll0(token) }
+                try {
+                    if (timeout == null) awaitAll0(token) else withTimeout(timeout) { awaitAll0(token) }
+                } catch (e: TimeoutCancellationException) {
+                    val basis = token.decodeTxBasisToken()
+                    val dbStatus = databaseNames
+                        .mapNotNull { databaseOrNull(it) }
+                        .filter { it.isIndexing }
+                        .joinToString("\n") { db ->
+                            val awaiting = basis[db.name]?.first()
+                            val current = db.latestProcessedMsgId
+                            val error = db.ingestionError != null
+                            "  db=${db.name}: awaiting=$awaiting, current=$current, ingestionError=$error"
+                        }
+                    LOG.warn("awaitAll timed out after $timeout:\n$dbStatus")
+                    throw e
+                }
         }
 
         fun syncAll(timeout: Duration?) = runBlocking {
