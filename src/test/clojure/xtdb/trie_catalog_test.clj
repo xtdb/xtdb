@@ -802,3 +802,35 @@
               "Compaction should have created non-L0 files")
         (t/is (= 4 (count blocks))
               "All L0 blocks should be visible even after compaction")))))
+
+(t/deftest test-repair-l0-l1c-consistency-5395
+  (let [->trie-details (partial trie/->trie-details #xt/table foo)]
+    (t/testing "L0 and L1C both live at same block-idx — L0 should be repaired to garbage"
+      (let [table-blocks {:partitions
+                          [{:level 0 :recency nil :part []
+                            :max-block-idx 2
+                            :tries [(->trie-details {:trie-key "l00-rc-b02" :data-file-size 10 :state :live})
+                                    (->trie-details {:trie-key "l00-rc-b03" :data-file-size 10 :state :live})]}
+                           {:level 1 :recency nil :part []
+                            :max-block-idx 2
+                            :tries [(->trie-details {:trie-key "l01-rc-b02" :data-file-size 10 :state :live})
+                                    (->trie-details {:trie-key "l01-rc-b01" :data-file-size 10 :state :garbage
+                                                     :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})]}]}
+            cat (trie-catalog-init {#xt/table foo table-blocks})]
+
+        (t/is (= #{"l00-rc-b03" "l01-rc-b02"}
+                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                      (into (sorted-set) (map :trie-key))))
+              "L0 b02 should be garbage (superseded by L1C b02), L0 b03 should remain live")))
+
+    (t/testing "no L1C — L0s should be unaffected"
+      (let [table-blocks {:partitions
+                          [{:level 0 :recency nil :part []
+                            :max-block-idx 2
+                            :tries [(->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})
+                                    (->trie-details {:trie-key "l00-rc-b02" :data-file-size 10 :state :live})]}]}
+            cat (trie-catalog-init {#xt/table foo table-blocks})]
+
+        (t/is (= #{"l00-rc-b01" "l00-rc-b02"}
+                 (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
+                      (into (sorted-set) (map :trie-key)))))))))
