@@ -127,14 +127,18 @@
 
   Closeable
   (close [_]
+    (log/debug "Closing connection..." {:cid cid})
     (util/close frontend)
+
+    (doseq [portal (vals (:portals @conn-state))]
+      (util/close (:cursor portal)))
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
 
     (util/close allocator)
 
-    (log/debug "Connection ended" {:cid cid})))
+    (log/debug "Connection closed" {:cid cid})))
 
 ;; best the server/conn records are opaque when printed as they contain mutual references
 (defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
