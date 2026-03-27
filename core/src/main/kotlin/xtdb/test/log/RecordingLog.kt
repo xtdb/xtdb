@@ -5,11 +5,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
+import xtdb.api.log.MessageId
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.LogOffset
 import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
+import xtdb.util.MsgIdUtil.msgIdToEpoch
+import xtdb.util.MsgIdUtil.msgIdToOffset
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -19,6 +22,7 @@ import java.time.temporal.ChronoUnit
 class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M>) : Log<M> {
     override val epoch = 0
     val messages = messages.toMutableList()
+    private val records = mutableListOf<Log.Record<M>>()
 
     @SerialName("!Recording")
     @Serializable
@@ -51,15 +55,20 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         messages.add(message)
 
         val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
+        val offset = ++latestSubmittedOffset
+        records.add(Log.Record(epoch, offset, ts.truncatedTo(ChronoUnit.MICROS), message))
 
-        return Log.MessageMetadata(
-            epoch,
-            ++latestSubmittedOffset,
-            ts.truncatedTo(ChronoUnit.MICROS)
-        )
+        return Log.MessageMetadata(epoch, offset, ts.truncatedTo(ChronoUnit.MICROS))
     }
 
     override fun readLastMessage(): M? = messages.lastOrNull()
+
+    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Log.Record<M>> {
+        if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return emptyList()
+        val fromOffset = msgIdToOffset(fromMsgId)
+        val toOffset = msgIdToOffset(toMsgId)
+        return records.filter { it.logOffset in fromOffset until toOffset }
+    }
 
     override fun openAtomicProducer(transactionalId: String) = object : Log.AtomicProducer<M> {
         override fun openTx() = object : Log.AtomicProducer.Tx<M> {

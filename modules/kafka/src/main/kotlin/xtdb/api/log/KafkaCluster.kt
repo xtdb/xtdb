@@ -37,6 +37,8 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
+import xtdb.util.MsgIdUtil.msgIdToEpoch
+import xtdb.util.MsgIdUtil.msgIdToOffset
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant.ofEpochMilli
@@ -221,6 +223,36 @@ class KafkaCluster(
                 val records = c.poll(pollDuration).records(topic)
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
+
+        override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Log.Record<M>> {
+            if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return emptyList()
+            val fromOffset = msgIdToOffset(fromMsgId)
+            val toOffset = msgIdToOffset(toMsgId)
+            if (fromOffset >= toOffset) return emptyList()
+
+            return kafkaConfigMap.openConsumer().use { c ->
+                val tp = TopicPartition(topic, 0)
+                c.assign(listOf(tp))
+
+                val endOffset = c.endOffsets(listOf(tp))[tp] ?: 0
+                val effectiveToOffset = minOf(toOffset, endOffset)
+                if (fromOffset >= effectiveToOffset) return emptyList()
+
+                c.seek(tp, fromOffset)
+
+                buildList {
+                    while (c.position(tp) < effectiveToOffset) {
+                        val batch = c.poll(pollDuration).records(topic).toList()
+
+                        for (rec in batch) {
+                            if (rec.offset() >= effectiveToOffset) return@buildList
+                            val msg = codec.decode(rec.value()) ?: continue
+                            add(Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg))
+                        }
+                    }
+                }
+            }
+        }
 
         override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
             private val producer = KafkaProducer(

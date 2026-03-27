@@ -160,6 +160,13 @@ interface Log<M> : AutoCloseable {
 
     fun readLastMessage(): M?
 
+    /**
+     * Reads records in the range [fromMsgId, toMsgId) (start-inclusive, end-exclusive).
+     * Returns a list of decoded records in offset order.
+     * If toMsgId exceeds the latest submitted offset, reads up to the latest available record.
+     */
+    fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Record<M>>
+
     fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription
     fun openGroupSubscription(listener: SubscriptionListener<M>): Subscription
 

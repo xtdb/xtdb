@@ -6,6 +6,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.information-schema :as info-schema]
+            [xtdb.log-tables :as log-tables]
             [xtdb.logical-plan :as lp]
             xtdb.object-store
             [xtdb.table :as table]
@@ -278,8 +279,14 @@
                      (let [^Snapshot snapshot (get snaps db-name)
                            derived-table-schema (info-schema/derived-table table)
                            template-table? (boolean (info-schema/template-table table))]
-                       (if (and derived-table-schema (not template-table?))
+                       (cond
+                         (log-tables/log-table table)
+                         (log-tables/->cursor db allocator table col-names col-preds selects schema args)
+
+                         (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
+
+                         :else
 
                          (let [iid-set (or (selects->iid-set selects args)
                                            (get pushdown-iids '_iid) ; usually patch

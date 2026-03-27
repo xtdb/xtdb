@@ -10,7 +10,10 @@ import kotlinx.serialization.Transient
 import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil
+import xtdb.util.MsgIdUtil.msgIdToOffset
+import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.database.proto.inMemoryLog
+import java.util.concurrent.CopyOnWriteArrayList
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
@@ -60,6 +63,8 @@ class InMemoryLog<M> @JvmOverloads constructor(
         val onCommit: CompletableDeferred<MessageMetadata>
     )
 
+    private val allRecords = CopyOnWriteArrayList<Record<M>>()
+
     private val appendCh: Channel<NewMessage<M>> = Channel(100)
     private val committedCh = appendCh.receiveAsFlow()
         .map { (message, onCommit) ->
@@ -68,6 +73,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
             val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
 
             val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
+            allRecords.add(record)
             onCommit.complete(MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS)))
             record
         }
@@ -118,6 +124,13 @@ class InMemoryLog<M> @JvmOverloads constructor(
     }
 
     override fun readLastMessage(): M? = null
+
+    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Record<M>> {
+        if (MsgIdUtil.msgIdToEpoch(fromMsgId) != epoch || MsgIdUtil.msgIdToEpoch(toMsgId) != epoch) return emptyList()
+        val fromOffset = msgIdToOffset(fromMsgId)
+        val toOffset = msgIdToOffset(toMsgId)
+        return allRecords.filter { it.logOffset in fromOffset until toOffset }
+    }
 
     override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
         var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)

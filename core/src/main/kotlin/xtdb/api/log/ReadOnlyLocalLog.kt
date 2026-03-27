@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log.*
 import xtdb.error.Incorrect
 import xtdb.util.MsgIdUtil
+import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.time.InstantUtil.fromMicros
 import java.io.DataInputStream
 import java.nio.ByteBuffer
@@ -105,6 +106,24 @@ class ReadOnlyLocalLog<M>(
         return FileChannel.open(logFilePath, READ).use { ch ->
             ch.position(latestSubmittedOffset)
             ch.readMessage()?.message
+        }
+    }
+
+    override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): List<Record<M>> {
+        if (MsgIdUtil.msgIdToEpoch(fromMsgId) != epoch || MsgIdUtil.msgIdToEpoch(toMsgId) != epoch) return emptyList()
+        val fromOffset = msgIdToOffset(fromMsgId)
+        val toOffset = msgIdToOffset(toMsgId)
+        if (fromOffset > latestSubmittedOffset || fromOffset >= toOffset) return emptyList()
+
+        return FileChannel.open(logFilePath, READ).use { ch ->
+            ch.position(fromOffset)
+            buildList {
+                while (ch.position() < ch.size()) {
+                    val record = ch.readMessage() ?: continue
+                    if (record.logOffset >= toOffset) break
+                    add(record)
+                }
+            }
         }
     }
 
