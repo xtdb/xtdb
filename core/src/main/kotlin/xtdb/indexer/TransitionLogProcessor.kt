@@ -52,7 +52,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.NoOp -> false
         }
 
-    private fun processRecord(record: Log.Record<ReplicaMessage>) {
+    private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
         val msgId = record.msgId
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {

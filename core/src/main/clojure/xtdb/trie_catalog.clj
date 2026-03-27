@@ -417,6 +417,17 @@
 (defn new-partition? [partition]
   (some? (:max-block-idx partition)))
 
+(defn- repair-l0-l1c-consistency
+  "If a live L1C exists, ensure all L0s with block-idx <= the L1C's max live block-idx are marked garbage.
+   Repairs an inconsistency where L0 and L1C are both live at the same block-idx,
+   caused by concurrent MW/SW operation — see #5395."
+  [tries]
+  (let [{l1c-live :live} (get tries [1 nil []])
+        l1c-max-live-block-idx (some-> (first l1c-live) :block-idx)]
+    (cond-> tries
+      l1c-max-live-block-idx
+      (update [0 nil []] supersede-by-block-idx l1c-max-live-block-idx {:as-of (Instant/now)}))))
+
 (defn partition->entry [{:keys [level recency part tries max-block-idx] :as _partition}]
   (MapEntry/create [level recency part]
                    (let [{:keys [live nascent garbage]} (group-by :state tries)]
@@ -505,7 +516,8 @@
                     tries (into {} (map partition->entry) partitions)
                     tries (if (new-partition? (first partitions))
                             tries
-                            (merge-with merge tries (partitions->max-block-idx-map partitions)))]]
+                            (merge-with merge tries (partitions->max-block-idx-map partitions)))
+                    tries (repair-l0-l1c-consistency tries)]]
         (s/assert ::catalog-tries tries)
         (.put !table-cats table {:tries tries}))
 
