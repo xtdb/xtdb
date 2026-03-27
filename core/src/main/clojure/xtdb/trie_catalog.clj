@@ -14,7 +14,6 @@
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)
-           (xtdb.storage BufferPool)
            (xtdb.util TemporalBounds)))
 
 (s/def ::level int?)
@@ -426,8 +425,7 @@
                           :nascent (into empty-trie-state-list nascent)}
                          (assoc :max-block-idx max-block-idx)))))
 
-(defrecord TrieCatalog [^BufferPool buffer-pool, ^BlockCatalog block-cat
-                        !state, ^long file-size-target]
+(defrecord TrieCatalog [!state, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [_ table added-tries as-of]
     (let [^Map table-cats (:table-cats @!state)]
@@ -484,20 +482,6 @@
                    (update partition :tries
                            (partial mapv #(trie/->trie-details table %))))))))
 
-  (refresh [_ block-idx]
-    (when-not (= block-idx (:block-idx @!state))
-      ;; HACK this is duplicated in `load-tries`
-      (let [table-cats (ConcurrentHashMap.)]
-        (doseq [[table {:keys [partitions]}] (table-cat/load-tables-to-metadata buffer-pool block-cat)
-                :let [partitions (update-vals partitions #(update % :tries (partial map trie/<-trie-details)))
-                      tries (into {} (map partition->entry) partitions)
-                      tries (if (new-partition? (first partitions))
-                              tries
-                              (merge-with merge tries (partitions->max-block-idx-map partitions)))]]
-          (s/assert ::catalog-tries tries)
-          (.put table-cats table {:tries tries}))
-        (vreset! !state {:block-idx block-idx, :table-cats table-cats}))))
-
   PTrieCatalog
   (trie-state [_ table] (.get ^Map (:table-cats @!state) table))
 
@@ -529,7 +513,7 @@
 
     ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
     ;; see #4526
-    (let [cat (TrieCatalog. nil nil (volatile! {:block-idx nil, :table-cats (ConcurrentHashMap.)}) file-size-target)
+    (let [cat (TrieCatalog. (volatile! {:block-idx nil, :table-cats (ConcurrentHashMap.)}) file-size-target)
           now (Instant/now)]
       (doseq [[table {:keys [partitions]}] table->table-block
               {:keys [tries]} partitions]
@@ -543,8 +527,7 @@
       (log/debug "starting trie catalog...")
       (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
             block-idx (or (.getCurrentBlockIndex ^BlockCatalog block-cat) -1)
-            cat (TrieCatalog. buffer-pool block-cat
-                              (volatile! {:block-idx block-idx
+            cat (TrieCatalog. (volatile! {:block-idx block-idx
                                           :table-cats (load-tries table->table-block *file-size-target*)})
                               *file-size-target*)]
         (log/debug "trie catalog started")

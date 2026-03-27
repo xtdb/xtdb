@@ -49,7 +49,7 @@ class SimulationTestUtils {
                     )
                 )
             )
-            return createTrieCatalogFn.invoke(null, null, state, 100 * 1024 * 1024) as TrieCatalog
+            return createTrieCatalogFn.invoke(state, 100 * 1024 * 1024) as TrieCatalog
         }
 
         val L0TrieKeys = sequence {

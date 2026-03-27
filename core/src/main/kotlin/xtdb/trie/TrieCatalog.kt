@@ -23,8 +23,6 @@ interface TrieCatalog {
     fun listLiveAndNascentTrieKeys(table: TableRef) : List<TrieKey>
     fun getPartitions(table: TableRef): List<Partition>
 
-    fun refresh(blockIndex: Long)
-
     fun interface Factory {
         fun openTrieCatalog(bufferPool: BufferPool, blockCatalog: BlockCatalog): TrieCatalog
     }
