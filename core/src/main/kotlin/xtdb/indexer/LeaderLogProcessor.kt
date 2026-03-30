@@ -183,6 +183,23 @@ class LeaderLogProcessor(
             finishBlock(txId, resolvedTx.externalSourceToken)
     }
 
+    suspend fun handleExternalTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+        appendToReplica(resolvedTx)
+
+        val result =
+            if (resolvedTx.committed)
+                TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
+            else
+                TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error)
+
+        watchers.notifyTx(result, latestSourceMsgId, resolvedTx.externalSourceToken)
+
+        if (liveIndex.isFull())
+            finishBlock(latestSourceMsgId, resolvedTx.externalSourceToken)
+    }
+
+    fun notifyError(exception: Throwable) = watchers.notifyError(exception)
+
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 

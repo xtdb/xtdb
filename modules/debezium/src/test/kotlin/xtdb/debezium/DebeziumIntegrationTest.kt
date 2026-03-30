@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
@@ -757,6 +758,73 @@ class DebeziumIntegrationTest {
                    WHERE (user_metadata).source = 'debezium'"""
             )
             assertEquals(0, primaryTxs.size, "Primary database should have no debezium transactions")
+        }
+    }
+
+    @Test
+    fun `CDC events ingested via external log (direct indexing)`() = runTest(timeout = 120.seconds) {
+        assumeTrue(
+            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() == true,
+            "external log requires single-writer mode"
+        )
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS cdc_direct (_id INT PRIMARY KEY, name TEXT, email TEXT)",
+            "INSERT INTO cdc_direct (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
+        )
+
+        registerConnectorAndAwait()
+
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val debeziumGroupId = "test-debezium-direct-${UUID.randomUUID()}"
+
+        openNodeOnSourceTopic(sourceTopic).use { node ->
+            node.getConnection().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("""ATTACH DATABASE cdc_direct_db WITH $$
+                        log: !Kafka
+                          cluster: kafka
+                          topic: test-direct-replica-${UUID.randomUUID()}
+                        externalLog: !Debezium
+                          log: !Kafka
+                            logCluster: kafka
+                            tableTopic: testdb.public.cdc_direct
+                            groupId: $debeziumGroupId
+                    $$""")
+                }
+            }
+
+            pgExecute(
+                "INSERT INTO cdc_direct (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                "UPDATE cdc_direct SET email = 'alice-new@example.com' WHERE _id = 1",
+                "DELETE FROM cdc_direct WHERE _id = 2",
+            )
+
+            // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
+            awaitTxs(node, 4, db = "cdc_direct_db")
+
+            val history = xtQueryDb(node, "cdc_direct_db",
+                """SELECT _id, name, email, _valid_from, _valid_to
+                   FROM public.cdc_direct
+                   FOR ALL VALID_TIME
+                   ORDER BY _id, _valid_from"""
+            )
+
+            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
+
+            // Alice: snapshot row then updated row
+            assertEquals(1L, (history[0]["_id"] as Number).toLong())
+            assertEquals("alice@example.com", history[0]["email"])
+            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
+
+            assertEquals(1L, (history[1]["_id"] as Number).toLong())
+            assertEquals("alice-new@example.com", history[1]["email"])
+            assertNull(history[1]["_valid_to"], "Updated row should be current")
+
+            // Bob: inserted then deleted
+            assertEquals(2L, (history[2]["_id"] as Number).toLong())
+            assertEquals("bob@example.com", history[2]["email"])
+            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
         }
     }
 

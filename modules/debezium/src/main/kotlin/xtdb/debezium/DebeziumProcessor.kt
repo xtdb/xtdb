@@ -4,20 +4,48 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.slf4j.LoggerFactory
+import xtdb.api.TransactionKey
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.KafkaCluster.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log
 import xtdb.api.log.SourceMessage
+import xtdb.database.DatabaseName
+import xtdb.database.ExternalSourceToken
+import xtdb.indexer.LiveIndex
+import xtdb.table.TableRef
+import xtdb.time.InstantUtil.asMicros
 import xtdb.tx.TxOp
-import xtdb.tx.toArrowBytes
 import xtdb.tx.serializeUserMetadata
+import xtdb.tx.toArrowBytes
+import xtdb.util.asIid
 import xtdb.util.safeMap
 import xtdb.util.useAll
+import java.nio.ByteBuffer
 import java.time.ZoneId
-import xtdb.database.ExternalSourceToken
 import com.google.protobuf.Any as ProtoAny
 
 private val logger = LoggerFactory.getLogger(DebeziumProcessor::class.java)
+
+fun LiveIndex.Tx.indexCdcEvent(
+    dbName: DatabaseName, event: CdcEvent, txKey: TransactionKey
+) {
+    val table = TableRef(dbName, event.schema, event.table)
+    val liveTableTx = liveTable(table)
+
+    when (event) {
+        is CdcEvent.Put -> {
+            val iid = ByteBuffer.wrap(event.doc["_id"]!!.asIid)
+            val validFrom = event.validFrom?.asMicros ?: txKey.systemTime.asMicros
+            val validTo = event.validTo?.asMicros ?: Long.MAX_VALUE
+            liveTableTx.logPut(iid, validFrom, validTo) { liveTableTx.docWriter.writeObject(event.doc) }
+        }
+
+        is CdcEvent.Delete -> {
+            val iid = ByteBuffer.wrap(event.id.asIid)
+            liveTableTx.logDelete(iid, txKey.systemTime.asMicros, Long.MAX_VALUE)
+        }
+    }
+}
 
 class DebeziumProcessor(
     private val producer: KafkaCluster.AtomicProducer<SourceMessage>,

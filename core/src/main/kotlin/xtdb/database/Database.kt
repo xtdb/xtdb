@@ -192,9 +192,26 @@ class Database(
                                 indexerConfig.flushDuration,
                                 base.meterRegistry,
                             )
-                            return object : LogProcessor.LeaderSystem {
-                                override val proc get() = leaderProc
-                                override fun close() = leaderProc.close()
+
+                            val extFactory = dbConfig.externalLog
+                            val extLog = storage.externalLog
+
+                            return if (extFactory != null && extLog != null) {
+                                @Suppress("UNCHECKED_CAST")
+                                val extProc = extFactory.openProcessor(leaderProc, state) as Log.RecordProcessor<Any?>
+                                val token = state.blockCatalog.externalSourceToken
+
+                                @Suppress("UNCHECKED_CAST")
+                                val demux = ExternalLog.Demux(leaderProc, extLog as ExternalLog<Any?>, token, extProc)
+                                object : LogProcessor.LeaderSystem {
+                                    override val proc get() = demux
+                                    override fun close() { demux.close(); leaderProc.close() }
+                                }
+                            } else {
+                                object : LogProcessor.LeaderSystem {
+                                    override val proc get() = leaderProc
+                                    override fun close() = leaderProc.close()
+                                }
                             }
                         }
 
