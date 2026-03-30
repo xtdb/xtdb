@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [integrant.core :as ig]
             [xtdb.authn.crypt :as authn.crypt]
+            [xtdb.block-tables :as block-tables]
             [xtdb.log-tables :as log-tables]
             [xtdb.serde.types :as st]
             [xtdb.table :as table]
@@ -123,7 +124,7 @@
         (update-vals map->vec-types)))
 
   (def derived-tables
-    (merge info-tables pg-catalog-tables xt-derived-tables log-tables/log-tables))
+    (merge info-tables pg-catalog-tables xt-derived-tables log-tables/log-tables block-tables/block-tables))
 
   (defn derived-table [table-ref]
     (get derived-tables (table/ref->schema+table table-ref)))

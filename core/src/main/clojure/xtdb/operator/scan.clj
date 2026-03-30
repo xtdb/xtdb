@@ -6,6 +6,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.information-schema :as info-schema]
+            [xtdb.block-tables :as block-tables]
             [xtdb.log-tables :as log-tables]
             [xtdb.logical-plan :as lp]
             xtdb.object-store
@@ -282,6 +283,9 @@
                        (cond
                          (log-tables/log-table table)
                          (log-tables/->cursor db allocator table col-names col-preds selects schema args)
+
+                         (block-tables/block-table table)
+                         (block-tables/->cursor db allocator table col-names col-preds selects schema args)
 
                          (and derived-table-schema (not template-table?))
                          (info-schema/->cursor info-schema allocator db snapshot derived-table-schema table col-names col-preds schema args)
