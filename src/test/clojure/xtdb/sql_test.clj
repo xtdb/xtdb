@@ -1013,9 +1013,23 @@
     (t/is (= [{:y 11} {:y 21} {:y 31}]
              (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY y * 2 ASC"))))
 
-  (t/testing "subquery in ORDER BY - not yet supported"
-    (t/is (thrown-with-msg? Exception #"Subqueries are not allowed in this context"
-             (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY (SELECT 1)")))))
+  (t/testing "subquery in ORDER BY — constant"
+    (t/is (= #{{:y 11} {:y 21} {:y 31}}
+             (set (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY (SELECT 1)")))))
+
+  (t/testing "subquery in ORDER BY — CASE WHEN ... IN (SELECT ...) pattern"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO items (_id, category) VALUES (1, 'a'), (2, 'b'), (3, 'c')"]])
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO priority (_id, cat) VALUES (1, 'b')"]])
+    (t/is (= [{:category "b"} {:category "a"} {:category "c"}]
+             (xt/q tu/*node* "SELECT category FROM items
+                              ORDER BY CASE WHEN category IN (SELECT cat FROM priority)
+                                THEN 0 ELSE 1 END, category"))))
+
+  (t/testing "subquery in ORDER BY — EXISTS"
+    (t/is (= [{:category "b"} {:category "a"} {:category "c"}]
+             (xt/q tu/*node* "SELECT category FROM items
+                              ORDER BY CASE WHEN EXISTS (SELECT 1 FROM priority WHERE priority.cat = items.category)
+                                THEN 0 ELSE 1 END, category")))))
 
 (t/deftest test-ordered-set-aggregates
   (t/is (=plan-file

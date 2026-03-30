@@ -2072,7 +2072,7 @@
     (mapv #(.accept ^ParserRuleContext % this) (.columnReference ctx)))
 
   (visitWindowOrderClause [_this ctx]
-    (plan-sort-specification-list (.sortSpecificationList ctx) env scope nil))
+    (:ob-specs (plan-sort-specification-list (.sortSpecificationList ctx) env scope nil)))
 
   (visitWindowFrameClause [_this _ctx]
     (throw (UnsupportedOperationException. "TODO: Window frames currently not supported!")))
@@ -2214,24 +2214,28 @@
                                      {:keys [!id-count] :as env} inner-scope outer-col-syms
                                      & {:keys [gb-expr-to-col select-expr-to-col]
                                         :or {gb-expr-to-col {}, select-expr-to-col {}}}]
-  (let [outer-cols (->> outer-col-syms
+  (let [!subqs (HashMap.)
+        outer-cols (->> outer-col-syms
                         (into {} (mapcat (juxt (juxt identity identity)
                                                (juxt (comp symbol name) identity)))))
-        ob-expr-visitor (->ExprPlanVisitor env
-                                           (reify Scope
-                                             (available-cols [_]
-                                               (set/union (available-cols inner-scope) (set (keys outer-cols))))
+        ob-expr-visitor (map->ExprPlanVisitor
+                         {:env env
+                          :scope (reify Scope
+                                   (available-cols [_]
+                                     (set/union (available-cols inner-scope) (set (keys outer-cols))))
 
-                                             (-find-cols [_ [col-name :as chain] excl-cols]
-                                               (assert col-name)
-                                               (or (when (= 1 (count chain))
-                                                     (when-let [sym (get outer-cols col-name)]
-                                                       (when-not (contains? excl-cols col-name)
-                                                         [sym])))
-                                                   (find-cols inner-scope chain excl-cols)))))]
+                                   (-find-cols [_ [col-name :as chain] excl-cols]
+                                     (assert col-name)
+                                     (or (when (= 1 (count chain))
+                                           (when-let [sym (get outer-cols col-name)]
+                                             (when-not (contains? excl-cols col-name)
+                                               [sym])))
+                                         (find-cols inner-scope chain excl-cols))))
+                          :!subqs !subqs})]
 
-    (-> (.sortSpecification ctx)
-        (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
+    {:ob-specs
+     (-> (.sortSpecification ctx)
+         (->> (mapv (fn [^Sql$SortSpecificationContext sort-spec-ctx]
                      (let [expr (cond-> (-> (.expr sort-spec-ctx) (.accept ob-expr-visitor))
                                  (seq gb-expr-to-col) (->> (w/postwalk #(get gb-expr-to-col % %))))
                            dir (or (some-> (.orderingSpecification sort-spec-ctx)
@@ -2262,16 +2266,20 @@
 
                          (get select-expr-to-col expr) {:order-by-spec [(get select-expr-to-col expr) ob-opts]}
 
-                         :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
-                                 {:order-by-spec [in-sym ob-opts]
-                                  :in-projection {in-sym expr}})))))))))
+                          :else (let [in-sym (->col-sym (str "_ob" (swap! !id-count inc)))]
+                                  {:order-by-spec [in-sym ob-opts]
+                                   :in-projection {in-sym expr}})))))))
+     :subqs (not-empty (into {} !subqs))}))
 
 (defn- plan-order-by [^Sql$OrderByClauseContext ctx env inner-scope outer-col-syms & opts]
   (apply plan-sort-specification-list (.sortSpecificationList ctx) env inner-scope outer-col-syms opts))
 
-(defn- wrap-isolated-ob [plan outer-col-syms ob-specs]
+(defn- wrap-isolated-ob [plan outer-col-syms {:keys [ob-specs subqs]}]
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))]
     (as-> plan plan
+      (cond-> plan
+        subqs (apply-sqs subqs))
+
       (if in-projs
         [:map {:projections in-projs} plan]
         plan)
@@ -2283,10 +2291,13 @@
         [:project {:projections outer-col-syms} plan]
         plan))))
 
-(defn- wrap-integrated-ob [plan projected-cols ob-specs]
+(defn- wrap-integrated-ob [plan projected-cols {:keys [ob-specs subqs]}]
   (let [in-projs (not-empty (into [] (keep :in-projection) ob-specs))
         extend-projs (not-empty (into [] (filter map?) (map :projection projected-cols)))]
     (as-> plan plan
+      (cond-> plan
+        subqs (apply-sqs subqs))
+
       (if extend-projs
         [:map {:projections extend-projs} plan]
         plan)
