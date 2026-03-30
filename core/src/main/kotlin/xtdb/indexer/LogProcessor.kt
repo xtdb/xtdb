@@ -165,7 +165,9 @@ class LogProcessor(
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
-                oldSys.close() // close first so no further processing can change the watermarks
+                // Close first: Kafka guarantees no concurrent processing during rebalance,
+                // and close() only releases the allocator — watermark fields remain readable.
+                oldSys.close()
                 val proc = oldSys.proc
                 this.sys = openFollowerSystem(proc.latestSourceMsgId, proc.latestReplicaMsgId, proc.pendingBlock)
             }
