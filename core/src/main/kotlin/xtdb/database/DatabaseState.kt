@@ -8,6 +8,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveIndex
 import xtdb.table.DatabaseName
 import xtdb.trie.TrieCatalog
+import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
 data class DatabaseState(
@@ -27,13 +28,15 @@ data class DatabaseState(
     }
 
     companion object {
+        private val trieCatalogFactory =
+            requiringResolve("xtdb.trie-catalog/->factory").invoke() as TrieCatalog.Factory
+
         @JvmStatic
         @JvmOverloads
         fun open(
             allocator: BufferAllocator,
             storage: DatabaseStorage,
             dbName: DatabaseName,
-            trieCatalogFactory: TrieCatalog.Factory,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): DatabaseState = safelyOpening {
             val bufferPool = storage.bufferPool
@@ -44,7 +47,7 @@ data class DatabaseState(
                 it.refresh(blockCatalog.currentBlockIndex ?: -1)
             }
 
-            val trieCatalog = trieCatalogFactory.openTrieCatalog(bufferPool, blockCatalog)
+            val trieCatalog = trieCatalogFactory.open(bufferPool, blockCatalog)
 
             val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, dbName, indexerConfig) }
 

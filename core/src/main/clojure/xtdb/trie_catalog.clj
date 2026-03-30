@@ -535,7 +535,7 @@
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory
-    (openTrieCatalog [_ buffer-pool block-cat]
+    (open [_ buffer-pool block-cat]
       (log/debug "starting trie catalog...")
       (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
             block-idx (or (.getCurrentBlockIndex ^BlockCatalog block-cat) -1)

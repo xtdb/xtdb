@@ -24,6 +24,6 @@ interface TrieCatalog {
     fun getPartitions(table: TableRef): List<Partition>
 
     fun interface Factory {
-        fun openTrieCatalog(bufferPool: BufferPool, blockCatalog: BlockCatalog): TrieCatalog
+        fun open(bufferPool: BufferPool, blockCatalog: BlockCatalog): TrieCatalog
     }
 }

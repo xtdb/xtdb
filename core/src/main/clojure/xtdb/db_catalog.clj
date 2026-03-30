@@ -1,6 +1,5 @@
 (ns xtdb.db-catalog
   (:require [integrant.core :as ig]
-            [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import xtdb.NodeBase
            [xtdb.compactor Compactor]
@@ -14,7 +13,7 @@
       :compactor (ig/ref :xtdb/compactor)}})
 
 (defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base ^Indexer indexer ^Compactor compactor]}]
-  (DatabaseCatalog/open base indexer compactor (trie-cat/->factory)))
+  (DatabaseCatalog/open base indexer compactor))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

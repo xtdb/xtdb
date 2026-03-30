@@ -137,7 +137,6 @@ class Database(
             dbConfig: Config,
             indexer: Indexer,
             compactor: Compactor,
-            trieCatalogFactory: TrieCatalog.Factory,
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
@@ -145,7 +144,7 @@ class Database(
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
             val storage = open { DatabaseStorage.open(allocator, base, dbName, dbConfig) }
-            val state = open { DatabaseState.open(allocator, storage, dbName, trieCatalogFactory, indexerConfig) }
+            val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
 
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(

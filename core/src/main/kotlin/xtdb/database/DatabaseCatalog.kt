@@ -7,7 +7,6 @@ import xtdb.error.Incorrect
 import xtdb.error.NotFound
 import xtdb.indexer.Indexer
 import xtdb.table.DatabaseName
-import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
@@ -20,7 +19,6 @@ class DatabaseCatalog(
     private val base: NodeBase,
     private val indexer: Indexer,
     private val compactor: Compactor,
-    private val trieCatalogFactory: TrieCatalog.Factory,
 ) : Database.Catalog, AutoCloseable {
 
     private val databases = ConcurrentHashMap<DatabaseName, Database>()
@@ -37,7 +35,7 @@ class DatabaseCatalog(
         val readOnlyConfig = if (base.config.readOnlyDatabases) dbConfig.mode(Database.Mode.READ_ONLY) else dbConfig
 
         val db = try {
-            Database.open(base, dbName, readOnlyConfig, indexer, compactor, trieCatalogFactory, this.takeIf { dbName == "xtdb" })
+            Database.open(base, dbName, readOnlyConfig, indexer, compactor, this.takeIf { dbName == "xtdb" })
         } catch (t: Throwable) {
             LOG.debug { "Failed to open database: db-name=$dbName, exception=${t.javaClass}, message=${t.message}" }
             t.cause?.let { LOG.debug { "Cause: class=${it.javaClass}, message=${it.message}" } }
@@ -71,9 +69,8 @@ class DatabaseCatalog(
             base: NodeBase,
             indexer: Indexer,
             compactor: Compactor,
-            trieCatalogFactory: TrieCatalog.Factory,
         ): DatabaseCatalog {
-            val catalog = DatabaseCatalog(base, indexer, compactor, trieCatalogFactory)
+            val catalog = DatabaseCatalog(base, indexer, compactor)
 
             catalog.closeOnCatch {
                 val conf = base.config
