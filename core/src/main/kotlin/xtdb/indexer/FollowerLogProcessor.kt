@@ -122,6 +122,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             val pendingBlockIdx = pendingBlock.blockIdx
             if (msg is ReplicaMessage.BlockUploaded
                 && msg.blockIndex == pendingBlockIdx
+                && msg.storageVersion == Storage.VERSION
                 && msg.storageEpoch == bufferPool.epoch
             ) {
                 LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
