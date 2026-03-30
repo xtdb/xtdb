@@ -133,23 +133,34 @@
 (defmethod macroexpand1-call :between [{[x left right :as args] :args, :as expr}]
   (assert (= 3 (count args)) (format "`between` expects 3 args: '%s'" (pr-str expr)))
 
-  ;; TODO hiding `x` behind a local might mean we don't use metadata when we could.
-  (let [local (gensym 'between)
-        local-expr {:op :local, :local local}]
-    {:op :let, :local local, :expr x
-     :body {:op :call, :f :and
-            :args [{:op :call, :f :>=, :args [local-expr left]}
-                   {:op :call, :f :<=, :args [local-expr right]}]}}))
+  (if (#{:variable :literal :param} (:op x))
+    ;; simple subject — inline to enable metadata pushdown (see #2101)
+    {:op :call, :f :and
+     :args [{:op :call, :f :>=, :args [x left]}
+            {:op :call, :f :<=, :args [x right]}]}
+    ;; complex expression — keep the let to avoid double evaluation
+    (let [local (gensym 'between)
+          local-expr {:op :local, :local local}]
+      {:op :let, :local local, :expr x
+       :body {:op :call, :f :and
+              :args [{:op :call, :f :>=, :args [local-expr left]}
+                     {:op :call, :f :<=, :args [local-expr right]}]}})))
 
 (defmethod macroexpand1-call :between_symmetric [{[x left right :as args] :args, :as expr}]
   (assert (= 3 (count args)) (format "`between-symmetric` expects 3 args: '%s'" (pr-str expr)))
 
-  (let [local (gensym 'between-symmetric)
-        local-expr {:op :local, :local local}]
-    {:op :let, :local local, :expr x
-     :body {:op :call, :f :or
-            :args [{:op :call, :f :between, :args [local-expr left right]}
-                   {:op :call, :f :between, :args [local-expr right left]}]}}))
+  (if (#{:variable :literal :param} (:op x))
+    ;; simple subject — inline to enable metadata pushdown (see #2101)
+    {:op :call, :f :or
+     :args [{:op :call, :f :between, :args [x left right]}
+            {:op :call, :f :between, :args [x right left]}]}
+    ;; complex expression — keep the let to avoid double evaluation
+    (let [local (gensym 'between-symmetric)
+          local-expr {:op :local, :local local}]
+      {:op :let, :local local, :expr x
+       :body {:op :call, :f :or
+              :args [{:op :call, :f :between, :args [local-expr left right]}
+                     {:op :call, :f :between, :args [local-expr right left]}]}})))
 
 (defmethod macroexpand1-call :str [{:keys [args] :as expr}]
   (case (count args)
