@@ -83,6 +83,43 @@
       (t/is (= 1.0 (.value ^Gauge (.gauge (.find registry "pgwire.active_connections")))))
       (t/is (= 2.0 (.count ^Counter (.counter (.find registry "pgwire.total_connections"))))))))
 
+(t/deftest test-per-database-metrics
+  (let [node-dir (util/->path "target/metrics/multi-db")
+        find-db-tagged-metric (fn [registry metric-name db-name]
+                                (.gauge (.tag (.find registry metric-name) "db" db-name)))]
+    (util/delete-dir node-dir)
+    (util/delete-dir (util/->path "target/metrics/multi-db-new"))
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (let [registry (.getMeterRegistry (util/node-base node))]
+
+        (prn (.find registry "node.tx.latestCompletedTxId"))
+        (t/testing "xtdb database has tagged gauges"
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestCompletedTxId" "xtdb")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestSubmittedMsgId" "xtdb")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestProcessedMsgId" "xtdb")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.lag.MsgId" "xtdb"))))
+
+        (t/testing "no gauges for non-existent db"
+          (t/is (nil? (find-db-tagged-metric registry "node.tx.latestCompletedTxId" "new_db"))))
+
+        (jdbc/execute! node ["
+ATTACH DATABASE new_db WITH $$
+  log: !Local
+    path: 'target/metrics/multi-db-new/log'
+  storage: !Local
+    path: 'target/metrics/multi-db-new/storage'
+$$"])
+
+        (t/testing "attached database gets its own tagged gauges"
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestCompletedTxId" "new_db")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestSubmittedMsgId" "new_db")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.latestProcessedMsgId" "new_db")))
+          (t/is (some? (find-db-tagged-metric registry "node.tx.lag.MsgId" "new_db"))))
+
+        (t/testing "xtdb gauges still present"
+          (t/is (some? (find-db-tagged-metric registry "node.tx.lag.MsgId" "xtdb"))))))))
+
 (t/deftest test-query-timer
   (let [node (xtn/start-node tu/*node-opts*)
         registry (.getMeterRegistry (util/node-base node))]
