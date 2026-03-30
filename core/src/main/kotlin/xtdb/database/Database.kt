@@ -42,6 +42,8 @@ import xtdb.tx.toArrowBytes
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.closeAll
 import xtdb.util.safelyOpening
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.util.*
 
@@ -54,10 +56,12 @@ class Database(
     override val queryState: DatabaseState,
     val isIndexing: Boolean,
     private val watchers: Watchers,
+    private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
     private val subscription: Log.Subscription? = null,
     private val processor: AutoCloseable? = null,
     private val indexerForDb: Indexer.ForDatabase? = null,
+    private val registeredGauges: List<Gauge> = emptyList(),
 ) : IQuerySource.QueryDatabase, AutoCloseable {
     val name: DatabaseName get() = queryState.name
     override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
@@ -98,6 +102,7 @@ class Database(
     override fun hashCode() = Objects.hash(name)
 
     override fun close() {
+        meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         listOf(subscription, processor, compactorOrNull, indexerForDb, queryState, storage, allocator).closeAll()
     }
 
@@ -250,6 +255,29 @@ class Database(
                 }
             }
 
+            val meterRegistry = base.meterRegistry
+            val gauges = meterRegistry?.let { reg ->
+                fun gauge(name: String, f: () -> Double) =
+                    Gauge.builder(name) { f() }
+                        .tag("db", dbName)
+                        .register(reg)
+
+                listOf(
+                    gauge("node.tx.latestCompletedTxId") {
+                        (state.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
+                    },
+                    gauge("node.tx.latestSubmittedMsgId") {
+                        storage.sourceLog.latestSubmittedMsgId.toDouble()
+                    },
+                    gauge("node.tx.latestProcessedMsgId") {
+                        watchers.latestSourceMsgId.toDouble()
+                    },
+                    gauge("node.tx.lag.MsgId") {
+                        maxOf(storage.sourceLog.latestSubmittedMsgId - watchers.latestSourceMsgId, 0).toDouble()
+                    },
+                )
+            } ?: emptyList()
+
             Database(
                 allocator = allocator,
                 config = dbConfig,
@@ -257,10 +285,12 @@ class Database(
                 queryState = state,
                 isIndexing = indexerConfig.enabled,
                 watchers = watchers,
+                meterRegistry = meterRegistry,
                 compactorOrNull = compactorForDb,
                 subscription = subscription,
                 processor = processor,
                 indexerForDb = indexerForDb,
+                registeredGauges = gauges,
             )
         }
     }
