@@ -41,7 +41,17 @@
 
     "TRIM(BOTH '😎' FROM foo.a)" '(trim f/a "😎")
 
-    "TRIM('$' FROM foo.a)" '(trim f/a "$")))
+    "TRIM('$' FROM foo.a)" '(trim f/a "$")
+
+    "TRIM(foo.a[1])" '(trim (nth f/a 0) " "))
+
+  (t/testing "TRIM on complex expr — array subscript must not be greedily matched as trimCharacter"
+    (t/is (= [{:val "public"}]
+             (xt/q tu/*node* "SELECT trim(s[1]) AS val FROM (VALUES (string_to_array(' public ', ','))) AS t(s)"))))
+
+  (t/testing "TRIM(expr expr) without FROM keyword is no longer valid"
+    (t/is (thrown? Exception
+             (xt/q tu/*node* "SELECT TRIM('$' '$hello$')")))))
 
 (t/deftest test-like-expr
   (t/are [sql expected] (= expected (plan-expr-with-foo sql))
