@@ -1024,6 +1024,18 @@
   (defmethod expr/codegen-call [:compare t :date] [{[t1 _] :arg-types, :as expr}]
     (-> expr (recall-with-cast2 t1 [:timestamp-local :micro]))))
 
+;; implicit utf8 → temporal coercion for comparisons
+;; PG implicitly casts string literals to temporal types in comparison contexts.
+;; e.g. Grafana's $__timeFilter macro: `recorded_at BETWEEN '2026-01-01T00:00:00Z' AND '2026-01-02T00:00:00Z'`
+;; where recorded_at is a timestamp-tz column and the strings are utf8 literals.
+(doseq [f-kw [:< :<= :> :>= :compare :=== :null_eq]
+        temporal-type [:timestamp-tz :timestamp-local :date :time-local]]
+  (defmethod expr/codegen-call [f-kw temporal-type :utf8] [{[t1 _] :arg-types, :as expr}]
+    (-> expr (recall-with-cast2 t1 t1)))
+
+  (defmethod expr/codegen-call [f-kw :utf8 temporal-type] [{[_ t2] :arg-types, :as expr}]
+    (-> expr (recall-with-cast2 t2 t2))))
+
 (defmethod expr/codegen-call [:compare :time-local :time-local] [{[t1 t2] :arg-types, :as expr}]
   (let [time-unit1 (st/time-type->unit t1)
         time-unit2 (st/time-type->unit t2)]

@@ -1949,6 +1949,56 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/is (= [{:v #xt/zoned-date-time "2021-10-21T12:34+01:00"}]
            (xt/q tu/*node* "SELECT TIMESTAMP WITH TIME ZONE '2021-10-21T12:34:00+01:00' v"))))
 
+(t/deftest test-implicit-utf8-to-temporal-coercion
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO ts_tz (_id, t) VALUES (1, TIMESTAMP '2026-01-15 10:00:00+00:00')"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO ts_local (_id, t) VALUES (1, TIMESTAMP '2026-01-15 10:00:00')"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO date_test (_id, d) VALUES (1, DATE '2026-03-15')"]])
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO time_test (_id, t) VALUES (1, TIME '14:30:00')"]])
+
+  (t/testing "timestamp-tz"
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE t >= '2026-01-15T09:00:00Z'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE t > '2026-01-15T09:00:00Z'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE t < '2026-01-15T11:00:00Z'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE '2026-01-15T09:00:00Z' <= t")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE t BETWEEN '2026-01-15T09:00:00Z' AND '2026-01-15T11:00:00Z'")))
+    (t/is (= [] (xt/q tu/*node* "SELECT _id AS id FROM ts_tz WHERE t >= '2026-01-15T11:00:00Z'"))))
+
+  (t/testing "timestamp-local"
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE t >= '2026-01-15T09:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE t > '2026-01-15T09:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE t < '2026-01-15T11:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE '2026-01-15T09:00:00' <= t")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE t BETWEEN '2026-01-15T09:00:00' AND '2026-01-15T11:00:00'")))
+    (t/is (= [] (xt/q tu/*node* "SELECT _id AS id FROM ts_local WHERE t >= '2026-01-15T11:00:00'"))))
+
+  (t/testing "date"
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE d >= '2026-03-14'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE d > '2026-03-14'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE d < '2026-03-16'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE '2026-03-16' > d")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE d BETWEEN '2026-03-14' AND '2026-03-16'")))
+    (t/is (= [] (xt/q tu/*node* "SELECT _id AS id FROM date_test WHERE d >= '2026-03-16'"))))
+
+  (t/testing "time-local"
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE t >= '14:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE t > '14:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE t < '15:00:00'")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE '15:00:00' > t")))
+    (t/is (= [{:id 1}] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE t BETWEEN '14:00:00' AND '15:00:00'")))
+    (t/is (= [] (xt/q tu/*node* "SELECT _id AS id FROM time_test WHERE t >= '15:00:00'"))))
+
+  (t/testing "malformed string"
+    (t/is (thrown-with-msg? Exception #"could not be parsed"
+             (xt/q tu/*node* "SELECT _id FROM ts_tz WHERE t >= 'not-a-timestamp'")))
+    (t/is (thrown-with-msg? Exception #"invalid format for type date"
+             (xt/q tu/*node* "SELECT _id FROM date_test WHERE d >= 'not-a-date'")))
+    (t/is (thrown-with-msg? Exception #"invalid format for type time"
+             (xt/q tu/*node* "SELECT _id FROM time_test WHERE t >= 'not-a-time'"))))
+
+  (t/testing "empty string"
+    (t/is (thrown-with-msg? Exception #"could not be parsed"
+             (xt/q tu/*node* "SELECT _id FROM ts_tz WHERE t >= ''")))))
+
 (t/deftest test-timezone-single-word-syntax
   ;; Tests that both TIME ZONE (two words) and TIMEZONE (single word) variants work
   (t/testing "TIMESTAMP WITH TIMEZONE (single word)"
