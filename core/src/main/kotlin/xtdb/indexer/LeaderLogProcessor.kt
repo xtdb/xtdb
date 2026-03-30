@@ -176,6 +176,7 @@ class LeaderLogProcessor(
         val txId = resolvedTx.txId
 
         appendToReplica(resolvedTx)
+        latestSourceMsgId = txId
         notifyTx(resolvedTx)
 
         if (liveIndex.isFull())
@@ -203,6 +204,7 @@ class LeaderLogProcessor(
                         if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
                             finishBlock(msgId, watchers.externalSourceToken)
                         }
+                        latestSourceMsgId = msgId
                         watchers.notifyMsg(msgId)
                     }
 
@@ -224,6 +226,7 @@ class LeaderLogProcessor(
                         val result =
                             if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                             else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        latestSourceMsgId = msgId
                         watchers.notifyTx(result, msgId, null)
                     }
 
@@ -244,6 +247,7 @@ class LeaderLogProcessor(
 
                         val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
                         else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        latestSourceMsgId = msgId
                         watchers.notifyTx(result, msgId, null)
                     }
 
@@ -264,16 +268,16 @@ class LeaderLogProcessor(
                             )
                         )
 
+                        latestSourceMsgId = msgId
                         watchers.notifyMsg(msgId)
                     }
 
                     // TODO this one's going before release
                     is SourceMessage.BlockUploaded -> {
+                        latestSourceMsgId = msgId
                         watchers.notifyMsg(msgId)
                     }
                 }
-
-                latestSourceMsgId = msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
