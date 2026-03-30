@@ -1,6 +1,8 @@
 (ns xtdb.log-tables
   (:require [clojure.tools.logging :as log]
             [xtdb.error :as err]
+            [xtdb.expression :as expr]
+            [xtdb.expression.constraints :as constraints]
             [xtdb.table :as table]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -126,66 +128,6 @@
 
      {:type :unknown})))
 
-(defn- resolve-expr-value
-  "Resolves a literal value or param reference from a predicate expression form."
-  [expr args]
-  (cond
-    (number? expr) (long expr)
-
-    (symbol? expr)
-    (when args
-      (let [^xtdb.arrow.RelationReader args-rel args]
-        (when-let [^VectorReader col (.readerForName args-rel (str expr))]
-          (.getObject col 0))))
-
-    (and (seq? expr) (= 'param (first expr)))
-    (let [[_ param-name _param-type] expr
-          param-str (str param-name)]
-      (when args
-        (let [^xtdb.arrow.RelationReader args-rel args]
-          (when-let [^VectorReader col (.readerForName args-rel param-str)]
-            (.getObject col 0)))))
-
-    :else nil))
-
-(defn- extract-msg-id-bounds
-  "Extracts [from-msg-id to-msg-id) bounds from the selects map for msg_id.
-  BETWEEN is inclusive, so we add 1 to the upper bound for end-exclusive semantics."
-  [selects args]
-  (when-let [pred (get selects "msg_id")]
-    (when (seq? pred)
-      (let [op (first pred)]
-        (case op
-          between
-          (let [[_ _col lower upper] pred
-                from (resolve-expr-value lower args)
-                to (resolve-expr-value upper args)]
-            (when (and from to)
-              [(long from) (inc (long to))]))
-
-          ;; fallback: try to extract >= and <= from an `and` form
-          and
-          (let [clauses (rest pred)
-                bounds (reduce (fn [acc clause]
-                                 (if (seq? clause)
-                                   (let [[op _col val] clause
-                                         v (some-> (resolve-expr-value val args) long)]
-                                     (if v
-                                       (let [v (long v)]
-                                         (case op
-                                           >= (assoc acc :from v)
-                                           > (assoc acc :from (inc v))
-                                           <= (assoc acc :to (inc v))
-                                           < (assoc acc :to v)
-                                           acc))
-                                       acc))
-                                   acc))
-                               {} clauses)]
-            (when (and (:from bounds) (:to bounds))
-              [(:from bounds) (:to bounds)]))
-
-          nil)))))
-
 (def ^:private ^:const batch-size 1024)
 
 (defn- take-batch
@@ -237,7 +179,10 @@
         source? (= 'xt/source_log_msgs table-sym)
         ^Log log (if source? (.getSourceLog db) (.getReplicaLog db))
         derived-table-schema (log-table table)
-        bounds (extract-msg-id-bounds selects args)]
+        env {:var-types derived-table-schema
+             :param-types (if args (expr/->param-types args) {})}
+        bounds (when-let [msg-id-form (get selects "msg_id")]
+                 (constraints/extract-range msg-id-form env args))]
 
     (when-not bounds
       (throw (err/incorrect :xtdb/missing-log-bounds

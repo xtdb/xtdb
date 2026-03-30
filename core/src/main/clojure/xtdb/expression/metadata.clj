@@ -1,5 +1,6 @@
 (ns xtdb.expression.metadata
   (:require [xtdb.expression :as expr]
+            [xtdb.expression.constraints :as constraints]
             [xtdb.expression.walk :as ewalk]
             [xtdb.serde.types :as st]
             [xtdb.types :as types]
@@ -32,13 +33,7 @@
           nil))
       expr))
 
-(defn- normalise-bool-args [[{x-op :op, :as x-expr} {y-op :op, :as y-expr}]]
-  (case [x-op y-op]
-    ([:param :param] [:literal :literal] [:literal :param] [:param :literal]) [:constant]
-    ([:variable :literal] [:variable :param]) [:col-val x-expr y-expr]
-    ([:literal :variable] [:param :variable]) [:val-col y-expr x-expr]
-
-    nil))
+(def ^:private normalise-bool-args constraints/normalise-bool-args)
 
 (defn- minmax-expr [f min-or-max {col :variable} value-expr]
   (let [val-sym (gensym 'val)
