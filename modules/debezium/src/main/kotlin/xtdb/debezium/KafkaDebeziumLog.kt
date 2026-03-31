@@ -122,33 +122,43 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 while (isActive) {
                     val records = runInterruptible(Dispatchers.IO) {
                         try {
-                            c.poll(pollDuration).records(topic).mapNotNull { record ->
-                                record.value()?.let { value ->
-                                    val offsets = debeziumOffsetToken {
-                                        dbzmTopicOffsets[record.topic()] = partitionOffsets {
-                                            val arr = LongArray(record.partition() + 1) { -1L }
-                                            arr[record.partition()] = record.offset()
-                                            offsets += arr.toList()
-                                        }
-                                    }
-                                    DebeziumMessage(
-                                        record.offset(),
-                                        Instant.ofEpochMilli(record.timestamp()),
-                                        listOf(CdcEvent.fromJson(value)),
-                                        offsets,
-                                        // TODO: groupMetadata captured at poll-time may become stale if a rebalance
-                                        //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
-                                        //  Acceptable for single-consumer setups; no data loss (transaction aborts).
-                                        c.groupMetadata(),
-                                    )
-                                }
-                            }
+                            c.poll(pollDuration)
                         } catch (_: InterruptException) {
                             throw InterruptedException()
                         }
                     }
 
-                    processor.processMessages(records)
+                    if (!records.isEmpty()) {
+                        val ops = mutableListOf<CdcEvent>()
+                        var maxOffset = -1L
+                        var latestTimestamp = Instant.EPOCH
+
+                        for (consumerRecord in records) {
+                            maxOffset = maxOf(maxOffset, consumerRecord.offset())
+                            latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
+                            val value = consumerRecord.value() ?: continue
+                            ops.add(CdcEvent.fromJson(value))
+                        }
+
+                        val offsets = debeziumOffsetToken {
+                            dbzmTopicOffsets[topic] = partitionOffsets {
+                                offsets += listOf(maxOffset)
+                            }
+                        }
+                        processor.processMessages(listOf(
+                            DebeziumMessage(
+                                maxOffset,
+                                latestTimestamp,
+                                ops,
+                                offsets,
+                                // TODO: groupMetadata captured at poll-time may become stale if a rebalance
+                                //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
+                                //  Acceptable for single-consumer setups; no data loss (transaction aborts).
+                                c.groupMetadata(),
+                            )
+                        ))
+                    }
+
                 }
             }
         }

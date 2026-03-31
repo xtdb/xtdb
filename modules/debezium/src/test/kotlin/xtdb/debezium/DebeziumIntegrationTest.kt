@@ -147,9 +147,12 @@ class DebeziumIntegrationTest {
         }
     }
 
-    private fun openNodeOnSourceTopic(sourceTopic: String): Xtdb = Xtdb.openNode {
+    private fun openNodeOnSourceTopic(
+        sourceTopic: String,
+        kafkaProperties: Map<String, String> = emptyMap(),
+    ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
-        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers).propertiesMap(kafkaProperties))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
@@ -352,7 +355,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_users", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.cdc_users", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -411,7 +414,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_no_envelope", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.cdc_no_envelope", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -468,7 +471,7 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
             withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.timed_docs", "test-group")
+                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.timed_docs", "test-group")
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
@@ -778,7 +781,9 @@ class DebeziumIntegrationTest {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         val debeziumGroupId = "test-debezium-direct-${UUID.randomUUID()}"
 
-        openNodeOnSourceTopic(sourceTopic).use { node ->
+        // max.poll.records=1 ensures each CDC event is a separate transaction,
+        // preserving per-event valid-time history for this test's assertions.
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
             node.getConnection().use { conn ->
                 conn.createStatement().use { stmt ->
                     stmt.execute("""ATTACH DATABASE cdc_direct_db WITH $$
