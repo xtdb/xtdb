@@ -1398,9 +1398,9 @@
                             {:setting-name setting-name}))))
 
 (defmethod codegen-call [:current_setting :utf8] [_]
-  {:return-type #xt/type :i64
+  {:return-type #xt/type :utf8
    :->call-code (fn [[setting-name]]
-                  `(current-setting (resolve-string ~setting-name)))})
+                  `(resolve-utf8-buf (current-setting (resolve-string ~setting-name))))})
 
 (defn sleep [^long duration unit]
   (Thread/sleep (long (* duration (quot (types/ts-units-per-second unit) 1000)))))
