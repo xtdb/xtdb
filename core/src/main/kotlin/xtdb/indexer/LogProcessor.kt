@@ -2,6 +2,9 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
@@ -18,6 +21,7 @@ class LogProcessor(
     dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,
+    private val scope: CoroutineScope,
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
@@ -66,9 +70,9 @@ class LogProcessor(
         val proc: LeaderProcessor
     }
 
-    private class FollowerSystem(val proc: FollowerProcessor, private val sub: Log.Subscription) : SubSystem {
+    private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
         override fun close() {
-            sub.close()
+            job.cancel()
             proc.close()
         }
     }
@@ -88,7 +92,7 @@ class LogProcessor(
                 }
             }
 
-            FollowerSystem(proc, replicaLog.tailAll(latestReplicaMsgId, proc))
+            FollowerSystem(proc, scope.launch { replicaLog.tailAll(latestReplicaMsgId, proc) })
         }
 
     @Volatile

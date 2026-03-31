@@ -1,6 +1,6 @@
 package xtdb.debezium
 
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
@@ -80,10 +80,15 @@ class DebeziumProcessorTest {
         return cluster.use {
             KafkaCluster.LogFactory("kafka", sourceTopic, groupId = "xtdb-$sourceTopic-debezium")
                 .openSourceLog(mapOf("kafka" to cluster)).use { log ->
-                    log.tailAll(-1) { records -> received.addAll(records) }.use {
-                        log.openAtomicProducer("test-debezium").use { producer ->
-                            val processor = DebeziumProcessor(producer as KafkaCluster.AtomicProducer, allocator, defaultTz)
-                            block(processor, received)
+                    coroutineScope {
+                        val job = launch { log.tailAll(-1) { records -> received.addAll(records) } }
+                        try {
+                            log.openAtomicProducer("test-debezium").use { producer ->
+                                val processor = DebeziumProcessor(producer as KafkaCluster.AtomicProducer, allocator, defaultTz)
+                                block(processor, received)
+                            }
+                        } finally {
+                            job.cancelAndJoin()
                         }
                     }
                 }

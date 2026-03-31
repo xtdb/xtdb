@@ -1,5 +1,7 @@
 package xtdb.api.log
 
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.RepeatedTest
@@ -22,18 +24,20 @@ class LocalLogTest {
 
         // Create a subscription
         val receivedRecords = mutableListOf<Record<SourceMessage>>()
-        val subscription = log.tailAll(
-            -1L,
-            object : Log.RecordProcessor<SourceMessage> {
-                override suspend fun processRecords(records: List<Record<SourceMessage>>) {
-                    records.forEach { receivedRecords.add(it) }
+        val job = launch {
+            log.tailAll(
+                -1L,
+                object : Log.RecordProcessor<SourceMessage> {
+                    override suspend fun processRecords(records: List<Record<SourceMessage>>) {
+                        records.forEach { receivedRecords.add(it) }
+                    }
                 }
-            }
-        )
+            )
+        }
 
         log.appendMessage(SourceMessage.FlushBlock(1))
 
-        subscription.close()
+        job.cancelAndJoin()
 
         log.close()
     }

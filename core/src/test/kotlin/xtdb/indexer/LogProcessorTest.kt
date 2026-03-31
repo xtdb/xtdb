@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -99,7 +100,7 @@ class LogProcessorTest {
         }
 
     @Test
-    fun `fresh node starts up with epoch 0`() {
+    fun `fresh node starts up with epoch 0`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
@@ -108,21 +109,22 @@ class LogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
+        val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader
+            dbStorage, dbState, blockUploader, scope
         )
 
-        val subscription = sourceLog.openGroupSubscription(logProc)
+        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        subscription.close()
+        job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
 
     @Test
-    fun `fresh node starts up with non-zero epoch`() {
+    fun `fresh node starts up with non-zero epoch`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 1)
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
@@ -131,14 +133,15 @@ class LogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
+        val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader
+            dbStorage, dbState, blockUploader, scope
         )
 
-        val subscription = sourceLog.openGroupSubscription(logProc)
+        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        subscription.close()
+        job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -162,17 +165,20 @@ class LogProcessorTest {
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
         replicaProducer.close()
 
+        val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader
+            dbStorage, dbState, blockUploader, scope
         )
 
-        val subscription = sourceLog.openGroupSubscription(logProc)
+        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        // The transition should have replayed the ResolvedTx
+        // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
+        watchers.awaitTx(1)
+
         verify { liveIndex.importTx(any()) }
 
-        subscription.close()
+        runBlocking { job.cancelAndJoin() }
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -194,16 +200,19 @@ class LogProcessorTest {
         // Pre-populate the replica log
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
 
+        val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader
+            dbStorage, dbState, blockUploader, scope
         )
 
-        val subscription = sourceLog.openGroupSubscription(logProc)
+        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+
+        watchers.awaitTx(1)
 
         verify { liveIndex.importTx(any()) }
 
-        subscription.close()
+        runBlocking { job.cancelAndJoin() }
         logProc.close()
         sourceLog.close()
         replicaLog.close()

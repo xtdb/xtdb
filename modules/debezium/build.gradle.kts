@@ -17,6 +17,7 @@ dependencies {
     api(libs.kotlinx.serialization.json)
     api(libs.protobuf.kotlin)
 
+    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.pgjdbc)
