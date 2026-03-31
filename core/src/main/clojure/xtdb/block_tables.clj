@@ -21,7 +21,7 @@
            (xtdb.table TableRef)
            (xtdb.time InstantUtil)
            (xtdb.trie Trie)
-           (xtdb.util HyperLogLog)))
+           (xtdb.util HyperLogLog StringUtil)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -29,7 +29,7 @@
   (update-vals m types/->type))
 
 (def block-tables
-  (-> '{xt/block_files {block_idx :i64
+  (-> '{xt/block_files {block_idx :utf8
                         tx_id [:? :i64]
                         system_time [:? :timestamp-tz :micro "UTC"]
                         latest_processed_msg_id :i64
@@ -38,14 +38,14 @@
                         file_size :i64}
 
         xt/table_block_files {table_name :utf8
-                              block_idx :i64
+                              block_idx :utf8
                               row_count :i64
                               fields :utf8
                               hlls :utf8
                               partition_count :i32}
 
         xt/table_block_file_tries {table_name :utf8
-                                   block_idx :i64
+                                   block_idx :utf8
                                    level :i32
                                    recency [:? :utf8]
                                    part :utf8
@@ -92,9 +92,24 @@
 
 ;;; xt.block_files
 
+(defn- ->lex-hex ^String [^long v]
+  (.getAsLexHex StringUtil/INSTANCE v))
+
+(defn- <-lex-hex ^long [^String s]
+  (.getFromLexHex StringUtil/INSTANCE s))
+
+(defn- range-bounds->from-to
+  "Converts structured range bounds from extract-range into a [from, to) long pair."
+  [{[lower-op lower-val] :lower, [upper-op upper-val] :upper}]
+  (let [from (let [v (<-lex-hex (str lower-val))]
+               (case lower-op :>= v, :> (inc v)))
+        to (let [v (<-lex-hex (str upper-val))]
+             (case upper-op :<= (inc v), :< v))]
+    [from to]))
+
 (defn- block->row [^Block block ^long file-size]
   (let [has-tx? (.hasLatestCompletedTx block)]
-    {"block_idx" (.getBlockIndex block)
+    {"block_idx" (->lex-hex (.getBlockIndex block))
      "tx_id" (when has-tx? (.getTxId (.getLatestCompletedTx block)))
      "system_time" (when has-tx? (InstantUtil/fromMicros (.getSystemTime (.getLatestCompletedTx block))))
      "latest_processed_msg_id" (.getLatestProcessedMsgId block)
@@ -122,9 +137,9 @@
 
     (when-not bounds
       (throw (err/incorrect :xtdb/missing-block-idx-bounds
-                            "Queries on xt.block_files require block_idx bounds (e.g. WHERE block_idx BETWEEN x AND y)")))
+                            "Queries on xt.block_files require block_idx bounds (e.g. WHERE block_idx = '...' or WHERE block_idx BETWEEN '...' AND '...')")))
 
-    (let [[^long from-idx ^long to-idx] bounds
+    (let [[^long from-idx ^long to-idx] (range-bounds->from-to bounds)
           ^BufferPool buffer-pool (.getBufferPool db)
           idx (volatile! from-idx)]
 
@@ -149,7 +164,7 @@
 
 (defn- table-block->row [^String table-name ^long block-idx {:keys [^long row-count fields hlls partitions]}]
   {"table_name" table-name
-   "block_idx" block-idx
+   "block_idx" (->lex-hex block-idx)
    "row_count" row-count
    "fields" (pr-str (update-vals fields #(types/field->col-type %)))
    "hlls" (pr-str (update-vals hlls #(long (HyperLogLog/estimate %))))
@@ -179,12 +194,13 @@
 
     (when-not (and table-name block-idx)
       (throw (err/incorrect :xtdb/missing-table-block-predicates
-                            "Queries on xt.table_block_files require table_name = '...' AND block_idx = N")))
+                            "Queries on xt.table_block_files require table_name = '...' AND block_idx = '...'")))
 
     (let [^BufferPool buffer-pool (.getBufferPool db)
-          table-block (resolve-table-block buffer-pool (.getName db) (str table-name) (long block-idx))
+          block-idx (<-lex-hex (str block-idx))
+          table-block (resolve-table-block buffer-pool (.getName db) (str table-name) block-idx)
           rows (if table-block
-                 [(table-block->row (str table-name) (long block-idx) table-block)]
+                 [(table-block->row (str table-name) block-idx table-block)]
                  [])
           done? (volatile! false)]
 
@@ -201,13 +217,13 @@
 
 ;;; xt.table_block_file_tries
 
-(defn- trie-details->rows [^String table-name ^long block-idx partitions]
+(defn- trie-details->rows [^String table-name ^String block-idx-hex partitions]
   (vec
    (for [{:keys [^int level recency part tries]} partitions
          ^TrieDetails td tries
          :let [trie-meta (some-> (.getTrieMetadata td) trie-cat/<-trie-metadata)]]
      {"table_name" table-name
-      "block_idx" block-idx
+      "block_idx" block-idx-hex
       "level" (int level)
       "recency" (some-> recency str)
       "part" (pr-str part)
@@ -232,12 +248,14 @@
 
     (when-not (and table-name block-idx)
       (throw (err/incorrect :xtdb/missing-table-block-predicates
-                            "Queries on xt.table_block_file_tries require table_name = '...' AND block_idx = N")))
+                            "Queries on xt.table_block_file_tries require table_name = '...' AND block_idx = '...'")))
 
     (let [^BufferPool buffer-pool (.getBufferPool db)
-          table-block (resolve-table-block buffer-pool (.getName db) (str table-name) (long block-idx))
+          block-idx-hex (str block-idx)
+          block-idx (<-lex-hex block-idx-hex)
+          table-block (resolve-table-block buffer-pool (.getName db) (str table-name) block-idx)
           rows (if table-block
-                 (trie-details->rows (str table-name) (long block-idx) (:partitions table-block))
+                 (trie-details->rows (str table-name) block-idx-hex (:partitions table-block))
                  [])
           iter (.iterator ^Iterable rows)]
 

@@ -186,9 +186,13 @@
 
     (when-not bounds
       (throw (err/incorrect :xtdb/missing-log-bounds
-                            "Queries on log tables require msg_id bounds (e.g. WHERE msg_id BETWEEN x AND y)")))
+                            "Queries on log tables require msg_id bounds (e.g. WHERE msg_id = N or WHERE msg_id BETWEEN x AND y)")))
 
-    (let [[^long from-msg-id ^long to-msg-id] bounds
+    (let [{[lower-op lower-val] :lower, [upper-op upper-val] :upper} bounds
+          from-msg-id (long (let [v (long lower-val)]
+                              (case lower-op :>= v, :> (inc v))))
+          to-msg-id (long (let [v (long upper-val)]
+                            (case upper-op :<= (inc v), :< v)))
           record-seq (.readRecords log from-msg-id to-msg-id)
           record-iter (.iterator record-seq)
           decode-tx-ops? (and source? (contains? col-names "tx_ops"))]

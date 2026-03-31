@@ -12,14 +12,24 @@
   (t/testing "can read block files with BETWEEN bounds"
     (let [rows (xt/q tu/*node*
                      "SELECT block_idx, tx_id, system_time, latest_processed_msg_id, table_names, boundary_replica_msg_id, file_size
-                      FROM xt.block_files WHERE block_idx BETWEEN 0 AND 100")]
+                      FROM xt.block_files WHERE block_idx BETWEEN '00' AND '264'")]
       (t/is (pos? (count rows)) "should return at least one block")
 
       (let [row (first rows)]
-        (t/is (number? (:block-idx row)))
+        (t/is (string? (:block-idx row)))
         (t/is (number? (:latest-processed-msg-id row)))
         (t/is (string? (:table-names row)))
         (t/is (pos? (:file-size row)))))))
+
+(deftest test-block-files-equality
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1, :v "hello"}]])
+  (tu/flush-block! tu/*node*)
+
+  (t/testing "can read block files with equality"
+    (let [rows (xt/q tu/*node*
+                     "SELECT block_idx FROM xt.block_files WHERE block_idx = '00'")]
+      (t/is (= 1 (count rows)))
+      (t/is (= "00" (:block-idx (first rows)))))))
 
 (deftest test-block-files-requires-predicate
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
@@ -34,13 +44,13 @@
 
   (t/testing "parameterised BETWEEN bounds"
     (let [rows (xt/q tu/*node*
-                     ["SELECT block_idx FROM xt.block_files WHERE block_idx BETWEEN ? AND ?" 0 100])]
+                     ["SELECT block_idx FROM xt.block_files WHERE block_idx BETWEEN ? AND ?" "00" "264"])]
       (t/is (pos? (count rows)))))
 
   (t/testing "parameterised equality on table-block tables"
     (let [rows (xt/q tu/*node*
                      ["SELECT row_count FROM xt.table_block_files WHERE table_name = ? AND block_idx = ?"
-                      "public/foo" 0])]
+                      "public/foo" "00"])]
       (t/is (= 1 (count rows))))))
 
 (deftest test-block-files-empty-range
@@ -48,7 +58,7 @@
   (tu/flush-block! tu/*node*)
 
   (let [rows (xt/q tu/*node*
-                   "SELECT * FROM xt.block_files WHERE block_idx BETWEEN 99999 AND 99999")]
+                   "SELECT * FROM xt.block_files WHERE block_idx BETWEEN '41869f' AND '41869f'")]
     (t/is (empty? rows))))
 
 (deftest test-table-block-files-basic
@@ -59,12 +69,12 @@
     (let [rows (xt/q tu/*node*
                      "SELECT table_name, block_idx, row_count, fields, hlls, partition_count
                       FROM xt.table_block_files
-                      WHERE table_name = 'public/foo' AND block_idx = 0")]
+                      WHERE table_name = 'public/foo' AND block_idx = '00'")]
       (t/is (= 1 (count rows)))
 
       (let [row (first rows)]
         (t/is (= "public/foo" (:table-name row)))
-        (t/is (= 0 (:block-idx row)))
+        (t/is (= "00" (:block-idx row)))
         (t/is (pos? (:row-count row)))
         (t/is (string? (:fields row)))
         (t/is (string? (:hlls row)))
@@ -90,12 +100,12 @@
     (let [rows (xt/q tu/*node*
                      "SELECT table_name, block_idx, level, trie_key, data_file_size, trie_state, row_count
                       FROM xt.table_block_file_tries
-                      WHERE table_name = 'public/foo' AND block_idx = 0")]
+                      WHERE table_name = 'public/foo' AND block_idx = '00'")]
       (t/is (pos? (count rows)) "should return at least one trie")
 
       (let [row (first rows)]
         (t/is (= "public/foo" (:table-name row)))
-        (t/is (= 0 (:block-idx row)))
+        (t/is (= "00" (:block-idx row)))
         (t/is (string? (:trie-key row)))
         (t/is (number? (:data-file-size row)))))))
 
@@ -106,11 +116,11 @@
   (t/testing "nonexistent table returns empty"
     (let [rows (xt/q tu/*node*
                      "SELECT * FROM xt.table_block_files
-                      WHERE table_name = 'public/nonexistent' AND block_idx = 0")]
+                      WHERE table_name = 'public/nonexistent' AND block_idx = '00'")]
       (t/is (empty? rows))))
 
   (t/testing "nonexistent block returns empty"
     (let [rows (xt/q tu/*node*
                      "SELECT * FROM xt.table_block_files
-                      WHERE table_name = 'public/foo' AND block_idx = 999")]
+                      WHERE table_name = 'public/foo' AND block_idx = '23e7'")]
       (t/is (empty? rows)))))

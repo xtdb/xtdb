@@ -5,8 +5,6 @@
   (:require [xtdb.expression :as expr])
   (:import (xtdb.arrow RelationReader VectorReader)))
 
-(set! *unchecked-math* :warn-on-boxed)
-
 (defn normalise-bool-args
   "Classifies the two arguments of a comparison expression.
   Returns [:col-val col-expr val-expr], [:val-col col-expr val-expr], [:constant], or nil."
@@ -31,32 +29,37 @@
   {:< :>, :<= :>=, :> :<, :>= :<=})
 
 (defn- extract-comparison-bound
-  "Given a comparison AST node, returns a partial bounds map or nil."
+  "Given a comparison AST node, returns a partial bounds map or nil.
+  Returns {:lower [op value]} or {:upper [op value]} with the normalised operator."
   [expr ^RelationReader args]
   (when (and (= :call (:op expr))
              (#{:>= :> :<= :<} (:f expr)))
     (when-let [[tag _col-expr val-expr] (normalise-bool-args (:args expr))]
       (when-let [v (resolve-value val-expr args)]
-        (let [v (long v)
-              f (if (= tag :val-col) (flip-op (:f expr)) (:f expr))]
+        (let [f (if (= tag :val-col) (flip-op (:f expr)) (:f expr))]
           (case f
-            :>= {:from v}
-            :> {:from (inc v)}
-            :<= {:to (inc v)}
-            :< {:to v}))))))
+            (:>= :>) {:lower [f v]}
+            (:<= :<) {:upper [f v]}))))))
 
 (defn extract-range
-  "Extracts [from, to) range bounds from a select expression form.
-  Handles `BETWEEN` (which macro-expands to `and` + `>=` + `<=`) and compound comparisons.
-  Returns [from to) pair or nil."
+  "Extracts range bounds from a select expression form.
+  Handles `BETWEEN` (which macro-expands to `and` + `>=` + `<=`), compound comparisons,
+  and equality (`=` includes both :eq and :lower/:upper).
+  Returns {:lower [op value] :upper [op value]} (plus :eq for equality) or nil."
   [select-form env ^RelationReader args]
   (let [expr (-> (expr/form->expr select-form env) expr/prepare-expr)]
-    (when (and (= :call (:op expr)) (= :and (:f expr)))
-      (let [bounds (reduce (fn [acc sub-expr]
-                             (merge acc (extract-comparison-bound sub-expr args)))
-                           {} (:args expr))]
-        (when (and (:from bounds) (:to bounds))
-          [(:from bounds) (:to bounds)])))))
+    (case (:f expr)
+      :and (let [bounds (reduce (fn [acc sub-expr]
+                                  (merge acc (extract-comparison-bound sub-expr args)))
+                                {} (:args expr))]
+             (when (and (:lower bounds) (:upper bounds))
+               bounds))
+
+      :== (when-let [[tag _col-expr val-expr] (normalise-bool-args (:args expr))]
+            (when-let [v (resolve-value val-expr args)]
+              {:eq v, :lower [:>= v] :upper [:<= v]}))
+
+      nil)))
 
 (defn extract-equality
   "Extracts an equality value from a select expression form.
