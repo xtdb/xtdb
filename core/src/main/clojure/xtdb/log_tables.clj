@@ -19,6 +19,7 @@
                          ReplicaMessage$BlockUploaded ReplicaMessage$NoOp)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.database Database)
+           (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
            (xtdb.table TableRef)))
 
@@ -52,6 +53,13 @@
     SourceMessage$LegacyTx "legacy-tx"
     "unknown"))
 
+(defn- trie-details->edn [tries]
+  (mapv (fn [^TrieDetails td]
+          {:table-name (.getTableName td)
+           :trie-key (.getTrieKey td)
+           :data-file-size (.getDataFileSize td)})
+        tries))
+
 (defn- source-msg->edn [^SourceMessage msg]
   (pr-str
    (condp instance? msg
@@ -70,11 +78,14 @@
      (let [^SourceMessage$TriesAdded m msg]
        {:type :tries-added
         :storage-version (.getStorageVersion m)
-        :storage-epoch (.getStorageEpoch m)})
+        :storage-epoch (.getStorageEpoch m)
+        :tries (trie-details->edn (.getTries m))})
 
      SourceMessage$AttachDatabase
-     {:type :attach-database
-      :db-name (.getDbName ^SourceMessage$AttachDatabase msg)}
+     (let [^SourceMessage$AttachDatabase m msg]
+       {:type :attach-database
+        :db-name (.getDbName m)
+        :config (str (.getConfig m))})
 
      SourceMessage$DetachDatabase
      {:type :detach-database
@@ -84,8 +95,10 @@
      (let [^SourceMessage$BlockUploaded m msg]
        {:type :block-uploaded
         :block-index (.getBlockIndex m)
+        :latest-processed-msg-id (.getLatestProcessedMsgId m)
         :storage-version (.getStorageVersion m)
-        :storage-epoch (.getStorageEpoch m)})
+        :storage-epoch (.getStorageEpoch m)
+        :tries (trie-details->edn (.getTries m))})
 
      SourceMessage$LegacyTx
      {:type :legacy-tx}
@@ -117,18 +130,28 @@
    (condp instance? msg
      ReplicaMessage$ResolvedTx
      (let [^ReplicaMessage$ResolvedTx m msg]
-       {:type :resolved-tx
-        :tx-id (.getTxId m)
-        :system-time (.getSystemTime m)
-        :committed (.getCommitted m)
-        :error (some-> (.getError m) str)})
+       (cond-> {:type :resolved-tx
+                :tx-id (.getTxId m)
+                :system-time (.getSystemTime m)
+                :committed (.getCommitted m)
+                :error (some-> (.getError m) str)
+                :table-names (vec (keys (.getTableData m)))}
+         (.getDbOp m) (assoc :db-op (let [op (.getDbOp m)]
+                                      (condp instance? op
+                                        xtdb.api.log.DbOp$Attach
+                                        {:op :attach
+                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Attach op)}
+                                        xtdb.api.log.DbOp$Detach
+                                        {:op :detach
+                                         :db-name (.getDbName ^xtdb.api.log.DbOp$Detach op)})))))
 
      ReplicaMessage$TriesAdded
      (let [^ReplicaMessage$TriesAdded m msg]
        {:type :tries-added
         :storage-version (.getStorageVersion m)
         :storage-epoch (.getStorageEpoch m)
-        :source-msg-id (.getSourceMsgId m)})
+        :source-msg-id (.getSourceMsgId m)
+        :tries (trie-details->edn (.getTries m))})
 
      ReplicaMessage$BlockBoundary
      (let [^ReplicaMessage$BlockBoundary m msg]
@@ -140,8 +163,10 @@
      (let [^ReplicaMessage$BlockUploaded m msg]
        {:type :block-uploaded
         :block-index (.getBlockIndex m)
+        :latest-processed-msg-id (.getLatestProcessedMsgId m)
         :storage-version (.getStorageVersion m)
-        :storage-epoch (.getStorageEpoch m)})
+        :storage-epoch (.getStorageEpoch m)
+        :tries (trie-details->edn (.getTries m))})
 
      ReplicaMessage$NoOp
      {:type :no-op}
