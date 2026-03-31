@@ -83,7 +83,7 @@ private fun KafkaConfigMap.openConsumer() =
         ByteArrayDeserializer()
     )
 
-private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
+fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     val desc =
         try {
             describeTopics(listOf(topic)).allTopicNames().get()[topic]

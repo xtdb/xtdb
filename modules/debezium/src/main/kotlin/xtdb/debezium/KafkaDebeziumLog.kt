@@ -3,6 +3,7 @@ package xtdb.debezium
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
@@ -12,6 +13,7 @@ import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
+import xtdb.api.log.ensureTopicExists
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.ExternalLog
 import xtdb.database.ExternalLog.MessageProcessor
@@ -50,6 +52,11 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         override fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>): DebeziumLog {
             val cluster =
                 requireNotNull(clusters[logCluster] as? KafkaCluster) { "missing Kafka cluster: '${logCluster}'" }
+
+            AdminClient.create(cluster.kafkaConfigMap).use { admin ->
+                admin.ensureTopicExists(tableTopic, autoCreate = false)
+            }
+
             return KafkaDebeziumLog(cluster.kafkaConfigMap, tableTopic, groupId)
         }
 
