@@ -44,6 +44,7 @@ import xtdb.util.closeAll
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import xtdb.database.ExternalLog.MessageProcessor
 import java.time.Duration
 import java.util.*
 
@@ -203,7 +204,7 @@ class Database(
 
                             return if (extFactory != null && extLog != null) {
                                 @Suppress("UNCHECKED_CAST")
-                                val extProc = extFactory.openProcessor(leaderProc, state) as Log.RecordProcessor<Any?>
+                                val extProc = extFactory.openProcessor(leaderProc, state) as MessageProcessor<Any?>
                                 val token = state.blockCatalog.externalSourceToken
 
                                 @Suppress("UNCHECKED_CAST")

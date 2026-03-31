@@ -17,7 +17,6 @@ import org.junit.jupiter.api.assertThrows
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
-import xtdb.api.log.Log.Record
 import xtdb.api.log.SourceMessage
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.Relation
@@ -56,26 +55,23 @@ class DebeziumProcessorTest {
     private fun deleteEvent(id: Int, table: String = "test") =
         CdcEvent.Delete("public", table, id)
 
-    private fun messageRecord(
+    private fun testMessage(
         ops: List<CdcEvent>,
         offset: Long = 0,
-    ): Record<DebeziumMessage> = Record(
-        0, offset, Instant.now(),
-        DebeziumMessage(ops, DebeziumOffsetToken.getDefaultInstance(), ConsumerGroupMetadata("test-group"))
-    )
+    ) = DebeziumMessage(offset, Instant.now(), ops, DebeziumOffsetToken.getDefaultInstance(), ConsumerGroupMetadata("test-group"))
 
-    private fun putRecord(id: Int, name: String, offset: Long = 0, table: String = "test") =
-        messageRecord(listOf(putEvent(id, name, table)), offset)
+    private fun putMessage(id: Int, name: String, offset: Long = 0, table: String = "test") =
+        testMessage(listOf(putEvent(id, name, table)), offset)
 
-    private fun deleteRecord(id: Int, offset: Long = 0, table: String = "test") =
-        messageRecord(listOf(deleteEvent(id, table)), offset)
+    private fun deleteMessage(id: Int, offset: Long = 0, table: String = "test") =
+        testMessage(listOf(deleteEvent(id, table)), offset)
 
     private suspend fun <R> withDebeziumProducer(
         defaultTz: ZoneId = ZoneOffset.UTC,
-        block: suspend (DebeziumProcessor, MutableList<Record<SourceMessage>>) -> R,
+        block: suspend (DebeziumProcessor, MutableList<Log.Record<SourceMessage>>) -> R,
     ): R {
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val received = synchronizedList(mutableListOf<Record<SourceMessage>>())
+        val received = synchronizedList(mutableListOf<Log.Record<SourceMessage>>())
 
         val cluster = KafkaCluster.ClusterFactory(kafka.bootstrapServers)
             .pollDuration(Duration.ofMillis(100))
@@ -107,7 +103,7 @@ class DebeziumProcessorTest {
     @Test
     fun `empty record list is a no-op`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
-            processor.processRecords(emptyList())
+            processor.processMessages(emptyList())
 
             delay(1000)
 
@@ -125,7 +121,7 @@ class DebeziumProcessorTest {
 
         val processor = DebeziumProcessor(failingProducer, allocator, ZoneOffset.UTC)
         assertThrows<Exception> {
-            processor.processRecords(listOf(putRecord(1, "Alice")))
+            processor.processMessages(listOf(putMessage(1, "Alice")))
         }
     }
 
@@ -133,13 +129,13 @@ class DebeziumProcessorTest {
     fun `batch of mixed ops processes all records`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
             val batch = listOf(
-                putRecord(1, "Alice", offset = 0),
-                putRecord(2, "Bob", offset = 1),
-                putRecord(1, "Alice Updated", offset = 2),
-                deleteRecord(2, offset = 3),
+                putMessage(1, "Alice", offset = 0),
+                putMessage(2, "Bob", offset = 1),
+                putMessage(1, "Alice Updated", offset = 2),
+                deleteMessage(2, offset = 3),
             )
 
-            processor.processRecords(batch)
+            processor.processMessages(batch)
 
             while (received.size < 4) delay(100)
 
@@ -156,7 +152,7 @@ class DebeziumProcessorTest {
     @Test
     fun `defaultTz is preserved in transaction`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer(defaultTz = ZoneId.of("America/Los_Angeles")) { processor, received ->
-            processor.processRecords(listOf(putRecord(1, "Alice")))
+            processor.processMessages(listOf(putMessage(1, "Alice")))
 
             while (received.size < 1) delay(100)
 
@@ -170,7 +166,7 @@ class DebeziumProcessorTest {
     @Test
     fun `empty ops list produces empty transaction`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
-            processor.processRecords(listOf(messageRecord(emptyList())))
+            processor.processMessages(listOf(testMessage(emptyList())))
 
             while (received.size < 1) delay(100)
 
@@ -183,11 +179,11 @@ class DebeziumProcessorTest {
     @Test
     fun `multi-op message produces single transaction`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
-            val record = messageRecord(
+            val record = testMessage(
                 listOf(putEvent(1, "Alice"), putEvent(2, "Bob")),
                 offset = 0
             )
-            processor.processRecords(listOf(record))
+            processor.processMessages(listOf(record))
 
             while (received.size < 1) delay(100)
 
@@ -200,11 +196,11 @@ class DebeziumProcessorTest {
     @Test
     fun `multi-op message with mixed put and delete`() = runTest(timeout = 60.seconds) {
         withDebeziumProducer { processor, received ->
-            val record = messageRecord(
+            val record = testMessage(
                 listOf(putEvent(1, "Alice"), deleteEvent(2)),
                 offset = 0
             )
-            processor.processRecords(listOf(record))
+            processor.processMessages(listOf(record))
 
             while (received.size < 1) delay(100)
 

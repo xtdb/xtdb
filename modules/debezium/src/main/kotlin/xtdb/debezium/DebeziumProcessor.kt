@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory
 import xtdb.api.TransactionKey
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.KafkaCluster.AtomicProducer.Companion.withTx
-import xtdb.api.log.Log
 import xtdb.api.log.SourceMessage
 import xtdb.database.DatabaseName
 import xtdb.database.ExternalSourceToken
@@ -51,7 +50,7 @@ class DebeziumProcessor(
     private val producer: KafkaCluster.AtomicProducer<SourceMessage>,
     private val allocator: BufferAllocator,
     private val defaultTz: ZoneId,
-) : Log.RecordProcessor<DebeziumMessage>, AutoCloseable {
+) : AutoCloseable {
 
     private fun buildTxMessage(
         txOps: List<TxOp>, userMetadata: Map<String, Any>,
@@ -66,10 +65,9 @@ class DebeziumProcessor(
             externalSourceToken = externalSourceToken
         )
 
-    override suspend fun processRecords(records: List<Log.Record<DebeziumMessage>>) {
-        for (record in records) {
+    suspend fun processMessages(messages: List<DebeziumMessage>) {
+        for (msg in messages) {
             producer.withTx { tx ->
-                val msg = record.message
                 val kafkaOffsets = msg.offsets.dbzmTopicOffsetsMap.flatMap { (topic, partOffsets) ->
                     partOffsets.offsetsList.mapIndexedNotNull { partition, offset ->
                         if (offset >= 0) TopicPartition(topic, partition) to OffsetAndMetadata(offset + 1) else null
@@ -78,14 +76,14 @@ class DebeziumProcessor(
                 tx.sendOffsetsToTransaction(kafkaOffsets, msg.consumerGroupMetadata)
                 val token = ProtoAny.pack(msg.offsets, "xtdb.debezium")
 
-                record.message.ops.safeMap { it.toTxOp(allocator) }.useAll { txOps ->
+                msg.ops.safeMap { it.toTxOp(allocator) }.useAll { txOps ->
                     val metadata = mapOf(
                         "source" to "debezium",
-                        "kafka_offset" to record.logOffset,
+                        "kafka_offset" to msg.txId,
                     )
                     val message = buildTxMessage(txOps, metadata, externalSourceToken = token)
                     tx.appendMessage(message)
-                    logger.debug("Submitted tx with {} ops at offset {}", txOps.size, record.logOffset)
+                    logger.debug("Submitted tx with {} ops at txId {}", txOps.size, msg.txId)
                 }
             }
         }

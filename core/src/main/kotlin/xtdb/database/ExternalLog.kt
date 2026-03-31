@@ -8,7 +8,6 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.selects.selectUnbiased
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
@@ -29,12 +28,16 @@ typealias ExternalSourceToken = ProtoAny
 
 interface ExternalLog<M> : AutoCloseable {
 
-    fun tailAll(afterToken: ExternalSourceToken?, processor: Log.RecordProcessor<M>): Log.Subscription
+    fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<M>): Log.Subscription
+
+    fun interface MessageProcessor<M> {
+        suspend fun processMessages(msgs: List<M>)
+    }
 
     interface Factory {
         fun writeTo(dbConfig: DatabaseConfig.Builder)
         fun open(clusters: Map<LogClusterAlias, Log.Cluster>): ExternalLog<*>
-        fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): Log.RecordProcessor<*>
+        fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<*>
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()
@@ -69,17 +72,17 @@ interface ExternalLog<M> : AutoCloseable {
     class Demux<M> @JvmOverloads constructor(
         private val leaderLogProcessor: LeaderLogProcessor,
         externalLog: ExternalLog<M>, externalSourceToken: ExternalSourceToken?,
-        private val externalProc: Log.RecordProcessor<M>,
+        private val externalProc: MessageProcessor<M>,
         ctx: CoroutineContext = Dispatchers.Default
     ) : LeaderProcessor by leaderLogProcessor {
-        private val externalCh = Channel<List<Log.Record<M>>>()
+        private val externalCh = Channel<List<M>>()
         private val sourceCh = Channel<List<Log.Record<SourceMessage>>>()
 
         private val job = CoroutineScope(ctx).launch {
             try {
                 while (true) {
-                    selectUnbiased<Unit> {
-                        externalCh.onReceive { externalProc.processRecords(it) }
+                    selectUnbiased {
+                        externalCh.onReceive { externalProc.processMessages(it) }
                         sourceCh.onReceive { leaderLogProcessor.processRecords(it) }
                     }
                 }
@@ -94,7 +97,7 @@ interface ExternalLog<M> : AutoCloseable {
             }
         }
 
-        private val externalSub = externalLog.tailAll(externalSourceToken) { records -> externalCh.send(records) }
+        private val externalSub = externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) }
 
         override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
             sourceCh.send(records)

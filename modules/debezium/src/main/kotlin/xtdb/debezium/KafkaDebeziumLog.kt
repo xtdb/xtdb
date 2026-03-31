@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
+import xtdb.database.ExternalLog
+import xtdb.database.ExternalLog.MessageProcessor
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.KafkaDebeziumLogConfig
 import xtdb.debezium.proto.debeziumOffsetToken
@@ -80,7 +82,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
     private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)
     val epoch: Int get() = 0
 
-    override fun tailAll(afterToken: ExternalSourceToken?, processor: Log.RecordProcessor<DebeziumMessage>): Log.Subscription {
+    override fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<DebeziumMessage>): Log.Subscription {
         val job = scope.launch {
             KafkaConsumer(
                 kafkaConfig.plus(
@@ -122,18 +124,15 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                                             offsets += arr.toList()
                                         }
                                     }
-                                    Log.Record(
-                                        epoch,
+                                    DebeziumMessage(
                                         record.offset(),
                                         Instant.ofEpochMilli(record.timestamp()),
-                                        DebeziumMessage(
-                                            listOf(CdcEvent.fromJson(value)),
-                                            offsets,
-                                            // TODO: groupMetadata captured at poll-time may become stale if a rebalance
-                                            //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
-                                            //  Acceptable for single-consumer setups; no data loss (transaction aborts).
-                                            c.groupMetadata()
-                                        ),
+                                        listOf(CdcEvent.fromJson(value)),
+                                        offsets,
+                                        // TODO: groupMetadata captured at poll-time may become stale if a rebalance
+                                        //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
+                                        //  Acceptable for single-consumer setups; no data loss (transaction aborts).
+                                        c.groupMetadata(),
                                     )
                                 }
                             }
@@ -142,7 +141,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                         }
                     }
 
-                    processor.processRecords(records)
+                    processor.processMessages(records)
                 }
             }
         }

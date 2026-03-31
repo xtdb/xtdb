@@ -11,7 +11,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import xtdb.api.log.Log
+import xtdb.database.ExternalLog.MessageProcessor
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,11 +62,11 @@ class KafkaDebeziumLogTest {
         }
     }
 
-    private fun capturingProcessor(): Pair<Log.RecordProcessor<DebeziumMessage>, List<Log.Record<DebeziumMessage>>> {
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<DebeziumMessage>>())
+    private fun capturingProcessor(): Pair<MessageProcessor<DebeziumMessage>, List<DebeziumMessage>> {
+        val received = Collections.synchronizedList(mutableListOf<DebeziumMessage>())
 
-        val capturing = Log.RecordProcessor { records ->
-            received.addAll(records)
+        val capturing = MessageProcessor<DebeziumMessage> { msgs ->
+            received.addAll(msgs)
         }
         return (capturing to received)
     }
@@ -91,7 +91,7 @@ class KafkaDebeziumLogTest {
         assertEquals(1, received.size, "Should not receive messages after subscription close")
 
         // Verify the Log parsed the raw bytes into a CdcEvent
-        val event = received[0].message.ops[0] as CdcEvent.Put
+        val event = received[0].ops[0] as CdcEvent.Put
         assertEquals("public", event.schema)
         assertEquals("test", event.table)
         assertEquals(1L, event.doc["_id"])

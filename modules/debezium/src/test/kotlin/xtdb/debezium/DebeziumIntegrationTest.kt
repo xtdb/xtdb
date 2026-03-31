@@ -20,7 +20,7 @@ import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
-import xtdb.api.log.Log
+import xtdb.database.ExternalLog.MessageProcessor
 import org.apache.arrow.memory.RootAllocator
 import java.util.UUID
 import java.time.ZoneOffset
@@ -232,13 +232,13 @@ class DebeziumIntegrationTest {
         this["payload"]?.jsonObject ?: fail("Expected 'payload' key in message")
 
     private fun capturingProcessor(
-        processor: Log.RecordProcessor<DebeziumMessage>
-    ): Pair<Log.RecordProcessor<DebeziumMessage>, List<Log.Record<DebeziumMessage>>> {
-        val received = Collections.synchronizedList(mutableListOf<Log.Record<DebeziumMessage>>())
+        processor: DebeziumProcessor
+    ): Pair<MessageProcessor<DebeziumMessage>, List<DebeziumMessage>> {
+        val received = Collections.synchronizedList(mutableListOf<DebeziumMessage>())
 
-        val capturing = Log.RecordProcessor { records ->
-            processor.processRecords(records)
-            received.addAll(records)
+        val capturing = MessageProcessor<DebeziumMessage> { msgs ->
+            processor.processMessages(msgs)
+            received.addAll(msgs)
         }
         return (capturing to received)
     }

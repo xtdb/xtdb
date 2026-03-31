@@ -74,17 +74,17 @@ class ExternalLogTest {
      * Send records to [channel] to simulate external events arriving.
      */
     class InMemoryExternalLog<M>(
-        val channel: Channel<List<Log.Record<M>>> = Channel(100)
+        val channel: Channel<List<M>> = Channel(100)
     ) : ExternalLog<M> {
 
         override fun tailAll(
             afterToken: ExternalSourceToken?,
-            processor: Log.RecordProcessor<M>
+            processor: ExternalLog.MessageProcessor<M>
         ): Log.Subscription {
             val scope = CoroutineScope(Dispatchers.Default)
             val job = scope.launch {
-                for (records in channel) {
-                    processor.processRecords(records)
+                for (msgs in channel) {
+                    processor.processMessages(msgs)
                 }
             }
             return Log.Subscription { runBlocking { job.cancelAndJoin() } }
@@ -134,13 +134,13 @@ class ExternalLogTest {
         val externalLog = InMemoryExternalLog<String>()
         val processedRecords = mutableListOf<String>()
 
-        val extProc = Log.RecordProcessor<String> { records ->
-            for (record in records) {
-                processedRecords.add(record.message)
+        val extProc = ExternalLog.MessageProcessor<String> { msgs ->
+            for (msg in msgs) {
+                processedRecords.add(msg)
 
                 lp.handleExternalTx(
                     ReplicaMessage.ResolvedTx(
-                        txId = record.logOffset, systemTime = record.logTimestamp,
+                        txId = 0, systemTime = Instant.now(),
                         committed = true, error = null,
                         tableData = emptyMap(),
                     )
@@ -151,11 +151,7 @@ class ExternalLogTest {
         val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
 
         try {
-            val now = Instant.now()
-            externalLog.channel.send(listOf(
-                Log.Record(0, 0, now, "event-1"),
-                Log.Record(0, 1, now, "event-2"),
-            ))
+            externalLog.channel.send(listOf("event-1", "event-2"))
 
             // give the demux coroutine time to process
             Thread.sleep(500)
@@ -176,7 +172,7 @@ class ExternalLogTest {
         val lp = leaderProc(replicaLog = replicaLog, liveIndex = liveIndex)
 
         val externalLog = InMemoryExternalLog<String>()
-        val extProc = Log.RecordProcessor<String> { }
+        val extProc = ExternalLog.MessageProcessor<String> { }
 
         val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
 
@@ -208,12 +204,12 @@ class ExternalLogTest {
         val externalLog = InMemoryExternalLog<String>()
         val events = mutableListOf<String>()
 
-        val extProc = Log.RecordProcessor<String> { records ->
-            for (record in records) {
-                events.add("ext:${record.message}")
+        val extProc = ExternalLog.MessageProcessor<String> { msgs ->
+            for (msg in msgs) {
+                events.add("ext:$msg")
                 lp.handleExternalTx(
                     ReplicaMessage.ResolvedTx(
-                        txId = record.logOffset, systemTime = record.logTimestamp,
+                        txId = 0, systemTime = Instant.now(),
                         committed = true, error = null,
                         tableData = emptyMap(),
                     )
@@ -224,14 +220,12 @@ class ExternalLogTest {
         val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
 
         try {
-            val now = Instant.now()
-
             // send external event
-            externalLog.channel.send(listOf(Log.Record(0, 0, now, "first")))
+            externalLog.channel.send(listOf("first"))
             Thread.sleep(200)
 
             // send another external event
-            externalLog.channel.send(listOf(Log.Record(0, 1, now, "second")))
+            externalLog.channel.send(listOf("second"))
             Thread.sleep(200)
 
             assertEquals(listOf("ext:first", "ext:second"), events)
@@ -313,15 +307,14 @@ class ExternalLogTest {
 
         val externalLog = InMemoryExternalLog<String>()
 
-        val extProc = Log.RecordProcessor<String> {
+        val extProc = ExternalLog.MessageProcessor<String> {
             throw RuntimeException("external processor failed")
         }
 
         val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
 
         try {
-            val now = Instant.now()
-            externalLog.channel.send(listOf(Log.Record(0, 0, now, "boom")))
+            externalLog.channel.send(listOf("boom"))
 
             Thread.sleep(500)
 
