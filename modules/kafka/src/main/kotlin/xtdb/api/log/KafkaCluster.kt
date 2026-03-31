@@ -345,19 +345,19 @@ class KafkaCluster(
             c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
 
             val pollingJob = scope.launch(Dispatchers.IO) {
-                while (isActive) {
-                    val records = c.pollRecords()
-                    if (records.isNotEmpty()) processor.processRecords(records)
+                try {
+                    while (isActive) {
+                        val records = c.pollRecords()
+                        if (records.isNotEmpty()) processor.processRecords(records)
+                    }
+                } finally {
+                    c.close()
                 }
             }
 
             return Log.Subscription {
                 c.wakeup()
-                try {
-                    runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
-                } finally {
-                    c.close()
-                }
+                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
             }
         }
 
@@ -387,19 +387,19 @@ class KafkaCluster(
             })
 
             val pollingJob = scope.launch(Dispatchers.IO) {
-                while (isActive) {
-                    val records = c.pollRecords()
-                    if (records.isNotEmpty()) currentProcessor?.processRecords(records)
+                try {
+                    while (isActive) {
+                        val records = c.pollRecords()
+                        if (records.isNotEmpty()) currentProcessor?.processRecords(records)
+                    }
+                } finally {
+                    c.close()
                 }
             }
 
             return Log.Subscription {
                 c.wakeup()
-                try {
-                    runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
-                } finally {
-                    c.close()
-                }
+                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
             }
         }
 
