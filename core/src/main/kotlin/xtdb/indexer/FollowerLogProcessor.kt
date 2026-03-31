@@ -43,9 +43,22 @@ class FollowerLogProcessor @JvmOverloads constructor(
     override var latestSourceMsgId: MessageId = afterSourceMsgId
         private set
 
-    private val latestSeenReplicaMsgId = MutableStateFlow(afterReplicaMsgId)
+    private sealed interface ReplicaState {
+        data class Active(val msgId: MessageId) : ReplicaState
+        data class Failed(val msgId: MessageId, val exception: Throwable) : ReplicaState
+    }
 
-    override val latestReplicaMsgId: MessageId get() = latestSeenReplicaMsgId.value
+    private val replicaState = MutableStateFlow<ReplicaState>(ReplicaState.Active(afterReplicaMsgId))
+
+    private fun ReplicaState.activeOrThrow(): ReplicaState.Active = when (this) {
+        is ReplicaState.Active -> this
+        is ReplicaState.Failed -> throw exception
+    }
+
+    override val latestReplicaMsgId: MessageId get() = when (val s = replicaState.value) {
+        is ReplicaState.Active -> s.msgId
+        is ReplicaState.Failed -> s.msgId
+    }
 
     private val dbName = dbState.name
     private val blockCatalog = dbState.blockCatalog
@@ -152,6 +165,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         for (record in records) {
             try {
                 handleRecord(record)
+                replicaState.value = ReplicaState.Active(record.msgId)
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
@@ -161,17 +175,16 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     e,
                     "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
+                replicaState.value = ReplicaState.Failed(record.msgId, e)
                 watchers.notifyError(e)
                 throw e
-            } finally {
-                latestSeenReplicaMsgId.value = record.msgId
             }
         }
     }
 
     override suspend fun awaitReplicaMsgId(target: MessageId) {
         LOG.debug("[$dbName] transition: awaiting replica watcher catch-up to $target")
-        latestSeenReplicaMsgId.first { it >= target }
+        replicaState.first { it.activeOrThrow().msgId >= target }
         LOG.debug("[$dbName] transition: replica watchers caught up to $target")
     }
 
