@@ -30,16 +30,27 @@
 (def log-tables
   (-> '{xt/source_log_msgs {msg_id :i64, log_offset :i64,
                             log_timestamp [:timestamp-tz :micro "UTC"],
-                            msg :utf8, tx_ops [:? :utf8]}
+                            msg_type :utf8, msg :utf8, tx_ops [:? :utf8]}
         xt/replica_log_msgs {msg_id :i64, log_offset :i64,
                              log_timestamp [:timestamp-tz :micro "UTC"],
-                             msg :utf8}}
+                             msg_type :utf8, msg :utf8}}
       (update-vals map->vec-types)))
 
 (defn log-table
   "Returns the table schema if this is a log table, nil otherwise."
   [table-ref]
   (get log-tables (table/ref->schema+table table-ref)))
+
+(defn- source-msg-type ^String [^SourceMessage msg]
+  (condp instance? msg
+    SourceMessage$Tx "tx"
+    SourceMessage$FlushBlock "flush-block"
+    SourceMessage$TriesAdded "tries-added"
+    SourceMessage$AttachDatabase "attach-database"
+    SourceMessage$DetachDatabase "detach-database"
+    SourceMessage$BlockUploaded "block-uploaded"
+    SourceMessage$LegacyTx "legacy-tx"
+    "unknown"))
 
 (defn- source-msg->edn [^SourceMessage msg]
   (pr-str
@@ -91,6 +102,15 @@
       (catch Exception e
         (log/warn e "Failed to decode tx-ops from source log message")
         "<error decoding tx-ops>"))))
+
+(defn- replica-msg-type ^String [^ReplicaMessage msg]
+  (condp instance? msg
+    ReplicaMessage$ResolvedTx "resolved-tx"
+    ReplicaMessage$TriesAdded "tries-added"
+    ReplicaMessage$BlockBoundary "block-boundary"
+    ReplicaMessage$BlockUploaded "block-uploaded"
+    ReplicaMessage$NoOp "no-op"
+    "unknown"))
 
 (defn- replica-msg->edn [^ReplicaMessage msg]
   (pr-str
@@ -145,15 +165,18 @@
               {"msg_id" (.getMsgId rec)
                "log_offset" (.getLogOffset rec)
                "log_timestamp" (.getLogTimestamp rec)
+               "msg_type" (source-msg-type msg)
                "msg" (source-msg->edn msg)
                "tx_ops" (when (and decode-tx-ops? (instance? SourceMessage$Tx msg))
                           (decode-tx-ops allocator (.getTxOps ^SourceMessage$Tx msg)))}))
           records)
     (mapv (fn [^Log$Record rec]
-            {"msg_id" (.getMsgId rec)
-             "log_offset" (.getLogOffset rec)
-             "log_timestamp" (.getLogTimestamp rec)
-             "msg" (replica-msg->edn (.getMessage rec))})
+            (let [msg (.getMessage rec)]
+              {"msg_id" (.getMsgId rec)
+               "log_offset" (.getLogOffset rec)
+               "log_timestamp" (.getLogTimestamp rec)
+               "msg_type" (replica-msg-type msg)
+               "msg" (replica-msg->edn msg)}))
           records)))
 
 (defn- emit-batch
