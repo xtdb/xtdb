@@ -8,6 +8,7 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
+            [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -576,16 +577,22 @@
                                                        [op])))
                                          (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
               (if async?
-                (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))]
-                  (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx {:tx-id (.getTxId tx-id)}))
+                (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))
+                      msg-id (.getTxId tx-id)]
+                  (swap! conn-state (fn [cs]
+                                      (-> cs
+                                          (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
+                                          (assoc :latest-submitted-tx {:tx-id msg-id})))))
 
-                (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))]
-                  (swap! conn-state assoc
-                         :await-token (xtp/await-token node),
-                         :latest-submitted-tx {:tx-id (.getTxId tx)
-                                               :system-time (.getSystemTime tx)
-                                               :committed? (.getCommitted tx)
-                                               :error (.getError tx)})
+                (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))
+                      msg-id (.getTxId tx)]
+                  (swap! conn-state (fn [cs]
+                                      (-> cs
+                                          (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
+                                          (assoc :latest-submitted-tx {:tx-id msg-id
+                                                                       :system-time (.getSystemTime tx)
+                                                                       :committed? (.getCommitted tx)
+                                                                       :error (.getError tx)}))))
 
                   (when-let [error (.getError tx)]
                     (throw error)))))))
@@ -1436,8 +1443,11 @@
                           {:db-name db-name})))
 
   (with-auth-check conn
-    (let [{:keys [error] :as tx} (xtp/attach-db node db-name db-config)]
-      (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+    (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
+      (swap! conn-state (fn [cs]
+                          (-> cs
+                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
+                              (assoc :latest-submitted-tx tx))))
 
       (when error
         (throw error)))))
@@ -1452,8 +1462,11 @@
                           {:db-name db-name})))
 
   (with-auth-check conn
-    (let [{:keys [error] :as tx} (xtp/detach-db node db-name)]
-      (swap! conn-state assoc :await-token (xtp/await-token node), :latest-submitted-tx tx)
+    (let [{:keys [tx-id error] :as tx} (xtp/detach-db node db-name)]
+      (swap! conn-state (fn [cs]
+                          (-> cs
+                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
+                              (assoc :latest-submitted-tx tx))))
 
       (when error
         (throw error)))))

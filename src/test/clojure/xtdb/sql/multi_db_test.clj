@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.check-pbuf :as pbuf]
             [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
@@ -270,6 +271,27 @@ ATTACH DATABASE new_db WITH $$
              (pgw-test/reading-ex
               (jdbc/execute! conn ["DETACH DATABASE xtdb"]))))))
 
+(t/deftest await-token-scoped-to-committed-db-5406
+  (with-open [node (xtn/start-node)
+              xtdb-conn (.build (.createConnectionBuilder node))]
 
+    (jdbc/execute! xtdb-conn ["ATTACH DATABASE secondary"])
+
+    (with-open [secondary-conn (.build (-> (.createConnectionBuilder node)
+                                           (.database "secondary")))]
+
+      (t/testing "committing to xtdb only includes xtdb in the await-token"
+        (jdbc/execute! xtdb-conn ["INSERT INTO foo RECORDS {_id: 'xtdb'}"])
+        (t/is (= [{:await-token (basis/->tx-basis-str {"xtdb" [1]})}]
+                 (pgw-test/q xtdb-conn ["SHOW AWAIT_TOKEN"]))))
+
+      (t/testing "committing to secondary only includes secondary in its await-token"
+        (jdbc/execute! secondary-conn ["INSERT INTO bar RECORDS {_id: 'secondary'}"])
+        (t/is (= [{:await-token (basis/->tx-basis-str {"secondary" [0]})}]
+                 (pgw-test/q secondary-conn ["SHOW AWAIT_TOKEN"]))))
+
+      (t/testing "querying xtdb still works regardless of secondary state"
+        (t/is (= [{:xt/id "xtdb"}]
+                 (xt/q xtdb-conn "SELECT * FROM foo")))))))
 
 
