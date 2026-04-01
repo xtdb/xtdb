@@ -117,14 +117,13 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 watchers.notifyMsg(msg.latestProcessedMsgId)
             }
 
-            is ReplicaMessage.BlockUploaded -> {
-                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
-                    addTries(msg.tries, record.logTimestamp)
-                watchers.notifyMsg(msg.latestProcessedMsgId)
-            }
+            is ReplicaMessage.BlockUploaded -> error(
+                "BlockUploaded should be handled by handleRecord, never reaching processRecord directly. msgId=${record.msgId}, blockIndex=${msg.blockIndex.asLexHex}, latestProcessedMsgId=${msg.latestProcessedMsgId}"
+            )
 
             is ReplicaMessage.NoOp -> Unit
         }
+
     }
 
     private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
@@ -141,6 +140,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
                 val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
 
+                addTries(msg.tries, record.logTimestamp)
                 blockCatalog.refresh(block)
                 liveIndex.nextBlock()
                 compactor.signalBlock()
