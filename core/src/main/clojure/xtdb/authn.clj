@@ -11,6 +11,7 @@
                      Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config
                      SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
            (xtdb.query IQuerySource)
+           xtdb.NodeBase
            [java.net URI]
            [java.time Duration Instant InstantSource]))
 
@@ -87,7 +88,7 @@
   (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src db-cat))
 
 (defmethod ig/expand-key :xtdb/authn [k opts]
-  {k (into {:q-src (ig/ref :xtdb.query/query-source)
+  {k (into {:base (ig/ref :xtdb/base)
             :db-cat (ig/ref :xtdb/db-catalog)}
            opts)})
 
@@ -296,7 +297,7 @@
                                                         (->rules-cfg rules))
             instant-src (.instantSource instant-src))))
 
-(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, q-src, db-cat]}]
-  (.open authn-factory q-src db-cat))
+(defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, ^NodeBase base, db-cat]}]
+  (.open authn-factory (.getQuerySource base) db-cat))
 
 (defn <-node ^xtdb.api.Authenticator [node] (:authn node))

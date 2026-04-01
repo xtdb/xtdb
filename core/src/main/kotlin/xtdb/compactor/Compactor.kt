@@ -47,6 +47,10 @@ interface Compactor : AutoCloseable {
         fun availableJobs(trieCatalog: TrieCatalog): Collection<Job>
     }
 
+    fun interface Factory {
+        fun create(meterRegistry: MeterRegistry?, threads: Int): Compactor
+    }
+
     interface ForDatabase : AutoCloseable {
         fun signalBlock()
         suspend fun compactAll()

@@ -12,8 +12,12 @@ import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
+import xtdb.compactor.Compactor
+import xtdb.indexer.Indexer
+import xtdb.query.IQuerySource
 import xtdb.util.closeAll
 import xtdb.util.maxDirectMemory
+import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
 class NodeBase(
@@ -21,15 +25,36 @@ class NodeBase(
     val memoryCache: MemoryCache, val diskCache: DiskCache?,
     val meterRegistry: MeterRegistry?, val tracer: OtelTracer?,
     val logClusters: Map<LogClusterAlias, Log.Cluster>,
+    val compactor: Compactor,
+    val infoSchema: AutoCloseable,
+    val querySource: IQuerySource,
+    val indexerFactory: Indexer.Factory,
 ) : AutoCloseable {
 
     override fun close() {
+        compactor.close()
+        querySource.close()
+        infoSchema.close()
         logClusters.values.closeAll()
         memoryCache.close()
         if (closeAllocator) allocator.close()
     }
 
     companion object {
+        private val compactorFactory by lazy {
+            requiringResolve("xtdb.compactor/->factory").invoke() as Compactor.Factory
+        }
+
+        private val infoSchemaFactory by lazy { requiringResolve("xtdb.information-schema/->info-schema") }
+        private val scanEmitterFactory by lazy { requiringResolve("xtdb.operator.scan/->scan-emitter") }
+        private val querySourceFactory by lazy {
+            requiringResolve("xtdb.query/->factory").invoke() as IQuerySource.Factory
+        }
+
+        private val idxFactory by lazy {
+            requiringResolve("xtdb.indexer/->factory").invoke() as Indexer.Factory
+        }
+
         @JvmStatic
         @JvmOverloads
         @JvmName("open")
@@ -54,6 +79,12 @@ class NodeBase(
 
                 val logClusters = config.logClusters.mapValues { (_, factory) -> open { factory.open() } }
 
+                val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
+
+                val infoSchema = open { infoSchemaFactory.invoke(al, meterReg) as AutoCloseable }
+                val scanEmitter = scanEmitterFactory.invoke(infoSchema)
+                val querySource = open { querySourceFactory.create(al, meterReg, scanEmitter) }
+
                 NodeBase(
                     allocator = al,
                     closeAllocator = externalAllocator == null,
@@ -63,6 +94,10 @@ class NodeBase(
                     meterRegistry = meterReg,
                     tracer = config.tracer.openTracer(),
                     logClusters = logClusters,
+                    compactor = compactor,
+                    infoSchema = infoSchema,
+                    querySource = querySource,
+                    indexerFactory = idxFactory,
                 )
             }
     }

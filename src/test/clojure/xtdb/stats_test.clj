@@ -12,7 +12,7 @@
 
 (deftest test-scan
   (with-open [node (xtn/start-node (assoc tu/*node-opts* :indexer {:rows-per-block 2}))]
-    (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)
+    (let [scan-emitter (:scan-emitter (.getQuerySource (util/node-base node)))
           db-cat (db/<-node node)]
       (xt/submit-tx node [[:put-docs :foo {:xt/id "foo1"}]
                           [:put-docs :bar {:xt/id "bar1"}]])

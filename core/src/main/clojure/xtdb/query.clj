@@ -2,7 +2,6 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig]
             [xtdb.antlr :as antlr]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
@@ -52,7 +51,7 @@
            (xtdb.indexer Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -462,11 +461,6 @@
 
     (util/close allocator)))
 
-(defmethod ig/expand-key ::query-source [k opts]
-  {k (merge opts
-            {:base (ig/ref :xtdb/base)
-             :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)})})
-
 ;; Estimated 400MB max size given large SLT queries, observed during SLT between/10/ run.
 ;; with an inferred value of roughly 100KB per parsed query.
 (defn ->query-source [{:keys [^NodeBase base allocator metrics-registry] :as deps}]
@@ -485,11 +479,12 @@
 
     (map->QuerySource deps)))
 
-(defmethod ig/init-key ::query-source [_ deps]
-  (->query-source deps))
-
-(defmethod ig/halt-key! ::query-source [_ ^AutoCloseable query-source]
-  (.close query-source))
+(defn ->factory ^xtdb.query.IQuerySource$Factory []
+  (reify IQuerySource$Factory
+    (create [_ allocator meter-registry scan-emitter]
+      (->query-source {:allocator allocator
+                       :metrics-registry meter-registry
+                       :scan-emitter scan-emitter}))))
 
 (defn- cache-key-fn [^IKeyFn key-fn]
   (let [cache (HashMap.)]

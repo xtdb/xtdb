@@ -1,7 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [integrant.core :as ig]
             [xtdb.basis :as basis]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
@@ -198,10 +197,6 @@
         (test [_ path]
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
-(defmethod ig/expand-key ::scan-emitter [k opts]
-  {k (merge opts
-            {:info-schema (ig/ref :xtdb/information-schema)})})
-
 (defn scan-vec-types [db-catalog, snaps, scan-cols]
   (letfn [(->vec-type [[^TableRef table col-name]]
             (let [col-name (str col-name)]
@@ -221,7 +216,7 @@
     (->> scan-cols
          (into {} (map (juxt identity ->vec-type))))))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [info-schema]}]
+(defn ->scan-emitter [info-schema]
   (reify IScanEmitter
     (emitScan [_ db-cat {:keys [opts]} scan-vec-types param-types]
       (let [{:keys [^TableRef table columns] :as scan-opts} opts

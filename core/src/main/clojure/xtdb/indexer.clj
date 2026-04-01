@@ -1,7 +1,6 @@
 (ns xtdb.indexer
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.basis :as basis]
@@ -31,7 +30,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            xtdb.NodeBase
            (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedQuery)))
@@ -531,10 +530,6 @@
 (defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t, user-metadata]
   (Indexer/addTxRow live-idx-tx db-name tx-key t user-metadata))
 
-(defmethod ig/expand-key :xtdb/indexer [k opts]
-  {k (merge {:base (ig/ref :xtdb/base)
-             :q-src (ig/ref ::q/query-source)}
-            opts)})
 
 (defn- build-table-data [^LiveIndex$Tx live-idx-tx]
   (let [m (java.util.HashMap.)]
@@ -668,25 +663,26 @@
       (add-tx-row! db-name live-idx-tx tx-key e {})
       (commit tx-key live-idx-tx (nil? e) e))))
 
-(defmethod ig/init-key :xtdb/indexer [_ {:keys [^NodeBase base, q-src]}]
-  (let [config (.getConfig base)
-        metrics-registry (.getMeterRegistry base)
-        ^Tracer tracer (when (.getTransactionTracing (.getTracer config)) (.getTracer base))
-        tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
-                                    {:description "indicates the timing and number of transactions"})
-        tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
-    (reify Indexer
-      (openForDatabase [_ allocator db-storage db-state live-index crash-logger]
-        (let [db-name (.getName db-state)]
-          (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
-            (->IndexerForDatabase allocator (.getNodeId config) q-src
-                                  db-name db-storage db-state
-                                  live-index (.getTableCatalog db-state)
-                                  crash-logger
-                                  tx-timer tx-error-counter tracer))))
+(defn ->factory ^xtdb.indexer.Indexer$Factory []
+  (reify Indexer$Factory
+    (^xtdb.indexer.Indexer
+     create [_ ^NodeBase base]
+      (let [config (.getConfig base)
+            metrics-registry (.getMeterRegistry base)
+            q-src (.getQuerySource base)
+            ^Tracer tracer (when (.getTransactionTracing (.getTracer config)) (.getTracer base))
+            tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
+                                        {:description "indicates the timing and number of transactions"})
+            tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
+        (reify Indexer
+          (openForDatabase [_ allocator db-storage db-state live-index crash-logger]
+            (let [db-name (.getName db-state)]
+              (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
+                (->IndexerForDatabase allocator (.getNodeId config) q-src
+                                      db-name db-storage db-state
+                                      live-index (.getTableCatalog db-state)
+                                      crash-logger
+                                      tx-timer tx-error-counter tracer))))
 
-      (close [_]))))
-
-(defmethod ig/halt-key! :xtdb/indexer [_ indexer]
-  (util/close indexer))
+          (close [_]))))))
 

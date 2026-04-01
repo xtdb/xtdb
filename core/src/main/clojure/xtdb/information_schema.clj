@@ -1,6 +1,5 @@
 (ns xtdb.information-schema
   (:require [clojure.string :as str]
-            [integrant.core :as ig]
             [xtdb.authn.crypt :as authn.crypt]
             [xtdb.block-tables :as block-tables]
             [xtdb.log-tables :as log-tables]
@@ -25,7 +24,6 @@
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
            xtdb.table.TableRef
-           xtdb.NodeBase
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)))
 
 (defn name->oid [s]
@@ -467,13 +465,8 @@
 
   (table-template [info-schema table-ref]))
 
-(defmethod ig/expand-key :xtdb/information-schema [k opts]
-  {k (into {:base (ig/ref :xtdb/base)}
-           opts)})
-
-(defmethod ig/init-key :xtdb/information-schema [_ {:keys [^NodeBase base]}]
-  (let [metrics-registry (.getMeterRegistry base)
-        pg-user (pg-user-template-page+trie (.getAllocator base))]
+(defn ->info-schema [allocator metrics-registry]
+  (let [pg-user (pg-user-template-page+trie allocator)]
     (reify InfoSchema
       (table-template [_ table-ref]
         (when (= 'pg_catalog/pg_user (table/ref->schema+table table-ref))
@@ -542,5 +535,3 @@
       (close [_]
         (util/close (first pg-user))))))
 
-(defmethod ig/halt-key! :xtdb/information-schema [_ info-schema]
-  (util/close info-schema))

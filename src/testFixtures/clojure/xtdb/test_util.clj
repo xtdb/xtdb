@@ -232,7 +232,7 @@
                                          (doto (-> :await-token (as-> token (xt-log/await-node node token nil)))))))
 
          [^IQuerySource q-src close-q-src?] (if node
-                                              [(util/component node ::q/query-source) false]
+                                              [(.getQuerySource (util/node-base node)) false]
                                               [(q/->query-source {:allocator allocator
                                                                   :ref-ctr (RefCounter.)})
                                                true])]

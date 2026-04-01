@@ -96,6 +96,10 @@ interface Indexer : AutoCloseable {
         }
     }
 
+    fun interface Factory {
+        fun create(base: xtdb.NodeBase): Indexer
+    }
+
     fun openForDatabase(
         allocator: BufferAllocator,
         storage: DatabaseStorage,

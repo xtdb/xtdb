@@ -61,16 +61,16 @@ class DatabaseCatalog(
 
     override fun close() {
         databases.values.closeAll()
+        indexer.close()
     }
 
     companion object {
         @JvmStatic
         fun open(
             base: NodeBase,
-            indexer: Indexer,
-            compactor: Compactor,
         ): DatabaseCatalog {
-            val catalog = DatabaseCatalog(base, indexer, compactor)
+            val indexer = base.indexerFactory.create(base)
+            val catalog = DatabaseCatalog(base, indexer, base.compactor)
 
             catalog.closeOnCatch {
                 val conf = base.config

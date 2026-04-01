@@ -2,18 +2,14 @@
   (:require [integrant.core :as ig]
             [xtdb.util :as util])
   (:import xtdb.NodeBase
-           [xtdb.compactor Compactor]
            [xtdb.database Database$Catalog DatabaseCatalog]
-           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]
-           [xtdb.indexer Indexer]))
+           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
-  {k {:base (ig/ref :xtdb/base)
-      :indexer (ig/ref :xtdb/indexer)
-      :compactor (ig/ref :xtdb/compactor)}})
+  {k {:base (ig/ref :xtdb/base)}})
 
-(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base ^Indexer indexer ^Compactor compactor]}]
-  (DatabaseCatalog/open base indexer compactor))
+(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base]}]
+  (DatabaseCatalog/open base))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

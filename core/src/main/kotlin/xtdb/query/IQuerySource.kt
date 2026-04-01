@@ -5,7 +5,7 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.indexer.Snapshot
 
-interface IQuerySource {
+interface IQuerySource : AutoCloseable {
 
     interface QueryCatalog {
         val databaseNames: Collection<DatabaseName>
@@ -18,4 +18,8 @@ interface IQuerySource {
     }
 
     fun prepareQuery(query: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
+
+    fun interface Factory {
+        fun create(allocator: org.apache.arrow.memory.BufferAllocator, meterRegistry: io.micrometer.core.instrument.MeterRegistry?, scanEmitter: Any): IQuerySource
+    }
 }

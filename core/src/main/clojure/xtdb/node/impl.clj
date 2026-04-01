@@ -263,7 +263,6 @@
 
 (defmethod ig/expand-key :xtdb/node [k opts]
   {k (merge {:base (ig/ref :xtdb/base)
-             :q-src (ig/ref :xtdb.query/query-source)
              :db-cat (ig/ref :xtdb/db-catalog)
              :authn (ig/ref :xtdb/authn)}
             opts)})
@@ -273,6 +272,7 @@
         node (map->Node (-> deps
                             (dissoc :base)
                             (assoc :allocator (.getAllocator base)
+                                   :q-src (.getQuerySource base)
                                    :metrics-registry metrics-registry
                                    :default-tz (.getDefaultTz (.getConfig base))
                                    :!await-token (AtomicReference. nil))
@@ -305,11 +305,6 @@
         healthz (.getHealthz opts)]
     (-> {:xtdb/node {}
          :xtdb/base opts
-         :xtdb/indexer {}
-         :xtdb/information-schema {}
-         :xtdb.operator.scan/scan-emitter {}
-         :xtdb.query/query-source {}
-         :xtdb/compactor (.getCompactor opts)
          :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
          :xtdb/garbage-collector (.getGarbageCollector opts)
@@ -347,7 +342,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn open-compactor ^xtdb.api.Xtdb$CompactorNode [opts]
-  (let [system (-> (node-system opts) ig/expand (ig/init [:xtdb/compactor]))]
+  (let [system (-> (node-system opts) ig/expand (ig/init [:xtdb/base]))]
     (try
       (->CompactorNode system (atom false))
       (catch clojure.lang.ExceptionInfo e
