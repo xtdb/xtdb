@@ -169,8 +169,10 @@ class Database(
             }
 
             var processor: AutoCloseable? = null
-            val job = SupervisorJob()
-            val scope = CoroutineScope(job)
+            val job = Job()
+            val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
+                watchers.notifyError(e)
+            })
 
             if (indexerConfig.enabled) {
                 if (singleWriter) {
