@@ -1610,6 +1610,41 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
   (t/testing "bare USER fallback in UNION with column resolution"
     (t/is (= #{{:user "alice"} {:user "xtdb"}}
              (set (xt/q tu/*node* "SELECT user FROM docs UNION ALL SELECT user AS user FROM foo"))))))
+
+(t/deftest test-string-to-array
+  (t/are [s delim expected]
+    (= [{:x expected}] (xt/q tu/*node* (str "SELECT string_to_array(" s ", " delim ") AS x")))
+
+    ;; basic splitting
+    "'a, b, c'"   "','"    ["a" " b" " c"]
+    "'a::b::c'"   "'::'"   ["a" "b" "c"]
+    "'a.b.c.d'"   "'.b.'"  ["a" "c.d"]
+
+    ;; NULL delimiter splits each character
+    "'abc'"       "NULL"   ["a" "b" "c"]
+
+    ;; empty delimiter returns whole string
+    "'abc'"       "''"     ["abc"]
+
+    ;; empty strings between/around delimiters
+    "'a,,b'"      "','"    ["a" "" "b"]
+    "',,'"        "','"    ["" "" ""]
+    "',foo,'"     "','"    ["" "foo" ""]
+    "','"         "','"    ["" ""]
+
+    ;; empty input
+    "''"          "','"    []
+    "''"          "NULL"   []
+    "''"          "''"     []
+
+    ;; regex metacharacters treated literally
+    "'a.*b'"      "'.*'"   ["a" "b"]
+    "'a[b'"       "'['"    ["a" "b"]
+    "'a\\b'"      "E'\\\\'" ["a" "b"]
+
+    ;; greedy consumption
+    "'aaa'"       "'aa'"   ["" "a"]))
+
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
     (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))

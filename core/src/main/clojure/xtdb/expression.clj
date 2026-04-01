@@ -629,7 +629,8 @@
   (complement (comp #{:is_true :is_false :is_null :true? :false? :nil? :boolean
                       :=== :null_eq :compare_nulls_first :compare_nulls_last
                       :distinct_from
-                      :period :str :_patch}
+                      :period :str :_patch
+                      :string_to_array}
                     normalise-fn-name)))
 
 (defn- cont-b3-call [arg-type code]
@@ -1557,6 +1558,42 @@
    :->call-code (fn [[s target replacement]]
                   `(-> (.replace (resolve-string ~s) (resolve-string ~target) (resolve-string ~replacement))
                        (resolve-utf8-buf)))})
+
+(defn- strings->list-reader ^xtdb.arrow.ListValueReader [^objects arr]
+  (let [box (ValueBox.)
+        bufs (object-array (mapv #(resolve-utf8-buf ^String %) arr))]
+    (reify ListValueReader
+      (size [_] (alength bufs))
+      (nth [_ idx]
+        (doto box
+          (.writeBytes (.duplicate ^ByteBuffer (aget bufs idx))))))))
+
+(defn string-to-array ^xtdb.arrow.ListValueReader [^String s ^String delimiter]
+  (if (.isEmpty s)
+    ;; PG returns {} for empty input regardless of delimiter
+    (strings->list-reader (into-array String []))
+    (if (.isEmpty delimiter)
+      (strings->list-reader (into-array String [s]))
+      (let [parts (.split s (java.util.regex.Pattern/quote delimiter) -1)]
+        (strings->list-reader parts)))))
+
+(defn string-to-chars ^xtdb.arrow.ListValueReader [^String s]
+  (if (.isEmpty s)
+    (strings->list-reader (into-array String []))
+    (let [parts (into-array String (mapv str (.toCharArray s)))]
+      (strings->list-reader parts))))
+
+(defmethod codegen-call [:string_to_array :utf8 :utf8] [_]
+  {:return-type #xt/type [:list :utf8]
+   :continue-call (fn [f [s delim]]
+                    (f #xt/type [:list :utf8]
+                       `(string-to-array (resolve-string ~s) (resolve-string ~delim))))})
+
+(defmethod codegen-call [:string_to_array :utf8 :null] [_]
+  {:return-type #xt/type [:list :utf8]
+   :continue-call (fn [f [s _delim]]
+                    (f #xt/type [:list :utf8]
+                       `(string-to-chars (resolve-string ~s))))})
 
 (defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type #xt/type :varbinary
