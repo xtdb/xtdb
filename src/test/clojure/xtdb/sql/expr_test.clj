@@ -1643,7 +1643,11 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     "'a\\b'"      "E'\\\\'" ["a" "b"]
 
     ;; greedy consumption
-    "'aaa'"       "'aa'"   ["" "a"]))
+    "'aaa'"       "'aa'"   ["" "a"]
+
+    ;; NULL string input
+    "NULL"        "','"    nil
+    "NULL"        "NULL"   nil))
 
 ;; TODO: Add this?
 #_(t/deftest test-random-fn

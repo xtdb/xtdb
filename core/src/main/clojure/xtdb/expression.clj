@@ -1595,6 +1595,12 @@
                     (f #xt/type [:list :utf8]
                        `(string-to-chars (resolve-string ~s))))})
 
+(defmethod codegen-call [:string_to_array :null :utf8] [_]
+  {:return-type #xt/type :null, :->call-code (constantly nil)})
+
+(defmethod codegen-call [:string_to_array :null :null] [_]
+  {:return-type #xt/type :null, :->call-code (constantly nil)})
+
 (defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type #xt/type :varbinary
    :->call-code (fn [[target replacement from len]]
