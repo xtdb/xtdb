@@ -1031,7 +1031,11 @@
     "LOCALTIMESTAMP()" '(local-timestamp)
     "LOCALTIMESTAMP(6)" '(local-timestamp 6)))
 
-(t/deftest test-current-setting-server-version-num
+(t/deftest test-current-setting
+  (t/is (= [{:v "public"}]
+           (xt/q tu/*node* "SELECT current_setting('search_path') AS v"))
+        "search_path returns PG-compatible default")
+
   (t/is (= [{:v "160000"}]
            (xt/q tu/*node* "SELECT current_setting('server_version_num') AS v")))
 
