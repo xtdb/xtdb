@@ -1,6 +1,6 @@
 package xtdb.debezium
 
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -359,7 +359,8 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                             "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
@@ -370,6 +371,8 @@ class DebeziumIntegrationTest {
                         while (received.size < 4) delay(100)
 
                         awaitTxs(node, 4)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -418,7 +421,8 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                             "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
@@ -428,6 +432,8 @@ class DebeziumIntegrationTest {
                         // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
                         while (received.size < 4) delay(100)
                         awaitTxs(node, 4)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -475,7 +481,8 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
                             VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
@@ -486,6 +493,8 @@ class DebeziumIntegrationTest {
                         )
 
                         awaitTxs(node, 3)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -540,17 +549,22 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
-                        // Alice (valid) is ingested first
-                        awaitTxs(node, 1)
+                    supervisorScope {
+                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
+                        try {
+                            // Alice (valid) is ingested first
+                            awaitTxs(node, 1)
 
-                        // Now insert a record with _valid_to but no _valid_from — halts ingestion
-                        pgExecute(
-                            """INSERT INTO bad_valid_to (_id, name, _valid_to)
-                            VALUES (2, 'bad', '2025-01-01T00:00:00Z')""",
-                        )
+                            // Now insert a record with _valid_to but no _valid_from — halts ingestion
+                            pgExecute(
+                                """INSERT INTO bad_valid_to (_id, name, _valid_to)
+                                VALUES (2, 'bad', '2025-01-01T00:00:00Z')""",
+                            )
 
-                        log.awaitError()
+                            tailJob.join()
+                        } finally {
+                            tailJob.cancelAndJoin()
+                        }
                     }
                 }
             }
@@ -580,13 +594,18 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
-                        pgExecute(
-                            "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
-                        )
+                    supervisorScope {
+                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
+                        try {
+                            pgExecute(
+                                "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
+                            )
 
-                        // snapshot record lacks _id — processor crashes, no records ingested
-                        log.awaitError()
+                            // snapshot record lacks _id — processor crashes, no records ingested
+                            tailJob.join()
+                        } finally {
+                            tailJob.cancelAndJoin()
+                        }
                     }
                 }
             }
@@ -621,7 +640,8 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
                             VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
@@ -632,6 +652,8 @@ class DebeziumIntegrationTest {
 
                         while (received.size < 2) delay(100)
                         awaitTxs(node, 2)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -681,13 +703,16 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
                         )
 
                         while (received.size < 1) delay(100)
                         awaitTxs(node, 1)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -731,7 +756,8 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
+                    val tailJob = launch { log.tailAll(null, capturing) }
+                    try {
                         pgExecute(
                             "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                         )
@@ -739,6 +765,8 @@ class DebeziumIntegrationTest {
                         // snapshot(Alice) + insert(Bob) = 2 records
                         while (received.size < 2) delay(100)
                         awaitTxs(node, 2, db = "cdc_secondary")
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -853,20 +881,25 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 log.use {
-                    log.tailAll(null, capturing).use {
-                        // TIMESTAMP (no tz) → Debezium sends as Long, not a string
-                        pgExecute(
-                            """INSERT INTO bad_times (_id, name, _valid_from)
-                            VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
-                        )
-                        // TEXT with non-ISO content → string that won't parse
-                        pgExecute(
-                            """INSERT INTO bad_times (_id, name, _valid_to)
-                            VALUES (2, 'bad-string', 'not-a-date')""",
-                        )
+                    supervisorScope {
+                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
+                        try {
+                            // TIMESTAMP (no tz) → Debezium sends as Long, not a string
+                            pgExecute(
+                                """INSERT INTO bad_times (_id, name, _valid_from)
+                                VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
+                            )
+                            // TEXT with non-ISO content → string that won't parse
+                            pgExecute(
+                                """INSERT INTO bad_times (_id, name, _valid_to)
+                                VALUES (2, 'bad-string', 'not-a-date')""",
+                            )
 
-                        // invalid valid time types — processor crashes, no records ingested
-                        log.awaitError()
+                            // invalid valid time types — processor crashes, no records ingested
+                            tailJob.join()
+                        } finally {
+                            tailJob.cancelAndJoin()
+                        }
                     }
                 }
             }
@@ -898,8 +931,11 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 kafkaDebeziumLog.use {
-                    kafkaDebeziumLog.tailAll(null, capturing).use {
+                    val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
+                    try {
                         while (received.size < 1) delay(100)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }
@@ -917,8 +953,11 @@ class DebeziumIntegrationTest {
                 val (capturing, received) = capturingProcessor(processor)
 
                 kafkaDebeziumLog.use {
-                    kafkaDebeziumLog.tailAll(null, capturing).use {
+                    val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
+                    try {
                         while (received.size < 1) delay(100)
+                    } finally {
+                        tailJob.cancelAndJoin()
                     }
                 }
             }

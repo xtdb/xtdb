@@ -3,12 +3,8 @@ package xtdb.database
 import com.google.protobuf.StringValue
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -77,17 +73,13 @@ class ExternalLogTest {
         val channel: Channel<List<M>> = Channel(100)
     ) : ExternalLog<M> {
 
-        override fun tailAll(
+        override suspend fun tailAll(
             afterToken: ExternalSourceToken?,
             processor: ExternalLog.MessageProcessor<M>
-        ): Log.Subscription {
-            val scope = CoroutineScope(Dispatchers.Default)
-            val job = scope.launch {
-                for (msgs in channel) {
-                    processor.processMessages(msgs)
-                }
+        ) {
+            for (msgs in channel) {
+                processor.processMessages(msgs)
             }
-            return Log.Subscription { runBlocking { job.cancelAndJoin() } }
         }
 
         override fun close() {
@@ -113,11 +105,11 @@ class ExternalLogTest {
         assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        val sub = replicaLog.tailAll(-1) { records ->
+        val job = launch { replicaLog.tailAll(-1) { records ->
             replicaMessages.addAll(records.map { it.message })
-        }
-        Thread.sleep(200)
-        sub.close()
+        } }
+        delay(200)
+        job.cancelAndJoin()
 
         assertEquals(1, replicaMessages.size)
         val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
@@ -148,13 +140,13 @@ class ExternalLogTest {
             }
         }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
+        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
 
         try {
             externalLog.channel.send(listOf("event-1", "event-2"))
 
-            // give the demux coroutine time to process
-            Thread.sleep(500)
+            // Demux runs on Dispatchers.Default — real time, not virtual
+            delay(500)
 
             assertEquals(listOf("event-1", "event-2"), processedRecords)
             assertTrue(replicaLog.latestSubmittedOffset >= 1, "replica log should have 2 messages")
@@ -174,7 +166,7 @@ class ExternalLogTest {
         val externalLog = InMemoryExternalLog<String>()
         val extProc = ExternalLog.MessageProcessor<String> { }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
+        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
 
         try {
             val now = Instant.now()
@@ -184,8 +176,8 @@ class ExternalLogTest {
                 Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
             ))
 
-            // give the demux coroutine time to process
-            Thread.sleep(500)
+            // Demux runs on Dispatchers.Default — real time, not virtual
+            delay(500)
 
             // FlushBlock with matching CAS (-1 == no current block) should trigger block finish
             // which writes BlockBoundary + BlockUploaded to replica
@@ -217,26 +209,26 @@ class ExternalLogTest {
             }
         }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
+        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
 
         try {
             // send external event
             externalLog.channel.send(listOf("first"))
-            Thread.sleep(200)
+            delay(200)
 
             // send another external event
             externalLog.channel.send(listOf("second"))
-            Thread.sleep(200)
+            delay(200)
 
             assertEquals(listOf("ext:first", "ext:second"), events)
 
             // replica log should have both external txs
             val replicaMessages = mutableListOf<ReplicaMessage>()
-            val sub = replicaLog.tailAll(-1) { records ->
+            val job = launch { replicaLog.tailAll(-1) { records ->
                 replicaMessages.addAll(records.map { it.message })
-            }
-            Thread.sleep(200)
-            sub.close()
+            } }
+            delay(200)
+            job.cancelAndJoin()
 
             assertEquals(2, replicaMessages.size)
             assertTrue(replicaMessages.all { it is ReplicaMessage.ResolvedTx })
@@ -265,11 +257,11 @@ class ExternalLogTest {
         assertInstanceOf(TransactionAborted::class.java, result)
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        val sub = replicaLog.tailAll(-1) { records ->
+        val job = launch { replicaLog.tailAll(-1) { records ->
             replicaMessages.addAll(records.map { it.message })
-        }
-        Thread.sleep(200)
-        sub.close()
+        } }
+        delay(200)
+        job.cancelAndJoin()
 
         assertEquals(1, replicaMessages.size)
         val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
@@ -311,12 +303,12 @@ class ExternalLogTest {
             throw RuntimeException("external processor failed")
         }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc)
+        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
 
         try {
             externalLog.channel.send(listOf("boom"))
 
-            Thread.sleep(500)
+            delay(500)
 
             assertNotNull(watchers.exception, "watchers should be in failed state")
         } finally {

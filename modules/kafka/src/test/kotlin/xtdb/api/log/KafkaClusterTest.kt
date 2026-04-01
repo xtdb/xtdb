@@ -2,7 +2,9 @@ package xtdb.api.log
 
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -68,7 +70,8 @@ class KafkaClusterTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(-1, subscriber).use { _ ->
+                        val job = launch { log.tailAll(-1, subscriber) }
+                        try {
                             val txPayload = ByteBuffer.allocate(9).put(-1).putLong(42).flip().array()
                             log.appendMessage(SourceMessage.LegacyTx(txPayload))
 
@@ -79,6 +82,8 @@ class KafkaClusterTest {
                             log.appendMessage(SourceMessage.AttachDatabase("foo", databaseConfig))
 
                             while (synchronized(msgs) { msgs.flatten().size } < 4) delay(100)
+                        } finally {
+                            job.cancelAndJoin()
                         }
                     }
             }

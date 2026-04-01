@@ -108,9 +108,9 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
         override fun close() {}
     }
 
-    override fun tailAll(afterMsgId: Long, processor: Log.RecordProcessor<M>): Log.Subscription = error("tailAll")
+    override suspend fun tailAll(afterMsgId: Long, processor: Log.RecordProcessor<M>): Unit = error("tailAll")
 
-    override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription = error("openGroupSubscription")
+    override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Unit = error("openGroupSubscription")
 
     override fun close() = Unit
 }

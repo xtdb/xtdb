@@ -59,7 +59,7 @@ class Database(
     private val watchers: Watchers,
     private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
-    private val subscription: Log.Subscription? = null,
+    private val job: Job? = null,
     private val processor: AutoCloseable? = null,
     private val indexerForDb: Indexer.ForDatabase? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
@@ -104,7 +104,8 @@ class Database(
 
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        listOf(subscription, processor, compactorOrNull, indexerForDb, queryState, storage, allocator).closeAll()
+        job?.let { runBlocking { it.cancelAndJoin() } }
+        listOf(processor, compactorOrNull, indexerForDb, queryState, storage, allocator).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -168,7 +169,10 @@ class Database(
             }
 
             var processor: AutoCloseable? = null
-            var subscription: Log.Subscription? = null
+            val job = Job()
+            val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
+                watchers.notifyError(e)
+            })
 
             if (indexerConfig.enabled) {
                 if (singleWriter) {
@@ -233,11 +237,11 @@ class Database(
                         )
                     }
 
-                    val lp = LogProcessor(procFactory, storage, state, blockUploader, base.meterRegistry)
+                    val lp = LogProcessor(procFactory, storage, state, blockUploader, scope, base.meterRegistry)
                     processor = lp
 
                     if (!readOnly) {
-                        subscription = storage.sourceLog.openGroupSubscription(lp)
+                        scope.launch { storage.sourceLog.openGroupSubscription(lp) }
                     }
                 } else {
                     val srcProc = SourceLogProcessor(
@@ -252,7 +256,7 @@ class Database(
                     processor = srcProc
 
                     val latestProcessedMsgId = blockCatalog.latestProcessedMsgId ?: -1
-                    subscription = storage.sourceLog.tailAll(latestProcessedMsgId, srcProc)
+                    scope.launch { storage.sourceLog.tailAll(latestProcessedMsgId, srcProc) }
                 }
             }
 
@@ -288,7 +292,7 @@ class Database(
                 watchers = watchers,
                 meterRegistry = meterRegistry,
                 compactorOrNull = compactorForDb,
-                subscription = subscription,
+                job = job,
                 processor = processor,
                 indexerForDb = indexerForDb,
                 registeredGauges = gauges,

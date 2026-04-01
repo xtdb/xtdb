@@ -125,10 +125,10 @@ class ReadOnlyLocalLog<M>(
         }
     }
 
-    override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
+    override suspend fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
         val ch = Channel<Log.Record<M>>(100)
 
-        val producerJob = scope.launch(SupervisorJob()) {
+        launch {
             var currentOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
             FileSystems.getDefault().newWatchService().use { watchService ->
@@ -164,28 +164,22 @@ class ReadOnlyLocalLog<M>(
             }
         }
 
-        val consumerJob = scope.launch(SupervisorJob()) {
-            try {
-                while (isActive) {
-                    val msg = withTimeoutOrNull(1.minutes) {
-                        ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
-                    }
-                    if (msg != null) processor.processRecords(listOf(msg))
-                }
-            } finally {
-                producerJob.cancelAndJoin()
+        while (isActive) {
+            val msg = withTimeoutOrNull(1.minutes) {
+                ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
             }
+            if (msg != null) processor.processRecords(listOf(msg))
         }
-
-        return Log.Subscription { runBlocking { withTimeout(5.seconds) { consumerJob.cancelAndJoin() } } }
     }
 
-    override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription {
+    override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
         val spec = listener.onPartitionsAssignedSync(listOf(0))
-        val sub = spec?.let { tailAll(it.afterMsgId, it.processor) }
-        return Subscription {
-            sub?.close()
-            listener.onPartitionsRevokedSync(listOf(0))
+        if (spec != null) {
+            try {
+                tailAll(spec.afterMsgId, spec.processor)
+            } finally {
+                listener.onPartitionsRevokedSync(listOf(0))
+            }
         }
     }
 

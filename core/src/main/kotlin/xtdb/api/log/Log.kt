@@ -167,8 +167,8 @@ interface Log<M> : AutoCloseable {
      */
     fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
 
-    fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription
-    fun openGroupSubscription(listener: SubscriptionListener<M>): Subscription
+    suspend fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>)
+    suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
 
     interface SubscriptionListener<M> {
         suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<M>?

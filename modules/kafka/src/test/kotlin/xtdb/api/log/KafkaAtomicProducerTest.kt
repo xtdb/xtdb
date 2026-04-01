@@ -2,7 +2,9 @@ package xtdb.api.log
 
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -61,7 +63,8 @@ class KafkaAtomicProducerTest {
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
-                        log.tailAll(-1, subscriber).use {
+                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        try {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.withTx { tx ->
                                     tx.appendMessage(txMessage(1))
@@ -70,6 +73,8 @@ class KafkaAtomicProducerTest {
                             }
 
                             while (synchronized(msgs) { msgs.flatten().size } < 2) delay(100)
+                        } finally {
+                            tailJob.cancelAndJoin()
                         }
                     }
             }
@@ -102,7 +107,8 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(-1, subscriber).use {
+                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        try {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 // Abort this transaction
                                 producer.openTx().use { tx ->
@@ -121,6 +127,8 @@ class KafkaAtomicProducerTest {
 
                             // Give extra time to ensure no more messages arrive
                             delay(500)
+                        } finally {
+                            tailJob.cancelAndJoin()
                         }
                     }
             }
@@ -149,7 +157,8 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(-1, subscriber).use {
+                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        try {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.withTx { tx -> tx.appendMessage(txMessage(1)) }
                                 producer.withTx { tx ->
@@ -160,6 +169,8 @@ class KafkaAtomicProducerTest {
                             }
 
                             while (synchronized(msgs) { msgs.flatten().size } < 4) delay(100)
+                        } finally {
+                            tailJob.cancelAndJoin()
                         }
                     }
             }
@@ -186,7 +197,8 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        log.tailAll(-1, subscriber).use {
+                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        try {
                             log.openAtomicProducer("tx-producer-1").use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
@@ -200,6 +212,8 @@ class KafkaAtomicProducerTest {
                             }
 
                             while (synchronized(msgs) { msgs.flatten().size } < 1) delay(100)
+                        } finally {
+                            tailJob.cancelAndJoin()
                         }
                     }
             }
@@ -250,7 +264,8 @@ class KafkaAtomicProducerTest {
                 .open().use { cluster ->
                     KafkaCluster.LogFactory("my-cluster", outputTopic)
                         .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
-                            log.tailAll(-1, subscriber).use {
+                            val tailJob = launch { log.tailAll(-1, subscriber) }
+                            try {
                                 (log.openAtomicProducer("tx-producer-1") as KafkaCluster.AtomicProducer).use { producer ->
                                     producer.openTx().use { tx ->
                                         tx.appendMessage(txMessage(1))
@@ -260,6 +275,8 @@ class KafkaAtomicProducerTest {
                                 }
 
                                 while (synchronized(msgs) { msgs.flatten().size } < 1) delay(100)
+                            } finally {
+                                tailJob.cancelAndJoin()
                             }
                         }
                 }

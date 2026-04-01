@@ -1,12 +1,13 @@
 package xtdb.debezium
 
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
+import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -82,9 +83,9 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber).use {
-                while (received.isEmpty()) delay(100)
-            }
+            val job = launch { log.tailAll(null, subscriber) }
+            while (received.isEmpty()) delay(100)
+            job.cancelAndJoin()
             // Subscription closed — produce more messages
             produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
             delay(500)
@@ -109,21 +110,20 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
 
-        val subscription = log.tailAll(null, subscriber)
+        val job = launch { log.tailAll(null, subscriber) }
         while (received.isEmpty()) delay(100)
 
         assertEquals(1, received.size, "Should have received Alice before closing")
 
-        // Close log directly (not via subscription) — should cancel the poll coroutine
+        // Close log directly — should not affect the tailAll job (caller owns lifecycle)
+        // Cancel the job to stop processing
+        job.cancelAndJoin()
         log.close()
 
         produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
         delay(500)
 
-        assertEquals(1, received.size, "Should not receive messages after log close")
-
-        // Closing subscription after log close should not throw
-        subscription.close()
+        assertEquals(1, received.size, "Should not receive messages after close")
     }
 
     @Test
@@ -136,9 +136,12 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber).use {
+            val tailJob = launch { log.tailAll(null, subscriber) }
+            try {
                 while (received.isEmpty()) delay(100)
                 delay(500)
+            } finally {
+                tailJob.cancelAndJoin()
             }
         }
 
@@ -169,9 +172,12 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(token, subscriber).use {
+            val tailJob = launch { log.tailAll(token, subscriber) }
+            try {
                 while (received.isEmpty()) delay(100)
                 delay(500)
+            } finally {
+                tailJob.cancelAndJoin()
             }
         }
 
@@ -198,9 +204,12 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber).use {
+            val tailJob = launch { log.tailAll(null, subscriber) }
+            try {
                 while (received.isEmpty()) delay(100)
                 delay(500) // give time — should not receive additional messages
+            } finally {
+                tailJob.cancelAndJoin()
             }
         }
 
@@ -229,8 +238,11 @@ class KafkaDebeziumLogTest {
         val (subscriber, received) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber).use {
+            val tailJob = launch { log.tailAll(null, subscriber) }
+            try {
                 while (received.sumOf { it.ops.size } < 3) delay(100)
+            } finally {
+                tailJob.cancelAndJoin()
             }
         }
 
@@ -248,9 +260,7 @@ class KafkaDebeziumLogTest {
         val (subscriber, _) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber)
-            val error = log.awaitError()
-            assertTrue(error is Exception, "Expected an exception from invalid JSON")
+            assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }
     }
 
@@ -265,9 +275,7 @@ class KafkaDebeziumLogTest {
         val (subscriber, _) = capturingProcessor()
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
-            log.tailAll(null, subscriber)
-            val error = log.awaitError()
-            assertTrue(error is Exception)
+            assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }
     }
 }

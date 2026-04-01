@@ -3,8 +3,11 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.apache.arrow.memory.RootAllocator
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.api.log.InMemoryLog
@@ -175,12 +178,12 @@ class LeaderLogProcessorTest {
         ))
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        val sub = replicaLog.tailAll(-1) { records ->
+        val job = launch { replicaLog.tailAll(-1) { records ->
             replicaMessages.addAll(records.map { it.message })
-        }
+        } }
 
-        Thread.sleep(200)
-        sub.close()
+        delay(200)
+        job.cancelAndJoin()
 
         assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
         assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)

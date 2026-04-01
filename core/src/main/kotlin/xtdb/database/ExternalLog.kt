@@ -5,11 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.selects.selectUnbiased
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -21,14 +18,13 @@ import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LogProcessor.LeaderProcessor
 import java.util.*
 import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 typealias ExternalSourceToken = ProtoAny
 
 interface ExternalLog<M> : AutoCloseable {
 
-    fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<M>): Log.Subscription
+    suspend fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<M>)
 
     fun interface MessageProcessor<M> {
         suspend fun processMessages(msgs: List<M>)
@@ -78,8 +74,12 @@ interface ExternalLog<M> : AutoCloseable {
         private val externalCh = Channel<List<M>>()
         private val sourceCh = Channel<List<Log.Record<SourceMessage>>>()
 
-        private val job = CoroutineScope(ctx).launch {
+        private val scope = CoroutineScope(ctx)
+
+        private val job = scope.launch {
             try {
+                launch { externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) } }
+
                 while (true) {
                     selectUnbiased {
                         externalCh.onReceive { externalProc.processMessages(it) }
@@ -97,17 +97,14 @@ interface ExternalLog<M> : AutoCloseable {
             }
         }
 
-        private val externalSub = externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) }
-
         override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
             sourceCh.send(records)
         }
 
         override fun close() {
-            externalSub.close()
             sourceCh.close()
             externalCh.close()
-            runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } }
+            job.cancel()
         }
     }
 }

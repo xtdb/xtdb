@@ -338,68 +338,54 @@ class KafkaCluster(
                 throw InterruptedException().initCause(e)
             }
 
-        override fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>): Log.Subscription {
+        override suspend fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
             val c = kafkaConfigMap.openConsumer()
-            val tp = TopicPartition(topic, 0)
-            c.assign(listOf(tp))
-            c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
+            try {
+                val tp = TopicPartition(topic, 0)
+                c.assign(listOf(tp))
+                c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
 
-            val pollingJob = scope.launch(Dispatchers.IO) {
-                try {
-                    while (isActive) {
-                        val records = c.pollRecords()
-                        if (records.isNotEmpty()) processor.processRecords(records)
-                    }
-                } finally {
-                    c.close()
+                while (isActive) {
+                    val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
+                    if (records.isNotEmpty()) processor.processRecords(records)
                 }
-            }
-
-            return Log.Subscription {
-                c.wakeup()
-                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+            } finally {
+                c.close()
             }
         }
 
-        override fun openGroupSubscription(listener: Log.SubscriptionListener<M>): Log.Subscription {
+        override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) = coroutineScope {
             val c = kafkaConfigMap.plus(mapOf("group.id" to groupId)).openConsumer()
-            val tp = TopicPartition(topic, 0)
-            var currentProcessor: Log.RecordProcessor<M>? = null
+            try {
+                val tp = TopicPartition(topic, 0)
+                var currentProcessor: Log.RecordProcessor<M>? = null
 
-            c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
-                private inline fun launderInterruptedException(block: () -> Unit) =
-                    try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
+                c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
+                    private inline fun launderInterruptedException(block: () -> Unit) =
+                        try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
 
-                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
-                    launderInterruptedException {
-                        listener.onPartitionsAssignedSync(partitions.map { it.partition() })
-                            ?.let { tailSpec ->
-                                currentProcessor = tailSpec.processor
-                                c.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
-                            }
-                    }
+                    override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                        launderInterruptedException {
+                            listener.onPartitionsAssignedSync(partitions.map { it.partition() })
+                                ?.let { tailSpec ->
+                                    currentProcessor = tailSpec.processor
+                                    c.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
+                                }
+                        }
 
-                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                    launderInterruptedException {
-                        listener.onPartitionsRevokedSync(partitions.map { it.partition() })
-                        currentProcessor = null
-                    }
-            })
+                    override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                        launderInterruptedException {
+                            listener.onPartitionsRevokedSync(partitions.map { it.partition() })
+                            currentProcessor = null
+                        }
+                })
 
-            val pollingJob = scope.launch(Dispatchers.IO) {
-                try {
-                    while (isActive) {
-                        val records = c.pollRecords()
-                        if (records.isNotEmpty()) currentProcessor?.processRecords(records)
-                    }
-                } finally {
-                    c.close()
+                while (isActive) {
+                    val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
+                    if (records.isNotEmpty()) currentProcessor?.processRecords(records)
                 }
-            }
-
-            return Log.Subscription {
-                c.wakeup()
-                runBlocking { withTimeout(30.seconds) { pollingJob.cancelAndJoin() } }
+            } finally {
+                c.close()
             }
         }
 

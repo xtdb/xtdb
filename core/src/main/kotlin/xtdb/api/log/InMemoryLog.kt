@@ -55,8 +55,6 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
-    private val subscriberScope = scope + SupervisorJob(scope.coroutineContext.job)
-
     internal data class NewMessage<M>(
         val message: M,
         val onCommit: CompletableDeferred<MessageMetadata>
@@ -135,43 +133,41 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
-    override fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>): Subscription {
+    override suspend fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>) = coroutineScope {
         var latestCompletedOffset = MsgIdUtil.afterMsgIdToOffset(epoch, afterMsgId)
 
-        val job = subscriberScope.launch {
-            val ch = committedCh
-                .filter {
-                    val logOffset = it.logOffset
-                    check(logOffset <= latestCompletedOffset + 1) {
-                        "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
-                    }
-                    logOffset > latestCompletedOffset
+        val ch = committedCh
+            .filter {
+                val logOffset = it.logOffset
+                check(logOffset <= latestCompletedOffset + 1) {
+                    "InMemoryLog emitted out-of-order record (expected ${latestCompletedOffset + 1}, got $logOffset)"
                 }
-                .onEach { latestCompletedOffset = it.logOffset }
-                .buffer(100)
-                .produceIn(this)
-
-            while (isActive) {
-                val records = select {
-                    ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
-
-                    @OptIn(ExperimentalCoroutinesApi::class)
-                    onTimeout(1.minutes) { emptyList() }
-                }
-
-                processor.processRecords(records)
+                logOffset > latestCompletedOffset
             }
-        }
+            .onEach { latestCompletedOffset = it.logOffset }
+            .buffer(100)
+            .produceIn(this)
 
-        return Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
+        while (isActive) {
+            val records = select {
+                ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
+
+                @OptIn(ExperimentalCoroutinesApi::class)
+                onTimeout(1.minutes) { emptyList() }
+            }
+
+            processor.processRecords(records)
+        }
     }
 
-    override fun openGroupSubscription(listener: SubscriptionListener<M>): Subscription {
+    override suspend fun openGroupSubscription(listener: SubscriptionListener<M>) {
         val spec = listener.onPartitionsAssignedSync(listOf(0))
-        val sub = spec?.let { tailAll(it.afterMsgId, it.processor) }
-        return Subscription {
-            sub?.close()
-            listener.onPartitionsRevokedSync(listOf(0))
+        if (spec != null) {
+            try {
+                tailAll(spec.afterMsgId, spec.processor)
+            } finally {
+                listener.onPartitionsRevokedSync(listOf(0))
+            }
         }
     }
 

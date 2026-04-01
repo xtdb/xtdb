@@ -17,16 +17,14 @@ import xtdb.api.log.ensureTopicExists
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.ExternalLog
 import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.database.ExternalSourceToken
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.KafkaDebeziumLogConfig
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.kafkaDebeziumLogConfig
 import xtdb.debezium.proto.partitionOffsets
-import xtdb.database.ExternalSourceToken
 import java.time.Duration
 import java.time.Instant
-import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.seconds
 
 private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
 
@@ -36,7 +34,6 @@ class KafkaDebeziumLog @JvmOverloads constructor(
     private val topic: String,
     private val groupId: String,
     private val pollDuration: Duration = Duration.ofSeconds(1),
-    coroutineContext: CoroutineContext = Dispatchers.Default,
 ) : DebeziumLog {
 
     object UnitDeserializer : Deserializer<Unit> {
@@ -76,97 +73,80 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         }
     }
 
-    private val _error = CompletableDeferred<Throwable>()
-    val error: Throwable? get() = if (_error.isCompleted) _error.getCompleted() else null
-    suspend fun awaitError(): Throwable = _error.await()
-
-    // TODO: non-deterministic failures (e.g. node down) currently kill this coroutine silently.
-    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        LOG.error("Fatal error in CDC ingestion — ingestion has stopped", throwable)
-        _error.complete(throwable)
-    }
-
-    private val scope = CoroutineScope(SupervisorJob() + coroutineContext + exceptionHandler)
     val epoch: Int get() = 0
 
-    override fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<DebeziumMessage>): Log.Subscription {
-        val job = scope.launch {
-            KafkaConsumer(
-                kafkaConfig.plus(
-                    mapOf(
-                        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
-                        ConsumerConfig.GROUP_ID_CONFIG to groupId,
-                        ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
-                        ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
-                    )
-                ),
-                UnitDeserializer,
-                ByteArrayDeserializer()
-            ).use { c ->
-                val partitionOffsets = afterToken?.let { tok ->
-                    val token = tok.unpack(DebeziumOffsetToken::class.java)
-                    token.dbzmTopicOffsetsMap[topic]?.offsetsList
-                        ?.mapIndexedNotNull { partition, offset ->
-                            if (offset >= 0) TopicPartition(topic, partition) to offset else null
-                        }
-                        ?.takeIf { it.isNotEmpty() }
+    override suspend fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<DebeziumMessage>) {
+        KafkaConsumer(
+            kafkaConfig.plus(
+                mapOf(
+                    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
+                    ConsumerConfig.GROUP_ID_CONFIG to groupId,
+                    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "earliest",
+                    ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
+                )
+            ),
+            UnitDeserializer,
+            ByteArrayDeserializer()
+        ).use { c ->
+            val partitionOffsets = afterToken?.let { tok ->
+                val token = tok.unpack(DebeziumOffsetToken::class.java)
+                token.dbzmTopicOffsetsMap[topic]?.offsetsList
+                    ?.mapIndexedNotNull { partition, offset ->
+                        if (offset >= 0) TopicPartition(topic, partition) to offset else null
+                    }
+                    ?.takeIf { it.isNotEmpty() }
+            }
+
+            if (partitionOffsets != null) {
+                c.assign(partitionOffsets.map { it.first })
+                partitionOffsets.forEach { (tp, offset) -> c.seek(tp, offset + 1) }
+            } else {
+                c.subscribe(listOf(topic))
+            }
+
+            while (currentCoroutineContext().isActive) {
+                val records = runInterruptible(Dispatchers.IO) {
+                    try {
+                        c.poll(pollDuration)
+                    } catch (_: InterruptException) {
+                        throw InterruptedException()
+                    }
                 }
 
-                if (partitionOffsets != null) {
-                    c.assign(partitionOffsets.map { it.first })
-                    partitionOffsets.forEach { (tp, offset) -> c.seek(tp, offset + 1) }
-                } else {
-                    c.subscribe(listOf(topic))
-                }
+                if (!records.isEmpty()) {
+                    val ops = mutableListOf<CdcEvent>()
+                    var maxOffset = -1L
+                    var latestTimestamp = Instant.EPOCH
 
-                while (isActive) {
-                    val records = runInterruptible(Dispatchers.IO) {
-                        try {
-                            c.poll(pollDuration)
-                        } catch (_: InterruptException) {
-                            throw InterruptedException()
-                        }
+                    for (consumerRecord in records) {
+                        maxOffset = maxOf(maxOffset, consumerRecord.offset())
+                        latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
+                        val value = consumerRecord.value() ?: continue
+                        ops.add(CdcEvent.fromJson(value))
                     }
 
-                    if (!records.isEmpty()) {
-                        val ops = mutableListOf<CdcEvent>()
-                        var maxOffset = -1L
-                        var latestTimestamp = Instant.EPOCH
-
-                        for (consumerRecord in records) {
-                            maxOffset = maxOf(maxOffset, consumerRecord.offset())
-                            latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
-                            val value = consumerRecord.value() ?: continue
-                            ops.add(CdcEvent.fromJson(value))
+                    val offsets = debeziumOffsetToken {
+                        dbzmTopicOffsets[topic] = partitionOffsets {
+                            offsets += listOf(maxOffset)
                         }
-
-                        val offsets = debeziumOffsetToken {
-                            dbzmTopicOffsets[topic] = partitionOffsets {
-                                offsets += listOf(maxOffset)
-                            }
-                        }
-                        processor.processMessages(listOf(
-                            DebeziumMessage(
-                                maxOffset,
-                                latestTimestamp,
-                                ops,
-                                offsets,
-                                // TODO: groupMetadata captured at poll-time may become stale if a rebalance
-                                //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
-                                //  Acceptable for single-consumer setups; no data loss (transaction aborts).
-                                c.groupMetadata(),
-                            )
-                        ))
                     }
-
+                    processor.processMessages(listOf(
+                        DebeziumMessage(
+                            maxOffset,
+                            latestTimestamp,
+                            ops,
+                            offsets,
+                            // TODO: groupMetadata captured at poll-time may become stale if a rebalance
+                            //  occurs before sendOffsetsToTransaction — would cause ProducerFencedException.
+                            //  Acceptable for single-consumer setups; no data loss (transaction aborts).
+                            c.groupMetadata(),
+                        )
+                    ))
                 }
             }
         }
-
-        return Log.Subscription { runBlocking { withTimeout(5.seconds) { job.cancelAndJoin() } } }
     }
 
     override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 }
