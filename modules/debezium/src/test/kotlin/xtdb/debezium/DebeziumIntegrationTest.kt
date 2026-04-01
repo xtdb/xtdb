@@ -223,7 +223,7 @@ class DebeziumIntegrationTest {
                     val value = record.value() ?: continue
                     messages.add(Json.parseToJsonElement(value).jsonObject)
                 }
-                delay(100)
+                runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             }
 
             assertEquals(expected, messages.size, "Expected $expected CDC messages on $topic, got ${messages.size}")
@@ -368,7 +368,7 @@ class DebeziumIntegrationTest {
                         )
 
                         // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                        while (received.size < 4) delay(100)
+                        while (received.size < 4) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
 
                         awaitTxs(node, 4)
                     } finally {
@@ -430,7 +430,7 @@ class DebeziumIntegrationTest {
                         )
 
                         // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                        while (received.size < 4) delay(100)
+                        while (received.size < 4) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                         awaitTxs(node, 4)
                     } finally {
                         tailJob.cancelAndJoin()
@@ -650,7 +650,7 @@ class DebeziumIntegrationTest {
                             VALUES (2, 'Bob', NULL, false, NULL, NULL, 'some notes')""",
                         )
 
-                        while (received.size < 2) delay(100)
+                        while (received.size < 2) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                         awaitTxs(node, 2)
                     } finally {
                         tailJob.cancelAndJoin()
@@ -709,7 +709,7 @@ class DebeziumIntegrationTest {
                             "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
                         )
 
-                        while (received.size < 1) delay(100)
+                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                         awaitTxs(node, 1)
                     } finally {
                         tailJob.cancelAndJoin()
@@ -763,7 +763,7 @@ class DebeziumIntegrationTest {
                         )
 
                         // snapshot(Alice) + insert(Bob) = 2 records
-                        while (received.size < 2) delay(100)
+                        while (received.size < 2) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                         awaitTxs(node, 2, db = "cdc_secondary")
                     } finally {
                         tailJob.cancelAndJoin()
@@ -933,7 +933,7 @@ class DebeziumIntegrationTest {
                 kafkaDebeziumLog.use {
                     val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
                     try {
-                        while (received.size < 1) delay(100)
+                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                     } finally {
                         tailJob.cancelAndJoin()
                     }
@@ -955,7 +955,7 @@ class DebeziumIntegrationTest {
                 kafkaDebeziumLog.use {
                     val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
                     try {
-                        while (received.size < 1) delay(100)
+                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                     } finally {
                         tailJob.cancelAndJoin()
                     }

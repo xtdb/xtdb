@@ -84,11 +84,11 @@ class KafkaDebeziumLogTest {
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
         log.use {
             val job = launch { log.tailAll(null, subscriber) }
-            while (received.isEmpty()) delay(100)
+            while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             job.cancelAndJoin()
             // Subscription closed — produce more messages
             produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
-            delay(500)
+            runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
         }
 
         // Should only have the first message — subscription was closed before Bob
@@ -111,7 +111,7 @@ class KafkaDebeziumLogTest {
         val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
 
         val job = launch { log.tailAll(null, subscriber) }
-        while (received.isEmpty()) delay(100)
+        while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
 
         assertEquals(1, received.size, "Should have received Alice before closing")
 
@@ -121,7 +121,7 @@ class KafkaDebeziumLogTest {
         log.close()
 
         produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
-        delay(500)
+        runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
 
         assertEquals(1, received.size, "Should not receive messages after close")
     }
@@ -138,8 +138,8 @@ class KafkaDebeziumLogTest {
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
-                while (received.isEmpty()) delay(100)
-                delay(500)
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+                runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
             } finally {
                 tailJob.cancelAndJoin()
             }
@@ -174,8 +174,8 @@ class KafkaDebeziumLogTest {
         log.use {
             val tailJob = launch { log.tailAll(token, subscriber) }
             try {
-                while (received.isEmpty()) delay(100)
-                delay(500)
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+                runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
             } finally {
                 tailJob.cancelAndJoin()
             }
@@ -206,8 +206,8 @@ class KafkaDebeziumLogTest {
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
-                while (received.isEmpty()) delay(100)
-                delay(500) // give time — should not receive additional messages
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+                runInterruptible(Dispatchers.IO) { Thread.sleep(500) } // give time — should not receive additional messages
             } finally {
                 tailJob.cancelAndJoin()
             }
@@ -240,7 +240,7 @@ class KafkaDebeziumLogTest {
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
-                while (received.sumOf { it.ops.size } < 3) delay(100)
+                while (received.sumOf { it.ops.size } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
                 tailJob.cancelAndJoin()
             }
