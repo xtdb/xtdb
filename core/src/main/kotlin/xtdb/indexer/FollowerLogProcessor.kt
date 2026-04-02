@@ -62,6 +62,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private val dbName = dbState.name
     private val blockCatalog = dbState.blockCatalog
+    private val tableCatalog = dbState.tableCatalog
     private val trieCatalog = dbState.trieCatalog
     private val liveIndex = dbState.liveIndex
 
@@ -142,6 +143,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 addTries(msg.tries, record.logTimestamp)
                 blockCatalog.refresh(block)
+                tableCatalog.updateFromBlockMetadata(liveIndex.blockMetadata())
                 liveIndex.nextBlock()
                 compactor.signalBlock()
 

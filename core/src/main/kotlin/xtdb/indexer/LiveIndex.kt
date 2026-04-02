@@ -176,6 +176,9 @@ class LiveIndex private constructor(
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
 
+    fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
+        tables.mapNotNull { (table, lt) -> lt.blockMetadata()?.let { table to it } }.toMap()
+
     fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) = tables.finishBlock(bp, blockIdx)
 
     private val skipTxsLogged = AtomicBoolean(false)

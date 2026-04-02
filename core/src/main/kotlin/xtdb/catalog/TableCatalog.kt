@@ -59,6 +59,22 @@ class TableCatalog(
         )
     }
 
+    fun updateFromBlockMetadata(metadata: Map<TableRef, LiveTable.BlockMetadata>) {
+        val oldTables = state.tables
+
+        val deltaByTable = metadata.mapValues { (_, bm) ->
+            TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas)
+        }
+
+        val allTableRefs = oldTables.keys + deltaByTable.keys
+        val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
+
+        state = State(
+            blockIdx = blockCatalog.currentBlockIndex,
+            tables = newTables
+        )
+    }
+
     fun finishBlock(
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
