@@ -3228,11 +3228,11 @@
       (->QueryExpr [:table {:rows [(into {} arg-row)]}]
                    (vec (keys arg-row))))))
 
-(defn xform-table-info [table-info default-db]
+(defn xform-table-info [table-info db-names default-db]
   ;; this fn turned up in a profiler the last time I checked, particularly for low-latency queries.
   ;; plenty happening here that can be cached.
   (into {}
-        (for [[table cns] (concat (info-schema/table-info default-db) table-info)]
+        (for [[table cns] (concat (info-schema/table-info db-names) table-info)]
           [table (->> cns
                       (map ->col-sym)
                       (sort-by identity (fn [s1 s2]
@@ -3247,9 +3247,9 @@
       (.maximumSize 4096)
       (.build)))
 
-(defn- ->table-chains [table-refs default-db]
+(defn- ->table-chains [table-refs db-names default-db]
   ;; I suspect this'll light up a profiler too?
-  (-> (into (info-schema/table-chains default-db)
+  (-> (into (info-schema/table-chains db-names default-db)
             (mapcat (fn [table]
                       (.get table-chains-cache [table default-db]
                             (fn [[^TableRef table default-db]]
@@ -3273,14 +3273,15 @@
 
 (defn ->env
   ([] (->env {}))
-  ([{:keys [table-info default-db], :or {default-db "xtdb"}}]
-   {:!errors (atom [])
-    :!warnings (atom [])
-    :!id-count (atom 0)
-    :!param-count (atom 0)
-    :default-db default-db
-    :table-info (xform-table-info table-info default-db)
-    :table-chains (->table-chains (keys table-info) default-db)}))
+  ([{:keys [table-info default-db db-names], :or {default-db "xtdb"}}]
+   (let [db-names (or db-names [default-db])]
+     {:!errors (atom [])
+      :!warnings (atom [])
+      :!id-count (atom 0)
+      :!param-count (atom 0)
+      :default-db default-db
+      :table-info (xform-table-info table-info db-names default-db)
+      :table-chains (->table-chains (keys table-info) db-names default-db)})))
 
 (defprotocol PlanExpr
   (-plan-expr [sql opts]))
@@ -3324,9 +3325,10 @@
         (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-query [ctx {:keys [default-db scope table-info arg-fields]
+  (-plan-query [ctx {:keys [default-db scope table-info db-names arg-fields]
                      :or {default-db "xtdb"}}]
-    (let [!errors (atom [])
+    (let [db-names (or db-names [default-db])
+          !errors (atom [])
           !warnings (atom [])
           !param-count (atom 0)
           env {:default-db default-db
@@ -3334,8 +3336,8 @@
                :!warnings !warnings
                :!id-count (atom 0)
                :!param-count !param-count
-               :table-info (xform-table-info table-info default-db)
-               :table-chains (->table-chains (keys table-info) default-db)
+               :table-info (xform-table-info table-info db-names default-db)
+               :table-chains (->table-chains (keys table-info) db-names default-db)
                ;; NOTE this may not necessarily be provided
                ;; we get it through SQL DML, which is the main case we need it for #3656
                :arg-fields arg-fields}

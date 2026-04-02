@@ -138,10 +138,11 @@
         (.maximumSize 1024)
         (.build)))
 
-  (defn table-info [default-db]
-    (.get table-info-cache default-db
-          (fn [db-name]
-            (->> (for [[table fields] (merge derived-tables template-tables)]
+  (defn table-info [db-names]
+    (.get table-info-cache (into (sorted-set) db-names)
+          (fn [db-names]
+            (->> (for [db-name db-names
+                       [table fields] (merge derived-tables template-tables)]
                    [(table/->ref db-name table) (set (keys fields))])
                  (into {})))))
 
@@ -150,18 +151,20 @@
         (.maximumSize 1024)
         (.build)))
 
-  (defn table-chains [default-db]
-    (.get table-chains-cache default-db
-          (fn [db-name]
-            (->> (keys (table-info db-name))
-                 (into [] (mapcat (fn [^TableRef table]
-                                    (let [db-name (symbol (.getDbName table))
-                                          schema-name (symbol (.getSchemaName table))
-                                          table-name (symbol (.getTableName table))]
-                                      (cond-> [[[db-name schema-name table-name] table]
-                                               [[schema-name table-name] table]]
-                                        (= 'pg_catalog schema-name) (conj [[table-name] table]))))))))))
-
+  (defn table-chains [db-names default-db]
+    (.get table-chains-cache [(into (sorted-set) db-names) default-db]
+          (fn [[db-names default-db]]
+            (->> (for [db-name db-names
+                       [table fields] (merge derived-tables template-tables)
+                       :let [^TableRef table-ref (table/->ref db-name table)
+                             db-sym (symbol db-name)
+                             schema-name (symbol (.getSchemaName table-ref))
+                             table-name (symbol (.getTableName table-ref))
+                             default? (= db-name default-db)]]
+                   (cond-> [[[db-sym schema-name table-name] table-ref]]
+                     default? (conj [[schema-name table-name] table-ref])
+                     (and default? (= 'pg_catalog schema-name)) (conj [[table-name] table-ref])))
+                 (into [] cat)))))
   (def meta-table-schemas
     (merge info-tables pg-catalog-tables pg-catalog-template-tables))
 
@@ -321,13 +324,12 @@
   (for [{:keys [oid proname pronamespace]} (vals procs)]
     {:oid oid, :proname proname, :pronamespace pronamespace}))
 
-(defn pg-database [db-name]
-  ;; TODO get all databases here
-  ;; currently not available due to cyclic dep
-  [{:oid (name->oid db-name)
-    :datname db-name
-    :datallowconn true
-    :datistemplate false}])
+(defn pg-database [db-names]
+  (for [db-name db-names]
+    {:oid (name->oid db-name)
+     :datname db-name
+     :datallowconn true
+     :datistemplate false}))
 
 (defn pg-stat-user-tables [schema-info]
   (for [^TableRef table (keys schema-info)]
@@ -459,7 +461,7 @@
     (some-> out-rel util/close)))
 
 (defprotocol InfoSchema
-  (->cursor [info-schema allocator db snapshot derived-table-schema
+  (->cursor [info-schema allocator db db-cat snapshot derived-table-schema
              table col-names col-preds
              schema params])
 
@@ -472,7 +474,7 @@
         (when (= 'pg_catalog/pg_user (table/ref->schema+table table-ref))
           pg-user))
 
-      (->cursor [_ allocator db snap derived-table-schema
+      (->cursor [_ allocator db db-cat snap derived-table-schema
                  table col-names col-preds
                  schema params]
         ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
@@ -507,7 +509,7 @@
                                        pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
                                        pg_catalog/pg_namespace (pg-namespace)
                                        pg_catalog/pg_proc (pg-proc)
-                                       pg_catalog/pg_database (pg-database db-name)
+                                       pg_catalog/pg_database (pg-database (.getDatabaseNames db-cat))
                                        pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
                                        pg_catalog/pg_settings (pg-settings)
                                        pg_catalog/pg_range (pg-range)

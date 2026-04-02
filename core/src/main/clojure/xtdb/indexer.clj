@@ -422,7 +422,7 @@
                                                                                                   :table (.getTableName table)}}
                               (let [table-info (-> (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
                                                      (.getSchema snap))
-                                                   (sql/xform-table-info default-db))
+                                                   (sql/xform-table-info [default-db] default-db))
                                     pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
                                                                                 {:table table
                                                                                  :valid-from valid-from

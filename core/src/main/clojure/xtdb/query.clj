@@ -289,7 +289,7 @@
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:default-db :decorrelate? :explain? :explain-analyze? :arg-fields])
+                                       (select-keys [:default-db :db-names :decorrelate? :explain? :explain-analyze? :arg-fields])
                                        (update :decorrelate? (fnil boolean true))
                                        (assoc :table-info table-info))]
           (fn [[parsed-query query-opts]]
@@ -316,7 +316,8 @@
   (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
           {:keys [default-tz] :as query-opts} (-> query-opts
-                                                  (update :default-tz (fnil identity expr/*default-tz*)))]
+                                                  (update :default-tz (fnil identity expr/*default-tz*))
+                                                  (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
       (letfn [(open-snaps []
                 ;; TODO this opens up a snapshot for *every* db in the catalog
                 ;; when people have 'proper' multi-tenancy, this will be a problem

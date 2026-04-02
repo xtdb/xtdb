@@ -499,13 +499,11 @@
           (t/is (= [{:xt/id "xtdb"}] (xt/q xt-conn ["SELECT * FROM foo"])))
           (t/is (= [{:xt/id :new-db}] (xt/q new-db-conn ["SELECT * FROM foo"])))
 
-          ;; TODO make all databases visible in pg_database, not just the current one
-          ;;
           (t/testing "adds database to pg_database"
-            (t/is (= [#_{:datname "new-db"} {:datname "xtdb"}]
+            (t/is (= [{:datname "new-db"} {:datname "xtdb"}]
                      (jdbc/execute! xt-conn ["SELECT datname FROM pg_catalog.pg_database ORDER BY datname"])))
 
-            (t/is (= [{:datname "new-db"} #_{:datname "xtdb"}]
+            (t/is (= [{:datname "new-db"} {:datname "xtdb"}]
                      (jdbc/execute! new-db-conn ["SELECT datname FROM pg_catalog.pg_database ORDER BY datname"]))))
 
           (t/testing "information_schema queries"
@@ -522,4 +520,9 @@
 
             (t/is (= [{:table-catalog "xtdb", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":utf8"}]
                      (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
-                  "query information_schema from xtdb")))))))
+                  "query information_schema from xtdb"))
+
+          (t/testing "cross-database information_schema queries"
+            (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
+                     (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM \"new-db\".information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
+                  "query other db's information_schema from xtdb connection")))))))
