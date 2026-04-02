@@ -67,10 +67,15 @@
                 ["/healthz/alive" {:name :alive
                                    :get (fn [{:keys [^Database db]}]
                                           (or (when-let [ingestion-error (get-ingestion-error db)]
+                                                (log/error (format "Ingestion error detected in /healthz/alive endpoint: %s" ingestion-error))
                                                 {:status 503, :body (str "Ingestion error - " ingestion-error)})
 
                                               (let [block-lag (->block-lag db)
                                                     block-lag-healthy? (<= block-lag 5)]
+                                                
+                                                (when-not block-lag-healthy?
+                                                  (log/warn (format "Block lag is %s blocks, which exceeds the healthy threshold - returning 503 from /healthz/alive endpoint" block-lag)))
+                                                
                                                 (-> (if block-lag-healthy?
                                                       {:status 200, :body "Alive."}
                                                       {:status 503, :body "Unhealthy - see headers for more info."})
