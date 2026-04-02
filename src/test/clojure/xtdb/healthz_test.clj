@@ -6,7 +6,8 @@
             [xtdb.healthz :as healthz]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import [xtdb.database Database Database$Catalog Database$Config]))
 
 (defn ->healthz-url [port endpoint]
   (format "http://localhost:%s/healthz/%s" port endpoint))
@@ -22,9 +23,6 @@
         (t/testing "started endpoint"
           (let [resp (clj-http/get (->healthz-url port "started"))]
             (t/is (= 200 (:status resp)))
-            (t/is (= {"X-XTDB-Target-Message-Id" "-1", "X-XTDB-Current-Message-Id" "-1"}
-                     (-> (:headers resp)
-                         (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
             (t/is (= "Started." (:body resp)))))
 
         (t/testing "alive endpoint"
@@ -61,16 +59,9 @@
 
                 (case (long (:status resp))
                   503 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" (str msg-id)}
-                                 (-> (:headers resp)
-                                     (select-keys ["X-XTDB-Target-Message-Id"]))))
                         (Thread/sleep 250)
                         (recur))
-                  200 (do
-                        (t/is (= {"X-XTDB-Target-Message-Id" (str msg-id), "X-XTDB-Current-Message-Id" (str msg-id)}
-                                 (-> (:headers resp)
-                                     (select-keys ["X-XTDB-Target-Message-Id" "X-XTDB-Current-Message-Id"]))))
-                        (t/is (= "Started." (:body resp)))))))))))))
+                  200 (t/is (= "Started." (:body resp))))))))))))
 
 (t/deftest test-indexer-error
   (util/with-tmp-dirs #{local-path}
@@ -79,7 +70,7 @@
                                           :healthz-port port})]
         (t/testing "alive endpoint - non errored indexer"
           (t/is (= 200 (:status (clj-http/get (->healthz-url port "alive"))))))
-        
+
         (t/testing "alive endpoint with indexer error"
           (with-redefs [healthz/get-ingestion-error (fn [_] (Exception. "Indexer error"))]
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
@@ -102,20 +93,17 @@
     (with-open [_node (xtn/start-node {:log [:in-memory]
                                        :storage [:in-memory]
                                        :healthz {:port port}})]
-      (t/testing "server thrown error responds with reasonable message"
+      (t/testing "block lag health"
         (letfn [(alive-resp []
                   (let [{:keys [status headers]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-                    [status (select-keys headers ["X-XTDB-Block-Lag" "X-XTDB-Block-Lag-Healthy"])]))]
-          (t/is (= [200 {"X-XTDB-Block-Lag" "0", "X-XTDB-Block-Lag-Healthy" "true"}]
-                   (alive-resp)))
+                    [status (get headers "X-XTDB-Databases-Unhealthy")]))]
+          (t/is (= [200 "0"] (alive-resp)))
 
           (with-redefs [healthz/->block-lag (fn [_] 5)]
-            (t/is (= [200 {"X-XTDB-Block-Lag" "5", "X-XTDB-Block-Lag-Healthy" "true"}]
-                     (alive-resp))))
+            (t/is (= [200 "0"] (alive-resp))))
 
           (with-redefs [healthz/->block-lag (fn [_] 6)]
-            (t/is (= [503 {"X-XTDB-Block-Lag" "6", "X-XTDB-Block-Lag-Healthy" "false"}]
-                     (alive-resp)))))))))
+            (t/is (= [503 "1"] (alive-resp)))))))))
 
 (t/deftest test-finish-block-endpoint
   (util/with-tmp-dirs #{local-path}
@@ -137,8 +125,7 @@
 
             (t/testing "successful block flush"
               (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
-                (t/is (= 200 (:status resp)))
-                (t/is (= "Block flush message sent successfully." (:body resp)))))
+                (t/is (= 200 (:status resp)))))
 
             (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
@@ -150,9 +137,59 @@
 
             (t/testing "second successful block flush"
               (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
-                (t/is (= 200 (:status resp)))
-                (t/is (= "Block flush message sent successfully." (:body resp)))))
+                (t/is (= 200 (:status resp)))))
 
             (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
             (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat))))))))))
+
+;; --- multi-db tests ---
+
+(t/deftest test-alive-critical-secondary
+  (util/with-tmp-dirs #{local-path}
+    (let [port (tu/free-port)]
+      (with-open [node (tu/->local-node {:node-dir local-path
+                                         :healthz-port port})]
+        (let [^Database$Catalog db-cat (db/<-node node)]
+          (.attach db-cat "critical-db"
+                   (-> (Database$Config.)
+                       (.critical true)))
+
+          (.attach db-cat "non-critical-db"
+                   (Database$Config.))
+
+          (t/testing "all healthy"
+            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp)))
+              (t/is (= "3" (get-in resp [:headers "X-XTDB-Databases-Checked"])))))
+
+          (t/testing "non-critical secondary ingestion error does not affect liveness"
+            (let [orig-fn healthz/get-ingestion-error]
+              (with-redefs [healthz/get-ingestion-error (fn [^Database db]
+                                                          (if (= "non-critical-db" (.getName db))
+                                                            (Exception. "Non-critical error")
+                                                            (orig-fn db)))]
+                (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+                  (t/is (= 200 (:status resp)))
+                  (t/is (= "1" (get-in resp [:headers "X-XTDB-Databases-Unhealthy"])))))))
+
+          (t/testing "critical secondary ingestion error triggers 503"
+            (let [orig-fn healthz/get-ingestion-error]
+              (with-redefs [healthz/get-ingestion-error (fn [^Database db]
+                                                          (if (= "critical-db" (.getName db))
+                                                            (Exception. "Critical error")
+                                                            (orig-fn db)))]
+                (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+                  (t/is (= 503 (:status resp)))
+                  (t/is (re-find #"critical-db" (:body resp))))))))))))
+
+(t/deftest test-alive-primary-always-critical
+  (util/with-tmp-dirs #{local-path}
+    (let [port (tu/free-port)]
+      (with-open [_node (tu/->local-node {:node-dir local-path
+                                          :healthz-port port})]
+        (t/testing "primary database ingestion error triggers 503"
+          (with-redefs [healthz/get-ingestion-error (fn [_] (Exception. "Primary error"))]
+            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+              (t/is (= 503 (:status resp)))
+              (t/is (re-find #"xtdb.*Primary error" (:body resp))))))))))

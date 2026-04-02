@@ -45,4 +45,6 @@
    :mode (condp = (.getMode conf)
            DatabaseMode/READ_WRITE :read-write
            DatabaseMode/READ_ONLY :read-only
-           :read-write)})
+           :read-write)
+
+   :critical? (.getCritical conf)})

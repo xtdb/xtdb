@@ -49,5 +49,6 @@ message DatabaseConfig {
 
     DatabaseMode mode = 7;
     google.protobuf.Any external_log = 8;
+    bool critical = 9;
 }
 

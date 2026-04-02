@@ -334,11 +334,13 @@ class Database(
         val storage: Storage.Factory = Storage.inMemory(),
         val mode: Mode = Mode.READ_WRITE,
         val externalLog: ExternalLog.Factory? = null,
+        val critical: Boolean = false,
     ) {
         fun log(log: Log.Factory) = copy(log = log)
         fun storage(storage: Storage.Factory) = copy(storage = storage)
         fun mode(mode: Mode) = copy(mode = mode)
         fun externalSource(externalLog: ExternalLog.Factory?) = copy(externalLog = externalLog)
+        fun critical(critical: Boolean) = copy(critical = critical)
 
         val isReadOnly: Boolean get() = mode == Mode.READ_ONLY
 
@@ -349,6 +351,7 @@ class Database(
                     dbConfig.applyStorage(storage)
                     dbConfig.mode = mode.toProto()
                     externalLog?.writeTo(dbConfig)
+                    dbConfig.critical = critical
                 }.build()
 
         companion object {
@@ -362,6 +365,7 @@ class Database(
                     .storage(Storage.Factory.fromProto(dbConfig))
                     .mode(Mode.fromProto(dbConfig.mode))
                     .externalSource(ExternalLog.Factory.fromProto(dbConfig))
+                    .critical(dbConfig.critical)
         }
     }
 
