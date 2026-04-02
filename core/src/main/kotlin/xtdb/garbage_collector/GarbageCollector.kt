@@ -1,8 +1,6 @@
 package xtdb.garbage_collector
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.plus
 import org.slf4j.LoggerFactory
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.database.DatabaseState
@@ -22,12 +20,14 @@ import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = LoggerFactory.getLogger(GarbageCollector::class.java)
 
-
 interface GarbageCollector : Closeable {
-    suspend fun garbageCollectTries(garbageAsOf: Instant? = null)
-    suspend fun collectGarbage()
-    fun collectAllGarbage()
-    fun start()
+    fun openForDatabase(bufferPool: BufferPool, dbState: DatabaseState): ForDatabase
+
+    interface ForDatabase : Closeable {
+        suspend fun garbageCollectTries(garbageAsOf: Instant? = null)
+        suspend fun collectGarbage()
+        fun collectAllGarbage()
+    }
 
     interface Driver : AutoCloseable {
         suspend fun deletePath(path: Path)
@@ -57,20 +57,42 @@ interface GarbageCollector : Closeable {
         }
     }
 
-    class Impl @JvmOverloads constructor(
+    class ForDatabaseImpl @JvmOverloads constructor(
         private val bufferPool: BufferPool,
         dbState: DatabaseState,
         driverFactory: Driver.Factory,
         private val blocksToKeep: Int,
         private val garbageLifetime: Duration,
         private val approxRunInterval: Duration,
+        enabled: Boolean,
         private val coroutineCtx: CoroutineContext = Dispatchers.IO
-    ) : GarbageCollector {
+    ) : ForDatabase {
         private val parentJob = Job()
         private val driver = driverFactory.create(bufferPool, dbState)
         private val blockCatalog = dbState.blockCatalog
         private val trieCatalog = dbState.trieCatalog
         private val blockGc = BlockGarbageCollector(blockCatalog, bufferPool, blocksToKeep)
+
+        init {
+            if (enabled) {
+                LOGGER.debug(
+                    "Starting GarbageCollector for database with approxRunInterval: {}, blocksToKeep: {}",
+                    approxRunInterval, blocksToKeep
+                )
+
+                CoroutineScope(coroutineCtx + parentJob).launch {
+                    delay(Random.nextLong(approxRunInterval.toMillis()))
+                    while (isActive) {
+                        try {
+                            collectGarbage()
+                        } catch (e: Exception) {
+                            LOGGER.warn("Garbage collection cycle failed", e)
+                        }
+                        delay(approxRunInterval.toMillis())
+                    }
+                }
+            }
+        }
 
         private fun defaultGarbageAsOf(): Instant? =
             bufferPool.blockFromLatest(blocksToKeep)
@@ -88,7 +110,7 @@ interface GarbageCollector : Closeable {
             LOGGER.debug("Garbage collecting data older than {}", asOf)
 
             try {
-                yieldIfSimulation() // simulate suspension for testing
+                yieldIfSimulation()
                 LOGGER.debug("Starting trie garbage collection")
                 val tableNames = blockCatalog.allTables.shuffled().take(100)
                 for (tableName in tableNames) {
@@ -113,32 +135,33 @@ interface GarbageCollector : Closeable {
             LOGGER.debug("Block garbage collection completed")
 
             garbageCollectTries()
-            LOGGER.debug("Next GC run scheduled in ${approxRunInterval.toMillis()}ms")
         }
 
         override fun collectAllGarbage() = runBlocking {
             collectGarbage()
         }
 
-        override fun start() {
-            LOGGER.debug(
-                "Starting GarbageCollector with approxRunInterval: {}, blocksToKeep: {}",
-                approxRunInterval, blocksToKeep
-            )
-
-            CoroutineScope(coroutineCtx + parentJob).launch {
-                delay(Random.nextLong(approxRunInterval.toMillis()))
-                while (isActive) {
-                    collectGarbage()
-                    delay(approxRunInterval.toMillis())
-                }
-            }
-        }
-
         override fun close() {
-            runBlocking { withTimeout(5.seconds) { parentJob.cancelAndJoin() } }
-            LOGGER.debug("GarbageCollector shut down")
+            runBlocking {
+                withTimeoutOrNull(5.seconds) { parentJob.cancelAndJoin() }
+                    ?: LOGGER.warn("GC coroutine did not stop within 5s")
+            }
+            driver.close()
         }
     }
-}
 
+    class Impl @JvmOverloads constructor(
+        private val driverFactory: Driver.Factory,
+        private val blocksToKeep: Int,
+        private val garbageLifetime: Duration,
+        private val approxRunInterval: Duration,
+        private val enabled: Boolean,
+        private val coroutineCtx: CoroutineContext = Dispatchers.IO
+    ) : GarbageCollector {
+
+        override fun openForDatabase(bufferPool: BufferPool, dbState: DatabaseState): ForDatabase =
+            ForDatabaseImpl(bufferPool, dbState, driverFactory, blocksToKeep, garbageLifetime, approxRunInterval, enabled, coroutineCtx)
+
+        override fun close() {}
+    }
+}

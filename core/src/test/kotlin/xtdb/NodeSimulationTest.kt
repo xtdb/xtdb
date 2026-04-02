@@ -56,7 +56,7 @@ data class MockDatabase(
     val blockCatalog: BlockCatalog,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
-    val garbageCollector: GarbageCollector,
+    val garbageCollector: GarbageCollector.ForDatabase,
 ) {
     fun close() {
         garbageCollector.close()
@@ -119,7 +119,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val dbStorage = DatabaseStorage(null, null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(-1))
-            val garbageCollector = GarbageCollector.Impl(sharedBufferPool, dbState, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), dispatcher)
+            val garbageCollector = GarbageCollector.ForDatabaseImpl(sharedBufferPool, dbState, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), false, dispatcher)
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
         }
     }

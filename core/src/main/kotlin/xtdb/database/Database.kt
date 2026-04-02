@@ -25,6 +25,7 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.garbage_collector.GarbageCollector
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.indexer.*
@@ -59,6 +60,7 @@ class Database(
     private val watchers: Watchers,
     private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
+    val gcOrNull: GarbageCollector.ForDatabase? = null,
     private val job: Job? = null,
     private val processor: AutoCloseable? = null,
     private val indexerForDb: Indexer.ForDatabase? = null,
@@ -105,7 +107,7 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         job?.let { runBlocking { it.cancelAndJoin() } }
-        listOf(processor, compactorOrNull, indexerForDb, queryState, storage, allocator).closeAll()
+        listOf(processor, compactorOrNull, gcOrNull, indexerForDb, queryState, storage, allocator).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -144,6 +146,7 @@ class Database(
             dbConfig: Config,
             indexer: Indexer,
             compactor: Compactor,
+            gc: GarbageCollector,
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
@@ -167,6 +170,8 @@ class Database(
                 if (readOnly) Compactor.NOOP.openForDatabase(allocator, storage, state, watchers)
                 else compactor.openForDatabase(allocator, storage, state, watchers)
             }
+
+            val gcForDb = open { gc.openForDatabase(storage.bufferPool, state) }
 
             var processor: AutoCloseable? = null
             val job = Job()
@@ -292,6 +297,7 @@ class Database(
                 watchers = watchers,
                 meterRegistry = meterRegistry,
                 compactorOrNull = compactorForDb,
+                gcOrNull = gcForDb,
                 job = job,
                 processor = processor,
                 indexerForDb = indexerForDb,

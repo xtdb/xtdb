@@ -5,6 +5,7 @@ import xtdb.compactor.Compactor
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.error.NotFound
+import xtdb.garbage_collector.GarbageCollector
 import xtdb.indexer.Indexer
 import xtdb.table.DatabaseName
 import xtdb.util.closeAll
@@ -19,6 +20,7 @@ class DatabaseCatalog(
     private val base: NodeBase,
     private val indexer: Indexer,
     private val compactor: Compactor,
+    private val gc: GarbageCollector,
 ) : Database.Catalog, AutoCloseable {
 
     private val databases = ConcurrentHashMap<DatabaseName, Database>()
@@ -35,7 +37,7 @@ class DatabaseCatalog(
         val readOnlyConfig = if (base.config.readOnlyDatabases) dbConfig.mode(Database.Mode.READ_ONLY) else dbConfig
 
         val db = try {
-            Database.open(base, dbName, readOnlyConfig, indexer, compactor, this.takeIf { dbName == "xtdb" })
+            Database.open(base, dbName, readOnlyConfig, indexer, compactor, gc, this.takeIf { dbName == "xtdb" })
         } catch (t: Throwable) {
             LOG.debug { "Failed to open database: db-name=$dbName, exception=${t.javaClass}, message=${t.message}" }
             t.cause?.let { LOG.debug { "Cause: class=${it.javaClass}, message=${it.message}" } }
@@ -68,9 +70,10 @@ class DatabaseCatalog(
         @JvmStatic
         fun open(
             base: NodeBase,
+            gc: GarbageCollector,
         ): DatabaseCatalog {
             val indexer = base.indexerFactory.create(base)
-            val catalog = DatabaseCatalog(base, indexer, base.compactor)
+            val catalog = DatabaseCatalog(base, indexer, base.compactor, gc)
 
             catalog.closeOnCatch {
                 val conf = base.config

@@ -4,7 +4,6 @@
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
-            [xtdb.garbage-collector :as gc]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
@@ -601,8 +600,8 @@
       (util/delete-dir node-dir)
 
       (with-open [node (tu/->local-node opts)]
-        (let [gc (gc/garbage-collector node)
-              db (db/primary-db node)
+        (let [db (db/primary-db node)
+              gc (.getGcOrNull db)
               bp (.getBufferPool db)
               cat (.getTrieCatalog db)]
           (doseq [i (range 4)]
