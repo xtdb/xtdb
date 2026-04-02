@@ -43,8 +43,8 @@ data class DatabaseState(
 
             val blockCatalog = BlockCatalog(dbName, bufferPool.latestBlock)
 
-            val tableCatalog = TableCatalog(blockCatalog, bufferPool).also {
-                it.refresh(blockCatalog.currentBlockIndex ?: -1)
+            val tableCatalog = TableCatalog(bufferPool).also {
+                it.refresh(blockCatalog)
             }
 
             val trieCatalog = trieCatalogFactory.open(bufferPool, blockCatalog)

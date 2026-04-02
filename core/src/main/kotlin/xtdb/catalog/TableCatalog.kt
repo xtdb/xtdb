@@ -21,7 +21,6 @@ import xtdb.util.toHLL
 import java.nio.ByteBuffer
 
 class TableCatalog(
-    private val blockCatalog: BlockCatalog,
     private val bufferPool: BufferPool
 ) {
 
@@ -50,7 +49,9 @@ class TableCatalog(
     val types: Map<TableRef, Map<ColumnName, VectorType>>
         get() = state.tables.mapValues { (_, meta) -> meta.vecTypes }
 
-    fun refresh(blockIndex: Long) {
+    fun refresh(blockCatalog: BlockCatalog) {
+        val blockIndex = blockCatalog.currentBlockIndex ?: return
+
         if (state.blockIdx?.let { blockIndex <= it } ?: false) return
 
         state = State(
@@ -59,7 +60,7 @@ class TableCatalog(
         )
     }
 
-    fun updateFromBlockMetadata(metadata: Map<TableRef, LiveTable.BlockMetadata>) {
+    fun updateFromBlockMetadata(blockIndex: Long?, metadata: Map<TableRef, LiveTable.BlockMetadata>) {
         val oldTables = state.tables
 
         val deltaByTable = metadata.mapValues { (_, bm) ->
@@ -70,12 +71,13 @@ class TableCatalog(
         val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
 
         state = State(
-            blockIdx = blockCatalog.currentBlockIndex,
+            blockIdx = blockIndex,
             tables = newTables
         )
     }
 
     fun finishBlock(
+        blockIndex: Long?,
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
@@ -89,7 +91,7 @@ class TableCatalog(
         val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
 
         state = State(
-            blockIdx = blockCatalog.currentBlockIndex,
+            blockIdx = blockIndex,
             tables = newTables
         )
 

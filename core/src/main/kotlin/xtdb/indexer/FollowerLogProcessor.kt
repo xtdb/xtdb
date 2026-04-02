@@ -143,7 +143,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 addTries(msg.tries, record.logTimestamp)
                 blockCatalog.refresh(block)
-                tableCatalog.updateFromBlockMetadata(liveIndex.blockMetadata())
+                tableCatalog.updateFromBlockMetadata(blockCatalog.currentBlockIndex, liveIndex.blockMetadata())
                 liveIndex.nextBlock()
                 compactor.signalBlock()
 

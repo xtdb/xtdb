@@ -66,7 +66,7 @@ class BlockUploader(
         val allTables = finishedBlocks.keys + blockCatalog.allTables
         val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
 
-        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
+        val tableBlocks = tableCatalog.finishBlock(blockCatalog.currentBlockIndex, finishedBlocks, tablePartitions)
 
         for ((table, tableBlock) in tableBlocks) {
             val path = BlockCatalog.tableBlockPath(table, blockIdx)

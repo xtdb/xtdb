@@ -91,7 +91,7 @@ class LeaderLogProcessorTest {
             every { getPartitions(any()) } returns emptyList()
         }
         val tableCatalog = mockk<TableCatalog>(relaxed = true) {
-            every { finishBlock(any(), any()) } returns emptyMap()
+            every { finishBlock(any(), any(), any()) } returns emptyMap()
         }
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
@@ -153,7 +153,7 @@ class LeaderLogProcessorTest {
             every { getPartitions(any()) } returns emptyList()
         }
         val tableCatalog = mockk<TableCatalog>(relaxed = true) {
-            every { finishBlock(any(), any()) } returns mapOf(
+            every { finishBlock(any(), any(), any()) } returns mapOf(
                 tableRef to TableBlock.getDefaultInstance()
             )
         }
