@@ -13,6 +13,7 @@ import org.apache.arrow.flight.sql.FlightSqlProducer
 import org.apache.arrow.flight.sql.NoOpFlightSqlProducer
 import org.apache.arrow.flight.sql.impl.FlightSql.*
 import org.apache.arrow.flight.sql.impl.FlightSql.ActionEndTransactionRequest.EndTransaction
+import xtdb.database.DatabaseName
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.UInt4Vector
@@ -81,9 +82,8 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
 
 private fun cljMap(vararg pairs: Pair<Any, Any?>): IPersistentMap = PersistentArrayMap.create(pairs.toMap())
 
-private fun isDml(sql: String): Boolean {
-    // TODO multi-db
-    val defaultDbOpts = cljMap("default-db".kw to "xtdb")
+private fun isDml(sql: String, dbName: DatabaseName): Boolean {
+    val defaultDbOpts = cljMap("default-db".kw to dbName)
     val parsed = requiringResolve("xtdb.sql.parse/parse-statement")
         .invoke(sql, defaultDbOpts)
 
@@ -124,6 +124,7 @@ private fun FlightStream.toBytes(allocator: BufferAllocator): ByteArray =
 private class PreparedStatement(
     val sql: String,
     val txHandle: TxHandle?,
+    val dbName: DatabaseName,
     val prepdQuery: PreparedQuery?,
     var cursor: IResultCursor? = null
 ) : AutoCloseable {
@@ -144,34 +145,56 @@ internal fun FlightServer.Builder.withErrorLoggingMiddleware(): FlightServer.Bui
         }
     }
 
+class DatabaseMiddleware(val dbName: DatabaseName?) : FlightServerMiddleware {
+    override fun onBeforeSendingHeaders(outgoingHeaders: CallHeaders?) {}
+    override fun onCallCompleted(status: CallStatus?) {}
+    override fun onCallErrored(e: Throwable?) {}
+
+    companion object {
+        val KEY: FlightServerMiddleware.Key<DatabaseMiddleware> = FlightServerMiddleware.Key.of("database")
+    }
+}
+
+internal fun FlightServer.Builder.withDatabaseMiddleware(): FlightServer.Builder =
+    this.middleware(DatabaseMiddleware.KEY) { _, incomingHeaders, _ ->
+        DatabaseMiddleware(incomingHeaders.get("x-xtdb-database"))
+    }
+
+private fun dbNameFromContext(ctx: CallContext?): DatabaseName =
+    ctx?.getMiddleware(DatabaseMiddleware.KEY)?.dbName ?: "xtdb"
+
 class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
-    private val connections = ConcurrentHashMap<TxHandle, XtdbConnection>()
+    private val txConnections = ConcurrentHashMap<TxHandle, XtdbConnection>()
+    private val defaultConnections = ConcurrentHashMap<DatabaseName, XtdbConnection>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
     private val tickets = ConcurrentHashMap<TicketHandle, IResultCursor>()
 
-    /** Connection for auto-commit (non-transactional) operations. */
-    private val defaultConnection: XtdbConnection = node.connect() as XtdbConnection
+    private fun defaultConnectionFor(dbName: DatabaseName): XtdbConnection =
+        defaultConnections.computeIfAbsent(dbName) {
+            (node.connect() as XtdbConnection).also { it.setCurrentCatalog(dbName) }
+        }
 
     override fun close() {
         stmts.closeAll()
-        connections.values.forEach { it.close() }
-        connections.clear()
-        defaultConnection.close()
+        txConnections.values.forEach { it.close() }
+        txConnections.clear()
+        defaultConnections.values.forEach { it.close() }
+        defaultConnections.clear()
         allocator.close()
     }
 
-    private fun connectionFor(txHandle: TxHandle?): XtdbConnection =
+    private fun connectionFor(txHandle: TxHandle?, dbName: DatabaseName): XtdbConnection =
         if (txHandle != null) {
-            requireNotNull(connections[txHandle]) { "unknown tx" }
+            requireNotNull(txConnections[txHandle]) { "unknown tx" }
         } else {
-            defaultConnection
+            defaultConnectionFor(dbName)
         }
 
-    private fun execDml(op: TxOp, txHandle: TxHandle?) {
+    private fun execDml(op: TxOp, txHandle: TxHandle?, dbName: DatabaseName) {
         try {
-            connectionFor(txHandle).executeDml(op)
+            connectionFor(txHandle, dbName).executeDml(op)
         } catch (t: Throwable) {
             LOGGER.warn(t, "bang")
             throw t
@@ -210,7 +233,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         try {
             execDml(
                 TxOp.Sql(cmd.query),
-                if (cmd.hasTransactionId()) cmd.transactionId else null
+                if (cmd.hasTransactionId()) cmd.transactionId else null,
+                dbNameFromContext(ctx)
             )
 
             ackStream.sendDoPutUpdateRes(allocator)
@@ -261,7 +285,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
         val op = TxOp.SqlBytes(ps.sql, flightStream.toBytes(allocator))
         try {
-            execDml(op, ps.txHandle)
+            execDml(op, ps.txHandle, ps.dbName)
             ackStream.sendDoPutUpdateRes(allocator)
         } catch (t: Throwable) {
             ackStream.onError(t)
@@ -275,15 +299,16 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo {
         try {
             val sql = cmd.queryBytes.toStringUtf8()
+            val dbName = dbNameFromContext(ctx)
 
             // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-            if (isDml(sql)) {
+            if (isDml(sql, dbName)) {
                 throw CallStatus.INVALID_ARGUMENT
                     .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
                     .toRuntimeException()
             }
             val ticketHandle = newHandle()
-            val pq = defaultConnection.prepareSql(sql)
+            val pq = defaultConnectionFor(dbName).prepareSql(sql)
             val cursor = pq.openQuery(EMPTY)
             val ticket = Ticket(
                 ProtoAny.pack(
@@ -357,11 +382,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
-        val pq = defaultConnection.prepareSql(sql)
+        val dbName = dbNameFromContext(ctx)
+        val pq = defaultConnectionFor(dbName).prepareSql(sql)
         val ps = PreparedStatement(
             sql,
             if (req.hasTransactionId()) req.transactionId else null,
-            pq.takeIf { !isDml(sql) }
+            dbName,
+            pq.takeIf { !isDml(sql, dbName) }
         )
 
         stmts[psId] = ps
@@ -427,7 +454,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_TABLE_TYPES_SCHEMA, descriptor)
 
     override fun getStreamTableTypes(ctx: CallContext?, listener: ServerStreamListener) {
-        streamArrowReader(defaultConnection.getTableTypes(), listener)
+        streamArrowReader(defaultConnectionFor(dbNameFromContext(ctx)).getTableTypes(), listener)
     }
 
     override fun getFlightInfoSqlInfo(
@@ -468,10 +495,14 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, descriptor)
 
     override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) {
+        val dbNames = (node as Xtdb.XtdbInternal).dbCatalog.databaseNames
+
         singleBatchStream(FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, listener) { root ->
             val vec = root.getVector("catalog_name") as VarCharVector
-            vec.setSafe(0, "xtdb".toByteArray())
-            root.rowCount = 1
+            for ((idx, name) in dbNames.withIndex()) {
+                vec.setSafe(idx, name.toByteArray())
+            }
+            root.rowCount = dbNames.size
         }
     }
 
@@ -482,10 +513,11 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamSchemas(
         command: CommandGetDbSchemas, ctx: CallContext?, listener: ServerStreamListener
     ) {
+        val dbName = dbNameFromContext(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
 
-        if (catalogFilter != null && catalogFilter != "xtdb") {
+        if (catalogFilter != null && catalogFilter != dbName) {
             singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
                 root.rowCount = 0
             }
@@ -498,14 +530,14 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             append(" ORDER BY table_schema")
         }
 
-        defaultConnection.openSqlQuery(sql).use { cursor ->
+        defaultConnectionFor(dbName).openSqlQuery(sql).use { cursor ->
             singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
                 val catalogVec = root.getVector("catalog_name") as VarCharVector
                 val schemaVec = root.getVector("db_schema_name") as VarCharVector
                 var idx = 0
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
-                        catalogVec.setSafe(idx, "xtdb".toByteArray())
+                        catalogVec.setSafe(idx, dbName.toByteArray())
                         schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
                         idx++
                     }
@@ -526,12 +558,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamTables(
         command: CommandGetTables, ctx: CallContext?, listener: ServerStreamListener
     ) {
+        val dbName = dbNameFromContext(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
         val tableFilter = if (command.hasTableNameFilterPattern()) command.tableNameFilterPattern else null
         val typeFilters = command.tableTypesList.takeIf { it.isNotEmpty() }
 
-        if (catalogFilter != null && catalogFilter != "xtdb") {
+        if (catalogFilter != null && catalogFilter != dbName) {
             val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
             else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
             singleBatchStream(schema, listener) { root -> root.rowCount = 0 }
@@ -553,8 +586,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
         val sql = "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
 
-        val cursor = defaultConnection.openSqlQuery(sql)
-        cursor.use {
+        defaultConnectionFor(dbName).openSqlQuery(sql).use { cursor ->
             val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
             else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
 
@@ -567,11 +599,10 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 var idx = 0
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
-                        catalogVec.setSafe(idx, "xtdb".toByteArray())
+                        catalogVec.setSafe(idx, dbName.toByteArray())
                         schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
                         tableVec.setSafe(idx, rel.get("table_name").getObject(i).toString().toByteArray())
                         typeVec.setSafe(idx, "TABLE".toByteArray())
-                        // TODO: include_schema support (table_schema binary column)
                         idx++
                     }
                 }
@@ -597,8 +628,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val txHandle = newHandle()
         val conn = node.connect() as XtdbConnection
+        conn.setCurrentCatalog(dbNameFromContext(ctx))
         conn.setAutoCommit(false)
-        connections[txHandle] = conn
+        txConnections[txHandle] = conn
 
         listener.onNext(
             ActionBeginTransactionResult.newBuilder()
@@ -615,7 +647,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener: StreamListener<Result>
     ) {
         val txHandle = req.transactionId
-        val conn = requireNotNull(connections.remove(txHandle)) { "unknown tx" }
+        val conn = requireNotNull(txConnections.remove(txHandle)) { "unknown tx" }
 
         if (req.action == EndTransaction.END_TRANSACTION_COMMIT) {
             try {

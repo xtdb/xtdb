@@ -42,12 +42,16 @@
 (defmethod ig/halt-key! :xtdb/base [_ ^NodeBase base]
   (.close base))
 
-(defn- with-query-opts-defaults [query-opts {:keys [default-tz]}]
-  (-> (into {:default-tz default-tz,
-             :key-fn (serde/read-key-fn :snake-case-string)
-             :default-db "xtdb"}
-            query-opts)
-      (update :current-time #(some-> % (time/->instant)))))
+(defn- with-query-opts-defaults
+  ([query-opts node]
+   (with-query-opts-defaults query-opts node (:default-db query-opts "xtdb")))
+
+  ([query-opts {:keys [default-tz]} db-name]
+   (-> (into {:default-tz default-tz,
+              :key-fn (serde/read-key-fn :snake-case-string)
+              :default-db db-name}
+             query-opts)
+       (update :current-time #(some-> % (time/->instant))))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
   (util/with-close-on-catch [cursor (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
@@ -102,16 +106,17 @@
     (XtdbConnection.
      (reify XtdbConnection$Node
        (getAllocator [_] allocator)
+       (getDatabaseNames [_] (.getDatabaseNames db-cat))
        (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
        (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
 
-       (openSqlQuery [_ sql]
-         (let [query-opts (-> {} (with-query-opts-defaults this-node))]
+       (openSqlQuery [_ sql db-name]
+         (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
            (-> (xtp/prepare-sql this-node sql query-opts)
                (.openQuery query-opts))))
 
-       (prepareSql [_ sql]
-         (let [query-opts (-> {} (with-query-opts-defaults this-node))]
+       (prepareSql [_ sql db-name]
+         (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
            (xtp/prepare-sql this-node sql query-opts)))
 
        (getColumnTypes [_ table]

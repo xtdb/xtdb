@@ -4,11 +4,11 @@
             [xtdb.test-util :as tu])
   (:import (org.apache.arrow.adbc.core AdbcConnection)
            org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
-           (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
+           (org.apache.arrow.flight CallOption FlightCallHeaders FlightClient FlightEndpoint FlightInfo HeaderCallOption Location)
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           xtdb.api.Xtdb
+           (xtdb.api Xtdb Xtdb$XtdbInternal)
            xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
@@ -33,6 +33,12 @@
 (def ^:private ^"[Lorg.apache.arrow.flight.CallOption;"
   empty-call-opts
   (make-array CallOption 0))
+
+(defn- db-call-opts ^"[Lorg.apache.arrow.flight.CallOption;" [db-name]
+  (into-array CallOption
+              [(HeaderCallOption.
+                (doto (FlightCallHeaders.)
+                  (.insert "x-xtdb-database" db-name)))]))
 
 (defn- flight-info->rows [^FlightInfo flight-info]
   (let [ticket (.getTicket ^FlightEndpoint (first (.getEndpoints flight-info)))]
@@ -167,3 +173,68 @@
                    (.getAsMaps rel))))
 
         (t/is (false? (.loadNextBatch rdr)))))))
+
+(t/deftest test-adbc-multi-db
+  (let [db-cat (.getDbCatalog ^Xtdb$XtdbInternal tu/*node*)]
+    (.attach db-cat "other-db" nil)
+
+    (with-open [conn (.connect ^Xtdb tu/*node*)]
+      (t/testing "setCurrentCatalog / getCurrentCatalog"
+        (t/is (= "xtdb" (.getCurrentCatalog conn)))
+        (.setCurrentCatalog conn "other-db")
+        (t/is (= "other-db" (.getCurrentCatalog conn))))
+
+      (t/testing "data isolation between databases"
+        ;; insert into other-db
+        (with-open [stmt (.createStatement conn)]
+          (.setSqlQuery stmt "INSERT INTO users (_id, name) VALUES ('jms', 'James')")
+          (.executeUpdate stmt))
+
+        ;; query other-db — should see the row
+        (with-open [stmt (.createStatement conn)]
+          (.setSqlQuery stmt "SELECT _id, name FROM users")
+          (with-open [rdr (.getReader (.executeQuery stmt))
+                      root (.getVectorSchemaRoot rdr)]
+            (t/is (true? (.loadNextBatch rdr)))
+            (with-open [rel (Relation/fromRoot tu/*allocator* root)]
+              (t/is (= [{:xt/id "jms", :name "James"}] (.getAsMaps rel))))))
+
+        ;; switch back to xtdb — should not see the row
+        (.setCurrentCatalog conn "xtdb")
+        (with-open [stmt (.createStatement conn)]
+          (.setSqlQuery stmt "SELECT _id, name FROM users")
+          (with-open [rdr (.getReader (.executeQuery stmt))
+                      root (.getVectorSchemaRoot rdr)]
+            (t/is (false? (.loadNextBatch rdr)))))))))
+
+(t/deftest test-flightsql-multi-db
+  (let [db-cat (.getDbCatalog ^Xtdb$XtdbInternal tu/*node*)
+        other-db-opts (db-call-opts "other-db")]
+    (.attach db-cat "other-db" nil)
+
+    (t/testing "insert and query on non-default database via header"
+      (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James')" other-db-opts)))
+
+      ;; query other-db — should see the row
+      (t/is (= [{:xt/id "jms", :name "James"}]
+               (-> (.execute *client* "SELECT _id, name FROM users" other-db-opts)
+                   (flight-info->rows))))
+
+      ;; query default (xtdb) — should not see the row
+      (t/is (= []
+               (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
+                   (flight-info->rows)))))
+
+    (t/testing "transaction on non-default database"
+      (let [fsql-tx (.beginTransaction *client* other-db-opts)]
+        (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('hak', 'Håkan')" fsql-tx other-db-opts)
+        (.commit *client* fsql-tx other-db-opts))
+
+      (t/is (= #{{:xt/id "jms", :name "James"}
+                  {:xt/id "hak", :name "Håkan"}}
+               (set (-> (.execute *client* "SELECT _id, name FROM users" other-db-opts)
+                        (flight-info->rows)))))
+
+      ;; still empty on default db
+      (t/is (= [] (-> (.execute *client* "SELECT _id, name FROM users" empty-call-opts)
+                       (flight-info->rows)))))))

@@ -34,6 +34,7 @@ import xtdb.util.useAll
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
 
+    private var dbName: DatabaseName = "xtdb"
     private var autoCommit = true
     private val pendingOps = mutableListOf<TxOp>()
 
@@ -50,7 +51,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun executeQuery(): QueryResult {
             val sql = this.sql ?: error("SQL query not set")
-            val cursor = node.openSqlQuery(sql)
+            val cursor = node.openSqlQuery(sql, dbName)
             val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
 
             return QueryResult(-1, cursorToArrowReader(cursor, schema))
@@ -69,8 +70,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     internal fun executeDml(op: TxOp) {
         if (autoCommit) {
             listOf(op).useAll { ops ->
-                // TODO multi-db
-                node.executeTx("xtdb", ops)
+                node.executeTx(dbName, ops)
             }
         } else {
             pendingOps.add(op)
@@ -86,8 +86,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         pendingOps.clear()
         if (ops.isNotEmpty()) {
             ops.useAll {
-                // TODO multi-db
-                node.executeTx("xtdb", ops)
+                node.executeTx(dbName, ops)
             }
         }
     }
@@ -126,9 +125,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             override fun executeUpdate(): UpdateResult {
                 return (rel.also { this.rel = null } ?: return UpdateResult(0))
                     .use { rel ->
-                        // TODO multi-db
                         // TODO valid-from/valid-to for the batch
-                        node.executeTx("xtdb", listOf(TxOp.PutDocs(schemaName, tableName, docs = rel)))
+                        node.executeTx(dbName, listOf(TxOp.PutDocs(schemaName, tableName, docs = rel)))
 
                         close()
 
@@ -138,8 +136,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
     }
 
-    fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql)
-    fun openSqlQuery(sql: String): IResultCursor = node.openSqlQuery(sql)
+    fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql, dbName)
+    fun openSqlQuery(sql: String): IResultCursor = node.openSqlQuery(sql, dbName)
 
     private fun cursorToArrowReader(cursor: IResultCursor, schema: Schema): ArrowReader =
         object : ArrowReader(node.allocator) {
@@ -226,8 +224,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     }
 
     override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema {
-        // TODO multi-db: use catalog to resolve dbName
-        val table = TableRef("xtdb", dbSchema ?: "public", tableName)
+        val table = TableRef(catalog ?: dbName, dbSchema ?: "public", tableName)
         val types = node.getColumnTypes(table) ?: return Schema(emptyList())
         return Schema(types.entries.map { (name, type) -> type.toField(name) })
     }
@@ -240,71 +237,73 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         tableTypes: Array<out String>?,
         columnNamePattern: String?
     ): ArrowReader {
-        // Build the nested getObjects response by querying information_schema.
-        // Currently reports a single "xtdb" catalog.
+        val catalogs = node.databaseNames
+            .filter { catalogPattern == null || catalogPattern == "%" || it == catalogPattern }
 
         return singleBatchReader(StandardSchemas.GET_OBJECTS_SCHEMA) { al, root ->
             val catalogNameVec = root.getVector("catalog_name") as VarCharVector
             val dbSchemasVec = root.getVector("catalog_db_schemas") as ListVector
 
-            catalogNameVec.setSafe(0, "xtdb".toByteArray())
+            for ((idx, catalog) in catalogs.withIndex()) {
+                catalogNameVec.setSafe(idx, catalog.toByteArray())
 
-            if (depth == GetObjectsDepth.CATALOGS) {
-                dbSchemasVec.setNull(0)
-                root.rowCount = 1
-                return@singleBatchReader
-            }
-
-            val writer = dbSchemasVec.writer
-            writer.setPosition(0)
-            writer.startList()
-
-            val schemas = querySchemas(dbSchemaPattern, tableNamePattern, tableTypes, columnNamePattern, depth)
-
-            for ((schemaName, tables) in schemas) {
-                writer.struct().start()
-                writeVarChar(al, writer.struct().varChar("db_schema_name"), schemaName)
-
-                if (depth == GetObjectsDepth.DB_SCHEMAS) {
-                    writer.struct().list("db_schema_tables").writeNull()
-                } else {
-                    val tableListWriter = writer.struct().list("db_schema_tables")
-                    tableListWriter.startList()
-
-                    for (table in tables) {
-                        val tw = tableListWriter.struct()
-                        tw.start()
-                        writeVarChar(al, tw.varChar("table_name"), table.name)
-                        writeVarChar(al, tw.varChar("table_type"), "TABLE")
-
-                        if (depth == GetObjectsDepth.TABLES || table.columns.isEmpty()) {
-                            tw.list("table_columns").writeNull()
-                        } else {
-                            val colListWriter = tw.list("table_columns")
-                            colListWriter.startList()
-                            for ((colIdx, col) in table.columns.withIndex()) {
-                                val cw = colListWriter.struct()
-                                cw.start()
-                                writeVarChar(al, cw.varChar("column_name"), col.name)
-                                cw.integer("ordinal_position").writeInt(colIdx + 1)
-                                // remaining xdbc fields are null
-                                cw.end()
-                            }
-                            colListWriter.endList()
-                        }
-
-                        tw.list("table_constraints").writeNull()
-                        tw.end()
-                    }
-
-                    tableListWriter.endList()
+                if (depth == GetObjectsDepth.CATALOGS || catalog != dbName) {
+                    // at CATALOGS depth, or for databases other than the current one, omit schema detail
+                    dbSchemasVec.setNull(idx)
+                    continue
                 }
 
-                writer.struct().end()
+                val writer = dbSchemasVec.writer
+                writer.setPosition(idx)
+                writer.startList()
+
+                val schemas = querySchemas(dbSchemaPattern, tableNamePattern, tableTypes, columnNamePattern, depth)
+
+                for ((schemaName, tables) in schemas) {
+                    writer.struct().start()
+                    writeVarChar(al, writer.struct().varChar("db_schema_name"), schemaName)
+
+                    if (depth == GetObjectsDepth.DB_SCHEMAS) {
+                        writer.struct().list("db_schema_tables").writeNull()
+                    } else {
+                        val tableListWriter = writer.struct().list("db_schema_tables")
+                        tableListWriter.startList()
+
+                        for (table in tables) {
+                            val tw = tableListWriter.struct()
+                            tw.start()
+                            writeVarChar(al, tw.varChar("table_name"), table.name)
+                            writeVarChar(al, tw.varChar("table_type"), "TABLE")
+
+                            if (depth == GetObjectsDepth.TABLES || table.columns.isEmpty()) {
+                                tw.list("table_columns").writeNull()
+                            } else {
+                                val colListWriter = tw.list("table_columns")
+                                colListWriter.startList()
+                                for ((colIdx, col) in table.columns.withIndex()) {
+                                    val cw = colListWriter.struct()
+                                    cw.start()
+                                    writeVarChar(al, cw.varChar("column_name"), col.name)
+                                    cw.integer("ordinal_position").writeInt(colIdx + 1)
+                                    cw.end()
+                                }
+                                colListWriter.endList()
+                            }
+
+                            tw.list("table_constraints").writeNull()
+                            tw.end()
+                        }
+
+                        tableListWriter.endList()
+                    }
+
+                    writer.struct().end()
+                }
+
+                writer.endList()
             }
 
-            writer.endList()
-            root.rowCount = 1
+            root.rowCount = catalogs.size
         }
     }
 
@@ -330,7 +329,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         if (depth == GetObjectsDepth.DB_SCHEMAS) {
             val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
             val result = linkedMapOf<String, List<TableInfo>>()
-            node.openSqlQuery(sql).use { cursor ->
+            node.openSqlQuery(sql, dbName).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         result[rel.get("table_schema").getObject(i).toString()] = emptyList()
@@ -354,7 +353,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         if (needColumns) {
             val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
-            node.openSqlQuery(sql).use { cursor ->
+            node.openSqlQuery(sql, dbName).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -371,7 +370,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
                     .add(TableInfo(key.second, cols))
             }
         } else {
-            node.openSqlQuery(sql).use { cursor ->
+            node.openSqlQuery(sql, dbName).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -386,15 +385,20 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         return result
     }
 
-    override fun getCurrentCatalog(): String = "xtdb"
+    override fun getCurrentCatalog(): String = dbName
+
+    override fun setCurrentCatalog(catalog: String) {
+        dbName = catalog
+    }
     override fun getCurrentDbSchema(): String = "public"
 
     interface Node {
         val allocator: BufferAllocator
+        val databaseNames: Collection<DatabaseName>
         fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
         fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
-        fun openSqlQuery(sql: String): IResultCursor
-        fun prepareSql(sql: String): PreparedQuery
+        fun openSqlQuery(sql: String, dbName: DatabaseName): IResultCursor
+        fun prepareSql(sql: String, dbName: DatabaseName): PreparedQuery
         fun getColumnTypes(table: TableRef): Map<String, VectorType>?
     }
 
