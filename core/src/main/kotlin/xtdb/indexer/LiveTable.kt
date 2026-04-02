@@ -221,6 +221,22 @@ constructor(
 
     fun openSnapshot() = openSnapshot(liveTrie)
 
+    data class BlockMetadata(
+        val vecTypes: Map<FieldName, VectorType>,
+        val rowCount: Int,
+        val hllDeltas: Map<FieldName, HLL>
+    )
+
+    fun blockMetadata(): BlockMetadata? {
+        val rowCount = liveRelation.rowCount
+        if (rowCount == 0) return null
+        return BlockMetadata(
+            vecTypes = liveRelation.types.orEmpty(),
+            rowCount = rowCount,
+            hllDeltas = hllCalculator.build()
+        )
+    }
+
     data class FinishedBlock(
         val vecTypes: Map<FieldName, VectorType>,
         val trieKey: TrieKey,

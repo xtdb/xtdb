@@ -241,6 +241,7 @@ class SourceLogProcessor(
     private fun enterPendingBlock() {
         val blockIdx = (blockCatalog.currentBlockIndex ?: -1) + 1
         pendingBlockIdx = blockIdx
+        tableCatalog.updateFromBlockMetadata(liveIndex.blockMetadata())
         liveIndex.nextBlock()
         LOG.debug("[$dbName] read-only: waiting for block 'b${blockIdx.asLexHex}' via BlockUploaded...")
     }

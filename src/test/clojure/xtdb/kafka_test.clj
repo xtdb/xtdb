@@ -2,13 +2,14 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
-            [xtdb.db-catalog :as db]
-            [xtdb.node :as xtn] 
-            [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.db-catalog :as db] 
+            [xtdb.node :as xtn]
+            [xtdb.test-util :as tu]  
+            [xtdb.util :as util]
+            [clojure.tools.logging :as log])
   (:import org.apache.kafka.common.KafkaException
            org.testcontainers.kafka.ConfluentKafkaContainer
-           org.testcontainers.utility.DockerImageName
+           org.testcontainers.utility.DockerImageName 
            [xtdb.api.log Log]))
 
 (def ^:private ^:dynamic *bootstrap-servers* nil)
@@ -279,8 +280,7 @@
         (t/testing "can finish the block"
           (t/is (nil? (tu/flush-block! node)))))
 
-
-      ;; Restarting the node again with the same new log path and epoch 1
+;; Restarting the node again with the same new log path and epoch 1
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                                           :poll-duration "PT2S"
                                                                           :properties-map {}
@@ -382,3 +382,36 @@
 
           (t/testing "shouldn't have flushed another block / re-read the flush block"
             (t/is (= ["l00-rc-b00.arrow"] (tu/read-files-from-bp-path node "tables/public$docs/meta/")))))))))
+
+(t/deftest ^:integration test-implicit-conn-awaiting
+  (let [topic (str "xtdb.kafka-test." (random-uuid))]
+    (util/with-tmp-dirs #{local-disk-path}
+      (with-open [node-1 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :compactor {:threads 0}})
+                  node-2 (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :poll-duration "PT2S"}]}
+                                          :log [:kafka {:cluster :my-kafka, :topic topic}]
+                                          :storage [:local {:path local-disk-path}]
+                                          :compactor {:threads 0}})
+                  xtdb-conn-1 (.build (.createConnectionBuilder node-1))
+                  xtdb-conn-2 (.build (.createConnectionBuilder node-2))]
+        (jdbc/execute! xtdb-conn-1 ["INSERT INTO foo RECORDS {_id: 'primary'}"])
+        (jdbc/execute! xtdb-conn-2 ["INSERT INTO foo RECORDS {_id: 'primary2'}"])
+        (tu/flush-block! node-1)
+
+        (log/info "Testing that both nodes can read from the topic after flush and compact")
+        (log/info "Running query against node 1") 
+        (t/is (= #{{:_id "primary"} {:_id "primary2"}}
+                 (set (jdbc/execute! xtdb-conn-1 ["SELECT * FROM foo"]))))
+
+        (log/info "Running query against node 2") 
+        (t/is (= #{{:_id "primary"} {:_id "primary2"}}
+                 (set (jdbc/execute! xtdb-conn-2 ["SELECT * FROM foo"]))))
+        
+        (log/info "Running second query against node 2")
+        (jdbc/execute! xtdb-conn-2 ["INSERT INTO foo RECORDS {_id: 'primary3'}"])
+        (t/is (= #{{:_id "primary"} {:_id "primary2"} {:_id "primary3"}}
+                 (set (jdbc/execute! xtdb-conn-2 ["SELECT * FROM foo"]))))))))
