@@ -1643,11 +1643,11 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     "'a\\b'"      "E'\\\\'" ["a" "b"]
 
     ;; greedy consumption
-    "'aaa'"       "'aa'"   ["" "a"]
+    "'aaa'"       "'aa'"   ["" "a"])
 
-    ;; NULL string input
-    "NULL"        "','"    nil
-    "NULL"        "NULL"   nil))
+  (t/testing "NULL string input returns NULL"
+    (t/is (= [{}] (xt/q tu/*node* "SELECT string_to_array(NULL, ',') AS x")))
+    (t/is (= [{}] (xt/q tu/*node* "SELECT string_to_array(NULL, NULL) AS x")))))
 
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
