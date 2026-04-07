@@ -7,12 +7,12 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
@@ -32,6 +32,7 @@ import java.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
+@EnabledIfEnvironmentVariable(named = "XTDB_SINGLE_WRITER", matches = "true")
 class DebeziumIntegrationTest {
 
     private lateinit var network: Network
@@ -43,11 +44,6 @@ class DebeziumIntegrationTest {
 
     @BeforeEach
     fun setUp() {
-        assumeTrue(
-            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() == true,
-            "Debezium integration tests require single-writer mode"
-        )
-
         network = Network.newNetwork()
 
         postgres = PostgreSQLContainer("postgres:17-alpine")
