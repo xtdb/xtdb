@@ -42,7 +42,9 @@ arrow-adbc = { group = "org.apache.arrow.adbc", name = "adbc-core", version.ref 
 arrow-adbc-driver-manager = { group = "org.apache.arrow.adbc", name = "adbc-driver-manager", version.ref = "arrow-adbc" }
 arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-sql", version.ref = "arrow-adbc" }
 arrow-flight-sql = { group = "org.apache.arrow", name = "flight-sql", version.ref = "arrow" }
+netty-bom = { group = "io.netty", name = "netty-bom", version.ref = "netty" }
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
+aws-netty-nio-client = { group = "software.amazon.awssdk", name = "netty-nio-client", version.ref = "aws-sdk" }
 
 roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.3.0" }
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.10.0" }

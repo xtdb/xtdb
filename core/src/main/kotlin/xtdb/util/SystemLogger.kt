@@ -21,6 +21,7 @@ fun Logger.info(message: Supplier<String>) = log(INFO, message)
 fun Logger.info(throwable: Throwable, message: String) = log(INFO, message, throwable)
 
 fun Logger.warn(message: String) = log(WARNING, message)
+fun Logger.warn(message: Supplier<String>) = log(WARNING, message)
 fun Logger.warn(throwable: Throwable, message: String) = log(WARNING, message, throwable)
 
 fun Logger.error(message: String) = log(ERROR, message)

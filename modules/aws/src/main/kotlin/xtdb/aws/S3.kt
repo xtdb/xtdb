@@ -12,14 +12,19 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import io.netty.handler.ssl.OpenSsl
+import io.netty.handler.ssl.SslProvider
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.FileTransformerConfiguration
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
+import software.amazon.awssdk.core.interceptor.Context
+import software.amazon.awssdk.core.interceptor.ExecutionAttributes
+import software.amazon.awssdk.core.interceptor.ExecutionInterceptor
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
-import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.*
 import xtdb.api.PathWithEnvVarSerde
 import xtdb.api.StringWithEnvVarSerde
@@ -33,6 +38,10 @@ import xtdb.aws.s3.S3Configurator
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
 import xtdb.util.asPath
+import xtdb.util.logger
+import xtdb.util.slices
+import xtdb.util.trace
+import xtdb.util.warn
 import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.file.Path
@@ -78,13 +87,14 @@ class S3(
         client.close()
     }
 
-    private fun efficientAsyncRequestBody(buf: ByteBuffer): AsyncRequestBody =
-        buf
-            // prevents copying the buffer into a new heap ByteBuffer, as `fromByteBuffer` would do
-            .let(AsyncRequestBody::fromByteBufferUnsafe)
-            // makes the buffer non-replayable, again preventing heap copies for payload-signing or checksum calculations
-            // (couldn't achive this effect by S3 client configuration)
-            .let(AsyncRequestBody::fromPublisher)
+    private fun asyncRequestBody(buf: ByteBuffer): AsyncRequestBody =
+        if (LESS_HEAP_COPIES)
+            // Since LESS_HEAP_COPIES disables chunking, we do our own slicing.
+            // That's because we cannot prevent the Netty TLS layer doing copies, so we need to ensure those are not too big.
+            AsyncRequestBody.fromByteBuffersUnsafe(*buf.slices(256 * 1024).toList().toTypedArray())
+        else
+            // Always prevent fromByteBuffer's heap copy by using fromByteBuffer*Unsafe*
+            AsyncRequestBody.fromByteBufferUnsafe(buf)
 
     override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<CompletedPart>> = scope.future {
         val s3Key = prefix.resolve(k).toString()
@@ -108,7 +118,7 @@ class S3(
                     val contentLength = buf.remaining().toLong()
                     val partNum = idx + 1
 
-                    val partResp = client.uploadPart(efficientAsyncRequestBody(buf)) {
+                    val partResp = client.uploadPart(asyncRequestBody(buf)) {
                         it.bucket(bucket)
                         it.key(s3Key)
                         it.uploadId(uploadId)
@@ -187,7 +197,7 @@ class S3(
 
             val contentLength = buf.remaining().toLong()
 
-            client.putObject(efficientAsyncRequestBody(buf)) {
+            client.putObject(asyncRequestBody(buf)) {
                 it.bucket(bucket)
                 it.key(s3Key)
                 it.contentLength(contentLength)
@@ -247,6 +257,10 @@ class S3(
 
 
     companion object {
+        private val LOG = S3::class.logger
+
+        private const val LESS_HEAP_COPIES = true
+
         @JvmStatic
         fun s3(bucket: String) = Factory(bucket = bucket)
 
@@ -260,6 +274,25 @@ class S3(
             @Serializable(StringWithEnvVarSerde::class) val accessKey: String,
             @Serializable(StringWithEnvVarSerde::class) val secretKey: String
         )
+
+        /** Logs when the SDK unexpectedly signs the payload or uses chunked encoding, which would indicate heap ByteBuffer allocations on the upload path. */
+        internal object HeapCopyDetector : ExecutionInterceptor {
+            override fun beforeTransmission(context: Context.BeforeTransmission, attrs: ExecutionAttributes) {
+                val headers = context.httpRequest().headers()
+                val contentSha = headers["x-amz-content-sha256"]?.firstOrNull()
+                val contentEncoding = headers["Content-Encoding"]?.firstOrNull()
+
+                fun headersSummary() =
+                    "x-amz-content-sha256=$contentSha, Content-Encoding=$contentEncoding, checksum header is ${headers.keys.firstOrNull { it.startsWith("x-amz-checksum-") }}"
+
+                LOG.trace { "S3 ${context.httpRequest().method().name}: ${headersSummary()}" }
+
+                if (contentEncoding == "aws-chunked"
+                    || (contentSha != null && contentSha != "UNSIGNED-PAYLOAD")) {
+                    LOG.warn { "S3 request using payload signing/chunked encoding: ${headersSummary()}" }
+                }
+            }
+        }
     }
 
     @Serializable
@@ -305,8 +338,27 @@ class S3(
                         }
                         endpoint?.let { endpointOverride(URI(it)) }
 
-                        if (pathStyleAccessEnabled)
-                            serviceConfiguration { it.pathStyleAccessEnabled(true) }
+                        if (LESS_HEAP_COPIES) {
+                            if (OpenSsl.isAvailable()) {
+                                // Netty's OpenSSL (BoringSSL) copies into direct memory, avoids heap copies done by Netty's JDK SslEngineType
+                                httpClient(
+                                    NettyNioAsyncHttpClient.builder()
+                                        .sslProvider(SslProvider.OPENSSL)
+                                        .build()
+                                )
+                            } else {
+                                LOG.warn(OpenSsl.unavailabilityCause(),
+                                    "OpenSSL (BoringSSL) not available for S3 client — TLS will use JDK SSLEngine with heap copies")
+                            }
+                            overrideConfiguration { it.addExecutionInterceptor(HeapCopyDetector) }
+                        }
+
+                        serviceConfiguration {
+                            if (LESS_HEAP_COPIES) {
+                                it.chunkedEncodingEnabled(false) // avoid ChunkedEncodedPublisher, which does heap copies, and can OOM
+                            }
+                            if (pathStyleAccessEnabled) it.pathStyleAccessEnabled(true)
+                        }
 
                         s3Configurator.configureClient(this)
                     }.build()
@@ -355,4 +407,5 @@ class S3(
             builder.subclass(Factory::class)
         }
     }
+
 }
