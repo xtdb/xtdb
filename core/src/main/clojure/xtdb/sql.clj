@@ -1179,7 +1179,7 @@
 
 ;; mathy
 (def-sql-fns [octet_length length cardinality] 1 1)
-(def-sql-fns [array_upper] 2 2)
+(def-sql-fns [array_upper array_lower array_length] 2 2)
 (def-sql-fns [abs] 1 1)
 (def-sql-fns [mod] 2 2)
 (def-sql-fns [log] 2 2)

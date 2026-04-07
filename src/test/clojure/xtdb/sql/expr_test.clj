@@ -1653,6 +1653,65 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= [{}] (xt/q tu/*node* "SELECT string_to_array(NULL, ',') AS x")))
     (t/is (= [{}] (xt/q tu/*node* "SELECT string_to_array(NULL, NULL) AS x")))))
 
+(t/deftest test-array-upper
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* "SELECT array_upper(ARRAY ['a', 'b'], 1) AS x"))
+        "returns upper bound for multi-element array")
+
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT array_upper(ARRAY ['a'], 1) AS x"))
+        "single-element array returns 1")
+
+  (t/is (= [{:x 0}]
+           (xt/q tu/*node* "SELECT array_upper(ARRAY [], 1) AS x"))
+        "empty array returns 0")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_upper(ARRAY ['a', 'b'], 2) AS x"))
+        "dimension 2 throws")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_upper(ARRAY ['a', 'b'], 0) AS x"))
+        "dimension 0 throws"))
+
+(t/deftest test-array-lower
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT array_lower(ARRAY ['a', 'b'], 1) AS x"))
+        "returns 1 for dimension 1")
+
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT array_lower(ARRAY ['a'], 1) AS x"))
+        "single-element array still returns 1")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_lower(ARRAY ['a', 'b'], 2) AS x"))
+        "dimension 2 throws")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_lower(ARRAY ['a', 'b'], 0) AS x"))
+        "dimension 0 throws"))
+
+(t/deftest test-array-length
+  (t/is (= [{:x 2}]
+           (xt/q tu/*node* "SELECT array_length(ARRAY ['a', 'b'], 1) AS x"))
+        "returns the length of a list")
+
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT array_length(ARRAY ['a'], 1) AS x"))
+        "single element returns 1")
+
+  (t/is (= [{:x 5}]
+           (xt/q tu/*node* "SELECT array_length(ARRAY ['a', 'b', 'c', 'd', 'e'], 1) AS x"))
+        "longer array returns correct count")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_length(ARRAY ['a', 'b'], 2) AS x"))
+        "dimension 2 throws")
+
+  (t/is (thrown-with-msg? RuntimeException #"dimension != 1"
+           (xt/q tu/*node* "SELECT array_length(ARRAY ['a', 'b'], 0) AS x"))
+        "dimension 0 throws"))
+
 ;; TODO: Add this?
 #_(t/deftest test-random-fn
     (t/is (= true (-> (xt/q tu/*node* "SELECT 0.0 <= random() AS greater") first :greater)))

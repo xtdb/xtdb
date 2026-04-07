@@ -2079,6 +2079,26 @@
 
                      (.size ~arr)))})
 
+(defmethod codegen-call [:array_lower :list :i64] [_]
+  {:return-type #xt/type :i32
+   :->call-code (fn [[_arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_LOWER for dimension != 1"
+                                               {:dim ~dim})))
+                     (int 1)))})
+
+(defmethod codegen-call [:array_length :list :i64] [_]
+  {:return-type #xt/type :i32
+   :->call-code (fn [[arr dim]]
+                  `(do
+                     (when-not (= ~dim 1)
+                       (throw (err/unsupported :xtdb.expression/array-dimension-error
+                                               "Unsupported: ARRAY_LENGTH for dimension != 1"
+                                               {:dim ~dim})))
+                     (.size ~arr)))})
+
 (defn trim-array-view ^xtdb.arrow.ListValueReader [^long trimmed-value-count ^ListValueReader lst]
   (reify ListValueReader
     (size [_] trimmed-value-count)
