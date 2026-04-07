@@ -1585,15 +1585,13 @@
 
 (defmethod codegen-call [:string_to_array :utf8 :utf8] [_]
   {:return-type #xt/type [:list :utf8]
-   :continue-call (fn [f [s delim]]
-                    (f #xt/type [:list :utf8]
-                       `(string-to-array (resolve-string ~s) (resolve-string ~delim))))})
+   :->call-code (fn [[s delim]]
+                  `(string-to-array (resolve-string ~s) (resolve-string ~delim)))})
 
 (defmethod codegen-call [:string_to_array :utf8 :null] [_]
   {:return-type #xt/type [:list :utf8]
-   :continue-call (fn [f [s _delim]]
-                    (f #xt/type [:list :utf8]
-                       `(string-to-chars (resolve-string ~s))))})
+   :->call-code (fn [[s _delim]]
+                  `(string-to-chars (resolve-string ~s)))})
 
 (defmethod codegen-call [:string_to_array :null :utf8] [_]
   {:return-type #xt/type :null, :->call-code (constantly nil)})
