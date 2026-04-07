@@ -37,7 +37,7 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           xtdb.indexer.LiveTable
+           (xtdb.indexer LiveTable OpenTx$Table)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
@@ -342,21 +342,17 @@
     (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user user-metadata))))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
-  (let [system-time (.getSystemTime tx-key) ]
-    (with-open [live-table-tx (.startTx live-table tx-key true)]
-      (try
-        (let [doc-wtr (.getDocWriter live-table-tx)]
-          (doseq [{eid :xt/id, :as doc} docs
-                  :let [{:keys [:xt/valid-from :xt/valid-to],
-                         :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-            (.logPut live-table-tx (ByteBuffer/wrap (util/->iid eid))
-                     (time/instant->micros valid-from) (time/instant->micros valid-to)
-                     (fn [] (.writeObject doc-wtr doc)))))
-        (catch Throwable t
-          (.abort live-table-tx)
-          (throw t)))
+  (let [system-time (.getSystemTime tx-key)]
+    (with-open [open-tx-table (OpenTx$Table. *allocator* (time/instant->micros system-time))]
+      (let [doc-wtr (.getDocWriter open-tx-table)]
+        (doseq [{eid :xt/id, :as doc} docs
+                :let [{:keys [:xt/valid-from :xt/valid-to],
+                       :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
+          (.logPut open-tx-table (ByteBuffer/wrap (util/->iid eid))
+                   (time/instant->micros valid-from) (time/instant->micros valid-to)
+                   (fn [] (.writeObject doc-wtr doc)))))
 
-      (.commit live-table-tx))))
+      (.importData live-table (.getTxRelation open-tx-table)))))
 
 (defn bytes->path [^bytes bs]
   (mapcat (fn [b]

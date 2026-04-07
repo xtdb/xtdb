@@ -384,16 +384,16 @@
 
 (defn live-tables [^Snapshot snap]
   (let [li-snap (.getLiveIndex snap)]
-    (for [^TableRef table (.getLiveTables li-snap)
-          :let [live-table (.liveTable li-snap table)]]
+    (for [^TableRef table (.getTables li-snap)
+          :let [live-table (.table li-snap table)]]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :row-count (long (.getRowCount (.getLiveRelation live-table)))})))
 
 (defn live-columns [^Snapshot snap]
   (let [li-snap (.getLiveIndex snap)]
-    (for [^TableRef table (.getLiveTables li-snap)
-          [col-name col-type] (.getTypes (.liveTable li-snap table))]
+    (for [^TableRef table (.getTables li-snap)
+          [col-name col-type] (.getTypes (.table li-snap table))]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
        :col-name col-name

@@ -48,7 +48,7 @@ class CrashLogger @JvmOverloads constructor(
         crashEdn: String,
         table: TableRef,
         liveIndex: LiveIndex,
-        liveTableTx: LiveTable.Tx,
+        openTxTable: OpenTx.Table,
         queryRel: RelationReader?,
         txOpsRdr: VectorReader?
     ) {
@@ -59,7 +59,7 @@ class CrashLogger @JvmOverloads constructor(
 
         bufferPool.putObject(crashDir.resolve("crash.edn"), ByteBuffer.wrap(crashEdn.toByteArray()))
 
-        val liveTable = liveIndex.liveTable(table) ?: return
+        val liveTable = liveIndex.table(table) ?: return
 
         bufferPool.putObject(
             crashDir.resolve("live-trie.binpb"),
@@ -70,9 +70,9 @@ class CrashLogger @JvmOverloads constructor(
             .takeIf { it.rowCount > 0 }
             ?.let { writeArrow(crashDir.resolve("live-table.arrow"), it) }
 
-        writeArrow(crashDir.resolve("live-table-tx.arrow"), liveTableTx.txRelation)
+        writeArrow(crashDir.resolve("open-tx-table.arrow"), openTxTable.txRelation)
 
-        bufferPool.putObject(crashDir.resolve("live-trie-tx.binpb"), ByteBuffer.wrap(liveTableTx.transientTrie.asProto))
+        bufferPool.putObject(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.trie.asProto))
 
         queryRel?.let { writeArrow(crashDir.resolve("query-rel.arrow"), it) }
         txOpsRdr?.let { writeTxOpsToArrow(crashDir.resolve("tx-ops.arrow"), it) }

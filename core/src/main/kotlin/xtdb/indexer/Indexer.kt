@@ -36,7 +36,7 @@ interface Indexer : AutoCloseable {
     companion object {
         @JvmStatic
         @JvmOverloads
-        fun LiveIndex.Tx.addTxRow(
+        fun OpenTx.addTxRow(
             dbName: DatabaseName,
             txKey: TransactionKey,
             error: Throwable?,
@@ -45,7 +45,7 @@ interface Indexer : AutoCloseable {
             val txId = txKey.txId
             val systemTimeMicros = txKey.systemTime.asMicros
 
-            val liveTable = liveTable(TableRef(dbName, "xt", "txs"))
+            val liveTable = table(TableRef(dbName, "xt", "txs"))
             val docWriter = liveTable.docWriter
 
             liveTable.logPut(ByteBuffer.wrap(txId.asIid), systemTimeMicros, Long.MAX_VALUE) {

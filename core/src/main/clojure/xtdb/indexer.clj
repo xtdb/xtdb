@@ -30,7 +30,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex LiveIndex$Tx LiveTable$Tx OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            xtdb.NodeBase
            (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedQuery)))
@@ -44,7 +44,7 @@
     (throw (err/fault :xtdb/invalid-timestamp-col-type "Invalid timestamp col type"
                       {:field (.getField rdr)}))))
 
-(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+(defn- ->put-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
                                                    ^Instant system-time
                                                    {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
   (let [db-name default-db
@@ -77,11 +77,11 @@
                                                                                      :when (not (contains? #{"_valid_from" "_valid_to"} sk))]
                                                                                  (.vectorFor doc-rdr sk))
                                                                                (.getValueCount doc-rdr)))
-                                                 live-table-tx (.liveTable live-idx-tx table)]
+                                                 open-tx-table (.table open-tx table)]
                                              (MapEntry/create table
                                                               {:id-rdr (.vectorFor doc-rdr "_id")
 
-                                                               :live-table-tx live-table-tx
+                                                               :open-tx-table open-tx-table
 
                                                                :row-valid-from-rdr (doto (.vectorForOrNull doc-rdr "_valid_from")
                                                                                      (assert-timestamp-col-type))
@@ -91,13 +91,13 @@
                                                                :docs-rdr table-docs-rdr
 
                                                                :doc-copier (.rowCopier table-doc-rdr
-                                                                                       (.getDocWriter live-table-tx))})))))))))]
+                                                                                       (.getDocWriter open-tx-table))})))))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [^TableRef table (table/->ref db-name (.getLeg docs-rdr tx-op-idx))
 
-              {:keys [^VectorReader docs-rdr, ^VectorReader id-rdr, ^LiveTable$Tx live-table-tx, ^RowCopier doc-copier
+              {:keys [^VectorReader docs-rdr, ^VectorReader id-rdr, ^OpenTx$Table open-tx-table, ^RowCopier doc-copier
                       ^VectorReader row-valid-from-rdr, ^VectorReader row-valid-to-rdr]}
               (get tables table)
 
@@ -128,9 +128,9 @@
 
                 (with-crash-log crash-logger "error putting document"
                   {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :doc-idx doc-idx}
-                  {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
+                  {:live-idx live-idx, :open-tx-table open-tx-table, :tx-ops-rdr tx-ops-rdr}
 
-                  (.logPut live-table-tx
+                  (.logPut open-tx-table
                            (if iid-rdr
                              (.getBytes iid-rdr (+ iid-start-idx row-idx))
                              (ByteBuffer/wrap (util/->iid (.getObject id-rdr doc-idx))))
@@ -139,7 +139,7 @@
 
         nil))))
 
-(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+(defn- ->delete-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
                                                       ^Instant current-time
                                                       {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
   (let [db-name default-db
@@ -153,7 +153,7 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [^TableRef table (table/->ref db-name (.getObject table-rdr tx-op-idx))
-              live-table-tx (.liveTable live-idx-tx table)
+              open-tx-table (.table open-tx table)
               valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            current-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
@@ -172,14 +172,14 @@
             (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
               (with-crash-log crash-logger "error deleting documents"
                 {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-                {:live-idx live-idx, :live-table-tx live-table-tx, :tx-ops-rdr tx-ops-rdr}
+                {:live-idx live-idx, :open-tx-table open-tx-table, :tx-ops-rdr tx-ops-rdr}
 
-                (.logDelete live-table-tx (.getBytes iid-rdr (+ iids-start-idx iid-idx))
+                (.logDelete open-tx-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))
                             valid-from valid-to)))))
 
         nil))))
 
-(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr
+(defn- ->erase-docs-indexer ^xtdb.indexer.OpIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr
                                                      {:keys [^CrashLogger crash-logger tx-key ^Tracer tracer default-db]}]
   (let [db-name default-db
         erase-leg (.vectorFor tx-ops-rdr "erase-docs")
@@ -189,7 +189,7 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [^TableRef table (table/->ref db-name (.getObject table-rdr tx-op-idx))
-              live-table (.liveTable live-idx-tx table)
+              live-table (.table open-tx table)
               iids-start-idx (.getListStartIndex iids-rdr tx-op-idx)]
 
           (when (xt-log/forbidden-table? table) (throw (xt-log/forbidden-table-ex table)))
@@ -197,13 +197,13 @@
           (dotimes [iid-idx (.getListCount iids-rdr tx-op-idx)]
             (with-crash-log crash-logger "error erasing documents"
               {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx, :iid-idx iid-idx}
-              {:live-idx live-idx, :live-table-tx live-table, :tx-ops-rdr tx-ops-rdr}
+              {:live-idx live-idx, :open-tx-table live-table, :tx-ops-rdr tx-ops-rdr}
 
               (.logErase live-table (.getBytes iid-rdr (+ iids-start-idx iid-idx))))))
 
         nil))))
 
-(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
                                                            {:keys [^Instant current-time, ^CrashLogger crash-logger tx-key]}]
 
   (let [current-time-µs (time/instant->micros current-time)]
@@ -220,13 +220,13 @@
                   valid-from-rdr (.vectorForOrNull in-rel "_valid_from")
                   valid-to-rdr (.vectorForOrNull in-rel "_valid_to")
 
-                  live-table-tx (.liveTable live-idx-tx table)]
+                  open-tx-table (.table open-tx table)]
 
               (with-crash-log crash-logger "error upserting rows"
                 {:table table, :tx-key tx-key}
-                {:live-idx live-idx, :live-table-tx live-table-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
+                {:live-idx live-idx, :open-tx-table open-tx-table, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
                 (let [live-idx-table-copier (.rowCopier (RelationAsStructReader. "content" content-rel)
-                                                        (.getDocWriter live-table-tx))]
+                                                        (.getDocWriter open-tx-table))]
                   (when-not id-col
                     (throw (err/incorrect :xtdb.indexer/missing-xt-id-column
                                           "Missing ID column"
@@ -249,9 +249,9 @@
 
                                         ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
                                         (when (< valid-from valid-to)
-                                          (.logPut live-table-tx (ByteBuffer/wrap (util/->iid eid)) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
+                                          (.logPut open-tx-table (ByteBuffer/wrap (util/->iid eid)) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))))))))))))
 
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -265,7 +265,7 @@
         (dotimes [idx row-count]
           (with-crash-log crash-logger "error deleting rows"
             {:table table, :tx-key tx-key, :row-idx idx}
-            {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
+            {:live-idx live-idx, :open-tx-table open-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
             (let [iid (.getBytes iid-rdr idx)
                   valid-from (.getLong valid-from-rdr idx)
@@ -278,10 +278,10 @@
                                       {:valid-from (time/micros->instant valid-from)
                                        :valid-to (time/micros->instant valid-to)})))
 
-              (-> (.liveTable live-idx-tx table)
+              (-> (.table open-tx table)
                   (.logDelete iid valid-from valid-to)))))))))
 
-(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
+(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
   (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.getRowCount in-rel)
@@ -292,10 +292,10 @@
         (dotimes [idx row-count]
           (with-crash-log crash-logger "error erasing rows"
             {:table table, :tx-key tx-key, :row-idx idx}
-            {:live-idx live-idx, :live-table-tx live-idx-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
+            {:live-idx live-idx, :open-tx-table open-tx, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
 
             (let [iid (.getBytes iid-rdr idx)]
-              (-> (.liveTable live-idx-tx table)
+              (-> (.table open-tx table)
                   (.logErase iid)))))))))
 
 (defn- wrap-sql-args [f ^long param-count]
@@ -359,7 +359,7 @@
                               (aset selection 0 idx)
                               (eval-query (-> param-rel (.select selection))))))))))
 
-(defn- patch-rel! [table, ^LiveIndex live-idx, ^LiveTable$Tx live-table, ^RelationReader rel {:keys [^CrashLogger crash-logger tx-key]}]
+(defn- patch-rel! [table, ^LiveIndex live-idx, ^OpenTx$Table live-table, ^RelationReader rel {:keys [^CrashLogger crash-logger tx-key]}]
   (let [row-count (.getRowCount rel)]
     (when (pos? row-count)
       (let [iid-rdr (.vectorForOrNull rel "_iid")
@@ -369,7 +369,7 @@
         (dotimes [idx row-count]
           (with-crash-log crash-logger "error patching rows"
             {:table table, :tx-key tx-key, :row-idx idx}
-            {:live-idx live-idx, :live-table-tx live-table, :query-rel rel}
+            {:live-idx live-idx, :open-tx-table live-table, :query-rel rel}
 
             (.logPut live-table
                      (.getBytes iid-rdr idx)
@@ -377,7 +377,7 @@
                      (.getLong to-rdr idx)
                      #(.copyRow doc-copier idx))))))))
 
-(defn- ->patch-docs-indexer [^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx, ^VectorReader tx-ops-rdr,
+(defn- ->patch-docs-indexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
                              ^IQuerySource q-src, ^IQuerySource$QueryCatalog db-cat, ^Instant system-time
                              {:keys [^String default-db, ^Tracer tracer] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
@@ -404,7 +404,7 @@
                                           (str "Cannot patch documents with columns: " (pr-str forbidden-cols))
                                           {:table table, :forbidden-cols forbidden-cols})))
 
-                  (let [live-table (.liveTable live-idx-tx table)]
+                  (let [live-table (.table open-tx table)]
                     (reify OpIndexer
                       (indexOp [_ tx-op-idx]
                         (err/wrap-anomaly {:tx-op-idx tx-op-idx, :tx-key (:tx-key tx-opts)}
@@ -458,10 +458,10 @@
 
 (def ^:private ^:const user-table #xt/table pg_catalog/pg_user)
 
-(defn- update-pg-user! [^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, user, password]
+(defn- update-pg-user! [^OpenTx open-tx, ^TransactionKey tx-key, user, password]
   (let [system-time-µs (time/instant->micros (.getSystemTime tx-key))
 
-        live-table (.liveTable live-idx-tx user-table)
+        live-table (.table open-tx user-table)
         doc-writer (.getDocWriter live-table)]
 
     (.logPut live-table (ByteBuffer/wrap (util/->iid user)) system-time-µs Long/MAX_VALUE
@@ -480,18 +480,18 @@
 
                (.endStruct doc-writer)))))
 
-(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^LiveIndex$Tx live-idx-tx
+(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^OpenTx open-tx
                                               ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db-cat,
                                               {:keys [default-db tx-key ^Tracer tracer] :as tx-opts}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
-        upsert-idxer (->upsert-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)
+        upsert-idxer (->upsert-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)
         patch-idxer (reify RelationIndexer
                       (indexOp [_ rel {:keys [table]}]
-                        (patch-rel! table live-idx (.liveTable live-idx-tx table) rel tx-opts)))
-        delete-idxer (->delete-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)
-        erase-idxer (->erase-rel-indexer live-idx live-idx-tx tx-ops-rdr tx-opts)]
+                        (patch-rel! table live-idx (.table open-tx table) rel tx-opts)))
+        delete-idxer (->delete-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)
+        erase-idxer (->erase-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)]
@@ -517,25 +517,25 @@
                                                              (->assert-idxer q-src db-cat tx-opts q-args))
 
                                     :create-user (let [{:keys [username password]} q-args]
-                                                   (update-pg-user! live-idx-tx tx-key username password))
+                                                   (update-pg-user! open-tx tx-key username password))
 
                                     :alter-user (let [{:keys [username password]} q-args]
-                                                  (update-pg-user! live-idx-tx tx-key username password))
+                                                  (update-pg-user! open-tx tx-key username password))
 
                                     (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
                                                           {:query query-str}))))))))
 
         nil))))
 
-(defn- add-tx-row! [db-name ^LiveIndex$Tx live-idx-tx, ^TransactionKey tx-key, ^Throwable t, user-metadata]
-  (Indexer/addTxRow live-idx-tx db-name tx-key t user-metadata))
+(defn- add-tx-row! [db-name ^OpenTx open-tx, ^TransactionKey tx-key, ^Throwable t, user-metadata]
+  (Indexer/addTxRow open-tx db-name tx-key t user-metadata))
 
 
-(defn- build-table-data [^LiveIndex$Tx live-idx-tx]
+(defn- build-table-data [^OpenTx open-tx]
   (let [m (java.util.HashMap.)]
-    (doseq [^java.util.Map$Entry entry (.getLiveTables live-idx-tx)]
+    (doseq [^java.util.Map$Entry entry (.getTables open-tx)]
       (let [^TableRef table-ref (.getKey entry)
-            ^LiveTable$Tx table-tx (.getValue entry)]
+            ^OpenTx$Table table-tx (.getValue entry)]
         (when-let [data (.serializeTxData table-tx)]
           (.put m (.getSchemaAndTable table-ref) data))))
     m))
@@ -549,10 +549,10 @@
                               nil
                               nil))
 
-(defn- commit [tx-key ^LiveIndex$Tx live-idx-tx committed? error]
-  (let [table-data (build-table-data live-idx-tx)]
-    (.commit live-idx-tx)
-    (->resolved-tx tx-key committed? error table-data)))
+(defn- commit [^LiveIndex live-index ^OpenTx open-tx committed? error]
+  (let [table-data (build-table-data open-tx)]
+    (.commitTx live-index open-tx)
+    (->resolved-tx (.getTxKey open-tx) committed? error table-data)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                db-name, db-storage, db-state
@@ -584,26 +584,25 @@
                        (pr-str system-time)
                        (pr-str (.getLatestCompletedTx live-index)))
 
-            (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+            (util/with-open [open-tx (.startTx live-index tx-key)]
               (when tx-error-counter
                 (.increment tx-error-counter))
-              (add-tx-row! db-name live-idx-tx tx-key err user-metadata)
-              (commit tx-key live-idx-tx false err)))
+              (add-tx-row! db-name open-tx tx-key err user-metadata)
+              (commit live-index open-tx false err)))
 
           (let [system-time (or system-time default-system-time)
                 tx-key (serde/->TxKey msg-id system-time)]
-            (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+            (util/with-open [open-tx (.startTx live-index tx-key)]
               (if (nil? tx-ops-rdr)
                 (do
-                  (.abort live-idx-tx)
-                  (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-                    (add-tx-row! db-name live-idx-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key live-idx-tx false skipped-exn)))
+                                    (util/with-open [open-tx (.startTx live-index tx-key)]
+                    (add-tx-row! db-name open-tx tx-key skipped-exn user-metadata)
+                    (commit live-index open-tx false skipped-exn)))
 
                 (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
                                                      (openSnapshot [_]
-                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot live-idx-tx)]
+                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot live-index open-tx)]
                                                          (Snapshot. tx-key live-index-snap
                                                                     (update-vals (LiveIndex/buildSchema live-index-snap table-catalog) set))))))
 
@@ -616,11 +615,11 @@
                                :user-metadata user-metadata
                                :tracer tracer}
 
-                      !put-docs-idxer (delay (->put-docs-indexer live-index live-idx-tx tx-ops-rdr system-time tx-opts))
-                      !patch-docs-idxer (delay (->patch-docs-indexer live-index live-idx-tx tx-ops-rdr q-src db-cat system-time tx-opts))
-                      !delete-docs-idxer (delay (->delete-docs-indexer live-index live-idx-tx tx-ops-rdr system-time tx-opts))
-                      !erase-docs-idxer (delay (->erase-docs-indexer live-index live-idx-tx tx-ops-rdr tx-opts))
-                      !sql-idxer (delay (->sql-indexer allocator live-index live-idx-tx tx-ops-rdr q-src db-cat tx-opts))]
+                      !put-docs-idxer (delay (->put-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
+                      !patch-docs-idxer (delay (->patch-docs-indexer live-index open-tx tx-ops-rdr q-src db-cat system-time tx-opts))
+                      !delete-docs-idxer (delay (->delete-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
+                      !erase-docs-idxer (delay (->erase-docs-indexer live-index open-tx tx-ops-rdr tx-opts))
+                      !sql-idxer (delay (->sql-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat tx-opts))]
 
                   (if-let [e (try
                                (err/wrap-anomaly {}
@@ -646,22 +645,21 @@
 
                     (do
                       (log/debug e "aborted tx")
-                      (.abort live-idx-tx)
-
-                      (util/with-open [live-idx-tx (.startTx live-index tx-key)]
+                      
+                      (util/with-open [open-tx (.startTx live-index tx-key)]
                         (when tx-error-counter
                           (.increment tx-error-counter))
-                        (add-tx-row! db-name live-idx-tx tx-key e user-metadata)
-                        (commit tx-key live-idx-tx false e)))
+                        (add-tx-row! db-name open-tx tx-key e user-metadata)
+                        (commit live-index open-tx false e)))
 
                     (do
-                      (add-tx-row! db-name live-idx-tx tx-key nil user-metadata)
-                      (commit tx-key live-idx-tx true nil)))))))))))
+                      (add-tx-row! db-name open-tx tx-key nil user-metadata)
+                      (commit live-index open-tx true nil)))))))))))
 
   (addTxRow [_ tx-key e]
-    (util/with-open [live-idx-tx (.startTx live-index tx-key)]
-      (add-tx-row! db-name live-idx-tx tx-key e {})
-      (commit tx-key live-idx-tx (nil? e) e))))
+    (util/with-open [open-tx (.startTx live-index tx-key)]
+      (add-tx-row! db-name open-tx tx-key e {})
+      (commit live-index open-tx (nil? e) e))))
 
 (defn ->factory ^xtdb.indexer.Indexer$Factory []
   (reify Indexer$Factory
