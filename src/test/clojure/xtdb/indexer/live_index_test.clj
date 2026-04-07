@@ -46,7 +46,7 @@
             (.logPut open-tx-table (util/uuid->byte-buffer iid) 0 0
                      #(.writeObject put-doc-wrt {:some :doc})))
 
-          (.commit open-tx)
+          (.commitTx live-index open-tx)
 
           (let [live-table (.table live-index #xt/table my-table)
                 live-rel (.getLiveRelation live-table)
@@ -137,7 +137,7 @@
           (aet/check-arrow-edn-dir (io/file expected-dir "arrow") node-dir)
           (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))))))
 
-(t/deftest test-new-table-discarded-on-abort-2721
+(t/deftest test-uncommitted-tx-not-visible
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]
 
     (with-open [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
@@ -146,45 +146,19 @@
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
-        (.commit live-tx0)))
+        (.commitTx live-index live-tx0)))
 
-    (t/testing "aborting bar means it doesn't get added to the committed live-index")
-    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
-      (let [bar-table-tx (.table live-tx1 #xt/table bar)
-            doc-wtr (.getDocWriter bar-table-tx)]
-        (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
-                 (fn []
-                   (.endStruct doc-wtr)))
-
-        (t/testing "doesn't get added in the tx either"
-          (t/is (nil? (.table live-index #xt/table bar))))
-
-        (.abort live-tx1)
-
-        (t/is (some? (.table live-index #xt/table foo)))
-        (t/is (nil? (.table live-index #xt/table bar)))))
-
-    (t/testing "aborting foo doesn't clear it from the live-index"
-      (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-03T00:00:00Z"})]
-        (let [foo-table-tx (.table live-tx2 #xt/table foo)
-              doc-wtr (.getDocWriter foo-table-tx)]
-          (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
-                   (fn []
-                     (.endStruct doc-wtr)))
-          (.abort live-tx2)))
-
-      (t/is (some? (.table live-index #xt/table foo))))
-
-    (t/testing "committing bar after an abort adds it correctly"
-      (with-open [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-04T00:00:00Z"})]
-        (let [bar-table-tx (.table live-tx3 #xt/table bar)
+    (t/testing "uncommitted tx data doesn't appear in live-index"
+      (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+        (let [bar-table-tx (.table live-tx1 #xt/table bar)
               doc-wtr (.getDocWriter bar-table-tx)]
           (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
                    (fn []
                      (.endStruct doc-wtr)))
-          (.commit live-tx3)))
 
-      (t/is (some? (.table live-index #xt/table bar))))))
+          ;; not committing — bar should not appear
+          (t/is (some? (.table live-index #xt/table foo)))
+          (t/is (nil? (.table live-index #xt/table bar))))))))
 
 (t/deftest live-index-row-counter-reinitialization
   (binding [c/*ignore-signal-block?* true]
@@ -226,7 +200,7 @@
                   "External snapshot should not see table created in uncommitted tx")))
 
         ;; But the transaction's own snapshot SHOULD see its data (in txRelation)
-        (with-open [tx-snap (.openSnapshot live-tx)]
+        (with-open [tx-snap (.openSnapshot live-index live-tx)]
           (let [table-snap (.table tx-snap table)]
             (t/is (some? table-snap)
                   "Transaction snapshot should see its own uncommitted table")
@@ -235,7 +209,7 @@
             (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
                   "Transaction snapshot should see its own uncommitted row in txRelation")))
 
-        (.commit live-tx))
+        (.commitTx live-index live-tx))
 
       ;; After commit, external snapshot should now see the data
       (with-open [external-snap (.openSnapshot live-index)]
@@ -257,7 +231,7 @@
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
-        (.commit live-tx1)))
+        (.commitTx live-index live-tx1)))
 
     ;; Take a snapshot BEFORE second transaction
     (with-open [snap-before (.openSnapshot live-index)]
@@ -270,7 +244,7 @@
           (let [table-tx (.table live-tx2 table)
                 doc-wtr (.getDocWriter table-tx)]
             (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
-            (.commit live-tx2)))
+            (.commitTx live-index live-tx2)))
 
         ;; The snapshot taken before should still show only 1 row (immutability)
         (t/is (= row-count-before
@@ -286,35 +260,8 @@
           (t/is (= 2 (.getRowCount (.getLiveRelation table-snap-after)))
                 "Post-commit snapshot should have 2 rows"))))))
 
-(t/deftest abort-updates-latest-completed-tx
-  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
-        table #xt/table test-table
-        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
-        tx-key-1 #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:00Z"}
-        tx-key-2 #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-02T00:00:00Z"}]
-
-    (t/is (nil? (.getLatestCompletedTx live-index))
-          "Initially no completed tx")
-
-    ;; Commit tx-1
-    (with-open [live-tx1 (.startTx live-index tx-key-1)]
-      (let [table-tx (.table live-tx1 table)
-            doc-wtr (.getDocWriter table-tx)]
-        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
-        (.commit live-tx1)))
-
-    (t/is (= tx-key-1 (.getLatestCompletedTx live-index))
-          "After commit, latest_completed_tx should be tx-1")
-
-    ;; Abort tx-2 - should still update latest_completed_tx
-    (with-open [live-tx2 (.startTx live-index tx-key-2)]
-      (let [table-tx (.table live-tx2 table)
-            doc-wtr (.getDocWriter table-tx)]
-        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
-        (.abort live-tx2)))
-
-    (t/is (= tx-key-2 (.getLatestCompletedTx live-index))
-          "After abort, latest_completed_tx should advance to tx-2 (processed, not committed)")))
+; abort-updates-latest-completed-tx removed — abort no longer exists as a concept.
+; OpenTx is standalone; not committing simply means the data isn't imported.
 
 (t/deftest get-table-tx-multiple-times-returns-same-tx
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
@@ -331,7 +278,7 @@
         (let [doc-wtr (.getDocWriter table-tx-1)]
           (.logPut table-tx-1 iid 0 0 #(.endStruct doc-wtr)))
 
-        (with-open [tx-snap (.openSnapshot live-tx)]
+        (with-open [tx-snap (.openSnapshot live-index live-tx)]
           (let [table-snap (.table tx-snap table)]
             (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
                   "Row written via first reference should be visible in txRelation")))))))
@@ -349,7 +296,7 @@
         (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
         (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
 
-        (.commit live-tx))
+        (.commitTx live-index live-tx))
 
       (with-open [snap (.openSnapshot live-index)]
         (let [live-idx-snap (.getLiveIndex snap)
@@ -376,7 +323,7 @@
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getDocWriter table-tx)]
               (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
-              (.commit live-tx)))
+              (.commitTx live-index live-tx)))
 
           (t/is (some? (.table live-index table))
                 "Table should exist after commit")
@@ -398,7 +345,7 @@
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
-        (.commit live-tx1)))
+        (.commitTx live-index live-tx1)))
 
     ;; Start second transaction and write more data
     (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
@@ -407,7 +354,7 @@
         (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
 
         ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2)
-        (with-open [tx-snap (.openSnapshot live-tx2)]
+        (with-open [tx-snap (.openSnapshot live-index live-tx2)]
           (let [table-snap (.table tx-snap table)
                 live-rel (.getLiveRelation table-snap)
                 tx-rel (.getTxRelation table-snap)]
@@ -418,4 +365,4 @@
             (t/is (= 1 (.getRowCount tx-rel))
                   "Transaction snapshot should see 1 uncommitted row")))
 
-        (.abort live-tx2)))))
+        ))))

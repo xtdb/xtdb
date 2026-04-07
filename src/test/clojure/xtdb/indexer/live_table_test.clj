@@ -13,7 +13,7 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.api IndexerConfig)
-           (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot)
+           (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot OpenTx$Table)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
@@ -40,7 +40,7 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
-          (with-open [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+          (with-open [open-tx-table (OpenTx$Table. allocator 0)]
             (let [doc-wtr (.getDocWriter open-tx-table)]
               (dotimes [_n n]
                 (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid))
@@ -48,7 +48,7 @@
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit open-tx-table)
+              (.importData live-table (.getTxRelation open-tx-table))
 
               (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                     leaf ^MemoryHashTrie$Leaf (first leaves)]
@@ -72,7 +72,7 @@
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.))]
-          (with-open [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+          (with-open [open-tx-table (OpenTx$Table. allocator 0)]
             (let [doc-wtr (.getDocWriter open-tx-table)]
 
               (dotimes [_n n]
@@ -80,7 +80,7 @@
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit open-tx-table)
+              (.importData live-table (.getTxRelation open-tx-table))
 
               (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                     leaf ^MemoryHashTrie$Leaf (first leaves)]
@@ -117,7 +117,7 @@
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
                      live-table (LiveTable. allocator #xt/table foo rc)]
-      (let [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
+      (let [open-tx-table (OpenTx$Table. allocator 0)
             doc-wtr (.getDocWriter open-tx-table)]
 
         (doseq [uuid uuids]
@@ -125,7 +125,7 @@
                    (fn []
                      (.endStruct doc-wtr))))
 
-        (.commit open-tx-table)
+        (.importData live-table (.getTxRelation open-tx-table))
 
         (util/with-open [live-table-snap (.openSnapshot live-table)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
@@ -162,7 +162,7 @@
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit open-tx)
+              (.commitTx live-index open-tx)
 
               (with-open [snap (.openSnapshot live-index)]
                 (let [live-index-snap (.getLiveIndex snap)

@@ -73,7 +73,7 @@ data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
                     tx.addTxRow(dbName, txKey, null)
 
                     val tableData = buildTableData(tx)
-                    tx.commit()
+                    liveIndex.commitTx(tx)
 
                     llp.handleExternalTx(
                         ReplicaMessage.ResolvedTx(

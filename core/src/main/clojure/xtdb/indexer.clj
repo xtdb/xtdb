@@ -549,10 +549,10 @@
                               nil
                               nil))
 
-(defn- commit [tx-key ^OpenTx open-tx committed? error]
+(defn- commit [^LiveIndex live-index ^OpenTx open-tx committed? error]
   (let [table-data (build-table-data open-tx)]
-    (.commit open-tx)
-    (->resolved-tx tx-key committed? error table-data)))
+    (.commitTx live-index open-tx)
+    (->resolved-tx (.getTxKey open-tx) committed? error table-data)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                db-name, db-storage, db-state
@@ -588,22 +588,21 @@
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name open-tx tx-key err user-metadata)
-              (commit tx-key open-tx false err)))
+              (commit live-index open-tx false err)))
 
           (let [system-time (or system-time default-system-time)
                 tx-key (serde/->TxKey msg-id system-time)]
             (util/with-open [open-tx (.startTx live-index tx-key)]
               (if (nil? tx-ops-rdr)
                 (do
-                  (.abort open-tx)
-                  (util/with-open [open-tx (.startTx live-index tx-key)]
+                                    (util/with-open [open-tx (.startTx live-index tx-key)]
                     (add-tx-row! db-name open-tx tx-key skipped-exn user-metadata)
-                    (commit tx-key open-tx false skipped-exn)))
+                    (commit live-index open-tx false skipped-exn)))
 
                 (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
                                                      (openSnapshot [_]
-                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot open-tx)]
+                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot live-index open-tx)]
                                                          (Snapshot. tx-key live-index-snap
                                                                     (update-vals (LiveIndex/buildSchema live-index-snap table-catalog) set))))))
 
@@ -646,22 +645,21 @@
 
                     (do
                       (log/debug e "aborted tx")
-                      (.abort open-tx)
-
+                      
                       (util/with-open [open-tx (.startTx live-index tx-key)]
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name open-tx tx-key e user-metadata)
-                        (commit tx-key open-tx false e)))
+                        (commit live-index open-tx false e)))
 
                     (do
                       (add-tx-row! db-name open-tx tx-key nil user-metadata)
-                      (commit tx-key open-tx true nil)))))))))))
+                      (commit live-index open-tx true nil)))))))))))
 
   (addTxRow [_ tx-key e]
     (util/with-open [open-tx (.startTx live-index tx-key)]
       (add-tx-row! db-name open-tx tx-key e {})
-      (commit tx-key open-tx (nil? e) e))))
+      (commit live-index open-tx (nil? e) e))))
 
 (defn ->factory ^xtdb.indexer.Indexer$Factory []
   (reify Indexer$Factory

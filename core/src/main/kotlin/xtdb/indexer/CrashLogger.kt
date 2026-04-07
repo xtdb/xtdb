@@ -72,7 +72,7 @@ class CrashLogger @JvmOverloads constructor(
 
         writeArrow(crashDir.resolve("open-tx-table.arrow"), openTxTable.txRelation)
 
-        bufferPool.putObject(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.transientTrie.asProto))
+        bufferPool.putObject(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.trie.asProto))
 
         queryRel?.let { writeArrow(crashDir.resolve("query-rel.arrow"), it) }
         txOpsRdr?.let { writeTxOpsToArrow(crashDir.resolve("tx-ops.arrow"), it) }

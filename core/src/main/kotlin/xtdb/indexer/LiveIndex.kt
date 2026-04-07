@@ -75,59 +75,43 @@ class LiveIndex private constructor(
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
-    fun startTx(txKey: TransactionKey): OpenTx {
-        val tableTxs = HashMap<TableRef, LiveTable.Tx>()
-        val thisIdx = this
+    fun startTx(txKey: TransactionKey) = OpenTx(allocator, txKey)
 
-        return object : OpenTx {
-            override fun table(table: TableRef): LiveTable.Tx =
-                tableTxs.computeIfAbsent(table) { t ->
-                    val existing = thisIdx.table(t)
-                    val liveTable = existing ?: LiveTable(allocator, t, rowCounter, liveTrieFactory)
-                    liveTable.startTx(txKey, existing == null)
-                }
-
-            override val tables: Iterable<Map.Entry<TableRef, LiveTable.Tx>> get() = tableTxs.entries
-
-            override fun commit() {
-                val stamp = snapLock.writeLock()
-                try {
-                    for ((table, tx) in tableTxs)
-                        this@LiveIndex.tables[table] = tx.commit()
-
-                    latestCompletedTx = txKey
-
-                    thisIdx.refreshSnap()
-                } finally {
-                    snapLock.unlock(stamp)
+    fun commitTx(openTx: OpenTx) {
+        val stamp = snapLock.writeLock()
+        try {
+            for ((tableRef, tableTx) in openTx.tables) {
+                if (tableTx.txRelation.rowCount > 0) {
+                    val liveTable = tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
+                    liveTable.importData(tableTx.txRelation)
                 }
             }
 
-            override fun abort() {
-                for (tx in tableTxs.values)
-                    tx.abort()
-                latestCompletedTx = txKey
+            latestCompletedTx = openTx.txKey
+
+            refreshSnap()
+        } finally {
+            snapLock.unlock(stamp)
+        }
+    }
+
+    fun openSnapshot(openTx: OpenTx): Snapshot {
+        val snaps = HashMap<TableRef, LiveTable.Snapshot>()
+        snaps.closeAllOnCatch {
+            for ((tableRef, tableTx) in openTx.tables) {
+                val liveTable = tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
+                snaps[tableRef] = liveTable.openSnapshot(tableTx)
             }
 
-            override fun openSnapshot(): Snapshot {
-                val snaps = HashMap<TableRef, LiveTable.Snapshot>()
-                snaps.closeAllOnCatch {
-                    for ((table, tx) in tableTxs)
-                        snaps[table] = tx.openSnapshot()
+            for ((table, liveTable) in tables)
+                snaps.computeIfAbsent(table) { liveTable.openSnapshot() }
 
-                    for ((table, liveTable) in this@LiveIndex.tables)
-                        snaps.computeIfAbsent(table) { liveTable.openSnapshot() }
-
-                    return object : Snapshot {
-                        override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }
-                        override fun table(table: TableRef) = snaps[table]
-                        override val tables get() = snaps.keys
-                        override fun close() = snaps.values.closeAll()
-                    }
-                }
+            return object : Snapshot {
+                override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }
+                override fun table(table: TableRef) = snaps[table]
+                override val tables get() = snaps.keys
+                override fun close() = snaps.values.closeAll()
             }
-
-            override fun close() = tableTxs.values.closeAll()
         }
     }
 
