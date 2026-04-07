@@ -398,7 +398,7 @@ class Database(
 
                 override fun databaseOrNull(dbName: DatabaseName) = null
 
-                override fun attach(dbName: DatabaseName, config: Config?) =
+                override fun attach(dbName: DatabaseName, config: Config?): Unit =
                     error("can't attach database to empty db-cat")
 
                 override fun detach(dbName: DatabaseName) =
@@ -413,7 +413,7 @@ class Database(
 
         val primary: Database get() = databaseOrNull("xtdb")!!
 
-        fun attach(dbName: DatabaseName, config: Config?): Database
+        fun attach(dbName: DatabaseName, config: Config?)
         fun detach(dbName: DatabaseName)
 
         override fun valAt(key: Any?) = valAt(key, null)
@@ -450,9 +450,8 @@ class Database(
             if (timeout == null) syncAll0() else withTimeout(timeout) { syncAll0() }
         }
 
-        val serialisedSecondaryDatabases
-            get(): Map<DatabaseName, DatabaseConfig> =
-                this.filterNot { it.name == "xtdb" }
-                    .associate { db -> db.name to db.config.serializedConfig }
+        val serialisedSecondaryDatabases: Map<DatabaseName, DatabaseConfig>
+            get() = this.filterNot { it.name == "xtdb" }
+                .associate { db -> db.name to db.config.serializedConfig }
     }
 }

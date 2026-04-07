@@ -58,6 +58,10 @@
   (cond-> (.getCompactor config)
     (some? threads) (.threads threads)))
 
+(defmethod apply-config! :skip-dbs [^Xtdb$Config config _ skip-dbs]
+  (when skip-dbs
+    (.skipDbs config (set skip-dbs))))
+
 (defmethod apply-config! :authn [config _ opts]
   (apply-config! config :xtdb/authn opts))
 

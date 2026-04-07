@@ -70,3 +70,25 @@ This action *must* be applied atomically: all nodes must be stopped, the configu
 When the errant transaction has been skipped, you will see a log message: "skipping transaction offset 2109".
 Once the next block has been written, you will then see another log message: "it is safe to remove the XTDB_SKIP_TXS environment variable".
 This can be applied as a standard (green/blue) configuration change, at your convenience.
+
+### Skipping Databases
+
+If a secondary database's underlying log (e.g. a Kafka topic) has been deleted or is otherwise unavailable, the node will fail to start.
+You can skip specific secondary databases on startup using `XTDB_SKIP_DBS`.
+
+Skipped databases become **dormant** — their configuration is preserved in the block catalog, but no processing starts.
+They are excluded from queries, the information schema, and health checks.
+
+This action *must* be applied atomically: all nodes must be stopped, the configuration change applied, and then all nodes restarted.
+
+1. Identify the problematic database name in the startup error logs.
+2. Scale down all nodes within the XTDB cluster.
+3. Set `XTDB_SKIP_DBS="db1,db2"` as an environment variable on all of the nodes.
+4. Restart all nodes within the XTDB cluster.
+
+Once the nodes have started, you can either:
+
+- **Fix the underlying issue** (e.g. recreate the Kafka topic), remove `XTDB_SKIP_DBS`, and restart.
+  The database will resume processing from where it left off.
+- **Permanently remove the database** by running `DETACH DATABASE <name>` while the database is dormant.
+  This removes the database configuration from future blocks.

@@ -33,6 +33,9 @@ import java.time.ZoneOffset
 import java.util.UUID.randomUUID
 import kotlin.io.path.extension
 
+private fun parseSkipDbsEnv(skipDbs: String): Set<String> =
+    skipDbs.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
 interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     val allocator: BufferAllocator
@@ -79,6 +82,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var tracer: TracerConfig = TracerConfig(),
         var readOnlyDatabases: Boolean = false,
+        var skipDbs: Set<String> = System.getenv("XTDB_SKIP_DBS")?.let(::parseSkipDbsEnv).orEmpty(),
         var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
     ) {
         var allocator: BufferAllocator? = null
@@ -122,6 +126,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             garbageCollector(GarbageCollectorConfig().also(configure))
 
         fun readOnlyDatabases(readOnlyDatabases: Boolean = true) = apply { this.readOnlyDatabases = readOnlyDatabases }
+
+        fun skipDbs(skipDbs: Set<String>) = apply { this.skipDbs = skipDbs }
 
         fun defaultTz(defaultTz: ZoneId) = apply { this.defaultTz = defaultTz }
 

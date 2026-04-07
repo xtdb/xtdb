@@ -352,7 +352,8 @@
         db (or (.databaseOrNull db-cat db-name)
                (when playground?
                  (log/debug "creating playground database" (pr-str db-name))
-                 (.attach db-cat db-name nil))
+                 (.attach db-cat db-name nil)
+                 (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
         conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)]

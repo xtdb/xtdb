@@ -14,6 +14,7 @@
             [xtdb.util :as util])
   (:import [java.nio.file Path]
            (org.postgresql.util PSQLException)
+           xtdb.database.DatabaseCatalog
            xtdb.storage.LocalStorage))
 
 (t/deftest test-resolves-other-db
@@ -293,5 +294,75 @@ ATTACH DATABASE new_db WITH $$
       (t/testing "querying xtdb still works regardless of secondary state"
         (t/is (= [{:xt/id "xtdb"}]
                  (xt/q xtdb-conn "SELECT * FROM foo")))))))
+
+(t/deftest skip-dbs-on-startup
+  (let [node-dir (util/->path "target/multi-db/skip-dbs")]
+    (util/delete-dir node-dir)
+    (util/delete-dir (util/->path "target/multi-db/skip-dbs-secondary"))
+
+    (t/testing "set up: attach a secondary database and flush a block"
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+        (jdbc/execute! node ["
+          ATTACH DATABASE secondary WITH $$
+            log: !Local
+              path: 'target/multi-db/skip-dbs-secondary/log'
+            storage: !Local
+              path: 'target/multi-db/skip-dbs-secondary/storage'
+          $$"])
+
+        (with-open [conn (-> (.createConnectionBuilder node)
+                             (.database "secondary")
+                             (.build))]
+          (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 'secondary'}"]))
+
+        (tu/flush-block! node)))
+
+    (t/testing "restart with skip-dbs: secondary is dormant"
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0, :skip-dbs #{"secondary"}})]
+        (let [^DatabaseCatalog db-cat (db/<-node node)]
+
+          (t/testing "secondary is not in databaseNames"
+            (t/is (= #{"xtdb"} (set (.getDatabaseNames db-cat)))))
+
+          (t/testing "secondary is not queryable"
+            (t/is (= {:sql-state "3D000", :message "database 'secondary' does not exist"}
+                     (pgw-test/reading-ex
+                      (with-open [conn (-> (.createConnectionBuilder node)
+                                           (.database "secondary")
+                                           (.build))]
+                        (jdbc/execute! conn ["SELECT 1"]))))))
+
+          (t/testing "secondary config is preserved in serialisedSecondaryDatabases"
+            (t/is (contains? (.getSerialisedSecondaryDatabases db-cat) "secondary"))))))
+
+    (t/testing "restart without skip-dbs: secondary is active again"
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+        (with-open [conn (-> (.createConnectionBuilder node)
+                             (.database "secondary")
+                             (.build))]
+          (t/is (= {:_id "secondary"} (jdbc/execute-one! conn ["SELECT * FROM foo"]))))))))
+
+(t/deftest detach-dormant-database
+  (let [node-dir (util/->path "target/multi-db/detach-dormant")]
+    (util/delete-dir node-dir)
+    (util/delete-dir (util/->path "target/multi-db/detach-dormant-secondary"))
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+      (jdbc/execute! node ["
+        ATTACH DATABASE secondary WITH $$
+          log: !Local
+            path: 'target/multi-db/detach-dormant-secondary/log'
+          storage: !Local
+            path: 'target/multi-db/detach-dormant-secondary/storage'
+        $$"])
+      (tu/flush-block! node))
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0, :skip-dbs #{"secondary"}})]
+      (let [^DatabaseCatalog db-cat (db/<-node node)]
+        (t/is (contains? (.getSerialisedSecondaryDatabases db-cat) "secondary"))
+
+        (jdbc/execute! node ["DETACH DATABASE secondary"])
+
+        (t/is (not (contains? (.getSerialisedSecondaryDatabases db-cat) "secondary")))))))
 
 
