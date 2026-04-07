@@ -1568,7 +1568,10 @@
   Multi-alternative rules (e.g. ANALYZE : 'ANALYZE' | 'ANALYSE') have no single
   literal name — these are added explicitly below."
   (let [vocab (xtdb.antlr.SqlLexer/VOCABULARY)
-        ks (java.util.HashSet. #{"analyze" "analyse"})]
+        ks (java.util.HashSet. #{"analyze" "analyse"
+                               "localdate" "local_date"
+                               "localtime" "local_time"
+                               "localtimestamp" "local_timestamp"})]
     (dotimes [i (.getMaxTokenType vocab)]
       (when-let [lit (.getLiteralName vocab (inc i))]
         (let [s (subs lit 1 (dec (count lit)))]

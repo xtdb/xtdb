@@ -1629,6 +1629,10 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     "'from'"               "\"from\""
     "'null'"               "\"null\""
 
+    ;; multi-alternative lexer keywords
+    "'local_date'"         "\"local_date\""
+    "'localdate'"          "\"localdate\""
+
     ;; mixed case / non-ASCII
     "'Foo'"                "\"Foo\""
     "'café'"               "\"café\""
