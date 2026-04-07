@@ -128,7 +128,7 @@ class DatabaseStorage(
             }
 
             val externalLog = open {
-                if (singleWriter) dbConfig.externalLog?.open(logClusters) else null
+                if (singleWriter) dbConfig.externalLog?.open(dbName, logClusters) else null
             }
 
             DatabaseStorage(sourceLog, replicaLog, externalLog, bufferPool, metadataManager)

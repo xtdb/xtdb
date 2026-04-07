@@ -31,7 +31,7 @@ interface ExternalLog<M> : AutoCloseable {
 
     interface Factory {
         fun writeTo(dbConfig: DatabaseConfig.Builder)
-        fun open(clusters: Map<LogClusterAlias, Log.Cluster>): ExternalLog<*>
+        fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalLog<*>
         fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<*>
 
         companion object {

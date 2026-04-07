@@ -12,7 +12,7 @@ import xtdb.debezium.proto.DebeziumSourceConfig.LogCase.*
 sealed interface DebeziumLog : ExternalLog<DebeziumMessage> {
 
     interface Factory {
-        fun openLog(clusters: Map<LogClusterAlias, Log.Cluster>): DebeziumLog
+        fun openLog(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): DebeziumLog
 
         companion object {
             val serializersModule = SerializersModule {

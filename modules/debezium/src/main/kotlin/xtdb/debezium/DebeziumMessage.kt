@@ -1,13 +1,13 @@
 package xtdb.debezium
 
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import xtdb.api.TxId
 import xtdb.debezium.proto.DebeziumOffsetToken
+import xtdb.indexer.OpenTx
 import java.time.Instant
 
 class DebeziumMessage(
     val txId: TxId,
     val systemTime: Instant,
-    val ops: List<CdcEvent>,
+    val openTx: OpenTx,
     val offsets: DebeziumOffsetToken,
 )

@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
-import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.ReplicaMessage
@@ -16,45 +15,13 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.debeziumSourceConfig
 import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.LeaderLogProcessor
-import xtdb.database.DatabaseName
-import xtdb.indexer.OpenTx
-import xtdb.table.TableRef
-import xtdb.time.InstantUtil.asMicros
-import xtdb.util.asIid
-import java.nio.ByteBuffer
 import xtdb.debezium.proto.DebeziumSourceConfig as DebeziumSourceConfigProto
 import com.google.protobuf.Any as ProtoAny
-
-private fun OpenTx.indexCdcEvent(
-    dbName: DatabaseName, event: CdcEvent, txKey: TransactionKey
-) {
-    val table = TableRef(dbName, event.schema, event.table)
-    val openTxTable = table(table)
-
-    when (event) {
-        is CdcEvent.Put -> {
-            val iid = ByteBuffer.wrap(event.doc["_id"]!!.asIid)
-            val validFrom = event.validFrom?.asMicros ?: txKey.systemTime.asMicros
-            val validTo = event.validTo?.asMicros ?: Long.MAX_VALUE
-            openTxTable.logPut(iid, validFrom, validTo) { openTxTable.docWriter.writeObject(event.doc) }
-        }
-
-        is CdcEvent.Delete -> {
-            val iid = ByteBuffer.wrap(event.id.asIid)
-            openTxTable.logDelete(iid, txKey.systemTime.asMicros, Long.MAX_VALUE)
-        }
-    }
-}
-
-private fun buildTableData(tx: OpenTx): Map<String, ByteArray> =
-    tx.tables.mapNotNull { (tableRef, tableTx) ->
-        tableTx.serializeTxData()?.let { tableRef.schemaAndTable to it }
-    }.toMap()
 
 @Serializable
 @SerialName("!Debezium")
 data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
-    override fun open(clusters: Map<LogClusterAlias, Log.Cluster>) = log.openLog(clusters)
+    override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>) = log.openLog(dbName, clusters)
 
     override fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<DebeziumMessage> {
         val dbName = dbState.name
@@ -63,26 +30,21 @@ data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
         return MessageProcessor { messages ->
             for (message in messages) {
                 val token = ProtoAny.pack(message.offsets, "xtdb.debezium")
-                // TODO: extract upstream txId from message (#5330)
-                val txKey = TransactionKey(message.txId, message.systemTime)
 
-                liveIndex.startTx(txKey).use { tx ->
-                    for (event in message.ops) {
-                        tx.indexCdcEvent(dbName, event, txKey)
-                    }
-                    tx.addTxRow(dbName, txKey, null)
+                val openTx = message.openTx
 
-                    val tableData = buildTableData(tx)
-                    liveIndex.commitTx(tx)
+                openTx.addTxRow(dbName, openTx.txKey, null)
 
-                    llp.handleExternalTx(
-                        ReplicaMessage.ResolvedTx(
-                            txId = txKey.txId, systemTime = message.systemTime,
-                            committed = true, error = null, tableData = tableData,
-                            externalSourceToken = token,
-                        )
+                val tableData = openTx.serializeTableData()
+                liveIndex.commitTx(openTx)
+
+                llp.handleExternalTx(
+                    ReplicaMessage.ResolvedTx(
+                        txId = openTx.txKey.txId, systemTime = message.systemTime,
+                        committed = true, error = null, tableData = tableData,
+                        externalSourceToken = token,
                     )
-                }
+                )
             }
         }
     }

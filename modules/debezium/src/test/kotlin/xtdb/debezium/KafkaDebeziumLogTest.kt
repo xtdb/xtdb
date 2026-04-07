@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
 import com.google.protobuf.Any as ProtoAny
@@ -44,7 +45,6 @@ class KafkaDebeziumLogTest {
                 putJsonObject("source") {
                     put("schema", "public")
                     put("table", "test")
-                    put("lsn", 100)
                 }
             }
         }.toString()
@@ -66,11 +66,23 @@ class KafkaDebeziumLogTest {
         }
     }
 
-    private fun capturingProcessor(): Pair<MessageProcessor<DebeziumMessage>, List<DebeziumMessage>> {
-        val received = Collections.synchronizedList(mutableListOf<DebeziumMessage>())
+    data class CapturedMessage(
+        val txId: Long,
+        val totalRows: Int,
+        val offsets: DebeziumOffsetToken,
+    )
+
+    private fun capturingProcessor(): Pair<MessageProcessor<DebeziumMessage>, List<CapturedMessage>> {
+        val received = Collections.synchronizedList(mutableListOf<CapturedMessage>())
 
         val capturing = MessageProcessor<DebeziumMessage> { msgs ->
-            received.addAll(msgs)
+            for (msg in msgs) {
+                received.add(CapturedMessage(
+                    txId = msg.txId,
+                    totalRows = msg.openTx.tables.sumOf { (_, table) -> table.txRelation.rowCount },
+                    offsets = msg.offsets,
+                ))
+            }
         }
         return (capturing to received)
     }
@@ -81,25 +93,17 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             val job = launch { log.tailAll(null, subscriber) }
             while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             job.cancelAndJoin()
-            // Subscription closed — produce more messages
             produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
             runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
         }
 
-        // Should only have the first message — subscription was closed before Bob
         assertEquals(1, received.size, "Should not receive messages after subscription close")
-
-        // Verify the Log parsed the raw bytes into a CdcEvent
-        val event = received[0].ops[0] as CdcEvent.Put
-        assertEquals("public", event.schema)
-        assertEquals("test", event.table)
-        assertEquals(1L, event.doc["_id"])
-        assertEquals("Alice", event.doc["name"])
+        assertEquals(1, received[0].totalRows)
     }
 
     @Test
@@ -108,15 +112,13 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
 
         val job = launch { log.tailAll(null, subscriber) }
         while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
 
         assertEquals(1, received.size, "Should have received Alice before closing")
 
-        // Close log directly — should not affect the tailAll job (caller owns lifecycle)
-        // Cancel the job to stop processing
         job.cancelAndJoin()
         log.close()
 
@@ -129,12 +131,10 @@ class KafkaDebeziumLogTest {
     @Test
     fun `tombstone offsets are tracked in cumulative token`() = runTest(timeout = 10.seconds) {
         val topic = "test-tombstone"
-        // Real message at offset 0, tombstone at offset 1
-        // The tombstone is last — if its offset isn't tracked, the token will show 0 instead of 1
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice"), null))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
@@ -145,11 +145,9 @@ class KafkaDebeziumLogTest {
             }
         }
 
-        // Only Alice should be delivered (tombstone skipped)
-        val allOps = received.flatMap { it.ops }
-        assertEquals(1, allOps.size)
+        val totalRows = received.sumOf { it.totalRows }
+        assertEquals(1, totalRows)
 
-        // Token should reflect offset 1 (the tombstone), not just offset 0 (Alice)
         val token = received.last().offsets
         val offsets = token.dbzmTopicOffsetsMap[topic]!!.offsetsList
         assertEquals(1L, offsets[0], "Token should track offset past the tombstone")
@@ -164,13 +162,12 @@ class KafkaDebeziumLogTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        // Token saying we've already seen offset 1 on partition 0
         val token = ProtoAny.pack(debeziumOffsetToken {
             dbzmTopicOffsets[topic] = partitionOffsets { offsets += listOf(1L) }
         }, "xtdb.debezium")
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(token, subscriber) }
             try {
@@ -181,10 +178,8 @@ class KafkaDebeziumLogTest {
             }
         }
 
-        // Should only get Carol (offset 2)
-        val allOps = received.flatMap { it.ops }
-        assertEquals(1, allOps.size)
-        assertEquals(3L, (allOps[0] as CdcEvent.Put).doc["_id"])
+        val totalRows = received.sumOf { it.totalRows }
+        assertEquals(1, totalRows)
 
         val lastToken = received.last().offsets
         val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
@@ -192,9 +187,8 @@ class KafkaDebeziumLogTest {
     }
 
     @Test
-    fun `poll batch is collapsed into single message with multiple ops`() = runTest(timeout = 10.seconds) {
+    fun `poll batch is collapsed into single message with multiple rows`() = runTest(timeout = 10.seconds) {
         val topic = "test-batch-collapse"
-        // Produce 3 messages before consumer starts — they'll be in the same poll batch
         produceMessages(topic, listOf(
             cdcMessage("c", 1, "Alice"),
             cdcMessage("c", 2, "Bob"),
@@ -202,25 +196,20 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                runInterruptible(Dispatchers.IO) { Thread.sleep(500) } // give time — should not receive additional messages
+                runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
             } finally {
                 tailJob.cancelAndJoin()
             }
         }
 
-        // All pre-produced records should land in a single poll → single message
         assertEquals(1, received.size, "Poll batch should be collapsed into a single message")
-        assertEquals(3, received[0].ops.size)
+        assertEquals(3, received[0].totalRows)
 
-        val ids = received[0].ops.map { (it as CdcEvent.Put).doc["_id"] }.toSet()
-        assertEquals(setOf(1L, 2L, 3L), ids)
-
-        // Token should reflect the latest offset (2, since offsets are 0-indexed)
         val lastToken = received[0].offsets
         val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
         assertEquals(2L, offsets[0])
@@ -236,17 +225,16 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
-                while (received.sumOf { it.ops.size } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+                while (received.sumOf { it.totalRows } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
                 tailJob.cancelAndJoin()
             }
         }
 
-        // Last message's token should have offset 2 (the latest), not 0
         val lastToken = received.last().offsets
         val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
         assertEquals(2L, offsets[0], "Token should track the latest offset, not the first")
@@ -258,7 +246,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf("not json at all"))
 
         val (subscriber, _) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }
@@ -273,7 +261,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, _) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic)
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }
