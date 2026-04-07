@@ -45,9 +45,6 @@ constructor(
     var liveTrie: MemoryHashTrie = liveTrieFactory(iidVec)
 
     private val opVec = liveRelation["op"]
-    private val putVec by lazy { opVec.vectorFor("put", STRUCT_TYPE, false) }
-    private val deleteVec = opVec["delete"]
-    private val eraseVec = opVec["erase"]
 
     private val trieMetadataCalculator = TrieMetadataCalculator(
         iidVec, validFromVec, validToVec, systemFromVec
@@ -79,12 +76,12 @@ constructor(
     inner class Tx internal constructor(
         txKey: TransactionKey,
         private val newLiveTable: Boolean
-    ) : AutoCloseable {
-        var transientTrie = liveTrie; private set
+    ) : OpenTx.Table {
+        override var transientTrie = liveTrie; private set
         private val systemFrom: InstantMicros = txKey.systemTime.asMicros
 
         // Transaction-scoped relation and trie (indices are 0-based in txRelation)
-        val txRelation: Relation = Trie.openLogDataWriter(al)
+        override val txRelation: Relation = Trie.openLogDataWriter(al)
         private val txIidVec = txRelation["_iid"]
         private val txSystemFromVec = txRelation["_system_from"]
         private val txValidFromVec = txRelation["_valid_from"]
@@ -95,10 +92,10 @@ constructor(
         private val txEraseVec = txOpVec["erase"]
         private var txTrie: MemoryHashTrie = MemoryHashTrie.emptyTrie(txIidVec)
 
-        fun openSnapshot(): Snapshot = openSnapshot(transientTrie, txTrie, txRelation)
-        val docWriter: VectorWriter by lazy { txPutVec }
+        override fun openSnapshot(): Snapshot = openSnapshot(transientTrie, txTrie, txRelation)
+        override val docWriter: VectorWriter by lazy { txPutVec }
 
-        fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
+        override fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
             val pos = txRelation.rowCount
 
             txIidVec.writeBytes(iid)
@@ -113,7 +110,7 @@ constructor(
             txTrie += pos
         }
 
-        fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long) {
+        override fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long) {
             val pos = txRelation.rowCount
 
             txIidVec.writeBytes(iid)
@@ -126,7 +123,7 @@ constructor(
             txTrie += pos
         }
 
-        fun logErase(iid: ByteBuffer) {
+        override fun logErase(iid: ByteBuffer) {
             val pos = txRelation.rowCount
 
             txIidVec.writeBytes(iid)
@@ -139,7 +136,7 @@ constructor(
             txTrie += pos
         }
 
-        fun serializeTxData(): ByteArray? =
+        override fun serializeTxData(): ByteArray? =
             if (txRelation.rowCount > 0) txRelation.asArrowStream else null
 
         fun commit(): LiveTable {

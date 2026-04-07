@@ -22,11 +22,11 @@ copy_edn_files() {
 process_arrow_files() {
   process_file readArrowFile "$1/query-rel.arrow" "$2/query-rel.edn"
   process_file readArrowFile "$1/tx-ops.arrow" "$2/tx-ops.edn"
-  process_file readArrowFile "$1/live-table-tx.arrow" "$2/live-table-tx.edn"
+  process_file readArrowFile "$1/open-tx-table.arrow" "$2/open-tx-table.edn"
 }
 
 process_trie_files() {
-  process_file readHashTrieFile "$1/live-trie-tx.binpb" "$2/live-trie-tx.edn"
+  process_file readHashTrieFile "$1/open-tx-trie.binpb" "$2/open-tx-trie.edn"
   process_file readHashTrieFile "$1/live-trie.binpb" "$2/live-trie.edn"
 }
 

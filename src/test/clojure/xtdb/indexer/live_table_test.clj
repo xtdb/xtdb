@@ -40,15 +40,15 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
-          (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
-            (let [doc-wtr (.getDocWriter live-table-tx)]
+          (with-open [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+            (let [doc-wtr (.getDocWriter open-tx-table)]
               (dotimes [_n n]
-                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
+                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid))
                          0 0
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit live-table-tx)
+              (.commit open-tx-table)
 
               (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                     leaf ^MemoryHashTrie$Leaf (first leaves)]
@@ -72,15 +72,15 @@
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.))]
-          (with-open [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
-            (let [doc-wtr (.getDocWriter live-table-tx)]
+          (with-open [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)]
+            (let [doc-wtr (.getDocWriter open-tx-table)]
 
               (dotimes [_n n]
-                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit live-table-tx)
+              (.commit open-tx-table)
 
               (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
                     leaf ^MemoryHashTrie$Leaf (first leaves)]
@@ -117,21 +117,21 @@
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
                      live-table (LiveTable. allocator #xt/table foo rc)]
-      (let [live-table-tx (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
-            doc-wtr (.getDocWriter live-table-tx)]
+      (let [open-tx-table (.startTx live-table (serde/->TxKey 0 (.toInstant #inst "2000")) false)
+            doc-wtr (.getDocWriter open-tx-table)]
 
         (doseq [uuid uuids]
-          (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+          (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                    (fn []
                      (.endStruct doc-wtr))))
 
-        (.commit live-table-tx)
+        (.commit open-tx-table)
 
         (util/with-open [live-table-snap (.openSnapshot live-table)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table bp 0)
-            (.close live-table-tx)
+            (.close open-tx-table)
 
             (let [live-table-after (live-table-snap->data live-table-snap)]
 
@@ -153,24 +153,24 @@
         (util/with-open [live-index (LiveIndex/open live-index-allocator
                                                                         block-cat table-catalog
                                                                         "xtdb")]
-          (with-open [live-index-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
-            (let [live-table-tx (.liveTable live-index-tx table)
-                  doc-wtr (.getDocWriter live-table-tx)]
+          (with-open [open-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
+            (let [open-tx-table (.table open-tx table)
+                  doc-wtr (.getDocWriter open-tx-table)]
 
               (doseq [uuid uuids]
-                (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
+                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commit live-index-tx)
+              (.commit open-tx)
 
               (with-open [snap (.openSnapshot live-index)]
                 (let [live-index-snap (.getLiveIndex snap)
-                      live-table-before (live-table-snap->data (.liveTable live-index-snap table))]
+                      live-table-before (live-table-snap->data (.table live-index-snap table))]
 
                   (.finishBlock live-index bp 0)
 
-                  (let [live-table-after (live-table-snap->data (.liveTable live-index-snap table))]
+                  (let [live-table-after (live-table-snap->data (.table live-index-snap table))]
 
                     (t/is (= (:live-trie-iids live-table-before)
                              (:live-trie-iids live-table-after)

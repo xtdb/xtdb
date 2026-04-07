@@ -33,20 +33,20 @@
             tx-ops [[:put-docs :public/foo {:xt/id 3, :version 0}]
                     [:put-docs :public/foo {:xt/id 4, :version 0}]]]
 
-        (with-open [live-idx-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
+        (with-open [open-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
                     query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])
                     tx-ops-rel (Relation/openFromArrowStream al (tu/serialize-tx-ops al (mapv tx-ops/parse-tx-op tx-ops)
                                                                                      {:default-db "xtdb"
                                                                                       :system-time #xt/zdt "1970-01-01T00:00Z[UTC]"
                                                                                       :default-tz (ZoneId/of "Europe/London")}))]
-          (let [live-table-tx (.liveTable live-idx-tx #xt/table foo)
+          (let [open-tx-table (.table open-tx #xt/table foo)
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
-            (.logPut live-table-tx (ByteBuffer/allocate 16) 0 0
+            (.logPut open-tx-table (ByteBuffer/allocate 16) 0 0
                      (fn []
-                       (.writeObject (.getDocWriter live-table-tx) {:xt/id 3, :version 0})))
+                       (.writeObject (.getDocWriter open-tx-table) {:xt/id 3, :version 0})))
             (.writeCrashLog crash-logger
                             (pr-str {:table #xt/table foo, :foo "bar", :ex "test crash log"})
-                            #xt/table foo live-idx live-table-tx
+                            #xt/table foo live-idx open-tx-table
                             query-rel tx-ops-rdr)))
 
           (t/is (= {:table #xt/table foo, :foo "bar", :ex "test crash log"}
@@ -60,7 +60,7 @@
                      (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
           (t/is (= {:tree [:leaf [0]], :page-limit 1024, :log-limit 64}
-                   (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-trie-tx.binpb" node-id))]
+                   (let [path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/open-tx-trie.binpb" node-id))]
                      (trie/<-MemoryHashTrie (MemoryHashTrie/fromProto (.getByteArray bp path) (NullVector. "_iid" true 0))))))
 
           ;; Committed live-table data
@@ -76,9 +76,9 @@
                             (mapv #(dissoc % :xt/iid)))))))
 
           ;; Transaction-scoped data
-          (let [live-table-tx-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/live-table-tx.arrow" node-id))
-                footer (.getFooter bp live-table-tx-path)]
-            (with-open [rb (.getRecordBatchSync bp live-table-tx-path 0)
+          (let [open-tx-table-path (util/->path (format "crashes/%s/1970-01-01T00:00:00Z/open-tx-table.arrow" node-id))
+                footer (.getFooter bp open-tx-table-path)]
+            (with-open [rb (.getRecordBatchSync bp open-tx-table-path 0)
                         rel (Relation/fromRecordBatch al (.getSchema footer) rb)]
               (t/is (= [{:xt/system-from #xt/zdt "1970-01-01T00:00Z[UTC]",
                          :xt/valid-from #xt/zdt "1970-01-01T00:00Z[UTC]",
