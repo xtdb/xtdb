@@ -7,10 +7,14 @@ import org.junit.jupiter.api.BeforeEach
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
+import xtdb.api.storage.Storage
+import xtdb.block.proto.block
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -97,7 +101,11 @@ class FollowerLogProcessorTest {
     @Test
     fun `skips stale messages when starting ahead of replica log`() = runTest {
         // simulates MW block with latestProcessedMsgId=1000, no boundaryReplicaMsgId,
-        // replaying a replica log that has old SW-era messages
+        // replaying a replica log that has old SW-era messages.
+        // block catalog starts at block 5 (simulating startup from latest block).
+        val startBlock = block { blockIndex = 5 }
+        blockCatalog = BlockCatalog("test", startBlock)
+        dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(1000)
         val proc = makeProcessor(afterSourceMsgId = 1000)
 
@@ -114,6 +122,31 @@ class FollowerLogProcessorTest {
 
         verify(exactly = 0) { liveIndex.importTx(any()) }
         assert(proc.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
+
+        proc.close()
+    }
+
+    @Test
+    fun `block boundary not skipped when isFull triggers on same txId`() = runTest {
+        // Simulates the replica log sequence when isFull() triggers on the leader:
+        // the BlockBoundary's latestProcessedMsgId equals the preceding ResolvedTx's txId.
+        // The follower must still process the block transition.
+        val proc = makeProcessor()
+
+        val blockProto = block { blockIndex = 0 }.toByteArray()
+        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+
+        assertNull(blockCatalog.currentBlockIndex, "no block before processing")
+
+        val txId = 100L
+        proc.processRecords(listOf(
+            record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap())),
+            record(1, ReplicaMessage.BlockBoundary(0, txId)),
+            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList())),
+        ))
+
+        assertEquals(0L, blockCatalog.currentBlockIndex,
+            "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
 
         proc.close()
     }

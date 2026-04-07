@@ -39,16 +39,17 @@ class TransitionLogProcessor(
         private set
 
     private val dbName = dbState.name
+    private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
 
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
 
-    private val ReplicaMessage.stale get() = 
+    private val ReplicaMessage.stale get() =
         when (this) {
             is ReplicaMessage.ResolvedTx -> txId <= latestSourceMsgId
             is ReplicaMessage.TriesAdded -> sourceMsgId <= latestSourceMsgId
-            is ReplicaMessage.BlockBoundary -> latestProcessedMsgId <= latestSourceMsgId
-            is ReplicaMessage.BlockUploaded -> latestProcessedMsgId <= latestSourceMsgId
+            is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+            is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.NoOp -> false
         }
 

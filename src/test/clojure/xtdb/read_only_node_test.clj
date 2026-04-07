@@ -1,6 +1,7 @@
 (ns xtdb.read-only-node-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
@@ -109,3 +110,37 @@
           (t/is (= [{:xt/id "b", :y 2}]
                    (xt/q ro-node "SELECT * FROM bar"))
                 "table in live index is visible"))))))
+
+(t/deftest read-only-node-handles-is-full-block-boundary
+  ;; Exercises block processing when isFull() triggers the block (not FlushBlock).
+  ;; In single-writer mode, this exercises the FollowerLogProcessor's stale check
+  ;; which previously dropped BlockBoundary/BlockUploaded when
+  ;; latestProcessedMsgId == latestSourceMsgId.
+  (util/with-tmp-dirs #{node-dir}
+    (let [cfg {:log [:local {:path (.resolve node-dir "log")}]
+               :storage [:local {:path (.resolve node-dir "objects")}]
+               :indexer {:rows-per-block 3}
+               :compactor {:threads 0}}]
+      (with-open [rw-node (xtn/start-node cfg)
+                  ro-node (-> (xtn/->config cfg)
+                              (.readOnlyDatabases true)
+                              (.open))]
+
+        ;; 2 docs + 1 xt.txs row = 3 rows, triggers isFull() with rows-per-block=3
+        (xt/execute-tx rw-node [[:put-docs :foo {:xt/id "a", :x 1}]
+                                [:put-docs :foo {:xt/id "b", :x 2}]])
+
+        ;; this tx lands after the block messages on the replica/source log,
+        ;; so syncing on it guarantees the ro node has processed the block.
+        (xt/execute-tx rw-node [[:put-docs :foo {:xt/id "c", :x 3}]])
+        (xt-log/sync-node ro-node #xt/duration "PT5S")
+
+        (t/is (= #{{:xt/id "a", :x 1} {:xt/id "b", :x 2} {:xt/id "c", :x 3}}
+                 (set (xt/q ro-node "SELECT * FROM foo")))
+              "ro node sees all data after isFull()-triggered block")
+
+        ;; in single-writer mode, the follower's block catalog should advance
+        (when (db/single-writer?)
+          (let [ro-block-cat (.getBlockCatalog (db/primary-db ro-node))]
+            (t/is (= 0 (.getCurrentBlockIndex ro-block-cat))
+                  "follower's block catalog should advance after isFull()-triggered block")))))))

@@ -78,8 +78,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
         when (this) {
             is ReplicaMessage.ResolvedTx -> txId <= latestSourceMsgId
             is ReplicaMessage.TriesAdded -> sourceMsgId <= latestSourceMsgId
-            is ReplicaMessage.BlockBoundary -> latestProcessedMsgId <= latestSourceMsgId
-            is ReplicaMessage.BlockUploaded -> latestProcessedMsgId <= latestSourceMsgId
+            is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+            is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.NoOp -> false
         }
 
