@@ -1615,6 +1615,45 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     (t/is (= #{{:user "alice"} {:user "xtdb"}}
              (set (xt/q tu/*node* "SELECT user FROM docs UNION ALL SELECT user AS user FROM foo"))))))
 
+(t/deftest test-quote-ident
+  (t/are [sql expected]
+    (= [{:x expected}] (xt/q tu/*node* (str "SELECT quote_ident(" sql ") AS x")))
+
+    ;; unquoted pass-through
+    "'foo'"                "foo"
+    "'foo_bar'"            "foo_bar"
+    "'_foo'"               "_foo"
+
+    ;; reserved words
+    "'select'"             "\"select\""
+    "'from'"               "\"from\""
+    "'null'"               "\"null\""
+
+    ;; multi-alternative lexer keywords
+    "'local_date'"         "\"local_date\""
+    "'localdate'"          "\"localdate\""
+
+    ;; mixed case / non-ASCII
+    "'Foo'"                "\"Foo\""
+    "'café'"               "\"café\""
+
+    ;; special characters
+    "'foo bar'"            "\"foo bar\""
+    "'foo\"bar'"           "\"foo\"\"bar\""
+    "'\"'"                 "\"\"\"\""
+    "'\"foo\"'"            "\"\"\"foo\"\"\""
+    "'123'"                "\"123\""
+    "'foo$bar'"            "\"foo$bar\""
+    "'$leading'"           "\"$leading\""
+    "'foo;DROP TABLE bar'" "\"foo;DROP TABLE bar\""
+
+    ;; empty string
+    "''"                   "\"\""
+
+    ;; escape syntax
+    "E'foo\\nbar'"         "\"foo\nbar\""
+    "E'foo\\\\bar'"        "\"foo\\bar\""))
+
 (t/deftest test-string-to-array
   (t/are [s delim expected]
     (= [{:x expected}] (xt/q tu/*node* (str "SELECT string_to_array(" s ", " delim ") AS x")))

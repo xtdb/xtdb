@@ -1560,6 +1560,36 @@
                   `(-> (.replace (resolve-string ~s) (resolve-string ~target) (resolve-string ~replacement))
                        (resolve-utf8-buf)))})
 
+(def ^:private ^java.util.Set sql-keywords
+  "SQL keywords derived from SqlLexer's vocabulary at load time, used by quote_ident.
+  A token is a keyword if its literal name is all letters/underscores (e.g. 'SELECT').
+  Tokens with no literal name (pattern-based like REGULAR_IDENTIFIER) or non-alpha
+  literals (operators like '||') are excluded automatically.
+  Multi-alternative rules (e.g. ANALYZE : 'ANALYZE' | 'ANALYSE') have no single
+  literal name — these are added explicitly below."
+  (let [vocab (xtdb.antlr.SqlLexer/VOCABULARY)
+        ks (java.util.HashSet. #{"analyze" "analyse"
+                               "localdate" "local_date"
+                               "localtime" "local_time"
+                               "localtimestamp" "local_timestamp"})]
+    (dotimes [i (.getMaxTokenType vocab)]
+      (when-let [lit (.getLiteralName vocab (inc i))]
+        (let [s (subs lit 1 (dec (count lit)))]
+          (when (re-matches #"[a-zA-Z_]+" s)
+            (.add ks (.toLowerCase s java.util.Locale/ROOT))))))
+    ks))
+
+(defn quote-ident ^String [^String s]
+  (if (and (re-matches #"[a-z_][a-z0-9_]*" s)
+           (not (.contains sql-keywords s)))
+    s
+    (str \" (.replace s "\"" "\"\"") \")))
+
+(defmethod codegen-call [:quote_ident :utf8] [_]
+  {:return-type #xt/type :utf8
+   :->call-code (fn [[s]]
+                  `(resolve-utf8-buf (quote-ident (resolve-string ~s))))})
+
 (defn- strings->list-reader ^xtdb.arrow.ListValueReader [^objects arr]
   (let [box (ValueBox.)
         bufs (object-array (mapv #(resolve-utf8-buf ^String %) arr))]
