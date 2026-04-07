@@ -147,7 +147,7 @@ identifier
         | 'VARBINARY' | 'BYTEA'
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
-        | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
+        | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL' | 'TIME'
         | METADATA
         | setFunctionType )
         # RegularIdentifier

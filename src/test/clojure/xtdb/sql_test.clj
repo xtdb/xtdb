@@ -994,6 +994,16 @@
     (t/is (= [{:x 1.0 :cnt 1} {:x 2.0 :cnt 1} {:x 3.0 :cnt 1}]
              (xt/q tu/*node* "SELECT (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 AS x, COUNT(*) AS cnt FROM orders GROUP BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ORDER BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ASC")))))
 
+(t/deftest test-time-as-identifier
+  (t/testing "TIME as column alias"
+    (t/is (= [{:time 1}]
+             (xt/q tu/*node* "SELECT 1 AS time"))))
+
+  (t/testing "TIME as column name"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO time_id_test (_id, time) VALUES (1, 42)"]])
+    (t/is (= [{:time 42}]
+             (xt/q tu/*node* "SELECT time FROM time_id_test")))))
+
 (t/deftest test-order-by-alias
   (t/testing "alias within expression - plan"
     (t/is (=plan-file
