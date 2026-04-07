@@ -78,7 +78,17 @@ interface ExternalLog<M> : AutoCloseable {
 
         private val job = scope.launch {
             try {
-                launch { externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) } }
+                launch {
+                    try {
+                        externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        leaderLogProcessor.notifyError(e)
+                        externalCh.close(e)
+                        sourceCh.close(e)
+                    }
+                }
 
                 while (true) {
                     selectUnbiased {

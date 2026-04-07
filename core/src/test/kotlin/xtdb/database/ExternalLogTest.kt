@@ -292,6 +292,35 @@ class ExternalLogTest {
     }
 
     @Test
+    fun `Demux error in external log tailAll propagates to watchers`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(-1)
+        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
+
+        val failingLog = object : ExternalLog<String> {
+            override suspend fun tailAll(
+                afterToken: ExternalSourceToken?,
+                processor: ExternalLog.MessageProcessor<String>,
+            ) {
+                throw RuntimeException("log poll failed")
+            }
+            override fun close() {}
+        }
+
+        val extProc = ExternalLog.MessageProcessor<String> { }
+
+        val demux = ExternalLog.Demux(lp, failingLog, null, extProc, coroutineContext)
+
+        try {
+            delay(500)
+
+            assertNotNull(watchers.exception, "watchers should be in failed state")
+        } finally {
+            demux.close()
+        }
+    }
+
+    @Test
     fun `Demux error in external processor propagates to watchers`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
