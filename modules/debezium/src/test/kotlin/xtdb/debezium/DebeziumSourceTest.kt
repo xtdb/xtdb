@@ -18,7 +18,6 @@ class DebeziumSourceTest {
             log = KafkaDebeziumLog.Factory(
                 logCluster = "my-cluster",
                 tableTopic = "cdc.public.users",
-                groupId = "xtdb-cdc-users",
             )
         )
 
@@ -27,7 +26,6 @@ class DebeziumSourceTest {
 
         assertEquals("my-cluster", restoredLog.logCluster)
         assertEquals("cdc.public.users", restoredLog.tableTopic)
-        assertEquals("xtdb-cdc-users", restoredLog.groupId)
     }
 
     @Test
@@ -45,7 +43,6 @@ class DebeziumSourceTest {
               log: !Kafka
                 logCluster: my-cluster
                 tableTopic: cdc.public.users
-                groupId: xtdb-cdc-users
         """.trimIndent()
 
         val config = Database.Config.fromYaml(yaml)
@@ -54,7 +51,6 @@ class DebeziumSourceTest {
 
         assertEquals("my-cluster", log.logCluster)
         assertEquals("cdc.public.users", log.tableTopic)
-        assertEquals("xtdb-cdc-users", log.groupId)
     }
 
     @Test
@@ -69,7 +65,7 @@ class DebeziumSourceTest {
         assertNull(config.externalLog)
 
         val withSource = config.externalSource(DebeziumSource(
-            log = KafkaDebeziumLog.Factory("cluster", "topic", "group")
+            log = KafkaDebeziumLog.Factory("cluster", "topic")
         ))
         assertNotNull(withSource.externalLog)
 

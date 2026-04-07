@@ -7,6 +7,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.junit.jupiter.api.*
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -19,18 +20,15 @@ import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
+import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.KafkaCluster
-import xtdb.database.ExternalLog.MessageProcessor
-import org.apache.arrow.memory.RootAllocator
 import java.util.UUID
-import java.time.ZoneOffset
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.sql.DriverManager
 import java.time.Duration
-import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
@@ -45,6 +43,11 @@ class DebeziumIntegrationTest {
 
     @BeforeEach
     fun setUp() {
+        assumeTrue(
+            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() == true,
+            "Debezium integration tests require single-writer mode"
+        )
+
         network = Network.newNetwork()
 
         postgres = PostgreSQLContainer("postgres:17-alpine")
@@ -156,20 +159,35 @@ class DebeziumIntegrationTest {
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
-    private suspend fun <R> withSourceProducer(
-        sourceTopic: String,
-        block: suspend (DebeziumProcessor) -> R,
-    ): R {
-        val cluster = KafkaCluster.ClusterFactory(kafka.bootstrapServers).open()
-        return cluster.use {
-            KafkaCluster.LogFactory("kafka", sourceTopic, groupId = "xtdb-$sourceTopic-debezium")
-                .openSourceLog(mapOf("kafka" to cluster)).use { sourceLog ->
-                    sourceLog.openAtomicProducer("test-debezium-$sourceTopic").use { producer ->
-                        RootAllocator().use { allocator ->
-                            block(DebeziumProcessor(producer as KafkaCluster.AtomicProducer, allocator, ZoneOffset.UTC))
-                        }
-                    }
-                }
+    private fun createTopic(topic: String) {
+        org.apache.kafka.clients.admin.AdminClient.create(kafkaConfig()).use { admin ->
+            admin.createTopics(listOf(
+                org.apache.kafka.clients.admin.NewTopic(topic, 1, 1.toShort())
+            )).all().get()
+        }
+    }
+
+    private fun attachDebeziumDb(
+        node: Xtdb,
+        debeziumTopic: String,
+        dbName: String = "cdc",
+        storagePath: java.nio.file.Path? = null,
+    ) {
+        val storageYaml = if (storagePath != null) """
+                    storage: !Local
+                      path: $storagePath""" else ""
+        node.getConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute("""ATTACH DATABASE $dbName WITH $$
+                    log: !Kafka
+                      cluster: kafka
+                      topic: test-replica-${UUID.randomUUID()}$storageYaml
+                    externalLog: !Debezium
+                      log: !Kafka
+                        logCluster: kafka
+                        tableTopic: $debeziumTopic
+                $$""")
+            }
         }
     }
 
@@ -183,6 +201,19 @@ class DebeziumIntegrationTest {
         }
         throw AssertionError("Timed out waiting for $expected txs on db '$db' (got $count)")
     }
+
+    private suspend fun awaitDatabase(node: Xtdb, dbName: String, timeout: Long = 30_000) {
+        val deadline = System.currentTimeMillis() + timeout
+        while (System.currentTimeMillis() < deadline) {
+            if ((node as Xtdb.XtdbInternal).dbCatalog.databaseOrNull(dbName) != null) return
+            delay(200)
+        }
+        throw AssertionError("Timed out waiting for database '$dbName'")
+    }
+
+    private fun database(node: Xtdb, dbName: String) =
+        (node as Xtdb.XtdbInternal).dbCatalog.databaseOrNull(dbName)
+            ?: throw AssertionError("Database '$dbName' does not exist")
 
     private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
         xtQueryDb(node, "xtdb", sql)
@@ -234,17 +265,6 @@ class DebeziumIntegrationTest {
     private fun JsonObject.payload(): JsonObject =
         this["payload"]?.jsonObject ?: fail("Expected 'payload' key in message")
 
-    private fun capturingProcessor(
-        processor: DebeziumProcessor
-    ): Pair<MessageProcessor<DebeziumMessage>, List<DebeziumMessage>> {
-        val received = Collections.synchronizedList(mutableListOf<DebeziumMessage>())
-
-        val capturing = MessageProcessor<DebeziumMessage> { msgs ->
-            processor.processMessages(msgs)
-            received.addAll(msgs)
-        }
-        return (capturing to received)
-    }
 
     @Test
     fun `debezium captures full CDC lifecycle`() = runTest(timeout = 120.seconds) {
@@ -353,31 +373,19 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.cdc_users", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+            attachDebeziumDb(node, "testdb.public.cdc_users")
 
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                            "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
-                            "DELETE FROM cdc_users WHERE _id = 2",
-                        )
+            pgExecute(
+                "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
+                "DELETE FROM cdc_users WHERE _id = 2",
+            )
 
-                        // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                        while (received.size < 4) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
+            awaitTxs(node, 4, db = "cdc")
 
-                        awaitTxs(node, 4)
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
-
-            val history = xtQuery(node,
+            val history = xtQueryDb(node, "cdc",
                 """SELECT _id, name, email, _valid_from, _valid_to
                    FROM public.cdc_users
                    FOR ALL VALID_TIME
@@ -415,30 +423,18 @@ class DebeziumIntegrationTest {
         ))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.cdc_no_envelope", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+            attachDebeziumDb(node, "testdb.public.cdc_no_envelope")
 
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                            "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
-                            "DELETE FROM cdc_no_envelope WHERE _id = 2",
-                        )
+            pgExecute(
+                "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
+                "DELETE FROM cdc_no_envelope WHERE _id = 2",
+            )
 
-                        // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-                        while (received.size < 4) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                        awaitTxs(node, 4)
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
+            awaitTxs(node, 4, db = "cdc")
 
-            val history = xtQuery(node,
+            val history = xtQueryDb(node, "cdc",
                 """SELECT _id, name, email, _valid_from, _valid_to
                    FROM public.cdc_no_envelope
                    FOR ALL VALID_TIME
@@ -475,31 +471,22 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig() + mapOf("max.poll.records" to "1"), "testdb.public.timed_docs", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+        createTopic("testdb.public.timed_docs")
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+            attachDebeziumDb(node, "testdb.public.timed_docs")
 
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
-                            VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
-                            """INSERT INTO timed_docs (_id, name, _valid_from)
-                            VALUES (2, 'from-only', '2024-06-01T00:00:00Z')""",
-                            """INSERT INTO timed_docs (_id, name)
-                            VALUES (3, 'neither')""",
-                        )
+            pgExecute(
+                """INSERT INTO timed_docs (_id, name, _valid_from, _valid_to)
+                VALUES (1, 'bounded', '2024-01-01T00:00:00Z', '2025-01-01T00:00:00Z')""",
+                """INSERT INTO timed_docs (_id, name, _valid_from)
+                VALUES (2, 'from-only', '2024-06-01T00:00:00Z')""",
+                """INSERT INTO timed_docs (_id, name)
+                VALUES (3, 'neither')""",
+            )
 
-                        awaitTxs(node, 3)
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
+            awaitTxs(node, 3, db = "cdc")
 
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 """SELECT _id, name, _valid_from, _valid_to
                    FROM public.timed_docs
                    FOR ALL VALID_TIME
@@ -543,34 +530,24 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.bad_valid_to", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+            attachDebeziumDb(node, "testdb.public.bad_valid_to")
 
-                log.use {
-                    supervisorScope {
-                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
-                        try {
-                            // Alice (valid) is ingested first
-                            awaitTxs(node, 1)
+            // Alice (valid) is ingested first
+            awaitTxs(node, 1, db = "cdc")
 
-                            // Now insert a record with _valid_to but no _valid_from — halts ingestion
-                            pgExecute(
-                                """INSERT INTO bad_valid_to (_id, name, _valid_to)
-                                VALUES (2, 'bad', '2025-01-01T00:00:00Z')""",
-                            )
+            // Now insert a record with _valid_to but no _valid_from — halts ingestion
+            pgExecute(
+                """INSERT INTO bad_valid_to (_id, name, _valid_to)
+                VALUES (2, 'bad', '2025-01-01T00:00:00Z')""",
+            )
 
-                            tailJob.join()
-                        } finally {
-                            tailJob.cancelAndJoin()
-                        }
-                    }
-                }
+            assertThrows<IngestionStoppedException> {
+                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
             }
 
-            // Alice should be ingested
-            val rows = xtQuery(node,
+            // Alice should be ingested, bad record should not
+            val rows = xtQueryDb(node, "cdc",
                 "SELECT _id, name FROM public.bad_valid_to ORDER BY _id"
             )
             assertEquals(1, rows.size, "Only Alice should be ingested — bad record halted ingestion")
@@ -589,28 +566,18 @@ class DebeziumIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.no_id_table", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+            attachDebeziumDb(node, "testdb.public.no_id_table")
 
-                log.use {
-                    supervisorScope {
-                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
-                        try {
-                            pgExecute(
-                                "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
-                            )
+            pgExecute(
+                "INSERT INTO no_id_table (id, name) VALUES (2, 'also-no-_id')",
+            )
 
-                            // snapshot record lacks _id — processor crashes, no records ingested
-                            tailJob.join()
-                        } finally {
-                            tailJob.cancelAndJoin()
-                        }
-                    }
-                }
+            // snapshot record lacks _id — ingestion halts
+            assertThrows<IngestionStoppedException> {
+                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
             }
 
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 "SELECT * FROM public.no_id_table FOR ALL VALID_TIME"
             )
             assertEquals(0, rows.size, "No rows should be ingested — records lack _id")
@@ -634,31 +601,21 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.typed_docs", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+        createTopic("testdb.public.typed_docs")
+        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+            attachDebeziumDb(node, "testdb.public.typed_docs")
 
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
-                            VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
-                                    ARRAY['admin', 'user'], NULL)""",
-                            """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
-                            VALUES (2, 'Bob', NULL, false, NULL, NULL, 'some notes')""",
-                        )
+            pgExecute(
+                """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
+                VALUES (1, 'Alice', 3.14, true, '{"city": "London", "nested": {"deep": true}}',
+                        ARRAY['admin', 'user'], NULL)""",
+                """INSERT INTO typed_docs (_id, name, score, active, metadata, tags, notes)
+                VALUES (2, 'Bob', NULL, false, NULL, NULL, 'some notes')""",
+            )
 
-                        while (received.size < 2) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                        awaitTxs(node, 2)
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
+            awaitTxs(node, 2, db = "cdc")
 
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 """SELECT _id, name, score, active, metadata, tags, notes
                    FROM public.typed_docs
                    ORDER BY _id"""
@@ -697,27 +654,17 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait(schemas = "inventory")
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        createTopic("testdb.inventory.products")
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.inventory.products", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+            attachDebeziumDb(node, "testdb.inventory.products")
 
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
-                        )
+            pgExecute(
+                "INSERT INTO inventory.products (_id, name, qty) VALUES (1, 'Widget', 100)",
+            )
 
-                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                        awaitTxs(node, 1)
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
+            awaitTxs(node, 1, db = "cdc")
 
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 "SELECT _id, name, qty FROM inventory.products"
             )
 
@@ -729,76 +676,7 @@ class DebeziumIntegrationTest {
     }
 
     @Test
-    fun `CDC events are ingested into secondary database`() = runTest(timeout = 120.seconds) {
-        pgExecute(
-            "CREATE TABLE IF NOT EXISTS cdc_secondary_test (_id INT PRIMARY KEY, name TEXT, email TEXT)",
-            "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
-        )
-
-        registerConnectorAndAwait()
-
-        val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val secondarySourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            // Attach a secondary database with its own source topic
-            node.getConnection().use { conn ->
-                conn.createStatement().use { stmt ->
-                    stmt.execute("""ATTACH DATABASE cdc_secondary WITH $$
-                        log: !Kafka
-                          cluster: kafka
-                          topic: $secondarySourceTopic
-                    $$""")
-                }
-            }
-
-            withSourceProducer(secondarySourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.cdc_secondary_test", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
-
-                log.use {
-                    val tailJob = launch { log.tailAll(null, capturing) }
-                    try {
-                        pgExecute(
-                            "INSERT INTO cdc_secondary_test (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-                        )
-
-                        // snapshot(Alice) + insert(Bob) = 2 records
-                        while (received.size < 2) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                        awaitTxs(node, 2, db = "cdc_secondary")
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
-
-            // Secondary db should have the rows
-            val rows = xtQueryDb(node, "cdc_secondary",
-                """SELECT _id, name, email
-                   FROM public.cdc_secondary_test
-                   ORDER BY _id"""
-            )
-            assertEquals(2, rows.size, "Expected 2 rows in secondary database")
-            assertEquals(1L, (rows[0]["_id"] as Number).toLong())
-            assertEquals("Alice", rows[0]["name"])
-            assertEquals(2L, (rows[1]["_id"] as Number).toLong())
-            assertEquals("Bob", rows[1]["name"])
-
-            // Primary db should have no debezium txs
-            val primaryTxs = xtQuery(node,
-                """SELECT _id FROM xt.txs
-                   WHERE (user_metadata).source = 'debezium'"""
-            )
-            assertEquals(0, primaryTxs.size, "Primary database should have no debezium transactions")
-        }
-    }
-
-    @Test
     fun `CDC events ingested via external log (direct indexing)`() = runTest(timeout = 120.seconds) {
-        assumeTrue(
-            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() == true,
-            "external log requires single-writer mode"
-        )
-
         pgExecute(
             "CREATE TABLE IF NOT EXISTS cdc_direct (_id INT PRIMARY KEY, name TEXT, email TEXT)",
             "INSERT INTO cdc_direct (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
@@ -807,25 +685,10 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val debeziumGroupId = "test-debezium-direct-${UUID.randomUUID()}"
-
         // max.poll.records=1 ensures each CDC event is a separate transaction,
         // preserving per-event valid-time history for this test's assertions.
         openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
-            node.getConnection().use { conn ->
-                conn.createStatement().use { stmt ->
-                    stmt.execute("""ATTACH DATABASE cdc_direct_db WITH $$
-                        log: !Kafka
-                          cluster: kafka
-                          topic: test-direct-replica-${UUID.randomUUID()}
-                        externalLog: !Debezium
-                          log: !Kafka
-                            logCluster: kafka
-                            tableTopic: testdb.public.cdc_direct
-                            groupId: $debeziumGroupId
-                    $$""")
-                }
-            }
+            attachDebeziumDb(node, "testdb.public.cdc_direct", dbName = "cdc_direct_db")
 
             pgExecute(
                 "INSERT INTO cdc_direct (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
@@ -858,6 +721,12 @@ class DebeziumIntegrationTest {
             assertEquals(2L, (history[2]["_id"] as Number).toLong())
             assertEquals("bob@example.com", history[2]["email"])
             assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+
+            // Primary db should have no CDC data
+            val primaryRows = xtQuery(node,
+                "SELECT * FROM public.cdc_direct FOR ALL VALID_TIME"
+            )
+            assertEquals(0, primaryRows.size, "Primary database should have no CDC data")
         }
     }
 
@@ -875,36 +744,27 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        createTopic("testdb.public.bad_times")
         openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val log = KafkaDebeziumLog(kafkaConfig(), "testdb.public.bad_times", "test-group")
-                val (capturing, received) = capturingProcessor(processor)
+            attachDebeziumDb(node, "testdb.public.bad_times")
 
-                log.use {
-                    supervisorScope {
-                        val tailJob = launch(CoroutineExceptionHandler { _, _ -> }) { log.tailAll(null, capturing) }
-                        try {
-                            // TIMESTAMP (no tz) → Debezium sends as Long, not a string
-                            pgExecute(
-                                """INSERT INTO bad_times (_id, name, _valid_from)
-                                VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
-                            )
-                            // TEXT with non-ISO content → string that won't parse
-                            pgExecute(
-                                """INSERT INTO bad_times (_id, name, _valid_to)
-                                VALUES (2, 'bad-string', 'not-a-date')""",
-                            )
+            // TIMESTAMP (no tz) → Debezium sends as Long, not a string
+            pgExecute(
+                """INSERT INTO bad_times (_id, name, _valid_from)
+                VALUES (1, 'wrong-type', '2024-01-01 00:00:00')""",
+            )
+            // TEXT with non-ISO content → string that won't parse
+            pgExecute(
+                """INSERT INTO bad_times (_id, name, _valid_to)
+                VALUES (2, 'bad-string', 'not-a-date')""",
+            )
 
-                            // invalid valid time types — processor crashes, no records ingested
-                            tailJob.join()
-                        } finally {
-                            tailJob.cancelAndJoin()
-                        }
-                    }
-                }
+            // invalid valid time types — ingestion halts
+            assertThrows<IngestionStoppedException> {
+                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
             }
 
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 "SELECT * FROM public.bad_times FOR ALL VALID_TIME"
             )
             assertEquals(0, rows.size, "No rows should be ingested — both have invalid valid time")
@@ -912,7 +772,7 @@ class DebeziumIntegrationTest {
     }
 
     @Test
-    fun `CDC consumer resumes from committed offset after restart`() = runTest(timeout = 120.seconds) {
+    fun `CDC consumer resumes from committed offset after restart`(@TempDir tempDir: java.nio.file.Path) = runTest(timeout = 120.seconds) {
         pgExecute(
             "CREATE TABLE IF NOT EXISTS cdc_resume (_id INT PRIMARY KEY, name TEXT)",
             "INSERT INTO cdc_resume (_id, name) VALUES (1, 'Alice')",
@@ -921,53 +781,42 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait()
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        val debeziumTopic = "testdb.public.cdc_resume"
-        val debeziumGroupId = "test-debezium-group-${UUID.randomUUID()}"
 
-        // First run: process the snapshot record (Alice), committing offsets
-        openNodeOnSourceTopic(sourceTopic).use { node ->
-            withSourceProducer(sourceTopic) { processor ->
-                val kafkaDebeziumLog = KafkaDebeziumLog(kafkaConfig(), debeziumTopic, debeziumGroupId)
-                val (capturing, received) = capturingProcessor(processor)
+        fun openPersistentNode() = Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(xtdb.api.storage.Storage.local(tempDir))
+        }
 
-                kafkaDebeziumLog.use {
-                    val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
-                    try {
-                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
+        val cdcStoragePath = tempDir.resolve("cdc-storage")
+
+        // First run: ingest snapshot (Alice), flush block to persist the offset token
+        openPersistentNode().use { node ->
+            attachDebeziumDb(node, "testdb.public.cdc_resume", storagePath = cdcStoragePath)
+            awaitTxs(node, 1, db = "cdc")
+
+            // Flush block so the external source token is persisted
+            (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
+                cat["cdc"]!!.sendFlushBlockMessage()
+                cat.syncAll(Duration.ofSeconds(10))
             }
+        }
 
-            awaitTxs(node, 1)
+        // Insert more data while node is down
+        pgExecute(
+            "INSERT INTO cdc_resume (_id, name) VALUES (2, 'Bob')",
+        )
 
-            // Insert more data while consumer is stopped
-            pgExecute(
-                "INSERT INTO cdc_resume (_id, name) VALUES (2, 'Bob')",
-            )
+        // Second run: same storage — database is already attached from persisted config,
+        // should resume from persisted token, not re-process Alice
+        openPersistentNode().use { node ->
+            // Wait for the node to replay the ATTACH message from the source log
+            awaitDatabase(node, "cdc")
 
-            // Second run: same group ID — should NOT re-process Alice, only Bob
-            withSourceProducer(sourceTopic) { processor ->
-                val kafkaDebeziumLog = KafkaDebeziumLog(kafkaConfig(), debeziumTopic, debeziumGroupId)
-                val (capturing, received) = capturingProcessor(processor)
+            awaitTxs(node, 2, db = "cdc")
 
-                kafkaDebeziumLog.use {
-                    val tailJob = launch { kafkaDebeziumLog.tailAll(null, capturing) }
-                    try {
-                        while (received.size < 1) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-                    } finally {
-                        tailJob.cancelAndJoin()
-                    }
-                }
-            }
-
-            awaitTxs(node, 2)
-
-            val txCount = xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs")[0]["cnt"] as Long
-            assertEquals(2L, txCount, "Should have exactly 2 transactions — Alice from first run, Bob from second")
-
-            val rows = xtQuery(node,
+            val rows = xtQueryDb(node, "cdc",
                 "SELECT _id, name FROM public.cdc_resume ORDER BY _id"
             )
             assertEquals(2, rows.size)

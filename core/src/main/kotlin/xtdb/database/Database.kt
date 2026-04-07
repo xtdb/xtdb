@@ -57,7 +57,7 @@ class Database(
     override val storage: DatabaseStorage,
     override val queryState: DatabaseState,
     val isIndexing: Boolean,
-    private val watchers: Watchers,
+    val watchers: Watchers,
     private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
     val gcOrNull: GarbageCollector.ForDatabase? = null,

@@ -42,6 +42,9 @@ class DatabaseStorage(
     }
 
     companion object {
+        private val singleWriter: Boolean =
+            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() ?: false
+
         private fun logNewEpoch() {
             LOG.info(
                 "Starting node with a log that has a different epoch than the latest completed tx " +
@@ -124,7 +127,9 @@ class DatabaseStorage(
                 else dbConfig.log.openReplicaLog(logClusters)
             }
 
-            val externalLog = open { dbConfig.externalLog?.open(logClusters) }
+            val externalLog = open {
+                if (singleWriter) dbConfig.externalLog?.open(logClusters) else null
+            }
 
             DatabaseStorage(sourceLog, replicaLog, externalLog, bufferPool, metadataManager)
         }

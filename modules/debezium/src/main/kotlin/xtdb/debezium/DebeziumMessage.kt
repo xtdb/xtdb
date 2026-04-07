@@ -10,5 +10,4 @@ class DebeziumMessage(
     val systemTime: Instant,
     val ops: List<CdcEvent>,
     val offsets: DebeziumOffsetToken,
-    val consumerGroupMetadata: ConsumerGroupMetadata,
 )

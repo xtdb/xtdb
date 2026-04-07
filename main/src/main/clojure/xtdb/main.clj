@@ -21,7 +21,6 @@
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
-  (println " * `debezium-cdc`: starts a node with Debezium CDC ingestion from Kafka")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -250,31 +249,6 @@
           (println "Usage: `read-table-block-file <file>`")
           (System/exit 2))))))
 
-(def debezium-cdc-cli-spec
-  [config-file-opt
-   ["-k" "--kafka-cluster ALIAS" "Kafka cluster alias (from node config log-clusters)"
-    :id :kafka-cluster]
-   ["-s" "--source-topic TOPIC" "XTDB source log topic to write transactions to"
-    :id :source-topic]
-   ["-t" "--debezium-topic TOPIC" "Kafka topic to consume CDC events from"
-    :id :debezium-topic]
-   ["-h" "--help"]])
-
-(defn- start-debezium-cdc [args]
-  (let [{{:keys [file kafka-cluster source-topic debezium-topic]} :options}
-        (-> (parse-args args debezium-cdc-cli-spec)
-            (handling-arg-errors-or-help))]
-    (when-not (and kafka-cluster source-topic debezium-topic)
-      (binding [*out* *err*]
-        (println "Required: --kafka-cluster, --source-topic and --debezium-topic")
-        (System/exit 2)))
-    (util/with-open [_cdc ((requiring-resolve 'xtdb.debezium/start!)
-                           (file->node-opts file)
-                           {:kafka-cluster kafka-cluster
-                            :source-topic source-topic
-                            :debezium-topic debezium-topic})]
-      @(shutdown-hook-promise))))
-
 (defn -main [& args]
   (binding [*out* *err*]
     (println (str "Starting " (util/xtdb-version-string) " ...")))
@@ -293,8 +267,6 @@
         "reset-compactor" (do
                             (reset-compactor! more-args)
                             (System/exit 0))
-
-        "debezium-cdc" (start-debezium-cdc more-args)
 
         "export-snapshot" (do
                             (export-snapshot! more-args)

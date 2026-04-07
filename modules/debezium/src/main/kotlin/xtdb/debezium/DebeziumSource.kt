@@ -16,9 +16,35 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.debeziumSourceConfig
 import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.LeaderLogProcessor
+import xtdb.database.DatabaseName
 import xtdb.indexer.LiveIndex
+import xtdb.table.TableRef
+import xtdb.time.InstantUtil.asMicros
+import xtdb.util.asIid
+import java.nio.ByteBuffer
 import xtdb.debezium.proto.DebeziumSourceConfig as DebeziumSourceConfigProto
 import com.google.protobuf.Any as ProtoAny
+
+private fun LiveIndex.Tx.indexCdcEvent(
+    dbName: DatabaseName, event: CdcEvent, txKey: TransactionKey
+) {
+    val table = TableRef(dbName, event.schema, event.table)
+    val liveTableTx = liveTable(table)
+
+    when (event) {
+        is CdcEvent.Put -> {
+            val iid = ByteBuffer.wrap(event.doc["_id"]!!.asIid)
+            val validFrom = event.validFrom?.asMicros ?: txKey.systemTime.asMicros
+            val validTo = event.validTo?.asMicros ?: Long.MAX_VALUE
+            liveTableTx.logPut(iid, validFrom, validTo) { liveTableTx.docWriter.writeObject(event.doc) }
+        }
+
+        is CdcEvent.Delete -> {
+            val iid = ByteBuffer.wrap(event.id.asIid)
+            liveTableTx.logDelete(iid, txKey.systemTime.asMicros, Long.MAX_VALUE)
+        }
+    }
+}
 
 private fun buildTableData(tx: LiveIndex.Tx): Map<String, ByteArray> =
     tx.liveTables.mapNotNull { (tableRef, tableTx) ->

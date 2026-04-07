@@ -81,7 +81,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             val job = launch { log.tailAll(null, subscriber) }
             while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
@@ -108,7 +108,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
 
         val job = launch { log.tailAll(null, subscriber) }
         while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
@@ -134,7 +134,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice"), null))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
@@ -170,7 +170,7 @@ class KafkaDebeziumLogTest {
         }, "xtdb.debezium")
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(token, subscriber) }
             try {
@@ -202,7 +202,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
@@ -236,7 +236,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, received) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             val tailJob = launch { log.tailAll(null, subscriber) }
             try {
@@ -258,7 +258,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf("not json at all"))
 
         val (subscriber, _) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }
@@ -273,7 +273,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (subscriber, _) = capturingProcessor()
-        val log = KafkaDebeziumLog(kafkaConfig(), topic, "test-group")
+        val log = KafkaDebeziumLog(kafkaConfig(), topic)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
         }

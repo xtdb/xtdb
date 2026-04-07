@@ -7,6 +7,7 @@ option java_multiple_files = true;
 message KafkaDebeziumLogConfig {
     string log_cluster = 1;
     string table_topic = 2;
+    // deprecated, no longer using consumer groups — using assign instead
     string group_id = 3;
 }
 
