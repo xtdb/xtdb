@@ -472,6 +472,8 @@ dependencies {
     }
 
     implementation(project(":xtdb-main"))
+    implementation(project(":modules:xtdb-kafka"))
+    implementation(project(":modules:xtdb-debezium"))
 
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
