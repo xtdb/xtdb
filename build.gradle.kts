@@ -465,7 +465,7 @@ project(":xtdb-core").run {
 dependencies {
     fun projectDep(name: String) {
         testImplementation(project(name))
-        val mainSourceSet = project(name).dependencyProject.sourceSets.main.get()
+        val mainSourceSet = project.project(name).sourceSets.main.get()
         devImplementation(mainSourceSet.clojure.sourceDirectories)
         devImplementation(mainSourceSet.resources.sourceDirectories)
     }
