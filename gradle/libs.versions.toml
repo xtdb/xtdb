@@ -28,7 +28,7 @@ testcontainers = "2.0.4"
 micrometer = "1.16.2"
 micrometer-tracing = "1.4.1"
 opentelemetry = "1.45.0"
-transit = "1.0.329"
+transit = "1.1.357"
 
 slf4j = "2.0.17"
 logback = "1.5.32"

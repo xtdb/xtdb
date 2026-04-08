@@ -10,13 +10,13 @@
   "system_time" [-2034527697 6.01764709272061],
   "committed" [1743138479 1.0004885993744506],
   "user_metadata" [1743287434 1.0004885993744506],
-  "error" [-2042553016 2.001955671862574]},
+  "error" [-1076153850 2.001955671862574]},
  :partitions
  [{:level 0,
    :part [],
    :tries
    [{:trie-key "l00-rc-b00",
-     :data-file-size 3390,
+     :data-file-size 3382,
      :trie-metadata
      {:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
       :max-valid-from #xt/instant "2020-01-06T00:00:00Z",

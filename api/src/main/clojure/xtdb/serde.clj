@@ -18,6 +18,7 @@
            (java.time Duration Period)
            [org.apache.arrow.vector PeriodDuration]
            [org.apache.commons.codec.binary Hex]
+           (org.msgpack.core MessageInsufficientBufferException)
            (org.postgresql.util PGobject PSQLException)
            (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn)
@@ -234,13 +235,18 @@
                                              (string? bytes-or-str) (-> ^String bytes-or-str (.getBytes StandardCharsets/UTF_8))))]
      (transit/read (transit/reader bais (or fmt :msgpack) {:handlers transit-read-handler-map})))))
 
+(defn- eof-exception? [ex]
+  (or (instance? java.io.EOFException ex)
+      ;; msgpack-core 0.9+ throws MessageInsufficientBufferException instead of EOFException
+      (instance? MessageInsufficientBufferException ex)))
+
 (defn transit-seq [rdr]
   (lazy-seq
    (try
      (cons (transit/read rdr)
            (transit-seq rdr))
      (catch RuntimeException ex
-       (when-not (instance? java.io.EOFException (.getCause ex))
+       (when-not (eof-exception? (.getCause ex))
          (throw (ex-cause ex)))))))
 
 (defn write-transit
