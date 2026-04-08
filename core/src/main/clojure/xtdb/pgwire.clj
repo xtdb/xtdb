@@ -1129,7 +1129,7 @@
                                        #_ ; FIXME: these break because of PgType not being serializable
                                        {:prepared-cols prepared-pg-cols
                                         :resolved-cols resolved-pg-cols})))
-              (with-result-formats prepared-pg-cols result-format)))]
+                (with-result-formats prepared-pg-cols result-format)))]
 
       (case statement-type
         :query (util/with-close-on-catch [cursor (->cursor xt-args)]
