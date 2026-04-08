@@ -27,7 +27,7 @@ muuntaja = "0.6.11"
 testcontainers = "2.0.4"
 micrometer = "1.16.2"
 micrometer-tracing = "1.4.1"
-opentelemetry = "1.45.0"
+opentelemetry = "1.60.1"
 transit = "1.1.357"
 
 slf4j = "2.0.17"
