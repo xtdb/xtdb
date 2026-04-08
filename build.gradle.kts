@@ -117,6 +117,7 @@ allprojects {
     repositories {
         mavenCentral()
         maven { url = uri("https://repo.clojars.org/") }
+        maven { url = uri("https://packages.confluent.io/maven/") }
     }
 
     if (plugins.hasPlugin("java-library")) {

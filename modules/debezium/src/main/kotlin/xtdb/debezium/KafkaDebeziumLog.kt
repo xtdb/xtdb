@@ -3,13 +3,14 @@ package xtdb.debezium
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.*
 import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
+import io.confluent.kafka.serializers.KafkaAvroDeserializer
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
@@ -38,13 +39,6 @@ import java.time.Instant
 
 private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
 
-private fun JsonElement.toJvmValue(): Any? = when (this) {
-    is JsonNull -> null
-    is JsonPrimitive -> if (isString) content else booleanOrNull ?: longOrNull ?: doubleOrNull ?: content
-    is JsonArray -> map { it.toJvmValue() }
-    is JsonObject -> entries.associate { (k, v) -> k to v.toJvmValue() }
-}
-
 private fun parseValidTimeMicros(value: Any?, field: String): Long? = when (value) {
     null -> null
     is String -> try {
@@ -60,6 +54,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
     private val dbName: String,
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
+    private val messageFormat: MessageFormat,
     private val pollDuration: Duration = Duration.ofSeconds(1),
 ) : DebeziumLog {
 
@@ -75,15 +70,31 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         val logCluster: LogClusterAlias, val tableTopic: String,
     ) : DebeziumLog.Factory {
 
-        override fun openLog(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): DebeziumLog {
+        override fun openLog(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>, messageFormat: MessageFormat): DebeziumLog {
             val cluster =
                 requireNotNull(clusters[logCluster] as? KafkaCluster) { "missing Kafka cluster: '${logCluster}'" }
+
+            if (messageFormat is MessageFormat.Avro) {
+                requireNotNull(cluster.schemaRegistryUrl) {
+                    "schemaRegistryUrl must be set on Kafka cluster '${logCluster}' when using Avro message format"
+                }
+            }
 
             AdminClient.create(cluster.kafkaConfigMap).use { admin ->
                 admin.ensureTopicExists(tableTopic, autoCreate = false)
             }
 
-            return KafkaDebeziumLog(dbName, cluster.kafkaConfigMap, tableTopic)
+            val kafkaConfig = when (messageFormat) {
+                is MessageFormat.Json -> cluster.kafkaConfigMap
+                is MessageFormat.Avro -> cluster.kafkaConfigMap.plus(
+                    mapOf(
+                        KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG to cluster.schemaRegistryUrl!!,
+                        KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG to "false",
+                    )
+                )
+            }
+
+            return KafkaDebeziumLog(dbName, kafkaConfig, tableTopic, messageFormat)
         }
 
         fun toProto(): KafkaDebeziumLogConfig = kafkaDebeziumLogConfig {
@@ -102,33 +113,33 @@ class KafkaDebeziumLog @JvmOverloads constructor(
 
     val epoch: Int get() = 0
 
-    private fun writeCdcJson(bytes: ByteArray, dbName: String, openTx: OpenTx) {
-        val envelope = try {
-            Json.parseToJsonElement(String(bytes)).jsonObject
-        } catch (e: IllegalArgumentException) {
-            throw Incorrect("Invalid CDC message: ${e.message}", cause = e)
-        }
+    private fun valueDeserializer(): Deserializer<*> = when (messageFormat) {
+        is MessageFormat.Json -> ByteArrayDeserializer()
+        // KafkaConsumer doesn't call configure() on deserializer instances passed to the constructor,
+        // so we configure it manually with the Schema Registry URL from kafkaConfig.
+        is MessageFormat.Avro -> KafkaAvroDeserializer().also { it.configure(kafkaConfig, false) }
+    }
 
-        val payload = envelope["payload"]?.jsonObject ?: envelope
-
-        val op = payload["op"]?.jsonPrimitive?.content
+    @Suppress("UNCHECKED_CAST")
+    private fun writeCdcPayload(payload: Map<String, Any?>, dbName: String, openTx: OpenTx) {
+        val op = payload["op"] as? String
             ?: throw Incorrect("Missing 'op' in payload")
 
-        val source = payload["source"]?.jsonObject
+        val source = payload["source"] as? Map<String, Any?>
             ?: throw Incorrect("Missing 'source' in payload")
-        val schema = source["schema"]?.jsonPrimitive?.content
+        val schema = source["schema"] as? String
             ?: throw Incorrect("Missing 'source.schema' in payload")
-        val table = source["table"]?.jsonPrimitive?.content
+        val table = source["table"] as? String
             ?: throw Incorrect("Missing 'source.table' in payload")
 
         val openTxTable = openTx.table(TableRef(dbName, schema, table))
 
         when (op) {
             "c", "r", "u" -> {
-                val after = payload["after"]?.jsonObject
+                val after = payload["after"] as? Map<String, Any?>
                     ?: throw Incorrect("Missing 'after' for put op")
 
-                val docMap = after.entries.associate { (k, v) -> k to v.toJvmValue() }.toMutableMap()
+                val docMap = after.toMutableMap()
 
                 val id = docMap["_id"] ?: throw Incorrect("Missing '_id' in document")
 
@@ -147,10 +158,10 @@ class KafkaDebeziumLog @JvmOverloads constructor(
             }
 
             "d" -> {
-                val before = payload["before"]?.takeUnless { it is JsonNull }?.jsonObject
+                val before = payload["before"]?.let { it as? Map<String, Any?> }
                     ?: throw Incorrect("Missing 'before' for delete — check REPLICA IDENTITY on source table")
 
-                val id = before["_id"]?.toJvmValue()
+                val id = before["_id"]
                     ?: throw Incorrect("Missing '_id' in 'before' for delete")
 
                 openTxTable.logDelete(
@@ -165,7 +176,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
     }
 
     override suspend fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<DebeziumMessage>) {
-        KafkaConsumer(
+        KafkaConsumer<Unit, Any>(
             kafkaConfig.plus(
                 mapOf(
                     ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
@@ -174,7 +185,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 )
             ),
             UnitDeserializer,
-            ByteArrayDeserializer()
+            @Suppress("UNCHECKED_CAST") (valueDeserializer() as Deserializer<Any>)
         ).use { c ->
             val partitionOffsets = afterToken?.let { tok ->
                 val token = tok.unpack(DebeziumOffsetToken::class.java)
@@ -219,7 +230,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                     OpenTx(allocator, txKey).use { openTx ->
                         for (consumerRecord in records) {
                             val value = consumerRecord.value() ?: continue
-                            writeCdcJson(value, dbName, openTx)
+                            writeCdcPayload(messageFormat.decode(value), dbName, openTx)
                         }
 
                         val offsets = debeziumOffsetToken {

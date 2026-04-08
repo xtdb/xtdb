@@ -17,8 +17,12 @@ dependencies {
     api(libs.kotlinx.serialization.json)
     api(libs.protobuf.kotlin)
 
+    implementation(libs.kafka.avro.serializer)
+
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.testcontainers)
+    testImplementation(libs.testcontainers.kafka)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.pgjdbc)
 }

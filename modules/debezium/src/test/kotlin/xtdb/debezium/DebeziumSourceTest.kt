@@ -18,7 +18,8 @@ class DebeziumSourceTest {
             log = KafkaDebeziumLog.Factory(
                 logCluster = "my-cluster",
                 tableTopic = "cdc.public.users",
-            )
+            ),
+            messageFormat = MessageFormat.Json,
         )
 
         val restored = protoRoundTrip(original)
@@ -40,6 +41,7 @@ class DebeziumSourceTest {
     fun `YAML round-trips DebeziumSource with KafkaDebeziumLog`() {
         val yaml = """
             externalLog: !Debezium
+              messageFormat: !Json {}
               log: !Kafka
                 logCluster: my-cluster
                 tableTopic: cdc.public.users
@@ -51,6 +53,7 @@ class DebeziumSourceTest {
 
         assertEquals("my-cluster", log.logCluster)
         assertEquals("cdc.public.users", log.tableTopic)
+        assertEquals(MessageFormat.Json, source.messageFormat)
     }
 
     @Test
@@ -60,12 +63,70 @@ class DebeziumSourceTest {
     }
 
     @Test
+    fun `proto round-trips DebeziumSource with Avro message format`() {
+        val original = DebeziumSource(
+            log = KafkaDebeziumLog.Factory(
+                logCluster = "my-cluster",
+                tableTopic = "cdc.public.users",
+            ),
+            messageFormat = MessageFormat.Avro,
+        )
+
+        val restored = protoRoundTrip(original)
+        assertEquals(MessageFormat.Avro, restored.messageFormat)
+    }
+
+    @Test
+    fun `proto round-trips DebeziumSource with Json message format`() {
+        val original = DebeziumSource(
+            log = KafkaDebeziumLog.Factory(
+                logCluster = "my-cluster",
+                tableTopic = "cdc.public.users",
+            ),
+            messageFormat = MessageFormat.Json,
+        )
+
+        val restored = protoRoundTrip(original)
+        assertEquals(MessageFormat.Json, restored.messageFormat)
+    }
+
+    @Test
+    fun `YAML round-trips DebeziumSource with Avro message format`() {
+        val yaml = """
+            externalLog: !Debezium
+              messageFormat: !Avro {}
+              log: !Kafka
+                logCluster: my-cluster
+                tableTopic: cdc.public.users
+        """.trimIndent()
+
+        val config = Database.Config.fromYaml(yaml)
+        val source = config.externalLog as DebeziumSource
+        assertEquals(MessageFormat.Avro, source.messageFormat)
+    }
+
+    @Test
+    fun `YAML requires messageFormat`() {
+        val yaml = """
+            externalLog: !Debezium
+              log: !Kafka
+                logCluster: my-cluster
+                tableTopic: cdc.public.users
+        """.trimIndent()
+
+        assertThrows(Exception::class.java) {
+            Database.Config.fromYaml(yaml)
+        }
+    }
+
+    @Test
     fun `external source is nullable in Config`() {
         val config = Database.Config()
         assertNull(config.externalLog)
 
         val withSource = config.externalSource(DebeziumSource(
-            log = KafkaDebeziumLog.Factory("cluster", "topic")
+            log = KafkaDebeziumLog.Factory("cluster", "topic"),
+            messageFormat = MessageFormat.Json,
         ))
         assertNotNull(withSource.externalLog)
 
