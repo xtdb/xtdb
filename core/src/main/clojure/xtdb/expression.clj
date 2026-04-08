@@ -1630,6 +1630,73 @@
 (defmethod codegen-call [:string_to_array :null :null] [_]
   {:return-type #xt/type :null, :->call-code (constantly nil)})
 
+(defn- scan-quoted-ident
+  "Scans a quoted identifier starting after the opening quote at position `start`.
+  Returns [parsed-string position-after-closing-quote]."
+  ^clojure.lang.IPersistentVector [^String s ^long start]
+  (let [len (.length s)
+        sb (StringBuilder.)]
+    (loop [j start]
+      (when (>= j len)
+        (throw (err/incorrect :xtdb.expression/unterminated-quoted-identifier
+                              (str "unterminated quoted identifier in: " s)
+                              {:input s})))
+      (let [c (.charAt s j)]
+        (if (= c \")
+          (if (and (< (inc j) len) (= (.charAt s (inc j)) \"))
+            (do (.append sb \") (recur (+ j 2)))
+            [(.toString sb) (inc j)])
+          (do (.append sb c) (recur (inc j))))))))
+
+(defn parse-ident ^xtdb.arrow.ListValueReader [^String s]
+  (let [len (.length s)]
+    (when (zero? len)
+      (throw (err/incorrect :xtdb.expression/zero-length-identifier
+                            (str "zero-length identifier in: " s)
+                            {:input s})))
+    (loop [i 0, parts [], after-dot? false]
+      (if (>= i len)
+        (if after-dot?
+          (throw (err/incorrect :xtdb.expression/zero-length-identifier
+                                (str "zero-length identifier in: " s)
+                                {:input s}))
+          (strings->list-reader (into-array String parts)))
+
+        (if (= (.charAt s i) \")
+          ;; quoted identifier
+          (let [[part next-i] (scan-quoted-ident s (inc i))
+                next-i (long next-i)]
+            (when (zero? (.length ^String part))
+              (throw (err/incorrect :xtdb.expression/empty-quoted-identifier
+                                    (str "quoted identifier must not be empty in: " s)
+                                    {:input s})))
+            (let [parts (conj parts part)]
+              (if (>= next-i len)
+                (strings->list-reader (into-array String parts))
+                (if (= (.charAt s next-i) \.)
+                  (recur (inc next-i) parts true)
+                  (throw (err/incorrect :xtdb.expression/unexpected-character-in-identifier
+                                        (str "unexpected character after quoted identifier in: " s)
+                                        {:input s}))))))
+
+          ;; unquoted identifier — scan to next dot, fold to lowercase
+          (let [dot-idx (.indexOf s (int \.) i)
+                end (if (neg? dot-idx) len dot-idx)
+                part (.toLowerCase (.substring s i end) java.util.Locale/ROOT)]
+            (when (zero? (.length part))
+              (throw (err/incorrect :xtdb.expression/zero-length-identifier
+                                    (str "zero-length identifier in: " s)
+                                    {:input s})))
+            (let [parts (conj parts part)]
+              (if (neg? dot-idx)
+                (strings->list-reader (into-array String parts))
+                (recur (inc end) parts true)))))))))
+
+(defmethod codegen-call [:parse_ident :utf8] [_]
+  {:return-type #xt/type [:list :utf8]
+   :->call-code (fn [[s]]
+                  `(parse-ident (resolve-string ~s)))})
+
 (defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type #xt/type :varbinary
    :->call-code (fn [[target replacement from len]]

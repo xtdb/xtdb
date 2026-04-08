@@ -1654,6 +1654,46 @@ SELECT DATE_BIN(INTERVAL 'P1D', TIMESTAMP '2020-01-01T00:00:00Z'),
     "E'foo\\nbar'"         "\"foo\nbar\""
     "E'foo\\\\bar'"        "\"foo\\bar\""))
 
+(t/deftest test-parse-ident
+  (t/are [sql expected]
+    (= [{:x expected}] (xt/q tu/*node* (str "SELECT parse_ident(" sql ") AS x")))
+
+    ;; case folding
+    "'FOO'"                          ["foo"]
+    "'public.foo'"                   ["public" "foo"]
+    "'select.from'"                  ["select" "from"]
+
+    ;; quoted identifiers
+    "'\"Foo\".\"Bar\"'"              ["Foo" "Bar"]
+    "'\"foo\"\"bar\"'"               ["foo\"bar"]
+    "'public.\"My Table\"'"          ["public" "My Table"]
+    "'\"foo bar\"'"                  ["foo bar"]
+    "'\"has.dot\"'"                  ["has.dot"]
+    "'schema.\"has.dot\"'"           ["schema" "has.dot"]
+    "'\"\"\"nested\"\"\"'"           ["\"nested\""]
+    "'\"\"\"\"'"                     ["\""]
+    "'\"café\"'"                     ["café"]
+
+    ;; deeply nested / alternating
+    "'a.b.c.d'"                      ["a" "b" "c" "d"]
+    "'a.\"B\".c.\"D\"'"              ["a" "B" "c" "D"])
+
+  (t/testing "error cases"
+    (t/are [sql pattern]
+      (thrown-with-msg? RuntimeException pattern
+        (xt/q tu/*node* (str "SELECT parse_ident(" sql ") AS x")))
+
+      "'\"foo'"              #"unterminated quoted identifier"
+      "'foo..bar'"           #"zero-length identifier"
+      "'\"foo\"bar'"         #"unexpected character after quoted identifier"
+      "'\"\"'"               #"quoted identifier must not be empty"
+      "'.foo'"               #"zero-length identifier"
+      "'foo.'"               #"zero-length identifier"
+      "''"                   #"zero-length identifier"
+      "'\"foo\".'"           #"zero-length identifier"
+      "'foo.\"\".bar'"       #"quoted identifier must not be empty"
+      "'\"foo\" .bar'"       #"unexpected character")))
+
 (t/deftest test-string-to-array
   (t/are [s delim expected]
     (= [{:x expected}] (xt/q tu/*node* (str "SELECT string_to_array(" s ", " delim ") AS x")))
