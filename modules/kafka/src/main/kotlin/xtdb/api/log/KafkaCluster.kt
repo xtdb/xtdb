@@ -117,6 +117,7 @@ fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
+    val schemaRegistryUrl: String? = null,
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log.Cluster {
     val producer = kafkaConfigMap.openProducer()
@@ -134,12 +135,14 @@ class KafkaCluster(
         var pollDuration: Duration = Duration.ofSeconds(1),
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
+        var schemaRegistryUrl: String? = null,
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Log.Cluster.Factory<KafkaCluster> {
 
         fun pollDuration(pollDuration: Duration) = apply { this.pollDuration = pollDuration }
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
+        fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -152,7 +155,7 @@ class KafkaCluster(
                 .plus(propertiesMap)
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
-        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, coroutineContext)
+        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, schemaRegistryUrl, coroutineContext)
     }
 
     interface AtomicProducer<M> : Log.AtomicProducer<M> {

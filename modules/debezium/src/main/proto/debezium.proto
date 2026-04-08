@@ -15,6 +15,10 @@ message DebeziumSourceConfig {
     oneof log {
         KafkaDebeziumLogConfig kafka_log = 1;
     }
+
+    oneof message_format {
+        bool avro = 10;
+    }
 }
 
 message PartitionOffsets {

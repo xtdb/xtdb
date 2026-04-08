@@ -20,8 +20,11 @@ import com.google.protobuf.Any as ProtoAny
 
 @Serializable
 @SerialName("!Debezium")
-data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
-    override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>) = log.openLog(dbName, clusters)
+data class DebeziumSource(
+    val log: DebeziumLog.Factory,
+    val messageFormat: MessageFormat,
+) : ExternalLog.Factory {
+    override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>) = log.openLog(dbName, clusters, messageFormat)
 
     override fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<DebeziumMessage> {
         val dbName = dbState.name
@@ -54,6 +57,9 @@ data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
             when (val l = log) {
                 is KafkaDebeziumLog.Factory -> kafkaLog = l.toProto()
             }
+            if (messageFormat is MessageFormat.Avro) {
+                avro = true
+            }
         }, "proto.xtdb.com")
     }
 
@@ -62,7 +68,11 @@ data class DebeziumSource(val log: DebeziumLog.Factory) : ExternalLog.Factory {
 
         override fun fromProto(msg: ProtoAny): ExternalLog.Factory {
             val config = msg.unpack(DebeziumSourceConfigProto::class.java)
-            return DebeziumSource(log = DebeziumLog.Factory.fromProto(config))
+            val format = when (config.messageFormatCase) {
+                DebeziumSourceConfigProto.MessageFormatCase.AVRO -> MessageFormat.Avro
+                else -> MessageFormat.Json
+            }
+            return DebeziumSource(log = DebeziumLog.Factory.fromProto(config), messageFormat = format)
         }
 
         override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalLog.Factory>) {

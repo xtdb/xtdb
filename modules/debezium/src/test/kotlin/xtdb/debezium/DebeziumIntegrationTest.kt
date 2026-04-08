@@ -179,6 +179,7 @@ class DebeziumIntegrationTest {
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}$storageYaml
                     externalLog: !Debezium
+                      messageFormat: !Json {}
                       log: !Kafka
                         logCluster: kafka
                         tableTopic: $debeziumTopic
