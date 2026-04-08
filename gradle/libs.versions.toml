@@ -1,8 +1,8 @@
 [versions]
 antlr = "4.13.2"
 arrow = "18.3.0"
-arrow-adbc = "0.22.0"
-aws-sdk = "2.41.27"
+arrow-adbc = "0.23.0"
+aws-sdk = "2.42.30"
 azure = "1.13.1"
 azure-storage = "12.27.0"
 clojure = "1.12.0"
@@ -10,11 +10,11 @@ exposed = "0.61.0"
 google-cloud-storage = "2.60.0"
 guava = "33.4.7-jre"
 kafka = "4.1.1"
-kotest = "6.0.4"
+kotest = "6.1.11"
 kotlin = "2.3.0"
 kotlin-coroutines = "1.10.2"
 dokka = "1.9.10"
-clojurephant = "0.9.0"
+clojurephant = "0.9.1"
 shadow = "8.3.6"
 freefair-javadoc = "8.13.1"
 junit = "5.13.0"
@@ -22,16 +22,16 @@ junit-launcher = "1.12.2"
 netty = "4.2.2.Final"
 protobuf = "4.31.1"
 protobuf-plugin = "0.9.6"
-reitit = "0.9.1"
+reitit = "0.10.1"
 muuntaja = "0.6.11"
-testcontainers = "2.0.3"
+testcontainers = "2.0.4"
 micrometer = "1.16.2"
 micrometer-tracing = "1.4.1"
 opentelemetry = "1.45.0"
 transit = "1.0.329"
 
 slf4j = "2.0.17"
-logback = "1.5.18"
+logback = "1.5.32"
 
 [libraries]
 arrow-algorithm = { group = "org.apache.arrow", name = "arrow-algorithm", version.ref = "arrow" }
@@ -44,26 +44,26 @@ arrow-adbc-fsql = { group = "org.apache.arrow.adbc", name = "adbc-driver-flight-
 arrow-flight-sql = { group = "org.apache.arrow", name = "flight-sql", version.ref = "arrow" }
 netty-common = { group = "io.netty", name = "netty-common", version.ref = "netty" }
 
-roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.3.0" }
+roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version = "1.6.14" }
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.10.0" }
-caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.1.8" }
-commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.20.0" }
+caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
+commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.21.0" }
 
 antlr = { group = "org.antlr", name = "antlr4", version.ref = "antlr" }
 antlr-runtime = { group = "org.antlr", name = "antlr4-runtime", version.ref = "antlr" }
 
 clojure = { group = "org.clojure", name = "clojure", version.ref = "clojure" }
-clojure-test-check = { group = "org.clojure", name = "test.check", version = "1.1.1" }
-clojure-tools-logging = { group = "org.clojure", name = "tools.logging", version = "1.3.0" }
-clojure-spec = { group = "org.clojure", name = "spec.alpha", version = "0.5.238" }
-clojure-data-json = { group = "org.clojure", name = "data.json", version = "2.5.1" }
-clojure-data-csv = { group = "org.clojure", name = "data.csv", version = "1.1.0" }
-clojure-tools-cli = { group = "org.clojure", name = "tools.cli", version = "1.3.250" }
+clojure-test-check = { group = "org.clojure", name = "test.check", version = "1.1.3" }
+clojure-tools-logging = { group = "org.clojure", name = "tools.logging", version = "1.3.1" }
+clojure-spec = { group = "org.clojure", name = "spec.alpha", version = "0.6.249" }
+clojure-data-json = { group = "org.clojure", name = "data.json", version = "2.5.2" }
+clojure-data-csv = { group = "org.clojure", name = "data.csv", version = "1.1.1" }
+clojure-tools-cli = { group = "org.clojure", name = "tools.cli", version = "1.4.256" }
 clj-yaml = { group = "clj-commons", name = "clj-yaml", version = "1.0.29" }
 transit-clj = { group = "com.cognitect", name = "transit-clj", version.ref = "transit" }
 transit-java = { group = "com.cognitect", name = "transit-java", version.ref = "transit" }
-next-jdbc = { group = "com.github.seancorfield", name = "next.jdbc", version = "1.3.1070" }
-honeysql = { group = "com.github.seancorfield", name = "honeysql", version = "2.7.1310" }
+next-jdbc = { group = "com.github.seancorfield", name = "next.jdbc", version = "1.3.1093" }
+honeysql = { group = "com.github.seancorfield", name = "honeysql", version = "2.7.1368" }
 integrant = { group = "integrant", name = "integrant", version = "1.0.1" }
 buddy-hashers = { group = "buddy", name = "buddy-hashers", version = "2.0.167" }
 
@@ -72,15 +72,15 @@ junit-jupiter-params = { group = "org.junit.jupiter", name = "junit-jupiter-para
 junit-jupiter-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-launcher" }
 
-pgjdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.8" }
+pgjdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.10" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time", version.ref = "exposed" }
 
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.8.1" }
-mockk = { group = "io.mockk", name = "mockk", version = "1.14.5" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.10.0" }
+mockk = { group = "io.mockk", name = "mockk", version = "1.14.9" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.56.0" }
 kotest = { group = "io.kotest", name = "kotest-assertions-core", version.ref = "kotest" }
 kotest-props = { group = "io.kotest", name = "kotest-property", version.ref = "kotest" }
@@ -100,7 +100,7 @@ reitit-spec = { group = "metosin", name = "reitit-spec", version.ref = "reitit" 
 hato = { group = "hato", name = "hato", version = "1.0.0" }
 
 ring-core = { group = "ring", name = "ring-core", version = "1.14.1" }
-ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", version = "0.38.0" }
+ring-jetty9-adapter = { group = "info.sunng", name = "ring-jetty9-adapter", version = "0.39.2" }
 jetty-alpn-server = { group = "org.eclipse.jetty", name = "jetty-alpn-server", version = "10.0.15" }
 
 testcontainers = { group = "org.testcontainers", name = "testcontainers", version.ref = "testcontainers" }
@@ -153,7 +153,7 @@ kafka-clients = { group = "org.apache.kafka", name = "kafka-clients", version.re
 kafka-connect-api = { group = "org.apache.kafka", name = "connect-api", version.ref = "kafka" }
 
 # Dev/test dependencies
-jovial = { group = "dev.clojurephant", name = "jovial", version = "0.4.1" }
+jovial = { group = "dev.clojurephant", name = "jovial", version = "0.4.3" }
 cider-nrepl = { group = "cider", name = "cider-nrepl", version = "0.58.0" }
 integrant-repl = { group = "integrant", name = "repl", version = "0.3.2" }
 tufte = { group = "com.taoensso", name = "tufte", version = "2.6.3" }
@@ -163,7 +163,7 @@ sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version = "3.39.3.0"
 clj-kondo = { group = "clj-kondo", name = "clj-kondo", version = "2023.12.15" }
 pg2-core = { group = "com.github.igrishaev", name = "pg2-core", version = "0.1.33" }
 codox = { group = "codox", name = "codox", version = "0.10.8" }
-clj-http = { group = "clj-http", name = "clj-http", version = "3.12.3" }
+clj-http = { group = "clj-http", name = "clj-http", version = "3.13.1" }
 minio = { group = "io.minio", name = "minio", version = "8.5.17" }
 cheshire = { group = "cheshire", name = "cheshire", version = "5.13.0" }
 scope-capture = { group = "vvvvalvalval", name = "scope-capture", version = "0.3.3" }
@@ -174,7 +174,7 @@ oshi-core = { group = "com.github.oshi", name = "oshi-core", version = "6.3.0" }
 hugsql-core = { group = "com.layerware", name = "hugsql-core", version = "0.5.3" }
 hugsql-adapter-next-jdbc = { group = "com.layerware", name = "hugsql-adapter-next-jdbc", version = "0.5.3" }
 hiccup = { group = "pro.juxt.clojars-mirrors.hiccup", name = "hiccup", version = "2.0.0-alpha2" }
-kixi-stats = { group = "kixi", name = "stats", version = "0.5.7" }
+kixi-stats = { group = "kixi", name = "stats", version = "0.5.8" }
 
 # Datasets dependencies
 tpch = { group = "io.airlift.tpch", name = "tpch", version = "0.10" }
