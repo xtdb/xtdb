@@ -532,7 +532,7 @@ fromClause : 'FROM' tableReference (',' tableReference)* ;
 /// §7.6 <table reference>
 
 tableReference
-    : fromTableRef (querySystemTimePeriodSpecification | queryValidTimePeriodSpecification)* tableAlias? tableProjection? # BaseTable
+    : fromTableRef (querySystemTimePeriodSpecification | queryValidTimePeriodSpecification)* (tableAlias tableProjection?)? # BaseTable
     | tableReference joinType? 'JOIN' tableReference joinSpecification # JoinTable
     | tableReference 'CROSS' 'JOIN' tableReference # CrossJoinTable
     | tableReference 'NATURAL' joinType? 'JOIN' tableReference # NaturalJoinTable
