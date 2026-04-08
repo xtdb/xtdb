@@ -171,7 +171,11 @@ class KafkaCluster(
                     try {
                         block(tx).also { tx.commit() }
                     } catch (e: Throwable) {
-                        tx.abort()
+                        try {
+                            tx.abort()
+                        } catch (abortEx: Throwable) {
+                            e.addSuppressed(abortEx)
+                        }
                         throw e
                     }
                 }
