@@ -12,7 +12,7 @@ internal class BitBuffer private constructor(
 ) : AutoCloseable {
 
     companion object {
-        private fun bufferSize(bitCount: Int) = BitVectorHelper.getValidityBufferSize(bitCount).toLong()
+        private fun bufferSize(bitCount: Int) = BitVectorHelper.getValidityBufferSizeFromCount(bitCount).toLong()
     }
 
     constructor(allocator: BufferAllocator) : this(allocator, allocator.empty, 0)

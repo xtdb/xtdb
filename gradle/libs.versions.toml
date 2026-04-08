@@ -1,6 +1,6 @@
 [versions]
 antlr = "4.13.2"
-arrow = "18.3.0"
+arrow = "19.0.0"
 arrow-adbc = "0.23.0"
 aws-sdk = "2.42.30"
 azure = "1.13.1"
