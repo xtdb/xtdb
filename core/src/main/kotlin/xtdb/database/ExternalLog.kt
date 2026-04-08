@@ -3,10 +3,9 @@ package xtdb.database
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.selectUnbiased
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -71,49 +70,28 @@ interface ExternalLog<M> : AutoCloseable {
         private val externalProc: MessageProcessor<M>,
         ctx: CoroutineContext = Dispatchers.Default
     ) : LeaderProcessor by leaderLogProcessor {
-        private val externalCh = Channel<List<M>>()
-        private val sourceCh = Channel<List<Log.Record<SourceMessage>>>()
+
+        private val lock = Mutex()
 
         private val scope = CoroutineScope(ctx)
 
         private val job = scope.launch {
             try {
-                launch {
-                    try {
-                        externalLog.tailAll(externalSourceToken) { msgs -> externalCh.send(msgs) }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        leaderLogProcessor.notifyError(e)
-                        externalCh.close(e)
-                        sourceCh.close(e)
-                    }
-                }
-
-                while (true) {
-                    selectUnbiased {
-                        externalCh.onReceive { externalProc.processMessages(it) }
-                        sourceCh.onReceive { leaderLogProcessor.processRecords(it) }
-                    }
+                externalLog.tailAll(externalSourceToken) { msgs ->
+                    lock.withLock { externalProc.processMessages(msgs) }
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: ClosedReceiveChannelException) {
-                // channels closed externally — normal shutdown, same as cancellation
             } catch (e: Throwable) {
                 leaderLogProcessor.notifyError(e)
-                externalCh.close(e)
-                sourceCh.close(e)
             }
         }
 
         override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
-            sourceCh.send(records)
+            lock.withLock { leaderLogProcessor.processRecords(records) }
         }
 
         override fun close() {
-            sourceCh.close()
-            externalCh.close()
             job.cancel()
         }
     }
