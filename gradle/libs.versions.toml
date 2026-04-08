@@ -188,3 +188,4 @@ shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = "freefair-javadoc" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
 jreleaser = { id = "org.jreleaser", version = "1.18.0" }
+ben-manes-versions = { id = "com.github.ben-manes.versions", version = "0.51.0" }

@@ -208,6 +208,11 @@ See link:RELEASING.adoc[].
 
 A couple of `./gradlew` tools:
 
+Checking for dependency updates::
++
+`./gradlew dependencyUpdates` reports available updates for all dependencies in the version catalog.
+Uses the https://github.com/ben-manes/gradle-versions-plugin[ben-manes versions plugin].
+
 Reading an Arrow file::
 +
 These tools output an Arrow file in EDN format
