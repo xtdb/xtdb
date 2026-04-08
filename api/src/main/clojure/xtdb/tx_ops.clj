@@ -2,7 +2,8 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import xtdb.util.NormalForm))
+  (:import [xtdb.tx Sql SqlByteArgs PutDocs PutRel PatchDocs DeleteDocs EraseDocs]
+           xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -26,13 +27,33 @@
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/incorrect :xtql/unknown-tx-op "Unknown tx-op" {:op op})))
 
-(defrecord Sql [sql arg-rows])
-(defrecord SqlByteArgs [sql ^bytes arg-bytes]) ; used in FlightSQL, LSP doesn't spot it
-(defrecord PutDocs [table-name docs valid-from valid-to])
-(defrecord PutRel [table-name ^bytes rel-bytes])
-(defrecord PatchDocs [table-name docs valid-from valid-to])
-(defrecord DeleteDocs [table-name doc-ids valid-from valid-to])
-(defrecord EraseDocs [table-name doc-ids])
+(defn ->Sql
+  ([sql] (Sql. sql))
+  ([sql arg-rows] (Sql. sql arg-rows)))
+
+(defn ->SqlByteArgs [sql arg-bytes] (SqlByteArgs. sql arg-bytes))
+
+(defn ->PutDocs
+  ([table-name docs] (PutDocs. table-name docs))
+  ([table-name docs valid-from valid-to] (PutDocs. table-name docs valid-from valid-to)))
+
+(defn ->PutRel [table-name rel-bytes] (PutRel. table-name rel-bytes))
+
+(defn ->PatchDocs
+  ([table-name docs] (PatchDocs. table-name docs))
+  ([table-name docs valid-from valid-to] (PatchDocs. table-name docs valid-from valid-to)))
+
+(defn ->DeleteDocs
+  ([table-name doc-ids] (DeleteDocs. table-name doc-ids))
+  ([table-name doc-ids valid-from valid-to] (DeleteDocs. table-name doc-ids valid-from valid-to)))
+
+(defn ->EraseDocs [table-name doc-ids] (EraseDocs. table-name doc-ids))
+
+(defn map->PutDocs [{:keys [table-name docs valid-from valid-to]}]
+  (PutDocs. table-name docs valid-from valid-to))
+
+(defn map->PatchDocs [{:keys [table-name docs valid-from valid-to]}]
+  (PatchDocs. table-name docs valid-from valid-to))
 
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 

@@ -32,7 +32,8 @@
            (xtdb JsonSerde JsonLdSerde)
            (xtdb.api DataSource$ConnectionBuilder)
            xtdb.api.log.SourceMessage$FlushBlock
-           xtdb.pgwire.Server))
+           xtdb.pgwire.Server
+           xtdb.tx.Sql))
 
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
@@ -1764,18 +1765,19 @@
       (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}])
 
       ;; HACK - leaning into internal state
-      (t/is (= [{:sql "INSERT INTO foo RECORDS $1",          
-                 :arg-rows [[{:_id 1, :a "one"}]
-                            [{:_id 2, :a "two"}]]}
-                {:sql "INSERT INTO foo RECORDS {_id: $1, a: $2}",
-                 :arg-rows [[3 "three"]]}
-                {:sql "INSERT INTO foo RECORDS $1",
-                 :arg-rows [[{:_id 4, :a "four"}]]}]
-               (-> @(:server-state *server*)
-                   (get-in [:connections 1 :conn-state])
-                   deref
-                   (get-in [:transaction :dml-buf])
-                   (->> (mapv (partial into {})))))))
+      (let [dml-buf (-> @(:server-state *server*)
+                        (get-in [:connections 1 :conn-state])
+                        deref
+                        (get-in [:transaction :dml-buf]))]
+        (t/is (= ["INSERT INTO foo RECORDS $1"
+                   "INSERT INTO foo RECORDS {_id: $1, a: $2}"
+                   "INSERT INTO foo RECORDS $1"]
+                  (mapv Sql/.getSql dml-buf)))
+        (t/is (= [[[{:_id 1, :a "one"}]
+                   [{:_id 2, :a "two"}]]
+                  [[3 "three"]]
+                  [[{:_id 4, :a "four"}]]]
+                  (mapv Sql/.getArgRows dml-buf)))))
 
     (t/is (= [{:xt/id 1, :a "one"}
               {:xt/id 2, :a "two"}

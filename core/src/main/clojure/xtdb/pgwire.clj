@@ -54,8 +54,7 @@
            xtdb.JsonLdSerde
            xtdb.NodeBase
            (xtdb.query PreparedQuery)
-           (xtdb.tx TxOpts)
-           (xtdb.tx_ops Sql)))
+           (xtdb.tx PutDocs PutRel Sql TxOpts)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -573,8 +572,8 @@
             (util/with-open [tx-ops (->> dml-buf
                                          (mapcat (fn [op]
                                                    (or (when (instance? Sql op)
-                                                         (let [{:keys [sql arg-rows]} op]
-                                                           (seq (sql/sql->static-ops sql arg-rows))))
+                                                         (let [^Sql op op]
+                                                           (seq (sql/sql->static-ops (.getSql op) (.getArgRows op)))))
                                                        [op])))
                                          (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
               (if async?
@@ -1325,10 +1324,10 @@
          (fnil (fn [dml-ops]
                  (or (when-let [^Sql last-op (peek dml-ops)]
                        (when (and (instance? Sql last-op)
-                                  (= (:sql last-op) query))
+                                  (= (.getSql last-op) query))
                          (conj (pop dml-ops)
-                               (tx-ops/->Sql query (conj (or (:arg-rows last-op) []) args)))))
-                     (conj dml-ops (tx-ops/->Sql query [args]))))
+                               (Sql. query (conj (or (.getArgRows last-op) []) args)))))
+                     (conj dml-ops (Sql. query [args]))))
                []))
 
   (pgio/cmd-write-msg conn pgio/msg-command-complete
@@ -1631,7 +1630,7 @@
                (fn [{:keys [copy], :as conn-state}]
                  (-> conn-state
                      (update-in [:transaction :dml-buf] (fnil conj [])
-                                (tx-ops/->PutDocs (:table-name copy) docs nil nil))
+                                (PutDocs. (:table-name copy) docs nil nil))
                      (dissoc :copy))))
 
         (when started-tx?
@@ -1655,7 +1654,7 @@
                        (fn [{:keys [copy], :as conn-state}]
                          (-> conn-state
                              (update-in [:transaction :dml-buf] (fnil conj [])
-                                        (tx-ops/->PutRel (:table-name copy) (.getAsArrowStream rel)))))))]
+                                        (PutRel. (:table-name copy) (.getAsArrowStream rel)))))))]
 
         (if-let [{:keys [access-mode]} (:transaction @conn-state)]
           (do

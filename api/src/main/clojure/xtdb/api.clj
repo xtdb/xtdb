@@ -22,7 +22,7 @@
            (java.sql BatchUpdateException Connection)
            [java.util.concurrent.atomic AtomicReference]
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
-           (xtdb.tx_ops DeleteDocs EraseDocs PatchDocs PutDocs Sql)
+           (xtdb.tx ClientTxOp DeleteDocs EraseDocs PatchDocs PutDocs Sql)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
 
@@ -184,9 +184,11 @@
 
 (extend-protocol xtp/ExecuteOp
   PutDocs
-  (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]
-    (let [table-name (NormalForm/normalTableName table-name)
-          docs (cond->> docs
+  (execute-op! [^PutDocs op conn]
+    (let [table-name (NormalForm/normalTableName (.getTableName op))
+          valid-from (.getValidFrom op)
+          valid-to (.getValidTo op)
+          docs (cond->> (.getDocs op)
                  (or valid-from valid-to)
                  (map (partial into (->> {:xt/valid-from valid-from, :xt/valid-to valid-to}
                                          (into {} (remove (comp nil? val)))))))
@@ -197,8 +199,11 @@
       (.endCopy copy-in)))
 
   PatchDocs
-  (execute-op! [{:keys [table-name valid-from valid-to docs]} conn]
-    (let [table-name (NormalForm/normalTableName table-name)]
+  (execute-op! [^PatchDocs op conn]
+    (let [table-name (NormalForm/normalTableName (.getTableName op))
+          valid-from (.getValidFrom op)
+          valid-to (.getValidTo op)
+          docs (.getDocs op)]
       (with-open [stmt (jdbc/prepare conn [(format "PATCH INTO \"%s\".\"%s\" %s RECORDS ?"
                                                    (namespace table-name) (name table-name)
                                                    (if (or valid-from valid-to)
@@ -211,8 +216,11 @@
                                         docs)))))
 
   DeleteDocs
-  (execute-op! [{:keys [table-name valid-from valid-to doc-ids]} conn]
-    (let [table-name (NormalForm/normalTableName table-name)]
+  (execute-op! [^DeleteDocs op conn]
+    (let [table-name (NormalForm/normalTableName (.getTableName op))
+          valid-from (.getValidFrom op)
+          valid-to (.getValidTo op)
+          doc-ids (.getDocIds op)]
       (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?"
                                                    (namespace table-name) (name table-name)
                                                    (if (or valid-from valid-to)
@@ -225,21 +233,23 @@
                                         doc-ids)))))
 
   EraseDocs
-  (execute-op! [{:keys [table-name doc-ids]} conn]
-    (let [table-name (NormalForm/normalTableName table-name)]
+  (execute-op! [^EraseDocs op conn]
+    (let [table-name (NormalForm/normalTableName (.getTableName op))]
       (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?"
                                                    (namespace table-name) (name table-name))])]
-        (jdbc/execute-batch! stmt (mapv vector doc-ids)))))
+        (jdbc/execute-batch! stmt (mapv vector (.getDocIds op))))))
 
   Sql
-  (execute-op! [{:keys [sql arg-rows]} conn]
-    (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
-      (cond
-        (nil? arg-rows) (jdbc/execute! conn [sql])
-        (empty? arg-rows) nil
-        (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
-        :else (with-open [stmt (jdbc/prepare conn [sql])]
-                (jdbc/execute-batch! stmt arg-rows))))))
+  (execute-op! [^Sql op conn]
+    (let [sql (.getSql op)
+          arg-rows (.getArgRows op)]
+      (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
+        (cond
+          (nil? arg-rows) (jdbc/execute! conn [sql])
+          (empty? arg-rows) nil
+          (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
+          :else (with-open [stmt (jdbc/prepare conn [sql])]
+                  (jdbc/execute-batch! stmt arg-rows)))))))
 
 (defn- submit-tx* [conn tx-ops tx-opts]
   (try
@@ -248,7 +258,7 @@
       (try
         (doseq [tx-op tx-ops
                 :let [tx-op (cond-> tx-op
-                              (not (record? tx-op)) tx-ops/parse-tx-op)]]
+                              (not (instance? ClientTxOp tx-op)) tx-ops/parse-tx-op)]]
           (xtp/execute-op! tx-op conn))
         (catch BatchUpdateException e
           (throw (ex-cause e))))
