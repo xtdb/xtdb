@@ -2,14 +2,16 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
-            [xtdb.db-catalog :as db] 
+            [xtdb.db-catalog :as db]
+            [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
-            [xtdb.test-util :as tu]  
+            [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [xtdb.compactor :as c])
   (:import org.apache.kafka.common.KafkaException
            org.testcontainers.kafka.ConfluentKafkaContainer
-           org.testcontainers.utility.DockerImageName 
+           org.testcontainers.utility.DockerImageName
            [xtdb.api.log Log]))
 
 (def ^:private ^:dynamic *bootstrap-servers* nil)
@@ -415,3 +417,67 @@
         (jdbc/execute! xtdb-conn-2 ["INSERT INTO foo RECORDS {_id: 'primary3'}"])
         (t/is (= #{{:_id "primary"} {:_id "primary2"} {:_id "primary3"}}
                  (set (jdbc/execute! xtdb-conn-2 ["SELECT * FROM foo"]))))))))
+
+(defn- start-kafka-node [{:keys [topic storage-path single-writer?]}]
+  (xtn/start-node (cond-> {:log-clusters {:kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                          :poll-duration "PT1S"}]}
+                           :log [:kafka {:cluster :kafka
+                                         :topic topic}]
+                           :storage [:local {:path storage-path}]}
+                    (some? single-writer?) (assoc-in [:indexer :single-writer?] single-writer?))))
+
+(t/deftest ^:integration test-multi-writer-to-single-writer-transition
+  (let [topic (str "xtdb.kafka-test.mw-sw." (random-uuid))]
+    (util/with-tmp-dirs #{storage-path}
+
+      (t/testing "Phase 1: multiple multi-writer nodes submitting concurrently"
+        (with-open [mw-node-1 (start-kafka-node {:topic topic :storage-path storage-path})
+                    mw-node-2 (start-kafka-node {:topic topic :storage-path storage-path})]
+          (doseq [[node prefix] [[mw-node-1 "n1"] [mw-node-2 "n2"]]]
+            (dotimes [batch-idx 100]
+              (xt/execute-tx node
+                             (for [i (range 1000)]
+                               [:put-docs :sensor_readings
+                                {:xt/id (format "%s-%s-%s" prefix batch-idx i)
+                                 :node prefix
+                                 :batch batch-idx
+                                 :value (rand-int 1000)}]))))
+
+          (c/compact-all! mw-node-1 nil)))
+
+      (t/testing "Phase 2: start single-writer node against same storage and topic"
+        (with-open [sw-node (start-kafka-node {:topic topic
+                                               :storage-path storage-path
+                                               :single-writer? true})]
+          (xt-log/sync-node sw-node #xt/duration "PT60S")
+
+          (t/testing "single-writer node sees all multi-writer data"
+            (t/is (= 200000 (count (xt/q sw-node "SELECT * FROM sensor_readings")))))
+
+          (t/testing "single-writer node can submit new transactions"
+            (dotimes [batch-idx 10]
+              (xt/execute-tx sw-node
+                             (for [i (range 1000)]
+                               [:put-docs :sensor_readings
+                                {:xt/id (format "sw-%s-%s" batch-idx i)
+                                 :node "sw"
+                                 :batch batch-idx
+                                 :value (rand-int 1000)}])))
+
+            (t/is (= 210000 (count (xt/q sw-node "SELECT * FROM sensor_readings")))
+                  "single-writer node can write and read new data"))
+
+          (t/testing "single-writer node can flush blocks"
+            (tu/flush-block! sw-node)
+
+            (t/is (= 210000 (count (xt/q sw-node "SELECT * FROM sensor_readings")))
+                  "data intact after single-writer block flush"))))
+
+      (t/testing "Phase 3: restart single-writer node — picks up where it left off"
+        (with-open [sw-node-2 (start-kafka-node {:topic topic
+                                                 :storage-path storage-path
+                                                 :single-writer? true})]
+          (xt-log/sync-node sw-node-2 #xt/duration "PT60S")
+
+          (t/is (= 210000 (count (xt/q sw-node-2 "SELECT * FROM sensor_readings")))
+                "restarted single-writer node sees all data"))))))
