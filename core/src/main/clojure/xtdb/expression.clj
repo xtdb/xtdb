@@ -680,6 +680,38 @@
                           ~(f #xt/type :null nil)
                           ~(f #xt/type :bool `(not (== -1 ~l-sym ~r-sym))))))))}))
 
+(def ^:private comparison-ops #{:< :<= :> :>= :== :<>})
+
+(defn- try-coerce-utf8-literal-to-temporal
+  "When a utf8 string literal is compared against a date-time type, coerces the
+  literal to the temporal type before dispatch — so operators only see temporal+temporal."
+  [{:keys [f] :as expr} arg-types emitted-args]
+  (when (and (comparison-ops f) (= 2 (count arg-types)))
+    (let [ea (vec emitted-args)
+          type-head (fn [t] (types/col-type-head (st/render-type t)))
+          date-time? (fn [th] (isa? types/col-type-hierarchy th :date-time))
+          coerce (fn [utf8-idx temporal-idx]
+                   (let [target-type (nth arg-types temporal-idx)
+                         {cast-ret :return-type, cast-bb :batch-bindings, cast-cc :->call-code}
+                         (codegen-cast {:source-type (nth arg-types utf8-idx) :target-type target-type})
+                         new-arg-types (assoc (vec arg-types) utf8-idx cast-ret)
+                         {ret :return-type, bb :batch-bindings, cc :->call-code}
+                         (codegen-call (assoc expr :args emitted-args :arg-types new-arg-types))]
+                     {:return-type ret
+                      :batch-bindings (vec (concat cast-bb bb))
+                      :->call-code (fn [args]
+                                     (cc (update (vec args) utf8-idx (fn [a] (cast-cc [a])))))}))]
+      (cond
+        (and (= :utf8 (type-head (nth arg-types 0)))
+             (date-time? (type-head (nth arg-types 1)))
+             (contains? (nth ea 0) :literal))
+        (coerce 0 1)
+
+        (and (date-time? (type-head (nth arg-types 0)))
+             (= :utf8 (type-head (nth arg-types 1)))
+             (contains? (nth ea 1) :literal))
+        (coerce 1 0)))))
+
 (defn- codegen-call* [{:keys [f emitted-args] :as expr}]
   (let [shortcut-null? (shortcut-null-args? f)
 
@@ -694,9 +726,10 @@
                              (MapEntry/create arg-types
                                               (if (or (not shortcut-null?)
                                                       (every? #(not= #xt/type :null %) arg-types))
-                                                (codegen-call (assoc expr
-                                                                     :args emitted-args
-                                                                     :arg-types arg-types))
+                                                (or (try-coerce-utf8-literal-to-temporal expr arg-types emitted-args)
+                                                    (codegen-call (assoc expr
+                                                                         :args emitted-args
+                                                                         :arg-types arg-types)))
                                                 {:return-type #xt/type :null, :->call-code (constantly nil)})))
                            (into {}))
 
