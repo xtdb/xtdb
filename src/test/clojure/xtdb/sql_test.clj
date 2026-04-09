@@ -2461,6 +2461,68 @@ UNION ALL
            (sql/plan "SELECT x FROM range(1, 4) xs (x)"))
         "RANGE produces the same plan as GENERATE_SERIES"))
 
+(t/deftest test-function-as-from-source
+  (t/testing "scalar function as FROM-clause table source produces single row"
+    (t/is (= [{:val ["a" "b" "c"]}]
+             (xt/q tu/*node* "SELECT s AS val FROM string_to_array('a,b,c', ',') AS t(s)"))))
+
+  (t/testing "cross join range with string_to_array in FROM"
+    (t/is (= [{:i 1, :val "a"} {:i 2, :val "b"} {:i 3, :val "c"}]
+             (xt/q tu/*node* "SELECT i, s[i] AS val FROM range(1, 4) AS xs(i), string_to_array('a,b,c', ',') AS t(s)"))))
+
+  (t/testing "range with computed bounds from array functions"
+    (t/is (= [{:i 1}]
+             (xt/q tu/*node* "SELECT i FROM range(array_lower(string_to_array('public', ','), 1), array_upper(string_to_array('public', ','), 1) + 1) AS xs(i)"))))
+
+  (t/testing "default column name is generated when no column projection"
+    (t/is (= [{:xt/column-2 ["a" "b" "c"]}]
+             (xt/q tu/*node* "SELECT * FROM string_to_array('a,b,c', ',') AS t"))))
+
+  (t/testing "multiple function sources in FROM"
+    (t/is (= [{:a ["x" "y"], :b ["1" "2"]}]
+             (xt/q tu/*node* "SELECT a, b FROM string_to_array('x,y', ',') AS t1(a), string_to_array('1,2', ',') AS t2(b)"))))
+
+  (t/testing "function in FROM with WITH ORDINALITY"
+    (t/is (= [{:s ["a" "b" "c"], :n 1}]
+             (xt/q tu/*node* "SELECT * FROM string_to_array('a,b,c', ',') WITH ORDINALITY AS t(s, n)"))))
+
+  (t/testing "function in subquery FROM"
+    (t/is (= [{:x ["a" "b"]}]
+             (xt/q tu/*node* "SELECT x FROM (SELECT s AS x FROM string_to_array('a,b', ',') AS t(s)) AS sub"))))
+
+  (t/testing "empty string produces row with empty array"
+    (t/is (= [{:s []}]
+             (xt/q tu/*node* "SELECT s FROM string_to_array('', ',') AS t(s)"))))
+
+  (t/testing "NULL argument produces row with no value"
+    (t/is (= [{}]
+             (xt/q tu/*node* "SELECT s FROM string_to_array(NULL, ',') AS t(s)"))))
+
+  (t/testing "nested function calls as arguments"
+    (t/is (= [{:s ["a" "b" "c"]}]
+             (xt/q tu/*node* "SELECT s FROM string_to_array(concat('a,', concat('b,', 'c')), ',') AS t(s)"))))
+
+  (t/testing "function name disambiguates from table with same name"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO string_to_array (_id, val) VALUES (1, 'hello')"]])
+    (t/is (= [{:xt/id 1, :val "hello"}]
+             (xt/q tu/*node* "SELECT * FROM string_to_array"))
+          "bare name resolves to table")
+    (t/is (= [{:s ["a" "b"]}]
+             (xt/q tu/*node* "SELECT s FROM string_to_array('a,b', ',') AS t(s)"))
+          "with parens resolves to function"))
+
+  (t/testing "table projection mismatch errors with too many columns"
+    (t/is (thrown-with-msg? Exception #"Table projection mismatch"
+             (xt/q tu/*node* "SELECT * FROM string_to_array('a,b', ',') AS t(a, b, c)"))))
+
+  (t/testing "WITH ORDINALITY with wrong column count errors"
+    (t/is (thrown-with-msg? Exception #"Table projection mismatch"
+             (xt/q tu/*node* "SELECT * FROM string_to_array('a,b', ',') WITH ORDINALITY AS t(s)"))))
+
+  (t/testing "aggregate functions are rejected in FROM"
+    (t/is (thrown-with-msg? Exception #"Aggregates are not allowed in this context"
+             (xt/q tu/*node* "SELECT x FROM sum(42) AS t(x)")))))
+
 (t/deftest star-goes-at-end-too-3706
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo RECORDS {_id: 1, x: 'foo'}"]])
 

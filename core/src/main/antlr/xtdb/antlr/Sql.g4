@@ -540,6 +540,7 @@ tableReference
     | 'LATERAL' subquery tableAlias tableProjection? # LateralDerivedTable
     | 'UNNEST' '(' expr ')' withOrdinality? tableAlias tableProjection? # CollectionDerivedTable
     | generateSeries withOrdinality? tableAlias tableProjection? # GenerateSeriesTable
+    | expr withOrdinality? (tableAlias tableProjection?)? # ExprDerivedTable
     | '(' tableReference ')' # WrappedTableReference
     ;
 

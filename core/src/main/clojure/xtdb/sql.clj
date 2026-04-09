@@ -791,6 +791,32 @@
                            (-> (->col-sym (str "_ordinal." (swap! !id-count inc)))
                                (vary-meta assoc :unnamed-unnest-col? true))))))))
 
+  (visitExprDerivedTable [{{:keys [!id-count]} :env} ctx]
+    (let [expr (.accept (.expr ctx) (->ExprPlanVisitor env (or left-scope scope)))
+
+          table-projection (->table-projection (.tableProjection ctx))
+          table-alias (or (identifier-sym (.tableAlias ctx))
+                          (->col-sym (str "_expr." (swap! !id-count inc))))
+          unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
+          with-ordinality? (boolean (.withOrdinality ctx))
+          expected-cols (+ 1 (if with-ordinality? 1 0))]
+
+      (if-not (or (nil? table-projection)
+                  (= expected-cols (count table-projection)))
+        (add-err! env (->TableProjectionMismatch table-alias table-projection))
+        (let [col-sym (or (->col-sym (first table-projection))
+                          (->col-sym (str "_column_" (swap! !id-count inc))))
+              output-cols (cond-> [col-sym]
+                            with-ordinality?
+                            (conj (or (->col-sym (second table-projection))
+                                      (->col-sym (str "_ordinal." (swap! !id-count inc))))))
+              ordinal-sym (when with-ordinality? (second output-cols))
+              plan [:table {:output-cols output-cols
+                            :rows [(cond-> {col-sym expr}
+                                     with-ordinality? (assoc ordinal-sym 1))]}]]
+          (->DerivedTable plan table-alias unique-table-alias
+                          (->insertion-ordered-set output-cols))))))
+
   (visitWrappedTableReference [this ctx] (-> (.tableReference ctx) (.accept this))))
 
 (defrecord QuerySpecificationScope [outer-scope from-rel]
