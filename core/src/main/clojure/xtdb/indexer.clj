@@ -531,28 +531,16 @@
   (Indexer/addTxRow open-tx db-name tx-key t user-metadata))
 
 
-(defn- build-table-data [^OpenTx open-tx]
-  (let [m (java.util.HashMap.)]
-    (doseq [^java.util.Map$Entry entry (.getTables open-tx)]
-      (let [^TableRef table-ref (.getKey entry)
-            ^OpenTx$Table table-tx (.getValue entry)]
-        (when-let [data (.serializeTxData table-tx)]
-          (.put m (.getSchemaAndTable table-ref) data))))
-    m))
-
-(defn- ->resolved-tx [^TransactionKey tx-key committed? error table-data]
-  (ReplicaMessage$ResolvedTx. (.getTxId tx-key)
-                              (.getSystemTime tx-key)
-                              committed?
-                              error
-                              table-data
-                              nil
-                              nil))
-
 (defn- commit [^LiveIndex live-index ^OpenTx open-tx committed? error]
-  (let [table-data (build-table-data open-tx)]
+  (let [table-data (.serializeTableData open-tx)
+        ^TransactionKey tx-key (.getTxKey open-tx)]
     (.commitTx live-index open-tx)
-    (->resolved-tx (.getTxKey open-tx) committed? error table-data)))
+    (ReplicaMessage$ResolvedTx. (.getTxId tx-key)
+                                (.getSystemTime tx-key)
+                                (boolean committed?)
+                                error
+                                table-data
+                                nil nil)))
 
 (defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
                                db-name, db-storage, db-state
