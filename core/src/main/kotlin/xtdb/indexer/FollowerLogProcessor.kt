@@ -93,7 +93,11 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 val txKey = TransactionKey(msg.txId, systemTime)
                 val result = if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
-                        is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                        is DbOp.Attach -> try {
+                            dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                        } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "[$dbName] follower: attach database '${dbOp.dbName}' failed" }
+                        }
                         is DbOp.Detach -> try {
                             dbCatalog!!.detach(dbOp.dbName)
                         } catch (e: Anomaly.Caller) {
