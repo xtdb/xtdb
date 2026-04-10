@@ -9,6 +9,7 @@ import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
+import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.database.Database
 import xtdb.database.DatabaseState
@@ -64,7 +65,11 @@ class TransitionLogProcessor(
                 val result = if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                        is DbOp.Detach -> dbCatalog!!.detach(dbOp.dbName)
+                        is DbOp.Detach -> try {
+                            dbCatalog!!.detach(dbOp.dbName)
+                        } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "[$dbName] transition: detach database '${dbOp.dbName}' failed" }
+                        }
                         null -> {}
                     }
 

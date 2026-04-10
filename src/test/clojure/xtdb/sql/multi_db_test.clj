@@ -272,6 +272,25 @@ ATTACH DATABASE new_db WITH $$
              (pgw-test/reading-ex
               (jdbc/execute! conn ["DETACH DATABASE xtdb"]))))))
 
+(t/deftest double-detach-does-not-halt-node
+  (with-open [node (xtn/start-node)
+              conn (.build (.createConnectionBuilder node))]
+
+    (jdbc/execute! conn ["ATTACH DATABASE test_db"])
+    (jdbc/execute! conn ["DETACH DATABASE test_db"])
+
+    (t/is (= {:sql-state "XX000",
+              :message "Database does not exist",
+              :detail #xt/error [:not-found :xtdb/no-such-db
+                                 "Database does not exist"
+                                 {:db-name "test_db"}]}
+             (pgw-test/reading-ex
+              (jdbc/execute! conn ["DETACH DATABASE test_db"]))))
+
+    (t/testing "node still functional after double detach"
+      (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 'test'}"])
+      (t/is (= {:_id "test"} (jdbc/execute-one! conn ["SELECT * FROM foo"]))))))
+
 (t/deftest await-token-scoped-to-committed-db-5406
   (with-open [node (xtn/start-node)
               xtdb-conn (.build (.createConnectionBuilder node))]

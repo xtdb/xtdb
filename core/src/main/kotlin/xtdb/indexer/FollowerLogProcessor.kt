@@ -12,6 +12,7 @@ import xtdb.catalog.BlockCatalog.Companion.blockFilePath
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
+import xtdb.error.Anomaly
 import xtdb.error.Interrupted
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -93,7 +94,11 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 val result = if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                        is DbOp.Detach -> dbCatalog!!.detach(dbOp.dbName)
+                        is DbOp.Detach -> try {
+                            dbCatalog!!.detach(dbOp.dbName)
+                        } catch (e: Anomaly.Caller) {
+                            LOG.debug(e) { "[$dbName] follower: detach database '${dbOp.dbName}' failed" }
+                        }
                         null -> {}
                     }
 
