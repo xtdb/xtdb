@@ -40,20 +40,15 @@ import kotlin.time.Duration.Companion.seconds
 @EnabledIfEnvironmentVariable(named = "XTDB_SINGLE_WRITER", matches = "true")
 class AvroConsumerTest {
 
-    private lateinit var network: Network
-    private lateinit var kafka: ConfluentKafkaContainer
-    private lateinit var schemaRegistry: GenericContainer<*>
+    companion object {
+        private val network: Network = Network.newNetwork()
 
-    @BeforeEach
-    fun setUp() {
-        network = Network.newNetwork()
-
-        kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
+        private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
             .withNetwork(network)
             .withNetworkAliases("kafka")
             .withListener("kafka:19092")
 
-        schemaRegistry = GenericContainer("confluentinc/cp-schema-registry:7.8.0")
+        private val schemaRegistry = GenericContainer("confluentinc/cp-schema-registry:7.8.0")
             .withNetwork(network)
             .withNetworkAliases("schema-registry")
             .withExposedPorts(8081)
@@ -63,14 +58,19 @@ class AvroConsumerTest {
             .waitingFor(Wait.forHttp("/subjects").forPort(8081).forStatusCode(200))
             .dependsOn(kafka)
 
-        Startables.deepStart(kafka, schemaRegistry).join()
-    }
+        @JvmStatic
+        @BeforeAll
+        fun beforeAll() {
+            Startables.deepStart(kafka, schemaRegistry).join()
+        }
 
-    @AfterEach
-    fun tearDown() {
-        schemaRegistry.stop()
-        kafka.stop()
-        network.close()
+        @JvmStatic
+        @AfterAll
+        fun afterAll() {
+            schemaRegistry.stop()
+            kafka.stop()
+            network.close()
+        }
     }
 
     private fun schemaRegistryUrl() =

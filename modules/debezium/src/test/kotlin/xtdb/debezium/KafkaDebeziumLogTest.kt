@@ -23,17 +23,20 @@ import kotlin.time.Duration.Companion.seconds
 @Tag("integration")
 class KafkaDebeziumLogTest {
 
-    private lateinit var kafka: ConfluentKafkaContainer
+    companion object {
+        private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
 
-    @BeforeEach
-    fun setUp() {
-        kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
-        kafka.start()
-    }
+        @JvmStatic
+        @BeforeAll
+        fun beforeAll() {
+            kafka.start()
+        }
 
-    @AfterEach
-    fun tearDown() {
-        kafka.stop()
+        @JvmStatic
+        @AfterAll
+        fun afterAll() {
+            kafka.stop()
+        }
     }
 
     private fun cdcMessage(op: String, id: Int, name: String): String {

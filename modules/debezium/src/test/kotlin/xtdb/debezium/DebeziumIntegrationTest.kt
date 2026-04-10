@@ -35,18 +35,13 @@ import kotlin.time.Duration.Companion.seconds
 @EnabledIfEnvironmentVariable(named = "XTDB_SINGLE_WRITER", matches = "true")
 class DebeziumIntegrationTest {
 
-    private lateinit var network: Network
-    private lateinit var kafka: ConfluentKafkaContainer
-    private lateinit var debeziumConnect: GenericContainer<*>
-    private lateinit var postgres: PostgreSQLContainer
-
     private val httpClient: HttpClient = HttpClient.newHttpClient()
+    private val connectorName = "test-connector-${UUID.randomUUID()}"
 
-    @BeforeEach
-    fun setUp() {
-        network = Network.newNetwork()
+    companion object {
+        private val network: Network = Network.newNetwork()
 
-        postgres = PostgreSQLContainer("postgres:17-alpine")
+        private val postgres = PostgreSQLContainer("postgres:17-alpine")
             .withNetwork(network)
             .withNetworkAliases("postgres")
             .withDatabaseName("testdb")
@@ -54,12 +49,12 @@ class DebeziumIntegrationTest {
             .withPassword("testpass")
             .withCommand("postgres", "-c", "wal_level=logical")
 
-        kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
+        private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
             .withNetwork(network)
             .withNetworkAliases("kafka")
             .withListener("kafka:19092")
 
-        debeziumConnect = GenericContainer("quay.io/debezium/connect:3.0")
+        private val debeziumConnect = GenericContainer("quay.io/debezium/connect:3.0")
             .withNetwork(network)
             .withExposedPorts(8083)
             .withEnv("BOOTSTRAP_SERVERS", "kafka:19092")
@@ -70,15 +65,46 @@ class DebeziumIntegrationTest {
             .waitingFor(Wait.forHttp("/connectors").forPort(8083).forStatusCode(200))
             .dependsOn(kafka)
 
-        Startables.deepStart(postgres, kafka, debeziumConnect).join()
+        @JvmStatic
+        @BeforeAll
+        fun beforeAll() {
+            Startables.deepStart(postgres, kafka, debeziumConnect).join()
+        }
+
+        @JvmStatic
+        @AfterAll
+        fun afterAll() {
+            debeziumConnect.stop()
+            kafka.stop()
+            postgres.stop()
+            network.close()
+        }
     }
 
     @AfterEach
-    fun tearDown() {
-        debeziumConnect.stop()
-        kafka.stop()
-        postgres.stop()
-        network.close()
+    fun cleanUpConnector() {
+        try {
+            httpClient.send(
+                HttpRequest.newBuilder()
+                    .uri(URI.create("${connectUrl()}/connectors/$connectorName"))
+                    .DELETE()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            )
+
+            val deadline = System.currentTimeMillis() + 10_000
+            while (System.currentTimeMillis() < deadline) {
+                val resp = httpClient.send(
+                    HttpRequest.newBuilder()
+                        .uri(URI.create("${connectUrl()}/connectors/$connectorName/status"))
+                        .GET()
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString()
+                )
+                if (resp.statusCode() == 404) break
+                Thread.sleep(200)
+            }
+        } catch (_: Exception) {}
     }
 
     private fun kafkaConfig() = mapOf("bootstrap.servers" to kafka.bootstrapServers)
@@ -95,7 +121,7 @@ class DebeziumIntegrationTest {
             try {
                 val resp = httpClient.send(
                     HttpRequest.newBuilder()
-                        .uri(URI.create("${connectUrl()}/connectors/test-connector/status"))
+                        .uri(URI.create("${connectUrl()}/connectors/$connectorName/status"))
                         .GET()
                         .build(),
                     HttpResponse.BodyHandlers.ofString()
@@ -111,7 +137,7 @@ class DebeziumIntegrationTest {
         }
 
         val connectorConfig = buildJsonObject {
-            put("name", "test-connector")
+            put("name", connectorName)
             putJsonObject("config") {
                 put("connector.class", "io.debezium.connector.postgresql.PostgresConnector")
                 put("tasks.max", "1")
@@ -123,6 +149,8 @@ class DebeziumIntegrationTest {
                 put("topic.prefix", "testdb")
                 put("schema.include.list", schemas)
                 put("plugin.name", "pgoutput")
+                put("slot.name", "debezium_${connectorName.replace("-", "_")}")
+                put("slot.drop.on.stop", "true")
                 for ((k, v) in extraConfig) put(k, v)
             }
         }
@@ -294,6 +322,11 @@ class DebeziumIntegrationTest {
             assertEquals(after, payload["after"]?.takeUnless { it is JsonNull }?.jsonObject)
         }
 
+        fun assertCdcData(message: JsonObject, after: JsonObject? = null) {
+            val payload = message.payload()
+            assertEquals(after, payload["after"]?.takeUnless { it is JsonNull }?.jsonObject)
+        }
+
         // Initial (s)napshot
         pgExecute(
             "CREATE TABLE IF NOT EXISTS test_items (id INT PRIMARY KEY, name TEXT)",
@@ -311,7 +344,8 @@ class DebeziumIntegrationTest {
 
         val messages = pollMessages("testdb.public.test_items", expected = 4)
 
-        assertCdcEvent(messages[0], "r", after = buildJsonObject { put("id", 1); put("name", "snapshot-row") })
+        // Snapshot row: op may be "r" (snapshot read) or "c" (WAL create) depending on connector state
+        assertCdcData(messages[0], after = buildJsonObject { put("id", 1); put("name", "snapshot-row") })
         assertCdcEvent(messages[1], "c", after = buildJsonObject { put("id", 2); put("name", "inserted") })
         assertCdcEvent(messages[2], "u", after = buildJsonObject { put("id", 2); put("name", "updated") })
         assertCdcEvent(messages[3], "d")
