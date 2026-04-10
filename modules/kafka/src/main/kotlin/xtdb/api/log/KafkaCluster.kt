@@ -118,6 +118,7 @@ class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
     val schemaRegistryUrl: String? = null,
+    val transactionalIdPrefix: String? = null,
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log.Cluster {
     val producer = kafkaConfigMap.openProducer()
@@ -136,6 +137,7 @@ class KafkaCluster(
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
         var schemaRegistryUrl: String? = null,
+        var transactionalIdPrefix: String? = null,
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Log.Cluster.Factory<KafkaCluster> {
 
@@ -143,6 +145,7 @@ class KafkaCluster(
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
         fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
+        fun transactionalIdPrefix(transactionalIdPrefix: String?) = apply { this.transactionalIdPrefix = transactionalIdPrefix }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -155,7 +158,7 @@ class KafkaCluster(
                 .plus(propertiesMap)
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
-        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, schemaRegistryUrl, coroutineContext)
+        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, schemaRegistryUrl, transactionalIdPrefix, coroutineContext)
     }
 
     interface AtomicProducer<M> : Log.AtomicProducer<M> {
@@ -258,12 +261,14 @@ class KafkaCluster(
         }
 
         override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
+            private val prefixedTxId = listOfNotNull(transactionalIdPrefix, transactionalId).joinToString("-")
+
             private val producer = KafkaProducer(
                 mapOf(
                     "enable.idempotence" to "true",
                     "acks" to "all",
                     "compression.type" to "snappy",
-                    "transactional.id" to transactionalId,
+                    "transactional.id" to prefixedTxId,
                 ) + kafkaConfigMap,
                 UnitSerializer,
                 ByteArraySerializer()

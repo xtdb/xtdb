@@ -420,14 +420,14 @@
   (let [env-a-topic (str "xtdb.kafka-test.env-a." (random-uuid))
         env-b-topic (str "xtdb.kafka-test.env-b." (random-uuid))]
     (util/with-tmp-dirs #{path-a path-b}
-      (with-open [node-a (xtn/start-node {:tx-id-prefix "env-a"
-                                          :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+      (with-open [node-a (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :transactional-id-prefix "env-a"}]}
                                           :log [:kafka {:cluster :my-kafka
                                                         :topic env-a-topic}]
                                           :storage [:remote {:object-store [:in-memory {}]}]
                                           :disk-cache {:path path-a}})
-                  node-b (xtn/start-node {:tx-id-prefix "env-b"
-                                          :log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*}]}
+                  node-b (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                            :transactional-id-prefix "env-b"}]}
                                           :log [:kafka {:cluster :my-kafka
                                                         :topic env-b-topic}]
                                           :storage [:remote {:object-store [:in-memory {}]}]

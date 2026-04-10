@@ -443,6 +443,41 @@ class YamlSerdeTest {
     }
 
     @Test
+    fun testTransactionalIdPrefix() {
+        assertEquals(
+            KafkaCluster.ClusterFactory(bootstrapServers = "localhost:9092"),
+            nodeConfig("""
+                logClusters:
+                  kafkaCluster: !Kafka
+                    bootstrapServers: "localhost:9092"
+            """.trimIndent()).logClusters["kafkaCluster"]
+        )
+
+        assertEquals(
+            KafkaCluster.ClusterFactory(bootstrapServers = "localhost:9092", transactionalIdPrefix = "staging"),
+            nodeConfig("""
+                logClusters:
+                  kafkaCluster: !Kafka
+                    bootstrapServers: "localhost:9092"
+                    transactionalIdPrefix: staging
+            """.trimIndent()).logClusters["kafkaCluster"]
+        )
+
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("XTDB_TX_ID_PREFIX") } returns "from-env"
+        assertEquals(
+            KafkaCluster.ClusterFactory(bootstrapServers = "localhost:9092", transactionalIdPrefix = "from-env"),
+            nodeConfig("""
+                logClusters:
+                  kafkaCluster: !Kafka
+                    bootstrapServers: "localhost:9092"
+                    transactionalIdPrefix: !Env XTDB_TX_ID_PREFIX
+            """.trimIndent()).logClusters["kafkaCluster"]
+        )
+        unmockkObject(EnvironmentVariableProvider)
+    }
+
+    @Test
     fun testTracer() {
         mockkObject(EnvironmentVariableProvider)
         every { EnvironmentVariableProvider.getEnvVariable("XTDB_OTEL_HTTP_ENDPOINT") } returns "http://otelhost:4318/v1/traces"
