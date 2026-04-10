@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,13 +37,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
-        val res4 = TransactionCommitted(4, Instant.parse("2021-01-01T00:00:00Z"))
+        val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z")))
         watchers.notifyTx(res4, 4, null)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
-        val res5 = TransactionAborted(5, Instant.parse("2021-01-02T00:00:00Z"), Exception("test"))
+        val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
         watchers.notifyTx(res5, 5, null)
 
         assertEquals(res5, await5.await())

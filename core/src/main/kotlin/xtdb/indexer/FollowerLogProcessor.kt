@@ -3,8 +3,8 @@ package xtdb.indexer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.storage.Storage
 import xtdb.block.proto.Block.parseFrom
@@ -89,6 +89,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 liveIndex.importTx(msg)
 
                 val systemTime = msg.systemTime
+                val txKey = TransactionKey(msg.txId, systemTime)
                 val result = if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> dbCatalog!!.attach(dbOp.dbName, dbOp.config)
@@ -96,8 +97,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
                         null -> {}
                     }
 
-                    TransactionCommitted(msg.txId, systemTime)
-                } else TransactionAborted(msg.txId, systemTime, msg.error)
+                    TransactionResult.Committed(txKey)
+                } else TransactionResult.Aborted(txKey, msg.error)
 
                 latestSourceMsgId = msg.txId
                 watchers.notifyTx(result, msg.txId, msg.externalSourceToken)

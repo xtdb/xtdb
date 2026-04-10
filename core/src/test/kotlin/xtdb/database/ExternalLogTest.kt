@@ -11,8 +11,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -254,7 +253,7 @@ class ExternalLogTest {
 
         val result = watchers.awaitTx(0)
         assertNotNull(result)
-        assertInstanceOf(TransactionAborted::class.java, result)
+        assertInstanceOf(TransactionResult.Aborted::class.java, result)
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
         val job = launch { replicaLog.tailAll(-1) { records ->

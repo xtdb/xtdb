@@ -4,9 +4,9 @@
 (defprotocol PNode
   (^java.util.stream.Stream open-sql-query [node ^String query opts])
   (^long submit-tx [node tx-ops tx-opts])
-  (^xtdb.api.TransactionResult execute-tx [node tx-ops tx-opts])
-  (^xtdb.api.TransactionResult attach-db [node db-name db-config])
-  (^xtdb.api.TransactionResult detach-db [node db-name]))
+  (^xtdb.api.Xtdb$ExecutedTx execute-tx [node tx-ops tx-opts])
+  (^xtdb.api.Xtdb$ExecutedTx attach-db [node db-name db-config])
+  (^xtdb.api.Xtdb$ExecutedTx detach-db [node db-name]))
 
 (defprotocol PLocalNode
   (^xtdb.query.PreparedQuery prepare-sql [node query query-opts])

@@ -4,9 +4,8 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.ExternalSourceToken
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -150,16 +149,15 @@ class LeaderLogProcessor(
     }
 
     private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
-        val txId = resolvedTx.txId
-        val systemTime = resolvedTx.systemTime
+        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
 
         val result =
             if (resolvedTx.committed)
-                TransactionCommitted(txId, systemTime)
+                TransactionResult.Committed(txKey)
             else
-                TransactionAborted(txId, systemTime, resolvedTx.error)
+                TransactionResult.Aborted(txKey, resolvedTx.error)
 
-        watchers.notifyTx(result, txId, resolvedTx.externalSourceToken)
+        watchers.notifyTx(result, resolvedTx.txId, resolvedTx.externalSourceToken)
     }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
@@ -186,11 +184,12 @@ class LeaderLogProcessor(
     suspend fun handleExternalTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         appendToReplica(resolvedTx)
 
+        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val result =
             if (resolvedTx.committed)
-                TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
+                TransactionResult.Committed(txKey)
             else
-                TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error)
+                TransactionResult.Aborted(txKey, resolvedTx.error)
 
         watchers.notifyTx(result, latestSourceMsgId, resolvedTx.externalSourceToken)
 
@@ -241,8 +240,8 @@ class LeaderLogProcessor(
                         appendToReplica(resolvedTx)
 
                         val result =
-                            if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
-                            else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                            if (error == null) TransactionResult.Committed(txKey)
+                            else TransactionResult.Aborted(txKey, error)
                         latestSourceMsgId = msgId
                         watchers.notifyTx(result, msgId, null)
                     }
@@ -262,8 +261,8 @@ class LeaderLogProcessor(
 
                         appendToReplica(resolvedTx)
 
-                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
-                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        val result = if (error == null) TransactionResult.Committed(txKey)
+                        else TransactionResult.Aborted(txKey, error)
                         latestSourceMsgId = msgId
                         watchers.notifyTx(result, msgId, null)
                     }

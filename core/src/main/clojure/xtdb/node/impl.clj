@@ -24,7 +24,7 @@
            xtdb.NodeBase
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionResult Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
+           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
@@ -60,20 +60,28 @@
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
 
+(defn- tx-result->map [^TransactionResult tx-res]
+  (let [^TransactionKey tx-key (.getTxKey tx-res)]
+    {:tx-id (.getTxId tx-key)
+     :system-time (.getSystemTime tx-key)
+     :committed? (instance? TransactionResult$Committed tx-res)
+     :error (when (instance? TransactionResult$Aborted tx-res)
+              (.getError ^TransactionResult$Aborted tx-res))}))
+
 (defn- await-msg-result [node ^Database db msg-id]
   (or (when-let [tx-res (.awaitTxBlocking db msg-id nil)]
-        (when (= (.getTxId tx-res) msg-id)
-          tx-res))
+        (when (= (.getTxId (.getTxKey tx-res)) msg-id)
+          (tx-result->map tx-res)))
 
       (with-open [res (xtp/open-sql-query node "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
                                           {:args [msg-id]
                                            :key-fn (serde/read-key-fn :kebab-case-keyword)
                                            :default-db (.getName db)})]
-        (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))
-              system-time (time/->instant system-time)]
-          (if committed?
-            (serde/->tx-committed msg-id system-time)
-            (serde/->tx-aborted msg-id system-time error))))))
+        (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))]
+          {:tx-id msg-id
+           :system-time (time/->instant system-time)
+           :committed? committed?
+           :error error}))))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src

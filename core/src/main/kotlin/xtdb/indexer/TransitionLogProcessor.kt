@@ -1,8 +1,8 @@
 package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
@@ -68,8 +68,8 @@ class TransitionLogProcessor(
                         null -> {}
                     }
 
-                    TransactionCommitted(msg.txId, msg.systemTime)
-                } else TransactionAborted(msg.txId, msg.systemTime, msg.error)
+                    TransactionResult.Committed(TransactionKey(msg.txId, msg.systemTime))
+                } else TransactionResult.Aborted(TransactionKey(msg.txId, msg.systemTime), msg.error)
 
                 latestSourceMsgId = msg.txId
                 watchers.notifyTx(result, msg.txId, msg.externalSourceToken)

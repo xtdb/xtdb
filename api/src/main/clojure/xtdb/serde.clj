@@ -20,7 +20,7 @@
            [org.apache.commons.codec.binary Hex]
            (org.msgpack.core MessageInsufficientBufferException)
            (org.postgresql.util PGobject PSQLException)
-           (xtdb.api TransactionAborted TransactionCommitted TransactionKey)
+           (xtdb.api TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted)
            (xtdb.api.query IKeyFn IKeyFn$KeyFn)
            (xtdb.arrow VectorType)
            xtdb.TaggedValue
@@ -39,22 +39,11 @@
 (defmethod print-method TxKey [tx-key w]
   (print-dup tx-key w))
 
-(defrecord TxCommitted [tx-id system-time committed?]
-  TransactionCommitted
-  (getTxId [_] tx-id)
-  (getSystemTime [_] system-time))
-
 (defn ->tx-committed [tx-id system-time]
-  (->TxCommitted tx-id system-time true))
-
-(defrecord TxAborted [tx-id system-time committed? error]
-  TransactionAborted
-  (getTxId [_] tx-id)
-  (getSystemTime [_] system-time)
-  (getError [_] error))
+  (TransactionResult$Committed. (->TxKey tx-id system-time)))
 
 (defn ->tx-aborted [tx-id system-time error]
-  (->TxAborted tx-id system-time false error))
+  (TransactionResult$Aborted. (->TxKey tx-id system-time) error))
 
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))

@@ -51,13 +51,14 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceTok
     // --- notify methods ---
 
     fun notifyTx(result: TransactionResult, srcMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
+        val txId = result.txKey.txId
         state.updateIfActive {
-            check(result.txId > it.latestTxId) { "txId ${result.txId} <= latestTxId ${it.latestTxId}" }
+            check(txId > it.latestTxId) { "txId $txId <= latestTxId ${it.latestTxId}" }
             // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
             // when the block was triggered by isFull() (no FlushBlock in between)
             check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
             it.copy(
-                latestSourceMsgId = srcMsgId, latestTxId = result.txId, latestTxResult = result,
+                latestSourceMsgId = srcMsgId, latestTxId = txId, latestTxResult = result,
                 externalSourceToken = externalSourceToken ?: it.externalSourceToken,
             )
         }
@@ -80,7 +81,7 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceTok
 
     suspend fun awaitTx(txId: TxId) =
         activeState.first { it.latestTxId >= txId }
-            .latestTxResult?.takeIf { it.txId == txId }
+            .latestTxResult?.takeIf { it.txKey.txId == txId }
 
     suspend fun awaitSource(srcMsgId: MessageId) {
         activeState.first { it.latestSourceMsgId >= srcMsgId }

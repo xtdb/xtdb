@@ -3,9 +3,8 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.api.TransactionAborted
-import xtdb.api.TransactionCommitted
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
@@ -320,8 +319,8 @@ class SourceLogProcessor(
 
                         indexer.addTxRow(txKey, error)
 
-                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
-                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        val result = if (error == null) TransactionResult.Committed(txKey)
+                        else TransactionResult.Aborted(txKey, error)
                         watchers.notifyTx(result, msgId, null)
                     }
 
@@ -337,8 +336,8 @@ class SourceLogProcessor(
 
                         indexer.addTxRow(txKey, error)
 
-                        val result = if (error == null) TransactionCommitted(txKey.txId, txKey.systemTime)
-                        else TransactionAborted(txKey.txId, txKey.systemTime, error)
+                        val result = if (error == null) TransactionResult.Committed(txKey)
+                        else TransactionResult.Aborted(txKey, error)
                         watchers.notifyTx(result, msgId, null)
                     }
 
@@ -371,10 +370,11 @@ class SourceLogProcessor(
     }
 
     private suspend fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
+        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val result = if (resolvedTx.committed) {
-            TransactionCommitted(resolvedTx.txId, resolvedTx.systemTime)
+            TransactionResult.Committed(txKey)
         } else {
-            TransactionAborted(resolvedTx.txId, resolvedTx.systemTime, resolvedTx.error!!)
+            TransactionResult.Aborted(txKey, resolvedTx.error)
         }
 
         watchers.notifyTx(result, msgId, resolvedTx.externalSourceToken)
