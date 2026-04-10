@@ -115,7 +115,11 @@
     :conflict conflict
     :unsupported unsupported
     :fault fault
-    :interrupted interrupted)
+    :interrupted interrupted
+    :not-found not-found
+    :forbidden forbidden
+    :busy busy
+    :unavailable unavailable)
    error-code msg data))
 
 (defn render-error [anomaly]
