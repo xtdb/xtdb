@@ -247,10 +247,42 @@ Process crash logs into EDN format:
 Example: `./dev/read-crash-log-folder.sh /path/to/my-crash-logs` outputs to `/path/to/my-crash-logs/edn/`
 --
 
-== Comments
+== General Coding Principles
+
+We aspire to use Clojure-inspired simplicity throughout (even when writing Kotlin).
+XTDB is an *essentially* complex codebase (cf. Out of the Tar Pit), so we must wherever possible avoid adding additional accidental complexity on top of that.
+This means that we deliberately choose to take longer with code changes in order to do the Right Thing™, rather than the quick thing.
+
+Specifically, this means:
+
+Make illegal states unrepresentable::
++
+If your types can only represent valid states, you get correctness by construction instead of by validation (cf. https://blog.janestreet.com/effective-ml-revisited/[Yaron Minsky's principle]).
++
+* If two fields are always set together, they belong in a single composite type.
+* If a field only makes sense in some contexts, use sealed types to separate those contexts rather than making it nullable everywhere.
+* If a value is always the same in a given context, the data structure is wrong for that context — change the structure rather than passing a constant.
++
+The corollary: **don't pass hack values.**
+If you find yourself passing `true`, `null`, or `emptyMap()` to satisfy a field that doesn't apply, that's a sign the type is complecting two concerns.
+
+Tidy first::
++
+We develop using https://tidyfirst.substack.com/[tidy-first] methodology — separate equivalence changes (refactorings that don't affect runtime behaviour, changes that increase our options) from changes that advance behaviour.
+Even on feature branches, a tidying change gets its own commit and is often cherry-picked to `main` independently, so that the resulting PR is easier to review.
+See link:GIT.adoc[] for more on how this works in practice.
+
+Intentional defaults::
++
+Kotlin parameter defaults are appropriate when the default is the overwhelming norm and only tests or unusual configurations would override it — e.g. HashTrie page sizes, flush timeouts.
++
+For data structures where the caller SHOULD care about every field (wire format types, domain records), don't use defaults — force every construction site to be explicit.
+Defaults hide intent; a caller can accidentally omit a field and get a value that compiles but doesn't mean what they think.
+
+=== Comments
 
 Comments that merely restate the code add visual noise without value.
-Assume your reader is a senior developer familiar with XTDB and its codebase.
+Assume your reader is a senior developer familiar with XTDB and its codebase, Clojure/Kotlin, and the principles in this section.
 
 **Don't write:**
 
@@ -261,11 +293,12 @@ Assume your reader is a senior developer familiar with XTDB and its codebase.
 **Do write:**
 
 * Rationale for counter-intuitive choices ("This is for performance, because...")
-* Non-obvious constraints or invariants ("this might be mutated by...")
+* Non-obvious constraints or invariants ("this might be mutated by...", "the obvious solution is X but this doesn't work because Y")
+* Gotchas and edge cases ("this can be null if...")
 * Links to issues or external context ("see #1234", "per RFC 7231 §6.5.1")
 * Warnings about subtle behaviour that could trip up future developers
 
-== Errors
+=== Errors
 
 Use `xtdb.error` (aliased as `err`) for throwing errors — not raw Java exceptions.
 We're migrating the codebase to this convention; new code should always use it.
@@ -279,6 +312,6 @@ Choose the appropriate anomaly category:
 
 See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
 
-== Git
+=== Git
 
 see link:GIT.adoc[] for details on git practices in XTDB.
