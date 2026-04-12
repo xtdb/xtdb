@@ -191,7 +191,13 @@ class LeaderLogProcessor(
             null -> null
         }
 
-        if (result != null) watchers.notifyTx(result, latestSourceMsgId, resolvedTx.externalSourceToken)
+        if (result != null) {
+            watchers.notifyTx(result, latestSourceMsgId, resolvedTx.externalSourceToken)
+        } else {
+            // No TransactionResult to publish, but the resume token must still advance
+            // so that block flushes persist the correct external source position.
+            watchers.updateExternalSourceToken(resolvedTx.externalSourceToken)
+        }
 
         if (liveIndex.isFull())
             finishBlock(latestSourceMsgId, resolvedTx.externalSourceToken)
