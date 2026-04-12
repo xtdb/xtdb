@@ -127,6 +127,7 @@ class AvroE2eTest {
     private suspend fun registerConnectorAndAwait(
         schemas: String = "public",
         extraConfig: Map<String, String> = emptyMap(),
+        awaitTopics: List<String> = emptyList(),
     ) {
         fun isConnectorRunning(): Boolean {
             try {
@@ -174,6 +175,20 @@ class AvroE2eTest {
         assertTrue(response.statusCode() in 200..201, "Failed to register connector: ${response.body()}")
 
         while (!isConnectorRunning()) delay(500)
+
+        if (awaitTopics.isNotEmpty()) {
+            val kafkaConfig = mapOf("bootstrap.servers" to kafka.bootstrapServers)
+            org.apache.kafka.clients.admin.AdminClient.create(kafkaConfig).use { admin ->
+                val deadline = System.currentTimeMillis() + 30_000
+                while (System.currentTimeMillis() < deadline) {
+                    val names = admin.listTopics().names().get()
+                    if (awaitTopics.all { it in names }) return
+                    delay(500)
+                }
+                val missing = awaitTopics.filterNot { it in admin.listTopics().names().get() }
+                throw AssertionError("Timed out waiting for topics: $missing")
+            }
+        }
     }
 
     private fun pgExecute(vararg statements: String) {
@@ -250,11 +265,14 @@ class AvroE2eTest {
             "INSERT INTO cdc_avro (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
         )
 
-        registerConnectorAndAwait(extraConfig = mapOf(
-            "key.converter" to "org.apache.kafka.connect.storage.StringConverter",
-            "value.converter" to "io.confluent.connect.avro.AvroConverter",
-            "value.converter.schema.registry.url" to "http://schema-registry:8081",
-        ))
+        registerConnectorAndAwait(
+            extraConfig = mapOf(
+                "key.converter" to "org.apache.kafka.connect.storage.StringConverter",
+                "value.converter" to "io.confluent.connect.avro.AvroConverter",
+                "value.converter.schema.registry.url" to "http://schema-registry:8081",
+            ),
+            awaitTopics = listOf("testdb.public.cdc_avro"),
+        )
 
         pgExecute(
             "INSERT INTO cdc_avro (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",

@@ -89,6 +89,7 @@ class DebeziumIntegrationTest {
     private suspend fun registerConnectorAndAwait(
         schemas: String = "public",
         extraConfig: Map<String, String> = emptyMap(),
+        awaitTopics: List<String> = emptyList(),
     ) {
         fun isConnectorRunning(): Boolean {
             try {
@@ -136,6 +137,19 @@ class DebeziumIntegrationTest {
         assertTrue(response.statusCode() in 200..201, "Failed to register connector: ${response.body()}")
 
         while (!isConnectorRunning()) delay(500)
+
+        if (awaitTopics.isNotEmpty()) {
+            org.apache.kafka.clients.admin.AdminClient.create(kafkaConfig()).use { admin ->
+                val deadline = System.currentTimeMillis() + 30_000
+                while (System.currentTimeMillis() < deadline) {
+                    val names = admin.listTopics().names().get()
+                    if (awaitTopics.all { it in names }) return
+                    delay(500)
+                }
+                val missing = awaitTopics.filterNot { it in admin.listTopics().names().get() }
+                throw AssertionError("Timed out waiting for topics: $missing")
+            }
+        }
     }
 
     private fun pgExecute(vararg statements: String) {
@@ -367,7 +381,7 @@ class DebeziumIntegrationTest {
             "INSERT INTO cdc_users (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
         )
 
-        registerConnectorAndAwait()
+        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_users"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
@@ -414,10 +428,13 @@ class DebeziumIntegrationTest {
             "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
         )
 
-        registerConnectorAndAwait(extraConfig = mapOf(
-            "value.converter" to "org.apache.kafka.connect.json.JsonConverter",
-            "value.converter.schemas.enable" to "false",
-        ))
+        registerConnectorAndAwait(
+            extraConfig = mapOf(
+                "value.converter" to "org.apache.kafka.connect.json.JsonConverter",
+                "value.converter.schemas.enable" to "false",
+            ),
+            awaitTopics = listOf("testdb.public.cdc_no_envelope"),
+        )
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
@@ -524,7 +541,7 @@ class DebeziumIntegrationTest {
             "INSERT INTO bad_valid_to (_id, name, _valid_from) VALUES (1, 'Alice', '2024-01-01T00:00:00Z')",
         )
 
-        registerConnectorAndAwait()
+        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.bad_valid_to"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
@@ -559,7 +576,7 @@ class DebeziumIntegrationTest {
             "INSERT INTO no_id_table (id, name) VALUES (1, 'pre-existing')",
         )
 
-        registerConnectorAndAwait()
+        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.no_id_table"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNodeOnSourceTopic(sourceTopic).use { node ->
@@ -679,7 +696,7 @@ class DebeziumIntegrationTest {
             "INSERT INTO cdc_direct (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
         )
 
-        registerConnectorAndAwait()
+        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_direct"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         // max.poll.records=1 ensures each CDC event is a separate transaction,
@@ -775,7 +792,7 @@ class DebeziumIntegrationTest {
             "INSERT INTO cdc_resume (_id, name) VALUES (1, 'Alice')",
         )
 
-        registerConnectorAndAwait()
+        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_resume"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
 
