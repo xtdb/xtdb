@@ -62,26 +62,31 @@ class TransitionLogProcessor(
                 if (latestTxId == null || msg.txId > latestTxId) {
                     liveIndex.importTx(msg)
                 }
-                val result = if (msg.committed) {
-                    when (val dbOp = msg.dbOp) {
-                        is DbOp.Attach -> try {
-                            dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] transition: attach database '${dbOp.dbName}' failed" }
+                val txKey = TransactionKey(msg.txId, msg.systemTime)
+                val result = when (msg.committed) {
+                    true -> {
+                        when (val dbOp = msg.dbOp) {
+                            is DbOp.Attach -> try {
+                                dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] transition: attach database '${dbOp.dbName}' failed" }
+                            }
+                            is DbOp.Detach -> try {
+                                dbCatalog!!.detach(dbOp.dbName)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] transition: detach database '${dbOp.dbName}' failed" }
+                            }
+                            null -> {}
                         }
-                        is DbOp.Detach -> try {
-                            dbCatalog!!.detach(dbOp.dbName)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] transition: detach database '${dbOp.dbName}' failed" }
-                        }
-                        null -> {}
-                    }
 
-                    TransactionResult.Committed(TransactionKey(msg.txId, msg.systemTime))
-                } else TransactionResult.Aborted(TransactionKey(msg.txId, msg.systemTime), msg.error)
+                        TransactionResult.Committed(txKey)
+                    }
+                    false -> TransactionResult.Aborted(txKey, msg.error)
+                    null -> null
+                }
 
                 latestSourceMsgId = msg.txId
-                watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
+                if (result != null) watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
             }
 
             is ReplicaMessage.TriesAdded -> {

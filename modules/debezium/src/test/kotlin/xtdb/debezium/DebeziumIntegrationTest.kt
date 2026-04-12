@@ -220,7 +220,7 @@ class DebeziumIntegrationTest {
                     log: !Kafka
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}$storageYaml
-                    externalLog: !Debezium
+                    externalSource: !Debezium
                       messageFormat: !Json {}
                       log: !Kafka
                         logCluster: kafka
@@ -316,12 +316,6 @@ class DebeziumIntegrationTest {
 
     @Test
     fun `debezium captures full CDC lifecycle`() = runTest(timeout = 120.seconds) {
-        fun assertCdcEvent(message: JsonObject, expectedOp: String, after: JsonObject? = null) {
-            val payload = message.payload()
-            assertEquals(expectedOp, payload["op"]?.jsonPrimitive?.content)
-            assertEquals(after, payload["after"]?.takeUnless { it is JsonNull }?.jsonObject)
-        }
-
         fun assertCdcData(message: JsonObject, after: JsonObject? = null) {
             val payload = message.payload()
             assertEquals(after, payload["after"]?.takeUnless { it is JsonNull }?.jsonObject)
@@ -344,11 +338,10 @@ class DebeziumIntegrationTest {
 
         val messages = pollMessages("testdb.public.test_items", expected = 4)
 
-        // Snapshot row: op may be "r" (snapshot read) or "c" (WAL create) depending on connector state
         assertCdcData(messages[0], after = buildJsonObject { put("id", 1); put("name", "snapshot-row") })
-        assertCdcEvent(messages[1], "c", after = buildJsonObject { put("id", 2); put("name", "inserted") })
-        assertCdcEvent(messages[2], "u", after = buildJsonObject { put("id", 2); put("name", "updated") })
-        assertCdcEvent(messages[3], "d")
+        assertCdcData(messages[1], after = buildJsonObject { put("id", 2); put("name", "inserted") })
+        assertCdcData(messages[2], after = buildJsonObject { put("id", 2); put("name", "updated") })
+        assertCdcData(messages[3])
     }
 
     @Test

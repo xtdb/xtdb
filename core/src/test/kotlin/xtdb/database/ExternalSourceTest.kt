@@ -25,7 +25,7 @@ import java.time.Instant
 import java.time.InstantSource
 import com.google.protobuf.Any as ProtoAny
 
-class ExternalLogTest {
+class ExternalSourceTest {
 
     private lateinit var allocator: RootAllocator
     private lateinit var bufferPool: MemoryStorage
@@ -52,7 +52,7 @@ class ExternalLogTest {
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, null, bufferPool, null)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
@@ -65,19 +65,16 @@ class ExternalLogTest {
     }
 
     /**
-     * Simple in-memory ExternalLog for testing.
-     * Send records to [channel] to simulate external events arriving.
+     * Simple in-memory ExternalSource for testing.
+     * Send signals to [channel] to trigger txHandler.handleTx with a mock OpenTx.
      */
-    class InMemoryExternalLog<M>(
-        val channel: Channel<List<M>> = Channel(100)
-    ) : ExternalLog<M> {
+    class InMemoryExternalSource(
+        val channel: Channel<Unit> = Channel(100)
+    ) : ExternalSource {
 
-        override suspend fun tailAll(
-            afterToken: ExternalSourceToken?,
-            processor: ExternalLog.MessageProcessor<M>
-        ) {
-            for (msgs in channel) {
-                processor.processMessages(msgs)
+        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
+            for (signal in channel) {
+                txHandler.handleTx(mockk(relaxed = true), null)
             }
         }
 
@@ -112,42 +109,39 @@ class ExternalLogTest {
 
         assertEquals(1, replicaMessages.size)
         val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-        assertTrue(resolved.committed)
+        assertEquals(true, resolved.committed)
         assertEquals(0, resolved.txId)
     }
 
     @Test
-    fun `Demux routes external records to external processor`() = runTest {
+    fun `Demux routes external events to txHandler`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
         val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
 
-        val externalLog = InMemoryExternalLog<String>()
-        val processedRecords = mutableListOf<String>()
+        val extSource = InMemoryExternalSource()
+        val events = mutableListOf<String>()
 
-        val extProc = ExternalLog.MessageProcessor<String> { msgs ->
-            for (msg in msgs) {
-                processedRecords.add(msg)
-
-                lp.handleExternalTx(
-                    ReplicaMessage.ResolvedTx(
-                        txId = 0, systemTime = Instant.now(),
-                        committed = true, error = null,
-                        tableData = emptyMap(),
-                    )
+        val txHandler = ExternalSource.TxHandler { _, _ ->
+            events.add("handled")
+            lp.handleExternalTx(
+                ReplicaMessage.ResolvedTx(
+                    txId = 0, systemTime = Instant.now(),
+                    committed = true, error = null,
+                    tableData = emptyMap(),
                 )
-            }
+            )
         }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
+        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
 
         try {
-            externalLog.channel.send(listOf("event-1", "event-2"))
+            extSource.channel.send(Unit)
+            extSource.channel.send(Unit)
 
-            // Demux runs on Dispatchers.Default — real time, not virtual
             delay(500)
 
-            assertEquals(listOf("event-1", "event-2"), processedRecords)
+            assertEquals(2, events.size)
             assertTrue(replicaLog.latestSubmittedOffset >= 1, "replica log should have 2 messages")
         } finally {
             demux.close()
@@ -162,75 +156,21 @@ class ExternalLogTest {
         }
         val lp = leaderProc(replicaLog = replicaLog, liveIndex = liveIndex)
 
-        val externalLog = InMemoryExternalLog<String>()
-        val extProc = ExternalLog.MessageProcessor<String> { }
+        val extSource = InMemoryExternalSource()
+        val txHandler = ExternalSource.TxHandler { _, _ -> }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
+        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
 
         try {
             val now = Instant.now()
 
-            // send a source message through the demux
             demux.processRecords(listOf(
                 Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
             ))
 
-            // Demux runs on Dispatchers.Default — real time, not virtual
             delay(500)
 
-            // FlushBlock with matching CAS (-1 == no current block) should trigger block finish
-            // which writes BlockBoundary + BlockUploaded to replica
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through demux to leader")
-        } finally {
-            demux.close()
-        }
-    }
-
-    @Test
-    fun `Demux interleaves source and external records`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
-
-        val externalLog = InMemoryExternalLog<String>()
-        val events = mutableListOf<String>()
-
-        val extProc = ExternalLog.MessageProcessor<String> { msgs ->
-            for (msg in msgs) {
-                events.add("ext:$msg")
-                lp.handleExternalTx(
-                    ReplicaMessage.ResolvedTx(
-                        txId = 0, systemTime = Instant.now(),
-                        committed = true, error = null,
-                        tableData = emptyMap(),
-                    )
-                )
-            }
-        }
-
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
-
-        try {
-            // send external event
-            externalLog.channel.send(listOf("first"))
-            delay(200)
-
-            // send another external event
-            externalLog.channel.send(listOf("second"))
-            delay(200)
-
-            assertEquals(listOf("ext:first", "ext:second"), events)
-
-            // replica log should have both external txs
-            val replicaMessages = mutableListOf<ReplicaMessage>()
-            val job = launch { replicaLog.tailAll(-1) { records ->
-                replicaMessages.addAll(records.map { it.message })
-            } }
-            delay(200)
-            job.cancelAndJoin()
-
-            assertEquals(2, replicaMessages.size)
-            assertTrue(replicaMessages.all { it is ReplicaMessage.ResolvedTx })
         } finally {
             demux.close()
         }
@@ -264,7 +204,7 @@ class ExternalLogTest {
 
         assertEquals(1, replicaMessages.size)
         val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-        assertFalse(resolved.committed)
+        assertEquals(false, resolved.committed)
     }
 
     @Test
@@ -291,24 +231,21 @@ class ExternalLogTest {
     }
 
     @Test
-    fun `Demux error in external log tailAll propagates to watchers`() = runTest {
+    fun `Demux error in external source propagates to watchers`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
         val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
 
-        val failingLog = object : ExternalLog<String> {
-            override suspend fun tailAll(
-                afterToken: ExternalSourceToken?,
-                processor: ExternalLog.MessageProcessor<String>,
-            ) {
-                throw RuntimeException("log poll failed")
+        val failingSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
+                throw RuntimeException("source poll failed")
             }
             override fun close() {}
         }
 
-        val extProc = ExternalLog.MessageProcessor<String> { }
+        val txHandler = ExternalSource.TxHandler { _, _ -> }
 
-        val demux = ExternalLog.Demux(lp, failingLog, null, extProc, coroutineContext)
+        val demux = ExternalSource.Demux(lp, failingSource, 0, null, txHandler, coroutineContext)
 
         try {
             delay(500)
@@ -320,21 +257,21 @@ class ExternalLogTest {
     }
 
     @Test
-    fun `Demux error in external processor propagates to watchers`() = runTest {
+    fun `Demux error in txHandler propagates to watchers`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
         val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
 
-        val externalLog = InMemoryExternalLog<String>()
+        val extSource = InMemoryExternalSource()
 
-        val extProc = ExternalLog.MessageProcessor<String> {
-            throw RuntimeException("external processor failed")
+        val txHandler = ExternalSource.TxHandler { _, _ ->
+            throw RuntimeException("handler failed")
         }
 
-        val demux = ExternalLog.Demux(lp, externalLog, null, extProc, coroutineContext)
+        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
 
         try {
-            externalLog.channel.send(listOf("boom"))
+            extSource.channel.send(Unit)
 
             delay(500)
 

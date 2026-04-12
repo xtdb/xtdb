@@ -7,14 +7,9 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
-import xtdb.api.log.ReplicaMessage
-import xtdb.database.DatabaseState
-import xtdb.database.ExternalLog
-import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.database.ExternalSource
 import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.debeziumSourceConfig
-import xtdb.indexer.Indexer.Companion.addTxRow
-import xtdb.indexer.LeaderLogProcessor
 import xtdb.debezium.proto.DebeziumSourceConfig as DebeziumSourceConfigProto
 import com.google.protobuf.Any as ProtoAny
 
@@ -23,37 +18,11 @@ import com.google.protobuf.Any as ProtoAny
 data class DebeziumSource(
     val log: DebeziumLog.Factory,
     val messageFormat: MessageFormat,
-) : ExternalLog.Factory {
+) : ExternalSource.Factory {
     override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>) = log.openLog(dbName, clusters, messageFormat)
 
-    override fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<DebeziumMessage> {
-        val dbName = dbState.name
-        val liveIndex = dbState.liveIndex
-
-        return MessageProcessor { messages ->
-            for (message in messages) {
-                val token = ProtoAny.pack(message.offsets, "xtdb.debezium")
-
-                val openTx = message.openTx
-
-                openTx.addTxRow(dbName, openTx.txKey, null)
-
-                val tableData = openTx.serializeTableData()
-                liveIndex.commitTx(openTx)
-
-                llp.handleExternalTx(
-                    ReplicaMessage.ResolvedTx(
-                        txId = openTx.txKey.txId, systemTime = message.systemTime,
-                        committed = true, error = null, tableData = tableData,
-                        externalSourceToken = token,
-                    )
-                )
-            }
-        }
-    }
-
     override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-        dbConfig.externalLog = ProtoAny.pack(debeziumSourceConfig {
+        dbConfig.externalSource = ProtoAny.pack(debeziumSourceConfig {
             when (val l = log) {
                 is KafkaDebeziumLog.Factory -> kafkaLog = l.toProto()
             }
@@ -63,10 +32,10 @@ data class DebeziumSource(
         }, "proto.xtdb.com")
     }
 
-    class Registration : ExternalLog.Registration {
+    class Registration : ExternalSource.Registration {
         override val protoTag: String get() = "proto.xtdb.com/xtdb.debezium.proto.DebeziumSourceConfig"
 
-        override fun fromProto(msg: ProtoAny): ExternalLog.Factory {
+        override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
             val config = msg.unpack(DebeziumSourceConfigProto::class.java)
             val format = when (config.messageFormatCase) {
                 DebeziumSourceConfigProto.MessageFormatCase.AVRO -> MessageFormat.Avro
@@ -75,7 +44,7 @@ data class DebeziumSource(
             return DebeziumSource(log = DebeziumLog.Factory.fromProto(config), messageFormat = format)
         }
 
-        override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalLog.Factory>) {
+        override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
             builder.subclass(DebeziumSource::class)
         }
 

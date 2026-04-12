@@ -9,7 +9,7 @@ class DebeziumSourceTest {
     private fun protoRoundTrip(source: DebeziumSource): DebeziumSource {
         val dbConfig = Database.Config().externalSource(source)
         val restored = Database.Config.fromProto(dbConfig.serializedConfig)
-        return restored.externalLog as DebeziumSource
+        return restored.externalSource as DebeziumSource
     }
 
     @Test
@@ -34,13 +34,13 @@ class DebeziumSourceTest {
         val dbConfig = Database.Config()
         val restored = Database.Config.fromProto(dbConfig.serializedConfig)
 
-        assertNull(restored.externalLog)
+        assertNull(restored.externalSource)
     }
 
     @Test
     fun `YAML round-trips DebeziumSource with KafkaDebeziumLog`() {
         val yaml = """
-            externalLog: !Debezium
+            externalSource: !Debezium
               messageFormat: !Json {}
               log: !Kafka
                 logCluster: my-cluster
@@ -48,7 +48,7 @@ class DebeziumSourceTest {
         """.trimIndent()
 
         val config = Database.Config.fromYaml(yaml)
-        val source = config.externalLog as DebeziumSource
+        val source = config.externalSource as DebeziumSource
         val log = source.log as KafkaDebeziumLog.Factory
 
         assertEquals("my-cluster", log.logCluster)
@@ -59,7 +59,7 @@ class DebeziumSourceTest {
     @Test
     fun `YAML parses Database Config without external source`() {
         val config = Database.Config.fromYaml("mode: read-write")
-        assertNull(config.externalLog)
+        assertNull(config.externalSource)
     }
 
     @Test
@@ -93,7 +93,7 @@ class DebeziumSourceTest {
     @Test
     fun `YAML round-trips DebeziumSource with Avro message format`() {
         val yaml = """
-            externalLog: !Debezium
+            externalSource: !Debezium
               messageFormat: !Avro {}
               log: !Kafka
                 logCluster: my-cluster
@@ -101,14 +101,14 @@ class DebeziumSourceTest {
         """.trimIndent()
 
         val config = Database.Config.fromYaml(yaml)
-        val source = config.externalLog as DebeziumSource
+        val source = config.externalSource as DebeziumSource
         assertEquals(MessageFormat.Avro, source.messageFormat)
     }
 
     @Test
     fun `YAML requires messageFormat`() {
         val yaml = """
-            externalLog: !Debezium
+            externalSource: !Debezium
               log: !Kafka
                 logCluster: my-cluster
                 tableTopic: cdc.public.users
@@ -122,15 +122,15 @@ class DebeziumSourceTest {
     @Test
     fun `external source is nullable in Config`() {
         val config = Database.Config()
-        assertNull(config.externalLog)
+        assertNull(config.externalSource)
 
         val withSource = config.externalSource(DebeziumSource(
             log = KafkaDebeziumLog.Factory("cluster", "topic"),
             messageFormat = MessageFormat.Json,
         ))
-        assertNotNull(withSource.externalLog)
+        assertNotNull(withSource.externalSource)
 
         val withoutSource = withSource.externalSource(null)
-        assertNull(withoutSource.externalLog)
+        assertNull(withoutSource.externalSource)
     }
 }

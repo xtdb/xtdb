@@ -18,8 +18,7 @@ import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.ensureTopicExists
 import xtdb.api.log.LogClusterAlias
-import xtdb.database.ExternalLog
-import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.KafkaDebeziumLogConfig
@@ -27,6 +26,7 @@ import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.kafkaDebeziumLogConfig
 import xtdb.debezium.proto.partitionOffsets
 import xtdb.error.Incorrect
+import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.OpenTx
 import xtdb.api.TransactionKey
 import xtdb.table.TableRef
@@ -37,6 +37,7 @@ import java.nio.ByteBuffer
 import java.time.DateTimeException
 import java.time.Duration
 import java.time.Instant
+import com.google.protobuf.Any as ProtoAny
 
 private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
 
@@ -116,8 +117,6 @@ class KafkaDebeziumLog @JvmOverloads constructor(
 
     private fun valueDeserializer(): Deserializer<*> = when (messageFormat) {
         is MessageFormat.Json -> ByteArrayDeserializer()
-        // KafkaConsumer doesn't call configure() on deserializer instances passed to the constructor,
-        // so we configure it manually with the Schema Registry URL from kafkaConfig.
         is MessageFormat.Avro -> KafkaAvroDeserializer().also { it.configure(kafkaConfig, false) }
     }
 
@@ -176,7 +175,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         }
     }
 
-    override suspend fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<DebeziumMessage>) {
+    override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
         KafkaConsumer<Unit, Any>(
             kafkaConfig.plus(
                 mapOf(
@@ -188,11 +187,12 @@ class KafkaDebeziumLog @JvmOverloads constructor(
             UnitDeserializer,
             @Suppress("UNCHECKED_CAST") (valueDeserializer() as Deserializer<Any>)
         ).use { c ->
+            // TODO: use partition parameter for multi-partition support
             val partitionOffsets = afterToken?.let { tok ->
                 val token = tok.unpack(DebeziumOffsetToken::class.java)
                 token.dbzmTopicOffsetsMap[topic]?.offsetsList
-                    ?.mapIndexedNotNull { partition, offset ->
-                        if (offset >= 0) TopicPartition(topic, partition) to offset else null
+                    ?.mapIndexedNotNull { p, offset ->
+                        if (offset >= 0) TopicPartition(topic, p) to offset else null
                     }
                     ?.takeIf { it.isNotEmpty() }
             }
@@ -223,7 +223,6 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 }
 
                 if (!records.isEmpty) {
-                    // compute batch-level metadata
                     var maxOffset = -1L
                     var latestTimestamp = Instant.EPOCH
                     for (consumerRecord in records) {
@@ -240,23 +239,20 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                     val systemTime = InstantUtil.fromMicros(systemTimeMicros)
                     val txKey = TransactionKey(maxOffset, systemTime)
 
-                    // parse CDC events directly into OpenTx
-                    // processor takes ownership of the OpenTx (commits and closes it)
                     OpenTx(allocator, txKey).use { openTx ->
                         for (consumerRecord in records) {
                             val value = consumerRecord.value() ?: continue
                             writeCdcPayload(messageFormat.decode(value), dbName, openTx)
                         }
 
-                        val offsets = debeziumOffsetToken {
+                        val resumeToken: ExternalSourceToken = ProtoAny.pack(debeziumOffsetToken {
                             dbzmTopicOffsets[topic] = partitionOffsets {
                                 offsets += listOf(maxOffset)
                             }
-                        }
+                        }, "xtdb.debezium")
 
-                        processor.processMessages(listOf(
-                            DebeziumMessage(maxOffset, systemTime, openTx, offsets)
-                        ))
+                        openTx.addTxRow(dbName, openTx.txKey, null)
+                        txHandler.handleTx(openTx, resumeToken)
                     }
                 }
             }

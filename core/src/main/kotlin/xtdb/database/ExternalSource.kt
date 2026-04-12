@@ -15,24 +15,24 @@ import xtdb.api.log.SourceMessage
 import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LogProcessor.LeaderProcessor
+import xtdb.indexer.OpenTx
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import com.google.protobuf.Any as ProtoAny
 
 typealias ExternalSourceToken = ProtoAny
 
-interface ExternalLog<M> : AutoCloseable {
+interface ExternalSource : AutoCloseable {
 
-    suspend fun tailAll(afterToken: ExternalSourceToken?, processor: MessageProcessor<M>)
+    suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: TxHandler)
 
-    fun interface MessageProcessor<M> {
-        suspend fun processMessages(msgs: List<M>)
+    fun interface TxHandler {
+        suspend fun handleTx(openTx: OpenTx, resumeToken: ExternalSourceToken?)
     }
 
     interface Factory {
         fun writeTo(dbConfig: DatabaseConfig.Builder)
-        fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalLog<*>
-        fun openProcessor(llp: LeaderLogProcessor, dbState: DatabaseState): MessageProcessor<*>
+        fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()
@@ -49,8 +49,8 @@ interface ExternalLog<M> : AutoCloseable {
             }
 
             fun fromProto(dbConfig: DatabaseConfig): Factory? {
-                if (!dbConfig.hasExternalLog()) return null
-                val any = dbConfig.externalLog
+                if (!dbConfig.hasExternalSource()) return null
+                val any = dbConfig.externalSource
                 val reg = registrationsByTag[any.typeUrl] ?: error("unknown external source: ${any.typeUrl}")
                 return reg.fromProto(any)
             }
@@ -64,10 +64,12 @@ interface ExternalLog<M> : AutoCloseable {
         val serializersModule: SerializersModule get() = SerializersModule {}
     }
 
-    class Demux<M> @JvmOverloads constructor(
+    class Demux @JvmOverloads constructor(
         private val leaderLogProcessor: LeaderLogProcessor,
-        externalLog: ExternalLog<M>, externalSourceToken: ExternalSourceToken?,
-        private val externalProc: MessageProcessor<M>,
+        private val externalSource: ExternalSource,
+        private val partition: Int,
+        private val afterToken: ExternalSourceToken?,
+        private val txHandler: TxHandler,
         ctx: CoroutineContext = Dispatchers.Default
     ) : LeaderProcessor by leaderLogProcessor {
 
@@ -77,9 +79,9 @@ interface ExternalLog<M> : AutoCloseable {
 
         private val job = scope.launch {
             try {
-                externalLog.tailAll(externalSourceToken) { msgs ->
-                    lock.withLock { externalProc.processMessages(msgs) }
-                }
+                externalSource.onPartitionAssigned(partition, afterToken, TxHandler { openTx, resumeToken ->
+                    lock.withLock { txHandler.handleTx(openTx, resumeToken) }
+                })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

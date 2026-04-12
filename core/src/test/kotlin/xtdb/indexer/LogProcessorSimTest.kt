@@ -60,7 +60,7 @@ class LogProcessorSimTest : SimulationTestBase(), LogProcessor.ProcessorFactory 
 
         this.srcLog = SimLog("src", dispatcher, rand)
         this.replicaLog = SimLog("replica", dispatcher, rand)
-        this.dbStorage = DatabaseStorage(srcLog, replicaLog, null, bp, null)
+        this.dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
 
         // isFull returns true every N txs, triggering block finishing
         val fullEvery = rand.nextInt(2, 5)

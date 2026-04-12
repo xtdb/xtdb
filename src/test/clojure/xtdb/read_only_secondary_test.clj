@@ -73,7 +73,7 @@ $$"])
                                               {:database :shared_db}))
               "read-only secondary rejects writes")))))
 
-(t/deftest read-only-secondary-detects-external-log-writes
+(t/deftest read-only-secondary-detects-external-source-writes
   ;; in single-writer mode, read-only secondaries require a leader resolving transactions
   ;; into the replica log - a submit-only node (indexer disabled) doesn't suffice.
   ;; this scenario is covered by read-only-secondary-follows-primary and read-only-secondary-survives-block-flush.

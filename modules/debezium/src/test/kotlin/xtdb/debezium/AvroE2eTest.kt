@@ -247,7 +247,7 @@ class AvroE2eTest {
                     log: !Kafka
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}
-                    externalLog: !Debezium
+                    externalSource: !Debezium
                       messageFormat: !Avro {}
                       log: !Kafka
                         logCluster: kafka

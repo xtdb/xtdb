@@ -12,10 +12,12 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.database.ExternalSource
+import xtdb.database.ExternalSourceToken
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
+import xtdb.indexer.OpenTx
 import com.google.protobuf.Any as ProtoAny
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
@@ -69,25 +71,29 @@ class KafkaDebeziumLogTest {
         }
     }
 
-    data class CapturedMessage(
-        val txId: Long,
-        val totalRows: Int,
-        val offsets: DebeziumOffsetToken,
+    data class CapturedTx(
+        val cdcRows: Int,
+        val resumeToken: ExternalSourceToken?,
     )
 
-    private fun capturingProcessor(): Pair<MessageProcessor<DebeziumMessage>, List<CapturedMessage>> {
-        val received = Collections.synchronizedList(mutableListOf<CapturedMessage>())
+    private fun capturingHandler(): Pair<ExternalSource.TxHandler, List<CapturedTx>> {
+        val received = Collections.synchronizedList(mutableListOf<CapturedTx>())
 
-        val capturing = MessageProcessor<DebeziumMessage> { msgs ->
-            for (msg in msgs) {
-                received.add(CapturedMessage(
-                    txId = msg.txId,
-                    totalRows = msg.openTx.tables.sumOf { (_, table) -> table.txRelation.rowCount },
-                    offsets = msg.offsets,
-                ))
-            }
+        val handler = ExternalSource.TxHandler { openTx, resumeToken ->
+            received.add(CapturedTx(
+                cdcRows = openTx.tables
+                    .filter { (ref, _) -> ref.schemaName != "xt" }
+                    .sumOf { (_, table) -> table.txRelation.rowCount },
+                resumeToken = resumeToken,
+            ))
         }
-        return (capturing to received)
+        return (handler to received)
+    }
+
+    private fun resumeTokenOffsets(token: ExternalSourceToken?, topic: String): Long? {
+        if (token == null) return null
+        val debeziumToken = token.unpack(DebeziumOffsetToken::class.java)
+        return debeziumToken.dbzmTopicOffsetsMap[topic]?.offsetsList?.firstOrNull()
     }
 
     @Test
@@ -95,10 +101,10 @@ class KafkaDebeziumLogTest {
         val topic = "test-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val job = launch { log.tailAll(null, subscriber) }
+            val job = launch { log.onPartitionAssigned(0, null, handler) }
             while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             job.cancelAndJoin()
             produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
@@ -106,7 +112,7 @@ class KafkaDebeziumLogTest {
         }
 
         assertEquals(1, received.size, "Should not receive messages after subscription close")
-        assertEquals(1, received[0].totalRows)
+        assertEquals(1, received[0].cdcRows)
     }
 
     @Test
@@ -114,10 +120,10 @@ class KafkaDebeziumLogTest {
         val topic = "test-log-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
 
-        val job = launch { log.tailAll(null, subscriber) }
+        val job = launch { log.onPartitionAssigned(0, null, handler) }
         while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
 
         assertEquals(1, received.size, "Should have received Alice before closing")
@@ -136,10 +142,10 @@ class KafkaDebeziumLogTest {
         val topic = "test-tombstone"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice"), null))
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.tailAll(null, subscriber) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -148,12 +154,11 @@ class KafkaDebeziumLogTest {
             }
         }
 
-        val totalRows = received.sumOf { it.totalRows }
-        assertEquals(1, totalRows)
+        val cdcRows = received.sumOf { it.cdcRows }
+        assertEquals(1, cdcRows)
 
-        val token = received.last().offsets
-        val offsets = token.dbzmTopicOffsetsMap[topic]!!.offsetsList
-        assertEquals(1L, offsets[0], "Token should track offset past the tombstone")
+        assertEquals(1L, resumeTokenOffsets(received.last().resumeToken, topic),
+            "Token should track offset past the tombstone")
     }
 
     @Test
@@ -165,14 +170,14 @@ class KafkaDebeziumLogTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        val token = ProtoAny.pack(debeziumOffsetToken {
+        val afterToken = ProtoAny.pack(debeziumOffsetToken {
             dbzmTopicOffsets[topic] = partitionOffsets { offsets += listOf(1L) }
         }, "xtdb.debezium")
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.tailAll(token, subscriber) }
+            val tailJob = launch { log.onPartitionAssigned(0, afterToken, handler) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -181,16 +186,15 @@ class KafkaDebeziumLogTest {
             }
         }
 
-        val totalRows = received.sumOf { it.totalRows }
-        assertEquals(1, totalRows)
+        val cdcRows = received.sumOf { it.cdcRows }
+        assertEquals(1, cdcRows)
 
-        val lastToken = received.last().offsets
-        val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
-        assertEquals(2L, offsets[0], "Token should reflect latest consumed offset")
+        assertEquals(2L, resumeTokenOffsets(received.last().resumeToken, topic),
+            "Token should reflect latest consumed offset")
     }
 
     @Test
-    fun `poll batch is collapsed into single message with multiple rows`() = runTest(timeout = 10.seconds) {
+    fun `poll batch is collapsed into single tx with multiple rows`() = runTest(timeout = 10.seconds) {
         val topic = "test-batch-collapse"
         produceMessages(topic, listOf(
             cdcMessage("c", 1, "Alice"),
@@ -198,10 +202,10 @@ class KafkaDebeziumLogTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.tailAll(null, subscriber) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -210,12 +214,10 @@ class KafkaDebeziumLogTest {
             }
         }
 
-        assertEquals(1, received.size, "Poll batch should be collapsed into a single message")
-        assertEquals(3, received[0].totalRows)
+        assertEquals(1, received.size, "Poll batch should be collapsed into a single tx")
+        assertEquals(3, received[0].cdcRows)
 
-        val lastToken = received[0].offsets
-        val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
-        assertEquals(2L, offsets[0])
+        assertEquals(2L, resumeTokenOffsets(received[0].resumeToken, topic))
     }
 
     @Test
@@ -227,20 +229,19 @@ class KafkaDebeziumLogTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        val (subscriber, received) = capturingProcessor()
+        val (handler, received) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.tailAll(null, subscriber) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
-                while (received.sumOf { it.totalRows } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+                while (received.sumOf { it.cdcRows } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
                 tailJob.cancelAndJoin()
             }
         }
 
-        val lastToken = received.last().offsets
-        val offsets = lastToken.dbzmTopicOffsetsMap[topic]!!.offsetsList
-        assertEquals(2L, offsets[0], "Token should track the latest offset, not the first")
+        assertEquals(2L, resumeTokenOffsets(received.last().resumeToken, topic),
+            "Token should track the latest offset, not the first")
     }
 
     @Test
@@ -248,10 +249,10 @@ class KafkaDebeziumLogTest {
         val topic = "test-invalid-json"
         produceMessages(topic, listOf("not json at all"))
 
-        val (subscriber, _) = capturingProcessor()
+        val (handler, _) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
+            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
         }
     }
 
@@ -263,10 +264,10 @@ class KafkaDebeziumLogTest {
             "not json",
         ))
 
-        val (subscriber, _) = capturingProcessor()
+        val (handler, _) = capturingHandler()
         val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            assertFailsWith<Exception> { runBlocking { log.tailAll(null, subscriber) } }
+            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
         }
     }
 }

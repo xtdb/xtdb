@@ -49,7 +49,7 @@ sealed interface ReplicaMessage {
                             ResolvedTx(
                                 it.txId,
                                 fromMicros(it.systemTimeMicros),
-                                it.committed,
+                                if (it.hasCommitted()) it.committed else null,
                                 it.error.toByteArray().let { bs ->
                                     if (bs.isEmpty()) null else readTransit(bs, MSGPACK) as Throwable
                                 },
@@ -100,7 +100,7 @@ sealed interface ReplicaMessage {
     data class ResolvedTx(
         val txId: MessageId,
         val systemTime: Instant,
-        val committed: Boolean,
+        val committed: Boolean?,
         val error: Throwable?,
         val tableData: Map<String, ByteArray>,
         val dbOp: DbOp? = null,
@@ -110,7 +110,7 @@ sealed interface ReplicaMessage {
             resolvedTx = resolvedTx {
                 this.txId = this@ResolvedTx.txId
                 this.systemTimeMicros = this@ResolvedTx.systemTime.asMicros
-                this.committed = this@ResolvedTx.committed
+                this@ResolvedTx.committed?.let { this.committed = it }
                 this.error = this@ResolvedTx.error?.let { ByteString.copyFrom(writeTransit(it, MSGPACK)) } ?: ByteString.EMPTY
                 this@ResolvedTx.tableData.forEach { (k, v) ->
                     this.tableData[k] = ByteString.copyFrom(v)

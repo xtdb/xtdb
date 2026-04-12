@@ -45,7 +45,7 @@ import xtdb.util.closeAll
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import xtdb.database.ExternalLog.MessageProcessor
+import xtdb.api.log.ReplicaMessage.ResolvedTx
 import java.time.Duration
 import java.util.*
 
@@ -208,19 +208,27 @@ class Database(
                                 base.meterRegistry,
                             )
 
-                            val extFactory = dbConfig.externalLog
-                            val extLog = storage.externalLog
+                            val extFactory = dbConfig.externalSource
 
-                            return if (extFactory != null && extLog != null) {
-                                @Suppress("UNCHECKED_CAST")
-                                val extProc = extFactory.openProcessor(leaderProc, state) as MessageProcessor<Any?>
-                                val token = state.blockCatalog.externalSourceToken
+                            return if (extFactory != null) {
+                                val extSource = extFactory.open(dbName, base.logClusters)
+                                val liveIndex = state.liveIndex
 
-                                @Suppress("UNCHECKED_CAST")
-                                val demux = ExternalLog.Demux(leaderProc, extLog as ExternalLog<Any?>, token, extProc)
+                                val txHandler = ExternalSource.TxHandler { openTx, resumeToken ->
+                                    val tableData = openTx.serializeTableData()
+                                    liveIndex.commitTx(openTx)
+                                    leaderProc.handleExternalTx(ResolvedTx(
+                                        txId = openTx.txKey.txId, systemTime = openTx.txKey.systemTime,
+                                        committed = null, error = null, tableData = tableData,
+                                        externalSourceToken = resumeToken,
+                                    ))
+                                }
+
+                                val afterToken = state.blockCatalog.externalSourceToken
+                                val demux = ExternalSource.Demux(leaderProc, extSource, 0, afterToken, txHandler)
                                 object : LogProcessor.LeaderSystem {
                                     override val proc get() = demux
-                                    override fun close() { demux.close(); leaderProc.close() }
+                                    override fun close() { demux.close(); extSource.close(); leaderProc.close() }
                                 }
                             } else {
                                 object : LogProcessor.LeaderSystem {
@@ -333,13 +341,13 @@ class Database(
         val log: Log.Factory = Log.inMemoryLog,
         val storage: Storage.Factory = Storage.inMemory(),
         val mode: Mode = Mode.READ_WRITE,
-        val externalLog: ExternalLog.Factory? = null,
+        val externalSource: ExternalSource.Factory? = null,
         val critical: Boolean = false,
     ) {
         fun log(log: Log.Factory) = copy(log = log)
         fun storage(storage: Storage.Factory) = copy(storage = storage)
         fun mode(mode: Mode) = copy(mode = mode)
-        fun externalSource(externalLog: ExternalLog.Factory?) = copy(externalLog = externalLog)
+        fun externalSource(externalSource: ExternalSource.Factory?) = copy(externalSource = externalSource)
         fun critical(critical: Boolean) = copy(critical = critical)
 
         val isReadOnly: Boolean get() = mode == Mode.READ_ONLY
@@ -350,7 +358,7 @@ class Database(
                     log.writeTo(dbConfig)
                     dbConfig.applyStorage(storage)
                     dbConfig.mode = mode.toProto()
-                    externalLog?.writeTo(dbConfig)
+                    externalSource?.writeTo(dbConfig)
                     dbConfig.critical = critical
                 }.build()
 
@@ -364,7 +372,7 @@ class Database(
                     .log(Log.Factory.fromProto(dbConfig))
                     .storage(Storage.Factory.fromProto(dbConfig))
                     .mode(Mode.fromProto(dbConfig.mode))
-                    .externalSource(ExternalLog.Factory.fromProto(dbConfig))
+                    .externalSource(ExternalSource.Factory.fromProto(dbConfig))
                     .critical(dbConfig.critical)
         }
     }

@@ -91,26 +91,30 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
                 val systemTime = msg.systemTime
                 val txKey = TransactionKey(msg.txId, systemTime)
-                val result = if (msg.committed) {
-                    when (val dbOp = msg.dbOp) {
-                        is DbOp.Attach -> try {
-                            dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] follower: attach database '${dbOp.dbName}' failed" }
+                val result = when (msg.committed) {
+                    true -> {
+                        when (val dbOp = msg.dbOp) {
+                            is DbOp.Attach -> try {
+                                dbCatalog!!.attach(dbOp.dbName, dbOp.config)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] follower: attach database '${dbOp.dbName}' failed" }
+                            }
+                            is DbOp.Detach -> try {
+                                dbCatalog!!.detach(dbOp.dbName)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] follower: detach database '${dbOp.dbName}' failed" }
+                            }
+                            null -> {}
                         }
-                        is DbOp.Detach -> try {
-                            dbCatalog!!.detach(dbOp.dbName)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] follower: detach database '${dbOp.dbName}' failed" }
-                        }
-                        null -> {}
-                    }
 
-                    TransactionResult.Committed(txKey)
-                } else TransactionResult.Aborted(txKey, msg.error)
+                        TransactionResult.Committed(txKey)
+                    }
+                    false -> TransactionResult.Aborted(txKey, msg.error)
+                    null -> null
+                }
 
                 latestSourceMsgId = msg.txId
-                watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
+                if (result != null) watchers.notifyTx(result, msg.txId, msg.externalSourceToken)
             }
 
             is ReplicaMessage.TriesAdded -> {

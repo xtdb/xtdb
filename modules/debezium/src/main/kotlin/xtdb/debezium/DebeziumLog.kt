@@ -5,11 +5,11 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
-import xtdb.database.ExternalLog
+import xtdb.database.ExternalSource
 import xtdb.debezium.proto.DebeziumSourceConfig
 import xtdb.debezium.proto.DebeziumSourceConfig.LogCase.*
 
-sealed interface DebeziumLog : ExternalLog<DebeziumMessage> {
+sealed interface DebeziumLog : ExternalSource {
 
     interface Factory {
         fun openLog(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>, messageFormat: MessageFormat): DebeziumLog

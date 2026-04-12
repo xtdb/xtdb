@@ -28,7 +28,6 @@ private val LOG = DatabaseStorage::class.logger
 class DatabaseStorage(
     val sourceLogOrNull: Log<SourceMessage>?,
     val replicaLogOrNull: Log<ReplicaMessage>?,
-    val externalLog: ExternalLog<*>?,
     val bufferPoolOrNull: BufferPool?,
     val metadataManagerOrNull: PageMetadata.Factory?,
 ) : AutoCloseable {
@@ -38,7 +37,7 @@ class DatabaseStorage(
     val metadataManager: PageMetadata.Factory get() = metadataManagerOrNull ?: error("no metadata-manager")
 
     override fun close() {
-        listOf(metadataManagerOrNull, bufferPoolOrNull, externalLog, replicaLogOrNull, sourceLogOrNull).closeAll()
+        listOf(metadataManagerOrNull, bufferPoolOrNull, replicaLogOrNull, sourceLogOrNull).closeAll()
     }
 
     companion object {
@@ -127,11 +126,7 @@ class DatabaseStorage(
                 else dbConfig.log.openReplicaLog(logClusters)
             }
 
-            val externalLog = open {
-                if (singleWriter) dbConfig.externalLog?.open(dbName, logClusters) else null
-            }
-
-            DatabaseStorage(sourceLog, replicaLog, externalLog, bufferPool, metadataManager)
+            DatabaseStorage(sourceLog, replicaLog, bufferPool, metadataManager)
         }
     }
 }

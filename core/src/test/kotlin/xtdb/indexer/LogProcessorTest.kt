@@ -105,7 +105,7 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
         val dbState = dbState()
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, null, bufferPool, null)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
@@ -129,7 +129,7 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
         val dbState = dbState()
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, null, bufferPool, null)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
@@ -156,7 +156,7 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, null, bufferPool, null)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
@@ -193,7 +193,7 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, null, bufferPool, null)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val watchers = Watchers(-1)
 
