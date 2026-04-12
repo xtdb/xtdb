@@ -94,6 +94,8 @@ interface ExternalSource : AutoCloseable {
         }
 
         override fun close() {
+            // cancel without join: the coroutine suspends on every iteration (Kafka poll / mutex acquire),
+            // so cancellation is near-instant. A blocking join would deadlock inside runTest's virtual time.
             job.cancel()
         }
     }
