@@ -30,6 +30,7 @@ import xtdb.error.Incorrect
 import xtdb.indexer.OpenTx
 import xtdb.api.TransactionKey
 import xtdb.table.TableRef
+import xtdb.time.InstantUtil
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
 import java.nio.ByteBuffer
@@ -205,6 +206,13 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 c.seekToBeginning(listOf(tp))
             }
 
+            // Smoothed clock: ensures monotonically increasing system-time across batches.
+            // Kafka timestamps are millisecond-precision — consecutive batches can share a timestamp,
+            // which would give two transactions the same systemFrom and collapse valid-time history.
+            // Mirrors the pattern in indexer.clj's indexTx (default-system-time).
+            // TODO: likely superseded by #5445 which restructures the external log pipeline
+            var lastSystemTimeMicros = Long.MIN_VALUE
+
             while (currentCoroutineContext().isActive) {
                 val records = runInterruptible(Dispatchers.IO) {
                     try {
@@ -215,7 +223,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 }
 
                 if (!records.isEmpty) {
-                    // first pass: compute batch-level metadata
+                    // compute batch-level metadata
                     var maxOffset = -1L
                     var latestTimestamp = Instant.EPOCH
                     for (consumerRecord in records) {
@@ -223,9 +231,16 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                         latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
                     }
 
-                    val txKey = TransactionKey(maxOffset, latestTimestamp)
+                    var systemTimeMicros = latestTimestamp.asMicros
+                    if (systemTimeMicros <= lastSystemTimeMicros) {
+                        systemTimeMicros = lastSystemTimeMicros + 1
+                    }
+                    lastSystemTimeMicros = systemTimeMicros
 
-                    // second pass: parse CDC events directly into OpenTx
+                    val systemTime = InstantUtil.fromMicros(systemTimeMicros)
+                    val txKey = TransactionKey(maxOffset, systemTime)
+
+                    // parse CDC events directly into OpenTx
                     // processor takes ownership of the OpenTx (commits and closes it)
                     OpenTx(allocator, txKey).use { openTx ->
                         for (consumerRecord in records) {
@@ -240,7 +255,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                         }
 
                         processor.processMessages(listOf(
-                            DebeziumMessage(maxOffset, latestTimestamp, openTx, offsets)
+                            DebeziumMessage(maxOffset, systemTime, openTx, offsets)
                         ))
                     }
                 }
