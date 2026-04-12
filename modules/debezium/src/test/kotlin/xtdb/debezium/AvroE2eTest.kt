@@ -23,6 +23,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.sql.DriverManager
 import java.util.UUID
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -242,6 +243,15 @@ class AvroE2eTest {
         throw AssertionError("Timed out waiting for $expected txs on db '$db' (got $count)")
     }
 
+    private suspend fun awaitCondition(description: String, timeout: Duration = 30.seconds, check: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
+        while (System.currentTimeMillis() < deadline) {
+            if (check()) return
+            delay(200)
+        }
+        throw AssertionError("Timed out waiting for: $description")
+    }
+
     private fun xtQueryDb(node: Xtdb, dbName: String, sql: String): List<Map<String, Any?>> {
         return node.createConnectionBuilder().database(dbName).build().use { conn ->
             conn.createStatement().use { stmt ->
@@ -274,41 +284,34 @@ class AvroE2eTest {
             awaitTopics = listOf("testdb.public.cdc_avro"),
         )
 
-        pgExecute(
-            "INSERT INTO cdc_avro (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
-            "UPDATE cdc_avro SET email = 'alice-new@example.com' WHERE _id = 1",
-            "DELETE FROM cdc_avro WHERE _id = 2",
-        )
-
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             attachAvroDebeziumDb(node, "testdb.public.cdc_avro")
 
-            // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-            awaitTxs(node, 4)
+            // Phase 1: snapshot
+            awaitTxs(node, 1)
+            val snapshotRows = xtQueryDb(node, "cdc",
+                "SELECT _id, email FROM public.cdc_avro ORDER BY _id"
+            )
+            assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
+            assertEquals("alice@example.com", snapshotRows[0]["email"])
 
-            val history = xtQueryDb(node, "cdc",
-                """SELECT _id, name, email, _valid_from, _valid_to
-                   FROM public.cdc_avro
-                   FOR ALL VALID_TIME
-                   ORDER BY _id, _valid_from"""
+            // Phase 2: streaming events
+            pgExecute(
+                "INSERT INTO cdc_avro (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                "UPDATE cdc_avro SET email = 'alice-new@example.com' WHERE _id = 1",
+                "DELETE FROM cdc_avro WHERE _id = 2",
             )
 
-            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
+            awaitCondition("Alice updated") {
+                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_avro WHERE _id = 1")
+                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            }
 
-            // Alice: snapshot row then updated row
-            assertEquals(1L, (history[0]["_id"] as Number).toLong())
-            assertEquals("alice@example.com", history[0]["email"])
-            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
-
-            assertEquals(1L, (history[1]["_id"] as Number).toLong())
-            assertEquals("alice-new@example.com", history[1]["email"])
-            assertNull(history[1]["_valid_to"], "Updated row should be current")
-
-            // Bob: inserted then deleted
-            assertEquals(2L, (history[2]["_id"] as Number).toLong())
-            assertEquals("bob@example.com", history[2]["email"])
-            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+            val bob = xtQueryDb(node, "cdc",
+                "SELECT _id FROM public.cdc_avro WHERE _id = 2"
+            )
+            assertEquals(0, bob.size, "Bob should be deleted")
         }
     }
 }

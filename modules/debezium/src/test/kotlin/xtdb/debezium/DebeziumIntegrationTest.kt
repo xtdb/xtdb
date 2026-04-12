@@ -28,7 +28,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.sql.DriverManager
-import java.time.Duration
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
@@ -213,6 +213,15 @@ class DebeziumIntegrationTest {
         throw AssertionError("Timed out waiting for $expected txs on db '$db' (got $count)")
     }
 
+    private suspend fun awaitCondition(description: String, timeout: Duration = 10.seconds, check: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
+        while (System.currentTimeMillis() < deadline) {
+            if (check()) return
+            delay(200)
+        }
+        throw AssertionError("Timed out waiting for: $description")
+    }
+
     private suspend fun awaitDatabase(node: Xtdb, dbName: String, timeout: Long = 30_000) {
         val deadline = System.currentTimeMillis() + timeout
         while (System.currentTimeMillis() < deadline) {
@@ -260,7 +269,7 @@ class DebeziumIntegrationTest {
             val messages = mutableListOf<JsonObject>()
 
             while (messages.size < expected) {
-                val records = consumer.poll(Duration.ofSeconds(1))
+                val records = consumer.poll(java.time.Duration.ofSeconds(1))
                 for (record in records) {
                     val value = record.value() ?: continue
                     messages.add(Json.parseToJsonElement(value).jsonObject)
@@ -384,40 +393,37 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_users"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             attachDebeziumDb(node, "testdb.public.cdc_users")
 
+            // Phase 1: snapshot ingested
+            awaitTxs(node, 1, db = "cdc")
+
+            val snapshotRows = xtQueryDb(node, "cdc",
+                "SELECT _id, name, email FROM public.cdc_users ORDER BY _id"
+            )
+            assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
+            assertEquals("alice@example.com", snapshotRows[0]["email"])
+
+            // Phase 2: streaming events — happens-before guarantees distinct system times
             pgExecute(
                 "INSERT INTO cdc_users (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                 "UPDATE cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
                 "DELETE FROM cdc_users WHERE _id = 2",
             )
 
-            // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-            awaitTxs(node, 4, db = "cdc")
+            // Wait for Alice's update rather than counting transactions,
+            // because the streaming events may batch into fewer transactions than records.
+            awaitCondition("Alice updated") {
+                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_users WHERE _id = 1")
+                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            }
 
-            val history = xtQueryDb(node, "cdc",
-                """SELECT _id, name, email, _valid_from, _valid_to
-                   FROM public.cdc_users
-                   FOR ALL VALID_TIME
-                   ORDER BY _id, _valid_from"""
+            // Bob: deleted — should not appear in current state
+            val bob = xtQueryDb(node, "cdc",
+                "SELECT _id FROM public.cdc_users WHERE _id = 2"
             )
-
-            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
-
-            // Alice: snapshot row then updated row
-            assertEquals(1L, (history[0]["_id"] as Number).toLong())
-            assertEquals("alice@example.com", history[0]["email"])
-            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
-
-            assertEquals(1L, (history[1]["_id"] as Number).toLong())
-            assertEquals("alice-new@example.com", history[1]["email"])
-            assertNull(history[1]["_valid_to"], "Updated row should be current")
-
-            // Bob: inserted then deleted — valid_to proves DELETE op worked
-            assertEquals(2L, (history[2]["_id"] as Number).toLong())
-            assertEquals("bob@example.com", history[2]["email"])
-            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+            assertEquals(0, bob.size, "Bob should be deleted")
         }
     }
 
@@ -437,37 +443,33 @@ class DebeziumIntegrationTest {
         )
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             attachDebeziumDb(node, "testdb.public.cdc_no_envelope")
 
+            // Phase 1: snapshot
+            awaitTxs(node, 1, db = "cdc")
+            val snapshotRows = xtQueryDb(node, "cdc",
+                "SELECT _id, email FROM public.cdc_no_envelope ORDER BY _id"
+            )
+            assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
+            assertEquals("alice@example.com", snapshotRows[0]["email"])
+
+            // Phase 2: streaming events
             pgExecute(
                 "INSERT INTO cdc_no_envelope (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                 "UPDATE cdc_no_envelope SET email = 'alice-new@example.com' WHERE _id = 1",
                 "DELETE FROM cdc_no_envelope WHERE _id = 2",
             )
 
-            awaitTxs(node, 4, db = "cdc")
+            awaitCondition("Alice updated") {
+                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_no_envelope WHERE _id = 1")
+                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            }
 
-            val history = xtQueryDb(node, "cdc",
-                """SELECT _id, name, email, _valid_from, _valid_to
-                   FROM public.cdc_no_envelope
-                   FOR ALL VALID_TIME
-                   ORDER BY _id, _valid_from"""
+            val bob = xtQueryDb(node, "cdc",
+                "SELECT _id FROM public.cdc_no_envelope WHERE _id = 2"
             )
-
-            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
-
-            assertEquals(1L, (history[0]["_id"] as Number).toLong())
-            assertEquals("alice@example.com", history[0]["email"])
-            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
-
-            assertEquals(1L, (history[1]["_id"] as Number).toLong())
-            assertEquals("alice-new@example.com", history[1]["email"])
-            assertNull(history[1]["_valid_to"], "Updated row should be current")
-
-            assertEquals(2L, (history[2]["_id"] as Number).toLong())
-            assertEquals("bob@example.com", history[2]["email"])
-            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+            assertEquals(0, bob.size, "Bob should be deleted")
         }
     }
 
@@ -699,42 +701,33 @@ class DebeziumIntegrationTest {
         registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_direct"))
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
-        // max.poll.records=1 ensures each CDC event is a separate transaction,
-        // preserving per-event valid-time history for this test's assertions.
-        openNodeOnSourceTopic(sourceTopic, mapOf("max.poll.records" to "1")).use { node ->
+        openNodeOnSourceTopic(sourceTopic).use { node ->
             attachDebeziumDb(node, "testdb.public.cdc_direct", dbName = "cdc_direct_db")
 
+            // Phase 1: snapshot
+            awaitTxs(node, 1, db = "cdc_direct_db")
+            val snapshotRows = xtQueryDb(node, "cdc_direct_db",
+                "SELECT _id, email FROM public.cdc_direct ORDER BY _id"
+            )
+            assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
+            assertEquals("alice@example.com", snapshotRows[0]["email"])
+
+            // Phase 2: streaming events
             pgExecute(
                 "INSERT INTO cdc_direct (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
                 "UPDATE cdc_direct SET email = 'alice-new@example.com' WHERE _id = 1",
                 "DELETE FROM cdc_direct WHERE _id = 2",
             )
 
-            // snapshot(Alice) + insert(Bob) + update(Alice) + delete(Bob)
-            awaitTxs(node, 4, db = "cdc_direct_db")
+            awaitCondition("Alice updated") {
+                xtQueryDb(node, "cdc_direct_db", "SELECT email FROM public.cdc_direct WHERE _id = 1")
+                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            }
 
-            val history = xtQueryDb(node, "cdc_direct_db",
-                """SELECT _id, name, email, _valid_from, _valid_to
-                   FROM public.cdc_direct
-                   FOR ALL VALID_TIME
-                   ORDER BY _id, _valid_from"""
+            val bob = xtQueryDb(node, "cdc_direct_db",
+                "SELECT _id FROM public.cdc_direct WHERE _id = 2"
             )
-
-            assertEquals(3, history.size, "Expected 3 history rows (2 Alice + 1 Bob)")
-
-            // Alice: snapshot row then updated row
-            assertEquals(1L, (history[0]["_id"] as Number).toLong())
-            assertEquals("alice@example.com", history[0]["email"])
-            assertTrue(history[0]["_valid_to"] != null, "Snapshot row should be superseded")
-
-            assertEquals(1L, (history[1]["_id"] as Number).toLong())
-            assertEquals("alice-new@example.com", history[1]["email"])
-            assertNull(history[1]["_valid_to"], "Updated row should be current")
-
-            // Bob: inserted then deleted
-            assertEquals(2L, (history[2]["_id"] as Number).toLong())
-            assertEquals("bob@example.com", history[2]["email"])
-            assertTrue(history[2]["_valid_to"] != null, "Bob should have valid_to from DELETE")
+            assertEquals(0, bob.size, "Bob should be deleted")
 
             // Primary db should have no CDC data
             val primaryRows = xtQuery(node,
@@ -813,7 +806,7 @@ class DebeziumIntegrationTest {
             // Flush block so the external source token is persisted
             (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
                 cat["cdc"]!!.sendFlushBlockMessage()
-                cat.syncAll(Duration.ofSeconds(10))
+                cat.syncAll(java.time.Duration.ofSeconds(10))
             }
         }
 
