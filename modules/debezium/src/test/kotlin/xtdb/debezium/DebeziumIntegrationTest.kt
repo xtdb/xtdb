@@ -3,6 +3,8 @@ package xtdb.debezium
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
+import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
@@ -140,7 +142,8 @@ class DebeziumIntegrationTest {
                 if (resp.statusCode() == 404) break
                 Thread.sleep(200)
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     private fun kafkaConfig() = mapOf("bootstrap.servers" to kafka.bootstrapServers)
@@ -168,7 +171,8 @@ class DebeziumIntegrationTest {
                 if (resp.statusCode() != 200) return false
                 val status = Json.parseToJsonElement(resp.body()).jsonObject
                 val connectorState = status["connector"]?.jsonObject?.get("state")?.jsonPrimitive?.content
-                val taskState = status["tasks"]?.jsonArray?.firstOrNull()?.jsonObject?.get("state")?.jsonPrimitive?.content
+                val taskState =
+                    status["tasks"]?.jsonArray?.firstOrNull()?.jsonObject?.get("state")?.jsonPrimitive?.content
                 return connectorState == "RUNNING" && taskState == "RUNNING"
             } catch (_: Exception) {
                 return false
@@ -206,7 +210,7 @@ class DebeziumIntegrationTest {
         while (!isConnectorRunning()) delay(500)
 
         if (awaitTopics.isNotEmpty()) {
-            org.apache.kafka.clients.admin.AdminClient.create(kafkaConfig()).use { admin ->
+            AdminClient.create(kafkaConfig()).use { admin ->
                 val deadline = System.currentTimeMillis() + 30_000
                 while (System.currentTimeMillis() < deadline) {
                     val names = admin.listTopics().names().get()
@@ -233,17 +237,18 @@ class DebeziumIntegrationTest {
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
         // schemaRegistryUrl is read only when the external source uses Avro; safe to set unconditionally.
-        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers)
-            .schemaRegistryUrl(schemaRegistryUrl())
-            .propertiesMap(kafkaProperties))
+        logCluster(
+            "kafka",
+            KafkaCluster.ClusterFactory(kafka.bootstrapServers)
+                .schemaRegistryUrl(schemaRegistryUrl())
+                .propertiesMap(kafkaProperties)
+        )
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
     private fun createTopic(topic: String) {
-        org.apache.kafka.clients.admin.AdminClient.create(kafkaConfig()).use { admin ->
-            admin.createTopics(listOf(
-                org.apache.kafka.clients.admin.NewTopic(topic, 1, 1.toShort())
-            )).all().get()
+        AdminClient.create(kafkaConfig()).use { admin ->
+            admin.createTopics(listOf(NewTopic(topic, 1, 1.toShort()))).all().get()
         }
     }
 
@@ -259,7 +264,8 @@ class DebeziumIntegrationTest {
                       path: $storagePath""" else ""
         node.getConnection().use { conn ->
             conn.createStatement().use { stmt ->
-                stmt.execute("""ATTACH DATABASE $dbName WITH $$
+                stmt.execute(
+                    """ATTACH DATABASE $dbName WITH $$
                     log: !Kafka
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}$storageYaml
@@ -268,7 +274,8 @@ class DebeziumIntegrationTest {
                       log: !Kafka
                         logCluster: kafka
                         tableTopic: $debeziumTopic
-                $$""")
+                $$"""
+                )
             }
         }
     }
@@ -469,7 +476,8 @@ class DebeziumIntegrationTest {
             // Phase 1: snapshot ingested
             awaitTxs(node, 1, db = "cdc")
 
-            val snapshotRows = xtQueryDb(node, "cdc",
+            val snapshotRows = xtQueryDb(
+                node, "cdc",
                 "SELECT _id, name, email FROM public.cdc_users ORDER BY _id"
             )
             assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
@@ -518,7 +526,8 @@ class DebeziumIntegrationTest {
 
             // Phase 1: snapshot
             awaitTxs(node, 1, db = "cdc")
-            val snapshotRows = xtQueryDb(node, "cdc",
+            val snapshotRows = xtQueryDb(
+                node, "cdc",
                 "SELECT _id, email FROM public.cdc_no_envelope ORDER BY _id"
             )
             assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
@@ -573,7 +582,8 @@ class DebeziumIntegrationTest {
 
             awaitTxs(node, 3, db = "cdc")
 
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 """SELECT _id, name, _valid_from, _valid_to
                    FROM public.timed_docs
                    FOR ALL VALID_TIME
@@ -630,11 +640,12 @@ class DebeziumIntegrationTest {
             )
 
             assertThrows<IngestionStoppedException> {
-                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
+                database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE)
             }
 
             // Alice should be ingested, bad record should not
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 "SELECT _id, name FROM public.bad_valid_to ORDER BY _id"
             )
             assertEquals(1, rows.size, "Only Alice should be ingested — bad record halted ingestion")
@@ -661,10 +672,11 @@ class DebeziumIntegrationTest {
 
             // snapshot record lacks _id — ingestion halts
             assertThrows<IngestionStoppedException> {
-                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
+                database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE)
             }
 
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 "SELECT * FROM public.no_id_table FOR ALL VALID_TIME"
             )
             assertEquals(0, rows.size, "No rows should be ingested — records lack _id")
@@ -702,7 +714,8 @@ class DebeziumIntegrationTest {
 
             awaitTxs(node, 2, db = "cdc")
 
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 """SELECT _id, name, score, active, metadata, tags, notes
                    FROM public.typed_docs
                    ORDER BY _id"""
@@ -717,7 +730,10 @@ class DebeziumIntegrationTest {
             assertEquals(3.14, (alice["score"] as Number).toDouble(), 0.001)
             assertEquals(true, alice["active"])
             // JSONB comes through Debezium as a string
-            assertTrue(alice["metadata"] is String, "JSONB should arrive as a string, got: ${alice["metadata"]?.javaClass}")
+            assertTrue(
+                alice["metadata"] is String,
+                "JSONB should arrive as a string, got: ${alice["metadata"]?.javaClass}"
+            )
             assertNull(alice["notes"], "NULL column should be null")
 
             // Bob: sparse row with NULLs
@@ -751,7 +767,8 @@ class DebeziumIntegrationTest {
 
             awaitTxs(node, 1, db = "cdc")
 
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 "SELECT _id, name, qty FROM inventory.products"
             )
 
@@ -777,7 +794,8 @@ class DebeziumIntegrationTest {
 
             // Phase 1: snapshot
             awaitTxs(node, 1, db = "cdc_direct_db")
-            val snapshotRows = xtQueryDb(node, "cdc_direct_db",
+            val snapshotRows = xtQueryDb(
+                node, "cdc_direct_db",
                 "SELECT _id, email FROM public.cdc_direct ORDER BY _id"
             )
             assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
@@ -802,7 +820,8 @@ class DebeziumIntegrationTest {
             assertEquals("alice-new@example.com", alice[0]["email"])
 
             // Primary db should have no CDC data
-            val primaryRows = xtQuery(node,
+            val primaryRows = xtQuery(
+                node,
                 "SELECT * FROM public.cdc_direct FOR ALL VALID_TIME"
             )
             assertEquals(0, primaryRows.size, "Primary database should have no CDC data")
@@ -840,10 +859,11 @@ class DebeziumIntegrationTest {
 
             // invalid valid time types — ingestion halts
             assertThrows<IngestionStoppedException> {
-                runBlocking { database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE) }
+                database(node, "cdc").watchers.awaitTx(Long.MAX_VALUE)
             }
 
-            val rows = xtQueryDb(node, "cdc",
+            val rows = xtQueryDb(
+                node, "cdc",
                 "SELECT * FROM public.bad_times FOR ALL VALID_TIME"
             )
             assertEquals(0, rows.size, "No rows should be ingested — both have invalid valid time")
@@ -851,58 +871,60 @@ class DebeziumIntegrationTest {
     }
 
     @Test
-    fun `CDC consumer resumes from committed offset after restart`(@TempDir tempDir: java.nio.file.Path) = runTest(timeout = 120.seconds) {
-        pgExecute(
-            "CREATE TABLE IF NOT EXISTS cdc_resume (_id INT PRIMARY KEY, name TEXT)",
-            "INSERT INTO cdc_resume (_id, name) VALUES (1, 'Alice')",
-        )
+    fun `CDC consumer resumes from committed offset after restart`(@TempDir tempDir: java.nio.file.Path) =
+        runTest(timeout = 120.seconds) {
+            pgExecute(
+                "CREATE TABLE IF NOT EXISTS cdc_resume (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO cdc_resume (_id, name) VALUES (1, 'Alice')",
+            )
 
-        registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_resume"))
+            registerConnectorAndAwait(awaitTopics = listOf("testdb.public.cdc_resume"))
 
-        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+            val sourceTopic = "test-topic-${UUID.randomUUID()}"
 
-        fun openPersistentNode() = Xtdb.openNode {
-            server { port = 0 }; flightSql = null
-            logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
-            log(KafkaCluster.LogFactory("kafka", sourceTopic))
-            storage(xtdb.api.storage.Storage.local(tempDir))
-        }
+            fun openPersistentNode() = Xtdb.openNode {
+                server { port = 0 }; flightSql = null
+                logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+                log(KafkaCluster.LogFactory("kafka", sourceTopic))
+                storage(xtdb.api.storage.Storage.local(tempDir))
+            }
 
-        val cdcStoragePath = tempDir.resolve("cdc-storage")
+            val cdcStoragePath = tempDir.resolve("cdc-storage")
 
-        // First run: ingest snapshot (Alice), flush block to persist the offset token
-        openPersistentNode().use { node ->
-            attachDebeziumDb(node, "testdb.public.cdc_resume", storagePath = cdcStoragePath)
-            awaitTxs(node, 1, db = "cdc")
+            // First run: ingest snapshot (Alice), flush block to persist the offset token
+            openPersistentNode().use { node ->
+                attachDebeziumDb(node, "testdb.public.cdc_resume", storagePath = cdcStoragePath)
+                awaitTxs(node, 1, db = "cdc")
 
-            // Flush block so the external source token is persisted
-            (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
-                cat["cdc"]!!.sendFlushBlockMessage()
-                cat.syncAll(java.time.Duration.ofSeconds(10))
+                // Flush block so the external source token is persisted
+                (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
+                    cat["cdc"]!!.sendFlushBlockMessage()
+                    cat.syncAll(java.time.Duration.ofSeconds(10))
+                }
+            }
+
+            // Insert more data while node is down
+            pgExecute(
+                "INSERT INTO cdc_resume (_id, name) VALUES (2, 'Bob')",
+            )
+
+            // Second run: same storage — database is already attached from persisted config,
+            // should resume from persisted token, not re-process Alice
+            openPersistentNode().use { node ->
+                // Wait for the node to replay the ATTACH message from the source log
+                awaitDatabase(node, "cdc")
+
+                awaitTxs(node, 2, db = "cdc")
+
+                val rows = xtQueryDb(
+                    node, "cdc",
+                    "SELECT _id, name FROM public.cdc_resume ORDER BY _id"
+                )
+                assertEquals(2, rows.size)
+                assertEquals("Alice", rows[0]["name"])
+                assertEquals("Bob", rows[1]["name"])
             }
         }
-
-        // Insert more data while node is down
-        pgExecute(
-            "INSERT INTO cdc_resume (_id, name) VALUES (2, 'Bob')",
-        )
-
-        // Second run: same storage — database is already attached from persisted config,
-        // should resume from persisted token, not re-process Alice
-        openPersistentNode().use { node ->
-            // Wait for the node to replay the ATTACH message from the source log
-            awaitDatabase(node, "cdc")
-
-            awaitTxs(node, 2, db = "cdc")
-
-            val rows = xtQueryDb(node, "cdc",
-                "SELECT _id, name FROM public.cdc_resume ORDER BY _id"
-            )
-            assertEquals(2, rows.size)
-            assertEquals("Alice", rows[0]["name"])
-            assertEquals("Bob", rows[1]["name"])
-        }
-    }
 
     @Test
     fun `Avro CDC from Debezium Connect ingested into XTDB`() = runTest(timeout = 120.seconds) {
@@ -926,7 +948,8 @@ class DebeziumIntegrationTest {
 
             // Phase 1: snapshot
             awaitTxs(node, 1, db = "cdc")
-            val snapshotRows = xtQueryDb(node, "cdc",
+            val snapshotRows = xtQueryDb(
+                node, "cdc",
                 "SELECT _id, email FROM public.cdc_avro ORDER BY _id"
             )
             assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
@@ -944,7 +967,8 @@ class DebeziumIntegrationTest {
                     .firstOrNull()?.get("email") == "alice-new@example.com"
             }
 
-            val bob = xtQueryDb(node, "cdc",
+            val bob = xtQueryDb(
+                node, "cdc",
                 "SELECT _id FROM public.cdc_avro WHERE _id = 2"
             )
             assertEquals(0, bob.size, "Bob should be deleted")
