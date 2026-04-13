@@ -48,7 +48,11 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.inputStream
 import kotlin.time.Duration.Companion.seconds
+import xtdb.util.info
+import xtdb.util.logger
 import com.google.protobuf.Any as ProtoAny
+
+private val LOG = KafkaCluster::class.logger
 
 private typealias KafkaConfigMap = Map<String, String>
 
@@ -262,6 +266,10 @@ class KafkaCluster(
 
         override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
             private val prefixedTxId = listOfNotNull(transactionalIdPrefix, transactionalId).joinToString("-")
+
+            init {
+                LOG.info { "starting atomic producer with transactional.id '$prefixedTxId'" }
+            }
 
             private val producer = KafkaProducer(
                 mapOf(
