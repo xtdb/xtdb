@@ -1,14 +1,15 @@
 package xtdb.garbage_collector
 
-import org.slf4j.LoggerFactory
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.catalog.BlockCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
 import xtdb.util.StringUtil.fromLexHex
+import xtdb.util.debug
+import xtdb.util.logger
 import java.nio.file.Path
 
-private val LOGGER = LoggerFactory.getLogger(BlockGarbageCollector::class.java)
+private val LOGGER = BlockGarbageCollector::class.logger
 
 class BlockGarbageCollector(
     private val blockCatalog: BlockCatalog,
@@ -26,7 +27,7 @@ class BlockGarbageCollector(
         check(blockPath.parseBlockIndex() != blockCatalog.currentBlockIndex) {
             "Cannot delete current block $blockPath - aborting"
         }
-        LOGGER.debug("Deleting block file {}", blockPath)
+        LOGGER.debug("Deleting block file $blockPath")
         bufferPool.deleteIfExists(blockPath)
     }
 
@@ -44,7 +45,7 @@ class BlockGarbageCollector(
         blockCatalog.allTables
             .shuffled().take(100)
             .forEach { table ->
-                LOGGER.debug("Garbage collecting blocks for table {}, keeping {} blocks", table.sym, blocksToKeep)
+                LOGGER.debug("Garbage collecting blocks for table ${table.sym}, keeping $blocksToKeep blocks")
                 bufferPool.tableBlocks(table).toList()
                     .dropLast(blocksToKeep)
                     .let { blocks ->
