@@ -28,6 +28,7 @@ dependencies {
     runtimeOnly(libs.log4j.jul)
     runtimeOnly(libs.log4j.jcl)
     runtimeOnly(libs.log4j.slf4j2.impl)
+    runtimeOnly(libs.log4j.layout.template.json)
 
     testImplementation(testFixtures(project(":")))
 }

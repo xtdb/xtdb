@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.gradle.jvm.toolchain.JavaInstallationMetadata
 import org.gradle.jvm.toolchain.JavaLauncher
@@ -118,6 +120,10 @@ allprojects {
         mavenCentral()
         maven { url = uri("https://repo.clojars.org/") }
         maven { url = uri("https://packages.confluent.io/maven/") }
+    }
+
+    tasks.withType<ShadowJar> {
+        transform(Log4j2PluginsCacheFileTransformer())
     }
 
     if (plugins.hasPlugin("java-library")) {

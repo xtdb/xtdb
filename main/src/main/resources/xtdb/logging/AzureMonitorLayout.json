@@ -1,0 +1,55 @@
+{
+  "Timestamp": {
+    "$resolver": "timestamp",
+    "pattern": {
+      "format": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+      "timeZone": "UTC"
+    }
+  },
+  "Severity": {
+    "$resolver": "level",
+    "field": "name"
+  },
+  "Message": {
+    "$resolver": "message",
+    "field": "fallback"
+  },
+  "OperationId": {
+    "$resolver": "mdc",
+    "key": "trace_id"
+  },
+  "ParentId": {
+    "$resolver": "mdc",
+    "key": "span_id"
+  },
+  "Attributes": {
+    "log.logger.name": {
+      "$resolver": "logger",
+      "field": "name"
+    },
+    "thread.name": {
+      "$resolver": "thread",
+      "field": "name"
+    },
+    "custom.context": {
+      "$resolver": "mdc"
+    }
+  },
+  "Exception": {
+    "type": {
+      "$resolver": "exception",
+      "field": "className"
+    },
+    "message": {
+      "$resolver": "exception",
+      "field": "message"
+    },
+    "stackTrace": {
+      "$resolver": "exception",
+      "field": "stackTrace",
+      "stackTrace": {
+        "stringified": true
+      }
+    }
+  }
+}

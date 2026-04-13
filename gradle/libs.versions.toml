@@ -135,6 +135,7 @@ log4j-jpl = { group = "org.apache.logging.log4j", name = "log4j-jpl", version.re
 log4j-jul = { group = "org.apache.logging.log4j", name = "log4j-jul", version.ref = "log4j" }     # bridges java.util.logging to Log4j2
 log4j-jcl = { group = "org.apache.logging.log4j", name = "log4j-jcl", version.ref = "log4j" }     # bridges Apache Commons Logging to Log4j2
 log4j-slf4j2-impl = { group = "org.apache.logging.log4j", name = "log4j-slf4j2-impl", version.ref = "log4j" }  # bridges SLF4J to Log4j2
+log4j-layout-template-json = { group = "org.apache.logging.log4j", name = "log4j-layout-template-json", version.ref = "log4j" }  # JSON log output
 
 # AWS SDK
 aws-s3 = { group = "software.amazon.awssdk", name = "s3", version.ref = "aws-sdk" }

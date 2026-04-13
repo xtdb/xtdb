@@ -4,6 +4,9 @@
         <Console name="text" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{HH:mm:ss} | %-5level %logger{36} | %msg%n"/>
         </Console>
+        <Console name="json" target="SYSTEM_OUT">
+            <JsonTemplateLayout eventTemplateUri="${env:XTDB_LOG_JSON_TEMPLATE:-classpath:xtdb/logging/AwsCloudWatchLayout.json}"/>
+        </Console>
     </Appenders>
     <Loggers>
         <Logger name="xtdb" level="INFO"/>
@@ -14,7 +17,7 @@
         <Logger name="org.eclipse.jetty" level="WARN"/>
         <Logger name="reactor" level="ERROR"/>
         <Root level="INFO">
-            <AppenderRef ref="text"/>
+            <AppenderRef ref="${env:XTDB_LOG_FORMAT:-text}"/>
         </Root>
     </Loggers>
 </Configuration>
