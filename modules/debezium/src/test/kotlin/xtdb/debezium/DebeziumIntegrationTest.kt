@@ -439,18 +439,18 @@ class DebeziumIntegrationTest {
                 "DELETE FROM cdc_users WHERE _id = 2",
             )
 
-            // Wait for Alice's update rather than counting transactions,
-            // because the streaming events may batch into fewer transactions than records.
-            awaitCondition("Alice updated") {
-                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_users WHERE _id = 1")
-                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            // Waiting for the last streaming event (DELETE Bob) guarantees UPDATE Alice is also applied,
+            // since Debezium preserves PG commit order.
+            awaitCondition("Bob deleted") {
+                xtQueryDb(node, "cdc",
+                    "SELECT _valid_to FROM public.cdc_users FOR ALL VALID_TIME WHERE _id = 2"
+                ).any { it["_valid_to"] != null }
             }
 
-            // Bob: deleted — should not appear in current state
-            val bob = xtQueryDb(node, "cdc",
-                "SELECT _id FROM public.cdc_users WHERE _id = 2"
+            val alice = xtQueryDb(node, "cdc",
+                "SELECT email FROM public.cdc_users WHERE _id = 1"
             )
-            assertEquals(0, bob.size, "Bob should be deleted")
+            assertEquals("alice-new@example.com", alice[0]["email"])
         }
     }
 
@@ -488,15 +488,16 @@ class DebeziumIntegrationTest {
                 "DELETE FROM cdc_no_envelope WHERE _id = 2",
             )
 
-            awaitCondition("Alice updated") {
-                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_no_envelope WHERE _id = 1")
-                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            awaitCondition("Bob deleted") {
+                xtQueryDb(node, "cdc",
+                    "SELECT _valid_to FROM public.cdc_no_envelope FOR ALL VALID_TIME WHERE _id = 2"
+                ).any { it["_valid_to"] != null }
             }
 
-            val bob = xtQueryDb(node, "cdc",
-                "SELECT _id FROM public.cdc_no_envelope WHERE _id = 2"
+            val alice = xtQueryDb(node, "cdc",
+                "SELECT email FROM public.cdc_no_envelope WHERE _id = 1"
             )
-            assertEquals(0, bob.size, "Bob should be deleted")
+            assertEquals("alice-new@example.com", alice[0]["email"])
         }
     }
 
@@ -746,15 +747,16 @@ class DebeziumIntegrationTest {
                 "DELETE FROM cdc_direct WHERE _id = 2",
             )
 
-            awaitCondition("Alice updated") {
-                xtQueryDb(node, "cdc_direct_db", "SELECT email FROM public.cdc_direct WHERE _id = 1")
-                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            awaitCondition("Bob deleted") {
+                xtQueryDb(node, "cdc_direct_db",
+                    "SELECT _valid_to FROM public.cdc_direct FOR ALL VALID_TIME WHERE _id = 2"
+                ).any { it["_valid_to"] != null }
             }
 
-            val bob = xtQueryDb(node, "cdc_direct_db",
-                "SELECT _id FROM public.cdc_direct WHERE _id = 2"
+            val alice = xtQueryDb(node, "cdc_direct_db",
+                "SELECT email FROM public.cdc_direct WHERE _id = 1"
             )
-            assertEquals(0, bob.size, "Bob should be deleted")
+            assertEquals("alice-new@example.com", alice[0]["email"])
 
             // Primary db should have no CDC data
             val primaryRows = xtQuery(node,
