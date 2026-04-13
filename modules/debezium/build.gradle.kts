@@ -19,6 +19,12 @@ dependencies {
 
     implementation(libs.kafka.avro.serializer)
 
+    implementation(libs.debezium.api)
+    implementation(libs.debezium.embedded)
+    implementation(libs.debezium.connector.postgres)
+    implementation(libs.kafka.connect.api)
+    implementation(libs.kafka.connect.runtime)
+
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers)

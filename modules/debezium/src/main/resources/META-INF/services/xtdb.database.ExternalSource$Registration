@@ -1,1 +1,2 @@
 xtdb.debezium.DebeziumKafkaSource$Factory$Registration
+xtdb.debezium.DebeziumEngineSource$Factory$Registration

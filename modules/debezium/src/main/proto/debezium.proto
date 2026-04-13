@@ -23,3 +23,70 @@ message DebeziumOffsetToken {
     int64 latest_tx_id = 2;
     int64 latest_system_time_micros = 3;
 }
+
+message DebeziumEngineSourceConfig {
+    // Number of snapshot records bundled into one XTDB transaction during initial snapshot.
+    int32 snapshot_chunk_size = 1;
+
+    // Debezium offset flush interval in millis — controls how often we acknowledge position
+    // to the source.  Shorter = smaller replay window; longer = fewer round-trips.
+    int64 offset_flush_interval_ms = 2;
+
+    // Connector-specific config — everything that differs between Postgres / MySQL / etc.
+    oneof backend {
+        PostgresBackendConfig postgres = 3;
+    }
+}
+
+message PostgresBackendConfig {
+    string hostname = 1;
+    string user = 2;
+    string password = 3;
+
+    // Postgres database to connect to (maps to `database.dbname`).
+    string database = 4;
+
+    // Publication name — must exist on the source DB, and declares the tables that emit CDC.
+    // Created first; the replication slot is created against it.
+    string publication_name = 5;
+
+    // Logical replication slot name.  Our consumer's handle on the source WAL.
+    // Must be unique per XTDB database pulling from this source.
+    string slot_name = 6;
+
+    // Comma-separated list of fully-qualified table names to include, e.g. "public.orders,public.customers".
+    string table_include_list = 7;
+
+    int32 port = 8;
+}
+
+message DebeziumOffsetEntry {
+    // A single entry in Debezium's OffsetBackingStore map.
+    // Keys and values are opaque to us — Debezium writes whatever shape it uses internally
+    // (currently Kafka Connect JSON blobs).  We round-trip them verbatim.
+    bytes key = 1;
+    bytes value = 2;
+}
+
+message DebeziumEngineOffsetToken {
+    // Debezium's OffsetBackingStore state.  Fed back into our in-memory store on restart
+    // so the engine knows where to resume reading from the Postgres replication slot.
+    // MUST be present (can be empty repeated on first start) — if we hand Debezium an empty
+    // offset map with snapshot already done, it will interpret that as "no previous state"
+    // and trigger a fresh snapshot.
+    repeated DebeziumOffsetEntry debezium_offsets = 1;
+
+    // High-water mark for dedup: any streaming event whose source.lsn is <= this value
+    // has already been atomically applied to XTDB and must be dropped on replay.
+    // Our precise dedup guard — needed because Debezium's offset in this token may be
+    // slightly stale relative to the true last-committed XTDB state (flush interval window).
+    uint64 last_applied_lsn = 2;
+
+    // Our XTDB-side monotonic txId counter (same pattern as DebeziumKafkaSource).
+    // Source txIds wrap; we mint our own and persist the high-water mark.
+    int64 latest_tx_id = 3;
+
+    // Latest system_time (microseconds) we've stamped on an XTDB tx.
+    // Used to smooth past ts_ms collisions at the millisecond boundary.
+    int64 latest_system_time_micros = 4;
+}

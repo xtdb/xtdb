@@ -10,6 +10,7 @@ exposed = "0.61.0"
 google-cloud-storage = "2.60.0"
 guava = "33.4.7-jre"
 confluent = "7.8.0"
+debezium = "3.2.2.Final"
 kafka = "4.1.1"
 kotest = "6.1.11"
 kotlin = "2.3.0"
@@ -152,7 +153,13 @@ guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 # Kafka
 kafka-clients = { group = "org.apache.kafka", name = "kafka-clients", version.ref = "kafka" }
 kafka-connect-api = { group = "org.apache.kafka", name = "connect-api", version.ref = "kafka" }
+kafka-connect-runtime = { group = "org.apache.kafka", name = "connect-runtime", version.ref = "kafka" }
 kafka-avro-serializer = { group = "io.confluent", name = "kafka-avro-serializer", version.ref = "confluent" }
+
+# Debezium
+debezium-api = { group = "io.debezium", name = "debezium-api", version.ref = "debezium" }
+debezium-embedded = { group = "io.debezium", name = "debezium-embedded", version.ref = "debezium" }
+debezium-connector-postgres = { group = "io.debezium", name = "debezium-connector-postgres", version.ref = "debezium" }
 
 # Dev/test dependencies
 jovial = { group = "dev.clojurephant", name = "jovial", version = "0.4.3" }
