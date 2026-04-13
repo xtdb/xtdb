@@ -23,8 +23,9 @@ dependencies {
     api(libs.clojure.data.csv)
     api(libs.clojure.test.check)
 
-    runtimeOnly(libs.logback.classic)
-    runtimeOnly(libs.slf4j.jpl)
+    runtimeOnly(libs.log4j.core)
+    runtimeOnly(libs.log4j.jpl)
+    runtimeOnly(libs.log4j.slf4j2.impl)
 
     // bench
     api(libs.oshi.core)

@@ -8,9 +8,6 @@ plugins {
 
 dependencies {
     implementation(project(":xtdb-main"))
-
-    runtimeOnly(libs.logback.classic)
-    runtimeOnly(libs.slf4j.jpl)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))

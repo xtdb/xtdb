@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="text" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss} | %-5level %logger{36} | %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="xtdb" level="INFO"/>
+        <Logger name="org.apache.kafka" level="ERROR"/>
+        <Logger name="org.apache.zookeeper" level="ERROR"/>
+        <Logger name="kafka" level="ERROR"/>
+        <Logger name="org.apache.arrow" level="WARN"/>
+        <Logger name="org.eclipse.jetty" level="WARN"/>
+        <Logger name="reactor" level="ERROR"/>
+        <Root level="INFO">
+            <AppenderRef ref="text"/>
+        </Root>
+    </Loggers>
+</Configuration>

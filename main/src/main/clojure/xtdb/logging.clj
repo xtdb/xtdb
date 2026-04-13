@@ -1,18 +1,21 @@
 (ns xtdb.logging
-  (:require [clojure.string :as str])
-  (:import [ch.qos.logback.classic Level Logger]
-           org.slf4j.LoggerFactory))
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [clojure.tools.logging.impl :as log-impl])
+  (:import [org.apache.logging.log4j Level LogManager]
+           [org.apache.logging.log4j.core.config Configurator]))
+
+(alter-var-root #'log/*logger-factory* (constantly (log-impl/log4j2-factory)))
 
 (defn set-log-level! [ns level]
-  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
-             (when level
-               (Level/valueOf (name level)))))
+  (Configurator/setLevel (name ns) (when level
+                                     (Level/valueOf (str/upper-case (name level))))))
 
 (defn get-log-level! [ns]
-  (some->> (.getLevel ^Logger (LoggerFactory/getLogger (name ns)))
-           (str)
-           (.toLowerCase)
-           (keyword)))
+  (some-> (.getLevel (LogManager/getLogger (name ns)))
+          (str)
+          (str/lower-case)
+          (keyword)))
 
 (defn with-log-levels* [ns-level-pairs f]
   (let [nses (mapv first ns-level-pairs)

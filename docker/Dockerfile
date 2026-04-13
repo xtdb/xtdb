@@ -20,8 +20,8 @@ LABEL org.opencontainers.image.licenses="MPL-2.0"
 LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
-LABEL usage="Example docker-run options for custom logging configuration: \
---volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml'"
+LABEL usage="For custom logging: \
+--volume .:/config --env JDK_JAVA_OPTIONS='-Dlog4j2.configurationFile=/config/log4j2.xml'"
 
 # For healthcheck
 RUN apk add --no-cache wget gcompat

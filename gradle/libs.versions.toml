@@ -32,7 +32,7 @@ opentelemetry = "1.60.1"
 transit = "1.1.357"
 
 slf4j = "2.0.17"
-logback = "1.5.32"
+log4j = "2.25.4"
 
 [libraries]
 arrow-algorithm = { group = "org.apache.arrow", name = "arrow-algorithm", version.ref = "arrow" }
@@ -120,18 +120,21 @@ opentelemetry-exporter-otlp = { group = "io.opentelemetry", name = "opentelemetr
 opentelemetry-sdk = { group = "io.opentelemetry", name = "opentelemetry-sdk", version.ref = "opentelemetry" }
 
 
-# logging in XTDB:
-# XTDB has public dependencies on clojure.tools.logging, java.lang.System and SLF4J (API) - we could potentially remove the latter
-# we then have dependencies in our 'applications' (Docker images, test runs) on:
-#  - slf4j-jdk-platform-logging to bridge java.lang.System.Logger to SLF4J
-#  - logback-classic to provide an implementation for SLF4J
-#
-# Clojure -> SLF4J
-# java.lang.System.Logger -> SLF4J
-# SLF4J -> Logback
+# Logging in XTDB:
+# XTDB has public dependencies on clojure.tools.logging and SLF4J (API) - we could potentially remove the latter
+# Also on log4j-core for implementing `set-log-level!`
+# We then have dependencies in our 'applications' (Docker images, test runs) on Log4j2 as our logging backend:
+# clojure.tools.logging -> Log4j2 (via alter-var-root in xtdb.logging)
+# java.lang.System.Logger (Kotlin code) -> log4j-jpl -> Log4j2
+# SLF4J (some Kotlin code and libs) -> log4j-slf4j2-impl -> Log4j2
+# java.util.logging (libs) -> log4j-jul -> Log4j2
+# Apache Commons Logging (libs) -> log4j-jcl -> Log4j2
 slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }                    # use this when you refer to an SLF4J class
-slf4j-jpl = { group = "org.slf4j", name = "slf4j-jdk-platform-logging", version.ref = "slf4j" }   # use this in applications
-logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" } # use this in applications
+log4j-core = { group = "org.apache.logging.log4j", name = "log4j-core", version.ref = "log4j" }   # Log4j2 logging backend
+log4j-jpl = { group = "org.apache.logging.log4j", name = "log4j-jpl", version.ref = "log4j" }     # bridges java.lang.System.Logger to Log4j2
+log4j-jul = { group = "org.apache.logging.log4j", name = "log4j-jul", version.ref = "log4j" }     # bridges java.util.logging to Log4j2
+log4j-jcl = { group = "org.apache.logging.log4j", name = "log4j-jcl", version.ref = "log4j" }     # bridges Apache Commons Logging to Log4j2
+log4j-slf4j2-impl = { group = "org.apache.logging.log4j", name = "log4j-slf4j2-impl", version.ref = "log4j" }  # bridges SLF4J to Log4j2
 
 # AWS SDK
 aws-s3 = { group = "software.amazon.awssdk", name = "s3", version.ref = "aws-sdk" }
