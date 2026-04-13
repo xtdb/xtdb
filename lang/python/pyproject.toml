@@ -13,7 +13,7 @@ psycopg = {extras = ["binary"], version = "^3.2.10"}
 transit-python2 = "^0.8"
 
 [tool.poetry.group.test.dependencies]
-pytest = "^8.1.1"
+pytest = "^9.0.3"
 mypy = "^1.9.0"
 
 [tool.pytest_ini.options]
