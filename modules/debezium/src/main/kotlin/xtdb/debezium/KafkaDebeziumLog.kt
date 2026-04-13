@@ -188,14 +188,13 @@ class KafkaDebeziumLog @JvmOverloads constructor(
             @Suppress("UNCHECKED_CAST") (valueDeserializer() as Deserializer<Any>)
         ).use { c ->
             // TODO: use partition parameter for multi-partition support
-            val partitionOffsets = afterToken?.let { tok ->
-                val token = tok.unpack(DebeziumOffsetToken::class.java)
-                token.dbzmTopicOffsetsMap[topic]?.offsetsList
-                    ?.mapIndexedNotNull { p, offset ->
-                        if (offset >= 0) TopicPartition(topic, p) to offset else null
-                    }
-                    ?.takeIf { it.isNotEmpty() }
-            }
+            val token = afterToken?.unpack(DebeziumOffsetToken::class.java)
+
+            val partitionOffsets = token?.dbzmTopicOffsetsMap?.get(topic)?.offsetsList
+                ?.mapIndexedNotNull { p, offset ->
+                    if (offset >= 0) TopicPartition(topic, p) to offset else null
+                }
+                ?.takeIf { it.isNotEmpty() }
 
             if (partitionOffsets != null) {
                 c.assign(partitionOffsets.map { it.first })
@@ -206,12 +205,14 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 c.seekToBeginning(listOf(tp))
             }
 
+            var latestTxId = token?.latestTxId ?: -1L
+
             // Smoothed clock: ensures monotonically increasing system-time across batches.
             // Kafka timestamps are millisecond-precision — consecutive batches can share a timestamp,
             // which would give two transactions the same systemFrom and collapse valid-time history.
             // Mirrors the pattern in indexer.clj's indexTx (default-system-time).
             // TODO: likely superseded by #5445 which restructures the external log pipeline
-            var lastSystemTimeMicros = Long.MIN_VALUE
+            var lastSystemTimeMicros = token?.latestSystemTimeMicros ?: Long.MIN_VALUE
 
             while (currentCoroutineContext().isActive) {
                 val records = runInterruptible(Dispatchers.IO) {
@@ -230,14 +231,12 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                         latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
                     }
 
-                    var systemTimeMicros = latestTimestamp.asMicros
-                    if (systemTimeMicros <= lastSystemTimeMicros) {
-                        systemTimeMicros = lastSystemTimeMicros + 1
-                    }
+                    val systemTimeMicros = maxOf(latestTimestamp.asMicros, lastSystemTimeMicros + 1)
                     lastSystemTimeMicros = systemTimeMicros
 
                     val systemTime = InstantUtil.fromMicros(systemTimeMicros)
-                    val txKey = TransactionKey(maxOffset, systemTime)
+                    val txId = ++latestTxId
+                    val txKey = TransactionKey(txId, systemTime)
 
                     OpenTx(allocator, txKey).use { openTx ->
                         for (consumerRecord in records) {
@@ -249,6 +248,8 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                             dbzmTopicOffsets[topic] = partitionOffsets {
                                 offsets += listOf(maxOffset)
                             }
+                            this.latestTxId = txId
+                            this.latestSystemTimeMicros = systemTimeMicros
                         }, "xtdb.debezium")
 
                         openTx.addTxRow(dbName, openTx.txKey, null)

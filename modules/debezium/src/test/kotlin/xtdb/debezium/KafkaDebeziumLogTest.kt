@@ -18,7 +18,9 @@ import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
 import xtdb.indexer.OpenTx
+import xtdb.time.InstantUtil.asMicros
 import com.google.protobuf.Any as ProtoAny
+import java.time.Instant
 import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
@@ -72,6 +74,8 @@ class KafkaDebeziumLogTest {
     }
 
     data class CapturedTx(
+        val txId: Long,
+        val systemTime: Instant,
         val cdcRows: Int,
         val resumeToken: ExternalSourceToken?,
     )
@@ -81,6 +85,8 @@ class KafkaDebeziumLogTest {
 
         val handler = ExternalSource.TxHandler { openTx, resumeToken ->
             received.add(CapturedTx(
+                txId = openTx.txKey.txId,
+                systemTime = openTx.txKey.systemTime,
                 cdcRows = openTx.tables
                     .filter { (ref, _) -> ref.schemaName != "xt" }
                     .sumOf { (_, table) -> table.txRelation.rowCount },
@@ -95,6 +101,12 @@ class KafkaDebeziumLogTest {
         val debeziumToken = token.unpack(DebeziumOffsetToken::class.java)
         return debeziumToken.dbzmTopicOffsetsMap[topic]?.offsetsList?.firstOrNull()
     }
+
+    private fun resumeTokenTxId(token: ExternalSourceToken?): Long? =
+        token?.unpack(DebeziumOffsetToken::class.java)?.latestTxId
+
+    private fun resumeTokenSystemTimeMicros(token: ExternalSourceToken?): Long? =
+        token?.unpack(DebeziumOffsetToken::class.java)?.latestSystemTimeMicros
 
     @Test
     fun `subscription close cancels cleanly`() = runTest(timeout = 10.seconds) {
@@ -269,5 +281,114 @@ class KafkaDebeziumLogTest {
         log.use {
             assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
         }
+    }
+
+    @Test
+    fun `synthetic txId starts at 0 and is persisted in token`() = runTest(timeout = 10.seconds) {
+        val topic = "test-synthetic-txid"
+        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
+
+        val (handler, received) = capturingHandler()
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        log.use {
+            val job = launch { log.onPartitionAssigned(0, null, handler) }
+            try {
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            } finally {
+                job.cancelAndJoin()
+            }
+        }
+
+        assertEquals(0L, received[0].txId, "First tx should have synthetic txId=0")
+        assertEquals(0L, resumeTokenTxId(received[0].resumeToken))
+    }
+
+    @Test
+    fun `txId continues incrementing across restarts`() = runTest(timeout = 10.seconds) {
+        val topic = "test-txid-restart"
+        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
+
+        val (handler1, received1) = capturingHandler()
+        val log1 = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        log1.use {
+            val job = launch { log1.onPartitionAssigned(0, null, handler1) }
+            try {
+                while (received1.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            } finally {
+                job.cancelAndJoin()
+            }
+        }
+        assertEquals(0L, received1[0].txId)
+        val resumeToken = received1.last().resumeToken
+
+        produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
+
+        val (handler2, received2) = capturingHandler()
+        val log2 = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        log2.use {
+            val job = launch { log2.onPartitionAssigned(0, resumeToken, handler2) }
+            try {
+                while (received2.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            } finally {
+                job.cancelAndJoin()
+            }
+        }
+
+        assertEquals(1L, received2[0].txId, "Should continue from previous txId + 1")
+        assertEquals(1L, resumeTokenTxId(received2[0].resumeToken))
+    }
+
+    @Test
+    fun `system_time is persisted in token in micros`() = runTest(timeout = 10.seconds) {
+        val topic = "test-systime-persist"
+        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
+
+        val (handler, received) = capturingHandler()
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        log.use {
+            val job = launch { log.onPartitionAssigned(0, null, handler) }
+            try {
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            } finally {
+                job.cancelAndJoin()
+            }
+        }
+
+        val captured = received[0]
+        assertEquals(
+            captured.systemTime.asMicros,
+            resumeTokenSystemTimeMicros(captured.resumeToken),
+        )
+    }
+
+    @Test
+    fun `system_time smoothing resumes from token`() = runTest(timeout = 10.seconds) {
+        val topic = "test-systime-smooth-restart"
+        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
+
+        // Pretend a previous run committed a tx with system_time in year 3000.
+        // The smoothing should force the next tx's system_time past that, even
+        // though the Kafka record timestamp is present-day.
+        val futureMicros = Instant.parse("3000-01-01T00:00:00Z").asMicros
+        val afterToken = ProtoAny.pack(debeziumOffsetToken {
+            latestSystemTimeMicros = futureMicros
+        }, "xtdb.debezium")
+
+        val (handler, received) = capturingHandler()
+        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        log.use {
+            val job = launch { log.onPartitionAssigned(0, afterToken, handler) }
+            try {
+                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
+            } finally {
+                job.cancelAndJoin()
+            }
+        }
+
+        assertEquals(
+            futureMicros + 1,
+            received[0].systemTime.asMicros,
+            "Smoothing should bump system_time past the token's latestSystemTimeMicros",
+        )
     }
 }
