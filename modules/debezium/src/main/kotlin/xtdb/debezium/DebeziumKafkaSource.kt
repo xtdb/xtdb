@@ -1,34 +1,35 @@
 package xtdb.debezium
 
+import io.confluent.kafka.serializers.KafkaAvroDeserializer
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG
+import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.subclass
 import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
-import io.confluent.kafka.serializers.KafkaAvroDeserializer
-import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
+import xtdb.api.TransactionKey
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
-import xtdb.api.log.ensureTopicExists
 import xtdb.api.log.LogClusterAlias
+import xtdb.api.log.ensureTopicExists
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
-import xtdb.debezium.proto.DebeziumOffsetToken
-import xtdb.debezium.proto.KafkaDebeziumLogConfig
-import xtdb.debezium.proto.debeziumOffsetToken
-import xtdb.debezium.proto.kafkaDebeziumLogConfig
-import xtdb.debezium.proto.partitionOffsets
+import xtdb.database.proto.DatabaseConfig
+import xtdb.debezium.proto.*
+import xtdb.debezium.proto.DebeziumKafkaSourceConfig.MessageFormatCase
 import xtdb.error.Incorrect
 import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.OpenTx
-import xtdb.api.TransactionKey
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil
 import xtdb.time.InstantUtil.asMicros
@@ -39,26 +40,27 @@ import java.time.Duration
 import java.time.Instant
 import com.google.protobuf.Any as ProtoAny
 
-private val LOG = LoggerFactory.getLogger(KafkaDebeziumLog::class.java)
+private val LOG = LoggerFactory.getLogger(DebeziumKafkaSource::class.java)
 
 private fun parseValidTimeMicros(value: Any?, field: String): Long? = when (value) {
     null -> null
     is String -> try {
         Instant.parse(value).asMicros
-    } catch (e: DateTimeException) {
+    } catch (_: DateTimeException) {
         throw Incorrect("Invalid ISO-8601 timestamp for '$field': $value")
     }
+
     else -> throw Incorrect("'$field' must be a TIMESTAMPTZ string, got ${value::class.simpleName}")
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class KafkaDebeziumLog @JvmOverloads constructor(
+class DebeziumKafkaSource @JvmOverloads constructor(
     private val dbName: String,
     private val kafkaConfig: Map<String, String>,
     private val topic: String,
     private val messageFormat: MessageFormat,
     private val pollDuration: Duration = Duration.ofSeconds(1),
-) : DebeziumLog {
+) : ExternalSource {
 
     private val allocator = RootAllocator()
 
@@ -66,58 +68,82 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         override fun deserialize(topic: String?, data: ByteArray) = Unit
     }
 
-    @Serializable
-    @SerialName("!Kafka")
-    data class Factory(
-        val logCluster: LogClusterAlias, val tableTopic: String,
-    ) : DebeziumLog.Factory {
+    private val valueDeserializer: Deserializer<out Any> = when (messageFormat) {
+        MessageFormat.Json -> ByteArrayDeserializer()
+        MessageFormat.Avro -> KafkaAvroDeserializer().also { it.configure(kafkaConfig, false) }
+    }
 
-        override fun openLog(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>, messageFormat: MessageFormat): DebeziumLog {
+    /**
+     * Config for a Debezium source consuming CDC events from a Kafka topic.
+     *
+     * Debezium can also run embedded or via Debezium Server emitting to other sinks —
+     * those would be sibling `ExternalSource.Factory`s (e.g. `!DebeziumEngine`),
+     * not variants under `!DebeziumKafka`, since they'd share almost no implementation.
+     */
+    @Serializable
+    @SerialName("!DebeziumKafka")
+    data class Factory(
+        val logCluster: LogClusterAlias,
+        val tableTopic: String,
+        val messageFormat: MessageFormat,
+    ) : ExternalSource.Factory {
+
+        override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource {
             val cluster =
                 requireNotNull(clusters[logCluster] as? KafkaCluster) { "missing Kafka cluster: '${logCluster}'" }
 
-            if (messageFormat is MessageFormat.Avro) {
-                requireNotNull(cluster.schemaRegistryUrl) {
-                    "schemaRegistryUrl must be set on Kafka cluster '${logCluster}' when using Avro message format"
-                }
-            }
-
-            AdminClient.create(cluster.kafkaConfigMap).use { admin ->
-                admin.ensureTopicExists(tableTopic, autoCreate = false)
-            }
+            AdminClient.create(cluster.kafkaConfigMap).use { it.ensureTopicExists(tableTopic, autoCreate = false) }
 
             val kafkaConfig = when (messageFormat) {
                 is MessageFormat.Json -> cluster.kafkaConfigMap
-                is MessageFormat.Avro -> cluster.kafkaConfigMap.plus(
-                    mapOf(
-                        KafkaAvroDeserializerConfig.SCHEMA_REGISTRY_URL_CONFIG to cluster.schemaRegistryUrl!!,
-                        KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG to "false",
-                    )
+
+                is MessageFormat.Avro -> {
+                    val schemaRegUrl = requireNotNull(cluster.schemaRegistryUrl) {
+                        "schemaRegistryUrl must be set on Kafka cluster '${logCluster}' when using Avro message format"
+                    }
+
+                    cluster.kafkaConfigMap
+                        .plus(mapOf(SCHEMA_REGISTRY_URL_CONFIG to schemaRegUrl, SPECIFIC_AVRO_READER_CONFIG to "false"))
+                }
+            }
+
+            return DebeziumKafkaSource(dbName, kafkaConfig, tableTopic, messageFormat)
+        }
+
+        override fun writeTo(dbConfig: DatabaseConfig.Builder) {
+            dbConfig.externalSource = ProtoAny.pack(debeziumKafkaSourceConfig {
+                logCluster = this@Factory.logCluster
+                tableTopic = this@Factory.tableTopic
+                when (messageFormat) {
+                    MessageFormat.Json -> json = true
+                    MessageFormat.Avro -> avro = true
+                }
+            }, "proto.xtdb.com")
+        }
+
+        class Registration : ExternalSource.Registration {
+            override val protoTag: String get() = "proto.xtdb.com/xtdb.debezium.proto.DebeziumKafkaSourceConfig"
+
+            override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
+                val config = msg.unpack(DebeziumKafkaSourceConfig::class.java)
+
+                return Factory(
+                    logCluster = config.logCluster,
+                    tableTopic = config.tableTopic,
+
+                    messageFormat = when (config.messageFormatCase) {
+                        MessageFormatCase.AVRO -> MessageFormat.Avro
+                        MessageFormatCase.JSON -> MessageFormat.Json
+
+                        else -> error("unknown message format in DebeziumKafkaSourceConfig: ${config.messageFormatCase}")
+                    },
                 )
             }
 
-            return KafkaDebeziumLog(dbName, kafkaConfig, tableTopic, messageFormat)
+            override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
+                builder.subclass(Factory::class)
+            }
         }
-
-        fun toProto(): KafkaDebeziumLogConfig = kafkaDebeziumLogConfig {
-            this.logCluster = this@Factory.logCluster
-            this.tableTopic = this@Factory.tableTopic
-        }
-
-        companion object {
-            fun fromProto(proto: KafkaDebeziumLogConfig) =
-                Factory(
-                    logCluster = proto.logCluster,
-                    tableTopic = proto.tableTopic,
-                )
-        }
-    }
-
-    val epoch: Int get() = 0
-
-    private fun valueDeserializer(): Deserializer<*> = when (messageFormat) {
-        is MessageFormat.Json -> ByteArrayDeserializer()
-        is MessageFormat.Avro -> KafkaAvroDeserializer().also { it.configure(kafkaConfig, false) }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -146,9 +172,8 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                 val explicitValidFrom = parseValidTimeMicros(docMap.remove("_valid_from"), "_valid_from")
                 val explicitValidTo = parseValidTimeMicros(docMap.remove("_valid_to"), "_valid_to")
 
-                if (explicitValidTo != null && explicitValidFrom == null) {
+                if (explicitValidTo != null && explicitValidFrom == null)
                     throw Incorrect("'_valid_to' requires '_valid_from'")
-                }
 
                 openTxTable.logPut(
                     ByteBuffer.wrap(id.asIid),
@@ -175,8 +200,10 @@ class KafkaDebeziumLog @JvmOverloads constructor(
         }
     }
 
-    override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
-        KafkaConsumer<Unit, Any>(
+    override suspend fun onPartitionAssigned(
+        partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler
+    ) {
+        KafkaConsumer(
             kafkaConfig.plus(
                 mapOf(
                     ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG to "false",
@@ -184,8 +211,7 @@ class KafkaDebeziumLog @JvmOverloads constructor(
                     ConsumerConfig.ISOLATION_LEVEL_CONFIG to "read_committed",
                 )
             ),
-            UnitDeserializer,
-            @Suppress("UNCHECKED_CAST") (valueDeserializer() as Deserializer<Any>)
+            UnitDeserializer, valueDeserializer
         ).use { c ->
             // TODO: use partition parameter for multi-partition support
             val token = afterToken?.unpack(DebeziumOffsetToken::class.java)

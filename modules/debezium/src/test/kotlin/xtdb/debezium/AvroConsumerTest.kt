@@ -1,9 +1,9 @@
 package xtdb.debezium
 
+import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG
 import io.confluent.kafka.serializers.KafkaAvroSerializer
 import io.confluent.kafka.serializers.KafkaAvroSerializerConfig
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.apache.avro.SchemaBuilder
 import org.apache.avro.generic.GenericData
@@ -26,7 +26,7 @@ import org.testcontainers.lifecycle.Startables
 import xtdb.api.Xtdb
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.KafkaCluster
-import java.util.UUID
+import java.util.*
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -139,7 +139,7 @@ class AvroConsumerTest {
                 "bootstrap.servers" to kafka.bootstrapServers,
                 "key.serializer" to StringSerializer::class.java.name,
                 "value.serializer" to KafkaAvroSerializer::class.java.name,
-                KafkaAvroSerializerConfig.SCHEMA_REGISTRY_URL_CONFIG to schemaRegistryUrl(),
+                SCHEMA_REGISTRY_URL_CONFIG to schemaRegistryUrl(),
                 "acks" to "all",
             ),
         )
@@ -162,11 +162,10 @@ class AvroConsumerTest {
                     log: !Kafka
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}
-                    externalSource: !Debezium
+                    externalSource: !DebeziumKafka
+                      logCluster: kafka
+                      tableTopic: $debeziumTopic
                       messageFormat: !Avro {}
-                      log: !Kafka
-                        logCluster: kafka
-                        tableTopic: $debeziumTopic
                 $$""")
             }
         }
@@ -380,7 +379,7 @@ class AvroConsumerTest {
             attachAvroDebeziumDb(node, topic, dbName = "avro_no_id")
 
             assertThrows<IngestionStoppedException> {
-                runBlocking { database(node, "avro_no_id").watchers.awaitTx(Long.MAX_VALUE) }
+                database(node, "avro_no_id").watchers.awaitTx(Long.MAX_VALUE)
             }
 
             val rows = xtQueryDb(node, "avro_no_id",
@@ -437,7 +436,7 @@ class AvroConsumerTest {
 
             // Second record halts ingestion
             assertThrows<IngestionStoppedException> {
-                runBlocking { database(node, "avro_bad_vt").watchers.awaitTx(Long.MAX_VALUE) }
+                database(node, "avro_bad_vt").watchers.awaitTx(Long.MAX_VALUE)
             }
 
             val rows = xtQueryDb(node, "avro_bad_vt",

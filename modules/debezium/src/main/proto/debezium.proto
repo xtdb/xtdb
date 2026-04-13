@@ -4,20 +4,13 @@ package xtdb.debezium.proto;
 
 option java_multiple_files = true;
 
-message KafkaDebeziumLogConfig {
+message DebeziumKafkaSourceConfig {
     string log_cluster = 1;
     string table_topic = 2;
-    // deprecated, no longer using consumer groups — using assign instead
-    string group_id = 3;
-}
-
-message DebeziumSourceConfig {
-    oneof log {
-        KafkaDebeziumLogConfig kafka_log = 1;
-    }
 
     oneof message_format {
-        bool avro = 10;
+        bool json = 3;
+        bool avro = 4;
     }
 }
 

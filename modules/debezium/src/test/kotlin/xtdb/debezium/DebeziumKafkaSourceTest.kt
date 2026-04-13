@@ -25,7 +25,7 @@ import java.util.Collections
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
-class KafkaDebeziumLogTest {
+class DebeziumKafkaSourceTest {
 
     companion object {
         private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
@@ -114,7 +114,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val job = launch { log.onPartitionAssigned(0, null, handler) }
             while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
@@ -133,7 +133,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
 
         val job = launch { log.onPartitionAssigned(0, null, handler) }
         while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
@@ -155,7 +155,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice"), null))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
@@ -187,7 +187,7 @@ class KafkaDebeziumLogTest {
         }, "xtdb.debezium")
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val tailJob = launch { log.onPartitionAssigned(0, afterToken, handler) }
             try {
@@ -215,7 +215,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
@@ -242,7 +242,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
             try {
@@ -262,7 +262,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf("not json at all"))
 
         val (handler, _) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
         }
@@ -277,7 +277,7 @@ class KafkaDebeziumLogTest {
         ))
 
         val (handler, _) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
         }
@@ -289,7 +289,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val job = launch { log.onPartitionAssigned(0, null, handler) }
             try {
@@ -309,7 +309,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (handler1, received1) = capturingHandler()
-        val log1 = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log1 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log1.use {
             val job = launch { log1.onPartitionAssigned(0, null, handler1) }
             try {
@@ -324,7 +324,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
 
         val (handler2, received2) = capturingHandler()
-        val log2 = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log2 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log2.use {
             val job = launch { log2.onPartitionAssigned(0, resumeToken, handler2) }
             try {
@@ -344,7 +344,7 @@ class KafkaDebeziumLogTest {
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val job = launch { log.onPartitionAssigned(0, null, handler) }
             try {
@@ -375,7 +375,7 @@ class KafkaDebeziumLogTest {
         }, "xtdb.debezium")
 
         val (handler, received) = capturingHandler()
-        val log = KafkaDebeziumLog("testdb", kafkaConfig(), topic, MessageFormat.Json)
+        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
             val job = launch { log.onPartitionAssigned(0, afterToken, handler) }
             try {

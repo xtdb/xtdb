@@ -68,9 +68,10 @@ services:
   #   and ATTACH DATABASE in XTDB:
   #     ATTACH DATABASE cdc WITH $$
   #       log: !Kafka { cluster: kafka, topic: cdc-replica }
-  #       externalSource: !Debezium
+  #       externalSource: !DebeziumKafka
+  #         logCluster: kafka
+  #         tableTopic: testdb.public.<table>
   #         messageFormat: !Avro {}
-  #         log: !Kafka { logCluster: kafka, tableTopic: testdb.public.<table> }
   #     $$
 
   cdc-postgres:
