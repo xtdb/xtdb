@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.fail
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
+import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
@@ -39,6 +40,18 @@ class DebeziumIntegrationTest {
     private val connectorName = "test-connector-${UUID.randomUUID()}"
 
     companion object {
+        // Confluent Connect image with Debezium PostgreSQL connector added.
+        // Built once and cached by Docker for subsequent runs.
+        // Used here (rather than debezium/connect) so the same container can handle both
+        // JSON and Avro converters — the Debezium image doesn't ship with the Confluent Avro converter.
+        private val connectImage = ImageFromDockerfile()
+            .withDockerfileFromBuilder { builder ->
+                builder
+                    .from("confluentinc/cp-kafka-connect:7.8.0")
+                    .run("mkdir -p /usr/share/confluent-hub-components/debezium-postgresql && cd /usr/share/confluent-hub-components/debezium-postgresql && curl -sL 'https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.0.2.Final/debezium-connector-postgres-3.0.2.Final-plugin.tar.gz' | tar xz")
+                    .build()
+            }
+
         private val network: Network = Network.newNetwork()
 
         private val postgres = PostgreSQLContainer("postgres:17-alpine")
@@ -54,27 +67,50 @@ class DebeziumIntegrationTest {
             .withNetworkAliases("kafka")
             .withListener("kafka:19092")
 
-        private val debeziumConnect = GenericContainer("quay.io/debezium/connect:3.0")
+        private val schemaRegistry = GenericContainer("confluentinc/cp-schema-registry:7.8.0")
+            .withNetwork(network)
+            .withNetworkAliases("schema-registry")
+            .withExposedPorts(8081)
+            .withEnv("SCHEMA_REGISTRY_HOST_NAME", "schema-registry")
+            .withEnv("SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS", "kafka:19092")
+            .withEnv("SCHEMA_REGISTRY_LISTENERS", "http://0.0.0.0:8081")
+            .waitingFor(Wait.forHttp("/subjects").forPort(8081).forStatusCode(200))
+            .dependsOn(kafka)
+
+        private val debeziumConnect = GenericContainer(connectImage)
             .withNetwork(network)
             .withExposedPorts(8083)
-            .withEnv("BOOTSTRAP_SERVERS", "kafka:19092")
-            .withEnv("GROUP_ID", "debezium-connect")
-            .withEnv("CONFIG_STORAGE_TOPIC", "debezium_configs")
-            .withEnv("OFFSET_STORAGE_TOPIC", "debezium_offsets")
-            .withEnv("STATUS_STORAGE_TOPIC", "debezium_statuses")
+            .withEnv("CONNECT_BOOTSTRAP_SERVERS", "kafka:19092")
+            .withEnv("CONNECT_REST_PORT", "8083")
+            .withEnv("CONNECT_GROUP_ID", "debezium-connect")
+            .withEnv("CONNECT_CONFIG_STORAGE_TOPIC", "debezium_configs")
+            .withEnv("CONNECT_OFFSET_STORAGE_TOPIC", "debezium_offsets")
+            .withEnv("CONNECT_STATUS_STORAGE_TOPIC", "debezium_statuses")
+            .withEnv("CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR", "1")
+            .withEnv("CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR", "1")
+            .withEnv("CONNECT_STATUS_STORAGE_REPLICATION_FACTOR", "1")
+            // Worker defaults — JSON for both converters. Avro tests override via extraConfig.
+            .withEnv("CONNECT_KEY_CONVERTER", "org.apache.kafka.connect.json.JsonConverter")
+            .withEnv("CONNECT_VALUE_CONVERTER", "org.apache.kafka.connect.json.JsonConverter")
+            .withEnv("CONNECT_REST_ADVERTISED_HOST_NAME", "debezium-connect")
+            .withEnv("CONNECT_PLUGIN_PATH", "/usr/share/java,/usr/share/confluent-hub-components")
+            // Internal converter for config/offset/status topics
+            .withEnv("CONNECT_INTERNAL_KEY_CONVERTER", "org.apache.kafka.connect.json.JsonConverter")
+            .withEnv("CONNECT_INTERNAL_VALUE_CONVERTER", "org.apache.kafka.connect.json.JsonConverter")
             .waitingFor(Wait.forHttp("/connectors").forPort(8083).forStatusCode(200))
-            .dependsOn(kafka)
+            .dependsOn(kafka, schemaRegistry)
 
         @JvmStatic
         @BeforeAll
         fun beforeAll() {
-            Startables.deepStart(postgres, kafka, debeziumConnect).join()
+            Startables.deepStart(postgres, kafka, schemaRegistry, debeziumConnect).join()
         }
 
         @JvmStatic
         @AfterAll
         fun afterAll() {
             debeziumConnect.stop()
+            schemaRegistry.stop()
             kafka.stop()
             postgres.stop()
             network.close()
@@ -108,6 +144,9 @@ class DebeziumIntegrationTest {
     }
 
     private fun kafkaConfig() = mapOf("bootstrap.servers" to kafka.bootstrapServers)
+
+    private fun schemaRegistryUrl() =
+        "http://${schemaRegistry.host}:${schemaRegistry.getMappedPort(8081)}"
 
     private fun connectUrl() =
         "http://${debeziumConnect.host}:${debeziumConnect.getMappedPort(8083)}"
@@ -193,7 +232,10 @@ class DebeziumIntegrationTest {
         kafkaProperties: Map<String, String> = emptyMap(),
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
-        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers).propertiesMap(kafkaProperties))
+        // schemaRegistryUrl is read only when the external source uses Avro; safe to set unconditionally.
+        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers)
+            .schemaRegistryUrl(schemaRegistryUrl())
+            .propertiesMap(kafkaProperties))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
@@ -210,6 +252,7 @@ class DebeziumIntegrationTest {
         debeziumTopic: String,
         dbName: String = "cdc",
         storagePath: java.nio.file.Path? = null,
+        messageFormat: String = "!Json {}",
     ) {
         val storageYaml = if (storagePath != null) """
                     storage: !Local
@@ -221,7 +264,7 @@ class DebeziumIntegrationTest {
                       cluster: kafka
                       topic: test-replica-${UUID.randomUUID()}$storageYaml
                     externalSource: !Debezium
-                      messageFormat: !Json {}
+                      messageFormat: $messageFormat
                       log: !Kafka
                         logCluster: kafka
                         tableTopic: $debeziumTopic
@@ -858,6 +901,53 @@ class DebeziumIntegrationTest {
             assertEquals(2, rows.size)
             assertEquals("Alice", rows[0]["name"])
             assertEquals("Bob", rows[1]["name"])
+        }
+    }
+
+    @Test
+    fun `Avro CDC from Debezium Connect ingested into XTDB`() = runTest(timeout = 120.seconds) {
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS cdc_avro (_id INT PRIMARY KEY, name TEXT, email TEXT)",
+            "INSERT INTO cdc_avro (_id, name, email) VALUES (1, 'Alice', 'alice@example.com')",
+        )
+
+        registerConnectorAndAwait(
+            extraConfig = mapOf(
+                "key.converter" to "org.apache.kafka.connect.storage.StringConverter",
+                "value.converter" to "io.confluent.connect.avro.AvroConverter",
+                "value.converter.schema.registry.url" to "http://schema-registry:8081",
+            ),
+            awaitTopics = listOf("testdb.public.cdc_avro"),
+        )
+
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        openNodeOnSourceTopic(sourceTopic).use { node ->
+            attachDebeziumDb(node, "testdb.public.cdc_avro", messageFormat = "!Avro {}")
+
+            // Phase 1: snapshot
+            awaitTxs(node, 1, db = "cdc")
+            val snapshotRows = xtQueryDb(node, "cdc",
+                "SELECT _id, email FROM public.cdc_avro ORDER BY _id"
+            )
+            assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
+            assertEquals("alice@example.com", snapshotRows[0]["email"])
+
+            // Phase 2: streaming events
+            pgExecute(
+                "INSERT INTO cdc_avro (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+                "UPDATE cdc_avro SET email = 'alice-new@example.com' WHERE _id = 1",
+                "DELETE FROM cdc_avro WHERE _id = 2",
+            )
+
+            awaitCondition("Alice updated") {
+                xtQueryDb(node, "cdc", "SELECT email FROM public.cdc_avro WHERE _id = 1")
+                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            }
+
+            val bob = xtQueryDb(node, "cdc",
+                "SELECT _id FROM public.cdc_avro WHERE _id = 2"
+            )
+            assertEquals(0, bob.size, "Bob should be deleted")
         }
     }
 }
