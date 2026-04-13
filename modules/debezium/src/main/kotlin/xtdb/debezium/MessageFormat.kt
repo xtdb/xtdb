@@ -2,7 +2,6 @@ package xtdb.debezium
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.*
 import org.apache.avro.generic.GenericArray
 import org.apache.avro.generic.GenericEnumSymbol
 import org.apache.avro.generic.GenericFixed
@@ -10,14 +9,6 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.avro.util.Utf8
 import xtdb.error.Incorrect
 import java.nio.ByteBuffer
-
-private fun jsonToJvmValue(el: Any?): Any? = when (el) {
-    null, is JsonNull -> null
-    is JsonPrimitive -> if (el.isString) el.content else el.booleanOrNull ?: el.longOrNull ?: el.doubleOrNull ?: el.content
-    is JsonArray -> el.map { jsonToJvmValue(it) }
-    is JsonObject -> el.entries.associate { (k, v) -> k to jsonToJvmValue(v) }
-    else -> el
-}
 
 private fun avroToJvmValue(value: Any?): Any? = when (value) {
     null -> null
@@ -50,19 +41,7 @@ sealed interface MessageFormat {
         override fun decode(value: Any): Map<String, Any?> {
             val bytes = value as? ByteArray
                 ?: throw Incorrect("Expected ByteArray for JSON message format, got ${value::class.simpleName}")
-
-            val payload = try {
-                val envelope = kotlinx.serialization.json.Json
-                    .parseToJsonElement(String(bytes, Charsets.UTF_8))
-                    .jsonObject
-
-                // Auto-detect JsonConverter envelope (schemas.enable=true wraps in {schema, payload}).
-                envelope["payload"]?.jsonObject ?: envelope
-            } catch (e: RuntimeException) {
-                throw Incorrect("Invalid CDC message: ${e.message}", cause = e)
-            }
-
-            return payload.entries.associate { (k, v) -> k to jsonToJvmValue(v) }
+            return parseCdcEnvelope(String(bytes, Charsets.UTF_8))
         }
     }
 

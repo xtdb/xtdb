@@ -30,28 +30,13 @@ import xtdb.debezium.proto.DebeziumKafkaSourceConfig.MessageFormatCase
 import xtdb.error.Incorrect
 import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.OpenTx
-import xtdb.table.TableRef
 import xtdb.time.InstantUtil
 import xtdb.time.InstantUtil.asMicros
-import xtdb.util.asIid
-import java.nio.ByteBuffer
-import java.time.DateTimeException
 import java.time.Duration
 import java.time.Instant
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = LoggerFactory.getLogger(DebeziumKafkaSource::class.java)
-
-private fun parseValidTimeMicros(value: Any?, field: String): Long? = when (value) {
-    null -> null
-    is String -> try {
-        Instant.parse(value).asMicros
-    } catch (_: DateTimeException) {
-        throw Incorrect("Invalid ISO-8601 timestamp for '$field': $value")
-    }
-
-    else -> throw Incorrect("'$field' must be a TIMESTAMPTZ string, got ${value::class.simpleName}")
-}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DebeziumKafkaSource @JvmOverloads constructor(
@@ -143,60 +128,6 @@ class DebeziumKafkaSource @JvmOverloads constructor(
             override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
                 builder.subclass(Factory::class)
             }
-        }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun writeCdcPayload(payload: Map<String, Any?>, dbName: String, openTx: OpenTx) {
-        val op = payload["op"] as? String
-            ?: throw Incorrect("Missing 'op' in payload")
-
-        val source = payload["source"] as? Map<String, Any?>
-            ?: throw Incorrect("Missing 'source' in payload")
-        val schema = source["schema"] as? String
-            ?: throw Incorrect("Missing 'source.schema' in payload")
-        val table = source["table"] as? String
-            ?: throw Incorrect("Missing 'source.table' in payload")
-
-        val openTxTable = openTx.table(TableRef(dbName, schema, table))
-
-        when (op) {
-            "c", "r", "u" -> {
-                val after = payload["after"] as? Map<String, Any?>
-                    ?: throw Incorrect("Missing 'after' for put op")
-
-                val docMap = after.toMutableMap()
-
-                val id = docMap["_id"] ?: throw Incorrect("Missing '_id' in document")
-
-                val explicitValidFrom = parseValidTimeMicros(docMap.remove("_valid_from"), "_valid_from")
-                val explicitValidTo = parseValidTimeMicros(docMap.remove("_valid_to"), "_valid_to")
-
-                if (explicitValidTo != null && explicitValidFrom == null)
-                    throw Incorrect("'_valid_to' requires '_valid_from'")
-
-                openTxTable.logPut(
-                    ByteBuffer.wrap(id.asIid),
-                    explicitValidFrom ?: openTx.systemFrom,
-                    explicitValidTo ?: Long.MAX_VALUE,
-                ) { openTxTable.docWriter.writeObject(docMap) }
-            }
-
-            "d" -> {
-                val before = payload["before"]?.let { it as? Map<String, Any?> }
-                    ?: throw Incorrect("Missing 'before' for delete — check REPLICA IDENTITY on source table")
-
-                val id = before["_id"]
-                    ?: throw Incorrect("Missing '_id' in 'before' for delete")
-
-                openTxTable.logDelete(
-                    ByteBuffer.wrap(id.asIid),
-                    openTx.systemFrom,
-                    Long.MAX_VALUE,
-                )
-            }
-
-            else -> throw Incorrect("Unknown CDC op: '$op'")
         }
     }
 
