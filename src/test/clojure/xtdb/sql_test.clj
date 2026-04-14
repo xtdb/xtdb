@@ -1017,6 +1017,23 @@
     (t/is (thrown-with-msg? Exception #"Subqueries are not allowed in this context"
              (xt/q tu/*node* "SELECT x + 1 AS y FROM t ORDER BY (SELECT 1)")))))
 
+(t/deftest test-scalar-subquery-with-expressions
+  (t/testing "non-correlated"
+    (t/is (= [{:v -1}]
+             (xt/q tu/*node* "SELECT (SELECT -1) AS v"))))
+
+  (xt/submit-tx tu/*node* [[:put-docs :t {:xt/id 1 :x 10}]
+                           [:put-docs :t {:xt/id 2 :x 20}]
+                           [:put-docs :t {:xt/id 3 :x 30}]])
+
+  (t/testing "correlated with negation"
+    (t/is (= [{:x 10, :neg -10} {:x 20, :neg -20} {:x 30, :neg -30}]
+             (xt/q tu/*node* "SELECT x, (SELECT -t.x) AS neg FROM t ORDER BY x"))))
+
+  (t/testing "nested"
+    (t/is (= [{:y -10} {:y -20} {:y -30}]
+             (xt/q tu/*node* "SELECT (SELECT (SELECT -t.x)) AS y FROM t ORDER BY x")))))
+
 (t/deftest test-ordered-set-aggregates
   (t/is (=plan-file
          "test-percentile-cont"
