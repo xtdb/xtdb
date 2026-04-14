@@ -361,7 +361,7 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz await-token tracer query-text]
+            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz tracer query-text]
                            :or {default-tz default-tz}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
@@ -404,8 +404,7 @@
 
                                                                         (default-basis snaps))
                                                               snapshot-time (basis/cap-basis (time/->instant snapshot-time)))
-                                                            (basis/->time-basis-str))
-                              expr/*await-token* await-token]
+                                                            (basis/->time-basis-str))]
 
                       (if (:explain? planned-query)
                         (let [explain-plan (->explain-plan emitted-query)]
