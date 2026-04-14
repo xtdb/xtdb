@@ -13,6 +13,7 @@ import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.warn
 
 private val LOG = LogProcessor::class.logger
 
@@ -68,6 +69,7 @@ class LogProcessor(
 
     interface LeaderSystem : SubSystem {
         val proc: LeaderProcessor
+        fun isProducerFenced(e: Throwable): Boolean = false
     }
 
     private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
@@ -120,7 +122,8 @@ class LogProcessor(
             is FollowerSystem -> {
                 LOG.info("[$dbName] partitions assigned: $partitions — transitioning to leader")
 
-                replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
+                val replicaProducer = replicaLog.openAtomicProducer("${dbState.name}-leader")
+                try {
                     val followerProc = oldSys.proc
 
                     // Send a NoOp to get a known msgId we can await —
@@ -152,12 +155,25 @@ class LogProcessor(
                             val latestSourceMsgId = transition.latestSourceMsgId
                             LOG.debug("[$dbName] transition: opening leader processor")
 
-                            val sys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
-                            this.sys = sys
+                            val leaderSys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
+                            this.sys = leaderSys
 
                             LOG.info("[$dbName] leader startup complete, resuming after $latestSourceMsgId")
-                            Log.TailSpec(latestSourceMsgId, sys.proc)
+                            Log.TailSpec(latestSourceMsgId, FencingAwareProcessor(leaderSys))
                         }
+                } catch (e: Throwable) {
+                    replicaProducer.close()
+                    if (replicaProducer.isProducerFenced(e)) {
+                        LOG.warn("[$dbName] fenced during leader transition — reverting to follower")
+                        val followerProc = oldSys.proc
+                        this.sys = openFollowerSystem(
+                            followerProc.latestSourceMsgId,
+                            followerProc.latestReplicaMsgId,
+                            followerProc.pendingBlock
+                        )
+                        return null
+                    }
+                    throw e
                 }
             }
         }
@@ -178,6 +194,22 @@ class LogProcessor(
 
             is FollowerSystem -> {
                 LOG.debug("[$dbName] partitions revoked: $partitions — already follower, no transition needed")
+            }
+        }
+    }
+
+    private inner class FencingAwareProcessor(
+        private val leaderSys: LeaderSystem
+    ) : Log.RecordProcessor<SourceMessage> {
+        override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+            try {
+                leaderSys.proc.processRecords(records)
+            } catch (e: Throwable) {
+                if (leaderSys.isProducerFenced(e)) {
+                    LOG.warn("[$dbName] producer fenced — stepping down")
+                    throw StepDownException(e)
+                }
+                throw e
             }
         }
     }

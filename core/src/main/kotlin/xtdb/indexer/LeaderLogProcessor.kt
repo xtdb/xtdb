@@ -305,6 +305,10 @@ class LeaderLogProcessor(
             } catch (e: Interrupted) {
                 throw e
             } catch (e: Throwable) {
+                if (replicaProducer.isProducerFenced(e)) {
+                    LOG.warn("[$dbName] leader: producer fenced while processing msgId $msgId — stepping down")
+                    throw e
+                }
                 LOG.error(
                     e,
                     "[$dbName] leader: failed to process log record with msgId $msgId (${record.message::class.simpleName})"

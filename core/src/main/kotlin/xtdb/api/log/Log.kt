@@ -139,6 +139,12 @@ interface Log<M> : AutoCloseable {
     interface AtomicProducer<M> : AutoCloseable {
         fun openTx(): Tx<M>
 
+        /**
+         * Returns true if the given exception (or any in its cause chain) indicates
+         * that this producer has been fenced by a newer producer with the same transactional.id.
+         */
+        fun isProducerFenced(e: Throwable): Boolean = false
+
         interface Tx<M> : AutoCloseable {
             fun appendMessage(message: M): CompletableDeferred<MessageMetadata>
             fun commit()

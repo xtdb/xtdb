@@ -22,9 +22,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.InterruptException
-import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
-import org.apache.kafka.common.errors.WakeupException
+import org.apache.kafka.common.errors.*
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
@@ -176,6 +174,17 @@ class KafkaCluster(
         }
 
         companion object {
+            fun isKafkaProducerFenced(e: Throwable): Boolean {
+                var current: Throwable? = e
+                while (current != null) {
+                    if (current is ProducerFencedException ||
+                        current is InvalidProducerEpochException ||
+                        current is OutOfOrderSequenceException) return true
+                    current = current.cause
+                }
+                return false
+            }
+
             inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
                 openTx().use { tx ->
                     try {
@@ -281,6 +290,8 @@ class KafkaCluster(
                 UnitSerializer,
                 ByteArraySerializer()
             ).also { it.initTransactions() }
+
+            override fun isProducerFenced(e: Throwable) = AtomicProducer.isKafkaProducerFenced(e)
 
             override fun openTx(): AtomicProducer.Tx<M> {
                 producer.beginTransaction()
@@ -402,7 +413,13 @@ class KafkaCluster(
 
                 while (isActive) {
                     val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
-                    if (records.isNotEmpty()) currentProcessor?.processRecords(records)
+                    if (records.isNotEmpty()) {
+                        try {
+                            currentProcessor?.processRecords(records)
+                        } catch (_: StepDownException) {
+                            currentProcessor = null
+                        }
+                    }
                 }
             } finally {
                 c.close()

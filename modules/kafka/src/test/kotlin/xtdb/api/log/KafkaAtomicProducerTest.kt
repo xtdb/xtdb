@@ -2,9 +2,7 @@ package xtdb.api.log
 
 import io.mockk.coEvery
 import io.mockk.mockk
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -15,8 +13,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.Assertions.assertArrayEquals
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -297,5 +294,34 @@ class KafkaAtomicProducerTest {
             val records = c2.poll(Duration.ofSeconds(2))
             assertEquals(0, records.count(), "No records should be re-delivered — offsets were committed")
         }
+    }
+
+    @Test
+    fun `second producer with same transactional id fences the first`() = runTest(timeout = 60.seconds) {
+        val topicName = "test-topic-${UUID.randomUUID()}"
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topicName)
+                    .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
+                        val producer1 = log.openAtomicProducer("same-tx-id")
+
+                        // Commit succeeds before fencing
+                        producer1.withTx { tx -> tx.appendMessage(txMessage(1)) }
+
+                        // Second producer with the same transactional.id fences producer1
+                        val producer2 = log.openAtomicProducer("same-tx-id")
+
+                        // producer1 is now fenced — next commit should throw
+                        val e = assertThrows(Exception::class.java) {
+                            producer1.withTx { tx -> tx.appendMessage(txMessage(2)) }
+                        }
+                        assertTrue(producer1.isProducerFenced(e), "Should be recognized as a fencing exception")
+
+                        producer1.close()
+                        producer2.close()
+                    }
+            }
     }
 }

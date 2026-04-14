@@ -228,12 +228,14 @@ class Database(
                                 val demux = ExternalSource.Demux(leaderProc, extSource, 0, afterToken, txHandler)
                                 object : LogProcessor.LeaderSystem {
                                     override val proc get() = demux
-                                    override fun close() { demux.close(); extSource.close(); leaderProc.close() }
+                                    override fun isProducerFenced(e: Throwable) = replicaProducer.isProducerFenced(e)
+                                    override fun close() { demux.close(); extSource.close(); leaderProc.close(); replicaProducer.close() }
                                 }
                             } else {
                                 object : LogProcessor.LeaderSystem {
                                     override val proc get() = leaderProc
-                                    override fun close() = leaderProc.close()
+                                    override fun isProducerFenced(e: Throwable) = replicaProducer.isProducerFenced(e)
+                                    override fun close() { leaderProc.close(); replicaProducer.close() }
                                 }
                             }
                         }

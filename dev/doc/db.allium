@@ -396,6 +396,24 @@ config {
 -- after a transition. This is safe because:
 --   - FlushBlock is a CAS on expected_block_idx; stale flushes fail the check.
 --   - TriesAdded is idempotent; addTries tolerates duplicates.
+--
+-- == Fencing Recovery ==
+--
+-- If the leader's transactional producer is fenced during normal operation
+-- (ProducerFencedException, InvalidProducerEpochException, or
+-- OutOfOrderSequenceException), the processor throws StepDownException.
+-- The subscription loop catches this and nulls out the processor,
+-- then continues polling. The in-progress rebalance fires
+-- onPartitionsRevoked on the next poll, which triggers the normal
+-- TransitionToFollower path.
+--
+-- The replica log remains consistent because the fenced transaction was
+-- never committed — Kafka rejected it. The new leader will re-process
+-- any source records that the fenced leader failed to commit.
+--
+-- If fencing occurs during leader transition (onPartitionsAssigned),
+-- the transition is aborted and the node remains as follower.
+-- The old follower's watermarks are used to open a new follower system.
 
 -- == Transition Safety ==
 --
@@ -517,6 +535,26 @@ rule TransitionToFollower {
             from_replica: leader.latest_replica_msg_id,
             pending_block: leader.pending_block
         )
+}
+
+rule ProducerFenced {
+    -- The leader's transactional producer has been fenced by a newer producer.
+    -- This happens when another node has been assigned the partition and opened
+    -- its own producer during a consumer group rebalance, or when a transaction
+    -- times out on the broker.
+    -- See: indexer/LogProcessor.kt (FencingAwareProcessor), api/log/StepDownException.kt
+    when: ProducerFencedException during leader processRecords
+    requires: log_processor.mode is Leader
+
+    ensures:
+        -- FencingAwareProcessor catches the exception and throws StepDownException.
+        -- The subscription loop catches StepDownException and nulls out the processor.
+        -- The in-progress rebalance fires onPartitionsRevoked on the next poll,
+        -- which triggers the normal TransitionToFollower path.
+        -- Watchers are NOT notified of the error (this is a graceful recovery).
+        -- The fenced transaction was never committed to the replica log.
+        -- The new leader will re-process the source records.
+        throw StepDownException
 }
 
 ---- Rules: Transaction Submission
