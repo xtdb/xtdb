@@ -104,7 +104,8 @@ get_var() {
 ANOMALY_BASELINE_N=$(get_var "anomaly_baseline_n" "30")
 ANOMALY_BASELINE_N_TIMES_20=$((ANOMALY_BASELINE_N * 20))
 ANOMALY_SIGMA=$(get_var "anomaly_sigma" "2")
-ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD=$(get_var "anomaly_new_normal_relative_threshold" "0.05")
+ANOMALY_CONFIRM_WINDOW=$(get_var "anomaly_confirm_window" "3")
+ANOMALY_CONFIRM_THRESHOLD=$(get_var "anomaly_confirm_threshold" "2")
 ANOMALY_REPO=$(get_var "anomaly_repo" "xtdb/xtdb")
 ANOMALY_BRANCH=$(get_var "anomaly_branch" "main")
 TPCH_ANOMALY_SCALE_FACTOR=$(get_var "tpch_anomaly_scale_factor" "1.0")
@@ -323,7 +324,8 @@ render_query() {
     sed "s/\${var.anomaly_baseline_n \* 20}/${ANOMALY_BASELINE_N_TIMES_20}/g" | \
     sed "s/\${var.tpch_anomaly_scale_factor}/${TPCH_ANOMALY_SCALE_FACTOR}/g" | \
     sed "s/\${var.anomaly_sigma}/${ANOMALY_SIGMA}/g" | \
-    sed "s/\${var.anomaly_new_normal_relative_threshold}/${ANOMALY_NEW_NORMAL_RELATIVE_THRESHOLD}/g" | \
+    sed "s/\${var.anomaly_confirm_window}/${ANOMALY_CONFIRM_WINDOW}/g" | \
+    sed "s/\${var.anomaly_confirm_threshold}/${ANOMALY_CONFIRM_THRESHOLD}/g" | \
     sed "s/\${var.anomaly_repo}/${ANOMALY_REPO//\//\\/}/g" | \
     sed "s/\${var.anomaly_branch}/${ANOMALY_BRANCH}/g" | \
     sed "s/\${var.${PARAM_VAR}}/${PARAM_VALUE}/g" | \

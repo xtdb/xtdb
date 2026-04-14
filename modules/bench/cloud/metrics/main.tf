@@ -464,6 +464,8 @@ resource "azapi_resource" "bench_anomaly" {
                 "timespan" = var.anomaly_timespan
                 "query"    = <<-KQL
                   let N = toint(${var.anomaly_baseline_n});
+                  let CW = toint(${var.anomaly_confirm_window});
+                  let CT = toint(${var.anomaly_confirm_threshold});
                   let benchmarkLogs =
                       ContainerLog
                       | where LogEntry startswith "{" and LogEntry has "benchmark"
@@ -474,34 +476,72 @@ resource "azapi_resource" "bench_anomaly" {
                                run_id = coalesce(tostring(log['github-run-id']), "n/a"),
                                ${local.param_filter_expr[each.key]}
                       | summarize TimeGenerated = max(TimeGenerated), metric_value = avg(metric_value) by run_id;
-                  let latestBenchmark =
-                      benchmarkLogs
-                      | summarize arg_max(TimeGenerated, *)
-                      | extend current_value = todouble(metric_value), k = 1;
-                  let previousBenchmark =
-                      benchmarkLogs
-                      | where TimeGenerated < toscalar(latestBenchmark | project TimeGenerated)
-                      | top 1 by TimeGenerated desc
-                      | project prev_value = todouble(metric_value), k = 1;
-                  let prevN =
+                  let latestRuns =
                       benchmarkLogs
                       | order by TimeGenerated desc
-                      | top N+1 by TimeGenerated desc
-                      | top N by TimeGenerated asc
-                      | project metric_value = todouble(metric_value), TimeGenerated;
-                  let baseline = prevN | summarize baseline_mean = avg(metric_value), baseline_std = stdev(metric_value) | extend k = 1;
+                      | top CW by TimeGenerated desc;
+                  let latestTime = toscalar(latestRuns | summarize min(TimeGenerated));
+                  let baseline =
+                      benchmarkLogs
+                      | where TimeGenerated < latestTime
+                      | order by TimeGenerated desc
+                      | top N by TimeGenerated desc
+                      | summarize baseline_mean = avg(metric_value), baseline_std = stdev(metric_value)
+                      | where isnotnull(baseline_std) and baseline_std > 0
+                      | extend k = 1;
+                  let latestWithBaseline =
+                      latestRuns
+                      | extend k = 1
+                      | join kind=inner baseline on k
+                      | extend threshold_slow = baseline_mean + (${var.anomaly_sigma} * baseline_std),
+                               threshold_fast = baseline_mean - (${var.anomaly_sigma} * baseline_std)
+                      | extend slow_violation = metric_value > threshold_slow,
+                               fast_violation = metric_value < threshold_fast;
+                  let confirmation =
+                      latestWithBaseline
+                      | summarize slow_count = countif(slow_violation),
+                                  fast_count = countif(fast_violation);
+                  let latestBenchmark =
+                      latestWithBaseline
+                      | top 1 by TimeGenerated desc;
+                  let lookback =
+                      benchmarkLogs
+                      | where TimeGenerated < latestTime
+                      | order by TimeGenerated desc
+                      | top CW by TimeGenerated desc
+                      | extend k = 1
+                      | join kind=inner baseline on k
+                      | extend lb_slow = metric_value > baseline_mean + (${var.anomaly_sigma} * baseline_std),
+                               lb_fast = metric_value < baseline_mean - (${var.anomaly_sigma} * baseline_std);
+                  let lookbackSummary =
+                      lookback
+                      | summarize lb_slow_count = countif(lb_slow),
+                                  lb_fast_count = countif(lb_fast)
+                      | extend k = 1;
+                  let windowMean =
+                      latestRuns
+                      | summarize window_mean = avg(metric_value)
+                      | extend k = 1;
+                  let lookbackProximity =
+                      lookback
+                      | extend k = 1
+                      | join kind=inner windowMean on k
+                      | extend closer_to_window = abs(metric_value - window_mean) < abs(metric_value - baseline_mean)
+                      | summarize lb_nearby = countif(closer_to_window)
+                      | extend k = 1;
                   latestBenchmark
-                    | join kind=inner baseline on k
-                    | join kind=leftouter previousBenchmark on k
-                    | where isnotnull(baseline_std) and baseline_std > 0
-                    | extend threshold_value_slow = baseline_mean + (${var.anomaly_sigma} * baseline_std),
-                             threshold_value_fast = baseline_mean - (${var.anomaly_sigma} * baseline_std)
-                    | extend slow_violation = current_value > threshold_value_slow,
-                             fast_violation = current_value < threshold_value_fast,
-                             prev_diff_ratio = iif(isnotnull(prev_value) and prev_value > 0, abs(current_value - prev_value) / prev_value, real(null))
-                    | extend new_normal_candidate = isnotnull(prev_diff_ratio) and prev_diff_ratio <= ${var.anomaly_new_normal_relative_threshold}
-                    | where (slow_violation or fast_violation) and not(new_normal_candidate)
-                    | project run_id, slow_violation, fast_violation, TimeGenerated, current_value, baseline_mean, baseline_std, prev_value, prev_diff_ratio
+                    | extend k = 1
+                    | join kind=inner (confirmation | extend k = 1) on k
+                    | join kind=inner lookbackSummary on k
+                    | join kind=inner lookbackProximity on k
+                    | extend slow_confirmed = slow_count >= CT and slow_count < CW,
+                             fast_confirmed = fast_count >= CT and fast_count < CW
+                    | extend continuing = (slow_violation and lb_slow_count > 0)
+                                       or (fast_violation and lb_fast_count > 0)
+                                       or (lb_nearby >= CT)
+                    | where ((slow_violation and slow_confirmed) or (fast_violation and fast_confirmed))
+                            and not(continuing)
+                    | project run_id, slow_violation, fast_violation, TimeGenerated, metric_value, baseline_mean, baseline_std
                 KQL
               }
             }
@@ -541,7 +581,7 @@ resource "azapi_resource" "bench_anomaly" {
                       {
                         "color"     = "#D32F2F"
                         "title"     = "@{concat('Benchmark anomaly: ${each.value.display_name} ', if(equals(first(body('QueryLogs')?['tables'][0]?['rows'])[1], true), 'ran slower', 'ran faster'))}"
-                        "text"      = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*${each.value.param_name}:* ', '${each.value.param_value}', '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
+                        "text"      = "${var.slack_subteam_id != "" ? "<!subteam^${var.slack_subteam_id}|${var.slack_subteam_label}> " : ""}@{concat('*${each.value.param_name}:* ', '${each.value.param_value}', '\n', '*Condition:* ± ', string(${var.anomaly_sigma}), 'σ over last ', '${var.anomaly_baseline_n} runs', ' (confirmed ${var.anomaly_confirm_threshold}/${var.anomaly_confirm_window})', '\n', '*Run:* https://github.com/${var.anomaly_repo}/actions/runs/', string(first(body('QueryLogs')?['tables'][0]?['rows'])[0]))}"
                         "mrkdwn_in" = ["text"]
                       }
                     ]

@@ -18,6 +18,8 @@ anomaly_schedule_interval  = 1
 anomaly_baseline_n         = 30  # previous N runs for baseline
 anomaly_sigma              = 2.0 # 2σ threshold
 anomaly_timespan           = "P30D"
+anomaly_confirm_window     = 3   # check last 3 runs
+anomaly_confirm_threshold  = 2   # 2-of-3 must violate
 
 # TPC-H anomaly detection
 tpch_anomaly_logic_app_name = "xtdb-benchmark-tpch-anomaly"

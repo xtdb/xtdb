@@ -119,10 +119,16 @@ variable "anomaly_sigma" {
   default     = 2
 }
 
-variable "anomaly_new_normal_relative_threshold" {
-  description = "Relative threshold between the latest and previous run durations below which anomalies are suppressed as a new normal"
+variable "anomaly_confirm_window" {
+  description = "Number of recent runs to check for confirmation (e.g., 3 means 'last 3 runs')"
   type        = number
-  default     = 0.05
+  default     = 3
+}
+
+variable "anomaly_confirm_threshold" {
+  description = "Minimum number of runs within the confirmation window that must exceed the threshold (e.g., 2 means '2-of-3')"
+  type        = number
+  default     = 2
 }
 
 variable "dashboard_name" {
