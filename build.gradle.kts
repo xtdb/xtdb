@@ -120,6 +120,17 @@ allprojects {
         maven { url = uri("https://packages.confluent.io/maven/") }
     }
 
+    // Confluent publishes kafka-clients with a higher version number (7.8.0-ccs)
+    // than Apache's (4.1.1), causing silent version override via the Confluent Maven repo.
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.apache.kafka" && requested.name == "kafka-clients") {
+                useVersion(libs.versions.kafka.get())
+                because("pin to Apache kafka-clients; Confluent's 7.8.0-ccs silently overrides 4.1.1")
+            }
+        }
+    }
+
     if (plugins.hasPlugin("java-library")) {
         java {
             withSourcesJar()
