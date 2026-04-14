@@ -361,9 +361,8 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz close-args? await-token tracer query-text]
-                           :or {default-tz default-tz
-                                close-args? true}}]
+            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz await-token tracer query-text]
+                           :or {default-tz default-tz}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
@@ -412,9 +411,7 @@
                         (let [explain-plan (->explain-plan emitted-query)]
                           (-> (PagesCursor. allocator nil [explain-plan])
                               (wrap-result-types (explain-plan-types explain-plan))
-                              (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                         close-args? (cons args)
-                                                         closeable-query-span (cons closeable-query-span)))))
+                              (wrap-closeables ref-ctr [closeable-query-span args snaps allocator])))
 
                         (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
                               cursor (-> (->cursor {:allocator allocator,
@@ -434,21 +431,16 @@
                               (.forEachRemaining cursor (fn [_]))
                               (-> (PagesCursor. allocator nil [(explain-analyze-results cursor)])
                                   (wrap-result-types explain-analyze-types)
-                                  (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                             close-args? (cons args)
-                                                             closeable-query-span (cons closeable-query-span))))
+                                  (wrap-closeables ref-ctr [closeable-query-span args snaps allocator]))
                               (finally
                                 (util/close cursor)))
 
                             (-> cursor
-                                (wrap-closeables ref-ctr (cond->> [snaps allocator]
-                                                           close-args? (cons args)
-                                                           closeable-query-span (cons closeable-query-span))))))))
+                                (wrap-closeables ref-ctr [closeable-query-span args snaps allocator]))))))
 
                     (catch Throwable t
                       (.release ref-ctr)
-                      (when close-args?
-                        (util/close args))
+                      (util/close args)
                       (throw t)))))))))))
 
   AutoCloseable

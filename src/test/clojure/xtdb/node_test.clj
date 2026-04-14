@@ -721,20 +721,20 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (t/testing "relevant schema unchanged since preparing query"
             (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
 
-            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
+            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "irrelevant schema changed since preparing query"
 
             (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
 
-            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
+            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "a -> union, but prepared query is still fine outside of pgwire"
             (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
-            (with-open [cursor (.openQuery pq {:args args, :close-args? false})]
+            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
               (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
                          {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
                          {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]

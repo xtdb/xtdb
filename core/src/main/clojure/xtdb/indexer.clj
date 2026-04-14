@@ -319,7 +319,7 @@
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz :tracer :query-text])
-                                             (assoc :args args, :close-args? false)))]
+                                             (assoc :args args)))]
 
             (letfn [(throw-assert-failed []
                       (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
@@ -336,7 +336,7 @@
   (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
     (-> (fn eval-query [^RelationReader args]
           (with-open [res (-> (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz :tracer :query-text])
-                                                 (assoc :args args, :close-args? false))))]
+                                                 (assoc :args args))))]
             (.forEachRemaining res
                                (fn [^RelationReader in-rel]
                                  (.indexOp rel-idxer in-rel query-opts)))))
@@ -357,7 +357,7 @@
           (dotimes [idx (.getRowCount param-rel)]
             (err/wrap-anomaly {:arg-idx idx}
                               (aset selection 0 idx)
-                              (eval-query (-> param-rel (.select selection))))))))))
+                              (eval-query (-> param-rel (.select selection) (.openSlice al))))))))))
 
 (defn- patch-rel! [table, ^LiveIndex live-idx, ^OpenTx$Table live-table, ^RelationReader rel {:keys [^CrashLogger crash-logger tx-key]}]
   (let [row-count (.getRowCount rel)]
@@ -377,7 +377,7 @@
                      (.getLong to-rdr idx)
                      #(.copyRow doc-copier idx))))))))
 
-(defn- ->patch-docs-indexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
+(defn- ->patch-docs-indexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
                              ^IQuerySource q-src, ^IQuerySource$QueryCatalog db-cat, ^Instant system-time
                              {:keys [^String default-db, ^Tracer tracer] :as tx-opts}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
@@ -442,7 +442,7 @@
                                                                                  (.withName "doc"))])))])]
 
                                 (util/with-open [res (.openQuery pq (-> (select-keys tx-opts [:snapshot-token :current-time :default-tz])
-                                                                        (assoc :args args, :close-args? false)))]
+                                                                        (assoc :args (.openSlice args allocator))))]
                                   (.forEachRemaining res
                                                      (fn [^RelationReader rel]
                                                        (patch-rel! table live-idx live-table rel tx-opts))))))))))))))]
@@ -604,7 +604,7 @@
                                :tracer tracer}
 
                       !put-docs-idxer (delay (->put-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
-                      !patch-docs-idxer (delay (->patch-docs-indexer live-index open-tx tx-ops-rdr q-src db-cat system-time tx-opts))
+                      !patch-docs-idxer (delay (->patch-docs-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat system-time tx-opts))
                       !delete-docs-idxer (delay (->delete-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
                       !erase-docs-idxer (delay (->erase-docs-indexer live-index open-tx tx-ops-rdr tx-opts))
                       !sql-idxer (delay (->sql-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat tx-opts))]
