@@ -976,7 +976,8 @@
                         :default-tz (.getZone clock)
                         :explain? explain?
                         :explain-analyze? explain-analyze?
-                        :default-db default-db}
+                        :default-db default-db
+                        :query-text (:query stmt)}
 
             ^PreparedQuery pq (case statement-type
                                 (:query :execute) (with-auth-check conn (xtp/prepare-sql node parsed-query query-opts))
@@ -1114,7 +1115,7 @@
     (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                  (.openQuery prepared-query args-rel (assoc query-opts :query-text (:query stmt))))))
+                  (.openQuery prepared-query args-rel query-opts))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
@@ -1180,7 +1181,7 @@
                      (let [^RelationReader args-rel (aget !args 0)]
                        (case (:statement-type inner)
                          :query (with-auth-check conn
-                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel (assoc query-opts :query-text (:query stmt)))]
+                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel query-opts)]
                                     (-> inner
                                         (assoc :cursor inner-cursor
                                                :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)

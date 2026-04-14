@@ -315,9 +315,9 @@
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
-          {:keys [default-tz] :as query-opts} (-> query-opts
-                                                  (update :default-tz (fnil identity expr/*default-tz*))
-                                                  (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
+          {:keys [default-tz query-text] :as query-opts} (-> query-opts
+                                                              (update :default-tz (fnil identity expr/*default-tz*))
+                                                              (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
       (letfn [(open-snaps []
                 ;; TODO this opens up a snapshot for *every* db in the catalog
                 ;; when people have 'proper' multi-tenancy, this will be a problem
@@ -361,7 +361,7 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ args {:keys [current-time snapshot-token snapshot-time default-tz tracer query-text]
+            (openQuery [_ args {:keys [current-time snapshot-token snapshot-time default-tz tracer]
                                 :or {default-tz default-tz}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")

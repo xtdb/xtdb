@@ -148,7 +148,7 @@
          (some #(when (instance? clazz %) %))))
 
   (^PreparedQuery prepareSql [this ^String sql query-opts]
-    (.prepareSql this (antlr/parse-statement sql) query-opts))
+    (.prepareSql this (antlr/parse-statement sql) (assoc query-opts :query-text sql)))
 
   (^PreparedQuery prepareSql [this ^Sql$DirectlyExecutableStatementContext ast query-opts]
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
