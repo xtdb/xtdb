@@ -324,7 +324,7 @@ exprPrimary
          | ',' startPosition=expr (',' stringLength=expr)? )
       ')' # CharacterSubstringFunction
 
-    | 'TRIM' '(' trimSpecification? trimCharacter=expr? 'FROM'? trimSource=expr ')' # TrimFunction
+    | 'TRIM' '(' trimSpecification? (trimCharacter=expr 'FROM' trimSource=expr | 'FROM' trimSource=expr | trimSource=expr) ')' # TrimFunction
 
     | 'URI_SCHEME' '(' expr ')' # UriSchemeFunction
     | 'URI_USER_INFO' '(' expr ')' # UriUserInfoFunction
