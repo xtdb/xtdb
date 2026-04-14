@@ -263,7 +263,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
                 RelationReader.from(newArgs, 1).closeOnCatch { argsRel ->
                     ps.cursor?.close()
-                    ps.cursor = ps.prepdQuery?.openQuery(cljMap("args".kw to argsRel))
+                    ps.cursor = ps.prepdQuery?.openQuery(argsRel, EMPTY)
                     ps
                 }
             }
@@ -309,7 +309,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             }
             val ticketHandle = newHandle()
             val pq = defaultConnectionFor(dbName).prepareSql(sql)
-            val cursor = pq.openQuery(EMPTY)
+            val cursor = pq.openQuery(null, EMPTY)
             val ticket = Ticket(
                 ProtoAny.pack(
                     TicketStatementQuery.newBuilder()
@@ -356,7 +356,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             ).toByteArray()
         )
 
-        val cursor = checkNotNull(ps.cursor ?: ps.prepdQuery?.openQuery(EMPTY)) { "invalid ps-id" }
+        val cursor = checkNotNull(ps.cursor ?: ps.prepdQuery?.openQuery(null, EMPTY)) { "invalid ps-id" }
 
         ps.cursor = cursor
         return FlightInfo(

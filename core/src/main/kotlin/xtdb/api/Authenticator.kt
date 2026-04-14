@@ -12,6 +12,7 @@ import kotlinx.serialization.modules.subclass
 import xtdb.UrlSerializer
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
+import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.Database
 import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
@@ -97,14 +98,14 @@ interface Authenticator : AutoCloseable {
 
         fun rules(rules: List<MethodRule>) = apply { this.rules = rules }
 
-        fun open(querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator
+        fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator
 
         @Serializable
         @SerialName("!UserTable")
         data class UserTable(override var rules: List<MethodRule> = DEFAULT_RULES) : Factory {
-            override fun open(querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
+            override fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
                 requiringResolve("xtdb.authn/->user-table-authn")
-                    .invoke(this, querySource, dbCatalog) as Authenticator
+                    .invoke(this, allocator, querySource, dbCatalog) as Authenticator
         }
 
         @Serializable
@@ -119,7 +120,7 @@ interface Authenticator : AutoCloseable {
             @Suppress("unused")
             fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         
-            override fun open(querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
+            override fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
                 requiringResolve("xtdb.authn/->oidc-authn")
                     .invoke(this) as Authenticator
         }

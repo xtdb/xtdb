@@ -67,6 +67,7 @@
    (->conn frontend startup-opts [{:user nil, :method #xt.authn/method :trust, :address nil}]))
   (^java.lang.AutoCloseable [frontend startup-opts authn-rules]
    (let [authn (authn/->UserTableAuthn authn-rules
+                                       (.getAllocator (util/node-base tu/*node*))
                                        (.getQuerySource (util/node-base tu/*node*))
                                        (db/<-node tu/*node*))
          conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"

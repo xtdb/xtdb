@@ -361,8 +361,8 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ {:keys [args current-time snapshot-token snapshot-time default-tz tracer query-text]
-                           :or {default-tz default-tz}}]
+            (openQuery [_ args {:keys [current-time snapshot-token snapshot-time default-tz tracer query-text]
+                                :or {default-tz default-tz}}]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
@@ -370,12 +370,7 @@
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
                       table-info (reset! !table-info (->table-info))
                       planned-query (plan-query* table-info)
-                      args (cond
-                             (instance? RelationReader args) args
-                             (vector? args) (vw/open-args allocator args)
-                             (nil? args) vw/empty-args
-                             :else (throw (ex-info "invalid args"
-                                                   {:type (class args)})))
+                      ^RelationReader args (or args vw/empty-args)
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) current-time)

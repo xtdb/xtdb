@@ -55,7 +55,7 @@
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args], :as query-opts} {:keys [query-timer] :as metrics}]
   (util/with-close-on-catch [cursor (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
-                                      (.openQuery prepared-query (assoc query-opts :args args-rel)))]
+                                      (.openQuery prepared-query args-rel query-opts))]
     ;;TODO metrics only currently wrapping openQueryAsync results
     (-> (q/cursor->stream cursor query-opts metrics)
         (metrics/wrap-query query-timer))))
@@ -121,7 +121,7 @@
        (openSqlQuery [_ sql db-name]
          (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
            (-> (xtp/prepare-sql this-node sql query-opts)
-               (.openQuery query-opts))))
+               (.openQuery nil query-opts))))
 
        (prepareSql [_ sql db-name]
          (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]

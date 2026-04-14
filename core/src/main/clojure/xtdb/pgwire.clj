@@ -1114,7 +1114,7 @@
     (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                  (.openQuery prepared-query (assoc query-opts :args args-rel :query-text (:query stmt))))))
+                  (.openQuery prepared-query args-rel (assoc query-opts :query-text (:query stmt))))))
 
             (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
@@ -1180,7 +1180,7 @@
                      (let [^RelationReader args-rel (aget !args 0)]
                        (case (:statement-type inner)
                          :query (with-auth-check conn
-                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq (assoc query-opts :args args-rel :query-text (:query stmt)))]
+                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel (assoc query-opts :query-text (:query stmt)))]
                                     (-> inner
                                         (assoc :cursor inner-cursor
                                                :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)

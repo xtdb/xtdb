@@ -694,7 +694,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
              (.getColumnFields pq [#xt/field {"?_0" :i64}]))
           "param type is assumed to be nullable")
 
-    (with-open [cursor (.openQuery pq {:args (tu/open-args [42])})]
+    (with-open [cursor (.openQuery pq (tu/open-args [42]) {})]
 
       (t/is (= (assoc column-types "_column_2" #xt/type :i64)
                (into {} (.getResultTypes cursor)))
@@ -704,7 +704,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                (tu/<-cursor cursor))))
 
     (t/testing "preparedQuery rebound with different param types"
-      (with-open [cursor (.openQuery pq {:args (tu/open-args ["fish"])})]
+      (with-open [cursor (.openQuery pq (tu/open-args ["fish"]) {})]
 
         (t/is (= (assoc column-types "_column_2" #xt/type :utf8)
                  (into {} (.getResultTypes cursor)))
@@ -721,20 +721,20 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           (t/testing "relevant schema unchanged since preparing query"
             (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
 
-            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
+            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) {})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "irrelevant schema changed since preparing query"
 
             (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
 
-            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
+            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) {})]
               (t/is (= res (tu/<-cursor cursor)))))
 
           (t/testing "a -> union, but prepared query is still fine outside of pgwire"
             (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
-            (with-open [cursor (.openQuery pq {:args (.openSlice args tu/*allocator*)})]
+            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) {})]
               (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
                          {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
                          {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]
@@ -746,36 +746,36 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
           pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz, :default-db "xtdb"})]
 
       (t/testing "and not at bind"
-        (with-open [cursor (.openQuery pq {})]
+        (with-open [cursor (.openQuery pq nil {})]
           (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "and and also at bind"
         (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [cursor (.openQuery pq {:default-tz tz})]
+          (with-open [cursor (.openQuery pq nil {:default-tz tz})]
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
 
   (t/testing "default-tz not supplied at prepare"
     (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-db "xtdb"})]
 
       (t/testing "and not at open"
-        (with-open [cursor (.openQuery pq {})]
+        (with-open [cursor (.openQuery pq nil {})]
           (t/is (= #xt/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
       (t/testing "but at bind"
         (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [cursor (.openQuery pq {:default-tz tz})]
+          (with-open [cursor (.openQuery pq nil {:default-tz tz})]
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
   (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil, :default-db "xtdb"})]
     (t/testing "preparedQuery rebound with args matching the assumed type"
 
-      (with-open [cursor (.openQuery pq {:args (tu/open-args ["42"])})]
+      (with-open [cursor (.openQuery pq (tu/open-args ["42"]) {})]
         (t/is (= [[{:v "42"}]]
                  (tu/<-cursor cursor))))
 
       (t/testing "or can be rebound with a different type"
-        (with-open [cursor (.openQuery pq {:args (tu/open-args [44])})]
+        (with-open [cursor (.openQuery pq (tu/open-args [44]) {})]
           (t/is (= [[{:v 44}]]
                    (tu/<-cursor cursor))))))))
 

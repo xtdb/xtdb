@@ -244,9 +244,10 @@
                                                      (vw/open-args allocator args)
                                                      vw/empty-args)
                           res (util/with-close-on-catch [args-slice (.openSlice args-rel allocator)]
-                                (.openQuery pq (-> (select-keys query-opts [:snapshot-token :snapshot-time :current-time
-                                                                            :table-args :default-tz])
-                                                   (assoc :args args-slice))))]
+                                (.openQuery pq
+                                            args-slice
+                                            (select-keys query-opts [:snapshot-token :snapshot-time :current-time
+                                                                      :table-args :default-tz])))]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-pages?) (into [] cat)))]
              (if with-types?

@@ -5,8 +5,11 @@
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.query :as q]
-            [xtdb.error :as err])
+            [xtdb.error :as err]
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import [java.io Writer]
+           [org.apache.arrow.memory BufferAllocator]
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
                      Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config
                      SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
@@ -16,14 +19,15 @@
            [java.time Duration Instant InstantSource]))
 
 (defn verify-pw
-  [^IQuerySource q-src db-cat user password]
+  [^BufferAllocator allocator ^IQuerySource q-src db-cat user password]
   (when-not password
     (throw (err/incorrect :xtdb/authn-failed (format "password authentication failed for user: %s" user))))
 
-  (with-open [res (-> (.prepareQuery q-src
-                                     "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
-                                     db-cat {:default-db "xtdb"})
-                      (.openQuery {:args [user]}))]
+  (with-open [res (util/with-close-on-catch [args (vw/open-args allocator [user])]
+                    (-> (.prepareQuery q-src
+                                       "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
+                                       db-cat {:default-db "xtdb"})
+                        (.openQuery args {})))]
     (let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
       (if (and encrypted (:valid (hashers/verify password encrypted)))
         user
@@ -74,18 +78,18 @@
 (defmethod xtn/apply-config! ::user-table-authn [^Xtdb$Config config, _, {:keys [rules]}]
   (.authn config (Authenticator$Factory$UserTable. (->rules-cfg rules))))
 
-(defrecord UserTableAuthn [rules q-src db-cat]
+(defrecord UserTableAuthn [rules ^BufferAllocator allocator q-src db-cat]
   Authenticator
   (methodFor [_ user remote-addr]
     (method-for rules {:user user, :remote-addr remote-addr}))
 
   (verifyPassword [_ user password]
-    (let [user-id (verify-pw q-src db-cat user password)]
+    (let [user-id (verify-pw allocator q-src db-cat user password)]
       (SimpleResult. user-id))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, q-src, db-cat]
-  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) q-src db-cat))
+(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, ^BufferAllocator allocator, q-src, db-cat]
+  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) allocator q-src db-cat))
 
 (defmethod ig/expand-key :xtdb/authn [k opts]
   {k (into {:base (ig/ref :xtdb/base)
@@ -298,6 +302,6 @@
             instant-src (.instantSource instant-src))))
 
 (defmethod ig/init-key :xtdb/authn [_ {:keys [^Authenticator$Factory authn-factory, ^NodeBase base, db-cat]}]
-  (.open authn-factory (.getQuerySource base) db-cat))
+  (.open authn-factory (.getAllocator base) (.getQuerySource base) db-cat))
 
 (defn <-node ^xtdb.api.Authenticator [node] (:authn node))
