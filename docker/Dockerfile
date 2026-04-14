@@ -13,6 +13,7 @@ FROM alpine:3.23.3
 ARG VARIANT=standalone
 ARG GIT_SHA
 ARG XTDB_VERSION
+ARG XTDB_LOG_JSON_TEMPLATE=classpath:xtdb/logging/AwsCloudWatchLayout.json
 
 LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
 LABEL org.opencontainers.image.description="XTDB 2.x"
@@ -20,8 +21,8 @@ LABEL org.opencontainers.image.licenses="MPL-2.0"
 LABEL org.opencontainers.image.version=${XTDB_VERSION}
 LABEL org.opencontainers.image.revision=${GIT_SHA}
 
-LABEL usage="Example docker-run options for custom logging configuration: \
---volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml'"
+LABEL usage="For custom logging: \
+--volume .:/config --env JDK_JAVA_OPTIONS='-Dlog4j2.configurationFile=/config/log4j2.xml'"
 
 # For healthcheck
 RUN apk add --no-cache wget gcompat
@@ -54,6 +55,7 @@ VOLUME /var/lib/xtdb
 
 ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
+ENV XTDB_LOG_JSON_TEMPLATE=${XTDB_LOG_JSON_TEMPLATE}
 
 COPY docker/${VARIANT}/*.yaml ./
 COPY docker/${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar

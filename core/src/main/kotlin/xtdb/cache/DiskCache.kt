@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import org.slf4j.LoggerFactory
 import xtdb.api.PathWithEnvVarSerde
 import java.nio.file.Files
 import java.nio.file.Path
@@ -18,8 +17,11 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.io.path.*
 import kotlin.math.max
+import xtdb.util.logger
+import xtdb.util.trace
+import xtdb.util.debug
 
-private val LOGGER = LoggerFactory.getLogger(DiskCache::class.java)
+private val LOGGER = DiskCache::class.logger
 
 class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long) {
 
@@ -52,7 +54,7 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
 
         override fun onEvict(k: Path, reason: RemovalCause) {
             path.deleteIfExists()
-            LOGGER.trace("Evicted {} due to {}", k, reason)
+            LOGGER.trace("Evicted $k due to $reason")
             super.onEvict(k, reason)
         }
 
@@ -78,7 +80,7 @@ class DiskCache internal constructor(val rootPath: Path, val maxSizeBytes: Long)
                 syncInnerCache.put(k, Entry(k, path))
             }
 
-        LOGGER.debug("disk cache started, existing size: {} bytes", pinningCache.stats0.evictableBytes)
+        LOGGER.debug("disk cache started, existing size: ${pinningCache.stats0.evictableBytes} bytes")
     }
 
     fun createTempPath(): Path =

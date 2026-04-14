@@ -18,27 +18,17 @@ The simplest way to modify XTDB's logging level is through environment variables
 
 Valid levels are `TRACE`, `DEBUG`, `INFO` (default), `WARN`, and `ERROR`.
 
-### Logback configuration
+### JSON log output
 
-For more control, you can also supply a custom [logback.xml](https://logback.qos.ch/manual/configuration.html) file:
+Set `XTDB_LOG_FORMAT=json` to enable structured JSON log output, suitable for cloud log aggregation services.
 
-``` xml
-<configuration>
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-    <root level="WARN">
-        <appender-ref ref="STDOUT" />
-    </root>
-    <logger name="xtdb" level="TRACE" />
-</configuration>
-```
+`docker run -e XTDB_LOG_FORMAT=json …​`
 
-You can then pass the `logback.xml` configuration file to the Docker container using the following command:
+### Custom logging configuration
 
-`docker run --volume .:/config --env JDK_JAVA_OPTIONS='-Dlogback.configurationFile=/config/logback.xml' …​`
+For more control, you can supply a custom [Log4j2 configuration file](https://logging.apache.org/log4j/2.x/manual/configuration.html) to the Docker container using the following command:
+
+`docker run --volume .:/config --env JDK_JAVA_OPTIONS='-Dlog4j2.configurationFile=/config/log4j2.xml' …​`
 
 ## Ingestion stopped
 

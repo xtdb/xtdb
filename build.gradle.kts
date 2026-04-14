@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.github.jengelman.gradle.plugins.shadow.transformers.Log4j2PluginsCacheFileTransformer
 import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.gradle.jvm.toolchain.JavaInstallationMetadata
 import org.gradle.jvm.toolchain.JavaLauncher
@@ -38,7 +40,7 @@ val defaultJvmArgs = listOf(
     "-Djdk.attach.allowAttachSelf",
     "-Darrow.memory.debug.allocator=false",
     "-XX:-OmitStackTraceInFastThrow",
-    "-Dlogback.configurationFile=${rootDir.resolve("src/testFixtures/resources/logback-test.xml")}",
+    "-Dlog4j2.configurationFile=${rootDir.resolve("src/testFixtures/resources/log4j2-test.xml")}",
     "-Dxtdb.rootDir=$rootDir",
     "-Djunit.jupiter.extensions.autodetection.enabled=true"
 )
@@ -118,6 +120,10 @@ allprojects {
         mavenCentral()
         maven { url = uri("https://repo.clojars.org/") }
         maven { url = uri("https://packages.confluent.io/maven/") }
+    }
+
+    tasks.withType<ShadowJar> {
+        transform(Log4j2PluginsCacheFileTransformer())
     }
 
     if (plugins.hasPlugin("java-library")) {
@@ -214,10 +220,16 @@ allprojects {
         }
 
         dependencies {
-            testRuntimeOnly(libs.logback.classic)
-            testRuntimeOnly(libs.logback.classic)
-            devRuntimeOnly(libs.slf4j.jpl)
-            testRuntimeOnly(libs.slf4j.jpl)
+            devRuntimeOnly(libs.log4j.core)
+            testRuntimeOnly(libs.log4j.core)
+            devRuntimeOnly(libs.log4j.jpl)
+            testRuntimeOnly(libs.log4j.jpl)
+            devRuntimeOnly(libs.log4j.jul)
+            testRuntimeOnly(libs.log4j.jul)
+            devRuntimeOnly(libs.log4j.jcl)
+            testRuntimeOnly(libs.log4j.jcl)
+            devRuntimeOnly(libs.log4j.slf4j2.impl)
+            testRuntimeOnly(libs.log4j.slf4j2.impl)
 
             testImplementation(libs.junit.jupiter.api)
             testImplementation(libs.junit.jupiter.params)
@@ -505,8 +517,13 @@ dependencies {
 
 
     api(libs.slf4j.api)
-    api(libs.logback.classic)
     api(libs.clojure.tools.logging)
+
+    api(libs.log4j.core)
+    api(libs.log4j.jpl)
+    api(libs.log4j.jul)
+    api(libs.log4j.jcl)
+    api(libs.log4j.slf4j2.impl)
 
     api(libs.next.jdbc)
     api(libs.integrant)

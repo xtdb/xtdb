@@ -11,9 +11,6 @@ dependencies {
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":modules:xtdb-google-cloud"))
     implementation(project(":modules:xtdb-debezium"))
-
-    runtimeOnly(libs.logback.classic)
-    runtimeOnly(libs.slf4j.jpl)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
