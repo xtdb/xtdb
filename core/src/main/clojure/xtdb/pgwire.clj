@@ -53,7 +53,7 @@
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
-           (xtdb.query PreparedQuery)
+           (xtdb.query PreparedQuery QueryOpts)
            (xtdb.tx PutDocs PutRel Sql TxOpts)))
 
 ;; references
@@ -221,12 +221,13 @@
                                                                  (str value))})))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
-  (swap! conn-state
-         (fn [{:keys [transaction] :as conn-state}]
-           (-> conn-state
-               (update-in [:session :clock] (fn [^Clock clock]
-                                              (.withZone clock (ZoneId/of tz))))
-               (cond-> transaction (assoc-in [:transaction :default-tz] tz)))))
+  (let [^ZoneId zone-id (if (instance? ZoneId tz) tz (ZoneId/of tz))]
+    (swap! conn-state
+           (fn [{:keys [transaction] :as conn-state}]
+             (-> conn-state
+                 (update-in [:session :clock] (fn [^Clock clock]
+                                                (.withZone clock zone-id)))
+                 (cond-> transaction (assoc-in [:transaction :default-tz] zone-id))))))
 
   (set-session-parameter conn time-zone-nf-param-name tz))
 
@@ -1101,18 +1102,18 @@
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction await-token)
 
-        query-opts {:snapshot-token (:snapshot-token stmt (:snapshot-token transaction))
-                    :snapshot-time (:snapshot-time stmt (:snapshot-time transaction))
-                    :current-time (or (:current-time stmt)
-                                      (:current-time transaction)
-                                      (.instant clock))
-                    :default-tz (or (:default-tz transaction) (.getZone clock))
-                    :await-token await-token
-                    :tracer query-tracer}
+        query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
+                                            (time/->instant))
+                                   (.instant clock))
+                              (or (:default-tz transaction) (.getZone clock))
+                              (:snapshot-token stmt (:snapshot-token transaction))
+                              (some-> (or (:snapshot-time stmt) (:snapshot-time transaction))
+                                      (time/->instant))
+                              query-tracer)
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->cursor ^xtdb.IResultCursor [xt-args] 
+    (letfn [(->cursor ^xtdb.IResultCursor [xt-args]
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                   (.openQuery prepared-query args-rel query-opts))))

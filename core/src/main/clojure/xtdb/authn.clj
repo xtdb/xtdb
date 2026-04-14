@@ -10,6 +10,7 @@
             [xtdb.vector.writer :as vw])
   (:import [java.io Writer]
            [org.apache.arrow.memory BufferAllocator]
+           (xtdb.query QueryOpts)
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
                      Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config
                      SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
@@ -27,7 +28,7 @@
                     (-> (.prepareQuery q-src
                                        "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
                                        db-cat {:default-db "xtdb"})
-                        (.openQuery args {})))]
+                        (.openQuery args (QueryOpts.))))]
     (let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
       (if (and encrypted (:valid (hashers/verify password encrypted)))
         user

@@ -3,7 +3,7 @@ package xtdb.flight_sql
 import clojure.lang.IPersistentMap
 import clojure.lang.IPersistentVector
 import clojure.lang.PersistentArrayMap
-import clojure.lang.PersistentArrayMap.EMPTY
+import xtdb.query.QueryOpts
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
@@ -263,7 +263,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
                 RelationReader.from(newArgs, 1).closeOnCatch { argsRel ->
                     ps.cursor?.close()
-                    ps.cursor = ps.prepdQuery?.openQuery(argsRel, EMPTY)
+                    ps.cursor = ps.prepdQuery?.openQuery(argsRel, QueryOpts())
                     ps
                 }
             }
@@ -309,7 +309,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             }
             val ticketHandle = newHandle()
             val pq = defaultConnectionFor(dbName).prepareSql(sql)
-            val cursor = pq.openQuery(null, EMPTY)
+            val cursor = pq.openQuery(null, QueryOpts())
             val ticket = Ticket(
                 ProtoAny.pack(
                     TicketStatementQuery.newBuilder()
@@ -356,7 +356,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             ).toByteArray()
         )
 
-        val cursor = checkNotNull(ps.cursor ?: ps.prepdQuery?.openQuery(null, EMPTY)) { "invalid ps-id" }
+        val cursor = checkNotNull(ps.cursor ?: ps.prepdQuery?.openQuery(null, QueryOpts())) { "invalid ps-id" }
 
         ps.cursor = cursor
         return FlightInfo(

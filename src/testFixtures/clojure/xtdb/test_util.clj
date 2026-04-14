@@ -39,7 +39,7 @@
            xtdb.database.Database$Catalog
            (xtdb.indexer LiveTable OpenTx$Table)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
-           (xtdb.query IQuerySource PreparedQuery)
+           (xtdb.query IQuerySource PreparedQuery QueryOpts)
            xtdb.storage.BufferPool
            (xtdb.tx TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
@@ -246,8 +246,8 @@
                           res (util/with-close-on-catch [args-slice (.openSlice args-rel allocator)]
                                 (.openQuery pq
                                             args-slice
-                                            (select-keys query-opts [:snapshot-token :snapshot-time :current-time
-                                                                      :table-args :default-tz])))]
+                                            (let [{:keys [snapshot-token snapshot-time current-time default-tz]} query-opts]
+                                              (QueryOpts. current-time default-tz snapshot-token snapshot-time))))]
            (let [rows (-> (<-cursor res (serde/read-key-fn key-fn))
                           (cond->> (not preserve-pages?) (into [] cat)))]
              (if with-types?

@@ -361,8 +361,8 @@
 
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
-            (openQuery [_ args {:keys [current-time snapshot-token snapshot-time default-tz tracer]
-                                :or {default-tz default-tz}}]
+            (openQuery [_ args opts]
+              (let [default-tz (or (.getDefaultTz opts) default-tz)]
               (util/with-close-on-catch [^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
@@ -373,10 +373,11 @@
                       ^RelationReader args (or args vw/empty-args)
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
-                      current-time (or (some-> (or (:current-time planned-query) current-time)
+                      current-time (or (some-> (or (:current-time planned-query) (.getCurrentTime opts))
                                                (expr->value {:args args})
                                                (time/->instant {:default-tz default-tz}))
                                        (expr/current-time))
+                      tracer (.getTracer opts)
                       query-span (when tracer
                                    (metrics/start-span tracer "xtdb.query" {:attributes {:query.text query-text}}))
                       closeable-query-span (when query-span
@@ -392,13 +393,13 @@
                               expr/*default-tz* default-tz
 
                               ;; both snapshot-token and snapshot-time form upper bounds - the result is the intersection of the two
-                              expr/*snapshot-token* (some-> (cond-> (or (some-> (:snapshot-token planned-query snapshot-token)
+                              expr/*snapshot-token* (some-> (cond-> (or (some-> (:snapshot-token planned-query (.getSnapshotToken opts))
                                                                                 (expr->value {:args args})
                                                                                 (basis/<-time-basis-str)
                                                                                 (doto (validate-basis-not-before snaps)))
 
                                                                         (default-basis snaps))
-                                                              snapshot-time (basis/cap-basis (time/->instant snapshot-time)))
+                                                              (.getSnapshotTime opts) (basis/cap-basis (time/->instant (.getSnapshotTime opts))))
                                                             (basis/->time-basis-str))]
 
                       (if (:explain? planned-query)
@@ -435,7 +436,7 @@
                     (catch Throwable t
                       (.release ref-ctr)
                       (util/close args)
-                      (throw t)))))))))))
+                      (throw t))))))))))))
 
   AutoCloseable
   (close [_]
