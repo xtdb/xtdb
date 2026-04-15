@@ -242,26 +242,26 @@
                                        :compactor {:threads 0}})]
       (let [bp1 (.getBufferPool (db/primary-db node1))
             bp2 (.getBufferPool (db/primary-db node2))]
-        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
-        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2)))
+        (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp1 nil)))
+        (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp2 nil)))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :foo}]])
         (tu/flush-block! node1)
 
-        (t/testing "cached"
-          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
-          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2))))
+        (t/testing "full listing"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 nil)))
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp2 nil))))
 
-        (t/testing "live"
-          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
-          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))
+        (t/testing "with afterBlockIndex"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 0))
+                "no new blocks after 0, returns afterBlockIndex"))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :bar}]])
         (tu/flush-block! node1)
 
-        (t/testing "live"
-          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
-          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))))))
+        (t/testing "finds new blocks after seed"
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp1 0)))
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp2 0))))))))
 
 (defn byte-buffer->byte-array ^bytes [^java.nio.ByteBuffer buf]
   (let [copy (.duplicate buf)
