@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
-import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.Trie
 import xtdb.util.RowCounter
@@ -45,7 +44,7 @@ class LiveTableTest {
                 assertEquals(2, liveTable.liveRelation.rowCount)
                 assertEquals(2L, rowCounter.blockRowCount)
 
-                liveTable.openSnapshot().use { snap ->
+                TableSnapshot.open(allocator, liveTable, tableTx = null).use { snap ->
                     assertEquals(2, snap.liveRelation.rowCount)
                     assertTrue(snap.columnType("foo").toString().isNotEmpty())
                 }

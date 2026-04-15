@@ -46,7 +46,7 @@ class LiveIndex private constructor(
 
     interface Snapshot : AutoCloseable {
         val allColumnTypes: Map<TableRef, Map<String, VectorType>>
-        fun table(table: TableRef): LiveTable.Snapshot?
+        fun table(table: TableRef): TableSnapshot?
         val tables: Iterable<TableRef>
     }
 
@@ -65,7 +65,7 @@ class LiveIndex private constructor(
     private fun refreshSnap() {
         val oldSnap = sharedSnap
 
-        openLiveIdxSnap(this@LiveIndex.tables).closeOnCatch { liveIdxSnap ->
+        openLiveIdxSnap(allocator, this@LiveIndex.tables).closeOnCatch { liveIdxSnap ->
             sharedSnap = Snapshot(latestCompletedTx, liveIdxSnap, buildSchema(liveIdxSnap, tableCatalog))
         }
 
@@ -96,15 +96,15 @@ class LiveIndex private constructor(
     }
 
     fun openSnapshot(openTx: OpenTx): Snapshot {
-        val snaps = HashMap<TableRef, LiveTable.Snapshot>()
+        val snaps = HashMap<TableRef, TableSnapshot>()
         snaps.closeAllOnCatch {
             for ((tableRef, tableTx) in openTx.tables) {
                 val liveTable = tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
-                snaps[tableRef] = liveTable.openSnapshot(tableTx)
+                snaps[tableRef] = TableSnapshot.open(allocator, liveTable, tableTx)
             }
 
             for ((table, liveTable) in tables)
-                snaps.computeIfAbsent(table) { liveTable.openSnapshot() }
+                snaps.computeIfAbsent(table) { TableSnapshot.open(allocator, liveTable, tableTx = null) }
 
             return object : Snapshot {
                 override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }
@@ -189,10 +189,10 @@ class LiveIndex private constructor(
     }
 
     companion object {
-        private fun openLiveIdxSnap(tables: Map<TableRef, LiveTable>): Snapshot {
-            HashMap<TableRef, LiveTable.Snapshot>().closeAllOnCatch { snaps ->
+        private fun openLiveIdxSnap(al: BufferAllocator, tables: Map<TableRef, LiveTable>): Snapshot {
+            HashMap<TableRef, TableSnapshot>().closeAllOnCatch { snaps ->
                 for ((table, liveTable) in tables)
-                    snaps[table] = liveTable.openSnapshot()
+                    snaps[table] = TableSnapshot.open(al, liveTable, tableTx = null)
 
                 return object : Snapshot {
                     override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }

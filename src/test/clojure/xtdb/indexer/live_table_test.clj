@@ -13,7 +13,7 @@
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.api IndexerConfig)
-           (xtdb.indexer LiveIndex LiveTable LiveTable$Snapshot OpenTx$Table)
+           (xtdb.indexer LiveIndex LiveTable OpenTx$Table TableSnapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
@@ -97,7 +97,7 @@
               (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
                                        (.resolve path "objects")))))))))
 
-(defn live-table-snap->data [^LiveTable$Snapshot live-table-snap]
+(defn live-table-snap->data [^TableSnapshot live-table-snap]
   (let [live-rel-data (.getAsMaps (.getLiveRelation live-table-snap))
         live-trie (.compactLogs (.getLiveTrie live-table-snap))
         live-trie-leaf-data (->> live-trie
@@ -127,7 +127,7 @@
 
         (.importData live-table (.getTxRelation open-tx-table))
 
-        (util/with-open [live-table-snap (.openSnapshot live-table)]
+        (util/with-open [live-table-snap (TableSnapshot/open allocator live-table nil)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table bp 0)

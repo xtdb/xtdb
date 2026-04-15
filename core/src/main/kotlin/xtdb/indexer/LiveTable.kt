@@ -7,15 +7,12 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Mono
-import xtdb.arrow.VectorType.Null
 import xtdb.log.proto.TrieMetadata
-import xtdb.segment.MemorySegment
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.*
 import xtdb.util.HLL
 import xtdb.util.RowCounter
-import xtdb.util.closeOnCatch
 
 class LiveTable @JvmOverloads constructor(
     private val al: BufferAllocator,
@@ -46,27 +43,6 @@ class LiveTable @JvmOverloads constructor(
 
     private val hllCalculator = HllCalculator()
 
-    class Snapshot(
-        val columnTypes: Map<ColumnName, VectorType>,
-        val segment: MemorySegment,
-        val txSegment: MemorySegment? = null
-    ) : AutoCloseable {
-        val liveRelation: RelationReader get() = segment.rel
-        val liveTrie: MemoryHashTrie get() = segment.trie
-
-        val txRelation: RelationReader? get() = txSegment?.rel
-        val txTrie: MemoryHashTrie? get() = txSegment?.trie
-
-        fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: Null
-
-        val types: Map<ColumnName, VectorType> get() = columnTypes
-
-        override fun close() {
-            segment.rel.close()
-            txSegment?.rel?.close()
-        }
-    }
-
     fun importData(data: RelationReader) {
         val offset = liveRelation.rowCount
         val count = data.rowCount
@@ -77,49 +53,7 @@ class LiveTable @JvmOverloads constructor(
         rowCounter.addRows(count)
     }
 
-    internal fun openSnapshot(tableTx: OpenTx.Table): Snapshot =
-        openSnapshot(liveTrie, tableTx.trie, tableTx.txRelation)
-
-    private val RelationWriter.types: Map<String, VectorType>?
-        get() {
-            val putVec = vectorFor("op").vectorForOrNull("put") ?: return null
-            val type = putVec.type
-            check(type is Mono && type.arrowType == STRUCT_TYPE) {
-                "Expected 'put' vector to be STRUCT type, got: $type"
-            }
-            return type.children
-        }
-
-    private fun openSnapshot(trie: MemoryHashTrie): Snapshot {
-        liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
-            val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
-
-            return Snapshot(liveRelation.types.orEmpty(), MemorySegment(wmLiveTrie, wmLiveRel))
-        }
-    }
-
-    private fun openSnapshot(trie: MemoryHashTrie, txTrie: MemoryHashTrie, txRel: RelationWriter): Snapshot {
-        liveRelation.openDirectSlice(al).closeOnCatch { wmLiveRel ->
-            val wmLiveTrie = trie.withIidReader(wmLiveRel["_iid"])
-
-            // Only include tx segment if there's actual tx data
-            val txSegment = if (txRel.rowCount > 0) {
-                txRel.openDirectSlice(al).closeOnCatch { wmTxRel ->
-                    val wmTxTrie = txTrie.withIidReader(wmTxRel["_iid"])
-                    MemorySegment(wmTxTrie, wmTxRel)
-                }
-            } else null
-
-            // txRel types are a superset (includes any new columns from this tx)
-            val types = if (txSegment != null) txRel.types ?: liveRelation.types else liveRelation.types
-
-            return Snapshot(types.orEmpty(), MemorySegment(wmLiveTrie, wmLiveRel), txSegment)
-        }
-    }
-
-    fun openSnapshot() = openSnapshot(liveTrie)
-
-    data class BlockMetadata(
+  data class BlockMetadata(
         val vecTypes: Map<FieldName, VectorType>,
         val rowCount: Int,
         val hllDeltas: Map<FieldName, HLL>
@@ -129,7 +63,7 @@ class LiveTable @JvmOverloads constructor(
         val rowCount = liveRelation.rowCount
         if (rowCount == 0) return null
         return BlockMetadata(
-            vecTypes = liveRelation.types.orEmpty(),
+            vecTypes = liveRelation.logRelTypes.orEmpty(),
             rowCount = rowCount,
             hllDeltas = hllCalculator.build()
         )
@@ -153,7 +87,7 @@ class LiveTable @JvmOverloads constructor(
             val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
-                vecTypes = liveRelation.types.orEmpty(),
+                vecTypes = liveRelation.logRelTypes.orEmpty(),
                 trieKey = trieKey,
                 dataFileSize = dataFileSize,
                 rowCount = rowCount,
@@ -164,6 +98,16 @@ class LiveTable @JvmOverloads constructor(
     }
 
     companion object {
+        internal val RelationReader.logRelTypes: Map<String, VectorType>?
+            get() {
+                val putVec = vectorFor("op").vectorForOrNull("put") ?: return null
+                val type = putVec.type
+                check(type is Mono && type.arrowType == STRUCT_TYPE) {
+                    "Expected 'put' vector to be STRUCT type, got: $type"
+                }
+                return type.children
+            }
+
         @JvmStatic
         fun Map<TableRef, LiveTable>.finishBlock(bp: BufferPool, blockIdx: BlockIndex): Map<TableRef, FinishedBlock> =
             // migrated here because of #5107 - may migrate the rest later.
