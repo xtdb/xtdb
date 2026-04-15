@@ -19,10 +19,13 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
+import xtdb.error.Incorrect
 import xtdb.indexer.*
 import xtdb.storage.MemoryStorage
+import xtdb.tx.TxOpts
 import java.time.Instant
 import java.time.InstantSource
+import java.time.ZoneId
 import com.google.protobuf.Any as ProtoAny
 
 class ExternalSourceTest {
@@ -254,6 +257,28 @@ class ExternalSourceTest {
         } finally {
             demux.close()
         }
+    }
+
+    @Test
+    fun `submitTxBlocking rejects when externalSource is configured`() {
+        val extFactory = mockk<ExternalSource.Factory>()
+        val config = Database.Config(externalSource = extFactory)
+
+        // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
+        val db = Database(
+            allocator = allocator,
+            config = config,
+            storage = DatabaseStorage(null, null, null, null),
+            queryState = DatabaseState("cdc", null, null, null, null),
+            isIndexing = false,
+            watchers = Watchers(-1),
+            meterRegistry = null,
+        )
+
+        val ex = assertThrows(Incorrect::class.java) {
+            db.submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
+        }
+        assertTrue(ex.message!!.contains("external source"), "message mentions external source")
     }
 
     @Test

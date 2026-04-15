@@ -28,6 +28,7 @@ import xtdb.compactor.Compactor
 import xtdb.garbage_collector.GarbageCollector
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
+import xtdb.error.Incorrect
 import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
@@ -111,6 +112,14 @@ class Database(
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
+        if (config.externalSource != null)
+            throw Incorrect(
+                "Cannot submit transactions to database '$name': it has an external source configured. " +
+                        "External-source databases use a separate txId sequence — submit through the source instead.",
+                "xtdb/submit-tx-to-external-source-db",
+                mapOf("db-name" to name)
+            )
+
         val defaultTz = checkNotNull(opts.defaultTz) { "missing defaultTz" }
         val txMsg = SourceMessage.Tx(
             txOps = ops.toArrowBytes(allocator),
