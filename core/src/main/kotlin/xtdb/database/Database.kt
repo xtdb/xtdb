@@ -250,7 +250,7 @@ class Database(
                         )
                     }
 
-                    val lp = LogProcessor(procFactory, storage, state, blockUploader, scope, base.meterRegistry)
+                    val lp = LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
                     processor = lp
 
                     if (!readOnly) {

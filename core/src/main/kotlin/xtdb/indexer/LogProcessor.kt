@@ -9,8 +9,10 @@ import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import xtdb.error.Interrupted
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
+import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
 
@@ -20,6 +22,7 @@ class LogProcessor(
     private val procFactory: ProcessorFactory,
     dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
+    private val watchers: Watchers,
     private val blockUploader: BlockUploader,
     private val scope: CoroutineScope,
     meterRegistry: MeterRegistry? = null,
@@ -120,44 +123,54 @@ class LogProcessor(
             is FollowerSystem -> {
                 LOG.info("[$dbName] partitions assigned: $partitions — transitioning to leader")
 
-                replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
-                    val followerProc = oldSys.proc
+                try {
+                    replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
+                        val followerProc = oldSys.proc
 
-                    // Send a NoOp to get a known msgId we can await —
-                    // we can't use latestSubmittedMsgId because Kafka's endOffsets
-                    // includes transaction marker offsets that consumers never deliver.
-                    val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
+                        // Send a NoOp to get a known msgId we can await —
+                        // we can't use latestSubmittedMsgId because Kafka's endOffsets
+                        // includes transaction marker offsets that consumers never deliver.
+                        val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
 
-                    followerProc.awaitReplicaMsgId(replayTarget)
-                    LOG.debug("[$dbName] transition: closing follower system")
-                    oldSys.close()
+                        followerProc.awaitReplicaMsgId(replayTarget)
+                        LOG.debug("[$dbName] transition: closing follower system")
+                        oldSys.close()
 
-                    val pendingBlock = followerProc.pendingBlock
+                        val pendingBlock = followerProc.pendingBlock
 
-                    procFactory.openTransition(
-                        replicaProducer,
-                        followerProc.latestSourceMsgId,
-                        followerProc.latestReplicaMsgId
-                    )
-                        .use { transition ->
-                            if (pendingBlock != null) {
-                                LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                                blockUploader.uploadBlock(
-                                    replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
-                                )
-                                LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                                transition.processRecords(pendingBlock.bufferedRecords)
+                        procFactory.openTransition(
+                            replicaProducer,
+                            followerProc.latestSourceMsgId,
+                            followerProc.latestReplicaMsgId
+                        )
+                            .use { transition ->
+                                if (pendingBlock != null) {
+                                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+                                    blockUploader.uploadBlock(
+                                        replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
+                                    )
+                                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
+                                    transition.processRecords(pendingBlock.bufferedRecords)
+                                }
+
+                                val latestSourceMsgId = transition.latestSourceMsgId
+                                LOG.debug("[$dbName] transition: opening leader processor")
+
+                                val sys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
+                                this.sys = sys
+
+                                LOG.info("[$dbName] leader startup complete, resuming after $latestSourceMsgId")
+                                Log.TailSpec(latestSourceMsgId, sys.proc)
                             }
-
-                            val latestSourceMsgId = transition.latestSourceMsgId
-                            LOG.debug("[$dbName] transition: opening leader processor")
-
-                            val sys = procFactory.openLeaderSystem(replicaProducer, latestSourceMsgId, replayTarget)
-                            this.sys = sys
-
-                            LOG.info("[$dbName] leader startup complete, resuming after $latestSourceMsgId")
-                            Log.TailSpec(latestSourceMsgId, sys.proc)
-                        }
+                    }
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Interrupted) {
+                    throw e
+                } catch (e: Throwable) {
+                    LOG.error(e, "[$dbName] transition: failed to transition to leader")
+                    watchers.notifyError(e)
+                    throw e
                 }
             }
         }

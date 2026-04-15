@@ -112,7 +112,7 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, scope
+            dbStorage, dbState, watchers, blockUploader, scope
         )
 
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
@@ -136,7 +136,7 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, scope
+            dbStorage, dbState, watchers, blockUploader, scope
         )
 
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
@@ -168,7 +168,7 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, scope
+            dbStorage, dbState, watchers, blockUploader, scope
         )
 
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
@@ -203,7 +203,7 @@ class LogProcessorTest {
         val scope = CoroutineScope(SupervisorJob())
         val logProc = LogProcessor(
             procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, blockUploader, scope
+            dbStorage, dbState, watchers, blockUploader, scope
         )
 
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }

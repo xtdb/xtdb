@@ -161,7 +161,7 @@ class LogProcessorSimTest : SimulationTestBase(), LogProcessor.ProcessorFactory 
             afterSourceMsgId, afterReplicaMsgId
         )
 
-    fun openLogProcessor(scope: CoroutineScope) = LogProcessor(this, dbStorage, dbState, blockUploader, scope)
+    fun openLogProcessor(scope: CoroutineScope) = LogProcessor(this, dbStorage, dbState, watchers, blockUploader, scope)
 
     private fun emptyTx(): SourceMessage.Tx =
         SourceMessage.Tx(
