@@ -181,30 +181,6 @@ class LeaderLogProcessor(
             finishBlock(txId, resolvedTx.externalSourceToken)
     }
 
-    suspend fun handleExternalTx(resolvedTx: ReplicaMessage.ResolvedTx) {
-        appendToReplica(resolvedTx)
-
-        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
-        val result = when (resolvedTx.committed) {
-            true -> TransactionResult.Committed(txKey)
-            false -> TransactionResult.Aborted(txKey, resolvedTx.error)
-            null -> null
-        }
-
-        if (result != null) {
-            watchers.notifyTx(result, latestSourceMsgId, resolvedTx.externalSourceToken)
-        } else {
-            // No TransactionResult to publish, but the resume token must still advance
-            // so that block flushes persist the correct external source position.
-            watchers.updateExternalSourceToken(resolvedTx.externalSourceToken)
-        }
-
-        if (liveIndex.isFull())
-            finishBlock(latestSourceMsgId, resolvedTx.externalSourceToken)
-    }
-
-    fun notifyError(exception: Throwable) = watchers.notifyError(exception)
-
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 

@@ -3,6 +3,7 @@ package xtdb.database
 import com.google.protobuf.StringValue
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
@@ -11,7 +12,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.TransactionResult
+import xtdb.api.TransactionKey
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -26,6 +27,7 @@ import xtdb.tx.TxOpts
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
+import kotlin.coroutines.CoroutineContext
 import com.google.protobuf.Any as ProtoAny
 
 class ExternalSourceTest {
@@ -45,12 +47,39 @@ class ExternalSourceTest {
         allocator.close()
     }
 
+    /**
+     * Simple in-memory ExternalSource for testing.
+     * Send signals to [channel] to trigger txHandler.handleTx with a mock OpenTx.
+     */
+    class InMemoryExternalSource(
+        val channel: Channel<Unit> = Channel(100)
+    ) : ExternalSource {
+        private var nextTxId = 0L
+
+        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
+            for (signal in channel) {
+                val openTx = mockk<OpenTx>(relaxed = true) {
+                    every { txKey } returns TransactionKey(nextTxId++, Instant.now())
+                    every { serializeTableData() } returns emptyMap()
+                }
+                txHandler.handleTx(openTx, null)
+            }
+        }
+
+        override fun close() {
+            channel.close()
+        }
+    }
+
     private fun leaderProc(
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         liveIndex: LiveIndex = mockk(relaxed = true),
         watchers: Watchers = Watchers(-1),
-    ): LeaderLogProcessor {
+        extSource: ExternalSource = InMemoryExternalSource(),
+        afterToken: ExternalSourceToken? = null,
+        ctx: CoroutineContext,
+    ): ExternalSourceProcessor {
         val blockCatalog = BlockCatalog("test", null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
@@ -60,83 +89,56 @@ class ExternalSourceTest {
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
-        return LeaderLogProcessor(
-            allocator, dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), watchers,
-            emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
+        return ExternalSourceProcessor(
+            dbStorage, replicaProducer, dbState, watchers, blockUploader,
+            afterSourceMsgId = -1, afterReplicaMsgId = -1,
+            extSource = extSource, afterToken = afterToken, ctx = ctx,
         )
     }
 
-    /**
-     * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel] to trigger txHandler.handleTx with a mock OpenTx.
-     */
-    class InMemoryExternalSource(
-        val channel: Channel<Unit> = Channel(100)
-    ) : ExternalSource {
+    @Test
+    fun `handleExternalTx appends ResolvedTx to replica log`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(-1)
+        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers, ctx = coroutineContext)
 
-        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
-            for (signal in channel) {
-                txHandler.handleTx(mockk(relaxed = true), null)
+        try {
+            val openTx = mockk<OpenTx>(relaxed = true) {
+                every { txKey } returns TransactionKey(0L, Instant.now())
+                every { serializeTableData() } returns emptyMap()
             }
-        }
+            lp.handleExternalTx(openTx, resumeToken = null)
 
-        override fun close() {
-            channel.close()
+            assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
+
+            val replicaMessages = mutableListOf<ReplicaMessage>()
+            val job = launch { replicaLog.tailAll(-1) { records ->
+                replicaMessages.addAll(records.map { it.message })
+            } }
+            delay(200)
+            job.cancelAndJoin()
+
+            assertEquals(1, replicaMessages.size)
+            val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
+            // external-source path always produces committed=null (tx-indexer branch will revisit)
+            assertEquals(null, resolved.committed)
+            assertEquals(0L, resolved.txId)
+        } finally {
+            lp.close()
         }
     }
 
     @Test
-    fun `handleExternalTx appends to replica log and notifies watchers`() = runTest {
+    fun `subscription routes external events through commitTx and handleExternalTx`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
-
-        val now = Instant.now()
-        lp.handleExternalTx(
-            ReplicaMessage.ResolvedTx(
-                txId = 0, systemTime = now,
-                committed = true, error = null,
-                tableData = emptyMap(),
-            )
-        )
-
-        assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
-
-        val replicaMessages = mutableListOf<ReplicaMessage>()
-        val job = launch { replicaLog.tailAll(-1) { records ->
-            replicaMessages.addAll(records.map { it.message })
-        } }
-        delay(200)
-        job.cancelAndJoin()
-
-        assertEquals(1, replicaMessages.size)
-        val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-        assertEquals(true, resolved.committed)
-        assertEquals(0, resolved.txId)
-    }
-
-    @Test
-    fun `Demux routes external events to txHandler`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
-
+        val liveIndex = mockk<LiveIndex>(relaxed = true)
         val extSource = InMemoryExternalSource()
-        val events = mutableListOf<String>()
 
-        val txHandler = ExternalSource.TxHandler { _, _ ->
-            events.add("handled")
-            lp.handleExternalTx(
-                ReplicaMessage.ResolvedTx(
-                    txId = 0, systemTime = Instant.now(),
-                    committed = true, error = null,
-                    tableData = emptyMap(),
-                )
-            )
-        }
-
-        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
+        val lp = leaderProc(
+            replicaLog = replicaLog, watchers = watchers, liveIndex = liveIndex,
+            extSource = extSource, ctx = coroutineContext
+        )
 
         try {
             extSource.channel.send(Unit)
@@ -144,100 +146,61 @@ class ExternalSourceTest {
 
             delay(500)
 
-            assertEquals(2, events.size)
+            verify(exactly = 2) { liveIndex.commitTx(any()) }
             assertTrue(replicaLog.latestSubmittedOffset >= 1, "replica log should have 2 messages")
         } finally {
-            demux.close()
+            lp.close()
         }
     }
 
     @Test
-    fun `Demux routes source records to leader processor`() = runTest {
+    fun `processRecords flows source records through the leader processor`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { latestCompletedTx } returns null
         }
-        val lp = leaderProc(replicaLog = replicaLog, liveIndex = liveIndex)
-
-        val extSource = InMemoryExternalSource()
-        val txHandler = ExternalSource.TxHandler { _, _ -> }
-
-        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
+        val lp = leaderProc(replicaLog = replicaLog, liveIndex = liveIndex, ctx = coroutineContext)
 
         try {
             val now = Instant.now()
 
-            demux.processRecords(listOf(
+            lp.processRecords(listOf(
                 Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
             ))
 
             delay(500)
 
-            assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through demux to leader")
+            assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through to the leader")
         } finally {
-            demux.close()
+            lp.close()
         }
     }
 
     @Test
-    fun `handleExternalTx with aborted transaction`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+    fun `handleExternalTx threads resumeToken to watchers`() = runTest {
         val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
+        val lp = leaderProc(watchers = watchers, ctx = coroutineContext)
 
-        val now = Instant.now()
-        lp.handleExternalTx(
-            ReplicaMessage.ResolvedTx(
-                txId = 0, systemTime = now,
-                committed = false, error = RuntimeException("bad data"),
-                tableData = emptyMap(),
-            )
-        )
+        try {
+            val token = ProtoAny.pack(StringValue.of("kafka-offset:42"))
+            val openTx = mockk<OpenTx>(relaxed = true) {
+                every { txKey } returns TransactionKey(0L, Instant.now())
+                every { serializeTableData() } returns emptyMap()
+            }
 
-        val result = watchers.awaitTx(0)
-        assertNotNull(result)
-        assertInstanceOf(TransactionResult.Aborted::class.java, result)
+            lp.handleExternalTx(openTx, resumeToken = token)
 
-        val replicaMessages = mutableListOf<ReplicaMessage>()
-        val job = launch { replicaLog.tailAll(-1) { records ->
-            replicaMessages.addAll(records.map { it.message })
-        } }
-        delay(200)
-        job.cancelAndJoin()
-
-        assertEquals(1, replicaMessages.size)
-        val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-        assertEquals(false, resolved.committed)
+            val watcherToken = watchers.externalSourceToken
+            assertNotNull(watcherToken)
+            assertEquals("kafka-offset:42", watcherToken!!.unpack(StringValue::class.java).value)
+        } finally {
+            lp.close()
+        }
     }
 
     @Test
-    fun `handleExternalTx threads externalSourceToken to watchers`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+    fun `error in external source propagates to watchers`() = runTest {
         val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
-
-        val token = ProtoAny.pack(StringValue.of("kafka-offset:42"))
-        val now = Instant.now()
-
-        lp.handleExternalTx(
-            ReplicaMessage.ResolvedTx(
-                txId = 0, systemTime = now,
-                committed = true, error = null,
-                tableData = emptyMap(),
-                externalSourceToken = token,
-            )
-        )
-
-        val watcherToken = watchers.externalSourceToken
-        assertNotNull(watcherToken)
-        assertEquals("kafka-offset:42", watcherToken!!.unpack(StringValue::class.java).value)
-    }
-
-    @Test
-    fun `Demux error in external source propagates to watchers`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
 
         val failingSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
@@ -246,16 +209,32 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        val txHandler = ExternalSource.TxHandler { _, _ -> }
-
-        val demux = ExternalSource.Demux(lp, failingSource, 0, null, txHandler, coroutineContext)
+        val lp = leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext)
 
         try {
             delay(500)
-
             assertNotNull(watchers.exception, "watchers should be in failed state")
         } finally {
-            demux.close()
+            lp.close()
+        }
+    }
+
+    @Test
+    fun `error in commitTx propagates to watchers`() = runTest {
+        val watchers = Watchers(-1)
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { commitTx(any()) } throws RuntimeException("commit failed")
+        }
+
+        val extSource = InMemoryExternalSource()
+        val lp = leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = extSource, ctx = coroutineContext)
+
+        try {
+            extSource.channel.send(Unit)
+            delay(500)
+            assertNotNull(watchers.exception, "watchers should be in failed state")
+        } finally {
+            lp.close()
         }
     }
 
@@ -279,30 +258,5 @@ class ExternalSourceTest {
             db.submitTxBlocking(emptyList(), TxOpts(defaultTz = ZoneId.of("UTC")))
         }
         assertTrue(ex.message!!.contains("external source"), "message mentions external source")
-    }
-
-    @Test
-    fun `Demux error in txHandler propagates to watchers`() = runTest {
-        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers)
-
-        val extSource = InMemoryExternalSource()
-
-        val txHandler = ExternalSource.TxHandler { _, _ ->
-            throw RuntimeException("handler failed")
-        }
-
-        val demux = ExternalSource.Demux(lp, extSource, 0, null, txHandler, coroutineContext)
-
-        try {
-            extSource.channel.send(Unit)
-
-            delay(500)
-
-            assertNotNull(watchers.exception, "watchers should be in failed state")
-        } finally {
-            demux.close()
-        }
     }
 }

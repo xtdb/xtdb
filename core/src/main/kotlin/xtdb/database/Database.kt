@@ -207,39 +207,33 @@ class Database(
                             afterSourceMsgId: MessageId,
                             afterReplicaMsgId: MessageId,
                         ): LogProcessor.LeaderSystem {
-                            val leaderProc = LeaderLogProcessor(
-                                allocator, storage, replicaProducer, state,
-                                indexerForDb, watchers,
-                                indexerConfig.skipTxs.toSet(),
-                                dbCatalog, blockUploader,
-                                afterSourceMsgId, afterReplicaMsgId,
-                                indexerConfig.flushDuration,
-                                base.meterRegistry,
-                            )
-
                             val extFactory = dbConfig.externalSource
 
                             return if (extFactory != null) {
-                                val extSource = extFactory.open(dbName, base.logClusters)
-                                val liveIndex = state.liveIndex
+                                val leaderProc = ExternalSourceProcessor(
+                                    storage, replicaProducer, state,
+                                    watchers, blockUploader,
+                                    afterSourceMsgId, afterReplicaMsgId,
+                                    extSource = extFactory.open(dbName, base.logClusters),
+                                    afterToken = state.blockCatalog.externalSourceToken,
+                                    flushTimeout = indexerConfig.flushDuration,
+                                )
 
-                                val txHandler = ExternalSource.TxHandler { openTx, resumeToken ->
-                                    val tableData = openTx.serializeTableData()
-                                    liveIndex.commitTx(openTx)
-                                    leaderProc.handleExternalTx(ResolvedTx(
-                                        txId = openTx.txKey.txId, systemTime = openTx.txKey.systemTime,
-                                        committed = null, error = null, tableData = tableData,
-                                        externalSourceToken = resumeToken,
-                                    ))
-                                }
-
-                                val afterToken = state.blockCatalog.externalSourceToken
-                                val demux = ExternalSource.Demux(leaderProc, extSource, 0, afterToken, txHandler)
                                 object : LogProcessor.LeaderSystem {
-                                    override val proc get() = demux
-                                    override fun close() { demux.close(); extSource.close(); leaderProc.close(); replicaProducer.close() }
+                                    override val proc get() = leaderProc
+                                    override fun close() { leaderProc.close(); replicaProducer.close() }
                                 }
                             } else {
+                                val leaderProc = LeaderLogProcessor(
+                                    allocator, storage, replicaProducer, state,
+                                    indexerForDb, watchers,
+                                    indexerConfig.skipTxs.toSet(),
+                                    dbCatalog, blockUploader,
+                                    afterSourceMsgId, afterReplicaMsgId,
+                                    indexerConfig.flushDuration,
+                                    base.meterRegistry,
+                                )
+
                                 object : LogProcessor.LeaderSystem {
                                     override val proc get() = leaderProc
                                     override fun close() { leaderProc.close(); replicaProducer.close() }
