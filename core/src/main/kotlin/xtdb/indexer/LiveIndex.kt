@@ -100,8 +100,7 @@ class LiveIndex private constructor(
         val snaps = HashMap<TableRef, TableSnapshot>()
         snaps.closeAllOnCatch {
             for ((tableRef, tableTx) in openTx.tables) {
-                val liveTable = tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
-                snaps[tableRef] = TableSnapshot.open(allocator, liveTable, tableTx)
+                snaps[tableRef] = TableSnapshot.open(allocator, tables[tableRef], tableTx)
             }
 
             for ((table, liveTable) in tables)

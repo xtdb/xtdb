@@ -58,8 +58,8 @@
   (def info-tables
     (-> '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
           information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8,
-                                       udt_schema :utf8, udt_name :utf8,
-                                       ordinal_position :i32, column_default [:? :utf8], is_nullable :utf8, is_identity :utf8}
+                                      udt_schema :utf8, udt_name :utf8,
+                                      ordinal_position :i32, column_default [:? :utf8], is_nullable :utf8, is_identity :utf8}
           information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}}
         (update-vals map->vec-types)))
 
@@ -388,7 +388,8 @@
           :let [live-table (.table li-snap table)]]
       {:schema-name (.getSchemaName table)
        :table-name (.getTableName table)
-       :row-count (long (.getRowCount (.getLiveRelation live-table)))})))
+       :row-count (long (or (some-> (.getLiveRelation live-table) (.getRowCount))
+                            0))})))
 
 (defn live-columns [^Snapshot snap]
   (let [li-snap (.getLiveIndex snap)]

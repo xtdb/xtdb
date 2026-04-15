@@ -24,15 +24,14 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
-           xtdb.catalog.TableCatalog
            (xtdb ICursor Bytes)
            (xtdb.indexer Snapshot Snapshot$Source)
-           (xtdb.metadata MetadataPredicate PageMetadata PageMetadata$Factory)
+           (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
+           xtdb.query.IQuerySource$QueryCatalog
            (xtdb.segment BufferPoolSegment MemorySegment MergePlanner)
-           (xtdb.storage BufferPool)
            xtdb.table.TableRef
-           (xtdb.trie Bucketer TrieCatalog)
+           (xtdb.trie Bucketer)
            (xtdb.util TemporalBounds TemporalDimension)))
 
 (s/def ::table ::table/ref)
@@ -197,7 +196,7 @@
         (test [_ path]
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
-(defn scan-vec-types [db-catalog, snaps, scan-cols]
+(defn scan-vec-types [^IQuerySource$QueryCatalog db-catalog, snaps, scan-cols]
   (letfn [(->vec-type [[^TableRef table col-name]]
             (let [col-name (str col-name)]
               (or (types/temporal-vec-types col-name)
@@ -208,7 +207,7 @@
                   (let [db-name (.getDbName table)
                         state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
-                        snap (get snaps db-name)]
+                        ^Snapshot snap (get snaps db-name)]
                     (types/merge-types (some-> (.getType table-catalog table col-name))
                                        (some-> (.getLiveIndex snap)
                                                (.table table)
@@ -323,7 +322,8 @@
                                      (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                              (when live-table-snap
-                               (.add !segments (.getSegment live-table-snap))
+                               (when-let [live-table-seg (.getSegment live-table-snap)]
+                                 (.add !segments live-table-seg))
 
                                ;; Add tx segment for read-own-writes (when snapshot opened from within transaction)
                                (when-let [tx-seg (.getTxSegment live-table-snap)]
