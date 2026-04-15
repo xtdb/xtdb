@@ -175,9 +175,12 @@
               c/*ignore-signal-block?* true]
       (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 120})]
         (doseq [tick (range 25)
-                batch (->> (range 100)
-                           (partition-all 64))
-                :let [tick-at (-> (time/->zdt #inst "2020-01-01") (.plusHours (* tick 12)))]]
+                [batch-idx batch] (map-indexed vector (->> (range 100)
+                                                           (partition-all 64)))
+                :let [tick-at (-> (time/->zdt #inst "2020-01-01") (.plusHours (* tick 12)))
+                      ;; distinct system-time per batch within a tick — the indexer rejects
+                      ;; txs whose system-time equals the previous one (smoothing collision).
+                      tx-st (.plusNanos tick-at (* batch-idx 1000))]]
           (xt/execute-tx node [(into [:put-docs {:into :readings, :valid-from tick-at, :valid-to (.plusHours tick-at 12)}]
                                      (for [x batch]
                                        {:xt/id x, :reading tick}))
@@ -186,7 +189,7 @@
                                      (for [x batch]
                                        {:xt/id x, :price tick}))]
 
-                         {:system-time tick-at}))
+                         {:system-time tx-st}))
 
         (c/compact-all! node #xt/duration "PT5S")
 
