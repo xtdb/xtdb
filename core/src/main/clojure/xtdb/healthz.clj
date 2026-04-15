@@ -36,7 +36,7 @@
 (defn- all-databases
   "Returns all currently attached databases from the catalog."
   [^Database$Catalog db-cat]
-  (into [] (map (fn [db-name] (.databaseOrNull db-cat db-name)))
+  (into [] (map (fn [^String db-name] (.databaseOrNull db-cat db-name)))
         (.getDatabaseNames db-cat)))
 
 (def index-html-str
@@ -64,7 +64,7 @@
 
                 ["/healthz/started" {:name :started
                                      :get (fn [{:keys [^Database$Catalog db-cat initial-target-message-ids]}]
-                                            (let [catching-up (for [[db-name target-msg-ids] initial-target-message-ids
+                                            (let [catching-up (for [[^String db-name, target-msg-ids] initial-target-message-ids
                                                                     :let [db (.databaseOrNull db-cat db-name)]
                                                                     :when db
                                                                     :let [lpm-id (.getLatestProcessedMsgId db)]
@@ -126,9 +126,9 @@
 
                 ["/system/finish-block" {:name :finish-block
                                          :post (fn [{:keys [^Database$Catalog db-cat query-string]}]
-                                                 (let [db-name (some->> query-string
-                                                                        (re-find #"(?:^|&)db=([^&]+)")
-                                                                        second)
+                                                 (let [^String db-name (some->> query-string
+                                                                                (re-find #"(?:^|&)db=([^&]+)")
+                                                                                second)
                                                        dbs (if db-name
                                                              (if-let [db (.databaseOrNull db-cat db-name)]
                                                                [db]
@@ -177,7 +177,7 @@
 
 (defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, ^NodeBase base, ^Database$Catalog db-cat]}]
   (let [initial-target-message-ids (into {}
-                                         (for [db-name (.getDatabaseNames db-cat)
+                                         (for [^String db-name (.getDatabaseNames db-cat)
                                                :let [^Database db (.databaseOrNull db-cat db-name)]
                                                :when db]
                                            [db-name [(.getLatestSubmittedMsgId (.getSourceLog db))]]))
