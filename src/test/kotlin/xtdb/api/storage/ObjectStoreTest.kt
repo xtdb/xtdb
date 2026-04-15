@@ -73,6 +73,7 @@ abstract class ObjectStoreTest {
 
     private fun ObjectStore.allObjects() = listAllObjects().map { it.key.toString() }.toSet()
     private fun ObjectStore.objects(dir: Path) = listAllObjects(dir).map { it.key.toString() }.toSet()
+    private fun ObjectStore.objectsAfter(dir: Path, afterKey: Path) = listAfter(dir, afterKey).map { it.key.toString() }.toSet()
 
     @Test
     fun `test list`() = runTest(timeout = 10.seconds) {
@@ -98,6 +99,33 @@ abstract class ObjectStoreTest {
             setOf("bar/baz/dan"),
             objectStore.objects("bar/baz".asPath),
             "doesn't include bar/baza"
+        )
+    }
+
+    @Test
+    fun `test listAfter`() = runTest(timeout = 10.seconds) {
+        objectStore.putString("bar/a", ":a")
+        objectStore.putString("bar/b", ":b")
+        objectStore.putString("bar/c", ":c")
+        objectStore.putString("bar/d", ":d")
+        objectStore.putString("foo/e", ":e")
+
+        assertEquals(
+            setOf("bar/c", "bar/d"),
+            objectStore.objectsAfter("bar".asPath, "bar/b".asPath),
+            "lists only objects after the marker"
+        )
+
+        assertEquals(
+            emptySet(),
+            objectStore.objectsAfter("bar".asPath, "bar/d".asPath),
+            "marker at last object returns empty"
+        )
+
+        assertEquals(
+            emptySet(),
+            objectStore.objectsAfter("bar".asPath, "bar/z".asPath),
+            "marker past all objects returns empty"
         )
     }
 

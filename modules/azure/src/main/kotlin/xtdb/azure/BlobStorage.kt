@@ -234,6 +234,15 @@ class BlobStorage(
     override fun listAllObjects() = listAllObjects0(prefix)
     override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
 
+    override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> {
+        val listPrefix = prefix.resolve(dir).normalize()
+        val startFrom = prefix.resolve(afterKey).normalize().toString()
+        return listObjects(ListBlobsOptions().setPrefix("$listPrefix/").setStartFrom(startFrom))
+            .map { StoredObject(prefix.relativize(it.name.asPath), it.properties.contentLength) }
+            .filter { it.key > afterKey }
+            .asIterable()
+    }
+
     // test usage only
     @Suppress("unused")
     fun listUncommittedBlobs(): Iterable<Path> {

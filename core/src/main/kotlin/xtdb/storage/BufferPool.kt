@@ -61,6 +61,9 @@ interface BufferPool : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
+    fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
+        listAllObjects(dir).filter { it.key > afterKey }
+
     fun copyObject(src: Path, dest: Path)
 
     fun deleteIfExists(key: Path)
@@ -127,6 +130,8 @@ class ReadOnlyBufferPool(private val delegate: BufferPool) : BufferPool {
     override fun listAllObjects(): Iterable<StoredObject> = delegate.listAllObjects()
 
     override fun listAllObjects(dir: Path): Iterable<StoredObject> = delegate.listAllObjects(dir)
+
+    override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> = delegate.listAfter(dir, afterKey)
 
     override fun copyObject(src: Path, dest: Path) {
         throw Fault("Attempted copy in read-only storage: $src -> $dest")

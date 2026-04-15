@@ -117,6 +117,15 @@ class CloudStorage(
     override fun listAllObjects() = listAllObjects0(prefix)
     override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
 
+    override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> {
+        val listPrefix = prefix.resolve(dir).normalize()
+        val startOffset = prefix.resolve(afterKey).normalize().toString()
+        return client.list(bucket, BlobListOption.prefix("$listPrefix/"), BlobListOption.startOffset(startOffset))
+            .iterateAll()
+            .map { blob -> StoredObject(prefix.relativize(blob.name.asPath), blob.size) }
+            .filter { it.key > afterKey }
+    }
+
     override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
         runInterruptible {
             val srcKey = prefix.resolve(src).normalize().toString()

@@ -218,6 +218,30 @@ class S3(
     override fun listAllObjects(dir: Path) = listAllObjects0(prefix.resolve(dir).normalize())
     override fun listAllObjects() = listAllObjects0(prefix)
 
+    private fun listAfter0(listPrefix: Path, afterKey: Path) =
+        sequence {
+            var continuationToken: String? = null
+
+            while (true) {
+                val listResp = runBlocking {
+                    client.listObjectsV2 {
+                        it.bucket(bucket)
+                        it.prefix("$listPrefix/")
+                        it.startAfter(prefix.resolve(afterKey).normalize().toString())
+                        it.continuationToken(continuationToken)
+                    }.await()
+                }
+
+                yieldAll(listResp.contents().map { StoredObject(prefix.relativize(it.key().asPath), it.size()) })
+
+                if (!listResp.isTruncated) break
+                continuationToken = listResp.nextContinuationToken()
+            }
+        }.asIterable()
+
+    override fun listAfter(dir: Path, afterKey: Path) =
+        listAfter0(prefix.resolve(dir).normalize(), afterKey)
+
     override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
         client.copyObject {
             it.sourceBucket(bucket)
