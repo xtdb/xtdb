@@ -12,6 +12,7 @@ import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.BlockIndex
+import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.util.RowCounter
 import xtdb.util.RefCounter
@@ -204,8 +205,8 @@ class LiveIndex private constructor(
         }
 
         @JvmStatic
-        fun buildSchema(snap: Snapshot?, tableCatalog: TableCatalog): Map<TableRef, Any> {
-            val schema = HashMap<TableRef, MutableSet<String>>()
+        fun buildSchema(snap: Snapshot?, tableCatalog: TableCatalog): Map<TableRef, Set<ColumnName>> {
+            val schema = HashMap<TableRef, MutableSet<ColumnName>>()
 
             for ((table, types) in tableCatalog.types)
                 schema.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
