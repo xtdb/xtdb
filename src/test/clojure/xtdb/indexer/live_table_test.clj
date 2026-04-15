@@ -165,12 +165,11 @@
               (.commitTx live-index open-tx)
 
               (with-open [snap (.openSnapshot live-index)]
-                (let [live-index-snap (.getLiveIndex snap)
-                      live-table-before (live-table-snap->data (.table live-index-snap table))]
+                (let [live-table-before (live-table-snap->data (.table snap table))]
 
                   (.finishBlock live-index bp 0)
 
-                  (let [live-table-after (live-table-snap->data (.table live-index-snap table))]
+                  (let [live-table-after (live-table-snap->data (.table snap table))]
 
                     (t/is (= (:live-trie-iids live-table-before)
                              (:live-trie-iids live-table-after)

@@ -40,19 +40,19 @@ class LiveIndex private constructor(
 ) : Snapshot.Source, AutoCloseable {
 
     private val tables = HashMap<TableRef, LiveTable>()
-    @Volatile private var sharedSnap: xtdb.indexer.Snapshot? = null
+
+    @Volatile
+    private var sharedSnap: xtdb.indexer.Snapshot? = null
     private val snapLock = StampedLock()
     private val snapRefCounter = RefCounter()
     private val rowCounter = RowCounter()
 
-    interface Snapshot : AutoCloseable {
-        val allColumnTypes: Map<TableRef, Map<String, VectorType>>
-        fun table(table: TableRef): TableSnapshot?
-        val tables: Iterable<TableRef>
-    }
+    @JvmField
+    val logLimit = indexerConfig.logLimit
 
-    @JvmField val logLimit = indexerConfig.logLimit
-    @JvmField val pageLimit = indexerConfig.pageLimit
+    @JvmField
+    val pageLimit = indexerConfig.pageLimit
+
     private val rowsPerBlock = indexerConfig.rowsPerBlock
     private val skipTxs = indexerConfig.skipTxs
 
@@ -66,9 +66,7 @@ class LiveIndex private constructor(
     private fun refreshSnap() {
         val oldSnap = sharedSnap
 
-        openLiveIdxSnap(allocator, this@LiveIndex.tables).closeOnCatch { liveIdxSnap ->
-            sharedSnap = Snapshot(latestCompletedTx, liveIdxSnap, buildSchema(liveIdxSnap, tableCatalog))
-        }
+        sharedSnap = Snapshot.open(allocator, tableCatalog, this, openTx = null)
 
         oldSnap?.close()
     }
@@ -83,7 +81,8 @@ class LiveIndex private constructor(
         try {
             for ((tableRef, tableTx) in openTx.tables) {
                 if (tableTx.txRelation.rowCount > 0) {
-                    val liveTable = tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
+                    val liveTable =
+                        tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
                     liveTable.importData(tableTx.txRelation)
                 }
             }
@@ -96,24 +95,6 @@ class LiveIndex private constructor(
         }
     }
 
-    fun openSnapshot(openTx: OpenTx): Snapshot {
-        val snaps = HashMap<TableRef, TableSnapshot>()
-        snaps.closeAllOnCatch {
-            for ((tableRef, tableTx) in openTx.tables) {
-                snaps[tableRef] = TableSnapshot.open(allocator, tables[tableRef], tableTx)
-            }
-
-            for ((table, liveTable) in tables)
-                snaps.computeIfAbsent(table) { TableSnapshot.open(allocator, liveTable, tableTx = null) }
-
-            return object : Snapshot {
-                override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }
-                override fun table(table: TableRef) = snaps[table]
-                override val tables get() = snaps.keys
-                override fun close() = snaps.values.closeAll()
-            }
-        }
-    }
 
     fun importTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
@@ -122,7 +103,14 @@ class LiveIndex private constructor(
             for ((schemaAndTable, ipcBytes) in resolvedTx.tableData) {
                 val tableRef = TableRef.parse(dbName, schemaAndTable)
                 val liveTable =
-                    this@LiveIndex.tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, rowCounter, liveTrieFactory) }
+                    this@LiveIndex.tables.getOrPut(tableRef) {
+                        LiveTable(
+                            allocator,
+                            tableRef,
+                            rowCounter,
+                            liveTrieFactory
+                        )
+                    }
 
                 Relation.StreamLoader(allocator, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
                     Relation(allocator, loader.schema).use { rel ->
@@ -140,7 +128,7 @@ class LiveIndex private constructor(
         }
     }
 
-    override fun openSnapshot(): xtdb.indexer.Snapshot {
+    override fun openSnapshot(): Snapshot {
         val stamp = snapLock.readLock()
         try {
             return sharedSnap!!.also { it.retain() }
@@ -148,6 +136,8 @@ class LiveIndex private constructor(
             snapLock.unlock(stamp)
         }
     }
+
+    fun openSnapshot(openTx: OpenTx) = Snapshot.open(allocator, tableCatalog, this, openTx)
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
 
@@ -189,33 +179,6 @@ class LiveIndex private constructor(
     }
 
     companion object {
-        private fun openLiveIdxSnap(al: BufferAllocator, tables: Map<TableRef, LiveTable>): Snapshot {
-            HashMap<TableRef, TableSnapshot>().closeAllOnCatch { snaps ->
-                for ((table, liveTable) in tables)
-                    snaps[table] = TableSnapshot.open(al, liveTable, tableTx = null)
-
-                return object : Snapshot {
-                    override val allColumnTypes get() = snaps.mapValues { (_, snap) -> snap.types }
-                    override fun table(table: TableRef) = snaps[table]
-                    override val tables get() = snaps.keys
-                    override fun close() = snaps.values.closeAll()
-                }
-            }
-        }
-
-        @JvmStatic
-        fun buildSchema(snap: Snapshot?, tableCatalog: TableCatalog): Map<TableRef, Set<ColumnName>> {
-            val schema = HashMap<TableRef, MutableSet<ColumnName>>()
-
-            for ((table, types) in tableCatalog.types)
-                schema.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
-            if (snap != null)
-                for ((table, types) in snap.allColumnTypes)
-                    schema.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
-
-            return schema
-        }
-
         @JvmStatic
         @JvmOverloads
         @JvmName("open")

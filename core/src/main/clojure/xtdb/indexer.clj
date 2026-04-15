@@ -590,9 +590,7 @@
                 (let [db-cat (Indexer/queryCatalog db-storage db-state
                                                    (reify Snapshot$Source
                                                      (openSnapshot [_]
-                                                       (util/with-close-on-catch [live-index-snap (.openSnapshot live-index open-tx)]
-                                                         (Snapshot. tx-key live-index-snap
-                                                                    (update-vals (LiveIndex/buildSchema live-index-snap table-catalog) set))))))
+                                                       (Snapshot/open allocator table-catalog live-index open-tx))))
 
                       tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                                :current-time system-time

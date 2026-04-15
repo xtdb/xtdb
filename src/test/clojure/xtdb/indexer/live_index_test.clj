@@ -195,9 +195,8 @@
 
         ;; External snapshot (from live-index, not from tx) should NOT see the uncommitted row
         (with-open [external-snap (.openSnapshot live-index)]
-          (let [live-idx-snap (.getLiveIndex external-snap)]
-            (t/is (nil? (.table live-idx-snap table))
-                  "External snapshot should not see table created in uncommitted tx")))
+          (t/is (nil? (.table external-snap table))
+                "External snapshot should not see table created in uncommitted tx"))
 
         ;; But the transaction's own snapshot SHOULD see its data (in txRelation)
         (with-open [tx-snap (.openSnapshot live-index live-tx)]
@@ -213,8 +212,7 @@
 
       ;; After commit, external snapshot should now see the data
       (with-open [external-snap (.openSnapshot live-index)]
-        (let [live-idx-snap (.getLiveIndex external-snap)
-              table-snap (.table live-idx-snap table)]
+        (let [table-snap (.table external-snap table)]
           (t/is (some? table-snap)
                 "External snapshot should see committed table")
           (t/is (= 1 (.getRowCount (.getLiveRelation table-snap)))
@@ -235,8 +233,7 @@
 
     ;; Take a snapshot BEFORE second transaction
     (with-open [snap-before (.openSnapshot live-index)]
-      (let [live-idx-snap-before (.getLiveIndex snap-before)
-            table-snap-before (.table live-idx-snap-before table)
+      (let [table-snap-before (.table snap-before table)
             row-count-before (.getRowCount (.getLiveRelation table-snap-before))]
 
         ;; Commit second transaction
@@ -255,8 +252,7 @@
 
       ;; New snapshot should see both rows
       (with-open [snap-after (.openSnapshot live-index)]
-        (let [live-idx-snap-after (.getLiveIndex snap-after)
-              table-snap-after (.table live-idx-snap-after table)]
+        (let [table-snap-after (.table snap-after table)]
           (t/is (= 2 (.getRowCount (.getLiveRelation table-snap-after)))
                 "Post-commit snapshot should have 2 rows"))))))
 
@@ -299,8 +295,7 @@
         (.commitTx live-index live-tx))
 
       (with-open [snap (.openSnapshot live-index)]
-        (let [live-idx-snap (.getLiveIndex snap)
-              table-snap (.table live-idx-snap table)]
+        (let [table-snap (.table snap table)]
           (t/is (= 3 (.getRowCount (.getLiveRelation table-snap)))
                 "All puts should be recorded (temporal history)"))))))
 

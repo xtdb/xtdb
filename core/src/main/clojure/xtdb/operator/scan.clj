@@ -208,10 +208,8 @@
                         state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
                         ^Snapshot snap (get snaps db-name)]
-                    (types/merge-types (some-> (.getType table-catalog table col-name))
-                                       (some-> (.getLiveIndex snap)
-                                               (.table table)
-                                               (.columnType col-name)))))))]
+                    (types/merge-types (.getType table-catalog table col-name)
+                                       (.columnType snap table col-name))))))]
     (->> scan-cols
          (into {} (map (juxt identity ->vec-type))))))
 
@@ -308,7 +306,7 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               live-table-snap (some-> (.getLiveIndex snapshot) (.table table))
+                               live-table-snap (.table snapshot table)
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [db-name 0])))]

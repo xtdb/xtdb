@@ -23,6 +23,7 @@
            xtdb.pgwire.PgType
            (xtdb.indexer Snapshot)
            xtdb.operator.SelectionSpec
+           (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.table.TableRef
            (xtdb.trie MemoryHashTrie Trie TrieCatalog)))
 
@@ -383,22 +384,20 @@
      :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
 
 (defn live-tables [^Snapshot snap]
-  (let [li-snap (.getLiveIndex snap)]
-    (for [^TableRef table (.getTables li-snap)
-          :let [live-table (.table li-snap table)]]
-      {:schema-name (.getSchemaName table)
-       :table-name (.getTableName table)
-       :row-count (long (or (some-> (.getLiveRelation live-table) (.getRowCount))
-                            0))})))
+  (for [^TableRef table (.getTables snap)
+        :let [live-table (.table snap table)]]
+    {:schema-name (.getSchemaName table)
+     :table-name (.getTableName table)
+     :row-count (long (or (some-> (.getLiveRelation live-table) (.getRowCount))
+                          0))}))
 
 (defn live-columns [^Snapshot snap]
-  (let [li-snap (.getLiveIndex snap)]
-    (for [^TableRef table (.getTables li-snap)
-          [col-name col-type] (.getTypes (.table li-snap table))]
-      {:schema-name (.getSchemaName table)
-       :table-name (.getTableName table)
-       :col-name col-name
-       :col-type (pr-str (st/render-type col-type))})))
+  (for [^TableRef table (.getTables snap)
+        [col-name col-type] (.getTypes (.table snap table))]
+    {:schema-name (.getSchemaName table)
+     :table-name (.getTableName table)
+     :col-name col-name
+     :col-type (pr-str (st/render-type col-type))}))
 
 (defn metrics-timers [^MeterRegistry reg]
   (->> (.getMeters reg)
@@ -480,14 +479,15 @@
                  schema params]
         ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
         ;; should be types/merge-types as per scan-vec-types
-        (let [db-state (.getQueryState db)
+        (let [^IQuerySource$QueryDatabase db db
+              ^IQuerySource$QueryCatalog db-cat db-cat
+              db-state (.getQueryState db)
               db-name (.getName db-state)
               table-catalog (.getTableCatalog db-state)
               trie-catalog (.getTrieCatalog db-state)
               schema-info (-> (merge-with merge
                                           (update-vals (into {} (.getTypes table-catalog)) #(into {} %))
-                                          (some-> (.getLiveIndex ^Snapshot snap)
-                                                  (.getAllColumnTypes)))
+                                          (.getAllColumnTypes ^Snapshot snap))
                               (merge meta-table-schemas)
                               (update-keys (fn [k]
                                              (cond
