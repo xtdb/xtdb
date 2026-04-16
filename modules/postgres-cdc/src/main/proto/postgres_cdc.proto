@@ -1,0 +1,25 @@
+edition = "2023";
+
+package xtdb.postgres.proto;
+
+option java_multiple_files = true;
+
+message PostgresCdcSourceConfig {
+    string hostname = 1;
+    int32 port = 2;
+    string database = 3;
+    string username = 4;
+    string password = 5;
+    string slot_name = 6;
+    string publication_name = 7;
+    repeated string schema_include_list = 8;
+}
+
+message PostgresCdcToken {
+    // The raw Debezium-style offset is not needed here — we own the protocol.
+    // The slot's confirmed_flush_lsn tells PG where to resume streaming.
+    // We track the LSN of the last committed transaction in XT.
+    int64 latest_committed_lsn = 1;
+    int64 latest_tx_id = 2;
+    bool snapshot_completed = 3;
+}

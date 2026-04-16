@@ -74,6 +74,8 @@ junit-jupiter-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engi
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junit-launcher" }
 
 pgjdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.10" }
+jdbi-core = { group = "org.jdbi", name = "jdbi3-core", version = "3.49.0" }
+jdbi-kotlin = { group = "org.jdbi", name = "jdbi3-kotlin", version = "3.49.0" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time", version.ref = "exposed" }
