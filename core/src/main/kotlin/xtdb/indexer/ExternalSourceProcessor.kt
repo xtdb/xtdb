@@ -31,6 +31,7 @@ import xtdb.util.logger
 import xtdb.util.trace
 import java.time.Duration
 import java.time.Instant
+import java.time.InstantSource
 import kotlin.coroutines.CoroutineContext
 
 private val LOG = ExternalSourceProcessor::class.logger
@@ -42,11 +43,12 @@ class ExternalSourceProcessor(
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
+    partition: Int,
     afterSourceMsgId: MessageId,
     afterReplicaMsgId: MessageId,
     private val extSource: ExternalSource,
     afterToken: ExternalSourceToken?,
-    partition: Int = 0,
+    private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
 ) : LogProcessor.LeaderProcessor {
@@ -88,39 +90,46 @@ class ExternalSourceProcessor(
         return if (systemTime.isBefore(floor)) floor else systemTime
     }
 
-    private val txIndexer = ExternalSource.TxIndexer { txId, systemTime, externalSourceToken, writer ->
-        val txKey = TransactionKey(txId, smoothSystemTime(systemTime))
+    private val txIndexer = object : ExternalSource.TxIndexer {
+        override suspend fun indexTx(
+            externalSourceToken: ExternalSourceToken?,
+            systemTime: Instant?,
+            writer: suspend (OpenTx) -> TxResult,
+        ): TxResult {
+            val txId = (liveIndex.latestCompletedTx?.txId ?: -1) + 1
+            val txKey = TransactionKey(txId, smoothSystemTime(systemTime ?: instantSource.instant()))
 
-        try {
-            val openTx = OpenTx(allocator, txKey)
-            val result = try {
-                writer(openTx)
-            } catch (e: Throwable) {
-                openTx.close()
-                throw e
-            }
-
-            when (result) {
-                is TxResult.Committed -> openTx.use {
-                    it.addTxRow(dbName, txKey, null, result.userMetadata)
-                    commitAndPublish(it, txKey, result, externalSourceToken)
+            try {
+                val openTx = OpenTx(allocator, txKey)
+                val result = try {
+                    writer(openTx)
+                } catch (e: Throwable) {
+                    openTx.close()
+                    throw e
                 }
 
-                is TxResult.Aborted -> {
-                    openTx.close()
-                    OpenTx(allocator, txKey).use { abortTx ->
-                        abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
-                        commitAndPublish(abortTx, txKey, result, externalSourceToken)
+                when (result) {
+                    is TxResult.Committed -> openTx.use {
+                        it.addTxRow(dbName, txKey, null, result.userMetadata)
+                        commitAndPublish(it, txKey, result, externalSourceToken)
+                    }
+
+                    is TxResult.Aborted -> {
+                        openTx.close()
+                        OpenTx(allocator, txKey).use { abortTx ->
+                            abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
+                            commitAndPublish(abortTx, txKey, result, externalSourceToken)
+                        }
                     }
                 }
-            }
 
-            result
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            watchers.notifyError(e)
-            throw e
+                return result
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                watchers.notifyError(e)
+                throw e
+            }
         }
     }
 

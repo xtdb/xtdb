@@ -21,7 +21,6 @@ import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
 import xtdb.indexer.OpenTx
-import xtdb.time.InstantUtil.asMicros
 import com.google.protobuf.Any as ProtoAny
 import java.time.Instant
 import java.util.Collections
@@ -77,10 +76,9 @@ class DebeziumKafkaSourceTest {
     }
 
     data class CapturedTx(
-        val txId: Long,
-        val systemTime: Instant,
         val cdcRows: Int,
         val resumeToken: ExternalSourceToken?,
+        val result: TxResult,
     )
 
     class CapturingTxIndexer(
@@ -96,23 +94,29 @@ class DebeziumKafkaSourceTest {
     private fun capturingTxIndexer(): CapturingTxIndexer {
         val received = Collections.synchronizedList(mutableListOf<CapturedTx>())
         val al = RootAllocator()
+        var nextTxId = 0L
 
-        val txIndexer = ExternalSource.TxIndexer { txId, systemTime, externalSourceToken, writer ->
-            val txKey = TransactionKey(txId, systemTime)
+        val txIndexer = object : ExternalSource.TxIndexer {
+            override suspend fun indexTx(
+                externalSourceToken: ExternalSourceToken?,
+                systemTime: Instant?,
+                writer: suspend (OpenTx) -> ExternalSource.TxResult,
+            ): ExternalSource.TxResult {
+                val txKey = TransactionKey(nextTxId++, systemTime ?: Instant.now())
 
-            OpenTx(al, txKey).use { openTx ->
-                val result = writer(openTx)
+                return OpenTx(al, txKey).use { openTx ->
+                    val result = writer(openTx)
 
-                received.add(CapturedTx(
-                    txId = txKey.txId,
-                    systemTime = txKey.systemTime,
-                    cdcRows = openTx.tables
-                        .filter { (ref, _) -> ref.schemaName != "xt" }
-                        .sumOf { (_, table) -> table.txRelation.rowCount },
-                    resumeToken = externalSourceToken,
-                ))
+                    received.add(CapturedTx(
+                        cdcRows = openTx.tables
+                            .filter { (ref, _) -> ref.schemaName != "xt" }
+                            .sumOf { (_, table) -> table.txRelation.rowCount },
+                        resumeToken = externalSourceToken,
+                        result = result,
+                    ))
 
-                result
+                    result
+                }
             }
         }
         return CapturingTxIndexer(txIndexer, received, al)
@@ -123,12 +127,6 @@ class DebeziumKafkaSourceTest {
         val debeziumToken = token.unpack(DebeziumOffsetToken::class.java)
         return debeziumToken.dbzmTopicOffsetsMap[topic]?.offsetsList?.firstOrNull()
     }
-
-    private fun resumeTokenTxId(token: ExternalSourceToken?): Long? =
-        token?.unpack(DebeziumOffsetToken::class.java)?.latestTxId
-
-    private fun resumeTokenSystemTimeMicros(token: ExternalSourceToken?): Long? =
-        token?.unpack(DebeziumOffsetToken::class.java)?.latestSystemTimeMicros
 
     @Test
     fun `subscription close cancels cleanly`() = runTest(timeout = 10.seconds) {
@@ -306,8 +304,8 @@ class DebeziumKafkaSourceTest {
     }
 
     @Test
-    fun `synthetic txId starts at 0 and is persisted in token`() = runTest(timeout = 10.seconds) {
-        val topic = "test-synthetic-txid"
+    fun `userMetadata carries lsn and tx_us`() = runTest(timeout = 10.seconds) {
+        val topic = "test-user-metadata"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
         val (txIndexer, received) = capturingTxIndexer()
@@ -321,65 +319,11 @@ class DebeziumKafkaSourceTest {
             }
         }
 
-        assertEquals(0L, received[0].txId, "First tx should have synthetic txId=0")
-        assertEquals(0L, resumeTokenTxId(received[0].resumeToken))
-    }
-
-    @Test
-    fun `txId continues incrementing across restarts`() = runTest(timeout = 10.seconds) {
-        val topic = "test-txid-restart"
-        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
-
-        val (txIndexer1, received1) = capturingTxIndexer()
-        val log1 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
-        log1.use {
-            val job = launch { log1.onPartitionAssigned(0, null, txIndexer1) }
-            try {
-                while (received1.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-            } finally {
-                job.cancelAndJoin()
-            }
-        }
-        assertEquals(0L, received1[0].txId)
-        val resumeToken = received1.last().resumeToken
-
-        produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
-
-        val (txIndexer2, received2) = capturingTxIndexer()
-        val log2 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
-        log2.use {
-            val job = launch { log2.onPartitionAssigned(0, resumeToken, txIndexer2) }
-            try {
-                while (received2.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-            } finally {
-                job.cancelAndJoin()
-            }
-        }
-
-        assertEquals(1L, received2[0].txId, "Should continue from previous txId + 1")
-        assertEquals(1L, resumeTokenTxId(received2[0].resumeToken))
-    }
-
-    @Test
-    fun `system_time is persisted in token in micros`() = runTest(timeout = 10.seconds) {
-        val topic = "test-systime-persist"
-        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
-
-        val (txIndexer, received) = capturingTxIndexer()
-        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
-        log.use {
-            val job = launch { log.onPartitionAssigned(0, null, txIndexer) }
-            try {
-                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-            } finally {
-                job.cancelAndJoin()
-            }
-        }
-
-        val captured = received[0]
-        assertEquals(
-            captured.systemTime.asMicros,
-            resumeTokenSystemTimeMicros(captured.resumeToken),
-        )
+        val result = received[0].result as TxResult.Committed
+        val metadata = result.userMetadata!!
+        assertTrue(metadata.containsKey("lsn"), "userMetadata should contain lsn")
+        assertTrue(metadata.containsKey("tx_us"), "userMetadata should contain tx_us")
+        assertEquals(0L, metadata["lsn"], "lsn should be the max Kafka offset")
+        assertTrue((metadata["tx_us"] as Long) > 0, "tx_us should be a positive micros timestamp")
     }
 }

@@ -3,7 +3,6 @@ package xtdb.database
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
-import xtdb.api.TxId
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.proto.DatabaseConfig
@@ -34,11 +33,10 @@ interface ExternalSource : AutoCloseable {
         data class Aborted(val error: Throwable, override val userMetadata: Map<*, *>? = null) : TxResult
     }
 
-    fun interface TxIndexer {
+    interface TxIndexer {
         suspend fun indexTx(
-            txId: TxId,
-            systemTime: Instant,
             externalSourceToken: ExternalSourceToken?,
+            systemTime: Instant? = null,
             writer: suspend (OpenTx) -> TxResult,
         ): TxResult
     }

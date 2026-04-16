@@ -54,11 +54,10 @@ class ExternalSourceTest {
     class InMemoryExternalSource(
         val channel: Channel<ExternalSourceToken?> = Channel(100),
     ) : ExternalSource {
-        private var nextTxId = 0L
 
         override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer) {
             for (token in channel) {
-                txIndexer.indexTx(nextTxId++, Instant.now(), token) { _ ->
+                txIndexer.indexTx(token) { _ ->
                     TxResult.Committed()
                 }
             }
@@ -89,7 +88,7 @@ class ExternalSourceTest {
 
         return ExternalSourceProcessor(
             allocator, dbStorage, replicaProducer, dbState, watchers, blockUploader,
-            afterSourceMsgId = -1, afterReplicaMsgId = -1,
+            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1,
             extSource = extSource, afterToken = afterToken, ctx = ctx,
         )
     }
@@ -98,9 +97,12 @@ class ExternalSourceTest {
     fun `indexTx appends ResolvedTx to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { latestCompletedTx } returns null
+        }
         val extSource = InMemoryExternalSource()
 
-        leaderProc(replicaLog = replicaLog, watchers = watchers, extSource = extSource, ctx = coroutineContext).use {
+        leaderProc(replicaLog = replicaLog, liveIndex = liveIndex, watchers = watchers, extSource = extSource, ctx = coroutineContext).use {
             extSource.channel.send(null)
             delay(500)
 

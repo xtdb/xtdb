@@ -20,6 +20,4 @@ message PartitionOffsets {
 
 message DebeziumOffsetToken {
     map<string, PartitionOffsets> dbzm_topic_offsets = 1;
-    int64 latest_tx_id = 2;
-    int64 latest_system_time_micros = 3;
 }

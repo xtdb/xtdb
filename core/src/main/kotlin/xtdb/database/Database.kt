@@ -46,7 +46,6 @@ import xtdb.util.closeAll
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
-import xtdb.api.log.ReplicaMessage.ResolvedTx
 import java.time.Duration
 import java.util.*
 
@@ -213,7 +212,7 @@ class Database(
                                 val leaderProc = ExternalSourceProcessor(
                                     allocator, storage, replicaProducer, state,
                                     watchers, blockUploader,
-                                    afterSourceMsgId, afterReplicaMsgId,
+                                    partition = 0, afterSourceMsgId, afterReplicaMsgId,
                                     extSource = extFactory.open(dbName, base.logClusters),
                                     // watchers has the latest token from replica log replay,
                                     // which may be ahead of blockCatalog if no block boundary was flushed.

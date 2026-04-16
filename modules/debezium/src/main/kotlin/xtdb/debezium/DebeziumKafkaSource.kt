@@ -219,8 +219,6 @@ class DebeziumKafkaSource @JvmOverloads constructor(
                 c.seekToBeginning(listOf(tp))
             }
 
-            var latestTxId = token?.latestTxId ?: -1L
-
             while (currentCoroutineContext().isActive) {
                 val records = runInterruptible(Dispatchers.IO) {
                     try {
@@ -238,22 +236,20 @@ class DebeziumKafkaSource @JvmOverloads constructor(
                         latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
                     }
 
-                    val txId = ++latestTxId
-
                     val resumeToken: ExternalSourceToken = ProtoAny.pack(debeziumOffsetToken {
                         dbzmTopicOffsets[topic] = partitionOffsets {
                             offsets += listOf(maxOffset)
                         }
-                        this.latestTxId = txId
-                        this.latestSystemTimeMicros = latestTimestamp.asMicros
                     }, "xtdb.debezium")
 
-                    txIndexer.indexTx(txId, latestTimestamp, resumeToken) { openTx ->
+                    txIndexer.indexTx(resumeToken, latestTimestamp) { openTx ->
                         for (consumerRecord in records) {
                             val value = consumerRecord.value() ?: continue
                             writeCdcPayload(messageFormat.decode(value), dbName, openTx)
                         }
-                        TxResult.Committed()
+                        TxResult.Committed(
+                            userMetadata = mapOf("lsn" to maxOffset, "tx_us" to latestTimestamp.asMicros)
+                        )
                     }
                 }
             }
