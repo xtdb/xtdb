@@ -215,7 +215,9 @@ class Database(
                                     watchers, blockUploader,
                                     afterSourceMsgId, afterReplicaMsgId,
                                     extSource = extFactory.open(dbName, base.logClusters),
-                                    afterToken = state.blockCatalog.externalSourceToken,
+                                    // watchers has the latest token from replica log replay,
+                                    // which may be ahead of blockCatalog if no block boundary was flushed.
+                                    afterToken = watchers.externalSourceToken,
                                     flushTimeout = indexerConfig.flushDuration,
                                 )
 
