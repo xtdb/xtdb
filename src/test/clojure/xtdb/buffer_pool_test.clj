@@ -223,6 +223,26 @@
     (t/is (= [(os/->StoredObject "bar/baz/dan" 4)]
              (vec (.listAllObjects buffer-pool (util/->path "bar/baz")))))))
 
+(defn test-latest-available-block [^BufferPool buffer-pool]
+  ;; block keys: b00.binpb = block 0, b01.binpb = block 1, etc.
+  (.putObject buffer-pool (util/->path "blocks/b00.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b01.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b02.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b03.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (Thread/sleep 1000)
+
+  (t/testing "full listing finds latest block"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool nil))))
+
+  (t/testing "after block 0 finds latest"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 0))))
+
+  (t/testing "after penultimate finds latest"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 2))))
+
+  (t/testing "after latest returns latest (no new blocks)"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 3)))))
+
 (t/deftest test-memory-list-objs
   (with-caches {}
     (with-open [bp (open-storage (Storage/inMemory))]
@@ -234,7 +254,7 @@
       (with-open [bp (open-storage (Storage/local tmp-dir))]
         (test-list-objects bp)))))
 
-(t/deftest test-latest-available-block
+(t/deftest test-latest-available-block-logic-local-node
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [node1 (xtn/start-node {:storage [:local {:path tmp-dir}]
                                        :compactor {:threads 0}})
