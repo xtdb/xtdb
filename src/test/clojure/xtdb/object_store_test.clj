@@ -97,3 +97,22 @@
 
     (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
 
+(defn test-list-after [^ObjectStore obj-store]
+  (put-edn obj-store (util/->path "bar/a") :a)
+  (put-edn obj-store (util/->path "bar/b") :b)
+  (put-edn obj-store (util/->path "bar/c") :c)
+  (put-edn obj-store (util/->path "bar/d") :d)
+  (put-edn obj-store (util/->path "foo/e") :e)
+
+  (t/testing "lists only objects after the marker"
+    (t/is (= #{(os/->StoredObject "bar/c" 2) (os/->StoredObject "bar/d" 2)}
+             (set (.listAfter obj-store (util/->path "bar") (util/->path "bar/b"))))))
+
+  (t/testing "marker before all objects returns all in dir"
+    (t/is (= #{(os/->StoredObject "bar/a" 2) (os/->StoredObject "bar/b" 2)
+               (os/->StoredObject "bar/c" 2) (os/->StoredObject "bar/d" 2)}
+             (set (.listAfter obj-store (util/->path "bar") (util/->path "bar/"))))))
+
+  (t/testing "marker at last object returns empty"
+    (t/is (empty? (.listAfter obj-store (util/->path "bar") (util/->path "bar/d"))))))
+

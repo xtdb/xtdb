@@ -73,6 +73,10 @@
                                              :prefix (str "xtdb.gcp-test." prefix)}]}]
     :disk-cache {:path local-disk-cache}}))
 
+(t/deftest ^:google-cloud list-after-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-after os)))
+
 (t/deftest ^:google-cloud list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]

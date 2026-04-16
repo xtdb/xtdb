@@ -41,6 +41,10 @@
                                    :prefix (util/->path (str "xtdb.s3-test." prefix))}]}]
     :disk-cache {:path local-disk-cache}}))
 
+(t/deftest ^:s3 list-after-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-after os)))
+
 (t/deftest ^:s3 list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]

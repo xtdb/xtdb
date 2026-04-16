@@ -86,6 +86,10 @@
     :disk-cache {:path local-disk-cache}
     :compactor {:threads 0}}))
 
+(t/deftest ^:azure list-after-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-after os)))
+
 (t/deftest ^:azure list-test
   (util/with-tmp-dirs #{local-disk-cache}
     (util/with-open [node (start-kafka-node local-disk-cache (random-uuid))]
