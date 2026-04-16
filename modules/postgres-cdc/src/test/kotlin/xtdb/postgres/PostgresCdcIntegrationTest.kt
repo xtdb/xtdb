@@ -222,6 +222,92 @@ class PostgresCdcIntegrationTest {
     }
 
     @Test
+    fun `multi-table snapshot and streaming`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_mt_users (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE TABLE IF NOT EXISTS pg_mt_orders (_id INT PRIMARY KEY, user_id INT, amount NUMERIC)",
+            "INSERT INTO pg_mt_users (_id, name) VALUES (1, 'Alice'), (2, 'Bob')",
+            "INSERT INTO pg_mt_orders (_id, user_id, amount) VALUES (1, 1, 99.99)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_mt_users, pg_mt_orders",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+
+            // Wait for both tables to be snapshotted
+            awaitCondition("both tables snapshotted", timeout = 30.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users").size == 2 &&
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders").size == 1
+                }.getOrDefault(false)
+            }
+
+            val users = xtQueryDb(node, "cdc", "SELECT _id, name FROM public.pg_mt_users ORDER BY _id")
+            assertEquals("Alice", users[0]["name"])
+            assertEquals("Bob", users[1]["name"])
+
+            val orders = xtQueryDb(node, "cdc", "SELECT _id, user_id, amount FROM public.pg_mt_orders")
+            assertEquals(1, orders.size)
+
+            // Stream changes to both tables in a single PG transaction
+            pgExecute(
+                "BEGIN",
+                "INSERT INTO pg_mt_users (_id, name) VALUES (3, 'Charlie')",
+                "INSERT INTO pg_mt_orders (_id, user_id, amount) VALUES (2, 3, 42.00)",
+                "COMMIT",
+            )
+
+            awaitCondition("streaming changes to both tables", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users WHERE _id = 3").isNotEmpty() &&
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders WHERE _id = 2").isNotEmpty()
+            }
+        }
+    }
+
+    @Test
+    fun `schema evolution - add column during streaming`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_evolve (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_evolve (_id, name) VALUES (1, 'Alice')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_evolve",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+
+            awaitCondition("Alice snapshotted", timeout = 30.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_evolve WHERE _id = 1").isNotEmpty()
+                }.getOrDefault(false)
+            }
+
+            // ALTER TABLE in PG while streaming is active
+            pgExecute(
+                "ALTER TABLE pg_evolve ADD COLUMN email TEXT",
+                "INSERT INTO pg_evolve (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
+            )
+
+            awaitCondition("Bob with new column appears", timeout = 30.seconds) {
+                val rows = xtQueryDb(node, "cdc", "SELECT _id, email FROM public.pg_evolve WHERE _id = 2")
+                rows.isNotEmpty() && rows[0]["email"] == "bob@example.com"
+            }
+
+            // Alice (pre-evolution row) should have null for the new column
+            val alice = xtQueryDb(node, "cdc", "SELECT _id, name, email FROM public.pg_evolve WHERE _id = 1")
+            assertEquals(1, alice.size)
+            assertEquals(null, alice[0]["email"])
+        }
+    }
+
+    @Test
     fun `snapshot and streaming CDC lifecycle`() = runTest(timeout = 120.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
 
