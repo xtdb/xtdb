@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -181,9 +182,11 @@ class ExternalSourceProcessor(
 
             appendToReplica(resolvedTx)
 
-            // No TransactionResult to publish — external sources have no caller awaiting an outcome.
-            // The resume token must still advance so that block flushes persist the correct position.
-            watchers.updateExternalSourceToken(resolvedTx.externalSourceToken)
+            val txResult = when (result) {
+                is TxResult.Committed -> TransactionResult.Committed(txKey)
+                is TxResult.Aborted -> TransactionResult.Aborted(txKey, result.error)
+            }
+            watchers.notifyTx(txResult, latestSourceMsgId, resolvedTx.externalSourceToken)
 
             if (liveIndex.isFull())
                 finishBlock(latestSourceMsgId, resolvedTx.externalSourceToken)

@@ -148,16 +148,14 @@ class LeaderLogProcessor(
         }
     }
 
-    private suspend fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+    private fun notifyTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
 
-        val result = when (resolvedTx.committed) {
-            true -> TransactionResult.Committed(txKey)
-            false -> TransactionResult.Aborted(txKey, resolvedTx.error)
-            null -> null
-        }
+        val result =
+            if (resolvedTx.committed) TransactionResult.Committed(txKey)
+            else TransactionResult.Aborted(txKey, resolvedTx.error)
 
-        if (result != null) watchers.notifyTx(result, resolvedTx.txId, resolvedTx.externalSourceToken)
+        watchers.notifyTx(result, resolvedTx.txId, resolvedTx.externalSourceToken)
     }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {

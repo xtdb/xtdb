@@ -371,12 +371,10 @@ class SourceLogProcessor(
 
     private suspend fun notifyTx(msgId: MessageId, resolvedTx: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
-        val result = when (resolvedTx.committed) {
-            true -> TransactionResult.Committed(txKey)
-            false -> TransactionResult.Aborted(txKey, resolvedTx.error)
-            null -> null
-        }
 
-        if (result != null) watchers.notifyTx(result, msgId, resolvedTx.externalSourceToken)
+        val result = if (resolvedTx.committed) TransactionResult.Committed(txKey)
+            else TransactionResult.Aborted(txKey, resolvedTx.error)
+
+        watchers.notifyTx(result, msgId, resolvedTx.externalSourceToken)
     }
 }

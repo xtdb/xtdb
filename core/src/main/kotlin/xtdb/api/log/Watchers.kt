@@ -64,11 +64,6 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceTok
         }
     }
 
-    fun updateExternalSourceToken(token: ExternalSourceToken?) {
-        if (token == null) return
-        state.updateIfActive { it.copy(externalSourceToken = token) }
-    }
-
     fun notifyMsg(srcMsgId: MessageId) {
         state.updateIfActive {
             // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
