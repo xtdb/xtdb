@@ -8,7 +8,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -17,21 +16,19 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
-import xtdb.api.TransactionKey
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.ensureTopicExists
 import xtdb.database.ExternalSource
+import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.*
 import xtdb.debezium.proto.DebeziumKafkaSourceConfig.MessageFormatCase
 import xtdb.error.Incorrect
-import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.OpenTx
 import xtdb.table.TableRef
-import xtdb.time.InstantUtil
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
 import java.nio.ByteBuffer
@@ -62,8 +59,6 @@ class DebeziumKafkaSource @JvmOverloads constructor(
     private val pollDuration: Duration = Duration.ofSeconds(1),
 ) : ExternalSource {
 
-    private val allocator = RootAllocator()
-
     object UnitDeserializer : Deserializer<Unit> {
         override fun deserialize(topic: String?, data: ByteArray) = Unit
     }
@@ -73,13 +68,6 @@ class DebeziumKafkaSource @JvmOverloads constructor(
         MessageFormat.Avro -> KafkaAvroDeserializer().also { it.configure(kafkaConfig, false) }
     }
 
-    /**
-     * Config for a Debezium source consuming CDC events from a Kafka topic.
-     *
-     * Debezium can also run embedded or via Debezium Server emitting to other sinks —
-     * those would be sibling `ExternalSource.Factory`s (e.g. `!DebeziumEngine`),
-     * not variants under `!DebeziumKafka`, since they'd share almost no implementation.
-     */
     @Serializable
     @SerialName("!DebeziumKafka")
     data class Factory(
@@ -201,7 +189,7 @@ class DebeziumKafkaSource @JvmOverloads constructor(
     }
 
     override suspend fun onPartitionAssigned(
-        partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler
+        partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer
     ) {
         KafkaConsumer(
             kafkaConfig.plus(
@@ -233,13 +221,6 @@ class DebeziumKafkaSource @JvmOverloads constructor(
 
             var latestTxId = token?.latestTxId ?: -1L
 
-            // Smoothed clock: ensures monotonically increasing system-time across batches.
-            // Kafka timestamps are millisecond-precision — consecutive batches can share a timestamp,
-            // which would give two transactions the same systemFrom and collapse valid-time history.
-            // Mirrors the pattern in indexer.clj's indexTx (default-system-time).
-            // TODO: likely superseded by #5445 which restructures the external log pipeline
-            var lastSystemTimeMicros = token?.latestSystemTimeMicros ?: Long.MIN_VALUE
-
             while (currentCoroutineContext().isActive) {
                 val records = runInterruptible(Dispatchers.IO) {
                     try {
@@ -257,36 +238,27 @@ class DebeziumKafkaSource @JvmOverloads constructor(
                         latestTimestamp = maxOf(latestTimestamp, Instant.ofEpochMilli(consumerRecord.timestamp()))
                     }
 
-                    val systemTimeMicros = maxOf(latestTimestamp.asMicros, lastSystemTimeMicros + 1)
-                    lastSystemTimeMicros = systemTimeMicros
-
-                    val systemTime = InstantUtil.fromMicros(systemTimeMicros)
                     val txId = ++latestTxId
-                    val txKey = TransactionKey(txId, systemTime)
 
-                    OpenTx(allocator, txKey).use { openTx ->
+                    val resumeToken: ExternalSourceToken = ProtoAny.pack(debeziumOffsetToken {
+                        dbzmTopicOffsets[topic] = partitionOffsets {
+                            offsets += listOf(maxOffset)
+                        }
+                        this.latestTxId = txId
+                        this.latestSystemTimeMicros = latestTimestamp.asMicros
+                    }, "xtdb.debezium")
+
+                    txIndexer.indexTx(txId, latestTimestamp, resumeToken) { openTx ->
                         for (consumerRecord in records) {
                             val value = consumerRecord.value() ?: continue
                             writeCdcPayload(messageFormat.decode(value), dbName, openTx)
                         }
-
-                        val resumeToken: ExternalSourceToken = ProtoAny.pack(debeziumOffsetToken {
-                            dbzmTopicOffsets[topic] = partitionOffsets {
-                                offsets += listOf(maxOffset)
-                            }
-                            this.latestTxId = txId
-                            this.latestSystemTimeMicros = systemTimeMicros
-                        }, "xtdb.debezium")
-
-                        openTx.addTxRow(dbName, openTx.txKey, null)
-                        txHandler.handleTx(openTx, resumeToken)
+                        TxResult.Committed()
                     }
                 }
             }
         }
     }
 
-    override fun close() {
-        allocator.close()
-    }
+    override fun close() = Unit
 }

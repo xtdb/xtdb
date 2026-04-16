@@ -12,7 +12,10 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import org.apache.arrow.memory.RootAllocator
+import xtdb.api.TransactionKey
 import xtdb.database.ExternalSource
+import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
@@ -80,20 +83,39 @@ class DebeziumKafkaSourceTest {
         val resumeToken: ExternalSourceToken?,
     )
 
-    private fun capturingHandler(): Pair<ExternalSource.TxHandler, List<CapturedTx>> {
-        val received = Collections.synchronizedList(mutableListOf<CapturedTx>())
+    class CapturingTxIndexer(
+        val txIndexer: ExternalSource.TxIndexer,
+        val received: List<CapturedTx>,
+        private val allocator: RootAllocator,
+    ) : AutoCloseable {
+        override fun close() = allocator.close()
+        operator fun component1() = txIndexer
+        operator fun component2() = received
+    }
 
-        val handler = ExternalSource.TxHandler { openTx, resumeToken ->
-            received.add(CapturedTx(
-                txId = openTx.txKey.txId,
-                systemTime = openTx.txKey.systemTime,
-                cdcRows = openTx.tables
-                    .filter { (ref, _) -> ref.schemaName != "xt" }
-                    .sumOf { (_, table) -> table.txRelation.rowCount },
-                resumeToken = resumeToken,
-            ))
+    private fun capturingTxIndexer(): CapturingTxIndexer {
+        val received = Collections.synchronizedList(mutableListOf<CapturedTx>())
+        val al = RootAllocator()
+
+        val txIndexer = ExternalSource.TxIndexer { txId, systemTime, externalSourceToken, writer ->
+            val txKey = TransactionKey(txId, systemTime)
+
+            OpenTx(al, txKey).use { openTx ->
+                val result = writer(openTx)
+
+                received.add(CapturedTx(
+                    txId = txKey.txId,
+                    systemTime = txKey.systemTime,
+                    cdcRows = openTx.tables
+                        .filter { (ref, _) -> ref.schemaName != "xt" }
+                        .sumOf { (_, table) -> table.txRelation.rowCount },
+                    resumeToken = externalSourceToken,
+                ))
+
+                result
+            }
         }
-        return (handler to received)
+        return CapturingTxIndexer(txIndexer, received, al)
     }
 
     private fun resumeTokenOffsets(token: ExternalSourceToken?, topic: String): Long? {
@@ -113,10 +135,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val job = launch { log.onPartitionAssigned(0, null, handler) }
+            val job = launch { log.onPartitionAssigned(0, null, txIndexer) }
             while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             job.cancelAndJoin()
             produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
@@ -132,10 +154,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-log-close"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
 
-        val job = launch { log.onPartitionAssigned(0, null, handler) }
+        val job = launch { log.onPartitionAssigned(0, null, txIndexer) }
         while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
 
         assertEquals(1, received.size, "Should have received Alice before closing")
@@ -154,10 +176,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-tombstone"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice"), null))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, txIndexer) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -186,10 +208,10 @@ class DebeziumKafkaSourceTest {
             dbzmTopicOffsets[topic] = partitionOffsets { offsets += listOf(1L) }
         }, "xtdb.debezium")
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.onPartitionAssigned(0, afterToken, handler) }
+            val tailJob = launch { log.onPartitionAssigned(0, afterToken, txIndexer) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -214,10 +236,10 @@ class DebeziumKafkaSourceTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, txIndexer) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
                 runInterruptible(Dispatchers.IO) { Thread.sleep(500) }
@@ -241,10 +263,10 @@ class DebeziumKafkaSourceTest {
             cdcMessage("c", 3, "Carol"),
         ))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val tailJob = launch { log.onPartitionAssigned(0, null, handler) }
+            val tailJob = launch { log.onPartitionAssigned(0, null, txIndexer) }
             try {
                 while (received.sumOf { it.cdcRows } < 3) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
@@ -261,10 +283,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-invalid-json"
         produceMessages(topic, listOf("not json at all"))
 
-        val (handler, _) = capturingHandler()
+        val (txIndexer, _) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
+            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, txIndexer) } }
         }
     }
 
@@ -276,10 +298,10 @@ class DebeziumKafkaSourceTest {
             "not json",
         ))
 
-        val (handler, _) = capturingHandler()
+        val (txIndexer, _) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, handler) } }
+            assertFailsWith<Exception> { runBlocking { log.onPartitionAssigned(0, null, txIndexer) } }
         }
     }
 
@@ -288,10 +310,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-synthetic-txid"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val job = launch { log.onPartitionAssigned(0, null, handler) }
+            val job = launch { log.onPartitionAssigned(0, null, txIndexer) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
@@ -308,10 +330,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-txid-restart"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (handler1, received1) = capturingHandler()
+        val (txIndexer1, received1) = capturingTxIndexer()
         val log1 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log1.use {
-            val job = launch { log1.onPartitionAssigned(0, null, handler1) }
+            val job = launch { log1.onPartitionAssigned(0, null, txIndexer1) }
             try {
                 while (received1.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
@@ -323,10 +345,10 @@ class DebeziumKafkaSourceTest {
 
         produceMessages(topic, listOf(cdcMessage("c", 2, "Bob")))
 
-        val (handler2, received2) = capturingHandler()
+        val (txIndexer2, received2) = capturingTxIndexer()
         val log2 = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log2.use {
-            val job = launch { log2.onPartitionAssigned(0, resumeToken, handler2) }
+            val job = launch { log2.onPartitionAssigned(0, resumeToken, txIndexer2) }
             try {
                 while (received2.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
@@ -343,10 +365,10 @@ class DebeziumKafkaSourceTest {
         val topic = "test-systime-persist"
         produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
 
-        val (handler, received) = capturingHandler()
+        val (txIndexer, received) = capturingTxIndexer()
         val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
         log.use {
-            val job = launch { log.onPartitionAssigned(0, null, handler) }
+            val job = launch { log.onPartitionAssigned(0, null, txIndexer) }
             try {
                 while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
             } finally {
@@ -358,37 +380,6 @@ class DebeziumKafkaSourceTest {
         assertEquals(
             captured.systemTime.asMicros,
             resumeTokenSystemTimeMicros(captured.resumeToken),
-        )
-    }
-
-    @Test
-    fun `system_time smoothing resumes from token`() = runTest(timeout = 10.seconds) {
-        val topic = "test-systime-smooth-restart"
-        produceMessages(topic, listOf(cdcMessage("c", 1, "Alice")))
-
-        // Pretend a previous run committed a tx with system_time in year 3000.
-        // The smoothing should force the next tx's system_time past that, even
-        // though the Kafka record timestamp is present-day.
-        val futureMicros = Instant.parse("3000-01-01T00:00:00Z").asMicros
-        val afterToken = ProtoAny.pack(debeziumOffsetToken {
-            latestSystemTimeMicros = futureMicros
-        }, "xtdb.debezium")
-
-        val (handler, received) = capturingHandler()
-        val log = DebeziumKafkaSource("testdb", kafkaConfig(), topic, MessageFormat.Json)
-        log.use {
-            val job = launch { log.onPartitionAssigned(0, afterToken, handler) }
-            try {
-                while (received.isEmpty()) runInterruptible(Dispatchers.IO) { Thread.sleep(100) }
-            } finally {
-                job.cancelAndJoin()
-            }
-        }
-
-        assertEquals(
-            futureMicros + 1,
-            received[0].systemTime.asMicros,
-            "Smoothing should bump system_time past the token's latestSystemTimeMicros",
         )
     }
 }

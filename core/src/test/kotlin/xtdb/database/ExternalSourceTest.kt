@@ -12,7 +12,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.api.TransactionKey
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -20,6 +19,7 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
+import xtdb.database.ExternalSource.TxResult
 import xtdb.error.Incorrect
 import xtdb.indexer.*
 import xtdb.storage.MemoryStorage
@@ -49,20 +49,18 @@ class ExternalSourceTest {
 
     /**
      * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel] to trigger txHandler.handleTx with a mock OpenTx.
+     * Send signals to [channel]; each signal submits a tx via [TxIndexer.indexTx].
      */
     class InMemoryExternalSource(
-        val channel: Channel<Unit> = Channel(100)
+        val channel: Channel<ExternalSourceToken?> = Channel(100),
     ) : ExternalSource {
         private var nextTxId = 0L
 
-        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
-            for (signal in channel) {
-                val openTx = mockk<OpenTx>(relaxed = true) {
-                    every { txKey } returns TransactionKey(nextTxId++, Instant.now())
-                    every { serializeTableData() } returns emptyMap()
+        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer) {
+            for (token in channel) {
+                txIndexer.indexTx(nextTxId++, Instant.now(), token) { _ ->
+                    TxResult.Committed()
                 }
-                txHandler.handleTx(openTx, null)
             }
         }
 
@@ -90,46 +88,42 @@ class ExternalSourceTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         return ExternalSourceProcessor(
-            dbStorage, replicaProducer, dbState, watchers, blockUploader,
+            allocator, dbStorage, replicaProducer, dbState, watchers, blockUploader,
             afterSourceMsgId = -1, afterReplicaMsgId = -1,
             extSource = extSource, afterToken = afterToken, ctx = ctx,
         )
     }
 
     @Test
-    fun `handleExternalTx appends ResolvedTx to replica log`() = runTest {
+    fun `indexTx appends ResolvedTx to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
-        val lp = leaderProc(replicaLog = replicaLog, watchers = watchers, ctx = coroutineContext)
+        val extSource = InMemoryExternalSource()
 
-        try {
-            val openTx = mockk<OpenTx>(relaxed = true) {
-                every { txKey } returns TransactionKey(0L, Instant.now())
-                every { serializeTableData() } returns emptyMap()
-            }
-            lp.handleExternalTx(openTx, resumeToken = null)
+        leaderProc(replicaLog = replicaLog, watchers = watchers, extSource = extSource, ctx = coroutineContext).use {
+            extSource.channel.send(null)
+            delay(500)
 
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
 
             val replicaMessages = mutableListOf<ReplicaMessage>()
-            val job = launch { replicaLog.tailAll(-1) { records ->
-                replicaMessages.addAll(records.map { it.message })
-            } }
+            val job = launch {
+                replicaLog.tailAll(-1) { records ->
+                    replicaMessages.addAll(records.map { it.message })
+                }
+            }
             delay(200)
             job.cancelAndJoin()
 
             assertEquals(1, replicaMessages.size)
             val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
-            // external-source path always produces committed=null (tx-indexer branch will revisit)
-            assertEquals(null, resolved.committed)
+            assertEquals(true, resolved.committed)
             assertEquals(0L, resolved.txId)
-        } finally {
-            lp.close()
         }
     }
 
     @Test
-    fun `subscription routes external events through commitTx and handleExternalTx`() = runTest {
+    fun `subscription routes external events through commitTx`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(-1)
         val liveIndex = mockk<LiveIndex>(relaxed = true)
@@ -141,8 +135,8 @@ class ExternalSourceTest {
         )
 
         try {
-            extSource.channel.send(Unit)
-            extSource.channel.send(Unit)
+            extSource.channel.send(null)
+            extSource.channel.send(null)
 
             delay(500)
 
@@ -177,18 +171,16 @@ class ExternalSourceTest {
     }
 
     @Test
-    fun `handleExternalTx threads resumeToken to watchers`() = runTest {
+    fun `indexTx threads resumeToken to watchers`() = runTest {
         val watchers = Watchers(-1)
-        val lp = leaderProc(watchers = watchers, ctx = coroutineContext)
+        val extSource = InMemoryExternalSource()
+        val lp = leaderProc(watchers = watchers, extSource = extSource, ctx = coroutineContext)
 
         try {
             val token = ProtoAny.pack(StringValue.of("kafka-offset:42"))
-            val openTx = mockk<OpenTx>(relaxed = true) {
-                every { txKey } returns TransactionKey(0L, Instant.now())
-                every { serializeTableData() } returns emptyMap()
-            }
+            extSource.channel.send(token)
 
-            lp.handleExternalTx(openTx, resumeToken = token)
+            delay(500)
 
             val watcherToken = watchers.externalSourceToken
             assertNotNull(watcherToken)
@@ -203,7 +195,7 @@ class ExternalSourceTest {
         val watchers = Watchers(-1)
 
         val failingSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: ExternalSource.TxHandler) {
+            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer) {
                 throw RuntimeException("source poll failed")
             }
             override fun close() {}
@@ -230,7 +222,7 @@ class ExternalSourceTest {
         val lp = leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = extSource, ctx = coroutineContext)
 
         try {
-            extSource.channel.send(Unit)
+            extSource.channel.send(null)
             delay(500)
             assertNotNull(watchers.exception, "watchers should be in failed state")
         } finally {

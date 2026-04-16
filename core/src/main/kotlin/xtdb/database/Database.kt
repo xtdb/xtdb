@@ -211,7 +211,7 @@ class Database(
 
                             return if (extFactory != null) {
                                 val leaderProc = ExternalSourceProcessor(
-                                    storage, replicaProducer, state,
+                                    allocator, storage, replicaProducer, state,
                                     watchers, blockUploader,
                                     afterSourceMsgId, afterReplicaMsgId,
                                     extSource = extFactory.open(dbName, base.logClusters),

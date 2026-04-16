@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.TransactionKey
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -14,20 +16,26 @@ import xtdb.api.storage.Storage
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
+import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Interrupted
+import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.table.TableRef
+import xtdb.time.InstantUtil.asMicros
+import xtdb.time.InstantUtil.fromMicros
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.trace
 import java.time.Duration
+import java.time.Instant
 import kotlin.coroutines.CoroutineContext
 
 private val LOG = ExternalSourceProcessor::class.logger
 
 class ExternalSourceProcessor(
+    private val allocator: BufferAllocator,
     dbStorage: DatabaseStorage,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val dbState: DatabaseState,
@@ -73,12 +81,51 @@ class ExternalSourceProcessor(
     // must hold this lock before touching it.
     private val mutex = Mutex()
 
-    private val extJob = CoroutineScope(ctx).launch {
+    private fun smoothSystemTime(systemTime: Instant): Instant {
+        val lct = liveIndex.latestCompletedTx?.systemTime ?: return systemTime
+        val floor = fromMicros(lct.asMicros + 1)
+        return if (systemTime.isBefore(floor)) floor else systemTime
+    }
+
+    private val txIndexer = ExternalSource.TxIndexer { txId, systemTime, externalSourceToken, writer ->
+        val txKey = TransactionKey(txId, smoothSystemTime(systemTime))
+
         try {
-            extSource.onPartitionAssigned(partition, afterToken) { openTx, resumeToken ->
-                handleExternalTx(openTx, resumeToken)
+            val openTx = OpenTx(allocator, txKey)
+            val result = try {
+                writer(openTx)
+            } catch (e: Throwable) {
+                openTx.close()
+                throw e
             }
 
+            when (result) {
+                is TxResult.Committed -> openTx.use {
+                    it.addTxRow(dbName, txKey, null, result.userMetadata)
+                    commitAndPublish(it, txKey, result, externalSourceToken)
+                }
+
+                is TxResult.Aborted -> {
+                    openTx.close()
+                    OpenTx(allocator, txKey).use { abortTx ->
+                        abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
+                        commitAndPublish(abortTx, txKey, result, externalSourceToken)
+                    }
+                }
+            }
+
+            result
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e)
+            throw e
+        }
+    }
+
+    private val extJob = CoroutineScope(ctx).launch {
+        try {
+            extSource.onPartitionAssigned(partition, afterToken, txIndexer)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
@@ -110,21 +157,32 @@ class ExternalSourceProcessor(
         pendingBlock = null
     }
 
-    suspend fun handleExternalTx(openTx: OpenTx, resumeToken: ExternalSourceToken?) {
-        val txKey = openTx.txKey
+    private suspend fun commitAndPublish(
+        openTx: OpenTx,
+        txKey: TransactionKey,
+        result: TxResult,
+        externalSourceToken: ExternalSourceToken?,
+    ) {
         val tableData = openTx.serializeTableData()
 
         mutex.withLock {
             liveIndex.commitTx(openTx)
 
             val resolvedTx = ReplicaMessage.ResolvedTx(
-                txKey.txId, txKey.systemTime, committed = null, error = null, tableData, dbOp = null, resumeToken
+                txKey.txId, txKey.systemTime,
+                committed = when (result) {
+                    is TxResult.Committed -> true
+                    is TxResult.Aborted -> false
+                },
+                error = (result as? TxResult.Aborted)?.error,
+                tableData, dbOp = null,
+                externalSourceToken = externalSourceToken,
             )
 
             appendToReplica(resolvedTx)
 
-            // No TransactionResult to publish, but the resume token must still advance
-            // so that block flushes persist the correct external source position.
+            // No TransactionResult to publish — external sources have no caller awaiting an outcome.
+            // The resume token must still advance so that block flushes persist the correct position.
             watchers.updateExternalSourceToken(resolvedTx.externalSourceToken)
 
             if (liveIndex.isFull())

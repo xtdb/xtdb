@@ -3,10 +3,12 @@ package xtdb.database
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.api.TxId
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.OpenTx
+import java.time.Instant
 import java.util.*
 import com.google.protobuf.Any as ProtoAny
 
@@ -14,10 +16,31 @@ typealias ExternalSourceToken = ProtoAny
 
 interface ExternalSource : AutoCloseable {
 
-    suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txHandler: TxHandler)
+    suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer)
 
-    fun interface TxHandler {
-        suspend fun handleTx(openTx: OpenTx, resumeToken: ExternalSourceToken?)
+    /**
+     * Per-tx entry point for external sources.
+     * The source provides tx metadata + a [writer] that populates the [OpenTx] and returns a [TxResult]
+     * indicating success or failure (with optional `userMetadata` — the source can decide metadata
+     * after writing, not before).
+     *
+     * `indexTx` owns the full lifecycle: smoothing, opening the raw OpenTx, running the writer,
+     * adding the `xt/txs` row, committing (or aborting) the live index, appending to the replica log,
+     * and closing the OpenTx.
+     */
+    sealed interface TxResult {
+        val userMetadata: Map<*, *>?
+        data class Committed(override val userMetadata: Map<*, *>? = null) : TxResult
+        data class Aborted(val error: Throwable, override val userMetadata: Map<*, *>? = null) : TxResult
+    }
+
+    fun interface TxIndexer {
+        suspend fun indexTx(
+            txId: TxId,
+            systemTime: Instant,
+            externalSourceToken: ExternalSourceToken?,
+            writer: suspend (OpenTx) -> TxResult,
+        ): TxResult
     }
 
     interface Factory {
