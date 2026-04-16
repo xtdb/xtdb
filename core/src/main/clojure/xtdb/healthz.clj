@@ -188,7 +188,8 @@
                                      :node node})
                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port port, :async? true, :join? false}))]
 
-    (log/info "Healthz server started at" (str (.getURI server)))
+    (log/info "Healthz server started at" (str (.getURI server))
+              "- startup targets:" (pr-str initial-target-message-ids))
 
     (reify AutoCloseable
       (close [_]
