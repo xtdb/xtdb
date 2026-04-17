@@ -74,7 +74,7 @@
     :disk-cache {:path local-disk-cache}}))
 
 (t/deftest ^:google-cloud list-after-test
-  (with-open [os (object-store (random-uuid))]
+  (let [os (object-store (random-uuid))]
     (os-test/test-list-after os)))
 
 (t/deftest ^:google-cloud get-latest-block-test
