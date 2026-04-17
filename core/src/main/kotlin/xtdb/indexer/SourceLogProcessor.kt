@@ -309,13 +309,15 @@ class SourceLogProcessor(
 
                     is SourceMessage.AttachDatabase -> {
                         val txKey = TransactionKey(msgId, record.logTimestamp)
-                        val error = try {
-                            dbCatalog!!.attach(msg.dbName, msg.config)
-                            null
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] source: attach database '${msg.dbName}' failed at $msgId" }
-                            e
-                        }
+                        val error = if (dbCatalog != null) {
+                            try {
+                                dbCatalog.attach(msg.dbName, msg.config)
+                                null
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] source: attach database '${msg.dbName}' failed at $msgId" }
+                                e
+                            }
+                        } else null
 
                         indexer.addTxRow(txKey, error)
 
@@ -326,13 +328,15 @@ class SourceLogProcessor(
 
                     is SourceMessage.DetachDatabase -> {
                         val txKey = TransactionKey(msgId, record.logTimestamp)
-                        val error = try {
-                            dbCatalog!!.detach(msg.dbName)
-                            null
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] source: detach database '${msg.dbName}' failed at $msgId" }
-                            e
-                        }
+                        val error = if (dbCatalog != null) {
+                            try {
+                                dbCatalog.detach(msg.dbName)
+                                null
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] source: detach database '${msg.dbName}' failed at $msgId" }
+                                e
+                            }
+                        } else null
 
                         indexer.addTxRow(txKey, error)
 

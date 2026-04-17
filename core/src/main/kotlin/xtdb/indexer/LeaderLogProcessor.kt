@@ -206,13 +206,15 @@ class LeaderLogProcessor(
 
                     is SourceMessage.AttachDatabase -> {
                         val txKey = TransactionKey(msgId, record.logTimestamp)
-                        val error = try {
-                            dbCatalog!!.attach(msg.dbName, msg.config)
-                            null
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
-                            e
-                        }
+                        val error = if (dbCatalog != null) {
+                            try {
+                                dbCatalog.attach(msg.dbName, msg.config)
+                                null
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
+                                e
+                            }
+                        } else null
 
                         val resolvedTx = indexer.addTxRow(txKey, error)
                             .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
@@ -228,13 +230,15 @@ class LeaderLogProcessor(
 
                     is SourceMessage.DetachDatabase -> {
                         val txKey = TransactionKey(msgId, record.logTimestamp)
-                        val error = try {
-                            dbCatalog!!.detach(msg.dbName)
-                            null
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
-                            e
-                        }
+                        val error = if (dbCatalog != null) {
+                            try {
+                                dbCatalog.detach(msg.dbName)
+                                null
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
+                                e
+                            }
+                        } else null
 
                         val resolvedTx = indexer.addTxRow(txKey, error)
                             .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }

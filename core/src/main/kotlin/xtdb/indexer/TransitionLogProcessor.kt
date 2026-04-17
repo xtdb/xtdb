@@ -65,15 +65,19 @@ class TransitionLogProcessor(
                 val txKey = TransactionKey(msg.txId, msg.systemTime)
                 if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
-                        is DbOp.Attach -> try {
-                            dbCatalog!!.attach(dbOp.dbName, dbOp.config)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] transition: attach database '${dbOp.dbName}' failed" }
+                        is DbOp.Attach -> if (dbCatalog != null) {
+                            try {
+                                dbCatalog.attach(dbOp.dbName, dbOp.config)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] transition: attach database '${dbOp.dbName}' failed" }
+                            }
                         }
-                        is DbOp.Detach -> try {
-                            dbCatalog!!.detach(dbOp.dbName)
-                        } catch (e: Anomaly.Caller) {
-                            LOG.debug(e) { "[$dbName] transition: detach database '${dbOp.dbName}' failed" }
+                        is DbOp.Detach -> if (dbCatalog != null) {
+                            try {
+                                dbCatalog.detach(dbOp.dbName)
+                            } catch (e: Anomaly.Caller) {
+                                LOG.debug(e) { "[$dbName] transition: detach database '${dbOp.dbName}' failed" }
+                            }
                         }
                         null -> {}
                     }

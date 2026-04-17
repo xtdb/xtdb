@@ -361,6 +361,53 @@ ATTACH DATABASE new_db WITH $$
                              (.build))]
           (t/is (= {:_id "secondary"} (jdbc/execute-one! conn ["SELECT * FROM foo"]))))))))
 
+(t/deftest secondary-node-handles-attach-db-in-shared-log
+  (let [xt1-dir (util/->path "target/multi-db/attach-base/xt1")
+        xt1-secondary-dir (util/->path "target/multi-db/attach-base/xt1-secondary")]
+    (util/delete-dir (util/->path "target/multi-db/attach-base"))
+
+    (with-open [xt1 (xtn/start-node {:log [:local {:path (.resolve xt1-dir "log")}]
+                                     :storage [:local {:path (.resolve xt1-dir "objects")}]})]
+
+      ;; write some data to xt1's primary database
+      (xt/submit-tx xt1 [[:put-docs :foo {:xt/id "from-xt1"}]])
+
+      (with-open [xt2 (xtn/start-node)]
+
+        ;; xt2 attaches xt1's primary database as a read-only secondary
+        (jdbc/execute! xt2 ["
+ATTACH DATABASE xt1_db WITH $$
+  log: !Local
+    path: 'target/multi-db/attach-base/xt1/log'
+  storage: !Local
+    path: 'target/multi-db/attach-base/xt1/objects'
+  mode: read-only
+$$"])
+
+        (t/is (= [{:xt/id "from-xt1"}]
+                 (xt/q xt2 "SELECT * FROM xt1_db.foo"))
+              "xt2 can read xt1's data via attached secondary")
+
+        ;; xt1 attaches a new secondary database — this writes an AttachDatabase
+        ;; message into xt1's primary log, which xt2 is also watching
+        (jdbc/execute! xt1 [(format "
+ATTACH DATABASE new_secondary WITH $$
+  log: !Local
+    path: '%s/log'
+  storage: !Local
+    path: '%s/objects'
+$$" xt1-secondary-dir xt1-secondary-dir)])
+
+        ;; sync xt2 so it processes the attach-db message from xt1's log
+        (xt-log/sync-node xt2 #xt/duration "PT5S")
+
+        (t/testing "xt2 still functional after processing xt1's attach-db message"
+          (xt/submit-tx xt1 [[:put-docs :foo {:xt/id "from-xt1", :v 2}]])
+          (xt-log/sync-node xt2 #xt/duration "PT5S")
+
+          (t/is (= [{:xt/id "from-xt1", :v 2}]
+                   (xt/q xt2 "SELECT * FROM xt1_db.foo"))))))))
+
 (t/deftest detach-dormant-database
   (let [node-dir (util/->path "target/multi-db/detach-dormant")]
     (util/delete-dir node-dir)
