@@ -135,6 +135,8 @@
           (tu/flush-block! node)
 
           (t/testing "after second block, listAfter from first finds it"
+            ;; invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
+            (BufferPoolKt/invalidateLatestAvailableBlockCache bp)
             (t/is (= 1 (.getCurrentBlockIndex block-cat)))
             (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 0))
                   "listing after block 0 finds block 1")

@@ -279,7 +279,13 @@
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :bar}]])
         (tu/flush-block! node1)
 
-        (t/testing "finds new blocks after seed"
+        (t/testing "cached — stale values returned within TTL"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 0)))
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp2 0))))
+
+        (t/testing "after cache invalidation — finds new blocks"
+          (BufferPoolKt/invalidateLatestAvailableBlockCache bp1)
+          (BufferPoolKt/invalidateLatestAvailableBlockCache bp2)
           (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp1 0)))
           (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp2 0))))))))
 

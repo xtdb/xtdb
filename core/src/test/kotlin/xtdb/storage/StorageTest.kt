@@ -67,6 +67,9 @@ abstract class StorageTest {
         storage.writeBlock(blockCount)
         Thread.sleep(100)
 
+        // invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
+        storage.invalidateLatestAvailableBlockCache()
+
         assertEquals(blockCount, storage.latestAvailableBlockIndex(blockCount - 1),
             "afterBlock=old-latest finds new block")
         assertEquals(blockCount, storage.latestAvailableBlockIndex(blockCount),

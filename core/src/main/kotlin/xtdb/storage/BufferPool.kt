@@ -1,5 +1,7 @@
 package xtdb.storage
 
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
@@ -13,6 +15,8 @@ import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 typealias StorageEpoch = Int
 
@@ -96,7 +100,21 @@ private fun Path.parseBlockIndex(): Long? =
         ?.groups?.get(1)
         ?.value?.fromLexHex
 
+private val latestAvailableBlockCache: Cache<BufferPool, Long> =
+    Caffeine.newBuilder()
+        .expireAfterWrite(10.seconds.toJavaDuration())
+        .build()
+
 fun BufferPool.latestAvailableBlockIndex(afterBlockIndex: Long? = null): Long? {
+    latestAvailableBlockCache.getIfPresent(this)?.let { return it }
+    val result = computeLatestAvailableBlockIndex(afterBlockIndex)
+    if (result != null) latestAvailableBlockCache.put(this, result)
+    return result
+}
+
+fun BufferPool.invalidateLatestAvailableBlockCache() = latestAvailableBlockCache.invalidate(this)
+
+private fun BufferPool.computeLatestAvailableBlockIndex(afterBlockIndex: Long?): Long? {
     val objects = if (afterBlockIndex != null) {
         val afterKey = "blocks/b${afterBlockIndex.asLexHex}.binpb".asPath
         listAfter("blocks".asPath, afterKey)
