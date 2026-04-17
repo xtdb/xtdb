@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
+import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.util.logger
 import xtdb.util.warn
 import java.util.concurrent.TimeUnit
@@ -67,6 +68,11 @@ abstract class SimulationTestBase {
     @AfterEach
     open fun tearDownSimulation() {
         explicitSeed = null
+    }
+
+    protected fun assertInterleaved() {
+        assertTrue(dispatcher.interleavedPicks > 0,
+            "Dispatcher never had multiple concurrent jobs — simulation did not interleave (seed=$currentSeed)")
     }
 
     companion object SimulationIterations {
