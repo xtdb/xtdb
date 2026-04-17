@@ -336,8 +336,8 @@
           valid-time-col? (contains? reqd-cols '_valid_time)
           sys-time-col? (contains? reqd-cols '_system_time)
           scan-cols (cond-> (vec (disj reqd-cols '_valid_time '_system_time))
-                      valid-time-col? (into ['_valid_from '_valid_to])
-                      sys-time-col? (into ['_system_from '_system_to]))
+                      valid-time-col? (into (remove reqd-cols ['_valid_from '_valid_to]))
+                      sys-time-col? (into (remove reqd-cols ['_system_from '_system_to])))
           for-vt (or for-valid-time valid-time-default)
           for-st (or for-system-time sys-time-default)]
 

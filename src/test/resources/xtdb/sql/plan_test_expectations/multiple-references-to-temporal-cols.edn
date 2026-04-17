@@ -12,8 +12,6 @@
      _system_from
      _system_to
      _valid_to
-     _valid_from
-     _valid_to
      {_valid_time (period _valid_from _valid_to)}]}
    [:scan
     {:table #xt/table foo,
@@ -26,16 +24,6 @@
         (== _valid_from 4))}
       {_system_from (== _system_from 20)}
       {_system_to (<= _system_to 23)}
-      {_valid_to
-       (and
-        (> (coalesce _valid_to xtdb/end-of-time) #xt/date "2000-01-01")
-        (> _valid_to 10))}
-      {_valid_from
-       (and
-        (<
-         _valid_from
-         (coalesce #xt/date "2004-01-01" xtdb/end-of-time))
-        (== _valid_from 4))}
       {_valid_to
        (and
         (> (coalesce _valid_to xtdb/end-of-time) #xt/date "2000-01-01")
