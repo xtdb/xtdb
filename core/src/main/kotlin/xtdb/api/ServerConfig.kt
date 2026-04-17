@@ -1,4 +1,4 @@
-@file:UseSerializers(IntWithEnvVarSerde::class, InetAddressSerde::class)
+@file:UseSerializers(InetAddressSerde::class)
 
 package xtdb.api
 
@@ -18,8 +18,8 @@ data class ServerConfig(
 
     @Serializable
     data class SslSettings(
-        @Serializable(with = PathWithEnvVarSerde::class) val keyStore: Path,
-        @Serializable(with = StringWithEnvVarSerde::class) val keyStorePassword: String
+        @Serializable(with = PathSerde::class) val keyStore: Path,
+        val keyStorePassword: String
     )
 
     fun host(host: InetAddress?) = apply { this.host = host }

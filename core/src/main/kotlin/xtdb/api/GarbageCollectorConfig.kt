@@ -1,4 +1,4 @@
-@file:UseSerializers(IntWithEnvVarSerde::class, DurationSerde::class)
+@file:UseSerializers(DurationSerde::class)
 package xtdb.api
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers

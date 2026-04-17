@@ -1,4 +1,4 @@
-@file:UseSerializers(PathWithEnvVarSerde::class, StringWithEnvVarSerde::class)
+@file:UseSerializers(PathSerde::class)
 
 package xtdb.aws
 
@@ -21,8 +21,7 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.*
-import xtdb.api.PathWithEnvVarSerde
-import xtdb.api.StringWithEnvVarSerde
+import xtdb.api.PathSerde
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -257,19 +256,19 @@ class S3(
 
         @Serializable
         data class BasicCredentials(
-            @Serializable(StringWithEnvVarSerde::class) val accessKey: String,
-            @Serializable(StringWithEnvVarSerde::class) val secretKey: String
+            val accessKey: String,
+            val secretKey: String
         )
     }
 
     @Serializable
     @SerialName("!S3")
     data class Factory(
-        @Serializable(StringWithEnvVarSerde::class) var region: String? = null,
-        @Serializable(StringWithEnvVarSerde::class) val bucket: String,
-        @Serializable(PathWithEnvVarSerde::class) var prefix: Path? = null,
+        var region: String? = null,
+        val bucket: String,
+        @Serializable(PathSerde::class) var prefix: Path? = null,
         var credentials: BasicCredentials? = null,
-        @Serializable(StringWithEnvVarSerde::class) var endpoint: String? = null,
+        var endpoint: String? = null,
         var pathStyleAccessEnabled: Boolean = false,
         @Transient var s3Configurator: S3Configurator = S3Configurator.Default,
         @Transient var coroutineContext: CoroutineContext = Dispatchers.IO

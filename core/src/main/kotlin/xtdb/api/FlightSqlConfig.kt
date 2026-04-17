@@ -1,9 +1,6 @@
-@file:UseSerializers(IntWithEnvVarSerde::class)
-
 package xtdb.api
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.UseSerializers
 
 @Serializable
 data class FlightSqlConfig(

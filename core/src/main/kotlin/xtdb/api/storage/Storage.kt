@@ -1,4 +1,4 @@
-@file:UseSerializers(PathWithEnvVarSerde::class)
+@file:UseSerializers(PathSerde::class)
 
 package xtdb.api.storage
 
@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
-import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.PathSerde
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName

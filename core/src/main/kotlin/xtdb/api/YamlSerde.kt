@@ -2,10 +2,18 @@
 
 package xtdb.api
 
-import com.charleskorn.kaml.*
+import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlList
+import com.charleskorn.kaml.YamlMap
+import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.YamlNull
+import com.charleskorn.kaml.YamlScalar
+import com.charleskorn.kaml.YamlTaggedNode
+import com.charleskorn.kaml.yamlScalar
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.SerializersModule
@@ -21,112 +29,34 @@ internal object EnvironmentVariableProvider {
     fun getEnvVariable(name: String): String? = System.getenv(name)
 }
 
-internal fun envFromTaggedNode(taggedNode: YamlTaggedNode): String {
-    if (taggedNode.tag == "!Env") {
-        val value = taggedNode.innerNode.yamlScalar.content
-        return EnvironmentVariableProvider.getEnvVariable(value)
-            ?: throw IllegalArgumentException("Environment variable '$value' not found")
-    }
-    return taggedNode.innerNode.yamlScalar.content
-}
-
-internal fun handleEnvTag(input: YamlInput): String {
-    val currentLocation = input.getCurrentLocation()
-    val scalar = input.node.yamlMap.entries.values.find { it.location == currentLocation }
-
-    return when (scalar) {
-        is YamlTaggedNode -> envFromTaggedNode(scalar.yamlTaggedNode)
-        is YamlScalar -> scalar.content
-        else -> throw IllegalStateException("Expected scalar or tagged node")
-    }
+// Substitutes `!Env VAR` scalars with their resolved environment variable value.
+// Leaves other tags (polymorphic discriminators like `!Local`, `!Kafka`) untouched.
+private fun resolveEnvVars(node: YamlNode): YamlNode = when (node) {
+    is YamlScalar, is YamlNull -> node
+    is YamlList -> node.copy(items = node.items.map(::resolveEnvVars))
+    is YamlMap -> node.copy(entries = node.entries.mapValues { (_, v) -> resolveEnvVars(v) })
+    is YamlTaggedNode ->
+        if (node.tag == "!Env") {
+            val varName = node.innerNode.yamlScalar.content
+            val value = EnvironmentVariableProvider.getEnvVariable(varName)
+                ?: throw IllegalArgumentException("Environment variable '$varName' not found")
+            YamlScalar(value, node.innerNode.path)
+        } else {
+            node.copy(innerNode = resolveEnvVars(node.innerNode))
+        }
 }
 
 /**
  * @suppress
  */
-object PathWithEnvVarSerde : KSerializer<Path> {
-    override val descriptor = PrimitiveSerialDescriptor("PathWithEnvVars", PrimitiveKind.STRING)
+object PathSerde : KSerializer<Path> {
+    override val descriptor = PrimitiveSerialDescriptor("Path", PrimitiveKind.STRING)
 
     override fun serialize(encoder: Encoder, value: Path) {
         throw UnsupportedOperationException("YAML serialization of config is not supported.")
     }
 
-    override fun deserialize(decoder: Decoder): Path {
-        val yamlInput: YamlInput = decoder as YamlInput
-        val str = handleEnvTag(yamlInput)
-        return Paths.get(str)
-    }
-}
-
-/**
- * @suppress
- */
-object StringWithEnvVarSerde : KSerializer<String> {
-    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("StringWithEnvVars", PrimitiveKind.STRING)
-
-    override fun serialize(encoder: Encoder, value: String) {
-        throw UnsupportedOperationException("YAML serialization of config is not supported.")
-    }
-
-    override fun deserialize(decoder: Decoder): String {
-        val yamlInput: YamlInput = decoder as YamlInput
-        return handleEnvTag(yamlInput)
-    }
-}
-
-object StringMapWithEnvVarsSerde : KSerializer<Map<String, String>> {
-    @OptIn(
-        kotlinx.serialization.ExperimentalSerializationApi::class,
-        kotlinx.serialization.InternalSerializationApi::class
-    )
-    override val descriptor: SerialDescriptor = buildSerialDescriptor("StringMapWithEnvVarsSerde", StructureKind.MAP)
-
-    override fun serialize(encoder: Encoder, value: Map<String, String>) {
-        throw UnsupportedOperationException("YAML serialization of config is not supported.")
-    }
-
-    override fun deserialize(decoder: Decoder): Map<String, String> {
-        val yamlInput: YamlInput = decoder as YamlInput
-        val currentLocation = yamlInput.getCurrentLocation()
-        val mapNode = yamlInput.node.yamlMap.entries.values.find { it.location == currentLocation }?.yamlMap
-            ?: throw IllegalStateException("Expected map node at current location")
-
-        return mapNode.entries.entries.associate { (keyNode, valueNode): Map.Entry<YamlScalar, YamlNode> ->
-            val key = keyNode.content
-            val value = when (valueNode) {
-                is YamlTaggedNode -> envFromTaggedNode(valueNode.yamlTaggedNode)
-                is YamlScalar -> valueNode.content
-                else -> throw IllegalStateException("Expected scalar or tagged node")
-            }
-            key to value
-        }
-    }
-}
-
-object BooleanWithEnvVarSerde : KSerializer<Boolean> {
-    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("BooleanWithEnvVars", PrimitiveKind.BOOLEAN)
-
-    override fun serialize(encoder: Encoder, value: Boolean) {
-        throw UnsupportedOperationException("YAML serialization of config is not supported.")
-    }
-
-    override fun deserialize(decoder: Decoder): Boolean {
-        val yamlInput: YamlInput = decoder as YamlInput
-        return handleEnvTag(yamlInput).toBoolean()
-    }
-}
-
-object IntWithEnvVarSerde : KSerializer<Int> {
-    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("BooleanWithEnvVars", PrimitiveKind.BOOLEAN)
-
-    override fun serialize(encoder: Encoder, value: Int) {
-        throw UnsupportedOperationException("YAML serialization of config is not supported.")
-    }
-
-    override fun deserialize(decoder: Decoder): Int {
-        val yamlInput: YamlInput = decoder as YamlInput
-        return handleEnvTag(yamlInput).toInt()
-    }
+    override fun deserialize(decoder: Decoder): Path = Paths.get(decoder.decodeString())
 }
 
 object InetAddressSerde : KSerializer<InetAddress?> {
@@ -156,5 +86,7 @@ val YAML_SERDE = Yaml(
 /**
  * @suppress
  */
-fun nodeConfig(yamlString: String): Xtdb.Config =
-    YAML_SERDE.decodeFromString<Xtdb.Config>(yamlString)
+fun nodeConfig(yamlString: String): Xtdb.Config {
+    val root = resolveEnvVars(YAML_SERDE.parseToYamlNode(yamlString))
+    return YAML_SERDE.decodeFromYamlNode(root)
+}

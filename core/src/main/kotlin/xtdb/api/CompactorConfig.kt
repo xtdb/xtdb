@@ -1,4 +1,4 @@
-@file:UseSerializers(DurationSerde::class, IntWithEnvVarSerde::class)
+@file:UseSerializers(DurationSerde::class)
 
 package xtdb.api
 

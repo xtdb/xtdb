@@ -112,8 +112,8 @@ interface Authenticator : AutoCloseable {
         @SerialName("!OpenIdConnect")
         data class OpenIdConnect @JvmOverloads constructor(
             val issuerUrl: URL,
-            @Serializable(with = StringWithEnvVarSerde::class) val clientId: String,
-            @Serializable(with = StringWithEnvVarSerde::class) val clientSecret: String,
+            val clientId: String,
+            val clientSecret: String,
             override var rules: List<MethodRule> = DEFAULT_RULES,
             @Transient var instantSource: InstantSource = InstantSource.system()
         ) : Factory {

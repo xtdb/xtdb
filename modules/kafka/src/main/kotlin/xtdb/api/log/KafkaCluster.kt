@@ -1,8 +1,6 @@
 @file:UseSerializers(
-    StringMapWithEnvVarsSerde::class,
     DurationSerde::class,
-    StringWithEnvVarSerde::class,
-    PathWithEnvVarSerde::class
+    PathSerde::class
 )
 
 package xtdb.api.log
@@ -30,9 +28,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.apache.kafka.common.serialization.Serializer
 import xtdb.DurationSerde
-import xtdb.api.PathWithEnvVarSerde
-import xtdb.api.StringMapWithEnvVarsSerde
-import xtdb.api.StringWithEnvVarSerde
+import xtdb.api.PathSerde
 import xtdb.database.proto.DatabaseConfig
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig

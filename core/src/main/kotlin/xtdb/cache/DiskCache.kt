@@ -1,4 +1,4 @@
-@file:UseSerializers(PathWithEnvVarSerde::class)
+@file:UseSerializers(PathSerde::class)
 package xtdb.cache
 
 import com.github.benmanes.caffeine.cache.RemovalCause
@@ -6,7 +6,7 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.PathSerde
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE

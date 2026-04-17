@@ -1,11 +1,10 @@
-@file:UseSerializers(IntWithEnvVarSerde::class, InetAddressSerde::class)
+@file:UseSerializers(InetAddressSerde::class)
 
 package xtdb.api.metrics
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.api.InetAddressSerde
-import xtdb.api.IntWithEnvVarSerde
 import java.net.InetAddress
 
 @Serializable

@@ -1,4 +1,4 @@
-@file:UseSerializers(DurationSerde::class, PathWithEnvVarSerde::class)
+@file:UseSerializers(DurationSerde::class, PathSerde::class)
 
 package xtdb.api.log
 
@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
-import xtdb.api.PathWithEnvVarSerde
+import xtdb.api.PathSerde
 import xtdb.api.log.Log.*
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil

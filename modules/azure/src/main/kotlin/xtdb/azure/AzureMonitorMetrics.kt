@@ -8,13 +8,12 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import xtdb.api.module.XtdbModule
-import xtdb.api.StringWithEnvVarSerde
 import xtdb.api.Xtdb
 
 @Serializable
 @SerialName("!AzureMonitor")
 class AzureMonitorMetrics(
-    @Serializable(StringWithEnvVarSerde::class) val connectionString: String,
+    val connectionString: String,
 ) : XtdbModule.Factory {
 
     override val moduleKey = "xtdb.metrics.azure-monitor"
