@@ -939,10 +939,10 @@
 
   (t/testing "execution"
     (xt/submit-tx tu/*node* [[:put-docs :products {:xt/id 1 :category "food"}]
-                              [:put-docs :products {:xt/id 2 :category "food"}]
-                              [:put-docs :products {:xt/id 3 :category "drink"}]
-                              [:put-docs :products {:xt/id 4 :category "drink"}]
-                              [:put-docs :products {:xt/id 5 :category "snack"}]])
+                             [:put-docs :products {:xt/id 2 :category "food"}]
+                             [:put-docs :products {:xt/id 3 :category "drink"}]
+                             [:put-docs :products {:xt/id 4 :category "drink"}]
+                             [:put-docs :products {:xt/id 5 :category "snack"}]])
 
     (t/is (= [{:cat "DRINK" :cnt 2} {:cat "FOOD" :cnt 2} {:cat "SNACK" :cnt 1}]
              (sort-by :cat (xt/q tu/*node* "SELECT UPPER(category) AS cat, COUNT(*) AS cnt FROM products GROUP BY UPPER(category)"))))
@@ -989,8 +989,8 @@
 
   (t/testing "Metabase-style binned expression"
     (xt/submit-tx tu/*node* [[:put-docs :orders {:xt/id 1}]
-                              [:put-docs :orders {:xt/id 2}]
-                              [:put-docs :orders {:xt/id 3}]])
+                             [:put-docs :orders {:xt/id 2}]
+                             [:put-docs :orders {:xt/id 3}]])
     (t/is (= [{:x 1.0 :cnt 1} {:x 2.0 :cnt 1} {:x 3.0 :cnt 1}]
              (xt/q tu/*node* "SELECT (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 AS x, COUNT(*) AS cnt FROM orders GROUP BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ORDER BY (FLOOR((_id - 1.0) / 1.0)) * 1.0 + 1.0 ASC")))))
 
