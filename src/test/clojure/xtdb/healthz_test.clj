@@ -7,7 +7,8 @@
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [xtdb.database Database Database$Catalog Database$Config]))
+  (:import [xtdb.database Database Database$Catalog Database$Config]
+           xtdb.storage.BufferPoolKt))
 
 (defn ->healthz-url [port endpoint]
   (format "http://localhost:%s/healthz/%s" port endpoint))
@@ -104,6 +105,45 @@
 
           (with-redefs [healthz/->block-lag (fn [_] 6)]
             (t/is (= [503 "1"] (alive-resp)))))))))
+
+(t/deftest test-block-lag-uses-list-after
+  (util/with-tmp-dirs #{local-path}
+    (let [port (tu/free-port)]
+      (with-open [node (tu/->local-node {:node-dir local-path
+                                         :healthz-port port
+                                         :compactor-threads 0})]
+        (let [db (db/primary-db node)
+              bp (.getBufferPool db)
+              block-cat (.getBlockCatalog db)]
+
+          (t/testing "no blocks yet"
+            (t/is (nil? (.getCurrentBlockIndex block-cat)))
+            (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp nil)))
+            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp)))))
+
+          (xt/execute-tx node [[:put-docs :foo {:xt/id :foo}]])
+          (tu/flush-block! node)
+
+          (t/testing "after first block, block-lag is zero"
+            (t/is (= 0 (.getCurrentBlockIndex block-cat)))
+            (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp 0)))
+            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp)))))
+
+          (xt/execute-tx node [[:put-docs :foo {:xt/id :bar}]])
+          (tu/flush-block! node)
+
+          (t/testing "after second block, listAfter from first finds it"
+            ;; invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
+            (BufferPoolKt/invalidateLatestAvailableBlockCache bp)
+            (t/is (= 1 (.getCurrentBlockIndex block-cat)))
+            (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 0))
+                  "listing after block 0 finds block 1")
+            (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 1))
+                  "listing after block 1 returns block 1 (no new blocks)")
+            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp))))))))))
 
 (t/deftest test-finish-block-endpoint
   (util/with-tmp-dirs #{local-path}

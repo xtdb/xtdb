@@ -1,5 +1,6 @@
 package xtdb.storage
 
+import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.vector.ipc.message.ArrowFooter
@@ -9,11 +10,12 @@ import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
 import xtdb.arrow.unsupported
 import xtdb.error.Fault
+import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
 typealias StorageEpoch = Int
@@ -61,6 +63,9 @@ interface BufferPool : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
+    fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
+        listAllObjects(dir).filter { it.key > afterKey }
+
     fun copyObject(src: Path, dest: Path)
 
     fun deleteIfExists(key: Path)
@@ -95,17 +100,30 @@ private fun Path.parseBlockIndex(): Long? =
         ?.groups?.get(1)
         ?.value?.fromLexHex
 
-private val latestAvailableBlockCache =
-    Caffeine.newBuilder().expireAfterWrite(1.minutes.toJavaDuration()).build<BufferPool, Long>()
+private val latestAvailableBlockCache: Cache<BufferPool, Long> =
+    Caffeine.newBuilder()
+        .expireAfterWrite(10.seconds.toJavaDuration())
+        .build()
 
-val BufferPool.latestAvailableBlockIndex0: Long
-    get() =
+fun BufferPool.latestAvailableBlockIndex(afterBlockIndex: Long? = null): Long? {
+    latestAvailableBlockCache.getIfPresent(this)?.let { return it }
+    val result = computeLatestAvailableBlockIndex(afterBlockIndex)
+    if (result != null) latestAvailableBlockCache.put(this, result)
+    return result
+}
+
+fun BufferPool.invalidateLatestAvailableBlockCache() = latestAvailableBlockCache.invalidate(this)
+
+private fun BufferPool.computeLatestAvailableBlockIndex(afterBlockIndex: Long?): Long? {
+    val objects = if (afterBlockIndex != null) {
+        val afterKey = "blocks/b${afterBlockIndex.asLexHex}.binpb".asPath
+        listAfter("blocks".asPath, afterKey)
+    } else {
         listAllObjects("blocks".asPath)
-            .lastOrNull()?.key?.fileName?.parseBlockIndex()
-            ?: -1
-
-val BufferPool.latestAvailableBlockIndex: Long
-    get() = latestAvailableBlockCache.get(this) { it.latestAvailableBlockIndex0 }
+    }
+    return objects.lastOrNull()?.key?.fileName?.parseBlockIndex()
+        ?: afterBlockIndex
+}
 
 /**
  * A wrapper around a BufferPool that prevents write operations.
@@ -127,6 +145,8 @@ class ReadOnlyBufferPool(private val delegate: BufferPool) : BufferPool {
     override fun listAllObjects(): Iterable<StoredObject> = delegate.listAllObjects()
 
     override fun listAllObjects(dir: Path): Iterable<StoredObject> = delegate.listAllObjects(dir)
+
+    override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> = delegate.listAfter(dir, afterKey)
 
     override fun copyObject(src: Path, dest: Path) {
         throw Fault("Attempted copy in read-only storage: $src -> $dest")

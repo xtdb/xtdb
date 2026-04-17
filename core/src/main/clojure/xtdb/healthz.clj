@@ -26,8 +26,10 @@
   (.getIngestionError db))
 
 (defn- ->block-lag [^Database db]
-  (max 0 (- (BufferPoolKt/getLatestAvailableBlockIndex (.getBufferPool db))
-            (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))))
+  (let [current-block (.getCurrentBlockIndex (.getBlockCatalog db))
+        latest-available (BufferPoolKt/latestAvailableBlockIndex (.getBufferPool db) current-block)]
+    (max 0 (- (or latest-available -1)
+              (or current-block -1)))))
 
 (defn- critical? [^Database db]
   (or (= "xtdb" (.getName db))

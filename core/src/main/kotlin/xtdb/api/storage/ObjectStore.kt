@@ -87,6 +87,14 @@ interface ObjectStore : AutoCloseable {
      */
     fun listAllObjects(dir: Path): Iterable<StoredObject>
 
+    /**
+     * Lists objects under the given directory whose keys are lexicographically after [afterKey].
+     *
+     * Objects are returned in lexicographic order of their path names.
+     */
+    fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
+        listAllObjects(dir).filter { it.key > afterKey }
+
     fun copyObject(src: Path, dest: Path): CompletableFuture<Unit>
 
     /**

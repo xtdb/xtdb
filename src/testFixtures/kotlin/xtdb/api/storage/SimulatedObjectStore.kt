@@ -53,6 +53,11 @@ class SimulatedObjectStore(
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
+    override fun listAfter(dir: Path, afterKey: Path): List<StoredObject> =
+        buffers.tailMap(afterKey, false).entries
+            .takeWhile { it.key.startsWith(dir) }
+            .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
+
     override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> {
         val srcBuffer = buffers[src] ?: return failedFuture(IllegalStateException("Object $src doesn't exist"))
         buffers[dest] = copyByteBuffer(srcBuffer)

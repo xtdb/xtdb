@@ -223,6 +223,26 @@
     (t/is (= [(os/->StoredObject "bar/baz/dan" 4)]
              (vec (.listAllObjects buffer-pool (util/->path "bar/baz")))))))
 
+(defn test-latest-available-block [^BufferPool buffer-pool]
+  ;; block keys: b00.binpb = block 0, b01.binpb = block 1, etc.
+  (.putObject buffer-pool (util/->path "blocks/b00.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b01.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b02.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObject buffer-pool (util/->path "blocks/b03.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (Thread/sleep 1000)
+
+  (t/testing "full listing finds latest block"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool nil))))
+
+  (t/testing "after block 0 finds latest"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 0))))
+
+  (t/testing "after penultimate finds latest"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 2))))
+
+  (t/testing "after latest returns latest (no new blocks)"
+    (t/is (= 3 (BufferPoolKt/latestAvailableBlockIndex buffer-pool 3)))))
+
 (t/deftest test-memory-list-objs
   (with-caches {}
     (with-open [bp (open-storage (Storage/inMemory))]
@@ -234,7 +254,7 @@
       (with-open [bp (open-storage (Storage/local tmp-dir))]
         (test-list-objects bp)))))
 
-(t/deftest test-latest-available-block
+(t/deftest test-latest-available-block-logic-local-node
   (tu/with-tmp-dirs #{tmp-dir}
     (with-open [node1 (xtn/start-node {:storage [:local {:path tmp-dir}]
                                        :compactor {:threads 0}})
@@ -242,26 +262,32 @@
                                        :compactor {:threads 0}})]
       (let [bp1 (.getBufferPool (db/primary-db node1))
             bp2 (.getBufferPool (db/primary-db node2))]
-        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
-        (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2)))
+        (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp1 nil)))
+        (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp2 nil)))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :foo}]])
         (tu/flush-block! node1)
 
-        (t/testing "cached"
-          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp1)))
-          (t/is (= -1 (BufferPoolKt/getLatestAvailableBlockIndex bp2))))
+        (t/testing "full listing"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 nil)))
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp2 nil))))
 
-        (t/testing "live"
-          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
-          (t/is (= 0 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))
+        (t/testing "with afterBlockIndex"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 0))
+                "no new blocks after 0, returns afterBlockIndex"))
 
         (xt/execute-tx node1 [[:put-docs :foo {:xt/id :bar}]])
         (tu/flush-block! node1)
 
-        (t/testing "live"
-          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp1)))
-          (t/is (= 1 (BufferPoolKt/getLatestAvailableBlockIndex0 bp2))))))))
+        (t/testing "cached — stale values returned within TTL"
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp1 0)))
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp2 0))))
+
+        (t/testing "after cache invalidation — finds new blocks"
+          (BufferPoolKt/invalidateLatestAvailableBlockCache bp1)
+          (BufferPoolKt/invalidateLatestAvailableBlockCache bp2)
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp1 0)))
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp2 0))))))))
 
 (defn byte-buffer->byte-array ^bytes [^java.nio.ByteBuffer buf]
   (let [copy (.duplicate buf)

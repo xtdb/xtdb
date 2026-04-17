@@ -156,6 +156,7 @@ internal class RemoteBufferPool(
 
     override fun listAllObjects() = objectStore.listAllObjects()
     override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
+    override fun listAfter(dir: Path, afterKey: Path) = objectStore.listAfter(dir, afterKey)
     override fun copyObject(src: Path, dest: Path): Unit = objectStore.copyObject(src, dest).get()
 
     override fun deleteIfExists(key: Path): Unit = runBlocking { objectStore.deleteIfExists(key).await() }
