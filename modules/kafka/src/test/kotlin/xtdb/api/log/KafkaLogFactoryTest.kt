@@ -23,7 +23,6 @@ class KafkaLogFactoryTest {
         assertEquals("my-topic-replica", restored.replicaTopic)
         assertEquals("myCluster", restored.replicaCluster)
         assertEquals(0, restored.epoch)
-        assertEquals("xtdb-my-topic", restored.groupId)
     }
 
     @Test
@@ -44,16 +43,6 @@ class KafkaLogFactoryTest {
         val restored = roundTrip(original)
 
         assertEquals("otherCluster", restored.replicaCluster)
-    }
-
-    @Test
-    fun `round-trips groupId`() {
-        val original = KafkaCluster.LogFactory("myCluster", "my-topic")
-            .groupId("my-group")
-
-        val restored = roundTrip(original)
-
-        assertEquals("my-group", restored.groupId)
     }
 
     @Test

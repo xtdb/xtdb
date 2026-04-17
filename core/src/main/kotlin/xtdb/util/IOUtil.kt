@@ -21,6 +21,10 @@ fun Iterable<AutoCloseable?>.closeAll() {
     forEach { it?.close() }
 }
 
+fun <T : AutoCloseable> Lazy<T>.close() {
+    if (isInitialized()) value.close()
+}
+
 fun <K, V : AutoCloseable?> Map<K, V>.closeAll() {
     values.closeAll()
 }

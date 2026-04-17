@@ -6,6 +6,12 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -15,6 +21,8 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
@@ -35,6 +43,10 @@ import xtdb.kafka.proto.kafkaLogConfig
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
+import xtdb.util.close
+import xtdb.util.error
+import xtdb.util.info
+import xtdb.util.logger
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant.ofEpochMilli
@@ -42,10 +54,10 @@ import java.util.*
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
 import kotlin.io.path.inputStream
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import xtdb.util.info
-import xtdb.util.logger
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = KafkaCluster::class.logger
@@ -119,14 +131,186 @@ class KafkaCluster(
     private val pollDuration: Duration,
     val schemaRegistryUrl: String? = null,
     val transactionalIdPrefix: String? = null,
+    private val groupId: String = "xtdb",
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log.Cluster {
     val producer = kafkaConfigMap.openProducer()
     val scope = CoroutineScope(SupervisorJob() + coroutineContext)
 
+    private sealed interface GroupCommand {
+        class Register(val topic: String, val subscription: SharedGroupConsumer.TopicSubscription<*>) : GroupCommand
+        class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private inner class SharedGroupConsumer : AutoCloseable {
+        private val subscriptions = mutableMapOf<String, TopicSubscription<*>>()
+        private val commandCh = Channel<GroupCommand>(Channel.UNLIMITED)
+
+        private val consumer: KafkaConsumer<Unit, ByteArray> =
+            kafkaConfigMap.plus(mapOf("group.id" to groupId)).openConsumer()
+
+        inner class TopicSubscription<M>(
+            val codec: MessageCodec<M>,
+            val epoch: Int,
+            val listener: Log.SubscriptionListener<M>,
+            var processor: Log.RecordProcessor<M>?,
+        ) {
+            // expecting a load of change here for multi-part.
+
+            suspend fun onPartitionAssigned(tp: TopicPartition) {
+                listener.onPartitionsAssigned(listOf(tp.partition()))
+                    ?.let { tailSpec ->
+                        processor = tailSpec.processor
+                        consumer.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
+                    }
+            }
+
+            suspend fun onPartitionRevoked(tp: TopicPartition) {
+                listener.onPartitionsRevoked(listOf(tp.partition()))
+                processor = null
+            }
+
+            suspend fun processRecords(records: List<ConsumerRecord<*, ByteArray>>) {
+                processor!!.processRecords(
+                    records.mapNotNull { rec ->
+                        codec.decode(rec.value())
+                            ?.let { msg -> Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg) }
+                    })
+            }
+        }
+
+
+        private inline fun launderInterruptedException(block: () -> Unit) =
+            try {
+                block()
+            } catch (e: InterruptedException) {
+                throw InterruptException(e)
+            }
+
+
+        private fun applySubscriptions() {
+            val topics = subscriptions.keys.toList()
+
+            if (topics.isEmpty()) consumer.unsubscribe()
+            else consumer.subscribe(topics, object : ConsumerRebalanceListener {
+                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                    launderInterruptedException {
+                        runBlocking {
+                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
+                                sub.onPartitionAssigned(tps.single())
+                            }
+                        }
+                    }
+
+                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                    launderInterruptedException {
+                        runBlocking {
+                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                subscriptions[topic]?.onPartitionRevoked(tps.single())
+                            }
+                        }
+                    }
+            })
+        }
+
+        private fun processCommand(cmd: GroupCommand) {
+            when (cmd) {
+                is GroupCommand.Register -> {
+                    check(cmd.topic !in subscriptions) { "Topic ${cmd.topic} already registered" }
+                    subscriptions[cmd.topic] = cmd.subscription
+                    applySubscriptions()
+                }
+
+                is GroupCommand.Unregister -> {
+                    subscriptions.remove(cmd.topic)?.listener?.onPartitionsRevokedSync(listOf(0))
+                    applySubscriptions()
+                    cmd.cont.resume(Unit)
+                }
+            }
+        }
+
+        private suspend fun KafkaConsumer<*, ByteArray>.pollRecords() =
+            runInterruptible(Dispatchers.IO) {
+                try {
+                    poll(pollDuration)
+                } catch (_: WakeupException) {
+                    ConsumerRecords.empty()
+                } catch (e: InterruptException) {
+                    throw InterruptedException().initCause(e)
+                }
+            }
+
+        private val pollingJob: Job = scope.launch {
+            try {
+                while (isActive) {
+                    select {
+                        commandCh.onReceive { processCommand(it) }
+
+                        if (subscriptions.isNotEmpty()) {
+                            @OptIn(ExperimentalCoroutinesApi::class)
+                            onTimeout(0.milliseconds) {
+                                consumer.pollRecords()?.let { consumerRecords ->
+                                    for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
+                                        val sub = subscriptions[topic]
+                                            ?: error("Received records for unsubscribed topic $topic")
+
+                                        sub.processRecords(recs)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                LOG.error(e) { "SharedGroupConsumer poll loop failed" }
+                throw e
+            }
+        }
+
+        suspend fun <M> register(
+            topic: String,
+            codec: MessageCodec<M>,
+            epoch: Int,
+            listener: Log.SubscriptionListener<M>
+        ) {
+            commandCh.send(GroupCommand.Register(topic, TopicSubscription(codec, epoch, listener, null)))
+            consumer.wakeup()
+        }
+
+        suspend fun unregister(topic: String) {
+            suspendCancellableCoroutine { cont ->
+                commandCh.trySendBlocking(GroupCommand.Unregister(topic, cont)).getOrThrow()
+                consumer.wakeup()
+            }
+        }
+
+        override fun close() {
+            consumer.wakeup()
+            pollingJob.cancel()
+            commandCh.close()
+            try {
+                runBlocking { withTimeout(30.seconds) { pollingJob.join() } }
+            } finally {
+                check(subscriptions.isEmpty()) { "SharedGroupConsumer closed with active subscriptions: ${subscriptions.keys}" }
+                consumer.close()
+            }
+        }
+    }
+
+    private val _sharedGroupConsumer = lazy { SharedGroupConsumer() }
+    private val sharedGroupConsumer by _sharedGroupConsumer
+
     override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-        producer.close()
+        try {
+            _sharedGroupConsumer.close()
+        } finally {
+            runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
+            producer.close()
+        }
     }
 
     @Serializable
@@ -138,6 +322,7 @@ class KafkaCluster(
         var propertiesFile: Path? = null,
         var schemaRegistryUrl: String? = null,
         var transactionalIdPrefix: String? = null,
+        var groupId: String = "xtdb",
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Log.Cluster.Factory<KafkaCluster> {
 
@@ -145,7 +330,10 @@ class KafkaCluster(
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
         fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
-        fun transactionalIdPrefix(transactionalIdPrefix: String?) = apply { this.transactionalIdPrefix = transactionalIdPrefix }
+        fun transactionalIdPrefix(transactionalIdPrefix: String?) =
+            apply { this.transactionalIdPrefix = transactionalIdPrefix }
+
+        fun groupId(groupId: String) = apply { this.groupId = groupId }
 
         private val Path.asPropertiesMap: Map<String, String>
             get() =
@@ -158,7 +346,8 @@ class KafkaCluster(
                 .plus(propertiesMap)
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
-        override fun open(): KafkaCluster = KafkaCluster(configMap, pollDuration, schemaRegistryUrl, transactionalIdPrefix, coroutineContext)
+        override fun open(): KafkaCluster =
+            KafkaCluster(configMap, pollDuration, schemaRegistryUrl, transactionalIdPrefix, groupId, coroutineContext)
     }
 
     interface AtomicProducer<M> : Log.AtomicProducer<M> {
@@ -192,7 +381,6 @@ class KafkaCluster(
         private val codec: MessageCodec<M>,
         private val topic: String,
         override val epoch: Int,
-        private val groupId: String
     ) : Log<M> {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -343,10 +531,13 @@ class KafkaCluster(
 
         private fun KafkaConsumer<*, ByteArray>.pollRecords(): List<Log.Record<M>> =
             try {
-                poll(pollDuration).records(topic)
+                poll(pollDuration)
+                    .records(topic)
                     .mapNotNull { rec ->
-                        val msg = codec.decode(rec.value()) ?: return@mapNotNull null
-                        Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg)
+                        Log.Record(
+                            epoch, rec.offset(), ofEpochMilli(rec.timestamp()),
+                            codec.decode(rec.value()) ?: return@mapNotNull null
+                        )
                     }
             } catch (_: WakeupException) {
                 emptyList()
@@ -355,8 +546,7 @@ class KafkaCluster(
             }
 
         override suspend fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
-            val c = kafkaConfigMap.openConsumer()
-            try {
+            kafkaConfigMap.openConsumer().use { c ->
                 val tp = TopicPartition(topic, 0)
                 c.assign(listOf(tp))
                 c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
@@ -365,43 +555,16 @@ class KafkaCluster(
                     val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
                     if (records.isNotEmpty()) processor.processRecords(records)
                 }
-            } finally {
-                c.close()
             }
         }
 
-        override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) = coroutineScope {
-            val c = kafkaConfigMap.plus(mapOf("group.id" to groupId)).openConsumer()
+        override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
+            sharedGroupConsumer.register(topic, codec, epoch, listener)
+            LOG.info { "registered group subscription for topic '$topic'" }
             try {
-                val tp = TopicPartition(topic, 0)
-                var currentProcessor: Log.RecordProcessor<M>? = null
-
-                c.subscribe(listOf(topic), object : ConsumerRebalanceListener {
-                    private inline fun launderInterruptedException(block: () -> Unit) =
-                        try { block() } catch (e: InterruptedException) { throw InterruptException(e) }
-
-                    override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
-                        launderInterruptedException {
-                            listener.onPartitionsAssignedSync(partitions.map { it.partition() })
-                                ?.let { tailSpec ->
-                                    currentProcessor = tailSpec.processor
-                                    c.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
-                                }
-                        }
-
-                    override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                        launderInterruptedException {
-                            listener.onPartitionsRevokedSync(partitions.map { it.partition() })
-                            currentProcessor = null
-                        }
-                })
-
-                while (isActive) {
-                    val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }
-                    if (records.isNotEmpty()) currentProcessor?.processRecords(records)
-                }
+                suspendCancellableCoroutine<Unit> { } // wait until cancelled
             } finally {
-                c.close()
+                withContext(NonCancellable) { sharedGroupConsumer.unregister(topic) }
             }
         }
 
@@ -417,14 +580,12 @@ class KafkaCluster(
         var replicaTopic: String = "$topic-replica",
         var autoCreateTopic: Boolean = true,
         var epoch: Int = 0,
-        var groupId: String = "xtdb-$topic"
     ) : Log.Factory {
 
         fun replicaCluster(replicaCluster: LogClusterAlias) = apply { this.replicaCluster = replicaCluster }
         fun replicaTopic(replicaTopic: String) = apply { this.replicaTopic = replicaTopic }
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
-        fun groupId(groupId: String) = apply { this.groupId = groupId }
 
         override fun openSourceLog(clusters: Map<LogClusterAlias, Log.Cluster>): Log<SourceMessage> {
             val clusterAlias = this.cluster
@@ -438,7 +599,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch, groupId)
+            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch)
         }
 
         override fun openReadOnlySourceLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
@@ -456,7 +617,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(replicaTopic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch, groupId)
+            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch)
         }
 
         override fun openReadOnlyReplicaLog(clusters: Map<LogClusterAlias, Log.Cluster>) =
@@ -469,7 +630,6 @@ class KafkaCluster(
                 this.logClusterAlias = cluster
                 this.replicaClusterAlias = replicaCluster
                 this.replicaTopic = this@LogFactory.replicaTopic
-                this.groupId = this@LogFactory.groupId
             }, "proto.xtdb.com"))
         }
     }
@@ -486,7 +646,6 @@ class KafkaCluster(
                     epoch = it.epoch
                     if (it.hasReplicaClusterAlias()) replicaCluster = it.replicaClusterAlias
                     if (it.hasReplicaTopic()) replicaTopic = it.replicaTopic
-                    if (it.hasGroupId()) groupId = it.groupId
                 }
             }
 
