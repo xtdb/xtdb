@@ -243,6 +243,16 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
         }
     }
 
+    /**
+     * Waits until all active plain consumers have processed all messages currently on the topic.
+     */
+    suspend fun awaitAllDelivered() {
+        while (plainConsumers.any { it.job.isActive && it.nextOffset < topic.size }) {
+            wakePlainConsumers.trySend(Unit)
+            yield()
+        }
+    }
+
     override fun close() {
         LOG.debug("$name: closing")
         job.cancel()
