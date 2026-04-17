@@ -4,7 +4,7 @@ package xtdb.postgres.proto;
 
 option java_multiple_files = true;
 
-message PostgresCdcSourceConfig {
+message PostgresSourceConfig {
     string hostname = 1;
     int32 port = 2;
     string database = 3;
@@ -15,7 +15,7 @@ message PostgresCdcSourceConfig {
     repeated string schema_include_list = 8;
 }
 
-message PostgresCdcToken {
+message PostgresSourceToken {
     // The raw Debezium-style offset is not needed here — we own the protocol.
     // The slot's confirmed_flush_lsn tells PG where to resume streaming.
     // We track the LSN of the last committed transaction in XT.

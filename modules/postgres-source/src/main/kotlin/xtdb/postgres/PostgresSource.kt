@@ -22,10 +22,10 @@ import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.error.Incorrect
 import xtdb.indexer.OpenTx
-import xtdb.postgres.proto.PostgresCdcSourceConfig
-import xtdb.postgres.proto.PostgresCdcToken
-import xtdb.postgres.proto.postgresCdcSourceConfig
-import xtdb.postgres.proto.postgresCdcToken
+import xtdb.postgres.proto.PostgresSourceConfig
+import xtdb.postgres.proto.PostgresSourceToken
+import xtdb.postgres.proto.postgresSourceConfig
+import xtdb.postgres.proto.postgresSourceToken
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
@@ -44,12 +44,12 @@ import java.time.Instant
 import java.util.Properties
 import com.google.protobuf.Any as ProtoAny
 
-private val LOG = LoggerFactory.getLogger(PostgresCdcSource::class.java)
+private val LOG = LoggerFactory.getLogger(PostgresSource::class.java)
 
 private const val PROTO_TAG = "proto.xtdb.com"
 private const val SNAPSHOT_BATCH_SIZE = 1000
 
-class PostgresCdcSource(
+class PostgresSource(
     private val dbName: String,
     private val hostname: String,
     private val port: Int,
@@ -63,7 +63,7 @@ class PostgresCdcSource(
 ) : ExternalSource {
 
     @Serializable
-    @SerialName("!PostgresCdc")
+    @SerialName("!Postgres")
     data class Factory(
         val hostname: String,
         val port: Int = 5432,
@@ -76,13 +76,13 @@ class PostgresCdcSource(
     ) : ExternalSource.Factory {
 
         override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource =
-            PostgresCdcSource(
+            PostgresSource(
                 dbName, hostname, port, database, username, password,
                 slotName, publicationName, schemaIncludeList,
             )
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.externalSource = ProtoAny.pack(postgresCdcSourceConfig {
+            dbConfig.externalSource = ProtoAny.pack(postgresSourceConfig {
                 hostname = this@Factory.hostname
                 port = this@Factory.port
                 database = this@Factory.database
@@ -95,10 +95,10 @@ class PostgresCdcSource(
         }
 
         class Registration : ExternalSource.Registration {
-            override val protoTag: String get() = "$PROTO_TAG/xtdb.postgres.proto.PostgresCdcSourceConfig"
+            override val protoTag: String get() = "$PROTO_TAG/xtdb.postgres.proto.PostgresSourceConfig"
 
             override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
-                val config = msg.unpack(PostgresCdcSourceConfig::class.java)
+                val config = msg.unpack(PostgresSourceConfig::class.java)
                 return Factory(
                     hostname = config.hostname,
                     port = config.port,
@@ -141,7 +141,7 @@ class PostgresCdcSource(
         afterToken: ExternalSourceToken?,
         txIndexer: ExternalSource.TxIndexer,
     ) {
-        val token = afterToken?.unpack(PostgresCdcToken::class.java)
+        val token = afterToken?.unpack(PostgresSourceToken::class.java)
 
         try {
             if (token != null && token.snapshotCompleted) {
@@ -209,7 +209,7 @@ class PostgresCdcSource(
                     }
 
                     // Mark snapshot complete
-                    val completeToken = ProtoAny.pack(postgresCdcToken {
+                    val completeToken = ProtoAny.pack(postgresSourceToken {
                         latestCommittedLsn = slotLsn
                         snapshotCompleted = true
                     }, PROTO_TAG)
@@ -304,7 +304,7 @@ class PostgresCdcSource(
                             val commitLsn = parsed.endLsn
                             val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
 
-                            val token = ProtoAny.pack(postgresCdcToken {
+                            val token = ProtoAny.pack(postgresSourceToken {
                                 latestCommittedLsn = commitLsn
                                 snapshotCompleted = true
                             }, PROTO_TAG)
@@ -391,7 +391,7 @@ class PostgresCdcSource(
         table: String,
         rows: List<Map<String, Any?>>,
     ) {
-        val token = ProtoAny.pack(postgresCdcToken {
+        val token = ProtoAny.pack(postgresSourceToken {
             latestCommittedLsn = slotLsn
             snapshotCompleted = false
         }, PROTO_TAG)

@@ -21,7 +21,7 @@ import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
 @EnabledIfEnvironmentVariable(named = "XTDB_SINGLE_WRITER", matches = "true")
-class PostgresCdcIntegrationTest {
+class PostgresSourceIntegrationTest {
 
     companion object {
         private val network: Network = Network.newNetwork()
@@ -67,7 +67,7 @@ class PostgresCdcIntegrationTest {
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
-    private fun attachPostgresCdc(
+    private fun attachPostgresSource(
         node: Xtdb,
         dbName: String = "cdc",
         slotName: String = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}",
@@ -81,7 +81,7 @@ class PostgresCdcIntegrationTest {
                         log: !Kafka
                           cluster: kafka
                           topic: test-replica-${UUID.randomUUID()}
-                        externalSource: !PostgresCdc
+                        externalSource: !Postgres
                           hostname: ${postgres.host}
                           port: ${postgres.getMappedPort(5432)}
                           database: testdb
@@ -148,7 +148,7 @@ class PostgresCdcIntegrationTest {
 
         // Phase 1: snapshot + streaming
         openNode(sourceTopic).use { node ->
-            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             // 1 table batch + 1 completion marker = 2 txs
             awaitTxs(node, 2, db = "cdc")
@@ -203,7 +203,7 @@ class PostgresCdcIntegrationTest {
         pgExecute("SELECT pg_create_logical_replication_slot('$slotName', 'pgoutput')")
 
         openNode(sourceTopic).use { node ->
-            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             // The CDC source will try to CREATE_REPLICATION_SLOT with the same name
             // and fail because it already exists. Wait long enough for the attempt.
@@ -236,7 +236,7 @@ class PostgresCdcIntegrationTest {
         )
 
         openNode(sourceTopic).use { node ->
-            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             // Wait for both tables to be snapshotted
             awaitCondition("both tables snapshotted", timeout = 30.seconds) {
@@ -281,7 +281,7 @@ class PostgresCdcIntegrationTest {
         )
 
         openNode(sourceTopic).use { node ->
-            attachPostgresCdc(node, slotName = slotName, publicationName = pubName)
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             awaitCondition("Alice snapshotted", timeout = 30.seconds) {
                 runCatching {
@@ -319,7 +319,7 @@ class PostgresCdcIntegrationTest {
 
         val sourceTopic = "test-topic-${UUID.randomUUID()}"
         openNode(sourceTopic).use { node ->
-            attachPostgresCdc(node, publicationName = pubName)
+            attachPostgresSource(node, publicationName = pubName)
 
             // Phase 1: snapshot
             // 1 tx per table + 1 completion marker = 2 txs
