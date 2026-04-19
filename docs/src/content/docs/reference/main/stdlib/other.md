@@ -2,9 +2,6 @@
 title: Other Functions
 ---
 
-`CARDINALITY(list)`
-: returns the number of elements in the list.
-
 `LENGTH(expr)`
 : returns the length of the value in `expr`, where `<expr>` is one of the following:
   - A **string**: returns the number of utf8 characters in the string (alias for `CHAR_LENGTH`)
@@ -12,9 +9,6 @@ title: Other Functions
   - A **list**: returns the number of elements in the list (alias for `CARDINALITY`)
   - A **set**: returns the number of elements in the set
   - A **struct**: returns the number of **non-absent** fields in the struct
-
-`TRIM_ARRAY(array, n)`
-: returns a copy of `array` with the last `n` elements removed.
 
 `obj->field`
 : PostgreSQL-compatible JSON field access operator. Extracts a field from a struct by key (preserving the original type).

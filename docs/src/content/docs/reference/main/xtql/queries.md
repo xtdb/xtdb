@@ -487,12 +487,23 @@ XTQL expressions are valid within predicates, projections, bindings and argument
 ### Subqueries
 
 - Subquery expressions must return a single row containing a single column - otherwise, a runtime exception will be thrown.
-- 'Exists' expressions will return false if the subquery returns no rows; true otherwise.
-- 'Pull' expressions must return a single row - otherwise, a runtime exception will be thrown.
+- `exists?` expressions return false if the subquery returns no rows, and true otherwise.
+- `pull` expressions must return a single row - otherwise, a runtime exception will be thrown.
   The columns in the returned row will be nested into a map in the outer expression.
-- 'Pull many' expressions may return any number of rows.
+- `pull*` expressions may return any number of rows.
   The rows will be nested into an array of maps in the outer expression.
 - The arguments to sub-queries are referred to as parameters in the inner query; no other variables from the outer scope are available in the inner query.
+
+`exists?`
+: tests whether a subquery returns at least one row.
+
+```clojure
+(-> (from :docs [{:xt/id e}])
+    (where (exists? (fn [e]
+                      (from :docs [{:parent e}])))))
+```
+
+This returns documents that have at least one child.
 
 <!-- -->
 
@@ -515,7 +526,7 @@ XTQL expressions are valid within predicates, projections, bindings and argument
     CallExpr :: (symbol Expr*)
 
     SubqueryExpr :: (q Subquery)
-    ExistsExpr :: (exists Subquery)
+    ExistsExpr :: (exists? Subquery)
     PullExpr :: (pull Subquery)
     PullManyExpr :: (pull* Subquery)
 
