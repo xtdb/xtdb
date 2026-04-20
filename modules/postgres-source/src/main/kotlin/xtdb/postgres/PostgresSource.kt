@@ -46,7 +46,13 @@ import java.time.Instant
 import java.util.Properties
 import com.google.protobuf.Any as ProtoAny
 
-private val LOG = LoggerFactory.getLogger(PostgresSource::class.java)
+import xtdb.util.debug
+import xtdb.util.info
+import xtdb.util.error
+import xtdb.util.logger
+import xtdb.util.trace
+
+private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG = "proto.xtdb.com"
 private const val SNAPSHOT_BATCH_SIZE = 1000
@@ -152,7 +158,10 @@ class PostgresSource(
         afterToken: ExternalSourceToken?,
         txIndexer: ExternalSource.TxIndexer,
     ) {
+        LOG.info("[$dbName] Partition $partition assigned (hostname=$hostname, port=$port, database=$database, publication=$publicationName, slot=$slotName)")
+
         val token = afterToken?.unpack(PostgresSourceToken::class.java)
+        LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
 
         try {
             if (token != null && token.snapshotCompleted) {
@@ -165,7 +174,7 @@ class PostgresSource(
                 streamChanges(txIndexer, slotLsn)
             }
         } catch (e: Exception) {
-            LOG.error("[$dbName] External source failed", e)
+            LOG.error(e, "[$dbName] External source failed")
             throw e
         }
     }
@@ -174,8 +183,12 @@ class PostgresSource(
      * Returns the slot LSN for streaming to resume from.
      */
     private suspend fun initialSnapshot(txIndexer: ExternalSource.TxIndexer): Long {
+        LOG.debug { "[$dbName] Opening replication connection to $hostname:$port/$database" }
+
         openJdbcConnection().use { replConn ->
             val pgReplConn = replConn.unwrap(PGConnection::class.java)
+
+            LOG.debug { "[$dbName] Creating replication slot '$slotName' with pgoutput" }
 
             // Create replication slot and get exported snapshot
             val slotInfo = pgReplConn.replicationAPI
@@ -195,16 +208,20 @@ class PostgresSource(
                 handle.begin()
                 try {
                     handle.transactionIsolationLevel = REPEATABLE_READ
+
+                    LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
                     handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
                     val tables = handle.discoverTables()
+                    LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
 
                     for ((schema, table) in tables) {
                         val columns = handle.discoverColumns(schema, table)
                         val fullTableName = "$schema.$table"
 
-                        LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns)")
+                        LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
 
+                        var rowCount = 0
                         handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
                             .setFetchSize(SNAPSHOT_BATCH_SIZE)
                             .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
@@ -212,11 +229,13 @@ class PostgresSource(
                                 it.asSequence()
                                     .chunked(SNAPSHOT_BATCH_SIZE)
                                     .forEach { batch ->
+                                        rowCount += batch.size
+                                        LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
                                         flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
                                     }
                             }
 
-                        LOG.info("[$dbName] Finished snapshotting $fullTableName")
+                        LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
                     }
 
                     // Mark snapshot complete
@@ -225,6 +244,7 @@ class PostgresSource(
                         snapshotCompleted = true
                     }, PROTO_TAG)
 
+                    LOG.debug { "[$dbName] Writing snapshot-complete marker" }
                     txIndexer.indexTx(completeToken) {
                         TxResult.Committed()
                     }
@@ -268,8 +288,12 @@ class PostgresSource(
             .list()
 
     private suspend fun streamChanges(txIndexer: ExternalSource.TxIndexer, startLsn: Long) {
+        LOG.debug { "[$dbName] Opening replication connection for streaming" }
+
         openJdbcConnection().use { replConn ->
             val pgReplConn = replConn.unwrap(PGConnection::class.java)
+
+            LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
 
             val stream: PGReplicationStream = pgReplConn.replicationAPI
                 .replicationStream()
@@ -292,10 +316,17 @@ class PostgresSource(
                     stream.read()!!
                 }
 
-                when (val parsed = PgOutputMessage.parse(msg)) {
-                    is PgOutputMessage.Relation -> relations[parsed.relationId] = parsed
+                val parsed = PgOutputMessage.parse(msg)
+                LOG.trace { "[$dbName] Received ${parsed::class.simpleName}" }
+
+                when (parsed) {
+                    is PgOutputMessage.Relation -> {
+                        relations[parsed.relationId] = parsed
+                        LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
+                    }
 
                     is PgOutputMessage.Begin -> {
+                        LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
                         currentTxOps = mutableListOf()
                     }
 
@@ -307,16 +338,20 @@ class PostgresSource(
                         }
                         val relation = relations[relationId]
                             ?: error("Relation $relationId not found — missing Relation message before data message")
+
+                        LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
                         currentTxOps.add(relation to parsed)
                     }
 
                     is PgOutputMessage.Commit -> {
+                        val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
+
                         if (currentTxOps.isNotEmpty()) {
-                            val commitLsn = parsed.endLsn
                             val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
+                            LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
 
                             val token = ProtoAny.pack(postgresSourceToken {
-                                latestCommittedLsn = commitLsn
+                                latestCommittedLsn = parsed.endLsn
                                 snapshotCompleted = true
                             }, PROTO_TAG)
 
@@ -328,10 +363,12 @@ class PostgresSource(
                                 }
                                 TxResult.Committed()
                             }
+                        } else {
+                            LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
                         }
 
                         // Acknowledge up to the commit LSN
-                        val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
+                        LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
                         runInterruptible(Dispatchers.IO) {
                             stream.setFlushedLSN(commitLsn)
                             stream.setAppliedLSN(commitLsn)
@@ -342,6 +379,8 @@ class PostgresSource(
                     }
                 }
             }
+
+            LOG.info("[$dbName] Streaming loop exiting (coroutine no longer active)")
         }
     }
 
@@ -393,7 +432,9 @@ class PostgresSource(
             }
             .toMap()
 
-    override fun close() = Unit
+    override fun close() {
+        LOG.info("[$dbName] Closing external source")
+    }
 
     private suspend fun flushSnapshotBatch(
         txIndexer: ExternalSource.TxIndexer,
