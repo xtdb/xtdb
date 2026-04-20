@@ -101,7 +101,7 @@ XTDB uses a single-writer architecture that ensures ACID consistency of updates 
 The single-writer provides strong consistency guarantees needed for auditing and bitemporal timestamp generation.
 XTDB does not offer a sharded multi-writer architecture, meaning write latencies and availability are geographically sensitive.
 
-Transaction logic is processed fully serially, deterministically and atomically on each node.
+Transaction logic is processed fully serially, deterministically, and atomically on the current leader node for a given database; other nodes in the cluster apply the already-resolved results.
 This means each transaction has exclusive access to the latest database state.
 Beyond basic record-oriented operations (i.e. via INSERT & DELETE `RECORDS`), many complex transactions can be expressed declaratively via SQL transactions.
 SQL transactions are non-interactive and mid-transaction writes are not queryable.

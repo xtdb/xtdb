@@ -3,13 +3,18 @@ title: Databases in XTDB
 ---
 
 <details>
-  <summary>Changelog (last updated v2.1.1)</summary>
+  <summary>Changelog (last updated v2.2)</summary>
 
-v2.1.1 (unreleased): read-only secondary databases
+v2.2: single-writer indexing
 
-: XTDB now supports read-only secondary databases.
+: Indexing within a database is now single-writer — see ['Database architecture'](#database-architecture) above for how it works today.
 
-  When attaching a database, you may specify `mode: read-only` in its configuration.
+  Previously, every indexer node independently consumed the log and wrote its own block files to the object store.
+  The design required all indexers to produce byte-identical output, so every feature had to be expressible as a pure, deterministic function of the log — which ruled out anything that wanted to draw per-transaction metadata (e.g. tx-id, system-time) from outside the log.
+
+  Single-writer lifts that restriction, unlocking new database topologies like change-data-capture-fed secondaries.
+
+  No upgrade steps needed — the user-facing API is unchanged, and existing Kafka topics continue to work.
 
 v2.1: multi-database support
 
@@ -121,35 +126,105 @@ Compute.Cluster2 -> Storage.ordersDb: secondary {
 
 ## Database architecture
 
-A single database in XTDB consists of the following components:
+Every XTDB database is backed by three pluggable external stores — a **source log** and a **replica log** (typically Kafka topics) and an **object store** (typically S3-compatible).
+A cluster of XTDB nodes is defined by — and communicates entirely through — these shared resources.
 
-![XTDB node architecture](/images/docs/xtdb-node-1.svg)
+```d2
+direction: right
 
-Write-ahead log (WAL)
+client: Client {
+  shape: person
+}
 
-: shared component responsible for ensuring all the nodes in the cluster agree on a total ordering of transactions within the database.
+source: "Source log\n(e.g. Kafka topic)" {
+  shape: cylinder
+}
 
-  e.g. Kafka
+replica: "Replica log\n(e.g. Kafka topic)" {
+  shape: cylinder
+}
 
-Indexer
+cluster: XTDB cluster {
+  leader: "Leader\n(for this database)" {
+    style.bold: true
+  }
+  f1: Follower
+  f2: Follower
+}
 
-: consumes transactions from the log, makes the results available to the query engine.
+objstore: "Object store\n(e.g. S3 / Azure / GCS)" {
+  shape: cylinder
+}
 
-  - at the end of a block (~100k rows/4 hours), the indexer writes the block to the object store.
-  - nodes compete to write blocks - although blocks are deterministic, so it doesn't matter who wins.
-  - new/restarting nodes start consuming from the most recent block in the object store.
+client -> source: "submitTx"
+source -> cluster.leader: "consumes"
+cluster.leader -> replica: "publishes\nresolved txns"
+replica -> cluster.f1
+replica -> cluster.f2
+cluster.leader -> objstore: "writes blocks"
+objstore -> cluster.leader
+objstore -> cluster.f1
+objstore -> cluster.f2
+```
+
+### External stores
+
+XTDB relies on three pluggable external stores — the source log, replica log, and object store.
+See the [log](/ops/config/log) and [storage](/ops/config/storage) configuration docs for the available implementations.
+
+Source log
+
+: the totally-ordered queue of client writes for this database.
+  Clients append to it via `submitTx` (or SQL DML); the current leader consumes from it.
+
+  e.g. a Kafka topic.
+
+Replica log
+
+: the leader's published output for this database, containing already-resolved transactions in indexed order.
+  Only the current leader writes to it; followers tail it.
+
+  e.g. a second Kafka topic, separate from the source log.
 
 Object store
 
 : shared storage for block files.
 
-  e.g. AWS S3, Azure Blob Storage, GCP Cloud Storage
+  e.g. AWS S3, Azure Blob Storage, GCP Cloud Storage.
+
+### Node processing
+
+An XTDB cluster consists of multiple XTDB nodes — each node is a single XTDB process.
+For each database it serves, a node runs the following sub-components:
+
+Leader (v2.2+)
+
+: for each database, exactly one node in the cluster holds leadership at any given time, elected automatically across the nodes serving that database.
+  If the current leader goes away, another node takes over without operator action — see ['Ingestion stopped'](/ops/troubleshooting#ingestion-stopped) for how failures are handled.
+
+  A leader:
+
+  - consumes the source log, resolves each transaction, and publishes the result to the replica log.
+  - at the end of each block (~100k rows/4 hours), writes the block to the object store.
+
+Follower (v2.2+)
+
+: for each database where this node isn't the leader:
+
+  - tails the replica log and applies the already-resolved transactions to its own in-memory index.
+  - serves queries directly from that index and the blocks in the object store.
+  - may be promoted to leader when the current leader goes away.
+
+  Because followers already hold a current-state index, a follower taking over as leader is effectively a hot-standby promotion — no catch-up replay required.
 
 Compactor
-: re-sorts/re-partitions block files in the object-store to make them faster to query.
+
+: re-sorts/re-partitions block files in the object store to make them faster to query.
+  Every node participates in compaction — work is picked up at random, with compaction output being byte-identical regardless of which node produced it.
 
 Query engine
-: serves queries, reading the object store (via local caches) and recently indexed transactions.
+
+: serves queries by reading the object store (via local caches) and recently indexed transactions from the live in-memory index.
 
 For more details on XTDB's storage and its optimisations, check out the ['Building a Bitemporal Index'](https://xtdb.com/blog/building-a-bitemp-index-3-storage) series.
 
@@ -171,7 +246,7 @@ ATTACH DATABASE my_secondary WITH $$
   storage: !Local
     path: 'my-secondary-db/storage'
 
-  mode: 'read-write' -- or 'read-only', v2.1.1+
+  mode: 'read-write' -- or 'read-only', v2.2+
 $$
 ```
 
@@ -192,16 +267,8 @@ $$
 ```
 
 - To detach a database, send `DETACH DATABASE my_secondary`.
-
-### Read-only secondary databases (v2.1.1+)
-
-Secondary databases may be attached as read-only by specifying `mode: read-only` in the configuration.
-This will prevent transactions from being submitted to that database through read-only nodes, and will ensure that the nodes in this cluster do not attempt to write blocks to its object-store.
-
-In this mode, the secondary cluster will continue to index transactions locally, but will pause at block boundaries to await a node in a read-write cluster writing the block to the object-store.
-Once a read-write cluster node has written the block, the read-only cluster will download it and continue indexing.
-
-Clusters do not perform compaction on read-only secondary databases.
+- **Read-only mode (v2.2+)**: specify `mode: 'read-only'` in the configuration to attach a database read-only.
+  A read-only cluster still indexes transactions locally so it can serve queries, but it won't write blocks to the object store or compact — it pauses at block boundaries and picks up blocks written by another (read-write) cluster on the same database instead.
 
 ## Querying multiple databases
 

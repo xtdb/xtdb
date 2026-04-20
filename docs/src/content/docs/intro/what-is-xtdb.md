@@ -26,8 +26,8 @@ Unlike most transactional database systems, XTDB implements a columnar data arch
 Most importantly, this design reduces operational costs when retaining large volumes of historical data.
 
 Transaction processing is strictly serial and strongly consistent (ACID), based on deterministic ordering of non-interactive transactions.
-All nodes in an XTDB cluster are replicas reading from a single, shared Write-Ahead Log.
-This design implies a hard upper limit on transaction throughput (since all processing must ultimately happen via a single thread) but the key advantage of this design is the concrete [information guarantees](https://www.youtube.com/watch?v=Cym4TZwTCNU) about *exactly when, how & why* data across the database has changed.
+Within a cluster, transactions for each database are processed by a single leader node for that database, which produces an indexed output that the other nodes follow — so writes for a given database happen once, on a single thread, and reads scale out across the cluster.
+This design implies a hard upper limit on transaction throughput, but the key advantage is the concrete [information guarantees](https://www.youtube.com/watch?v=Cym4TZwTCNU) about *exactly when, how & why* data across the database has changed.
 
 ## Dynamic relational engine
 
