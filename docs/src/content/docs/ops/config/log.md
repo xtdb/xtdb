@@ -3,7 +3,13 @@ title: Log
 ---
 
 <details>
-<summary>Changelog (last updated v2.1)</summary>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: source/replica log split
+
+: Each database now uses two logs under the hood — a source log (client writes) and a replica log (the indexing leader's output) — to support [single-writer indexing](/about/dbs-in-xtdb#database-architecture).
+  See the [Kafka log documentation](log/kafka) for configuration details.
+  The in-memory and local-disk log implementations are single-node only and unaffected.
 
 v2.1: multi-database support
 
