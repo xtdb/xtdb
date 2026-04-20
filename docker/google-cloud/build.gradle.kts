@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":modules:xtdb-kafka"))
     implementation(project(":modules:xtdb-google-cloud"))
     implementation(project(":modules:xtdb-debezium"))
+    implementation(project(":modules:xtdb-postgres-source"))
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
