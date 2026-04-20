@@ -38,6 +38,7 @@ ENTRYPOINT ["java", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
+    "-Dlog4j2.contextSelector=org.apache.logging.log4j.core.selector.BasicContextSelector", \
     "-cp","xtdb.jar", \
     "clojure.main", "-m", "xtdb.main"]
 
