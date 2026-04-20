@@ -7,6 +7,8 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, etc. per RFC 2119.
 See developer documentation in `/dev` in this repo, particularly @dev/README.adoc and @dev/GIT.adoc.
 `dev/doc/*.adoc` describe the high level architecture of XTDB - read those too.
 
+For editing or adding pages to the user-facing documentation site (`docs/src/content/docs/`), see the "Writing docs" section in @docs/README.md — it covers the Diataxis mapping, voice, changelog conventions, and a few patterns that trip agents up (properties vs mechanism, per-database scoping, theme-neutral diagrams, mining commits for context).
+
 We develop using 'tidy-first' methodology - endeavouring to separate 'equivalence' changes (changes which do not affect runtime behaviour, changes which increase our options) from changes that advance the behaviour of XT.
 For example, even when we're working on a feature branch, we will often separate a tidying change in a separate commit and cherry-pick it onto `main`, so that the resulting PR is easier to review.
 
