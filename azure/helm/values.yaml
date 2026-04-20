@@ -49,8 +49,12 @@ xtdbConfig:
   storageContainerName: ""
   # Kafka bootstrap servers
   kafkaBootstrapServers: "kafka.xtdb-deployment.svc.cluster.local:9092"
-  # XTDB log topic on Kafka 
+  # XTDB source log topic on Kafka
   kafkaLogTopic: "xtdb-log"
+  # XTDB replica log topic on Kafka (v2.2+)
+  kafkaReplicaLogTopic: "xtdb-log-replica"
+  # Kafka transactional-ID prefix (v2.2+). Override per deployment when sharing a Kafka cluster.
+  kafkaTransactionalIdPrefix: "xtdb"
 
   # OPTIONAL
   # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
@@ -72,10 +76,12 @@ xtdbConfig:
     logClusters:
       kafkaCluster: !Kafka
         bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+        transactionalIdPrefix: !Env XTDB_TRANSACTIONAL_ID_PREFIX
 
     log: !Kafka
       cluster: kafkaCluster
       topic: !Env XTDB_LOG_TOPIC
+      replicaTopic: !Env XTDB_REPLICA_LOG_TOPIC
 
     storage: !Remote
       objectStore: !Azure

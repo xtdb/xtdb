@@ -347,7 +347,13 @@ class KafkaCluster(
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
         override fun open(): KafkaCluster =
-            KafkaCluster(configMap, pollDuration, schemaRegistryUrl, transactionalIdPrefix, groupId, coroutineContext)
+            KafkaCluster(
+                configMap, pollDuration, schemaRegistryUrl,
+                // normalise empty/blank prefix to null so `ENV XTDB_TRANSACTIONAL_ID_PREFIX=""`
+                // from the Docker image produces `xtdb-leader` rather than `-xtdb-leader`.
+                transactionalIdPrefix?.ifBlank { null },
+                groupId, coroutineContext
+            )
     }
 
     interface AtomicProducer<M> : Log.AtomicProducer<M> {

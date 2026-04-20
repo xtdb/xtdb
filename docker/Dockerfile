@@ -58,6 +58,14 @@ ENV GIT_SHA=${GIT_SHA}
 ENV XTDB_VERSION=${XTDB_VERSION}
 ENV XTDB_LOG_JSON_TEMPLATE=${XTDB_LOG_JSON_TEMPLATE}
 
+# Default Kafka replica log topic (v2.2+). Override when customising XTDB_LOG_TOPIC
+# so the pair stays consistent (e.g. XTDB_LOG_TOPIC=foo XTDB_REPLICA_LOG_TOPIC=foo-replica).
+ENV XTDB_REPLICA_LOG_TOPIC=xtdb-log-replica
+
+# Default Kafka transactional-ID prefix (v2.2+). Override per deployment when sharing
+# a Kafka cluster across multiple XTDB clusters (e.g. "prod", "staging"). Set to empty to disable prefixing.
+ENV XTDB_TRANSACTIONAL_ID_PREFIX=xtdb
+
 COPY docker/${VARIANT}/*.yaml ./
 COPY docker/${VARIANT}/build/libs/xtdb-${VARIANT}.jar xtdb.jar
 
