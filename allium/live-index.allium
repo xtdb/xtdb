@@ -7,12 +7,18 @@
 -- Concurrency model:
 --   - Single-writer thread: all transaction operations (StartTransaction, LogPut,
 --     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially.
---     This is enforced structurally: the SourceLogProcessor (see db.allium) processes
---     source-log messages sequentially, and all transaction lifecycle happens
---     within that sequential processing loop.
+--     This is enforced structurally: whichever LogProcessor variant owns the live
+--     index drives mutations sequentially. On a leader, that is the
+--     LeaderLogProcessor consuming the source log; on a follower, the
+--     FollowerLogProcessor applying ReplicaMessages; during promotion, the
+--     TransitionLogProcessor; and for CDC-sourced databases, an
+--     ExternalSourceProcessor. All variants are single-threaded writers against
+--     the live index, so the concurrency model below is the same regardless of
+--     which variant is in play.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
---   - Writes don't block reads: persistent data structures ensure existing snapshots
---     remain valid while new transactions commit
+--   - Writes don't block reads: a shared, reference-counted snapshot is published
+--     after each commit; existing snapshots remain valid until their last holder
+--     releases them
 --
 -- Critical invariant: External queries MUST NOT see in-flight transaction data
 
@@ -35,6 +41,12 @@ external entity IID   -- 16-byte entity identifier
 
 external entity Document   -- the actual row data for puts
 
+external entity MemorySegment
+    -- A slice of an Arrow relation paired with the MemoryHashTrie indexing
+    -- its IID column. The slice is taken at snapshot creation and is
+    -- unaffected by subsequent writes to the source relation.
+    -- See: xtdb.segment.MemorySegment, memory-hash-trie.allium.
+
 ------------------------------------------------------------
 -- Value Types
 ------------------------------------------------------------
@@ -45,9 +57,12 @@ value ValidTimeRange {
 }
 
 value Row {
-    -- Stored as a row in an Arrow relation.
-    -- The op column is an Arrow union with three legs: put, delete, erase.
-    -- See: LiveTable.kt (liveRelation, txRelation)
+    -- `Row` is an abstraction used by the rules below to describe commit
+    -- semantics. The actual storage is an Arrow relation (not a row set): each
+    -- LiveTable holds a `liveRelation` and each in-flight table-tx holds a
+    -- `txRelation`, with a MemoryHashTrie built over the IID column. The `op`
+    -- column is an Arrow dense union with three legs: put, delete, erase.
+    -- See: LiveTable.kt, OpenTx.kt.
     iid: IID
     system_from: Timestamp
     valid_time: ValidTimeRange
@@ -79,6 +94,11 @@ entity LiveIndex {
 
     tables: LiveTable for this index
 
+    -- Current shared external snapshot. Refreshed on every commit and on
+    -- NextBlock (see RefreshSharedSnapshot). External readers retain this
+    -- snapshot when calling OpenSnapshot(index); see OpenExternalSnapshot.
+    shared_snap: Snapshot
+
     row_count: tables.sum(t => t.row_count)
     is_full: row_count >= rows_per_block
 }
@@ -92,7 +112,7 @@ entity LiveTable {
     row_count: rows.count
 }
 
-entity LiveIndexTx {
+entity OpenTx {
     index: LiveIndex
     tx_key: TransactionKey
     status: active | committed | aborted
@@ -103,7 +123,7 @@ entity LiveIndexTx {
 }
 
 entity LiveTableTx {
-    transaction: LiveIndexTx
+    transaction: OpenTx
     table_ref: TableRef
     live_table: LiveTable?   -- null if table is new
     is_new_table: live_table = null
@@ -115,18 +135,37 @@ entity LiveTableTx {
 ------------------------------------------------------------
 -- Snapshots (visibility)
 --
+-- A Snapshot is a point-in-time view over the live index. It is composed of
+-- per-table TableSnapshots, each holding a MemorySegment: a sliced live
+-- relation plus the MemoryHashTrie indexing it. When opened from within an
+-- active transaction, a TableSnapshot also layers an optional tx segment
+-- (sliced from the OpenTx.Table's txRelation) on top of the live segment, so
+-- queries inside the tx see committed rows + their own uncommitted rows.
+--
 -- Consistency guarantees:
---   - A snapshot's visible_rows are fixed at creation and never change
+--   - A snapshot's underlying segments are sliced at creation and do not
+--     observe later writes
 --   - Commits are atomic: all tx rows become visible together, or none
 --   - Multiple snapshots can be held concurrently without interference
---   - Writes don't block reads: transactions can commit while queries
---     hold snapshots, and existing snapshots remain unaffected
+--   - Writes don't block reads: a shared external snapshot is refreshed
+--     after each commit, and existing snapshots remain valid until released
+--
+-- Sharing and reference counting:
+--   - External snapshots are shared: the live index publishes a single
+--     current shared snapshot, and each external opener retains it
+--   - A snapshot is released by its holder via close(); the underlying
+--     segments are freed when the last holder releases
+--   - Transaction snapshots are per-OpenTx and not shared
 ------------------------------------------------------------
 
 entity Snapshot {
-    basis_tx: TransactionKey
+    basis_tx: TransactionKey?
 
     table_snapshots: TableSnapshot for this snapshot
+
+    -- External snapshots are shared and reference-counted; concurrent
+    -- readers each hold one retention on the current shared snapshot.
+    ref_count: Integer
 
     -- Derived: which tables are visible in this snapshot
     visible_tables: table_snapshots.map(ts => ts.table_ref)
@@ -136,10 +175,15 @@ entity TableSnapshot {
     snapshot: Snapshot
     table_ref: TableRef
 
-    -- The rows visible through this snapshot
-    -- This is a COPY of the rows at snapshot creation time, not a reference
-    -- Subsequent commits or NextBlock do not affect existing snapshots
-    visible_rows: Set<Row>
+    -- Live segment: slice of the LiveTable's liveRelation paired with its
+    -- MemoryHashTrie. Absent when the table has no live data at snapshot time.
+    live_segment: MemorySegment?
+
+    -- Tx segment: slice of the enclosing OpenTx.Table's txRelation paired with
+    -- its MemoryHashTrie. Present only on transaction snapshots where the tx
+    -- has written rows for this table. Layered on top of live_segment so that
+    -- a query inside the tx sees committed rows + its own uncommitted rows.
+    tx_segment: MemorySegment?
 }
 
 ------------------------------------------------------------
@@ -155,7 +199,7 @@ default erase_valid_time = ValidTimeRange{ from: MIN_TIMESTAMP, to: MAX_TIMESTAM
 rule StartTransaction {
     when: StartTransaction(index, tx_key)
 
-    ensures: LiveIndexTx.created(
+    ensures: OpenTx.created(
         index: index,
         tx_key: tx_key,
         status: active
@@ -239,16 +283,27 @@ rule CommitTransaction {
     ensures: tx.status = committed
     ensures: tx.index.latest_completed_tx = tx.tx_key
 
-    -- For each touched table: move rows from tx to live table
-    ensures: for each table_tx in tx.table_txs:
-        if table_tx.is_new_table:
-            LiveTable.created(
-                index: tx.index,
-                table_ref: table_tx.table_ref,
-                rows: table_tx.rows
-            )
-        else:
-            table_tx.live_table.rows.addAll(table_tx.rows)
+    -- For each touched table with tx data: import the tx rows into the
+    -- (possibly new) live table. There is a single path regardless of
+    -- whether the live table previously existed: `tables.getOrPut` creates
+    -- one on demand, and tables with no tx rows are skipped entirely.
+    ensures: for each table_tx in tx.table_txs where table_tx.rows.count > 0:
+        let live_table =
+            if table_tx.live_table != null:
+                table_tx.live_table
+            else:
+                LiveTable.created(
+                    index: tx.index,
+                    table_ref: table_tx.table_ref,
+                    rows: {}
+                )
+        live_table.rows.addAll(table_tx.rows)
+
+    -- After committing, the shared external snapshot is refreshed to a new
+    -- Snapshot with basis_tx = tx.tx_key. Previously-published shared
+    -- snapshots remain valid for any readers still holding them until those
+    -- readers release their retention.
+    ensures: RefreshSharedSnapshot(tx.index)
 }
 
 rule AbortTransaction {
@@ -271,46 +326,92 @@ rule AbortTransaction {
 ------------------------------------------------------------
 
 rule OpenExternalSnapshot {
-    -- Called by queries outside any transaction
+    -- Called by queries outside any transaction.
+    --
+    -- The index publishes a single shared Snapshot that is refreshed on each
+    -- commit (see CommitTransaction / RefreshSharedSnapshot). Each external
+    -- opener retains the current shared snapshot rather than building a
+    -- fresh one, and releases it on close. The underlying segments are
+    -- freed when the last holder releases.
     when: OpenSnapshot(index)
 
     ensures:
-        let snap = Snapshot.created(basis_tx: index.latest_completed_tx)
-        for each table in index.tables:
-            TableSnapshot.created(
-                snapshot: snap,
-                table_ref: table.table_ref,
-                visible_rows: table.rows   -- committed rows only
-            )
+        let snap = index.shared_snap
+        snap.ref_count = snap.ref_count + 1
+        snap   -- returned to the caller; close() decrements ref_count
 }
 
 rule OpenTransactionSnapshot {
-    -- Called by queries within a transaction (e.g. UPDATE...WHERE)
-    -- Only active transactions can open snapshots; committed/aborted txs are closed
+    -- Called by queries within a transaction (e.g. UPDATE...WHERE).
+    -- Only active transactions can open snapshots; committed/aborted txs
+    -- are closed. Transaction snapshots are built per-OpenTx and are NOT
+    -- shared: each call produces a fresh Snapshot whose table snapshots
+    -- layer the tx segment on top of the live table segment.
     when: OpenSnapshot(tx)
 
     requires: tx.status = active
 
     ensures:
-        let snap = Snapshot.created(basis_tx: tx.tx_key)
-        for each table in tx.index.tables:
-            let table_tx = tx.table_txs.find(tt => tt.table_ref = table.table_ref)
-            TableSnapshot.created(
-                snapshot: snap,
-                table_ref: table.table_ref,
-                visible_rows:
-                    if table_tx != null:
-                        table.rows + table_tx.rows   -- committed + own uncommitted
-                    else:
-                        table.rows                   -- committed only
-            )
-        -- Also include new tables created in this tx
-        for each table_tx in tx.table_txs with is_new_table:
+        let snap = Snapshot.created(basis_tx: tx.tx_key, ref_count: 1)
+
+        -- One TableSnapshot per table touched by the tx: live segment from
+        -- the existing LiveTable (if any) plus the tx segment from this
+        -- OpenTx's Table.
+        for each table_tx in tx.table_txs:
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table_tx.table_ref,
-                visible_rows: table_tx.rows
+                live_segment:
+                    if table_tx.live_table != null:
+                        MemorySegment.for(table_tx.live_table)
+                    else:
+                        null,
+                tx_segment:
+                    if table_tx.rows.count > 0:
+                        MemorySegment.for(table_tx)
+                    else:
+                        null
             )
+
+        -- Plus the remaining live tables the tx hasn't touched: live
+        -- segment only, no tx segment.
+        for each table in tx.index.tables
+                where not tx.table_txs.any(tt => tt.table_ref = table.table_ref):
+            TableSnapshot.created(
+                snapshot: snap,
+                table_ref: table.table_ref,
+                live_segment: MemorySegment.for(table),
+                tx_segment: null
+            )
+
+        snap
+}
+
+rule RefreshSharedSnapshot {
+    -- Triggered at the end of each commit (and on NextBlock, which drops
+    -- all live tables). The index atomically swaps its shared snapshot for
+    -- a freshly-built one reflecting the new committed state, and releases
+    -- its own retention on the previous shared snapshot. Readers already
+    -- holding the previous shared snapshot retain it independently.
+    when: RefreshSharedSnapshot(index)
+
+    ensures:
+        let old_snap = index.shared_snap
+        let new_snap = Snapshot.created(
+            basis_tx: index.latest_completed_tx,
+            ref_count: 1   -- the index's own retention on the shared snap
+        )
+        for each table in index.tables:
+            TableSnapshot.created(
+                snapshot: new_snap,
+                table_ref: table.table_ref,
+                live_segment: MemorySegment.for(table),
+                tx_segment: null
+            )
+        index.shared_snap = new_snap
+        -- Decrement the index's retention on the old shared snap; it is
+        -- freed once no external readers are still holding it.
+        old_snap.ref_count = old_snap.ref_count - 1
 }
 
 ------------------------------------------------------------
@@ -331,5 +432,9 @@ rule NextBlock {
     -- Remove all live tables (their data is now in block storage)
     -- Tables will be recreated on demand by future transactions
     ensures: index.tables = {}
+
+    -- The shared snapshot no longer reflects reality; refresh it so
+    -- subsequent external openers see an empty index.
+    ensures: RefreshSharedSnapshot(index)
 }
 

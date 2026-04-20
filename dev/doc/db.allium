@@ -14,10 +14,17 @@
 -- Leader/follower transitions driven by Kafka consumer group rebalancing (or local log startup).
 -- A single LiveIndex sits outside the processor as shared state.
 -- Leader mode feeds it from source processing; follower mode feeds it from replica processing.
--- A single Watchers instance tracks both txId and sourceMsgId for client correlation.
+-- A single Watchers instance tracks both txId and sourceMsgId for client correlation,
+-- plus the latest ExternalSourceToken for external-source databases.
 -- Follower→leader transition sync uses a separate MutableStateFlow on the FollowerProcessor,
 -- not Watchers (see FollowerProcessor.awaitReplicaMsgId).
 -- The compactor writes L1+ to the source log; the leader forwards to replica.
+--
+-- Leader comes in two flavours:
+--   Leader                 — client-driven; subscribes to source log, resolves TxMessages.
+--   ExternalSourceLeader   — fed by an ExternalSource (CDC); assigns its own tx_id, uses the
+--                            source log only for flush / tries / block coordination. Rejects
+--                            client submitTx with xtdb/submit-tx-to-external-source-db.
 
 use "./trie-cat.allium" as trie_cat
 use "./compaction.allium" as compaction
@@ -50,6 +57,18 @@ external entity Log {
 
 external entity ObjectStore {
     -- Durable key-value storage for blocks, tries, table-blocks.
+}
+
+external entity ExternalSource {
+    -- A system outside XTDB that feeds a database via CDC
+    -- (e.g. Postgres logical replication). On assignment the external source
+    -- calls back through a TxIndexer, providing an opaque resume token and
+    -- a writer that populates an OpenTx with the transformed row data.
+    -- An external-source database assigns its own monotonically increasing
+    -- tx_id (live_index.latest_completed_tx.tx_id + 1) rather than taking
+    -- it from the source log position. Client submitTx is rejected for
+    -- these databases — transactions enter only through the external source.
+    -- See: database/ExternalSource.kt
 }
 
 ---- Entities
@@ -89,17 +108,38 @@ entity LogProcessor {
     --   onPartitionsAssigned → TransitionToLeader
     --   onPartitionsRevoked  → TransitionToFollower
     -- For local log, the single node is always immediately assigned.
-    mode: Leader | Follower | Transition
+    mode: Leader | ExternalSourceLeader | Follower | Transition
     latest_source_msg_id: MessageId
     latest_replica_msg_id: MessageId
 }
 
 variant Leader : LogProcessor {
-    -- Subscribes to the source log, resolves messages,
-    -- writes resolved output to the replica log.
-    -- Also owns block finishing via BlockUploader.
+    -- Client-driven leader: subscribes to the source log, resolves
+    -- client-submitted TxMessages (and Attach/Detach on the primary),
+    -- writes resolved output to the replica log. Also owns block finishing
+    -- via BlockUploader.
     -- See: indexer/LeaderLogProcessor.kt
     pending_block: PendingBlock?  -- set between BlockBoundary and BlockUploaded during finishBlock
+}
+
+variant ExternalSourceLeader : LogProcessor {
+    -- External-source leader: holds the replica-log transactional producer
+    -- for a database whose transactions originate from an external system.
+    -- Transactions arrive via the TxIndexer callback, not from the source log:
+    --   external_source.onPartitionAssigned(partition, after_token, tx_indexer)
+    -- tx_id is assigned by this processor (live_index.latest_completed_tx.tx_id + 1),
+    -- NOT taken from a source-log position. An ExternalSourceToken is carried
+    -- end-to-end (tx → replica log → watchers → block) so the source can resume
+    -- after restart / leader handoff.
+    --
+    -- It still consumes the source log for flush/tries/block-uploaded coordination
+    -- (forwarding TriesAdded, acting on FlushBlock), but client TxMessage /
+    -- AttachDatabase / DetachDatabase MUST NOT appear on its source log —
+    -- the primary rejects these at submit time.
+    --
+    -- See: indexer/ExternalSourceProcessor.kt
+    external_source: ExternalSource
+    pending_block: PendingBlock?
 }
 
 variant Follower : LogProcessor {
@@ -136,11 +176,14 @@ entity TableCatalog {
 
 entity Watchers {
     -- Single instance per database.
-    -- Tracks both txId and sourceMsgId progression.
+    -- Tracks both txId and sourceMsgId progression, plus the external-source
+    -- resume token for external-source databases.
     -- Clients call awaitTx(txId) to wait for a transaction result.
     -- Transition code calls awaitSource(srcMsgId) to wait for source processing.
     --
-    -- notifyTx(result, srcMsgId): advances both txId and sourceMsgId.
+    -- notifyTx(result, srcMsgId, externalSourceToken): advances txId and
+    --   sourceMsgId; if the token is non-null it overrides the tracked token
+    --   (so restarts can read the latest resume point from the watcher).
     -- notifyMsg(srcMsgId): advances only sourceMsgId (for non-tx messages like
     --   TriesAdded, FlushBlock, BlockBoundary, BlockUploaded).
     -- notifyError(exception): transitions to Failed state; all subsequent awaits throw.
@@ -149,6 +192,7 @@ entity Watchers {
     latest_tx_id: MessageId
     latest_source_msg_id: MessageId
     latest_tx_result: TransactionResult?
+    external_source_token: ExternalSourceToken?
 
     -- Monotonicity invariants enforced at runtime:
     invariant: notifyTx must supply txId > latest_tx_id (strictly increasing)
@@ -195,6 +239,14 @@ value MessageId {
     offset: Int
 }
 
+value ExternalSourceToken {
+    -- Opaque resume token supplied by an external source (e.g. a Postgres LSN).
+    -- Carried through ResolvedTx → BlockBoundary → BlockUploaded on the replica
+    -- log, tracked in Watchers, and persisted in Block so that on restart the
+    -- external source can resume from the last durably persisted position.
+    -- See: database/ExternalSource.kt (ExternalSourceToken = ProtoAny)
+}
+
 value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
     -- tx_id is monotonically increasing (assigned by the source log).
@@ -208,8 +260,10 @@ value Block {
     -- A persisted block in the object store.
     block_index: Long
     latest_completed_tx: TransactionKey
-    latest_processed_msg_id: MessageId       -- source log
-    latest_replica_msg_id: MessageId         -- replica log; msg id of the BlockBoundary message
+    latest_processed_msg_id: MessageId         -- source log
+    boundary_replica_msg_id: MessageId?        -- replica log; msg id of the BlockBoundary message
+    external_source_token: ExternalSourceToken?  -- last token seen by the external source at block time
+    -- See: catalog/BlockCatalog.kt, block/proto/block.proto
 }
 
 value PendingBlock {
@@ -322,34 +376,44 @@ variant ResolvedTxMessage : ReplicaMessage {
     -- A resolved transaction: put/delete/erase events that require no database reads.
     -- Carries the source tx_id so watchers can correlate with submit-tx responses.
     -- Attach/detach results are encoded as a dbOp field within the resolved tx.
+    -- For external-source databases, carries the ExternalSourceToken (e.g. the
+    -- Postgres LSN at the tx boundary) for resume-on-restart.
     -- See: api/log/Log.kt (Message.ResolvedTx), api/log/ReplicaMessage.kt (ResolvedTx)
-    tx_id: MessageId            -- source-log msg id of the original Tx/Attach/Detach
-    system_time: Instant        -- resolved system time for the transaction
+    tx_id: MessageId                          -- source-log msg id of the original Tx/Attach/Detach,
+                                              -- or processor-assigned tx_id for external-source DBs
+    system_time: Instant                      -- resolved system time for the transaction
     committed: Boolean
-    error: Throwable?           -- abort reason (null if committed)
-    db_op: DbOp?               -- Attach or Detach side-effect, if any
-    table_data: Map<String, Bytes>  -- resolved row data per table, serialized; imported by replica processor
+    error: Throwable?                         -- abort reason (null if committed)
+    db_op: DbOp?                              -- Attach or Detach side-effect, if any
+    table_data: Map<String, Bytes>            -- resolved row data per table, serialized; imported by replica processor
+    external_source_token: ExternalSourceToken?  -- present for external-source DBs
 }
 
 variant BlockBoundaryMessage : ReplicaMessage {
     -- Leader signals that a block boundary has been reached.
     -- Followers enter pending mode and buffer subsequent messages until BlockUploaded.
     -- L0 tries are delivered in the subsequent BlockUploaded message (not separately).
-    -- See: log/proto/replica-log.proto (BlockBoundary)
+    -- For external-source DBs, carries the ExternalSourceToken as of the boundary
+    -- so it gets persisted in the Block on upload.
+    -- See: log/proto/replica-log.proto (BlockBoundary), api/log/ReplicaMessage.kt (BlockBoundary)
     block_index: Long
-    latest_processed_msg_id: MessageId   -- source log high-water at block time
+    latest_processed_msg_id: MessageId           -- source log high-water at block time
+    external_source_token: ExternalSourceToken?  -- present for external-source DBs
 }
 
 variant BlockUploadedMessage : ReplicaMessage {
     -- Block has been written to the object store.
     -- Carries L0 tries so followers can update their trie catalogs.
     -- Followers refresh catalogs and transition out of pending mode.
-    -- See: log/proto/log.proto (BlockUploaded)
+    -- For external-source DBs, carries the ExternalSourceToken that was
+    -- persisted with the block.
+    -- See: log/proto/log.proto (BlockUploaded), api/log/ReplicaMessage.kt (BlockUploaded)
     block_index: Long
     latest_processed_msg_id: MessageId
     storage_version: Int
     storage_epoch: Int
     tries: List<trie_cat/TrieDetails>
+    external_source_token: ExternalSourceToken?  -- present for external-source DBs
 }
 
 variant TriesAddedMessage : ReplicaMessage {
@@ -490,6 +554,8 @@ rule TransitionToLeader {
         -- Switch to leader mode: subscribe to source log.
         -- The leader receives replay_target as its after_replica_msg_id so it
         -- knows where the replica log left off.
+        -- For databases with an external source configured, the new mode is
+        -- ExternalSourceLeader (see Database.openLeaderSystem); otherwise Leader.
         log_processor.mode = Leader
         log_processor.start(source_resume, after_replica_msg_id: replay_target)
 
@@ -499,8 +565,9 @@ rule TransitionToLeader {
 }
 
 rule TransitionToFollower {
+    -- Applies when revoking from either Leader or ExternalSourceLeader.
     when: PartitionsRevoked(database)
-    requires: log_processor.mode is Leader
+    requires: log_processor.mode is Leader or log_processor.mode is ExternalSourceLeader
 
     ensures:
         -- close() completes any in-flight commit, then stops.
@@ -522,6 +589,12 @@ rule TransitionToFollower {
 ---- Rules: Transaction Submission
 
 rule ClientSubmitsTransaction {
+    -- Client submits a transaction. Only permitted on a client-driven leader
+    -- (mode is Leader). An ExternalSourceLeader rejects submitTx with error
+    -- code `xtdb/submit-tx-to-external-source-db`: external-source databases
+    -- assign their own tx_id sequence and accept transactions only via the
+    -- TxIndexer callback.
+    -- See: database/Database.kt (submitTxBlocking)
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
     requires: log_processor.mode is Leader
@@ -533,6 +606,20 @@ rule ClientSubmitsTransaction {
             user: opts.user
         )
         msg appended to database.source_log
+}
+
+rule ClientSubmitsTransactionToExternalSourceDb {
+    -- Rejected: submitTx is not a valid entry point for an external-source DB.
+    -- Returns error xtdb/submit-tx-to-external-source-db.
+    when: ClientSubmitsTx(client, database, tx_ops, opts)
+
+    requires: log_processor.mode is ExternalSourceLeader
+
+    ensures:
+        SubmitTxRejected(
+            error_code: `xtdb/submit-tx-to-external-source-db`,
+            db_name: database.name
+        )
 }
 
 ---- Rules: Leader Mode (source processing)
@@ -554,10 +641,11 @@ rule LeaderProcessesTx {
         ResolvedTxMessage.created(
             tx_id: msg.msg_id,
             committed: resolved.committed,
-            db_op: resolved.db_op
+            db_op: resolved.db_op,
+            external_source_token: null
         ) appended to database.replica_log
 
-        watchers.notifyTx(resolved.result, msg.msg_id)
+        watchers.notifyTx(resolved.result, msg.msg_id, null)
         log_processor.latest_source_msg_id = msg.msg_id
 
         if live_index.is_full:
@@ -575,10 +663,11 @@ rule LeaderProcessesAttachDb {
         ResolvedTxMessage.created(
             tx_id: msg.msg_id,
             committed: resolved.committed,
-            db_op: resolved.db_op
+            db_op: resolved.db_op,
+            external_source_token: null
         ) appended to database.replica_log
 
-        watchers.notifyTx(resolved.result, msg.msg_id)
+        watchers.notifyTx(resolved.result, msg.msg_id, null)
         log_processor.latest_source_msg_id = msg.msg_id
 }
 
@@ -593,10 +682,11 @@ rule LeaderProcessesDetachDb {
         ResolvedTxMessage.created(
             tx_id: msg.msg_id,
             committed: resolved.committed,
-            db_op: resolved.db_op
+            db_op: resolved.db_op,
+            external_source_token: null
         ) appended to database.replica_log
 
-        watchers.notifyTx(resolved.result, msg.msg_id)
+        watchers.notifyTx(resolved.result, msg.msg_id, null)
         log_processor.latest_source_msg_id = msg.msg_id
 }
 
@@ -685,7 +775,8 @@ rule LeaderFinishesBlock {
         -- latest_replica_msg_id — the resume point for replica log subscriptions.
         let block_boundary = BlockBoundaryMessage.created(
             block_index: block_index,
-            latest_processed_msg_id: latest_processed_msg_id
+            latest_processed_msg_id: latest_processed_msg_id,
+            external_source_token: null
         )
         block_boundary appended to database.replica_log
 
@@ -715,9 +806,10 @@ rule LeaderFlushTimeout {
     -- It compares the current block's latest tx_id against the previous check.
     -- If the block hasn't advanced after flush_timeout, and we haven't already
     -- flushed this tx, it returns true and the leader writes FlushBlock to source.
+    -- Applies to both Leader and ExternalSourceLeader.
     -- See: indexer/BlockFlusher.kt
     when: block_flusher.checkBlockTimeout() == true
-    mode: log_processor.mode is Leader
+    mode: log_processor.mode is Leader or log_processor.mode is ExternalSourceLeader
 
     requires: live_index.has_data
 
@@ -725,6 +817,154 @@ rule LeaderFlushTimeout {
         FlushBlockMessage.created(
             expected_block_idx: block_catalog.current_block_index
         ) appended to database.source_log
+}
+
+---- Rules: External Source Leader
+
+-- An ExternalSourceLeader does NOT subscribe to the source log for tx ingestion.
+-- Instead, the external source is handed a TxIndexer callback on partition
+-- assignment and feeds transactions in directly. Flush/tries/block-uploaded
+-- coordination still uses the source log, so the processor also reads it —
+-- but TxMessage / AttachDatabase / DetachDatabase MUST NOT appear there
+-- (rejected at submit time by the primary or by this database's submit path).
+--
+-- See: indexer/ExternalSourceProcessor.kt
+
+rule ExternalSourceAssigned {
+    -- On partition assignment the external source receives a TxIndexer and
+    -- the last persisted ExternalSourceToken, and begins streaming txs.
+    -- The starting token is taken from watchers.external_source_token
+    -- (which reflects the latest replay of the replica log, possibly ahead
+    -- of the last persisted block).
+    when: PartitionsAssigned(database)
+    requires: log_processor.mode is ExternalSourceLeader
+
+    ensures:
+        let leader = log_processor as ExternalSourceLeader
+        leader.external_source.onPartitionAssigned(
+            partition: 0,
+            after_token: watchers.external_source_token,
+            tx_indexer: TxIndexer
+        )
+}
+
+rule ExternalSourceIndexesTx {
+    -- Per-tx entry point. The external source calls TxIndexer.indexTx with
+    -- an opaque resume token, optional system_time, and a writer that
+    -- populates an OpenTx with the transformed row data.
+    --
+    -- Unlike the client-driven leader, tx_id here is assigned by the
+    -- processor as live_index.latest_completed_tx.tx_id + 1, NOT taken
+    -- from a source-log position. system_time is "smoothed" so it is
+    -- strictly greater than the previous tx's system_time.
+    --
+    -- The resulting ResolvedTx carries the external_source_token all the way
+    -- through watchers, so block boundaries and restarts can resume from it.
+    when: ExternalSourceIndexTx(external_source_token, system_time, writer)
+    mode: log_processor.mode is ExternalSourceLeader
+
+    ensures:
+        let tx_id = (live_index.latest_completed_tx?.tx_id ?? -1) + 1
+        let resolved_system_time = smooth_system_time(system_time, live_index.latest_completed_tx?.system_time)
+        let result = writer(OpenTx(tx_id, resolved_system_time))
+
+        ResolvedTxMessage.created(
+            tx_id: tx_id,
+            system_time: resolved_system_time,
+            committed: result is Committed,
+            error: (result as Aborted)?.error,
+            db_op: null,
+            external_source_token: external_source_token
+        ) appended to database.replica_log
+
+        watchers.notifyTx(result, log_processor.latest_source_msg_id, external_source_token)
+
+        if live_index.is_full:
+            ExternalSourceFinishesBlock(log_processor.latest_source_msg_id, external_source_token)
+}
+
+rule ExternalSourceProcessesFlushBlock {
+    -- Same CAS semantics as LeaderProcessesFlushBlock, but finishes the
+    -- block with the token currently tracked on watchers.
+    when: msg: FlushBlockMessage consumed from database.source_log
+    mode: log_processor.mode is ExternalSourceLeader
+
+    requires: msg.msg_id > log_processor.latest_source_msg_id
+
+    ensures:
+        if msg.expected_block_idx != null
+           and msg.expected_block_idx == (block_catalog.current_block_index ?? -1):
+            ExternalSourceFinishesBlock(msg.msg_id, watchers.external_source_token)
+
+        watchers.notifyMsg(msg.msg_id)
+        log_processor.latest_source_msg_id = msg.msg_id
+}
+
+rule ExternalSourceProcessesTriesAdded {
+    -- Same shape as LeaderProcessesTriesAdded: update trie catalog and
+    -- forward to the replica log with the original source_msg_id.
+    when: msg: TriesAddedMessage consumed from database.source_log
+    mode: log_processor.mode is ExternalSourceLeader
+
+    requires: msg.msg_id > log_processor.latest_source_msg_id
+    requires: msg.storage_version == current_storage_version
+    requires: msg.storage_epoch == current_storage_epoch
+
+    ensures:
+        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+
+        TriesAddedMessage.created(
+            storage_version: msg.storage_version,
+            storage_epoch: msg.storage_epoch,
+            tries: msg.tries,
+            source_msg_id: msg.msg_id
+        ) appended to database.replica_log
+
+        watchers.notifyMsg(msg.msg_id)
+        log_processor.latest_source_msg_id = msg.msg_id
+}
+
+rule ExternalSourceProcessesBlockUploaded {
+    -- TODO legacy single-writer path: ignored by ExternalSourceLeader.
+    when: msg: BlockUploadedMessage consumed from database.source_log
+    mode: log_processor.mode is ExternalSourceLeader
+
+    requires: msg.msg_id > log_processor.latest_source_msg_id
+
+    ensures:
+        watchers.notifyMsg(msg.msg_id)
+        log_processor.latest_source_msg_id = msg.msg_id
+}
+
+rule ExternalSourceFinishesBlock {
+    -- Mirror of LeaderFinishesBlock for the external-source leader. The
+    -- BlockBoundary and the persisted Block both carry the
+    -- external_source_token so that a restart can resume the external source
+    -- from the last durably persisted position.
+    when: ExternalSourceFinishesBlock(latest_processed_msg_id, external_source_token)
+
+    let block_index = (block_catalog.current_block_index ?? -1) + 1
+
+    ensures:
+        let block_boundary = BlockBoundaryMessage.created(
+            block_index: block_index,
+            latest_processed_msg_id: latest_processed_msg_id,
+            external_source_token: external_source_token
+        )
+        block_boundary appended to database.replica_log
+
+        log_processor.pending_block = PendingBlock(
+            boundary_msg_id: block_boundary.msg_id,
+            boundary_message: block_boundary
+        )
+
+        block_uploader.uploadBlock(
+            producer,
+            block_boundary.msg_id,
+            block_boundary
+        )
+
+        log_processor.pending_block = null
 }
 
 ---- Rules: Replica Message Handling
@@ -763,7 +1003,7 @@ rule HandleReplicaMessage {
                 if msg.db_op is Detach:
                     database.catalog.detach(msg.db_op.db_name)
             log_processor.latest_source_msg_id = msg.tx_id
-            watchers.notifyTx(result, msg.tx_id)
+            watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
 
         if msg is TriesAddedMessage:
             requires: msg.storage_version == current_storage_version
@@ -848,7 +1088,7 @@ rule TransitionHandlesResolvedTx {
             if msg.db_op is Detach:
                 database.catalog.detach(msg.db_op.db_name)
         log_processor.latest_source_msg_id = msg.tx_id
-        watchers.notifyTx(result, msg.tx_id)
+        watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
 }
 
 rule TransitionHandlesBlockBoundary {
