@@ -2,6 +2,24 @@
 title: Google Cloud
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: Kafka replica log topic
+
+: The `xtdb-google-cloud` Docker image and Helm chart now expose the replica log topic alongside the source log topic, to support [single-writer indexing](/about/dbs-in-xtdb#database-architecture).
+
+  Previously, only `XTDB_LOG_TOPIC` / `xtdbConfig.kafkaLogTopic` existed; a database used a single Kafka topic.
+
+  Upgrading:
+
+  - **Docker image** — `XTDB_REPLICA_LOG_TOPIC` defaults to `xtdb-log-replica` via the Dockerfile. If you customise `XTDB_LOG_TOPIC`, override this env var too so the pair stays consistent.
+  - **Helm chart** — `xtdbConfig.kafkaReplicaLogTopic` defaults to `xtdb-log-replica` and auto-creates alongside the source topic. Existing deployments pick this up on next rollout without any values changes.
+  - **Shared Kafka clusters** — `XTDB_TRANSACTIONAL_ID_PREFIX` / `xtdbConfig.kafkaTransactionalIdPrefix` defaults to `xtdb`.
+    If multiple XTDB deployments share a Kafka cluster, set a distinct prefix per deployment so their leaders don't fence each other — see ['Leader election and fencing'](config/log/kafka#leader-election-and-fencing).
+
+</details>
+
 XTDB provides modular support for Google Cloud environments, including a prebuilt Docker image, integrations with **Google Cloud Storage**, and configuration options for deploying onto Google Cloud infrastructure.
 
 :::note
@@ -132,6 +150,17 @@ helm show values oci://ghcr.io/xtdb/helm-xtdb-google-cloud
   --version 2.0.0-snapshot
 ```
 
+#### Kafka topics
+
+The chart uses one Kafka topic for each of the source and replica logs (v2.2+):
+
+- `xtdbConfig.kafkaLogTopic` — source log topic (defaults to `xtdb-log`).
+- `xtdbConfig.kafkaReplicaLogTopic` — replica log topic (defaults to `xtdb-log-replica`).
+
+Both topics auto-create on startup.
+
+If multiple XTDB deployments share a Kafka cluster, set `xtdbConfig.kafkaTransactionalIdPrefix` to a distinct value per deployment (defaults to `xtdb`) — see [Leader election and fencing](config/log/kafka#leader-election-and-fencing).
+
 ### Resources
 
 By default, the following resources are deployed by the Helm chart:
@@ -163,7 +192,9 @@ The following environment variables are used to configure the `xtdb-google-cloud
 | Variable | Description |
 | --- | --- |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the XTDB topics. |
-| `XTDB_LOG_TOPIC` | Kafka topic to be used as the XTDB log. |
+| `XTDB_LOG_TOPIC` | Kafka topic used as the source log. |
+| `XTDB_REPLICA_LOG_TOPIC` | (v2.2+) Kafka topic used as the replica log. Defaults to `xtdb-log-replica`. If you override `XTDB_LOG_TOPIC`, override this too to keep the pair consistent. |
+| `XTDB_TRANSACTIONAL_ID_PREFIX` | (v2.2+) Prefix applied to Kafka transactional producer IDs. Defaults to `xtdb`. Override per deployment when sharing a Kafka cluster across multiple XTDB clusters — see [Leader election and fencing](config/log/kafka#leader-election-and-fencing). |
 | `XTDB_GCP_PROJECT_ID` | GCP project ID containing the bucket. |
 | `XTDB_GCP_BUCKET` | Name of the Google Cloud Storage bucket used for remote storage. |
 | `XTDB_GCP_LOCAL_DISK_CACHE_PATH` | Path to the local disk cache. |
@@ -171,6 +202,7 @@ The following environment variables are used to configure the `xtdb-google-cloud
 
 
 You can also [set the XTDB log level](/ops/troubleshooting#loglevel) using environment variables.
+
 
 ### Using a Custom Node Configuration
 

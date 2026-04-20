@@ -9,10 +9,12 @@ flightSql:
 logClusters:
   kafkaCluster: !Kafka
     bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
+    transactionalIdPrefix: !Env XTDB_TRANSACTIONAL_ID_PREFIX
 
 log: !Kafka
   cluster: kafkaCluster
   topic: !Env XTDB_LOG_TOPIC
+  replicaTopic: !Env XTDB_REPLICA_LOG_TOPIC
 
 storage: !Remote
   objectStore: !GoogleCloud

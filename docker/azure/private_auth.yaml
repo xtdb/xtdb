@@ -14,9 +14,12 @@ logClusters:
       security.protocol: !Env KAFKA_SECURITY_PROTOCOL
       sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
 
+    transactionalIdPrefix: !Env XTDB_TRANSACTIONAL_ID_PREFIX
+
 log: !Kafka
   cluster: kafkaCluster
   topic: !Env XTDB_LOG_TOPIC
+  replicaTopic: !Env XTDB_REPLICA_LOG_TOPIC
 
 storage: !Remote
   objectStore: !Azure

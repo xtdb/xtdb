@@ -109,8 +109,32 @@ vX.Y-1: earlier headline
 </details>
 ````
 
-The main page body describes *current* behaviour only.
-The changelog carries the *transition* story.
+The main page body describes *current* behaviour only — write as if the feature has always been there.
+The changelog carries the *transition* story — what it was, why it changed, how to upgrade.
+
+Avoid narrative phrases in the main body like "now", "under v2.2+", "previously", "with this change", "the default handles this transparently" — these belong in the changelog.
+Inline `(vX.Y+)` markers on section headings are the right place to flag when a feature arrived, without narrating the change.
+
+Example — a Helm chart that gained an extra Kafka topic in v2.2:
+
+Wrong (main body, narrates the transition):
+
+```md
+Under single-writer indexing (v2.2+), each database uses two Kafka topics — a source log and a replica log.
+The default chart handles this transparently: the replica topic defaults to `${kafkaLogTopic}-replica` and auto-creates alongside the source topic.
+Most single-deployment setups don't need to do anything.
+```
+
+Right (main body, states the current fact):
+
+```md
+Kafka topics used by the chart (v2.2+):
+
+- `xtdbConfig.kafkaLogTopic` — source log topic.
+- `xtdbConfig.kafkaReplicaLogTopic` — replica log topic.
+```
+
+The "previously X, now Y, how to upgrade" content for that feature lives in the changelog block at the top.
 
 ### Changelog entry vs inline version marker
 

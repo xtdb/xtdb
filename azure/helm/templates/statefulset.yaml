@@ -64,8 +64,12 @@ spec:
                   fieldPath: metadata.name
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ required "xtdbConfig.kafkaBootstrapServers is required." .Values.xtdbConfig.kafkaBootstrapServers }}
-            - name: KAFKA_LOG_TOPIC
+            - name: XTDB_LOG_TOPIC
               value: {{ required "xtdbConfig.kafkaLogTopic is required." .Values.xtdbConfig.kafkaLogTopic }}
+            - name: XTDB_REPLICA_LOG_TOPIC
+              value: {{ required "xtdbConfig.kafkaReplicaLogTopic is required." .Values.xtdbConfig.kafkaReplicaLogTopic }}
+            - name: XTDB_TRANSACTIONAL_ID_PREFIX
+              value: {{ .Values.xtdbConfig.kafkaTransactionalIdPrefix | quote }}
             - name: AZURE_STORAGE_ACCOUNT
               value: {{ required "xtdbConfig.storageAccountName is required." .Values.xtdbConfig.storageAccountName }}
             - name: AZURE_STORAGE_CONTAINER
