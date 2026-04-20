@@ -7,6 +7,8 @@ import org.apache.arrow.memory.RootAllocator
 import xtdb.Metrics.registerRootAllocatorMeters
 import xtdb.Metrics.rootAllocatorListener
 import xtdb.Tracer.openTracer
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.Xtdb
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
@@ -25,6 +27,7 @@ class NodeBase(
     val memoryCache: MemoryCache, val diskCache: DiskCache?,
     val meterRegistry: MeterRegistry?, val tracer: OtelTracer?,
     val logClusters: Map<LogClusterAlias, Log.Cluster>,
+    val remotes: Map<RemoteAlias, Remote>,
     val compactor: Compactor,
     val infoSchema: AutoCloseable,
     val querySource: IQuerySource,
@@ -35,6 +38,7 @@ class NodeBase(
         compactor.close()
         querySource.close()
         infoSchema.close()
+        remotes.values.closeAll()
         logClusters.values.closeAll()
         memoryCache.close()
         if (closeAllocator) allocator.close()
@@ -78,6 +82,7 @@ class NodeBase(
                     }
 
                 val logClusters = config.logClusters.mapValues { (_, factory) -> open { factory.open() } }
+                val remotes = config.remotes.mapValues { (_, factory) -> open { factory.open() } }
 
                 val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
 
@@ -94,6 +99,7 @@ class NodeBase(
                     meterRegistry = meterReg,
                     tracer = config.tracer.openTracer(),
                     logClusters = logClusters,
+                    remotes = remotes,
                     compactor = compactor,
                     infoSchema = infoSchema,
                     querySource = querySource,

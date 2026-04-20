@@ -70,6 +70,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var server: ServerConfig? = ServerConfig(),
         var flightSql: FlightSqlConfig? = FlightSqlConfig(),
         var logClusters: Map<LogClusterAlias, Log.Cluster.Factory<*>> = emptyMap(),
+        var remotes: Map<RemoteAlias, Remote.Factory<*>> = emptyMap(),
         var log: Log.Factory = Log.inMemoryLog,
         var storage: Storage.Factory = Storage.inMemory(),
         val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
@@ -93,6 +94,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun logCluster(alias: LogClusterAlias, cluster: Log.Cluster.Factory<*>) =
             apply { logClusters += alias to cluster }
+
+        fun remotes(remotes: Map<RemoteAlias, Remote.Factory<*>>) = apply { this.remotes += remotes }
+
+        fun remote(alias: RemoteAlias, remote: Remote.Factory<*>) =
+            apply { this.remotes += alias to remote }
 
         fun log(log: Log.Factory) = apply { this.log = log }
         fun storage(storage: Storage.Factory) = apply { this.storage = storage }

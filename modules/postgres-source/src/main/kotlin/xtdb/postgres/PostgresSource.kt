@@ -14,6 +14,8 @@ import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.slf4j.LoggerFactory
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
@@ -65,29 +67,42 @@ class PostgresSource(
     @Serializable
     @SerialName("!Postgres")
     data class Factory(
-        val hostname: String,
-        val port: Int = 5432,
-        val database: String,
-        val username: String,
-        val password: String,
+        val remote: RemoteAlias,
         val slotName: String,
         val publicationName: String,
         val schemaIncludeList: List<String> = listOf("public"),
     ) : ExternalSource.Factory {
 
-        override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource =
-            PostgresSource(
-                dbName, hostname, port, database, username, password,
+        override fun open(
+            dbName: String,
+            clusters: Map<LogClusterAlias, Log.Cluster>,
+            remotes: Map<RemoteAlias, Remote>,
+        ): ExternalSource {
+            val raw = remotes[remote]
+                ?: throw Incorrect(
+                    "no remote configured with alias '$remote' — add a '!Postgres' entry under 'remotes:' in node config",
+                    errorCode = "xtdb.postgres/missing-remote",
+                    data = mapOf("alias" to remote),
+                )
+
+            val actualType = raw::class.simpleName ?: raw::class.qualifiedName ?: "unknown"
+
+            val pg = raw as? PostgresRemote
+                ?: throw Incorrect(
+                    "remote '$remote' is a $actualType, expected a !Postgres remote",
+                    errorCode = "xtdb.postgres/wrong-remote-type",
+                    data = mapOf("alias" to remote, "actualType" to actualType),
+                )
+
+            return PostgresSource(
+                dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
                 slotName, publicationName, schemaIncludeList,
             )
+        }
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.externalSource = ProtoAny.pack(postgresSourceConfig {
-                hostname = this@Factory.hostname
-                port = this@Factory.port
-                database = this@Factory.database
-                username = this@Factory.username
-                password = this@Factory.password
+                remote = this@Factory.remote
                 slotName = this@Factory.slotName
                 publicationName = this@Factory.publicationName
                 schemaIncludeList += this@Factory.schemaIncludeList
@@ -100,11 +115,7 @@ class PostgresSource(
             override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
                 val config = msg.unpack(PostgresSourceConfig::class.java)
                 return Factory(
-                    hostname = config.hostname,
-                    port = config.port,
-                    database = config.database,
-                    username = config.username,
-                    password = config.password,
+                    remote = config.remote,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
                     schemaIncludeList = config.schemaIncludeListList,

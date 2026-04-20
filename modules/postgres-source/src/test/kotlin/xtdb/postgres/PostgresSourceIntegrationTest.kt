@@ -64,6 +64,13 @@ class PostgresSourceIntegrationTest {
     private fun openNode(sourceTopic: String): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
         logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+        remote("pg", PostgresRemote.Factory(
+            hostname = postgres.host,
+            port = postgres.getMappedPort(5432),
+            database = "testdb",
+            username = "testuser",
+            password = "testpass",
+        ))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
 
@@ -82,11 +89,7 @@ class PostgresSourceIntegrationTest {
                           cluster: kafka
                           topic: test-replica-${UUID.randomUUID()}
                         externalSource: !Postgres
-                          hostname: ${postgres.host}
-                          port: ${postgres.getMappedPort(5432)}
-                          database: testdb
-                          username: testuser
-                          password: testpass
+                          remote: pg
                           slotName: $slotName
                           publicationName: $publicationName
                           schemaIncludeList: [public]

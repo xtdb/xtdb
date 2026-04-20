@@ -78,6 +78,7 @@ val YAML_SERDE = Yaml(
     serializersModule = SerializersModule {
         include(Log.Factory.serializersModule)
         include(Log.Cluster.Factory.serializersModule)
+        include(Remote.Factory.serializersModule)
         include(ObjectStore.Factory.serializersModule)
         include(XtdbModule.Factory.serializersModule)
         include(ExternalSource.Factory.serializersModule)

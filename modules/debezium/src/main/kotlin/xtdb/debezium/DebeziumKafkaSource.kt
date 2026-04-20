@@ -16,6 +16,8 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
@@ -76,7 +78,11 @@ class DebeziumKafkaSource @JvmOverloads constructor(
         val messageFormat: MessageFormat,
     ) : ExternalSource.Factory {
 
-        override fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource {
+        override fun open(
+            dbName: String,
+            clusters: Map<LogClusterAlias, Log.Cluster>,
+            remotes: Map<RemoteAlias, Remote>,
+        ): ExternalSource {
             val cluster =
                 requireNotNull(clusters[logCluster] as? KafkaCluster) { "missing Kafka cluster: '${logCluster}'" }
 

@@ -3,6 +3,8 @@ package xtdb.database
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.proto.DatabaseConfig
@@ -43,7 +45,11 @@ interface ExternalSource : AutoCloseable {
 
     interface Factory {
         fun writeTo(dbConfig: DatabaseConfig.Builder)
-        fun open(dbName: String, clusters: Map<LogClusterAlias, Log.Cluster>): ExternalSource
+        fun open(
+            dbName: String,
+            clusters: Map<LogClusterAlias, Log.Cluster>,
+            remotes: Map<RemoteAlias, Remote>,
+        ): ExternalSource
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()
