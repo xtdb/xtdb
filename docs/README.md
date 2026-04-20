@@ -175,8 +175,13 @@ A fill like `#fde68a` that looks good in one theme can look wrong in the other.
 
 ### Before documenting a feature
 
-Read the feature's landing commit body (`git log --all --grep='<feature>'`) and, if chalk was active, the issue's chalk comments (`gh issue view N --comments`).
-These contain the *why* that isn't visible in the diff — root causes, operational guarantees, invariants — and noticeably improve the resulting docs.
+Read:
+
+- the feature's landing commit body (`git log --all --grep='<feature>'`);
+- its pull request — description *and* review discussion (`gh pr view N`, `gh pr view N --comments`);
+- if chalk was active, its tracking issue and chalk comments (`gh issue view N --comments`).
+
+All three carry the *why* that isn't visible in the diff — root causes, operational guarantees, invariants, rejected alternatives — and noticeably improve the resulting docs.
 
 e.g. the `XTDB_SKIP_DBS` troubleshooting note originally said "the node will fail to start if a secondary's log is unavailable".
 The commit body spelled out *why* (`DatabaseCatalog.open()` attaches every secondary from the block catalog), and the chalk comment noted that `healthz` is multi-db-aware and naturally ignores dormant databases.
