@@ -1,7 +1,7 @@
 = A high-level tour of the XTDB codebase
 
 :written: 2024-10-29
-:reviewed: 2024-10-29
+:reviewed: 2026-04-20
 
 The aim of this document isn't to be in any way _complete_ - more as a guide on where to start looking!
 
@@ -14,7 +14,7 @@ Initial notes:
 ** In-process Clojure-only API - this now talks over pgwire too.
 * XTDB has two 'golden stores' - the log and the object-store.
   XTDB nodes do not currently communicate with each other except through these external services.
-  Hence, they _must_ agree on the contents of any shared files - i.e. the process to create the files (even the decision of _when_ to cut a file) must be entirely deterministic.
+  Indexing is coordinated by electing a single leader per database (see 'Leader election and handover' below); compactors, by contrast, run on every node and must produce byte-identical files, because multiple compactors may independently pick up the same task.
 * The overall aim of the nodes in the XTDB cluster is to maintain a performant primary index for each table in the object-store.
   This primary index is an https://en.wikipedia.org/wiki/Log-structured_merge-tree[LSM tree^] of 'events' (puts, deletes and erases), sorted first by IID (a 16-byte representation of the entity's primary key), then system-time descending, written in https://arrow.apache.org[Apache Arrow^] files.
 +
@@ -35,17 +35,29 @@ Transaction 'operations' (e.g. put-docs, delete-docs, or a SQL query) are buffer
 
 The client receives a 'ticket' containing the tx-id (essentially a log sequence number) and system-time of the transaction, which it later provides on query to ensure it observes the results of the submitted transactions.
 --
-2. *XTDB nodes continually index the log*
+2. *A single leader per database indexes the source log*
 +
 --
 (see `xtdb.indexer`, `xtdb.live-index`)
 
-XTDB nodes read transactions from the log, evaluate them if required, and upload blocks of transactions (~100k rows) as files to the object store.
-These block files form the lowest level (L0) of the LSM tree.
+Each database has two logs (separate Kafka topics, single-partition each):
+
+* the *source log* (`SourceMessage`) — the durable queue that clients submit to.
+  Many writers; no ordering constraints beyond Kafka's.
+* the *replica log* (`ReplicaMessage`) — the leader's output.
+  It carries already-resolved transactions (with tx-ids, system-times, and tries ready to be included in a block), plus block boundaries and trie-added notifications.
+  Only the current leader writes to it.
+
+All indexer nodes in the cluster join a consumer group on the source log.
+Whichever node gets assigned the partition becomes the *leader* for that database; the others are *followers*.
+Kafka's consumer-group rebalance protocol drives the handover when a leader dies or a new node joins.
+
+The leader consumes each `SourceMessage`, evaluates the transaction if required, indexes it into its live index, and appends the resulting `ReplicaMessage` to the replica log.
+It also uploads blocks of transactions (~100k rows) as files to the object store — these block files form the lowest level (L0) of the LSM tree.
+Followers tail the replica log (not the source log) and apply each `ReplicaMessage` to their own live indexes.
 
 Before transactions are included in a block, they are held in the 'live index', which is included as part of queries' input sets, so that queries can observe recent transactions.
-
-The live-index is in-memory - so, when they start up, XTDB nodes check the latest transaction written as part of a block in the object store and start consuming the log from there.
+The live-index is in-memory — so, when they start up, XTDB nodes check the latest transaction written as part of a block in the object store and start consuming the replica log from there.
 --
 3. *In the background, the compactors on each node share the compaction of the LSM tree*
 +
@@ -63,12 +75,74 @@ Compaction, essentially, is pre-computing as much of this merge-sort as possible
 3. This then continues up the tree - so once there've been 16 L1 files, there will be four '00' L2 files, which themselves are compacted into four L3 files: '0000', '0001', '0010' and '0011'.
    L4 uses six bits of prefix, L5 eight, etc.
 
-Unlike the indexers (which compete to write the L0 files), the compactors share the work of compacting the LSM tree - again, without communication save for through the golden stores.
-Here, though, there is plenty of work to go around - because each compaction task is relatively fine-grained, and the compactors pick up work at random, there is a sufficiently low chance of compactors picking the same task at the same time.
+Unlike the indexers — where a single leader writes L0 files for each database — the compactors share the work of compacting the LSM tree across all nodes, again without communication save for through the golden stores.
+There is plenty of work to go around: because each compaction task is relatively fine-grained, and the compactors pick up work at random, there is a sufficiently low chance of compactors picking the same task at the same time.
+If two compactors _do_ pick the same task, that's fine: compaction output is deterministic, so they produce byte-identical files — only the wasted CPU is lost.
 --
 4. *Queries combine the LSM tree and the live-index to serve query results*
 +
 This is a lifecycle in itself 😃
+
+== Leader election and handover
+
+(see `xtdb.indexer.LogProcessor`, `xtdb.api.log.Watchers`)
+
+Leadership is elected via Kafka consumer-group rebalancing — the standard Kafka protocol, no XTDB-level machinery on top.
+Every indexer subscribes to the source-log topic; whichever node gets assigned the partition is the leader.
+When the current leader stops heartbeating (crash, network partition, long GC pause) or a new node joins, Kafka triggers a rebalance and the partition assignment moves.
+
+Leaders are *fenced* via Kafka's transactional-producer API.
+Each replica-log producer is opened with a fixed transactional ID (e.g. `"${dbName}-leader"`, plus an operator-configurable prefix so multiple deployments can share a Kafka cluster).
+When a new leader opens a producer with the same transactional ID, Kafka fences the old one — any further writes from the outgoing leader raise `ProducerFencedException`, so at most one node is ever writing to the replica log.
+
+=== Three LogProcessor states
+
+`xtdb.indexer.LogProcessor` is a small state machine, driven by Kafka's `onPartitionsAssigned` / `onPartitionsRevoked` callbacks:
+
+Follower (`FollowerLogProcessor`)::
+The default state for a node that isn't currently leader.
+Tails the replica log and applies each `ReplicaMessage` to its live index.
+It does not consume the source log at all.
+
+Leader (`LeaderLogProcessor`, or `ExternalSourceProcessor` — see below)::
+Consumes the source log via the consumer-group subscription, resolves each transaction, indexes it locally, and appends the resulting `ReplicaMessage` to the replica log.
+Only the leader writes L0 files to the object store.
+
+Transition (`TransitionLogProcessor`)::
+An ephemeral state entered during follower→leader promotion.
+The incoming leader may have a partially-filled in-memory block (from its time as a follower) that is not yet reflected on the replica log — the previous leader died before flushing it.
+The transition processor finishes that pending block — uploading it to the object store and replaying the buffered records through the leader's pipeline — before the leader starts accepting new source-log messages.
+This keeps the replica log the single source of truth for what's committed: by the time `LeaderLogProcessor` starts, the replica log agrees with what every follower has in its live index.
+
+=== Watchers and poisoning
+
+Each database has a `Watchers` (`xtdb.api.log.Watchers`) — a small state holder that tracks the latest processed source-msg-id, tx-id, and external-source token.
+Clients' `awaitTx` / `awaitSource` calls suspend on it.
+
+`Watchers` has two states: active, and failed (poisoned).
+Once poisoned, every call raises the stored `IngestionStoppedException` — no further progress is observable on this node.
+
+Poisoning happens when the node reaches an unrecoverable state.
+The important case is failure *during* follower→leader transition: if we've started writing to the replica log but can't finish the handover, the node's in-memory state may have diverged from what's been durably committed.
+Rather than continue with divergent state, we poison the watchers and let the node be restarted — it rebuilds its live index from the latest persisted block and catches up from the replica log.
+
+== External-source databases
+
+Some databases aren't fed by client `submitTx` at all — they mirror an external system via CDC (e.g. Debezium, Postgres logical replication).
+These use a dedicated leader processor, `xtdb.indexer.ExternalSourceProcessor` (ESP), that fills the leader role instead of `LeaderLogProcessor`.
+
+The key differences from a regular leader:
+
+* *tx-ids come from the ESP, not the source log*.
+  The ESP owns the tx-id sequence directly (monotonically from the live index's latest completed tx) rather than deriving it from source-log msg-ids.
+* *client `submitTx` is rejected* on external-source DBs with error code `xtdb/submit-tx-to-external-source-db` — users must submit through the external source instead.
+* *the ESP drives its own ingestion loop* via the `ExternalSource.TxIndexer` interface, per-tx: smooth the system-time, open an `OpenTx`, let the source populate it, add the `xt/txs` row, commit or abort the live index, and append to the replica log.
+  'Smoothing' nudges the system-time forward as needed to keep it strictly monotonic — upstream sources don't always guarantee that, but XTDB requires it.
+  This is also how CDC sources get to choose tx metadata (including `userMetadata`) after seeing the transaction rather than before.
+* *external-source tokens* (e.g. a Postgres LSN) are carried in the replica log alongside each tx, so on restart the ESP can resume the upstream source from the last durably-indexed position — see `ExternalSourceToken` and the `afterToken` argument on `ExternalSource.onPartitionAssigned`.
+
+Followers of an external-source database work exactly as above — they tail the replica log and apply `ReplicaMessage`s.
+They have no visibility into the upstream CDC source at all.
 
 == The lifecycle of a query
 
@@ -164,7 +238,7 @@ A few notes on the individual operators:
 At this point, system-time-descending is a useful ordering - for as-of-now queries, we can usually skip all bar the most recent event for each entity.
 
 +
-After the scan operator, the relation is known to only contains rows which are valid at the time of the query.
+After the scan operator, the relation is known to contain only rows which are valid at the time of the query.
 * The `:project` and `:select` operators both contain 'expressions' to be evaluated.
 These expressions are compiled into Clojure 'kernels' - forms which, when compiled (using `eval`) and executed, efficiently apply the given calculation to a vector of values.
 +
