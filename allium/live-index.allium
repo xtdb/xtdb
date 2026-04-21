@@ -1,3 +1,4 @@
+-- allium: 3
 -- live-index.allium
 --
 -- Scope: In-memory staging for transactions before block compaction
@@ -92,7 +93,7 @@ entity LiveIndex {
     latest_completed_tx: TransactionKey?
     rows_per_block: Integer
 
-    tables: LiveTable for this index
+    tables: LiveTable with index = this
 
     -- Current shared external snapshot. Refreshed on every commit and on
     -- NextBlock (see RefreshSharedSnapshot). External readers retain this
@@ -117,7 +118,13 @@ entity OpenTx {
     tx_key: TransactionKey
     status: active | committed | aborted
 
-    table_txs: LiveTableTx for this transaction
+    transitions status {
+        active -> committed
+        active -> aborted
+        terminal: committed, aborted
+    }
+
+    table_txs: LiveTableTx with transaction = this
 
     system_from: tx_key.system_time
 }
@@ -161,7 +168,7 @@ entity LiveTableTx {
 entity Snapshot {
     basis_tx: TransactionKey?
 
-    table_snapshots: TableSnapshot for this snapshot
+    table_snapshots: TableSnapshot with snapshot = this
 
     -- External snapshots are shared and reference-counted; concurrent
     -- readers each hold one retention on the current shared snapshot.
@@ -190,7 +197,7 @@ entity TableSnapshot {
 -- Defaults
 ------------------------------------------------------------
 
-default erase_valid_time = ValidTimeRange{ from: MIN_TIMESTAMP, to: MAX_TIMESTAMP }
+default ValidTimeRange erase_valid_time = { from: MIN_TIMESTAMP, to: MAX_TIMESTAMP }
 
 ------------------------------------------------------------
 -- Rules: Transaction lifecycle
@@ -287,7 +294,7 @@ rule CommitTransaction {
     -- (possibly new) live table. There is a single path regardless of
     -- whether the live table previously existed: `tables.getOrPut` creates
     -- one on demand, and tables with no tx rows are skipped entirely.
-    ensures: for each table_tx in tx.table_txs where table_tx.rows.count > 0:
+    ensures: for table_tx in tx.table_txs where table_tx.rows.count > 0:
         let live_table =
             if table_tx.live_table != null:
                 table_tx.live_table
@@ -357,7 +364,7 @@ rule OpenTransactionSnapshot {
         -- One TableSnapshot per table touched by the tx: live segment from
         -- the existing LiveTable (if any) plus the tx segment from this
         -- OpenTx's Table.
-        for each table_tx in tx.table_txs:
+        for table_tx in tx.table_txs:
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table_tx.table_ref,
@@ -375,7 +382,7 @@ rule OpenTransactionSnapshot {
 
         -- Plus the remaining live tables the tx hasn't touched: live
         -- segment only, no tx segment.
-        for each table in tx.index.tables
+        for table in tx.index.tables
                 where not tx.table_txs.any(tt => tt.table_ref = table.table_ref):
             TableSnapshot.created(
                 snapshot: snap,
@@ -401,7 +408,7 @@ rule RefreshSharedSnapshot {
             basis_tx: index.latest_completed_tx,
             ref_count: 1   -- the index's own retention on the shared snap
         )
-        for each table in index.tables:
+        for table in index.tables:
             TableSnapshot.created(
                 snapshot: new_snap,
                 table_ref: table.table_ref,

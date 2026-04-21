@@ -1,3 +1,4 @@
+-- allium: 3
 -- memory-hash-trie.allium
 --
 -- Scope: In-memory hierarchical hash trie for row index organization
@@ -41,22 +42,24 @@ value Path {
 }
 
 ------------------------------------------------------------
--- Configuration Constants
+-- Config
 ------------------------------------------------------------
 
--- Threshold for promoting log entries to sorted data
--- Batches writes before incurring sort cost
-default LOG_LIMIT = 64
+config {
+    -- Threshold for promoting log entries to sorted data.
+    -- Batches writes before incurring sort cost.
+    log_limit: Integer = 64
 
--- Maximum entries per leaf before splitting into branch
-default PAGE_LIMIT = 1024
+    -- Maximum entries per leaf before splitting into branch.
+    page_limit: Integer = 1024
 
--- Maximum tree depth (supports 16-byte IIDs with 2-bit bucketing)
-default MAX_LEVEL = 64
+    -- Maximum tree depth (supports 16-byte IIDs with 2-bit bucketing).
+    max_level: Integer = 64
 
--- Bits extracted per level (determines branching factor)
--- 2 bits -> 4 children, 4 bits -> 16 children, 8 bits -> 256 children
-default LEVEL_BITS = 2
+    -- Bits extracted per level (determines branching factor).
+    -- 2 bits -> 4 children, 4 bits -> 16 children, 8 bits -> 256 children.
+    level_bits: Integer = 2
+}
 
 ------------------------------------------------------------
 -- Entities
@@ -65,22 +68,22 @@ default LEVEL_BITS = 2
 entity MemoryHashTrie {
     root_node: Node
     iid_reader: VectorReader   -- external vector for IID lookups
-    log_limit: Integer = LOG_LIMIT
-    page_limit: Integer = PAGE_LIMIT
+    log_limit: Integer
+    page_limit: Integer
 }
 
 entity Node {
     path: Path                 -- position in trie hierarchy
-    type: branch | leaf
+    kind: Branch | Leaf
 }
 
-entity Branch extends Node {
+variant Branch : Node {
     -- Branch nodes distribute indices across children by IID bits
     -- Number of children = 2^LEVEL_BITS (4 for default 2-bit bucketing)
     children: List<Node?>      -- sparse array, nulls for empty buckets
 }
 
-entity Leaf extends Node {
+variant Leaf : Node {
     -- Leaf nodes store actual row indices
 
     data: List<Integer>        -- SORTED indices (compacted from previous logs)
@@ -114,10 +117,10 @@ rule BucketFor {
     when: BucketFor(iid, level)
 
     -- Deterministically maps IID to bucket index at given level
-    -- Returns value in range [0, 2^LEVEL_BITS - 1]
+    -- Returns value in range [0, 2^level_bits - 1]
 
     ensures:
-        result in 0..(2^LEVEL_BITS - 1)
+        result in 0..(2^config.level_bits - 1)
         -- Same IID at same level always returns same bucket
         BucketFor(iid, level) = BucketFor(iid, level)
 }
@@ -203,7 +206,7 @@ rule CompactLogs {
     let merged = merge_sorted(leaf.data, sorted_log, trie)
 
     ensures:
-        if merged.count > trie.page_limit and leaf.path.count < MAX_LEVEL:
+        if merged.count > trie.page_limit and leaf.path.count < config.max_level:
             -- Split into branch with child leaves
             leaf.split_into_branch(trie, merged)
         else:
@@ -226,7 +229,7 @@ rule SplitIntoBranch {
 
     ensures: Branch.created(
         path: leaf.path,
-        children: for bucket_idx in 0..(2^LEVEL_BITS - 1):
+        children: for bucket_idx in 0..(2^config.level_bits - 1):
             if buckets[bucket_idx] != null:
                 Leaf.created(
                     path: leaf.path.append(bucket_idx),
@@ -334,7 +337,7 @@ rule ForEachMatch {
     -- Iterate all indices that could match the given hash
     -- (same bucket path). Consumer receives each candidate.
 
-    ensures: for each index in trie where bucket_matches(index, hash):
+    ensures: for index in trie where bucket_matches(index, hash):
         consumer(index)
 }
 

@@ -1,3 +1,4 @@
+-- allium: 3
 -- compaction.allium
 --
 -- Merges small tries into larger ones for better query performance.
@@ -148,4 +149,4 @@ entity CompactionJob {
 -- Open Questions
 ------------------------------------------------------------
 
-open_question "Should compaction have back-pressure when too many jobs are queued?"
+open question "Should compaction have back-pressure when too many jobs are queued?"
