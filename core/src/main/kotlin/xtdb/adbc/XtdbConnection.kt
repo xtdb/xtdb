@@ -19,7 +19,7 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.IResultCursor
+import xtdb.ResultCursor
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
@@ -137,9 +137,9 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     }
 
     fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql, dbName)
-    fun openSqlQuery(sql: String): IResultCursor = node.openSqlQuery(sql, dbName)
+    fun openSqlQuery(sql: String): ResultCursor = node.openSqlQuery(sql, dbName)
 
-    private fun cursorToArrowReader(cursor: IResultCursor, schema: Schema): ArrowReader =
+    private fun cursorToArrowReader(cursor: ResultCursor, schema: Schema): ArrowReader =
         object : ArrowReader(node.allocator) {
             override fun readSchema() = schema
 
@@ -397,7 +397,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         val databaseNames: Collection<DatabaseName>
         fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
         fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
-        fun openSqlQuery(sql: String, dbName: DatabaseName): IResultCursor
+        fun openSqlQuery(sql: String, dbName: DatabaseName): ResultCursor
         fun prepareSql(sql: String, dbName: DatabaseName): PreparedQuery
         fun getColumnTypes(table: TableRef): Map<String, VectorType>?
     }

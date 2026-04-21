@@ -31,7 +31,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.VectorType
 import xtdb.asBytes
-import xtdb.IResultCursor
+import xtdb.ResultCursor
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.withName
 import xtdb.kw
@@ -126,7 +126,7 @@ private class PreparedStatement(
     val txHandle: TxHandle?,
     val dbName: DatabaseName,
     val prepdQuery: PreparedQuery?,
-    var cursor: IResultCursor? = null
+    var cursor: ResultCursor? = null
 ) : AutoCloseable {
     override fun close() {
         cursor?.close()
@@ -169,7 +169,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     private val txConnections = ConcurrentHashMap<TxHandle, XtdbConnection>()
     private val defaultConnections = ConcurrentHashMap<DatabaseName, XtdbConnection>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
-    private val tickets = ConcurrentHashMap<TicketHandle, IResultCursor>()
+    private val tickets = ConcurrentHashMap<TicketHandle, ResultCursor>()
 
     private fun defaultConnectionFor(dbName: DatabaseName): XtdbConnection =
         defaultConnections.computeIfAbsent(dbName) {
@@ -201,7 +201,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         }
     }
 
-    private fun handleGetStream(cursor: IResultCursor, listener: ServerStreamListener) {
+    private fun handleGetStream(cursor: ResultCursor, listener: ServerStreamListener) {
         try {
             VectorSchemaRoot.create(resultTypesToSchema(cursor.resultTypes), allocator).use { vsr ->
                 val rootLoader = VectorLoader(vsr)
