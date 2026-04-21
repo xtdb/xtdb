@@ -128,7 +128,7 @@ Rather than continue with divergent state, we poison the watchers and let the no
 
 == External-source databases
 
-Some databases aren't fed by client `submitTx` at all — they mirror an external system via CDC (e.g. Debezium, Postgres logical replication).
+Some databases aren't fed by client `submitTx` at all — they mirror an external system via CDC (e.g. Postgres logical replication).
 These use a dedicated leader processor, `xtdb.indexer.ExternalSourceProcessor` (ESP), that fills the leader role instead of `LeaderLogProcessor`.
 
 The key differences from a regular leader:

@@ -12,7 +12,6 @@ message PostgresSourceConfig {
 }
 
 message PostgresSourceToken {
-    // The raw Debezium-style offset is not needed here — we own the protocol.
     // The slot's confirmed_flush_lsn tells PG where to resume streaming.
     // We track the LSN of the last committed transaction in XT.
     int64 latest_committed_lsn = 1;
