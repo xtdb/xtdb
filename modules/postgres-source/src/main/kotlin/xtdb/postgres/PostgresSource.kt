@@ -163,78 +163,97 @@ class PostgresSource(
     }
 
     /**
+     * Runs [block] with a child coroutine that force-closes [closeable] on cancellation.
+     *
+     * pgjdbc's socket reads don't respond to Thread.interrupt(), so coroutine
+     * cancellation alone can't unblock them. The child coroutine watches for
+     * cancellation and closes the resource, causing the blocked read to throw.
+     */
+    private suspend fun <T : AutoCloseable, R> closeOnCancel(closeable: T, block: suspend () -> R): R =
+        coroutineScope {
+            val watcher = launch {
+                try { awaitCancellation() }
+                finally { runCatching { closeable.close() } }
+            }
+            try { block() }
+            finally { watcher.cancel() }
+        }
+
+    /**
      * Returns the slot LSN for streaming to resume from.
      */
     private suspend fun initialSnapshot(txIndexer: TxIndexer): Long {
         LOG.debug { "[$dbName] Opening replication connection to $hostname:$port/$database" }
 
         openJdbcConnection().use { replConn ->
-            val pgReplConn = replConn.unwrap(PGConnection::class.java)
+            return closeOnCancel(replConn) {
+                val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
-            LOG.debug { "[$dbName] Creating replication slot '$slotName' with pgoutput" }
+                LOG.debug { "[$dbName] Creating replication slot '$slotName' with pgoutput" }
 
-            // Create replication slot and get exported snapshot
-            val slotInfo = pgReplConn.replicationAPI
-                .createReplicationSlot()
-                .logical()
-                .withSlotName(slotName)
-                .withOutputPlugin("pgoutput")
-                .make()
+                // Create replication slot and get exported snapshot
+                val slotInfo = pgReplConn.replicationAPI
+                    .createReplicationSlot()
+                    .logical()
+                    .withSlotName(slotName)
+                    .withOutputPlugin("pgoutput")
+                    .make()
 
-            val snapshotName = slotInfo.snapshotName
-            val slotLsn = slotInfo.consistentPoint.asLong()
+                val snapshotName = slotInfo.snapshotName
+                val slotLsn = slotInfo.consistentPoint.asLong()
 
-            LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slotLsn)}, snapshot=$snapshotName")
+                LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slotLsn)}, snapshot=$snapshotName")
 
-            // Read tables using the exported snapshot for consistency
-            jdbi.open().use { handle ->
-                handle.begin()
-                try {
-                    handle.transactionIsolationLevel = REPEATABLE_READ
+                // Read tables using the exported snapshot for consistency
+                jdbi.open().use { handle ->
+                    handle.begin()
+                    try {
+                        handle.transactionIsolationLevel = REPEATABLE_READ
 
-                    LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
-                    handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
+                        LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
+                        handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
-                    val tables = handle.discoverTables()
-                    LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
+                        val tables = handle.discoverTables()
+                        LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
 
-                    for ((schema, table) in tables) {
-                        val columns = handle.discoverColumns(schema, table)
-                        val fullTableName = "$schema.$table"
+                        for ((schema, table) in tables) {
+                            val columns = handle.discoverColumns(schema, table)
+                            val fullTableName = "$schema.$table"
 
-                        LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
+                            LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
 
-                        var rowCount = 0
-                        handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
-                            .setFetchSize(SNAPSHOT_BATCH_SIZE)
-                            .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
-                            .iterator().use {
-                                it.asSequence()
-                                    .chunked(SNAPSHOT_BATCH_SIZE)
-                                    .forEach { batch ->
-                                        rowCount += batch.size
-                                        LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                                        flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
-                                    }
-                            }
+                            var rowCount = 0
+                            handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
+                                .setFetchSize(SNAPSHOT_BATCH_SIZE)
+                                .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
+                                .iterator().use {
+                                    it.asSequence()
+                                        .chunked(SNAPSHOT_BATCH_SIZE)
+                                        .forEach { batch ->
+                                            rowCount += batch.size
+                                            LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
+                                            flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
+                                        }
+                                }
 
-                        LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
+                            LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
+                        }
+
+                        // Mark snapshot complete
+                        val completeToken = ProtoAny.pack(postgresSourceToken {
+                            latestCommittedLsn = slotLsn
+                            snapshotCompleted = true
+                        }, PROTO_TAG)
+
+                        LOG.debug { "[$dbName] Writing snapshot-complete marker" }
+                        txIndexer.indexTx(completeToken) {
+                            TxResult.Committed()
+                        }
+
+                        slotLsn
+                    } finally {
+                        handle.rollback()
                     }
-
-                    // Mark snapshot complete
-                    val completeToken = ProtoAny.pack(postgresSourceToken {
-                        latestCommittedLsn = slotLsn
-                        snapshotCompleted = true
-                    }, PROTO_TAG)
-
-                    LOG.debug { "[$dbName] Writing snapshot-complete marker" }
-                    txIndexer.indexTx(completeToken) {
-                        TxResult.Committed()
-                    }
-
-                    return slotLsn
-                } finally {
-                    handle.rollback()
                 }
             }
         }
@@ -305,89 +324,91 @@ class PostgresSource(
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
 
         openJdbcConnection().use { replConn ->
-            val pgReplConn = replConn.unwrap(PGConnection::class.java)
+            closeOnCancel(replConn) {
+                val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
-            LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
+                LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
 
-            val stream: PGReplicationStream = startReplicationStream(pgReplConn, startLsn)
+                val stream: PGReplicationStream = startReplicationStream(pgReplConn, startLsn)
 
-            val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
+                val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
-            // Accumulated operations within a single PG transaction
-            var currentTxOps = mutableListOf<Pair<PgOutputMessage.Relation, PgOutputMessage>>()
+                // Accumulated operations within a single PG transaction
+                var currentTxOps = mutableListOf<Pair<PgOutputMessage.Relation, PgOutputMessage>>()
 
-            while (currentCoroutineContext().isActive) {
-                // read() blocks until a message is available; runInterruptible
-                // lets coroutine cancellation interrupt the blocking call.
-                val msg = runInterruptible(Dispatchers.IO) {
-                    stream.read()!!
-                }
-
-                val parsed = PgOutputMessage.parse(msg)
-                LOG.trace { "[$dbName] Received ${parsed::class.simpleName}" }
-
-                when (parsed) {
-                    is PgOutputMessage.Relation -> {
-                        relations[parsed.relationId] = parsed
-                        LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
+                while (currentCoroutineContext().isActive) {
+                    // read() blocks until a message is available; runInterruptible
+                    // lets coroutine cancellation interrupt the blocking call.
+                    val msg = runInterruptible(Dispatchers.IO) {
+                        stream.read()!!
                     }
 
-                    is PgOutputMessage.Begin -> {
-                        LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
-                        currentTxOps = mutableListOf()
-                    }
+                    val parsed = PgOutputMessage.parse(msg)
+                    LOG.trace { "[$dbName] Received ${parsed::class.simpleName}" }
 
-                    is PgOutputMessage.Insert, is PgOutputMessage.Update, is PgOutputMessage.Delete -> {
-                        val relationId = when (parsed) {
-                            is PgOutputMessage.Insert -> parsed.relationId
-                            is PgOutputMessage.Update -> parsed.relationId
-                            is PgOutputMessage.Delete -> parsed.relationId
+                    when (parsed) {
+                        is PgOutputMessage.Relation -> {
+                            relations[parsed.relationId] = parsed
+                            LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
                         }
-                        val relation = relations[relationId]
-                            ?: error("Relation $relationId not found — missing Relation message before data message")
 
-                        LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
-                        currentTxOps.add(relation to parsed)
-                    }
+                        is PgOutputMessage.Begin -> {
+                            LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
+                            currentTxOps = mutableListOf()
+                        }
 
-                    is PgOutputMessage.Commit -> {
-                        val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
-
-                        if (currentTxOps.isNotEmpty()) {
-                            val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
-                            LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
-
-                            val token = ProtoAny.pack(postgresSourceToken {
-                                latestCommittedLsn = parsed.endLsn
-                                snapshotCompleted = true
-                            }, PROTO_TAG)
-
-                            val ops = currentTxOps.toList()
-
-                            txIndexer.indexTx(token, commitTime) { openTx ->
-                                for ((relation, op) in ops) {
-                                    applyStreamingOp(openTx, dbName, relation, op)
-                                }
-                                TxResult.Committed()
+                        is PgOutputMessage.Insert, is PgOutputMessage.Update, is PgOutputMessage.Delete -> {
+                            val relationId = when (parsed) {
+                                is PgOutputMessage.Insert -> parsed.relationId
+                                is PgOutputMessage.Update -> parsed.relationId
+                                is PgOutputMessage.Delete -> parsed.relationId
                             }
-                        } else {
-                            LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
+                            val relation = relations[relationId]
+                                ?: error("Relation $relationId not found — missing Relation message before data message")
+
+                            LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
+                            currentTxOps.add(relation to parsed)
                         }
 
-                        // Acknowledge up to the commit LSN
-                        LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
-                        runInterruptible(Dispatchers.IO) {
-                            stream.setFlushedLSN(commitLsn)
-                            stream.setAppliedLSN(commitLsn)
-                            stream.forceUpdateStatus()
-                        }
+                        is PgOutputMessage.Commit -> {
+                            val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
 
-                        currentTxOps = mutableListOf()
+                            if (currentTxOps.isNotEmpty()) {
+                                val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
+                                LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
+
+                                val token = ProtoAny.pack(postgresSourceToken {
+                                    latestCommittedLsn = parsed.endLsn
+                                    snapshotCompleted = true
+                                }, PROTO_TAG)
+
+                                val ops = currentTxOps.toList()
+
+                                txIndexer.indexTx(token, commitTime) { openTx ->
+                                    for ((relation, op) in ops) {
+                                        applyStreamingOp(openTx, dbName, relation, op)
+                                    }
+                                    TxResult.Committed()
+                                }
+                            } else {
+                                LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
+                            }
+
+                            // Acknowledge up to the commit LSN
+                            LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
+                            runInterruptible(Dispatchers.IO) {
+                                stream.setFlushedLSN(commitLsn)
+                                stream.setAppliedLSN(commitLsn)
+                                stream.forceUpdateStatus()
+                            }
+
+                            currentTxOps = mutableListOf()
+                        }
                     }
                 }
-            }
 
-            LOG.info("[$dbName] Streaming loop exiting (coroutine no longer active)")
+                LOG.info("[$dbName] Streaming loop exiting (coroutine no longer active)")
+            }
         }
     }
 
