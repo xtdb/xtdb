@@ -126,6 +126,7 @@ export default defineConfig({
                                 { label: 'Temporal functions', link: '/reference/main/stdlib/temporal' },
                                 { label: 'URI functions', link: '/reference/main/stdlib/uri' },
                                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates' },
+                                { label: 'Table functions', link: '/reference/main/stdlib/table' },
                                 { label: 'Other functions', link: '/reference/main/stdlib/other' }
                             ]
                         },

@@ -45,6 +45,8 @@ These can be accessed at the following endpoint on the **Healthz Server**:
 
     <node_url>:<healthz_port>/metrics
 
+Metrics that relate to a specific database are tagged with `db=<database-name>` (v2.2+), so dashboards can slice per database on nodes serving more than one.
+
 ### Cloud Integrations
 
 XTDB nodes can be configured to report metrics to the following cloud-based monitoring services:
