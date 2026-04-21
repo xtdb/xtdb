@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import clojure.lang.Keyword
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
@@ -14,6 +16,7 @@ import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
+import xtdb.arrow.RelationReader
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
@@ -21,6 +24,8 @@ import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Interrupted
 import xtdb.indexer.Indexer.Companion.addTxRow
+import xtdb.query.IQuerySource
+import xtdb.query.QueryOpts
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
@@ -38,11 +43,12 @@ private val LOG = ExternalSourceProcessor::class.logger
 
 class ExternalSourceProcessor(
     private val allocator: BufferAllocator,
-    dbStorage: DatabaseStorage,
+    private val dbStorage: DatabaseStorage,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
+    private val querySource: IQuerySource,
     partition: Int,
     afterSourceMsgId: MessageId,
     afterReplicaMsgId: MessageId,
@@ -90,11 +96,46 @@ class ExternalSourceProcessor(
         return if (systemTime.isBefore(floor)) floor else systemTime
     }
 
+    // Wraps the inner [OpenTx] and exposes the narrow surface source authors see:
+    // writes via [table], reads via [openQuery]. The wrapper forwards query execution
+    // to the node's [IQuerySource], scoped to this database with a snapshot that includes
+    // the tx's in-flight writes.
+    private inner class WriterOpenTx(val inner: OpenTx) : ExternalSource.OpenTx {
+        override val systemFrom get() = inner.systemFrom
+
+        override fun table(ref: TableRef) = inner.table(ref)
+        override fun table(schemaName: String, tableName: String) =
+            inner.table(TableRef(dbName, schemaName, tableName))
+
+        override fun openQuery(
+            sql: String,
+            args: RelationReader?,
+            opts: ExternalSource.QueryOpts,
+        ): ResultCursor {
+            val currentTime = opts.currentTime ?: inner.txKey.systemTime
+
+            val snapSource = object : Snapshot.Source {
+                override fun openSnapshot() = liveIndex.openSnapshot(inner)
+            }
+            val queryCat = Indexer.queryCatalog(dbStorage, dbState, snapSource)
+
+            val prepareOpts = mapOf(
+                Keyword.intern("current-time") to currentTime,
+                Keyword.intern("default-tz") to opts.defaultTz,
+                Keyword.intern("default-db") to dbName,
+                Keyword.intern("query-text") to sql,
+            )
+
+            val pq = querySource.prepareQuery(sql, queryCat, prepareOpts)
+            return pq.openQuery(args, QueryOpts(currentTime = currentTime, defaultTz = opts.defaultTz))
+        }
+    }
+
     private val txIndexer = object : ExternalSource.TxIndexer {
         override suspend fun indexTx(
             externalSourceToken: ExternalSourceToken?,
             systemTime: Instant?,
-            writer: suspend (OpenTx) -> TxResult,
+            writer: suspend (ExternalSource.OpenTx) -> TxResult,
         ): TxResult {
             val txId = (liveIndex.latestCompletedTx?.txId ?: -1) + 1
             val txKey = TransactionKey(txId, smoothSystemTime(systemTime ?: instantSource.instant()))
@@ -102,7 +143,7 @@ class ExternalSourceProcessor(
             try {
                 val openTx = OpenTx(allocator, txKey)
                 val result = try {
-                    writer(openTx)
+                    writer(WriterOpenTx(openTx))
                 } catch (e: Throwable) {
                     openTx.close()
                     throw e

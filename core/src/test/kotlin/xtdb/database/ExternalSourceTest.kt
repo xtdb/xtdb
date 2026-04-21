@@ -3,6 +3,7 @@ package xtdb.database
 import com.google.protobuf.StringValue
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.ResultCursor
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -22,6 +24,8 @@ import xtdb.compactor.Compactor
 import xtdb.database.ExternalSource.TxResult
 import xtdb.error.Incorrect
 import xtdb.indexer.*
+import xtdb.query.IQuerySource
+import xtdb.query.PreparedQuery
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import java.time.Instant
@@ -75,6 +79,7 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(-1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
+        querySource: IQuerySource = mockk(relaxed = true),
         ctx: CoroutineContext,
     ): ExternalSourceProcessor {
         val blockCatalog = BlockCatalog("test", null)
@@ -87,7 +92,7 @@ class ExternalSourceTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         return ExternalSourceProcessor(
-            allocator, dbStorage, replicaProducer, dbState, watchers, blockUploader,
+            allocator, dbStorage, replicaProducer, dbState, watchers, blockUploader, querySource,
             partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1,
             extSource = extSource, afterToken = afterToken, ctx = ctx,
         )
@@ -227,6 +232,61 @@ class ExternalSourceTest {
             extSource.channel.send(null)
             delay(500)
             assertNotNull(watchers.exception, "watchers should be in failed state")
+        } finally {
+            lp.close()
+        }
+    }
+
+    @Test
+    fun `openQuery on writer OpenTx delegates to querySource with tx-scoped snapshot`() = runTest {
+        val cursor = mockk<ResultCursor>(relaxed = true)
+        val pq = mockk<PreparedQuery> {
+            every { openQuery(any(), any()) } returns cursor
+        }
+
+        val sqlSlot = slot<Any>()
+        val catSlot = slot<IQuerySource.QueryCatalog>()
+        val querySource = mockk<IQuerySource> {
+            every { prepareQuery(capture(sqlSlot), capture(catSlot), any()) } returns pq
+        }
+
+        val receivedCursor = CompletableDeferred<ResultCursor>()
+        val receivedTable = CompletableDeferred<Unit>()
+
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer,
+            ) {
+                txIndexer.indexTx(null) { openTx ->
+                    openTx.table("public", "customers")
+                    receivedTable.complete(Unit)
+
+                    val cur = openTx.openQuery("SELECT _id FROM public.customers")
+                    receivedCursor.complete(cur)
+                    TxResult.Committed()
+                }
+            }
+
+            override fun close() {}
+        }
+
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { latestCompletedTx } returns null
+        }
+
+        val lp = leaderProc(
+            liveIndex = liveIndex, extSource = extSource,
+            querySource = querySource, ctx = coroutineContext,
+        )
+
+        try {
+            receivedTable.await()
+            val cur = receivedCursor.await()
+
+            assertSame(cursor, cur, "openQuery should return the querySource's cursor")
+            assertEquals("SELECT _id FROM public.customers", sqlSlot.captured)
+            assertEquals(setOf("test"), catSlot.captured.databaseNames.toSet())
+            verify { pq.openQuery(isNull(), any()) }
         } finally {
             lp.close()
         }
