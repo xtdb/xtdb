@@ -2,32 +2,38 @@ package xtdb.debezium
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import org.apache.arrow.memory.RootAllocator
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringSerializer
-import kotlin.test.assertFailsWith
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
 import org.testcontainers.kafka.ConfluentKafkaContainer
-import org.apache.arrow.memory.RootAllocator
-import xtdb.api.TransactionKey
 import xtdb.ResultCursor
+import xtdb.api.TransactionKey
 import xtdb.arrow.RelationReader
-import xtdb.database.ExternalSource
-import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
 import xtdb.indexer.OpenTx
+import xtdb.indexer.TxIndexer
+import xtdb.indexer.TxIndexer.TxResult
 import xtdb.table.TableRef
-import com.google.protobuf.Any as ProtoAny
 import java.time.Instant
-import java.util.Collections
+import java.util.*
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.seconds
+import com.google.protobuf.Any as ProtoAny
 
 @Tag("integration")
 class DebeziumKafkaSourceTest {
@@ -85,7 +91,7 @@ class DebeziumKafkaSourceTest {
     )
 
     class CapturingTxIndexer(
-        val txIndexer: ExternalSource.TxIndexer,
+        val txIndexer: TxIndexer,
         val received: List<CapturedTx>,
         private val allocator: RootAllocator,
     ) : AutoCloseable {
@@ -99,23 +105,23 @@ class DebeziumKafkaSourceTest {
         val al = RootAllocator()
         var nextTxId = 0L
 
-        val txIndexer = object : ExternalSource.TxIndexer {
+        val txIndexer = object : TxIndexer {
             override suspend fun indexTx(
                 externalSourceToken: ExternalSourceToken?,
                 systemTime: Instant?,
-                writer: suspend (ExternalSource.OpenTx) -> ExternalSource.TxResult,
-            ): ExternalSource.TxResult {
+                writer: suspend (TxIndexer.OpenTx) -> TxResult,
+            ): TxResult {
                 val txKey = TransactionKey(nextTxId++, systemTime ?: Instant.now())
 
                 return OpenTx(al, txKey).use { inner ->
-                    val captured = object : ExternalSource.OpenTx {
+                    val captured = object : TxIndexer.OpenTx {
                         override val systemFrom get() = inner.systemFrom
                         override fun table(ref: TableRef) = inner.table(ref)
                         override fun table(schemaName: String, tableName: String) =
                             inner.table(TableRef("testdb", schemaName, tableName))
 
                         override fun openQuery(
-                            sql: String, args: RelationReader?, opts: ExternalSource.QueryOpts,
+                            sql: String, args: RelationReader?, opts: TxIndexer.QueryOpts,
                         ): ResultCursor = error("openQuery not supported in CapturingTxIndexer — wire a real ESP if you need this")
                     }
 

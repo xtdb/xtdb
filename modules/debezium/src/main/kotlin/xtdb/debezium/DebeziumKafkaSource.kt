@@ -16,18 +16,19 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.Deserializer
 import org.slf4j.LoggerFactory
+import xtdb.indexer.TxIndexer
 import xtdb.api.log.KafkaCluster
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.ensureTopicExists
 import xtdb.database.ExternalSource
-import xtdb.database.ExternalSource.TxResult
+import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.*
 import xtdb.debezium.proto.DebeziumKafkaSourceConfig.MessageFormatCase
 import xtdb.error.Incorrect
-import xtdb.database.ExternalSource.OpenTx
+import xtdb.indexer.TxIndexer.OpenTx
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
@@ -189,7 +190,7 @@ class DebeziumKafkaSource @JvmOverloads constructor(
     }
 
     override suspend fun onPartitionAssigned(
-        partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer
+        partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
     ) {
         KafkaConsumer(
             kafkaConfig.plus(

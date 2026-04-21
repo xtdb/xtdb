@@ -1,56 +1,43 @@
 package xtdb.postgres
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import org.jdbi.v3.core.Handle
+import org.jdbi.v3.core.Jdbi
+import org.jdbi.v3.core.kotlin.KotlinPlugin
+import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
-import org.postgresql.util.PSQLException
 import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
-import org.slf4j.LoggerFactory
-import xtdb.database.ExternalSource
-import xtdb.database.ExternalSource.TxResult
-import xtdb.database.ExternalSourceToken
-import xtdb.database.proto.DatabaseConfig
+import org.postgresql.util.PSQLException
+import xtdb.indexer.TxIndexer
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
+import xtdb.database.ExternalSource
+import xtdb.indexer.TxIndexer.OpenTx
+import xtdb.indexer.TxIndexer.TxResult
+import xtdb.database.ExternalSourceToken
+import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Incorrect
-import xtdb.database.ExternalSource.OpenTx
+import xtdb.postgres.PgOutputMessage.ColumnValue
 import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig
 import xtdb.postgres.proto.postgresSourceToken
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
-import xtdb.util.asIid
-import org.jdbi.v3.core.Jdbi
-import org.jdbi.v3.core.Handle
-import org.jdbi.v3.core.kotlin.KotlinPlugin
-import org.jdbi.v3.core.transaction.TransactionIsolationLevel
-import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
-import xtdb.postgres.PgOutputMessage.ColumnValue
+import xtdb.util.*
 import java.nio.ByteBuffer
 import java.sql.Connection
-import java.sql.Connection.TRANSACTION_REPEATABLE_READ
 import java.sql.DriverManager
 import java.time.Duration
 import java.time.Instant
-import java.util.Properties
+import java.util.*
 import com.google.protobuf.Any as ProtoAny
-
-import xtdb.util.debug
-import xtdb.util.info
-import xtdb.util.error
-import xtdb.util.logger
-import xtdb.util.trace
 
 private val LOG = PostgresSource::class.logger
 
@@ -152,7 +139,7 @@ class PostgresSource(
     override suspend fun onPartitionAssigned(
         partition: Int,
         afterToken: ExternalSourceToken?,
-        txIndexer: ExternalSource.TxIndexer,
+        txIndexer: TxIndexer,
     ) {
         LOG.info("[$dbName] Partition $partition assigned (hostname=$hostname, port=$port, database=$database, publication=$publicationName, slot=$slotName)")
 
@@ -178,7 +165,7 @@ class PostgresSource(
     /**
      * Returns the slot LSN for streaming to resume from.
      */
-    private suspend fun initialSnapshot(txIndexer: ExternalSource.TxIndexer): Long {
+    private suspend fun initialSnapshot(txIndexer: TxIndexer): Long {
         LOG.debug { "[$dbName] Opening replication connection to $hostname:$port/$database" }
 
         openJdbcConnection().use { replConn ->
@@ -314,7 +301,7 @@ class PostgresSource(
         error("unreachable")
     }
 
-    private suspend fun streamChanges(txIndexer: ExternalSource.TxIndexer, startLsn: Long) {
+    private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
 
         openJdbcConnection().use { replConn ->
@@ -457,7 +444,7 @@ class PostgresSource(
     }
 
     private suspend fun flushSnapshotBatch(
-        txIndexer: ExternalSource.TxIndexer,
+        txIndexer: TxIndexer,
         slotLsn: Long,
         schema: String,
         table: String,
