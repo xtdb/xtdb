@@ -14,10 +14,9 @@ if (file("lang/test-harness").isDirectory) {
 
 include("docker:standalone", "docker:aws", "docker:azure", "docker:google-cloud")
 
-include("modules:kafka", "modules:kafka-connect", "modules:debezium", "modules:postgres-source", "modules:aws", "modules:azure", "modules:google-cloud")
+include("modules:kafka", "modules:kafka-connect", "modules:postgres-source", "modules:aws", "modules:azure", "modules:google-cloud")
 project(":modules:kafka").name = "xtdb-kafka"
 project(":modules:kafka-connect").name = "xtdb-kafka-connect"
-project(":modules:debezium").name = "xtdb-debezium"
 project(":modules:postgres-source").name = "xtdb-postgres-source"
 project(":modules:aws").name = "xtdb-aws"
 project(":modules:azure").name = "xtdb-azure"
