@@ -136,6 +136,34 @@ title: String functions
 `REVERSE(str)`
 : reverses the characters in the string
 
+`QUOTE_IDENT(name)` (v2.2+)
+: returns `name` formatted as a SQL identifier — double-quoted with `"` escaped to `""` if necessary, bare otherwise.
+
+  - PostgreSQL-compatible.
+
+  ```sql
+  QUOTE_IDENT('users')      -- 'users'
+  QUOTE_IDENT('User Table') -- '"User Table"'
+  QUOTE_IDENT('from')       -- '"from"'  (reserved word)
+  ```
+
+`STRING_TO_ARRAY(str, delimiter)` (v2.2+)
+: splits `str` on `delimiter`, returning an array of strings.
+
+  - `delimiter` is matched as a literal string (not a regex).
+  - If `delimiter` is `NULL`, `str` is split into its individual characters.
+  - If `delimiter` is the empty string, returns a single-element array containing `str`.
+  - If `str` is `NULL`, returns `NULL`.
+  - PostgreSQL-compatible.
+
+  ```sql
+  STRING_TO_ARRAY('a,b,c', ',')
+  -- ['a', 'b', 'c']
+
+  STRING_TO_ARRAY('abc', NULL)
+  -- ['a', 'b', 'c']
+  ```
+
 `UPPER(str)`
 : upper-case
 

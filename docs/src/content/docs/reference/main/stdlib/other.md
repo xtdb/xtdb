@@ -2,8 +2,35 @@
 title: Other Functions
 ---
 
+<details>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: `current_database` requires parentheses
+
+: `current_database` is now a function — [`current_database()`](#postgresql-compatibility-functions) — rather than a bare keyword.
+
+  Previously `SELECT current_database` parsed as a reference to a reserved keyword.
+  Now it's a regular function call, which lets tools like Metabase use `SELECT current_database() AS current_database` (same name as keyword and column alias) without a parse error.
+
+  Upgrade: rewrite any bare `current_database` references as `current_database()`.
+
+</details>
+
 `CARDINALITY(list)`
 : returns the number of elements in the list.
+
+`ARRAY_LENGTH(array, dimension)` (v2.2+)
+: returns the number of elements in `array` at the given dimension.
+
+  - XTDB arrays are 1-dimensional, so `dimension` must be `1`; any other value throws.
+  - PostgreSQL-compatible.
+
+`ARRAY_LOWER(array, dimension)` (v2.2+)
+: returns the lower bound of `array` at the given dimension.
+
+  - Always returns `1` — XTDB arrays are 1-indexed with no custom lower bounds.
+  - `dimension` must be `1`; any other value throws.
+  - PostgreSQL-compatible.
 
 `LENGTH(expr)`
 : returns the length of the value in `expr`, where `<expr>` is one of the following:
@@ -49,3 +76,13 @@ title: Other Functions
   - Returns NULL if any step in the path does not exist
   - Example: `data #>> ARRAY['nested', 'inner']` accesses `data.nested.inner` as text
   - Equivalent to chaining `->` operators and ending with `->>`
+
+## PostgreSQL built-in functions
+
+`current_database()` (v2.2+)
+: returns the name of the current database.
+
+`current_setting(name)` (v2.2+)
+: returns the value of a GUC parameter.
+
+  XTDB recognises a fixed set of parameter names — e.g. `'search_path'` returns `'"$user", public'`, `'server_version_num'` returns the reported PostgreSQL version.

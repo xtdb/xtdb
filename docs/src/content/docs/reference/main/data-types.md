@@ -158,6 +158,7 @@ There are a number of considerations when casting between temporal types:
 - When explicitly casting to most temporal types, can specify an optional fractional precision to truncate the value to:
     - In SQL, the syntax for this would be `CAST(value AS TYPE(<precision>))`.
 - Casting to/from `VARCHAR` involves formatting or parsing as ISO8601 strings.
+- In comparisons (`=`, `<`, `BETWEEN`, etc.) between a temporal value and a string literal, the string is implicitly parsed as the temporal type of the other operand (v2.2+) — e.g. `recorded_at BETWEEN '2026-01-01T00:00:00Z' AND '2026-01-02T00:00:00Z'` works without an explicit cast.
 - Intervals have specific casting behaviors, which are detailed in the next section.
 
 ### Casting between Intervals
@@ -203,8 +204,9 @@ When casting to/from intervals from other types, the following rules apply:
 
     e.g. `X('41af8e01')`
 
-`VARCHAR` | `TEXT`
-: a variable-length character array
+`VARCHAR` | `TEXT` | `CHAR`
+: a variable-length character array.
+  `CHAR` is accepted as a synonym for `VARCHAR`/`TEXT` (v2.2+); XTDB does not distinguish fixed-width character types.
 
     e.g.:
 
@@ -216,6 +218,8 @@ When casting to/from intervals from other types, the following rules apply:
     - `$$dollar quoted string$$`: no need to escape single/double quotes etc in here.
         - dollars can also contain a tag, for nesting purposes:
     `$mytag$…​$mytag$`
+
+    Any value may be cast to `TEXT` (v2.2+) — composite types (lists, sets, structs) render as their canonical textual representation.
 
 `URI`
 : e.g. `URI 'https://xtdb.com'`
