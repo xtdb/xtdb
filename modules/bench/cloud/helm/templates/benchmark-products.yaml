@@ -18,6 +18,9 @@ spec:
   parallelism: 1
   completions: 1
   backoffLimit: 0
+  {{- if .Values.job.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  {{- end }}
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
   template:
     metadata:

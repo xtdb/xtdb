@@ -408,6 +408,22 @@ jobs:
           fi
           if [ -n "$BENCHMARK_TIMEOUT" ]; then
             HELM_ARGS+=(--set "timeout=${BENCHMARK_TIMEOUT}")
+            # k8s-level backstop: force-terminate the Job `benchmark_timeout + 15m`
+            # after start. Covers cases where the JVM-level --timeout can't abort
+            # (e.g. thread parked in a Kafka producer retry loop).
+            # Only handles hours/minutes/seconds — days (P1D...) not supported.
+            iso=${BENCHMARK_TIMEOUT#PT}
+            hours=0; mins=0; secs=0
+            if [[ "$iso" =~ ([0-9]+)H ]]; then hours=${BASH_REMATCH[1]}; fi
+            if [[ "$iso" =~ ([0-9]+)M ]]; then mins=${BASH_REMATCH[1]}; fi
+            if [[ "$iso" =~ ([0-9]+)S ]]; then secs=${BASH_REMATCH[1]}; fi
+            timeout_seconds=$((hours * 3600 + mins * 60 + secs))
+            if [ "$timeout_seconds" -le 0 ]; then
+              echo "::error::Could not parse BENCHMARK_TIMEOUT='${BENCHMARK_TIMEOUT}' as ISO-8601 duration (expected form: PT[nH][nM][nS])"
+              exit 1
+            fi
+            active_deadline=$((timeout_seconds + 900))
+            HELM_ARGS+=(--set "job.activeDeadlineSeconds=${active_deadline}")
           fi
           if [ -n "$CLICKBENCH_SIZE" ]; then
             HELM_ARGS+=(--set "clickbench.size=${CLICKBENCH_SIZE}")

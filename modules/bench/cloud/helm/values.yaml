@@ -16,6 +16,11 @@ job:
   # Time-to-live for Jobs after they finish (in seconds)
   # Set to 0 to disable cleanup by TTL controller
   ttlSecondsAfterFinished: 3600
+  # Hard deadline (seconds) after which k8s force-terminates the Job.
+  # Backstop for when the JVM-level --timeout fails to abort (e.g. hung
+  # Kafka retries). Normally set by the deploy workflow to benchmark_timeout
+  # + a buffer. Leave empty to disable.
+  activeDeadlineSeconds: ""
 
 # Benchmark timeout (ISO-8601 duration, e.g. PT1H30M for 90 minutes)
 # If set, the benchmark will gracefully abort after this duration

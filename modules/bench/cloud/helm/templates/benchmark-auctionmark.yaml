@@ -23,6 +23,9 @@ spec:
   completions: 1
   {{- end }}
   backoffLimit: 0
+  {{- if .Values.job.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+  {{- end }}
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished | default 0 }}
   template:
     metadata:
