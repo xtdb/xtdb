@@ -1,3 +1,4 @@
+-- allium: 3
 -- db.allium
 --
 -- The processing model of a single database within an XTDB node:
@@ -29,9 +30,9 @@
 use "./trie-cat.allium" as trie_cat
 use "./compaction.allium" as compaction
 
----- Context
+---- Given
 
-context {
+given {
     database: Database
     log_processor: LogProcessor
     live_index: LiveIndex              -- shared across leader/follower modes
@@ -88,8 +89,9 @@ entity Database {
     source_log: Log
     replica_log: Log
 
-    invariant: source_log != replica_log
-        -- Source and replica are always distinct logs.
+    invariant DistinctLogs {
+        source_log != replica_log
+    }
 }
 
 entity LogProcessor {
@@ -194,11 +196,11 @@ entity Watchers {
     latest_tx_result: TransactionResult?
     external_source_token: ExternalSourceToken?
 
-    -- Monotonicity invariants enforced at runtime:
-    invariant: notifyTx must supply txId > latest_tx_id (strictly increasing)
-    invariant: notifyTx and notifyMsg must supply srcMsgId >= latest_source_msg_id (non-decreasing)
-        -- >= not >: BlockBoundary can carry the same source msgId as the preceding
-        -- ResolvedTx when the block was triggered by isFull() (no FlushBlock in between).
+    -- Monotonicity obligations enforced at runtime (temporal, not state properties):
+    -- notifyTx must supply txId > latest_tx_id (strictly increasing)
+    -- notifyTx and notifyMsg must supply srcMsgId >= latest_source_msg_id (non-decreasing)
+    --   >= not >: BlockBoundary can carry the same source msgId as the preceding
+    --   ResolvedTx when the block was triggered by isFull() (no FlushBlock in between).
 }
 
 entity BlockUploader {
@@ -498,7 +500,7 @@ config {
 
 rule TransitionToLeader {
     when: PartitionsAssigned(database)
-    requires: log_processor.mode is Follower
+    requires: log_processor.mode = Follower
 
     ensures:
         -- Fence: open transactional producer on replica log.
@@ -559,15 +561,15 @@ rule TransitionToLeader {
         log_processor.mode = Leader
         log_processor.start(source_resume, after_replica_msg_id: replay_target)
 
-    invariant: ReplayEquivalence
-        -- The live index state after transition is identical regardless of
-        -- how much work the follower had already done.
+    @guidance
+        -- ReplayEquivalence: the live index state after transition is identical
+        -- regardless of how much work the follower had already done.
 }
 
 rule TransitionToFollower {
     -- Applies when revoking from either Leader or ExternalSourceLeader.
     when: PartitionsRevoked(database)
-    requires: log_processor.mode is Leader or log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
 
     ensures:
         -- close() completes any in-flight commit, then stops.
@@ -597,7 +599,7 @@ rule ClientSubmitsTransaction {
     -- See: database/Database.kt (submitTxBlocking)
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     ensures:
         let msg = TxMessage.created(
@@ -613,7 +615,7 @@ rule ClientSubmitsTransactionToExternalSourceDb {
     -- Returns error xtdb/submit-tx-to-external-source-db.
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     ensures:
         SubmitTxRejected(
@@ -632,7 +634,7 @@ rule ClientSubmitsTransactionToExternalSourceDb {
 
 rule LeaderProcessesTx {
     when: msg: TxMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -654,7 +656,7 @@ rule LeaderProcessesTx {
 
 rule LeaderProcessesAttachDb {
     when: msg: AttachDbMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -673,7 +675,7 @@ rule LeaderProcessesAttachDb {
 
 rule LeaderProcessesDetachDb {
     when: msg: DetachDbMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -692,7 +694,7 @@ rule LeaderProcessesDetachDb {
 
 rule LeaderProcessesFlushBlock {
     when: msg: FlushBlockMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -701,7 +703,7 @@ rule LeaderProcessesFlushBlock {
         -- When the CAS fails (stale FlushBlock, or null expected_block_idx),
         -- we still advance watchers and latest_source_msg_id.
         if msg.expected_block_idx != null
-           and msg.expected_block_idx == (block_catalog.current_block_index ?? -1):
+           and msg.expected_block_idx = (block_catalog.current_block_index ?? -1):
             LeaderFinishesBlock(msg.msg_id)
 
         watchers.notifyMsg(msg.msg_id)
@@ -712,11 +714,11 @@ rule LeaderProcessesTriesAdded {
     -- L1+ from compactor. The leader needs these in its trie catalog
     -- for correct partition info at block time, and forwards them to the replica log.
     when: msg: TriesAddedMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
-    requires: msg.storage_version == current_storage_version
-    requires: msg.storage_epoch == current_storage_epoch
+    requires: msg.storage_version = current_storage_version
+    requires: msg.storage_epoch = current_storage_epoch
 
     ensures:
         -- Update the trie catalog (needed for finishBlock partition info).
@@ -739,7 +741,7 @@ rule LeaderProcessesBlockUploaded {
     -- BlockUploaded on the source log is from the single-writer path.
     -- The leader ignores it (notifies watchers only).
     when: msg: BlockUploadedMessage consumed from database.source_log
-    mode: log_processor.mode is Leader
+    requires: log_processor.mode = Leader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -808,8 +810,8 @@ rule LeaderFlushTimeout {
     -- flushed this tx, it returns true and the leader writes FlushBlock to source.
     -- Applies to both Leader and ExternalSourceLeader.
     -- See: indexer/BlockFlusher.kt
-    when: block_flusher.checkBlockTimeout() == true
-    mode: log_processor.mode is Leader or log_processor.mode is ExternalSourceLeader
+    when: block_flusher.checkBlockTimeout() = true
+    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
 
     requires: live_index.has_data
 
@@ -837,7 +839,7 @@ rule ExternalSourceAssigned {
     -- (which reflects the latest replay of the replica log, possibly ahead
     -- of the last persisted block).
     when: PartitionsAssigned(database)
-    requires: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     ensures:
         let leader = log_processor as ExternalSourceLeader
@@ -861,7 +863,7 @@ rule ExternalSourceIndexesTx {
     -- The resulting ResolvedTx carries the external_source_token all the way
     -- through watchers, so block boundaries and restarts can resume from it.
     when: ExternalSourceIndexTx(external_source_token, system_time, writer)
-    mode: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     ensures:
         let tx_id = (live_index.latest_completed_tx?.tx_id ?? -1) + 1
@@ -887,13 +889,13 @@ rule ExternalSourceProcessesFlushBlock {
     -- Same CAS semantics as LeaderProcessesFlushBlock, but finishes the
     -- block with the token currently tracked on watchers.
     when: msg: FlushBlockMessage consumed from database.source_log
-    mode: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
     ensures:
         if msg.expected_block_idx != null
-           and msg.expected_block_idx == (block_catalog.current_block_index ?? -1):
+           and msg.expected_block_idx = (block_catalog.current_block_index ?? -1):
             ExternalSourceFinishesBlock(msg.msg_id, watchers.external_source_token)
 
         watchers.notifyMsg(msg.msg_id)
@@ -904,11 +906,11 @@ rule ExternalSourceProcessesTriesAdded {
     -- Same shape as LeaderProcessesTriesAdded: update trie catalog and
     -- forward to the replica log with the original source_msg_id.
     when: msg: TriesAddedMessage consumed from database.source_log
-    mode: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
-    requires: msg.storage_version == current_storage_version
-    requires: msg.storage_epoch == current_storage_epoch
+    requires: msg.storage_version = current_storage_version
+    requires: msg.storage_epoch = current_storage_epoch
 
     ensures:
         trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
@@ -927,7 +929,7 @@ rule ExternalSourceProcessesTriesAdded {
 rule ExternalSourceProcessesBlockUploaded {
     -- TODO legacy single-writer path: ignored by ExternalSourceLeader.
     when: msg: BlockUploadedMessage consumed from database.source_log
-    mode: log_processor.mode is ExternalSourceLeader
+    requires: log_processor.mode = ExternalSourceLeader
 
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
@@ -995,24 +997,24 @@ rule HandleReplicaMessage {
     when: msg: ReplicaMessage
 
     ensures:
-        if msg is ResolvedTxMessage:
+        if msg.kind = ResolvedTxMessage:
             live_index.importTx(msg)
             if msg.committed:
-                if msg.db_op is Attach:
+                if msg.db_op.kind = Attach:
                     database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
-                if msg.db_op is Detach:
+                if msg.db_op.kind = Detach:
                     database.catalog.detach(msg.db_op.db_name)
             log_processor.latest_source_msg_id = msg.tx_id
             watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
 
-        if msg is TriesAddedMessage:
-            requires: msg.storage_version == current_storage_version
-            requires: msg.storage_epoch == current_storage_epoch
+        if msg.kind = TriesAddedMessage:
+            requires: msg.storage_version = current_storage_version
+            requires: msg.storage_epoch = current_storage_epoch
             trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
             log_processor.latest_source_msg_id = msg.source_msg_id
             watchers.notifyMsg(msg.source_msg_id)
 
-        if msg is BlockBoundaryMessage:
+        if msg.kind = BlockBoundaryMessage:
             -- Follower: enters pending mode. Subsequent messages (except a matching
             -- BlockUploaded) will be buffered by the pending block guard above.
             -- Also advances latest_source_msg_id and notifies watchers.
@@ -1020,17 +1022,17 @@ rule HandleReplicaMessage {
             log_processor.latest_source_msg_id = msg.latest_processed_msg_id
             watchers.notifyMsg(msg.latest_processed_msg_id)
 
-        if msg is BlockUploadedMessage:
+        if msg.kind = BlockUploadedMessage:
             -- In the follower's normal (non-pending) path, this handles
             -- BlockUploaded messages that aren't matched to a pending block
             -- (e.g. stale ones that passed the stale check).
             -- Adds L0 tries and notifies watchers.
-            requires: msg.storage_version == current_storage_version
-            requires: msg.storage_epoch == current_storage_epoch
+            requires: msg.storage_version = current_storage_version
+            requires: msg.storage_epoch = current_storage_epoch
             trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
             watchers.notifyMsg(msg.latest_processed_msg_id)
 
-        if msg is NoOpMessage:
+        if msg.kind = NoOpMessage:
             -- No-op; used for fencing synchronization only.
             pass
 }
@@ -1042,8 +1044,8 @@ rule FollowerHandlesBlockUploaded {
     -- The BlockUploaded message is just a signal.
     when: msg: BlockUploadedMessage
     requires: pending_block is set
-    requires: msg.block_index == pending_block.block_index
-    requires: msg.storage_epoch == current_storage_epoch
+    requires: msg.block_index = pending_block.block_index
+    requires: msg.storage_epoch = current_storage_epoch
 
     ensures:
         -- Read the block file from the object store.
@@ -1076,16 +1078,16 @@ rule FollowerHandlesBlockUploaded {
 rule TransitionHandlesResolvedTx {
     -- Extra guard: only importTx if the tx hasn't already been applied.
     when: msg: ResolvedTxMessage
-    mode: log_processor.mode is Transition
+    requires: log_processor.mode = Transition
 
     ensures:
-        if live_index.latest_completed_tx == null
+        if live_index.latest_completed_tx = null
            or msg.tx_id > live_index.latest_completed_tx.tx_id:
             live_index.importTx(msg)
         if msg.committed:
-            if msg.db_op is Attach:
+            if msg.db_op.kind = Attach:
                 database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
-            if msg.db_op is Detach:
+            if msg.db_op.kind = Detach:
                 database.catalog.detach(msg.db_op.db_name)
         log_processor.latest_source_msg_id = msg.tx_id
         watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
@@ -1095,7 +1097,7 @@ rule TransitionHandlesBlockBoundary {
     -- On BlockBoundary: directly finish the block via BlockUploader.
     -- This is different from the follower, which enters pending mode.
     when: msg: BlockBoundaryMessage
-    mode: log_processor.mode is Transition
+    requires: log_processor.mode = Transition
 
     ensures:
         block_uploader.uploadBlock(
@@ -1112,7 +1114,7 @@ rule TransitionHandlesBlockUploaded {
     -- (the block was already uploaded by the BlockBoundary handler above).
     -- But it still advances the watermarks.
     when: msg: BlockUploadedMessage
-    mode: log_processor.mode is Transition
+    requires: log_processor.mode = Transition
 
     ensures:
         log_processor.latest_source_msg_id = msg.latest_processed_msg_id
@@ -1128,7 +1130,7 @@ rule TransitionHandlesBlockUploaded {
 
 rule FollowerProcessesMessage {
     when: msg: ReplicaMessage consumed from database.replica_log
-    mode: log_processor.mode is Follower
+    requires: log_processor.mode = Follower
 
     ensures:
         HandleRecord(msg)
@@ -1149,7 +1151,7 @@ rule CompactorWakesUp {
     let jobs = compaction/available_jobs(trie_cat/trie_catalog)
 
     ensures:
-        for each job in jobs:
+        for job in jobs:
             StartCompactionJob(job)
 }
 
@@ -1193,34 +1195,37 @@ rule ProcessingErrorHaltsNode {
         NodeMarkedUnhealthy()
 }
 
----- Surfaces
+---- Actor Declarations
 
-actor Client {
-    identified_by: external session
+actor ClientActor {
+    -- Minimal identification: any Client is a valid actor for the surfaces below.
+    identified_by: Client where true
 }
 
+---- Surfaces
+
 surface TransactionSubmission {
-    for caller: Client
+    facing caller: ClientActor
 
     context db: Database
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when log_processor.mode is Leader
+            when log_processor.mode = Leader
 
-    invariant: OrderedProcessing
+    @guarantee OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.
 }
 
 surface QueryAccess {
-    for caller: Client
+    facing caller: ClientActor
 
     context db: Database
 
     provides:
         ClientOpensSnapshot(caller, db)
 
-    invariant: SnapshotIsolation
+    @guarantee SnapshotIsolation
         -- A snapshot sees a consistent point-in-time view.
         -- It includes all transactions up to latest_completed_tx.
 }

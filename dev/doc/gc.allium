@@ -1,3 +1,4 @@
+-- allium: 3
 -- gc.allium
 --
 -- Garbage collection of superseded tries.
@@ -76,12 +77,12 @@ rule GarbageCollectorRuns {
     let as_of = block_time - config.garbage_lifetime
 
     let eligible = trie_cat/trie_catalog.tries.values.flatten
-        .filter(t => t.trie_state == garbage
+        .filter(t => t.trie_state = garbage
                   and t.trie_key.level != 0
                   and t.garbage_as_of <= as_of)
 
     ensures:
-        for each trie in eligible:
+        for trie in eligible:
             -- Paths derived from trie.table and trie.trie_key; see trie/Trie.kt
             ObjectStore.delete(metaFilePath(trie.table, trie.trie_key))
             ObjectStore.delete(dataFilePath(trie.table, trie.trie_key))
