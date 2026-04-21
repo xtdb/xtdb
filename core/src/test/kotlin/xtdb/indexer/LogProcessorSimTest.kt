@@ -10,6 +10,7 @@ import kotlinx.coroutines.yield
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import xtdb.RepeatableSimulationTest
@@ -27,6 +28,9 @@ import xtdb.compactor.Compactor
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.storage.MemoryStorage
+import xtdb.table.TableRef
+import xtdb.trie.Trie.dataFilePath
+import xtdb.trie.Trie.metaFilePath
 import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.util.debug
@@ -155,6 +159,32 @@ class LogProcessorSimTest : SimulationTestBase() {
         }
     }
 
+    private fun assertBlockFilesExist(bp: MemoryStorage, dbName: String, replicaMessages: List<ReplicaMessage>) {
+        val storedPaths = bp.listAllObjects().map { it.key }.toSet()
+
+        for (upload in replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()) {
+            val blockIdx = upload.blockIndex
+
+            assertTrue(BlockCatalog.blockFilePath(blockIdx) in storedPaths,
+                "block file missing for b$blockIdx")
+
+            val tables = upload.tries.map { TableRef.parse(dbName, it.tableName) }.toSet()
+
+            for (trie in upload.tries) {
+                val table = TableRef.parse(dbName, trie.tableName)
+                assertTrue(table.dataFilePath(trie.trieKey) in storedPaths,
+                    "data file missing for ${trie.tableName}/${trie.trieKey}")
+                assertTrue(table.metaFilePath(trie.trieKey) in storedPaths,
+                    "meta file missing for ${trie.tableName}/${trie.trieKey}")
+            }
+
+            for (table in tables) {
+                assertTrue(BlockCatalog.tableBlockPath(table, blockIdx) in storedPaths,
+                    "table-block file missing for ${table.schemaAndTable}/b$blockIdx")
+            }
+        }
+    }
+
     private fun emptyTx(): SourceMessage.Tx =
         SourceMessage.Tx(
             txOps = emptyList<TxOp>().toArrowBytes(allocator),
@@ -225,6 +255,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                     assertEquals(lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
                         "live index latestCompletedTx should match last replica tx")
                 }
+
+                assertBlockFilesExist(bp, "test-db", replicaMessages)
             }
 
             node.close()
@@ -316,6 +348,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                     assertEquals(nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
                         "both nodes should agree on live index's latestCompletedTx")
+
+                    assertBlockFilesExist(bp, "test-db", replicaMessages)
                 }
             }
 
