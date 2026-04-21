@@ -211,7 +211,7 @@ class Database(
                             return if (extFactory != null) {
                                 val leaderProc = ExternalSourceProcessor(
                                     allocator, storage, replicaProducer, state,
-                                    watchers, blockUploader,
+                                    watchers, blockUploader, base.querySource,
                                     partition = 0, afterSourceMsgId, afterReplicaMsgId,
                                     extSource = extFactory.open(dbName, base.logClusters),
                                     // watchers has the latest token from replica log replay,

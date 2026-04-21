@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.apache.arrow.memory.RootAllocator
 import xtdb.api.TransactionKey
+import xtdb.ResultCursor
+import xtdb.arrow.RelationReader
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
@@ -21,6 +23,7 @@ import xtdb.debezium.proto.DebeziumOffsetToken
 import xtdb.debezium.proto.debeziumOffsetToken
 import xtdb.debezium.proto.partitionOffsets
 import xtdb.indexer.OpenTx
+import xtdb.table.TableRef
 import com.google.protobuf.Any as ProtoAny
 import java.time.Instant
 import java.util.Collections
@@ -100,15 +103,26 @@ class DebeziumKafkaSourceTest {
             override suspend fun indexTx(
                 externalSourceToken: ExternalSourceToken?,
                 systemTime: Instant?,
-                writer: suspend (OpenTx) -> ExternalSource.TxResult,
+                writer: suspend (ExternalSource.OpenTx) -> ExternalSource.TxResult,
             ): ExternalSource.TxResult {
                 val txKey = TransactionKey(nextTxId++, systemTime ?: Instant.now())
 
-                return OpenTx(al, txKey).use { openTx ->
-                    val result = writer(openTx)
+                return OpenTx(al, txKey).use { inner ->
+                    val captured = object : ExternalSource.OpenTx {
+                        override val systemFrom get() = inner.systemFrom
+                        override fun table(ref: TableRef) = inner.table(ref)
+                        override fun table(schemaName: String, tableName: String) =
+                            inner.table(TableRef("testdb", schemaName, tableName))
+
+                        override fun openQuery(
+                            sql: String, args: RelationReader?, opts: ExternalSource.QueryOpts,
+                        ): ResultCursor = error("openQuery not supported in CapturingTxIndexer — wire a real ESP if you need this")
+                    }
+
+                    val result = writer(captured)
 
                     received.add(CapturedTx(
-                        cdcRows = openTx.tables
+                        cdcRows = inner.tables
                             .filter { (ref, _) -> ref.schemaName != "xt" }
                             .sumOf { (_, table) -> table.txRelation.rowCount },
                         resumeToken = externalSourceToken,

@@ -23,7 +23,7 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.error.Incorrect
-import xtdb.indexer.OpenTx
+import xtdb.database.ExternalSource.OpenTx
 import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig

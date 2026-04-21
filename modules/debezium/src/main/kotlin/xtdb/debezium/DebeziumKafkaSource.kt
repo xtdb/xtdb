@@ -27,7 +27,7 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.debezium.proto.*
 import xtdb.debezium.proto.DebeziumKafkaSourceConfig.MessageFormatCase
 import xtdb.error.Incorrect
-import xtdb.indexer.OpenTx
+import xtdb.database.ExternalSource.OpenTx
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
