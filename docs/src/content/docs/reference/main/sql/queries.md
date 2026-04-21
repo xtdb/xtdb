@@ -137,12 +137,14 @@ const xtql = rr.Sequence("XTQL", rr.Choice(0, "<XTQL query>", rr.Sequence('(', '
 const subquery = rr.Sequence("(", "<query>", ")")
 const lateral = rr.Sequence("LATERAL", subquery)
 const unnest = rr.Sequence("UNNEST", "(", "<value>", ")", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
-const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest), tableAlias)
+const tableFn = rr.Sequence("<table-function>", rr.Optional(rr.Sequence("WITH", "ORDINALITY"), "skip"))
+const subqs = rr.Sequence(rr.Choice(0, values, xtql, subquery, lateral, unnest, tableFn), tableAlias)
 
 return rr.Diagram(rr.Choice(0, wrapped, base, join, crossJoin, naturalJoin, subqs))
 ```
 
 - See [query term](#query-term) for details on XTQL queries.
+- `<table-function>` covers both purpose-built table-valued functions (e.g. `GENERATE_SERIES`) and any scalar function call wrapped as a single-row table — see [table functions](/reference/main/stdlib/table).
 
 ### temporal filter
 

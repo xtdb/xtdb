@@ -136,6 +136,19 @@ title: String functions
 `REVERSE(str)`
 : reverses the characters in the string
 
+`PARSE_IDENT(qualified_name)` (v2.2+)
+: splits a qualified SQL identifier on `.`, returning an array of its parts.
+
+  - Unquoted parts are folded to lowercase; double-quoted parts preserve case.
+  - `""` within a quoted part is an escaped double quote.
+  - Throws on unterminated quotes, empty identifiers, or unexpected characters.
+  - PostgreSQL-compatible.
+
+  ```sql
+  PARSE_IDENT('public.USERS')       -- ['public', 'users']
+  PARSE_IDENT('"My Schema"."tbl"')  -- ['My Schema', 'tbl']
+  ```
+
 `QUOTE_IDENT(name)` (v2.2+)
 : returns `name` formatted as a SQL identifier — double-quoted with `"` escaped to `""` if necessary, bare otherwise.
 
