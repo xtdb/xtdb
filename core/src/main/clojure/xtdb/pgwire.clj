@@ -48,7 +48,7 @@
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
-           xtdb.IResultCursor
+           xtdb.ResultCursor
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
@@ -1113,12 +1113,12 @@
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->cursor ^xtdb.IResultCursor [xt-args]
+    (letfn [(->cursor ^xtdb.ResultCursor [xt-args]
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                   (.openQuery prepared-query args-rel query-opts))))
 
-            (->pg-cols [prepared-pg-cols ^IResultCursor cursor]
+            (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
                 (when-not (and (= (count prepared-pg-cols) (count resolved-pg-cols))
                                (->> (map vector prepared-pg-cols resolved-pg-cols)
@@ -1169,7 +1169,7 @@
                                       :pg-cols (-> (:pg-cols stmt)
                                                    (with-result-formats result-format))))))
 
-        :execute (util/with-open [^IResultCursor args-cursor (->cursor xt-args)]
+        :execute (util/with-open [^ResultCursor args-cursor (->cursor xt-args)]
                    ;; in the case of execute, we've just bound the args query rather than the inner query.
                    ;; so now we bind the inner query and pretend this was the one we were running all along
                    (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (:statement-name stmt)])
@@ -1362,7 +1362,7 @@
       Future$State/FAILED (throw (.exceptionNow task)))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit statement-type query ^IResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
+                      {:keys [limit statement-type query ^ResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
   (let [transaction (get-in @conn-state [:transaction])]

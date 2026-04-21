@@ -6,13 +6,13 @@ import xtdb.arrow.VectorType
 import java.util.function.Consumer
 import java.util.SequencedMap
 
-interface IResultCursor : ICursor {
+interface ResultCursor : ICursor {
     val resultTypes: SequencedMap<String, VectorType>
 
     class ErrorTrackingCursor(
-        private val inner: IResultCursor,
+        private val inner: ResultCursor,
         private val counter: Counter
-    ) : IResultCursor by inner {
+    ) : ResultCursor by inner {
         override fun tryAdvance(c: Consumer<in RelationReader>): Boolean =
             try {
                 inner.tryAdvance(c)

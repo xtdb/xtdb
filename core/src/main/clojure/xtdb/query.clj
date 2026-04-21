@@ -44,7 +44,7 @@
            [java.util.stream Stream StreamSupport]
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb ICursor IResultCursor IResultCursor$ErrorTrackingCursor PagesCursor)
+           (xtdb ICursor ResultCursor ResultCursor$ErrorTrackingCursor PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
@@ -55,7 +55,7 @@
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
-  (reify IResultCursor
+  (reify ResultCursor
     (getResultTypes [_] result-types)
     (tryAdvance [_ c] (.tryAdvance cursor c))
 
@@ -71,10 +71,10 @@
     (trySplit [_] (.trySplit cursor))
     (close [_] (.close cursor))))
 
-(defn- wrap-dynvars ^xtdb.IResultCursor [^IResultCursor cursor
+(defn- wrap-dynvars ^xtdb.ResultCursor [^ResultCursor cursor
                                          current-time, snapshot-token, default-tz
                                          ^RefCounter ref-ctr]
-  (reify IResultCursor
+  (reify ResultCursor
     (getResultTypes [_] (.getResultTypes cursor))
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
@@ -97,9 +97,9 @@
     (trySplit [_] (.trySplit cursor))
     (close [_] (.close cursor))))
 
-(defn- wrap-closeables ^xtdb.IResultCursor [^IResultCursor cursor, ^RefCounter ref-ctr, closeables]
+(defn- wrap-closeables ^xtdb.ResultCursor [^ResultCursor cursor, ^RefCounter ref-ctr, closeables]
   (let [!closed? (AtomicBoolean. false)]
-    (reify IResultCursor
+    (reify ResultCursor
       (getResultTypes [_] (.getResultTypes cursor))
       (tryAdvance [_ c] (.tryAdvance cursor c))
 
@@ -258,7 +258,7 @@
                (map (fn [[k v]] [k (truncate-pushdown-val k v)]))
                col-pushdowns))))
 
-(defn- explain-analyze-results [^IResultCursor cursor]
+(defn- explain-analyze-results [^ResultCursor cursor]
   (letfn [(->results [^ICursor cursor, depth]
             (lazy-seq
              (if-let [ea (.getExplainAnalyze cursor)]
@@ -484,12 +484,12 @@
                               (.denormalize key-fn k))))))))
 
 (defn cursor->stream
-  (^java.util.stream.Stream [^IResultCursor cursor query-opts]
+  (^java.util.stream.Stream [^ResultCursor cursor query-opts]
    (cursor->stream cursor query-opts {}))
-  (^java.util.stream.Stream [^IResultCursor cursor {:keys [key-fn]} {:keys [query-error-counter]}]
+  (^java.util.stream.Stream [^ResultCursor cursor {:keys [key-fn]} {:keys [query-error-counter]}]
    (let [key-fn (cache-key-fn key-fn)]
      (-> (StreamSupport/stream (cond-> cursor
-                                 query-error-counter (IResultCursor$ErrorTrackingCursor. query-error-counter))
+                                 query-error-counter (ResultCursor$ErrorTrackingCursor. query-error-counter))
                                false)
          ^Stream (.onClose (fn []
                              (util/close cursor)))
