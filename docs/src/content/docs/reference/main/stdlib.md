@@ -9,6 +9,7 @@ XTDB provides a rich standard library of predicates and functions:
 - [String functions](/reference/main/stdlib/string)
 - [Temporal functions](/reference/main/stdlib/temporal)
 - [Aggregate functions](/reference/main/stdlib/aggregates)
+- [Collection functions](/reference/main/stdlib/collections)
 - [Other functions](/reference/main/stdlib/other)
 
 The following control structures are available in XTDB:

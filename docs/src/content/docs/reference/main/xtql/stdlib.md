@@ -26,6 +26,9 @@ The following notes and exceptions apply:
         - `p1 STRICTLY CONTAINS p2` → \`(strictly-contains? p1 p2)
     - `DATE_TRUNC('UNIT', date_time)` → `(date-trunc "UNIT" date-time)`
     - `EXTRACT('FIELD' FROM date_time)` → `(extract "FIELD" date-time)`
+- [Collection functions](/reference/main/stdlib/collections):
+    - SQL `array[1]` → XTQL `(nth array 0)`
+    - `nth` returns `nil` for null, out-of-bounds, negative indexes, and non-list inputs
 
 ## Control structures
 
