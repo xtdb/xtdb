@@ -2,6 +2,7 @@ package xtdb.postgres
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.runInterruptible
@@ -10,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.postgresql.PGConnection
+import org.postgresql.util.PSQLException
 import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
@@ -54,6 +56,11 @@ private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG = "proto.xtdb.com"
 private const val SNAPSHOT_BATCH_SIZE = 1000
+
+private const val SLOT_RETRY_MAX_ATTEMPTS = 7
+private const val SLOT_RETRY_BASE_DELAY_MS = 1000L
+
+private val SLOT_ACTIVE_PATTERN = Regex(".*replication slot .* is active.*")
 
 class PostgresSource(
     private val dbName: String,
@@ -276,6 +283,37 @@ class PostgresSource(
             .map { rs, _ -> ColumnInfo(rs.getString("attname"), rs.getInt("atttypid")) }
             .list()
 
+    /**
+     * Retries starting the replication stream when the slot is still held by a previous connection
+     * (e.g. after leadership handover). PG's wal_sender_timeout (default 60s) will kill the old
+     * connection eventually — we just need to wait it out.
+     */
+    private suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
+        for (attempt in 1..SLOT_RETRY_MAX_ATTEMPTS) {
+            try {
+                return pgReplConn.replicationAPI
+                    .replicationStream()
+                    .logical()
+                    .withSlotName(slotName)
+                    .withStartPosition(LogSequenceNumber.valueOf(startLsn))
+                    .withSlotOption("proto_version", "1")
+                    .withSlotOption("publication_names", publicationName)
+                    .start()
+            } catch (e: PSQLException) {
+                if (!SLOT_ACTIVE_PATTERN.matches(e.message ?: "")) throw e
+                if (attempt == SLOT_RETRY_MAX_ATTEMPTS) throw e
+
+                val baseDelay = SLOT_RETRY_BASE_DELAY_MS shl (attempt - 1)
+                val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
+
+                LOG.info("[$dbName] Replication slot '$slotName' is active (attempt $attempt/$SLOT_RETRY_MAX_ATTEMPTS), retrying in ${delayMs}ms")
+                delay(delayMs)
+            }
+        }
+
+        error("unreachable")
+    }
+
     private suspend fun streamChanges(txIndexer: ExternalSource.TxIndexer, startLsn: Long) {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
 
@@ -284,14 +322,7 @@ class PostgresSource(
 
             LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
 
-            val stream: PGReplicationStream = pgReplConn.replicationAPI
-                .replicationStream()
-                .logical()
-                .withSlotName(slotName)
-                .withStartPosition(LogSequenceNumber.valueOf(startLsn))
-                .withSlotOption("proto_version", "1")
-                .withSlotOption("publication_names", publicationName)
-                .start()
+            val stream: PGReplicationStream = startReplicationStream(pgReplConn, startLsn)
 
             val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
