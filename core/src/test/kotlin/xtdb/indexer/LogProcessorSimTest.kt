@@ -206,15 +206,15 @@ class LogProcessorSimTest : SimulationTestBase() {
                 val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
 
                 launch(dispatcher) {
-                    val totalActions = rand.nextInt(5, 20)
+                    val totalActions = rand.nextInt(50, 100)
                     LOG.debug("test: will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
                     repeat(totalActions) { _ ->
                         yield()
 
-                        when (rand.nextInt(3)) {
-                            0 -> srcLog.appendMessage(emptyTx())
-                            1 -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
-                            2 -> srcLog.rebalanceTrigger.send(Unit)
+                        when (rand.nextInt(100)) {
+                            in 0..<80 -> srcLog.appendMessage(emptyTx())
+                            in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
+                            else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
                         }
                     }
                     val lastSrcMsgId = srcLog.latestSubmittedMsgId
@@ -281,14 +281,14 @@ class LogProcessorSimTest : SimulationTestBase() {
                     val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(logProcB) }
 
                     launch(dispatcher) {
-                        val totalActions = rand.nextInt(5, 20)
+                        val totalActions = rand.nextInt(50, 100)
                         LOG.debug("test: multi-node will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
                         repeat(totalActions) { _ ->
                             yield()
-                            when (rand.nextInt(3)) {
-                                0 -> srcLog.appendMessage(emptyTx())
-                                1 -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
-                                2 -> srcLog.rebalanceTrigger.send(Unit)
+                            when (rand.nextInt(100)) {
+                                in 0..<80 -> srcLog.appendMessage(emptyTx())
+                                in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
+                                else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
                             }
                         }
 
