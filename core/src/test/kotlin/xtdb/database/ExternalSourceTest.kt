@@ -5,8 +5,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -14,16 +17,15 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.ResultCursor
-import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
-import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.SourceMessage
-import xtdb.api.log.Watchers
+import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
-import xtdb.database.ExternalSource.TxResult
 import xtdb.error.Incorrect
-import xtdb.indexer.*
+import xtdb.indexer.BlockUploader
+import xtdb.indexer.ExternalSourceProcessor
+import xtdb.indexer.LiveIndex
+import xtdb.indexer.TxIndexer
+import xtdb.indexer.TxIndexer.TxResult
 import xtdb.query.IQuerySource
 import xtdb.query.PreparedQuery
 import xtdb.storage.MemoryStorage
@@ -53,13 +55,13 @@ class ExternalSourceTest {
 
     /**
      * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel]; each signal submits a tx via [TxIndexer.indexTx].
+     * Send signals to [channel]; each signal submits a tx via [xtdb.TxIndexer.indexTx].
      */
     class InMemoryExternalSource(
         val channel: Channel<ExternalSourceToken?> = Channel(100),
     ) : ExternalSource {
 
-        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer) {
+        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer) {
             for (token in channel) {
                 txIndexer.indexTx(token) { _ ->
                     TxResult.Committed()
@@ -202,7 +204,7 @@ class ExternalSourceTest {
         val watchers = Watchers(-1)
 
         val failingSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer) {
+            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer) {
                 throw RuntimeException("source poll failed")
             }
             override fun close() {}
@@ -255,7 +257,7 @@ class ExternalSourceTest {
 
         val extSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(
-                partition: Int, afterToken: ExternalSourceToken?, txIndexer: ExternalSource.TxIndexer,
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer,
             ) {
                 txIndexer.indexTx(null) { openTx ->
                     openTx.table("public", "customers")

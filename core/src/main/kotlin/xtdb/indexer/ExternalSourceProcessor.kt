@@ -20,10 +20,10 @@ import xtdb.arrow.RelationReader
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
-import xtdb.database.ExternalSource.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Interrupted
 import xtdb.indexer.Indexer.Companion.addTxRow
+import xtdb.indexer.TxIndexer.TxResult
 import xtdb.query.IQuerySource
 import xtdb.query.QueryOpts
 import xtdb.table.TableRef
@@ -100,7 +100,7 @@ class ExternalSourceProcessor(
     // writes via [table], reads via [openQuery]. The wrapper forwards query execution
     // to the node's [IQuerySource], scoped to this database with a snapshot that includes
     // the tx's in-flight writes.
-    private inner class WriterOpenTx(val inner: OpenTx) : ExternalSource.OpenTx {
+    private inner class WriterOpenTx(val inner: OpenTx) : TxIndexer.OpenTx {
         override val systemFrom get() = inner.systemFrom
 
         override fun table(ref: TableRef) = inner.table(ref)
@@ -110,7 +110,7 @@ class ExternalSourceProcessor(
         override fun openQuery(
             sql: String,
             args: RelationReader?,
-            opts: ExternalSource.QueryOpts,
+            opts: TxIndexer.QueryOpts,
         ): ResultCursor {
             val currentTime = opts.currentTime ?: inner.txKey.systemTime
 
@@ -131,11 +131,11 @@ class ExternalSourceProcessor(
         }
     }
 
-    private val txIndexer = object : ExternalSource.TxIndexer {
+    private val txIndexer = object : TxIndexer {
         override suspend fun indexTx(
             externalSourceToken: ExternalSourceToken?,
             systemTime: Instant?,
-            writer: suspend (ExternalSource.OpenTx) -> TxResult,
+            writer: suspend (TxIndexer.OpenTx) -> TxResult,
         ): TxResult {
             val txId = (liveIndex.latestCompletedTx?.txId ?: -1) + 1
             val txKey = TransactionKey(txId, smoothSystemTime(systemTime ?: instantSource.instant()))
