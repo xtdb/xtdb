@@ -221,8 +221,42 @@ jobs:
           echo "failed_job_names=$(echo "$result" | jq -c '.failedJobs')" >> "$GITHUB_OUTPUT"
           echo "succeeded_job_names=$(echo "$result" | jq -c '.succeededJobs')" >> "$GITHUB_OUTPUT"
 
+      # Evaluate whether tonight's run can proceed, given any existing helm release:
+      # - no existing release, or status completed/failed → clean up and proceed
+      # - status in_progress AND older than 12h → prior run died without firing its
+      #   finally-block (e.g. JVM hang). Treat as garbage, force-clean, proceed.
+      # - status in_progress AND recent → genuine overlap, cancel this run.
+      - name: Evaluate Deployment Gate
+        id: gate
+        run: |
+          set -euo pipefail
+          STALE_THRESHOLD_SECONDS=43200  # 12h
+          check_ok='${{ steps.check-deployment.outcome }}'
+          status='${{ steps.inspect-deployment.outputs.deployment_status }}'
+          is_stale=false
+          if [ "$check_ok" = "success" ] && [ "$status" = "in_progress" ]; then
+            last_deployed=$(helm status xtdb-benchmark -n cloud-benchmark -o json | jq -r '.info.last_deployed')
+            age=$(( $(date -u +%s) - $(date -d "$last_deployed" +%s) ))
+            echo "Release last_deployed=${last_deployed} age=${age}s threshold=${STALE_THRESHOLD_SECONDS}s"
+            if [ "$age" -gt "$STALE_THRESHOLD_SECONDS" ]; then
+              is_stale=true
+              echo "::notice::Release is stale (age ${age}s > ${STALE_THRESHOLD_SECONDS}s); will force-clean and proceed."
+            fi
+          fi
+          if [ "$check_ok" = "success" ] && [ "$status" = "in_progress" ] && [ "$is_stale" != "true" ]; then
+            should_cancel=true; needs_cleanup=false; should_proceed=false
+          elif [ "$status" = "completed" ] || [ "$status" = "failed" ] || [ "$is_stale" = "true" ]; then
+            should_cancel=false; needs_cleanup=true; should_proceed=true
+          else
+            should_cancel=false; needs_cleanup=false; should_proceed=true
+          fi
+          echo "is_stale=$is_stale" >> "$GITHUB_OUTPUT"
+          echo "should_cancel=$should_cancel" >> "$GITHUB_OUTPUT"
+          echo "needs_cleanup=$needs_cleanup" >> "$GITHUB_OUTPUT"
+          echo "should_proceed=$should_proceed" >> "$GITHUB_OUTPUT"
+
       - name: Re-authenticate Azure CLI (before cleanup)
-        if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
+        if: steps.gate.outputs.needs_cleanup == 'true'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
           client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
@@ -230,18 +264,22 @@ jobs:
           subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
 
       - name: Cleanup Existing Deployment
-        if: steps.inspect-deployment.outputs.deployment_status == 'completed' || steps.inspect-deployment.outputs.deployment_status == 'failed'
+        if: steps.gate.outputs.needs_cleanup == 'true'
         run: |
           set -euo pipefail
-          echo "Previous benchmark finished with status: ${{ steps.inspect-deployment.outputs.deployment_status }}. Cleaning up release before proceeding."
+          if [ "${{ steps.gate.outputs.is_stale }}" = "true" ]; then
+            echo "Previous benchmark release is stale (in_progress but older than threshold). Force-cleaning before proceeding."
+          else
+            echo "Previous benchmark finished with status: ${{ steps.inspect-deployment.outputs.deployment_status }}. Cleaning up release before proceeding."
+          fi
           ./modules/bench/cloud/clear-bench.sh azure
 
       - name: Cancel workflow (existing deployment)
-        if: steps.check-deployment.outcome == 'success' && steps.inspect-deployment.outputs.deployment_status == 'in_progress'
+        if: steps.gate.outputs.should_cancel == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            core.notice('Existing deployment found and still in progress. Cancelling this workflow run to avoid overlap.');
+            core.notice('Existing deployment found and still in progress (recent). Cancelling this workflow run to avoid overlap.');
             await github.rest.actions.cancelWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -249,13 +287,13 @@ jobs:
             });
 
       - name: Stop job after cancellation
-        if: steps.check-deployment.outcome == 'success' && steps.inspect-deployment.outputs.deployment_status == 'in_progress'
+        if: steps.gate.outputs.should_cancel == 'true'
         run: |
           echo "Workflow cancellation requested due to existing deployment. Stopping job."
           exit 0
 
       - name: Re-authenticate Azure CLI (before clear state)
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
           client-id: ${{ secrets.BENCHMARK_AZURE_CLIENT_ID }}
@@ -263,20 +301,20 @@ jobs:
           subscription-id: ${{ secrets.BENCHMARK_AZURE_SUBSCRIPTION_ID }}
 
       - name: Clear Bench State
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         continue-on-error: true
         run: |
           echo "Ensuring clean state before starting benchmark..."
           ./modules/bench/cloud/clear-bench.sh azure || true
 
       - name: Install Monitoring Stack
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         continue-on-error: true
         run: |
           bash ./modules/bench/cloud/monitoring/install-monitoring.sh
 
       - name: Create Bench Secret (GITHUB_PAT)
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         run: |
           set -euo pipefail
           kubectl -n cloud-benchmark create secret generic xtdb-bench-secrets \
@@ -284,7 +322,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create AWS Datasets Secret (for S3 dataset benchmarks)
-        if: (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress') && (inputs.bench_type == 'clickbench' || inputs.bench_type == 'products' || inputs.bench_type == 'ts-devices')
+        if: (steps.gate.outputs.should_proceed == 'true') && (inputs.bench_type == 'clickbench' || inputs.bench_type == 'products' || inputs.bench_type == 'ts-devices')
         run: |
           set -euo pipefail
           kubectl -n cloud-benchmark create secret generic xtdb-aws-datasets-secret \
@@ -294,11 +332,11 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Record Deployment Start
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         run: echo "DEPLOY_START=$(date -u +%s)" >> "$GITHUB_ENV"
 
       - name: Run Benchmark
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         env:
           BENCH_TYPE: ${{ env.BENCH_TYPE }}
           SCALE_FACTOR: ${{ env.SCALE_FACTOR }}
@@ -429,7 +467,7 @@ jobs:
 
       - name: Check for Immediate Benchmark Failure
         id: immediate-check
-        if: steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress'
+        if: steps.gate.outputs.should_proceed == 'true'
         env:
           SLACK_LABEL: ${{ env.SLACK_LABEL }}
         run: |
@@ -465,7 +503,7 @@ jobs:
           echo "No immediate benchmark pod failures detected."
 
       - name: Remove Monitoring Stack on Failure
-        if: failure() && (steps.check-deployment.outcome != 'success' || steps.inspect-deployment.outputs.deployment_status != 'in_progress')
+        if: failure() && (steps.gate.outputs.should_proceed == 'true')
         run: |
           if helm status monitoring -n monitoring >/dev/null 2>&1; then
             echo "Uninstalling monitoring stack due to benchmark failure..."
@@ -587,7 +625,7 @@ jobs:
             CONFIG_INFO=""
           fi
 
-          if [ "${{ steps.check-deployment.outcome }}" = "success" ] && [ "${{ steps.inspect-deployment.outputs.deployment_status }}" = "in_progress" ]; then
+          if [ "${{ steps.gate.outputs.should_cancel }}" = "true" ]; then
             {
               echo 'msg<<EOF_MSG'
               echo "*${SLACK_LABEL} Benchmark* :information_source: Skipped — existing deployment found"
