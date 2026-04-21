@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -15,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
 import xtdb.api.log.*
 import xtdb.api.log.Log
@@ -25,15 +26,12 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
-import xtdb.trie.TrieCatalog
 import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.util.debug
 import xtdb.util.logger
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicInteger
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 
@@ -60,64 +58,50 @@ class LogProcessorSimTest : SimulationTestBase() {
         allocator.close()
     }
 
-    /**
-     * Simulates the Indexer — ~30% random abort rate, no actual SQL indexing.
-     */
-    private fun simIndexer() = object : Indexer.ForDatabase {
+    private fun simIndexer(liveIndex: LiveIndex, dbName: String) = object : Indexer.ForDatabase {
+
+        private fun openAndCommit(txKey: TransactionKey, committed: Boolean): Pair<Map<String, ByteArray>, ReplicaMessage.ResolvedTx> {
+            val openTx = liveIndex.startTx(txKey)
+            with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else RuntimeException("aborted")) }
+            val tableData = openTx.serializeTableData()
+            liveIndex.commitTx(openTx)
+            openTx.close()
+            return tableData to ReplicaMessage.ResolvedTx(
+                txId = txKey.txId,
+                systemTime = txKey.systemTime,
+                committed = committed,
+                error = null,
+                tableData = tableData
+            )
+        }
+
         override fun indexTx(
             msgId: MessageId, msgTimestamp: Instant, txOps: xtdb.arrow.VectorReader?,
             systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
-        ): ReplicaMessage.ResolvedTx =
-            ReplicaMessage.ResolvedTx(
-                txId = msgId,
-                systemTime = systemTime ?: msgTimestamp,
-                committed = rand.nextFloat() > 0.3f,
-                error = null,
-                tableData = emptyMap()
-            )
+        ): ReplicaMessage.ResolvedTx {
+            val txKey = TransactionKey(msgId, systemTime ?: msgTimestamp)
+            return openAndCommit(txKey, committed = rand.nextFloat() > 0.3f).second
+        }
 
         override fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx =
-            ReplicaMessage.ResolvedTx(
-                txId = txKey.txId,
-                systemTime = txKey.systemTime,
-                committed = error == null,
-                error = error,
-                tableData = emptyMap()
-            )
+            openAndCommit(txKey, committed = error == null).second
 
         override fun close() {}
     }
 
-    /**
-     * Per-node state for simulation tests.
-     * Each node has its own block catalog, watchers, live index, etc.
-     * but shares the source and replica logs with other nodes.
-     */
     private inner class SimNode(
-        dbName: String, val bp: BufferPool,
-        private val fullEvery: Int, private val txsSinceFlush: AtomicInteger,
+        val dbName: String, val bp: MemoryStorage, indexerConfig: IndexerConfig,
     ) : LogProcessor.ProcessorFactory, AutoCloseable {
+
         val blockCatalog = BlockCatalog(dbName, null)
+        val tableCatalog = TableCatalog(bp)
+        val trieCatalog = createTrieCatalog()
+        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, dbName, indexerConfig)
 
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
-            every { isFull() } answers {
-                if (txsSinceFlush.incrementAndGet() % fullEvery == 0) {
-                    txsSinceFlush.set(0)
-                    true
-                } else false
-            }
-        }
-
-        val dbState = DatabaseState(
-            dbName, blockCatalog,
-            mockk<TableCatalog>(relaxed = true),
-            mockk<TrieCatalog>(relaxed = true),
-            liveIndex
-        )
+        val dbState = DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
 
         val watchers = Watchers(-1)
-        private val indexer = simIndexer()
+        private val indexer = simIndexer(liveIndex, dbName)
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
 
@@ -167,6 +151,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         override fun close() {
             indexer.close()
+            dbState.close()
         }
     }
 
@@ -183,9 +168,8 @@ class LogProcessorSimTest : SimulationTestBase() {
     fun `single node processes txs and flush-blocks with rebalances`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
             val bp = MemoryStorage(allocator, epoch = 0)
-            val fullEvery = rand.nextInt(2, 5)
-            val txsSinceFlush = AtomicInteger(0)
-            val node = SimNode("test-db", bp, fullEvery, txsSinceFlush)
+            val rowsPerBlock = rand.nextLong(3, 10)
+            val node = SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock))
 
             val logProcScope = CoroutineScope(dispatcher + Job())
             node.openLogProcessor(logProcScope).use { logProc ->
@@ -193,7 +177,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                 launch(dispatcher) {
                     val totalActions = rand.nextInt(5, 20)
-                    LOG.debug("test: will perform $totalActions actions")
+                    LOG.debug("test: will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
                     repeat(totalActions) { _ ->
                         yield()
 
@@ -220,9 +204,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                     .map { it.txId }
 
                 assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-
                 assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-
                 assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
 
                 val replicaMessages = replicaLog.topic.map { it.message }
@@ -232,6 +214,17 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                 assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
                     "block indices should be contiguous starting from 0")
+
+                val expectedBlockIndex = uploads.maxOfOrNull { it }
+                assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                    "block catalog should match latest uploaded block")
+
+                if (replicaTxIds.isNotEmpty()) {
+                    val lastReplicaTx = replicaMessages
+                        .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
+                    assertEquals(lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
+                        "live index latestCompletedTx should match last replica tx")
+                }
             }
 
             node.close()
@@ -242,10 +235,10 @@ class LogProcessorSimTest : SimulationTestBase() {
     fun `multi-node leadership changes preserve block catalog consistency`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
             val bp = MemoryStorage(allocator, epoch = 0)
-            val fullEvery = rand.nextInt(2, 5)
-            val txsSinceFlush = AtomicInteger(0)
-            val nodeA = SimNode("test-db", bp, fullEvery, txsSinceFlush)
-            val nodeB = SimNode("test-db", bp, fullEvery, txsSinceFlush)
+            val rowsPerBlock = rand.nextLong(3, 10)
+            val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
+            val nodeA = SimNode("test-db", bp, indexerConfig)
+            val nodeB = SimNode("test-db", bp, indexerConfig)
 
             val scopeA = CoroutineScope(dispatcher + Job())
             val scopeB = CoroutineScope(dispatcher + Job())
@@ -257,7 +250,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                     launch(dispatcher) {
                         val totalActions = rand.nextInt(5, 20)
-                        LOG.debug("test: multi-node will perform $totalActions actions")
+                        LOG.debug("test: multi-node will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
                         repeat(totalActions) { _ ->
                             yield()
                             when (rand.nextInt(3)) {
@@ -267,7 +260,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                             }
                         }
 
-                        // final tx so both nodes can reach a consistent source watermark
                         srcLog.appendMessage(emptyTx())
                         val lastSrcMsgId = srcLog.latestSubmittedMsgId
                         if (lastSrcMsgId >= 0) {
@@ -275,7 +267,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                             nodeB.watchers.awaitSource(lastSrcMsgId)
                         }
 
-                        // ensure followers have processed all replica messages including block events
                         replicaLog.awaitAllDelivered()
                     }.join()
 
@@ -305,7 +296,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                     assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
                         "block indices should be contiguous starting from 0")
 
-                    // block catalog consistency — would catch the stale check bug (#5428)
                     val expectedBlockIndex = replicaMessages
                         .filterIsInstance<ReplicaMessage.BlockUploaded>()
                         .maxOfOrNull { it.blockIndex }
@@ -315,9 +305,17 @@ class LogProcessorSimTest : SimulationTestBase() {
                     assertEquals(expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
                         "node B block catalog should match latest uploaded block")
 
-                    // follower convergence — both nodes should agree on latest source watermark
                     assertEquals(nodeA.watchers.latestSourceMsgId, nodeB.watchers.latestSourceMsgId,
                         "both nodes should converge on the same source watermark")
+
+                    assertEquals(nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
+                        "both nodes should agree on latestProcessedMsgId")
+
+                    assertEquals(nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
+                        "both nodes should agree on block catalog's latestCompletedTx")
+
+                    assertEquals(nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
+                        "both nodes should agree on live index's latestCompletedTx")
                 }
             }
 
