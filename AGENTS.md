@@ -136,15 +136,22 @@ Issue types (org-level, set on the issue itself rather than the project board):
 - `Feature` — a request, idea, or new functionality: `IT_kwDOBNKmUs4A3DI7`
 - `Epic` — larger projects that require breaking down: `IT_kwDOBNKmUs4BnRe4`
 
-Sub-issue and blocked-by relationships are not exposed on the plain `gh` CLI, but the chalk `github` agent already knows how to manage them via `gh api graphql` — delegate to it rather than re-deriving the mutations.
+### Delegating to the chalk `github` agent
 
-### Common commands
+All GitHub interaction — issue creation, comments, PR creation, project-board updates, issue-type assignment, label changes, blocked-by/sub-issue wiring — goes through the chalk `github` agent.
 
-The project-board and issue-type pieces are xtdb-specific and not covered by the chalk agent:
+The chalk skill is deliberately generic; its own instructions specify that callers pass project-specific conventions (project IDs, field IDs, option IDs, issue-type IDs, labels, reviewers) verbatim in the prompt.
+When delegating for anything board- or issue-type-related, paste the relevant IDs from this file directly into the agent's prompt.
+Don't ask chalk to discover them; don't paraphrase.
+
+Under the hood, chalk runs the commands below — handy to know when writing a chalk prompt or diagnosing an unexpected result:
 
 - Add an existing issue/PR to the board: `gh project item-add 13 --owner xtdb --url <url>`
 - Set a field on an item: `gh project item-edit --id <item-id> --project-id PVT_kwDOBNKmUs4AJUwS --field-id <field-id> --single-select-option-id <option-id>`
-- Set the issue type: `gh api graphql -f query='mutation($issue:ID!,$type:ID!){ updateIssueIssueType(input:{issueId:$issue,issueTypeId:$type}){ issue { id } } }' -f issue=<issue-node-id> -f type=<type-id>`
+- Set the issue type (org-level, not exposed on plain `gh`): `gh api graphql -f query='mutation($issue:ID!,$type:ID!){ updateIssueIssueType(input:{issueId:$issue,issueTypeId:$type}){ issue { id } } }' -f issue=<issue-node-id> -f type=<type-id>`
 - Add the breaking-change label: `gh issue edit N --add-label 'breaking change'` / `gh pr edit N --add-label 'breaking change'`
-- Re-fetch field/option IDs if this list looks stale: `gh project field-list 13 --owner xtdb`, then `gh api graphql -f query='query { node(id: "<field-id>") { ... on ProjectV2SingleSelectField { options { id name } } } }'`.
-- Re-fetch issue type IDs: `gh api graphql -f query='query { organization(login: "xtdb") { issueTypes(first: 20) { nodes { id name } } } }'`.
+
+Re-fetch IDs if the tables above look stale:
+
+- Project fields/options: `gh project field-list 13 --owner xtdb`, then `gh api graphql -f query='query { node(id: "<field-id>") { ... on ProjectV2SingleSelectField { options { id name } } } }'`.
+- Issue types: `gh api graphql -f query='query { organization(login: "xtdb") { issueTypes(first: 20) { nodes { id name } } } }'`.
