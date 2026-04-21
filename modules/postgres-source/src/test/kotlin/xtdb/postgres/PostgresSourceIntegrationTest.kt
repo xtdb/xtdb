@@ -358,4 +358,53 @@ class PostgresSourceIntegrationTest {
             }
         }
     }
+
+    @Test
+    fun `cancellation releases replication slot`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_cancel (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_cancel (_id, name) VALUES (1, 'Alice')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_cancel",
+        )
+
+        // Start a node, let it snapshot and begin streaming (holds the slot)
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            awaitTxs(node, 2, db = "cdc")
+
+            // Stream an insert so we know streaming is running and holding the slot
+            pgExecute("INSERT INTO pg_cancel (_id, name) VALUES (2, 'Bob')")
+            awaitCondition("Bob appears", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_cancel WHERE _id = 2").isNotEmpty()
+            }
+
+            // Streaming connection is now holding the slot
+            assertEquals(true, pgSlotState(slotName), "Slot should be active while streaming")
+        }
+        // node.close() triggers ExternalSourceProcessor.close() → extJob.cancel()
+        // The closeOnCancel child coroutine should force-close the PG connection,
+        // releasing the replication slot.
+
+        awaitCondition("slot released after node close", timeout = 10.seconds) {
+            pgSlotState(slotName) == false
+        }
+    }
+
+    /**
+     * Returns true if the slot is active, false if it exists but is inactive, null if the slot doesn't exist.
+     */
+    private fun pgSlotState(slotName: String): Boolean? {
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT active FROM pg_replication_slots WHERE slot_name = '$slotName'").use { rs ->
+                    return if (rs.next()) rs.getBoolean("active") else null
+                }
+            }
+        }
+    }
 }
