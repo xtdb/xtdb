@@ -25,10 +25,6 @@ In line with the SQL spec:
 - `VAR_POP(xs)` (population variance)
 - `VAR_SAMP(xs)` (sample variance)
 
-Note:
-
-- `MIN`/`MAX` aggregates are not yet supported on string values.
-
 ## Boolean aggregate functions
 
 - `BOOL_AND(xs)` / `EVERY(xs)` (true if all values are true; false otherwise)
@@ -39,3 +35,17 @@ Note: In keeping with Postgres, we rename `ALL` and `ANY` to `BOOL_AND` and `BOO
 ## Composite-type aggregate functions
 
 - `ARRAY_AGG(xs)` (return an array of all of the input values)
+
+## Ordered-set aggregate functions
+
+`PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY col)` (v2.2+)
+: continuous percentile — the value at position `fraction` (in `[0, 1]`) along the sorted values, interpolating between adjacent values if necessary.
+
+  - `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY col)` gives the median.
+  - `col` must be numeric.
+  - PostgreSQL-compatible.
+
+  ```sql
+  SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount) AS median_amount
+  FROM sales
+  ```
