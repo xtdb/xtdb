@@ -37,6 +37,7 @@ import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.util.asIid
 import xtdb.util.debug
+import xtdb.error.Incorrect
 import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -71,7 +72,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     private fun simIndexer(liveIndex: LiveIndex, dbName: String) = object : Indexer.ForDatabase {
 
         private fun commitTx(openTx: OpenTx, txKey: TransactionKey, committed: Boolean): ReplicaMessage.ResolvedTx {
-            with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else RuntimeException("aborted")) }
+            with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else Incorrect("aborted")) }
             val tableData = openTx.serializeTableData()
             liveIndex.commitTx(openTx)
             openTx.close()
