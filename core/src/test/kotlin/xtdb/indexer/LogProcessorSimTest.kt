@@ -225,122 +225,31 @@ class LogProcessorSimTest : SimulationTestBase() {
     @RepeatableSimulationTest
     fun `single node processes txs and flush-blocks with rebalances`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
-            val bp = MemoryStorage(allocator, epoch = 0)
             val rowsPerBlock = rand.nextLong(15, 25)
-            val node = SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock))
-
-            val logProcScope = CoroutineScope(dispatcher + Job())
-            node.openLogProcessor(logProcScope).use { logProc ->
-                val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
-
-                launch(dispatcher) {
-                    val totalActions = rand.nextInt(50, 100)
-                    LOG.debug("test: will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
-                    repeat(totalActions) { _ ->
-                        yield()
-
-                        when (rand.nextInt(100)) {
-                            in 0..<80 -> srcLog.appendMessage(emptyTx())
-                            in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
-                            else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
-                        }
-                    }
-                    val lastSrcMsgId = srcLog.latestSubmittedMsgId
-                    if (lastSrcMsgId >= 0) node.watchers.awaitSource(lastSrcMsgId)
-                }.join()
-
-                groupJob.cancel()
-                logProcScope.cancel()
-
-                val sourceTxIds = srcLog.topic
-                    .filter { it.message is SourceMessage.Tx || it.message is SourceMessage.LegacyTx }
-                    .map { it.msgId }
-
-                val replicaTxIds = replicaLog.topic
-                    .map { it.message }
-                    .filterIsInstance<ReplicaMessage.ResolvedTx>()
-                    .map { it.txId }
-
-                assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-                assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-                assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
-
-                val replicaMessages = replicaLog.topic.map { it.message }
-                val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-                val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
-                assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
-
-                assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
-                    "block indices should be contiguous starting from 0")
-
-                val expectedBlockIndex = uploads.maxOfOrNull { it }
-                assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                    "block catalog should match latest uploaded block")
-
-                if (replicaTxIds.isNotEmpty()) {
-                    val lastReplicaTx = replicaMessages
-                        .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
-                    assertEquals(lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
-                        "live index latestCompletedTx should match last replica tx")
-                }
-
-                assertBlockFilesExist(bp, "test-db", replicaMessages)
-            }
-
-            node.close()
-            bp.close()
-        }
-
-    @RepeatableSimulationTest
-    fun `stable leader with sustained throughput`(@Suppress("unused") iteration: Int) =
-        runTest(timeout = 5.seconds) {
-            val bp = MemoryStorage(allocator, epoch = 0)
-            val rowsPerBlock = rand.nextLong(15, 25)
-            val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
-            val leader = SimNode("test-db", bp, indexerConfig)
-            val followerA = SimNode("test-db", bp, indexerConfig)
-            val followerB = SimNode("test-db", bp, indexerConfig)
-
-            val leaderScope = CoroutineScope(dispatcher + Job())
-            val followerScopeA = CoroutineScope(dispatcher + Job())
-            val followerScopeB = CoroutineScope(dispatcher + Job())
-
-            leader.openLogProcessor(leaderScope).use { leaderProc ->
-                followerA.openLogProcessor(followerScopeA).use { followerProcA ->
-                    followerB.openLogProcessor(followerScopeB).use { followerProcB ->
-                        val groupJobLeader = launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
-                        val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
-                        val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock)).use { node ->
+                    val logProcScope = CoroutineScope(dispatcher + Job())
+                    node.openLogProcessor(logProcScope).use { logProc ->
+                        val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
 
                         launch(dispatcher) {
-                            val totalTxs = rand.nextInt(50, 100)
-                            LOG.debug("test: stable-leader will perform $totalTxs txs (rowsPerBlock=$rowsPerBlock)")
-                            repeat(totalTxs) { _ ->
+                            val totalActions = rand.nextInt(50, 100)
+                            LOG.debug("test: will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
+                            repeat(totalActions) { _ ->
                                 yield()
 
                                 when (rand.nextInt(100)) {
-                                    in 0..<95 -> srcLog.appendMessage(emptyTx())
+                                    in 0..<80 -> srcLog.appendMessage(emptyTx())
+                                    in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
                                     else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                 }
                             }
-
-                            srcLog.appendMessage(emptyTx())
                             val lastSrcMsgId = srcLog.latestSubmittedMsgId
-                            if (lastSrcMsgId >= 0) {
-                                leader.watchers.awaitSource(lastSrcMsgId)
-                                followerA.watchers.awaitSource(lastSrcMsgId)
-                                followerB.watchers.awaitSource(lastSrcMsgId)
-                            }
-
-                            replicaLog.awaitAllDelivered()
+                            if (lastSrcMsgId >= 0) node.watchers.awaitSource(lastSrcMsgId)
                         }.join()
 
-                        groupJobLeader.cancel()
-                        groupJobA.cancel()
-                        groupJobB.cancel()
-                        leaderScope.cancel()
-                        followerScopeA.cancel()
-                        followerScopeB.cancel()
+                        groupJob.cancel()
+                        logProcScope.cancel()
 
                         val sourceTxIds = srcLog.topic
                             .filter { it.message is SourceMessage.Tx || it.message is SourceMessage.LegacyTx }
@@ -363,133 +272,220 @@ class LogProcessorSimTest : SimulationTestBase() {
                         assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
                             "block indices should be contiguous starting from 0")
 
-                        val nodes = listOf(leader, followerA, followerB)
-
                         val expectedBlockIndex = uploads.maxOfOrNull { it }
-                        for (node in nodes) {
-                            assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                                "block catalog should match latest uploaded block")
-                        }
+                        assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                            "block catalog should match latest uploaded block")
 
-                        val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
-                        val expectedBlockCatalogTx = leader.blockCatalog.latestCompletedTx
-                        val expectedProcessedMsgId = leader.blockCatalog.latestProcessedMsgId
-                        val expectedSourceWatermark = leader.watchers.latestSourceMsgId
-
-                        for (node in nodes) {
-                            assertEquals(expectedSourceWatermark, node.watchers.latestSourceMsgId,
-                                "all nodes should converge on the same source watermark")
-                            assertEquals(expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
-                                "all nodes should agree on latestProcessedMsgId")
-                            assertEquals(expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
-                                "all nodes should agree on block catalog's latestCompletedTx")
-                            assertEquals(expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
-                                "all nodes should agree on live index's latestCompletedTx")
+                        if (replicaTxIds.isNotEmpty()) {
+                            val lastReplicaTx = replicaMessages
+                                .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
+                            assertEquals(lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
+                                "live index latestCompletedTx should match last replica tx")
                         }
 
                         assertBlockFilesExist(bp, "test-db", replicaMessages)
                     }
                 }
             }
+        }
 
-            leader.close()
-            followerA.close()
-            followerB.close()
-            bp.close()
+    @RepeatableSimulationTest
+    fun `stable leader with sustained throughput`(@Suppress("unused") iteration: Int) =
+        runTest(timeout = 5.seconds) {
+            val rowsPerBlock = rand.nextLong(15, 25)
+            val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
+
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig).use { leader ->
+                    SimNode("test-db", bp, indexerConfig).use { followerA ->
+                        SimNode("test-db", bp, indexerConfig).use { followerB ->
+                            val leaderScope = CoroutineScope(dispatcher + Job())
+                            val followerScopeA = CoroutineScope(dispatcher + Job())
+                            val followerScopeB = CoroutineScope(dispatcher + Job())
+
+                            leader.openLogProcessor(leaderScope).use { leaderProc ->
+                                followerA.openLogProcessor(followerScopeA).use { followerProcA ->
+                                    followerB.openLogProcessor(followerScopeB).use { followerProcB ->
+                                        val groupJobLeader = launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
+                                        val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
+                                        val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
+
+                                        launch(dispatcher) {
+                                            val totalTxs = rand.nextInt(50, 100)
+                                            LOG.debug("test: stable-leader will perform $totalTxs txs (rowsPerBlock=$rowsPerBlock)")
+                                            repeat(totalTxs) { _ ->
+                                                yield()
+
+                                                when (rand.nextInt(100)) {
+                                                    in 0..<95 -> srcLog.appendMessage(emptyTx())
+                                                    else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                                }
+                                            }
+
+                                            srcLog.appendMessage(emptyTx())
+                                            val lastSrcMsgId = srcLog.latestSubmittedMsgId
+                                            if (lastSrcMsgId >= 0) {
+                                                leader.watchers.awaitSource(lastSrcMsgId)
+                                                followerA.watchers.awaitSource(lastSrcMsgId)
+                                                followerB.watchers.awaitSource(lastSrcMsgId)
+                                            }
+
+                                            replicaLog.awaitAllDelivered()
+                                        }.join()
+
+                                        groupJobLeader.cancel()
+                                        groupJobA.cancel()
+                                        groupJobB.cancel()
+                                        leaderScope.cancel()
+                                        followerScopeA.cancel()
+                                        followerScopeB.cancel()
+
+                                        val sourceTxIds = srcLog.topic
+                                            .filter { it.message is SourceMessage.Tx || it.message is SourceMessage.LegacyTx }
+                                            .map { it.msgId }
+
+                                        val replicaTxIds = replicaLog.topic
+                                            .map { it.message }
+                                            .filterIsInstance<ReplicaMessage.ResolvedTx>()
+                                            .map { it.txId }
+
+                                        assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
+                                        assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
+                                        assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
+
+                                        val replicaMessages = replicaLog.topic.map { it.message }
+                                        val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
+                                        val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
+                                        assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
+
+                                        assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
+                                            "block indices should be contiguous starting from 0")
+
+                                        val nodes = listOf(leader, followerA, followerB)
+
+                                        val expectedBlockIndex = uploads.maxOfOrNull { it }
+                                        for (node in nodes) {
+                                            assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                                                "block catalog should match latest uploaded block")
+                                        }
+
+                                        val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
+                                        val expectedBlockCatalogTx = leader.blockCatalog.latestCompletedTx
+                                        val expectedProcessedMsgId = leader.blockCatalog.latestProcessedMsgId
+                                        val expectedSourceWatermark = leader.watchers.latestSourceMsgId
+
+                                        for (node in nodes) {
+                                            assertEquals(expectedSourceWatermark, node.watchers.latestSourceMsgId,
+                                                "all nodes should converge on the same source watermark")
+                                            assertEquals(expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
+                                                "all nodes should agree on latestProcessedMsgId")
+                                            assertEquals(expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
+                                                "all nodes should agree on block catalog's latestCompletedTx")
+                                            assertEquals(expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
+                                                "all nodes should agree on live index's latestCompletedTx")
+                                        }
+
+                                        assertBlockFilesExist(bp, "test-db", replicaMessages)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
     @RepeatableSimulationTest
     fun `multi-node leadership changes preserve block catalog consistency`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
-            val bp = MemoryStorage(allocator, epoch = 0)
             val rowsPerBlock = rand.nextLong(15, 25)
             val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
-            val nodeA = SimNode("test-db", bp, indexerConfig)
-            val nodeB = SimNode("test-db", bp, indexerConfig)
 
-            val scopeA = CoroutineScope(dispatcher + Job())
-            val scopeB = CoroutineScope(dispatcher + Job())
+            MemoryStorage(allocator, epoch = 0).use { bp ->
+                SimNode("test-db", bp, indexerConfig).use { nodeA ->
+                    SimNode("test-db", bp, indexerConfig).use { nodeB ->
+                        val scopeA = CoroutineScope(dispatcher + Job())
+                        val scopeB = CoroutineScope(dispatcher + Job())
 
-            nodeA.openLogProcessor(scopeA).use { logProcA ->
-                nodeB.openLogProcessor(scopeB).use { logProcB ->
-                    val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(logProcA) }
-                    val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(logProcB) }
+                        nodeA.openLogProcessor(scopeA).use { logProcA ->
+                            nodeB.openLogProcessor(scopeB).use { logProcB ->
+                                val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(logProcA) }
+                                val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(logProcB) }
 
-                    launch(dispatcher) {
-                        val totalActions = rand.nextInt(50, 100)
-                        LOG.debug("test: multi-node will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
-                        repeat(totalActions) { _ ->
-                            yield()
-                            when (rand.nextInt(100)) {
-                                in 0..<80 -> srcLog.appendMessage(emptyTx())
-                                in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
-                                else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                launch(dispatcher) {
+                                    val totalActions = rand.nextInt(50, 100)
+                                    LOG.debug("test: multi-node will perform $totalActions actions (rowsPerBlock=$rowsPerBlock)")
+                                    repeat(totalActions) { _ ->
+                                        yield()
+                                        when (rand.nextInt(100)) {
+                                            in 0..<80 -> srcLog.appendMessage(emptyTx())
+                                            in 80..<95 -> srcLog.rebalanceTrigger.send(Unit)
+                                            else -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                        }
+                                    }
+
+                                    srcLog.appendMessage(emptyTx())
+                                    val lastSrcMsgId = srcLog.latestSubmittedMsgId
+                                    if (lastSrcMsgId >= 0) {
+                                        nodeA.watchers.awaitSource(lastSrcMsgId)
+                                        nodeB.watchers.awaitSource(lastSrcMsgId)
+                                    }
+
+                                    replicaLog.awaitAllDelivered()
+                                }.join()
+
+                                groupJobA.cancel()
+                                groupJobB.cancel()
+                                scopeA.cancel()
+                                scopeB.cancel()
+
+                                val sourceTxIds = srcLog.topic
+                                    .filter { it.message is SourceMessage.Tx || it.message is SourceMessage.LegacyTx }
+                                    .map { it.msgId }
+
+                                val replicaTxIds = replicaLog.topic
+                                    .map { it.message }
+                                    .filterIsInstance<ReplicaMessage.ResolvedTx>()
+                                    .map { it.txId }
+
+                                assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
+                                assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
+                                assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
+
+                                val replicaMessages = replicaLog.topic.map { it.message }
+                                val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
+                                val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
+                                assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
+
+                                assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
+                                    "block indices should be contiguous starting from 0")
+
+                                val expectedBlockIndex = replicaMessages
+                                    .filterIsInstance<ReplicaMessage.BlockUploaded>()
+                                    .maxOfOrNull { it.blockIndex }
+
+                                assertEquals(expectedBlockIndex, nodeA.blockCatalog.currentBlockIndex,
+                                    "node A block catalog should match latest uploaded block")
+                                assertEquals(expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
+                                    "node B block catalog should match latest uploaded block")
+
+                                assertEquals(nodeA.watchers.latestSourceMsgId, nodeB.watchers.latestSourceMsgId,
+                                    "both nodes should converge on the same source watermark")
+
+                                assertEquals(nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
+                                    "both nodes should agree on latestProcessedMsgId")
+
+                                assertEquals(nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
+                                    "both nodes should agree on block catalog's latestCompletedTx")
+
+                                assertEquals(nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
+                                    "both nodes should agree on live index's latestCompletedTx")
+
+                                assertBlockFilesExist(bp, "test-db", replicaMessages)
                             }
                         }
-
-                        srcLog.appendMessage(emptyTx())
-                        val lastSrcMsgId = srcLog.latestSubmittedMsgId
-                        if (lastSrcMsgId >= 0) {
-                            nodeA.watchers.awaitSource(lastSrcMsgId)
-                            nodeB.watchers.awaitSource(lastSrcMsgId)
-                        }
-
-                        replicaLog.awaitAllDelivered()
-                    }.join()
-
-                    groupJobA.cancel()
-                    groupJobB.cancel()
-                    scopeA.cancel()
-                    scopeB.cancel()
-
-                    val sourceTxIds = srcLog.topic
-                        .filter { it.message is SourceMessage.Tx || it.message is SourceMessage.LegacyTx }
-                        .map { it.msgId }
-
-                    val replicaTxIds = replicaLog.topic
-                        .map { it.message }
-                        .filterIsInstance<ReplicaMessage.ResolvedTx>()
-                        .map { it.txId }
-
-                    assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-                    assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-                    assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
-
-                    val replicaMessages = replicaLog.topic.map { it.message }
-                    val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-                    val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
-                    assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
-
-                    assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
-                        "block indices should be contiguous starting from 0")
-
-                    val expectedBlockIndex = replicaMessages
-                        .filterIsInstance<ReplicaMessage.BlockUploaded>()
-                        .maxOfOrNull { it.blockIndex }
-
-                    assertEquals(expectedBlockIndex, nodeA.blockCatalog.currentBlockIndex,
-                        "node A block catalog should match latest uploaded block")
-                    assertEquals(expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
-                        "node B block catalog should match latest uploaded block")
-
-                    assertEquals(nodeA.watchers.latestSourceMsgId, nodeB.watchers.latestSourceMsgId,
-                        "both nodes should converge on the same source watermark")
-
-                    assertEquals(nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
-                        "both nodes should agree on latestProcessedMsgId")
-
-                    assertEquals(nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
-                        "both nodes should agree on block catalog's latestCompletedTx")
-
-                    assertEquals(nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
-                        "both nodes should agree on live index's latestCompletedTx")
-
-                    assertBlockFilesExist(bp, "test-db", replicaMessages)
+                    }
                 }
             }
-
-            nodeA.close()
-            nodeB.close()
-            bp.close()
         }
 }
