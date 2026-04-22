@@ -222,6 +222,37 @@ class LogProcessorSimTest : SimulationTestBase() {
             userMetadata = null
         )
 
+    private fun abortedTxIds(): Set<MessageId> =
+        replicaLog.topic.map { it.message }
+            .filterIsInstance<ReplicaMessage.ResolvedTx>()
+            .filter { !it.committed }
+            .map { it.txId }
+            .toSet()
+
+    private fun assertSnapshotHasNoAbortedRows(node: SimNode) {
+        node.liveIndex.openSnapshot().use { snap ->
+            assertEquals(node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
+                "snapshot basis should equal liveIndex.latestCompletedTx")
+
+            val tableSnap = snap.table(docsTable) ?: return
+            val rel = tableSnap.liveRelation ?: return
+            val op = rel["op"]
+            val put = op.vectorForOrNull("put") ?: return
+            val txIdVec = put.vectorFor("tx_id")
+            val basisTxId = snap.txBasis?.txId ?: -1L
+
+            for (i in 0 until rel.rowCount) {
+                if (op.getLeg(i) == "put") {
+                    val txId = txIdVec.getLong(i)
+                    assertTrue(txId !in abortedTxIds(),
+                        "aborted txId=$txId left a row in live table")
+                    assertTrue(txId <= basisTxId,
+                        "row txId=$txId > snapshot basis=$basisTxId")
+                }
+            }
+        }
+    }
+
     @RepeatableSimulationTest
     fun `single node processes txs and flush-blocks with rebalances`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
@@ -284,6 +315,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         }
 
                         assertBlockFilesExist(bp, "test-db", replicaMessages)
+                        assertSnapshotHasNoAbortedRows(node)
                     }
                 }
             }
@@ -386,6 +418,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                                         }
 
                                         assertBlockFilesExist(bp, "test-db", replicaMessages)
+
+                                        assertSnapshotHasNoAbortedRows(leader)
+                                        assertSnapshotHasNoAbortedRows(followerA)
+                                        assertSnapshotHasNoAbortedRows(followerB)
                                     }
                                 }
                             }
@@ -482,6 +518,9 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     "both nodes should agree on live index's latestCompletedTx")
 
                                 assertBlockFilesExist(bp, "test-db", replicaMessages)
+
+                                assertSnapshotHasNoAbortedRows(nodeA)
+                                assertSnapshotHasNoAbortedRows(nodeB)
                             }
                         }
                     }
