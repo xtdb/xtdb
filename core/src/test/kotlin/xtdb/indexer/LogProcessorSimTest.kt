@@ -22,6 +22,7 @@ import xtdb.api.log.*
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
+import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
@@ -29,12 +30,15 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
+import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
+import xtdb.util.asIid
 import xtdb.util.debug
 import xtdb.util.logger
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
@@ -62,15 +66,16 @@ class LogProcessorSimTest : SimulationTestBase() {
         allocator.close()
     }
 
+    private val docsTable = TableRef("test-db", "public", "docs")
+
     private fun simIndexer(liveIndex: LiveIndex, dbName: String) = object : Indexer.ForDatabase {
 
-        private fun openAndCommit(txKey: TransactionKey, committed: Boolean): Pair<Map<String, ByteArray>, ReplicaMessage.ResolvedTx> {
-            val openTx = liveIndex.startTx(txKey)
+        private fun commitTx(openTx: OpenTx, txKey: TransactionKey, committed: Boolean): ReplicaMessage.ResolvedTx {
             with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else RuntimeException("aborted")) }
             val tableData = openTx.serializeTableData()
             liveIndex.commitTx(openTx)
             openTx.close()
-            return tableData to ReplicaMessage.ResolvedTx(
+            return ReplicaMessage.ResolvedTx(
                 txId = txKey.txId,
                 systemTime = txKey.systemTime,
                 committed = committed,
@@ -84,11 +89,33 @@ class LogProcessorSimTest : SimulationTestBase() {
             systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
         ): ReplicaMessage.ResolvedTx {
             val txKey = TransactionKey(msgId, systemTime ?: msgTimestamp)
-            return openAndCommit(txKey, committed = rand.nextFloat() > 0.3f).second
+            val committed = rand.nextFloat() > 0.1f
+            val openTx = liveIndex.startTx(txKey)
+
+            if (committed) {
+                val table = openTx.table(docsTable)
+                val rowCount = rand.nextInt(1, 6)
+                repeat(rowCount) {
+                    val id = java.util.UUID(rand.nextLong(), rand.nextLong())
+                    table.logPut(
+                        ByteBuffer.wrap(id.asIid),
+                        txKey.systemTime.asMicros,
+                        Long.MAX_VALUE
+                    ) {
+                        table.docWriter.vectorFor("_id", VectorType.UUID.arrowType, false).writeObject(id)
+                        table.docWriter.vectorFor("tx_id", VectorType.I64.arrowType, false).writeLong(msgId)
+                        table.docWriter.endStruct()
+                    }
+                }
+            }
+
+            return commitTx(openTx, txKey, committed)
         }
 
-        override fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx =
-            openAndCommit(txKey, committed = error == null).second
+        override fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx {
+            val openTx = liveIndex.startTx(txKey)
+            return commitTx(openTx, txKey, committed = error == null)
+        }
 
         override fun close() {}
     }
@@ -198,7 +225,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     fun `single node processes txs and flush-blocks with rebalances`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
             val bp = MemoryStorage(allocator, epoch = 0)
-            val rowsPerBlock = rand.nextLong(3, 10)
+            val rowsPerBlock = rand.nextLong(15, 25)
             val node = SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock))
 
             val logProcScope = CoroutineScope(dispatcher + Job())
@@ -267,7 +294,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     fun `multi-node leadership changes preserve block catalog consistency`(@Suppress("unused") iteration: Int) =
         runTest(timeout = 5.seconds) {
             val bp = MemoryStorage(allocator, epoch = 0)
-            val rowsPerBlock = rand.nextLong(3, 10)
+            val rowsPerBlock = rand.nextLong(15, 25)
             val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
             val nodeA = SimNode("test-db", bp, indexerConfig)
             val nodeB = SimNode("test-db", bp, indexerConfig)
