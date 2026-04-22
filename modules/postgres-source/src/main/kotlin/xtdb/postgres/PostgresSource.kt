@@ -167,6 +167,13 @@ class PostgresSource(
                 LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
                 streamChanges(txIndexer, slotLsn)
             }
+        } catch (e: PSQLException) {
+            if (e.cause is java.net.SocketException) {
+                LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
+            } else {
+                LOG.error(e, "[$dbName] External source failed")
+                throw e
+            }
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
