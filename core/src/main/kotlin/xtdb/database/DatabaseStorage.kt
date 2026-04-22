@@ -41,9 +41,6 @@ class DatabaseStorage(
     }
 
     companion object {
-        private val singleWriter: Boolean =
-            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() ?: false
-
         private fun logNewEpoch() {
             LOG.info(
                 "Starting node with a log that has a different epoch than the latest completed tx " +

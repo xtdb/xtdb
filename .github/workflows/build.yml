@@ -12,17 +12,11 @@ concurrency:
 
 jobs:
   gradle-test:
-    name: Gradle Test (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
+    name: Gradle Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        single-writer: ['', 'true']
-    env:
-      XTDB_SINGLE_WRITER: ${{ matrix.single-writer }}
     steps:
       - name: Pick and set a random system-wide time zone
         run: |
@@ -52,7 +46,7 @@ jobs:
         uses: mikepenz/action-junit-report@49b2ca06f62aa7ef83ae6769a2179271e160d8e4 # v6.3.1
         if: success() || failure() # always run even if the previous step fails
         with:
-          check_name: JUnit Test Report (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
+          check_name: JUnit Test Report
           report_paths: '**/build/test-results/test/TEST-*.xml'
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'
@@ -133,17 +127,11 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   integration-test:
-    name: Integration Test (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
+    name: Integration Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
-    strategy:
-      fail-fast: false
-      matrix:
-        single-writer: ['', 'true']
-    env:
-      XTDB_SINGLE_WRITER: ${{ matrix.single-writer }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
       - name: Set up JDK 21
@@ -162,7 +150,7 @@ jobs:
         uses: mikepenz/action-junit-report@49b2ca06f62aa7ef83ae6769a2179271e160d8e4 # v6.3.1
         if: success() || failure() # always run even if the previous step fails
         with:
-          check_name: JUnit Integration Test Report (${{ matrix.single-writer && 'single-writer' || 'multi-writer' }})
+          check_name: JUnit Integration Test Report
           report_paths: '**/build/test-results/integration-test/TEST-*.xml'
       - name: Post Slack Notification (On Fail)
         if: failure() && github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/main'

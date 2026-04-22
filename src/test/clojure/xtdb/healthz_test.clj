@@ -55,8 +55,7 @@
                 (throw (ex-info "timed out" {})))
 
               (let [resp (clj-http/get (->healthz-url port "started")
-                                       {:throw-exceptions false})
-                    msg-id (if (db/single-writer?) 1575 1905)]
+                                       {:throw-exceptions false})]
 
                 (case (long (:status resp))
                   503 (do

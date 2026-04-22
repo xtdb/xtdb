@@ -16,9 +16,6 @@
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))
 
-(defn single-writer? []
-  (some-> (System/getenv "XTDB_SINGLE_WRITER") Boolean/parseBoolean))
-
 (defn <-node ^xtdb.database.Database$Catalog [node]
   (:db-cat node))
 

@@ -391,9 +391,7 @@
         ;; to artifically create a new table block
         (tu/flush-block! node)
 
-        (cpb/check-pbuf (.toPath (io/as-file (io/resource (if (db/single-writer?)
-                                                            "xtdb/compactor-test/compactor-metadata-test"
-                                                            "xtdb/compactor-test/compactor-metadata-test-multi-writer"))))
+        (cpb/check-pbuf (.toPath (io/as-file (io/resource "xtdb/compactor-test/compactor-metadata-test")))
                         (.resolve node-dir "objects"))
 
         (let [tries (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))

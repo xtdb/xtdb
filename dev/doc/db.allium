@@ -341,8 +341,8 @@ variant TriesAddedMessage : SourceMessage {
 }
 
 variant BlockUploadedMessage : SourceMessage {
-    -- Written by the multi-writer path (SourceLogProcessor).
-    -- The leader ignores this (notifies watchers only).
+    -- Legacy variant: no current path emits this. The leader ignores it
+    -- (notifies watchers only) and it will be removed before release.
     -- See: log/proto/log.proto (BlockUploaded)
     storage_version: Int
     storage_epoch: Int
@@ -738,8 +738,8 @@ rule LeaderProcessesTriesAdded {
 }
 
 rule LeaderProcessesBlockUploaded {
-    -- BlockUploaded on the source log is from the single-writer path.
-    -- The leader ignores it (notifies watchers only).
+    -- Legacy variant: no current path emits BlockUploaded on the source log.
+    -- The leader ignores it (notifies watchers only) — see BlockUploadedMessage.
     when: msg: BlockUploadedMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
@@ -927,7 +927,7 @@ rule ExternalSourceProcessesTriesAdded {
 }
 
 rule ExternalSourceProcessesBlockUploaded {
-    -- TODO legacy single-writer path: ignored by ExternalSourceLeader.
+    -- Legacy variant: ignored by ExternalSourceLeader — see BlockUploadedMessage.
     when: msg: BlockUploadedMessage consumed from database.source_log
     requires: log_processor.mode = ExternalSourceLeader
 

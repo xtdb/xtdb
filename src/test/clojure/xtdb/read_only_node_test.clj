@@ -113,9 +113,8 @@
 
 (t/deftest read-only-node-handles-is-full-block-boundary
   ;; Exercises block processing when isFull() triggers the block (not FlushBlock).
-  ;; In single-writer mode, this exercises the FollowerLogProcessor's stale check
-  ;; which previously dropped BlockBoundary/BlockUploaded when
-  ;; latestProcessedMsgId == latestSourceMsgId.
+  ;; Exercises the FollowerLogProcessor's stale check which previously dropped
+  ;; BlockBoundary/BlockUploaded when latestProcessedMsgId == latestSourceMsgId.
   (util/with-tmp-dirs #{node-dir}
     (let [cfg {:log [:local {:path (.resolve node-dir "log")}]
                :storage [:local {:path (.resolve node-dir "objects")}]
@@ -139,8 +138,6 @@
                  (set (xt/q ro-node "SELECT * FROM foo")))
               "ro node sees all data after isFull()-triggered block")
 
-        ;; in single-writer mode, the follower's block catalog should advance
-        (when (db/single-writer?)
-          (let [ro-block-cat (.getBlockCatalog (db/primary-db ro-node))]
-            (t/is (= 0 (.getCurrentBlockIndex ro-block-cat))
-                  "follower's block catalog should advance after isFull()-triggered block")))))))
+        (let [ro-block-cat (.getBlockCatalog (db/primary-db ro-node))]
+          (t/is (= 0 (.getCurrentBlockIndex ro-block-cat))
+                "follower's block catalog should advance after isFull()-triggered block"))))))

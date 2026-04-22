@@ -174,9 +174,7 @@
 
 (t/deftest test-compacted-trie-details
   (binding [c/*ignore-signal-block?* true]
-    (let [expected-path (.toPath (io/as-file (io/resource (if (db/single-writer?)
-                                                            "xtdb/indexer-test/compacted-trie-details/pbuf"
-                                                            "xtdb/indexer-test/compacted-trie-details-multi-writer/pbuf"))))
+    (let [expected-path (.toPath (io/as-file (io/resource "xtdb/indexer-test/compacted-trie-details/pbuf")))
           node-dir (util/->path "target/compacted-trie-details")]
       (util/delete-dir node-dir)
 

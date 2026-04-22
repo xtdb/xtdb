@@ -6,7 +6,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
@@ -20,7 +19,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
-@EnabledIfEnvironmentVariable(named = "XTDB_SINGLE_WRITER", matches = "true")
 class PostgresSourceIntegrationTest {
 
     companion object {

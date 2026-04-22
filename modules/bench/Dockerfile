@@ -12,7 +12,6 @@ WORKDIR /opt/xtdb
 
 # Default JVM options - override by setting JDK_JAVA_OPTIONS at runtime
 ENV JDK_JAVA_OPTIONS="-Xmx3g -Xms3g"
-ENV XTDB_SINGLE_WRITER="true"
 
 # Copy pre-built TSBS generators
 COPY --from=tsbs-builder /tsbs/bin /opt/xtdb/tsbs/bin

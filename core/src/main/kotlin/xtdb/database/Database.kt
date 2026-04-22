@@ -144,9 +144,6 @@ class Database(
     }
 
     companion object {
-        private val singleWriter: Boolean =
-            System.getenv("XTDB_SINGLE_WRITER")?.toBooleanStrictOrNull() ?: false
-
         @JvmStatic
         fun open(
             base: NodeBase,
@@ -188,92 +185,76 @@ class Database(
             })
 
             if (indexerConfig.enabled) {
-                if (singleWriter) {
-                    val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog)
+                val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog)
 
-                    val procFactory = object : LogProcessor.ProcessorFactory {
-                        override fun openFollower(
-                            pendingBlock: PendingBlock?,
-                            afterSourceMsgId: MessageId,
-                            afterReplicaMsgId: MessageId,
-                        ) = FollowerLogProcessor(
-                            allocator, storage.bufferPool, state, compactorForDb,
-                            watchers, dbCatalog, pendingBlock, afterSourceMsgId, afterReplicaMsgId
-                        )
+                val procFactory = object : LogProcessor.ProcessorFactory {
+                    override fun openFollower(
+                        pendingBlock: PendingBlock?,
+                        afterSourceMsgId: MessageId,
+                        afterReplicaMsgId: MessageId,
+                    ) = FollowerLogProcessor(
+                        allocator, storage.bufferPool, state, compactorForDb,
+                        watchers, dbCatalog, pendingBlock, afterSourceMsgId, afterReplicaMsgId
+                    )
 
-                        override fun openLeaderSystem(
-                            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                            afterSourceMsgId: MessageId,
-                            afterReplicaMsgId: MessageId,
-                        ): LogProcessor.LeaderSystem {
-                            val extFactory = dbConfig.externalSource
+                    override fun openLeaderSystem(
+                        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                        afterSourceMsgId: MessageId,
+                        afterReplicaMsgId: MessageId,
+                    ): LogProcessor.LeaderSystem {
+                        val extFactory = dbConfig.externalSource
 
-                            return if (extFactory != null) {
-                                val leaderProc = ExternalSourceProcessor(
-                                    allocator, storage, replicaProducer, state,
-                                    watchers, blockUploader, base.querySource,
-                                    partition = 0, afterSourceMsgId, afterReplicaMsgId,
-                                    extSource = extFactory.open(dbName, base.logClusters, base.remotes),
-                                    // watchers has the latest token from replica log replay,
-                                    // which may be ahead of blockCatalog if no block boundary was flushed.
-                                    afterToken = watchers.externalSourceToken,
-                                    flushTimeout = indexerConfig.flushDuration,
-                                )
+                        return if (extFactory != null) {
+                            val leaderProc = ExternalSourceProcessor(
+                                allocator, storage, replicaProducer, state,
+                                watchers, blockUploader, base.querySource,
+                                partition = 0, afterSourceMsgId, afterReplicaMsgId,
+                                extSource = extFactory.open(dbName, base.logClusters, base.remotes),
+                                // watchers has the latest token from replica log replay,
+                                // which may be ahead of blockCatalog if no block boundary was flushed.
+                                afterToken = watchers.externalSourceToken,
+                                flushTimeout = indexerConfig.flushDuration,
+                            )
 
-                                object : LogProcessor.LeaderSystem {
-                                    override val proc get() = leaderProc
-                                    override fun close() { leaderProc.close(); replicaProducer.close() }
-                                }
-                            } else {
-                                val leaderProc = LeaderLogProcessor(
-                                    allocator, storage, replicaProducer, state,
-                                    indexerForDb, watchers,
-                                    indexerConfig.skipTxs.toSet(),
-                                    dbCatalog, blockUploader,
-                                    afterSourceMsgId, afterReplicaMsgId,
-                                    indexerConfig.flushDuration,
-                                    base.meterRegistry,
-                                )
+                            object : LogProcessor.LeaderSystem {
+                                override val proc get() = leaderProc
+                                override fun close() { leaderProc.close(); replicaProducer.close() }
+                            }
+                        } else {
+                            val leaderProc = LeaderLogProcessor(
+                                allocator, storage, replicaProducer, state,
+                                indexerForDb, watchers,
+                                indexerConfig.skipTxs.toSet(),
+                                dbCatalog, blockUploader,
+                                afterSourceMsgId, afterReplicaMsgId,
+                                indexerConfig.flushDuration,
+                                base.meterRegistry,
+                            )
 
-                                object : LogProcessor.LeaderSystem {
-                                    override val proc get() = leaderProc
-                                    override fun close() { leaderProc.close(); replicaProducer.close() }
-                                }
+                            object : LogProcessor.LeaderSystem {
+                                override val proc get() = leaderProc
+                                override fun close() { leaderProc.close(); replicaProducer.close() }
                             }
                         }
-
-                        override fun openTransition(
-                            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                            afterSourceMsgId: MessageId,
-                            afterReplicaMsgId: MessageId,
-                        ) = TransitionLogProcessor(
-                            allocator, storage.bufferPool, state, state.liveIndex,
-                            blockUploader, replicaProducer,
-                            watchers, dbCatalog,
-                            afterSourceMsgId, afterReplicaMsgId
-                        )
                     }
 
-                    val lp = LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
-                    processor = lp
-
-                    if (!readOnly) {
-                        scope.launch { storage.sourceLog.openGroupSubscription(lp) }
-                    }
-                } else {
-                    val srcProc = SourceLogProcessor(
-                        allocator, base.meterRegistry ?: error("no meter registry"),
-                        storage, state,
-                        indexerForDb, state.liveIndex,
-                        watchers, compactorForDb,
-                        indexerConfig.skipTxs.toSet(),
-                        readOnly, dbCatalog,
-                        indexerConfig.flushDuration,
+                    override fun openTransition(
+                        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+                        afterSourceMsgId: MessageId,
+                        afterReplicaMsgId: MessageId,
+                    ) = TransitionLogProcessor(
+                        allocator, storage.bufferPool, state, state.liveIndex,
+                        blockUploader, replicaProducer,
+                        watchers, dbCatalog,
+                        afterSourceMsgId, afterReplicaMsgId
                     )
-                    processor = srcProc
+                }
 
-                    val latestProcessedMsgId = blockCatalog.latestProcessedMsgId ?: -1
-                    scope.launch { storage.sourceLog.tailAll(latestProcessedMsgId, srcProc) }
+                val lp = LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
+                processor = lp
+
+                if (!readOnly) {
+                    scope.launch { storage.sourceLog.openGroupSubscription(lp) }
                 }
             }
 
