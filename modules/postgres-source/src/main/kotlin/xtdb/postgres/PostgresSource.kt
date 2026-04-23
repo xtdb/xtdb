@@ -24,6 +24,7 @@ import xtdb.indexer.TxIndexer.OpenTx
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.database.proto.DatabaseConfig
+import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.postgres.PgOutputMessage.ColumnValue
 import xtdb.postgres.proto.PostgresSourceConfig
@@ -158,14 +159,27 @@ class PostgresSource(
         LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
 
         try {
-            if (token != null && token.snapshotCompleted) {
-                LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(token.latestCommittedLsn)}")
-                streamChanges(txIndexer, token.latestCommittedLsn)
-            } else {
-                LOG.info("[$dbName] Starting initial snapshot")
-                val slotLsn = initialSnapshot(txIndexer)
-                LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
-                streamChanges(txIndexer, slotLsn)
+            when {
+                token != null && !token.snapshotCompleted ->
+                    // > The snapshot is valid until a new command is executed on this connection or the replication connection is closed
+                    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-CREATE-REPLICATION-SLOT
+                    // Therefore it is impossible to resume a snapshot, meaning if we receive a previous incomplete snapshot we must mark the database inoperable
+                    // The only recovery is to clear the topics & object store and try the snapshot again
+                    throw Fault(
+                        "Incomplete snapshot — database is inoperable",
+                        "xtdb.postgres/incomplete-snapshot",
+                        mapOf("db-name" to dbName, "slot-name" to slotName),
+                    )
+                token != null && token.snapshotCompleted -> {
+                    LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(token.latestCommittedLsn)}")
+                    streamChanges(txIndexer, token.latestCommittedLsn)
+                }
+                else -> {
+                    LOG.info("[$dbName] Starting initial snapshot")
+                    val slotLsn = initialSnapshot(txIndexer)
+                    LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
+                    streamChanges(txIndexer, slotLsn)
+                }
             }
         } catch (e: PSQLException) {
             if (e.cause is java.net.SocketException) {
