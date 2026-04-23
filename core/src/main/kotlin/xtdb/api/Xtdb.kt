@@ -9,7 +9,7 @@ import org.apache.arrow.adbc.core.AdbcDatabase
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ZoneIdSerde
 import xtdb.antlr.Sql
-import xtdb.api.Authenticator.Factory.UserTable
+import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.api.log.MessageId
@@ -79,7 +79,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var defaultTz: ZoneId = ZoneOffset.UTC,
         val indexer: IndexerConfig = IndexerConfig(),
         val compactor: CompactorConfig = CompactorConfig(),
-        var authn: Authenticator.Factory = UserTable(),
+        var authn: Authenticator.Factory = SingleRootUser(),
         var garbageCollector: GarbageCollectorConfig = GarbageCollectorConfig(),
         var tracer: TracerConfig = TracerConfig(),
         var readOnlyDatabases: Boolean = false,

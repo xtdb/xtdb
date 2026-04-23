@@ -12,7 +12,8 @@
            [org.apache.arrow.memory BufferAllocator]
            (xtdb.query QueryOpts)
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
-                     Authenticator$Factory$UserTable Authenticator$Method Authenticator$MethodRule Xtdb$Config
+                     Authenticator$Factory$SingleRootUser Authenticator$Factory$UserTable
+                     Authenticator$Method Authenticator$MethodRule Xtdb$Config
                      SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
            (xtdb.query IQuerySource)
            xtdb.NodeBase
@@ -72,6 +73,7 @@
   (xtn/apply-config! config
                      (case tag
                        :user-table ::user-table-authn
+                       :single-root-user ::single-root-user-authn
                        :openid-connect ::openid-connect-authn
                        tag)
                      opts))
@@ -91,6 +93,9 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, ^BufferAllocator allocator, q-src, db-cat]
   (->UserTableAuthn (<-rules-cfg (.getRules cfg)) allocator q-src db-cat))
+
+(defmethod xtn/apply-config! ::single-root-user-authn [^Xtdb$Config config, _, {:keys [password]}]
+  (.authn config (Authenticator$Factory$SingleRootUser. password)))
 
 (defmethod ig/expand-key :xtdb/authn [k opts]
   {k (into {:base (ig/ref :xtdb/base)

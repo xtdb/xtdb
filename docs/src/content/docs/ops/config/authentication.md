@@ -5,17 +5,52 @@ title: Authentication
 XTDB provides authentication to control database access and secure connections.
 Authentication rules determine which users can connect and what credentials they must provide.
 
-## Authentication Providers
+## Authentication providers
 
-XTDB supports two authentication providers:
+XTDB supports three authentication providers:
 
-- **User Table** (`!UserTable`): Uses an internal user table with password-based authentication
-- **OpenID Connect** (`!OpenIdConnect`): Integrates with external identity providers like Keycloak, Auth0, AWS Cognito or Azure Entra.
+- **Single Root User** (`!SingleRootUser`, v2.2+): a single user (`xtdb`) whose password is configured at startup.
+  This is the default.
+- **User Table** (`!UserTable`): uses an internal user table with password-based authentication.
+- **OpenID Connect** (`!OpenIdConnect`): integrates with external identity providers like Keycloak, Auth0, AWS Cognito or Azure Entra.
 
-## User Table
+## Single root user (v2.2+)
 
-The `!
-UserTable` authentication method uses an internal user table with password-based authentication.
+The `!SingleRootUser` method authenticates a single user named `xtdb` against a password that's configured at startup.
+
+The password is resolved at config-construction time:
+
+1. The explicit `password` field on the YAML config (or Kotlin `SingleRootUser` value), if present.
+2. Otherwise, the `XTDB_PASSWORD` environment variable, if set.
+3. Otherwise, no password is configured.
+
+If no password is configured, connections run under `TRUST` — no credentials required.
+If a password is configured, connections require `PASSWORD` authentication as the `xtdb` user.
+Any other username is rejected.
+
+### Configuration
+
+Resolve the password from `XTDB_PASSWORD` (the common case for containerised deployments):
+
+``` yaml
+authn: !SingleRootUser
+```
+
+Or pass the password explicitly (discouraged for production — anyone with access to the config can read it):
+
+``` yaml
+authn: !SingleRootUser
+  password: !Env XTDB_PASSWORD
+```
+
+``` yaml
+authn: !SingleRootUser
+  password: hunter2
+```
+
+## User table
+
+The `!UserTable` authentication method uses an internal user table with password-based authentication.
 
 ### Configuration
 
@@ -32,11 +67,11 @@ authn: !UserTable
     - method: PASSWORD
 ```
 
-### User Management
+### User management
 
 **Default User**
-: The `pg_user` table contains a default user "xtdb" with password
-    "xtdb".
+: The `pg_user` table contains a default user `xtdb` with password
+    `xtdb`.
 
 **Creating Users**
 :
@@ -58,8 +93,7 @@ ALTER USER ada WITH PASSWORD 'LOVELACE'
 
 ## OpenID Connect (OIDC)
 
-The `!
-OpenIdConnect` authentication method integrates with external identity providers like Keycloak, Auth0, AWS Cognito or Azure Entra.
+The `!OpenIdConnect` authentication method integrates with external identity providers like Keycloak, Auth0, AWS Cognito or Azure Entra.
 
 ### Basic Configuration
 
@@ -76,9 +110,10 @@ authn: !OpenIdConnect
 
 For complete OIDC configuration, setup guides, and troubleshooting, see [OpenID Connect Authentication](authentication/oidc).
 
-## Rule Configuration
+## Rule configuration
 
-XTDB controls database access through authentication rules that match users and IP addresses to determine the required authentication method.
+`!UserTable` and `!OpenIdConnect` control database access through authentication rules that match users and IP addresses to determine the required authentication method.
+`!SingleRootUser` doesn't use rules — its method is determined by whether a password is configured.
 
 ### Authentication Rules
 

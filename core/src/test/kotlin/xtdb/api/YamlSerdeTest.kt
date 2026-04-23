@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import xtdb.api.Authenticator.Factory.OpenIdConnect
+import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.Authenticator.Method.*
 import xtdb.api.Authenticator.MethodRule
@@ -371,6 +372,31 @@ class YamlSerdeTest {
             ),
             nodeConfig(input).authn
         )
+    }
+
+    @Test
+    fun testSingleRootUserExplicitPassword() {
+        val input = """
+        authn: !SingleRootUser
+          password: hunter2
+        """.trimIndent()
+
+        assertEquals(SingleRootUser(password = "hunter2"), nodeConfig(input).authn)
+    }
+
+    @Test
+    fun testSingleRootUserEnvPassword() {
+        mockkObject(EnvironmentVariableProvider)
+        every { EnvironmentVariableProvider.getEnvVariable("XTDB_PASSWORD") } returns "from-env"
+
+        val input = """
+        authn: !SingleRootUser
+          password: !Env XTDB_PASSWORD
+        """.trimIndent()
+
+        assertEquals(SingleRootUser(password = "from-env"), nodeConfig(input).authn)
+
+        unmockkObject(EnvironmentVariableProvider)
     }
 
     @Test

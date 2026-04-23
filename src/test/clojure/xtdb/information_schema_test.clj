@@ -6,9 +6,11 @@
             [xtdb.authn :as authn]
             [xtdb.compactor :as c]
             [xtdb.information-schema :as i-s]
+            [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time])
+            [xtdb.time :as time]
+            [xtdb.util :as util])
   (:import [xtdb.api SimpleResult]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -335,21 +337,29 @@
                   WHERE column_name = 'set_column'"))))
 
 (deftest test-pg-user
-  (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
-           (xt/q tu/*node* "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
+  ;; This test exercises `!UserTable` behaviour (CREATE/ALTER USER, the seeded
+  ;; xtdb/xtdb row, password verification via the pg_user table). The default
+  ;; authn is now `!SingleRootUser`, so start a dedicated node with `!UserTable`.
+  ;; `:trust` rules keep the pgwire-backed `xt/q` / `xt/execute-tx` callers
+  ;; working; we exercise password flow by calling `.verifyPassword` directly.
+  (util/with-open [node (xtn/start-node {:authn [:user-table {:rules [{:method :trust}]}]
+                                         :log [:in-memory {:instant-src (tu/->mock-clock)}]})]
+    (t/is (= [{:username "xtdb", :usesuper true, :xt/valid-from (time/->zdt #inst "1970")}]
+             (xt/q node "SELECT username, usesuper, _valid_from, _valid_to FROM pg_user")))
 
-  (t/is (= (SimpleResult. "xtdb") (.verifyPassword (authn/<-node tu/*node*) "xtdb" "xtdb")))
+    (t/is (= (SimpleResult. "xtdb") (.verifyPassword (authn/<-node node) "xtdb" "xtdb")))
 
-  (xt/execute-tx tu/*node* ["CREATE USER ada WITH PASSWORD 'lovelace'"])
+    (xt/execute-tx node ["CREATE USER ada WITH PASSWORD 'lovelace'"])
 
-  (t/is (= [{:username "ada", :usesuper false}]
-           (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'ada'")))
-  (t/is (= (SimpleResult. "ada") (.verifyPassword (authn/<-node tu/*node*) "ada" "lovelace")))
+    (t/is (= [{:username "ada", :usesuper false}]
+             (xt/q node "SELECT username, usesuper FROM pg_user WHERE username = 'ada'")))
+    (t/is (= (SimpleResult. "ada") (.verifyPassword (authn/<-node node) "ada" "lovelace")))
 
-  (xt/execute-tx tu/*node* ["ALTER USER anonymous WITH PASSWORD 'anonymous'"])
+    (xt/execute-tx node ["ALTER USER anonymous WITH PASSWORD 'anonymous'"])
 
-  (t/is (= [{:username "anonymous", :usesuper false}] (xt/q tu/*node* "SELECT username, usesuper FROM pg_user WHERE username = 'anonymous'")))
-  (t/is (= (SimpleResult. "anonymous") (.verifyPassword (authn/<-node tu/*node*) "anonymous" "anonymous"))))
+    (t/is (= [{:username "anonymous", :usesuper false}]
+             (xt/q node "SELECT username, usesuper FROM pg_user WHERE username = 'anonymous'")))
+    (t/is (= (SimpleResult. "anonymous") (.verifyPassword (authn/<-node node) "anonymous" "anonymous")))))
 
 ;; required for Postgrex
 (deftest test-pg-range-3737
