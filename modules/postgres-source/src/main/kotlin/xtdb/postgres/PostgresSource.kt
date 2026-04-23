@@ -5,6 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import org.jdbi.v3.core.Handle
 import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
 import org.postgresql.replication.LogSequenceNumber
@@ -208,30 +209,8 @@ class PostgresSource(
                         LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
                         handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
-                        val tables = with(driver) { handle.discoverTables() }
-                        LOG.info("[$dbName] Discovered ${tables.size} tables: ${tables.joinToString { "${it.first}.${it.second}" }}")
-
-                        for ((schema, table) in tables) {
-                            val columns = with(driver) { handle.discoverColumns(schema, table) }
-                            val fullTableName = "$schema.$table"
-
-                            LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
-
-                            var rowCount = 0
-                            handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
-                                .setFetchSize(SNAPSHOT_BATCH_SIZE)
-                                .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
-                                .iterator().use {
-                                    it.asSequence()
-                                        .chunked(SNAPSHOT_BATCH_SIZE)
-                                        .forEach { batch ->
-                                            rowCount += batch.size
-                                            LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                                            flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
-                                        }
-                                }
-
-                            LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
+                        for ((schema, table, batch) in readSnapshotBatches(handle)) {
+                            flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
                         }
 
                         // Mark snapshot complete
@@ -251,6 +230,34 @@ class PostgresSource(
                     }
                 }
             }
+        }
+    }
+
+    private fun readSnapshotBatches(handle: Handle): Sequence<Triple<String, String, List<Map<String, Any?>>>> = sequence {
+        val tables = with(driver) { handle.discoverTables() }
+        LOG.info("[$dbName] Discovered ${tables.size} tables: ${tables.joinToString { "${it.first}.${it.second}" }}")
+
+        for ((schema, table) in tables) {
+            val columns = with(driver) { handle.discoverColumns(schema, table) }
+            val fullTableName = "$schema.$table"
+
+            LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
+
+            var rowCount = 0
+            handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
+                .setFetchSize(SNAPSHOT_BATCH_SIZE)
+                .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
+                .iterator().use { iter ->
+                    iter.asSequence()
+                        .chunked(SNAPSHOT_BATCH_SIZE)
+                        .forEach { batch ->
+                            rowCount += batch.size
+                            LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
+                            yield(Triple(schema, table, batch))
+                        }
+                }
+
+            LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
         }
     }
 
