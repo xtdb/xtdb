@@ -29,6 +29,7 @@
             xtdb.operator.unnest
             xtdb.operator.window
             [xtdb.sql :as sql]
+            [xtdb.sql.parse :as parse-sql]
             [xtdb.time :as time]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -51,7 +52,8 @@
            (xtdb.indexer Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery)
+           (xtdb.query IQuerySource IQuerySource$Factory PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery)
+           (xtdb.table TableRef)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -437,6 +439,35 @@
                       (.release ref-ctr)
                       (util/close args)
                       (throw t))))))))))))
+
+  (prepareDmlQuery [this sql db-cat opts]
+    (let [[q-tag {:keys [stmt table message]}]
+          (parse-sql/parse-statement sql {:default-db (:default-db opts)})
+          pq (.prepareQuery this stmt db-cat opts)]
+      (case q-tag
+        (:insert :update) (PreparedDmlQuery. pq (PreparedDmlQuery$Put. table))
+        :patch (PreparedDmlQuery. pq (PreparedDmlQuery$Patch. table))
+        :delete (PreparedDmlQuery. pq (PreparedDmlQuery$Delete. table))
+        :erase (PreparedDmlQuery. pq (PreparedDmlQuery$Erase. table))
+        :assert (PreparedDmlQuery. pq (PreparedDmlQuery$Assert. message))
+        (throw (err/incorrect ::invalid-sql-tx-op
+                              "Invalid SQL query sent as transaction operation"
+                              {:query sql})))))
+
+  (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
+    (let [default-db (:default-db opts)
+          table-info (-> (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
+                           (.getTableInfo snap))
+                         (sql/xform-table-info [default-db] default-db))
+          plan (-> (sql/plan-patch {:table-info table-info}
+                                   {:table table
+                                    :valid-from valid-from
+                                    :valid-to valid-to
+                                    :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]
+                                                                          :param ?patch_docs}]
+                                                                '[_iid doc])})
+                   lp/rewrite-plan)]
+      (.prepareQuery this plan db-cat opts)))
 
   AutoCloseable
   (close [_]

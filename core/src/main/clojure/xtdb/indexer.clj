@@ -6,13 +6,10 @@
             [xtdb.error :as err]
             [xtdb.indexer.crash-logger :refer [with-crash-log]]
             [xtdb.log :as xt-log]
-            [xtdb.logical-plan :as lp]
             [xtdb.metrics :as metrics]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.serde.types :as st]
-            [xtdb.sql :as sql]
-            [xtdb.sql.parse :as parse-sql]
             [xtdb.table :as table]
             [xtdb.time :as time]
             [xtdb.types :as types]
@@ -32,7 +29,7 @@
            (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer RelationIndexer Snapshot Snapshot$Source)
            (xtdb.table TableRef)
            xtdb.NodeBase
-           (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedQuery QueryOpts)))
+           (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery QueryOpts)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -317,31 +314,29 @@
 (defn- ->query-opts ^xtdb.query.QueryOpts [{:keys [current-time default-tz snapshot-token snapshot-time tracer]}]
   (QueryOpts. current-time default-tz snapshot-token snapshot-time tracer))
 
-(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [^IQuerySource q-src, db-cat, tx-opts, {:keys [stmt message]}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
-    (-> (fn eval-query [^RelationReader args]
-          (with-open [res (.openQuery pq args (->query-opts tx-opts))]
+(defn- ->assert-idxer [^PreparedQuery pq, message, tx-opts]
+  (-> (fn eval-query [^RelationReader args]
+        (with-open [res (.openQuery pq args (->query-opts tx-opts))]
 
-            (letfn [(throw-assert-failed []
-                      (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
-              (or (.tryAdvance res
-                               (fn [^RelationReader in-rel]
-                                 (when-not (pos? (.getRowCount in-rel))
-                                   (throw-assert-failed))))
+          (letfn [(throw-assert-failed []
+                    (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
+            (or (.tryAdvance res
+                             (fn [^RelationReader in-rel]
+                               (when-not (pos? (.getRowCount in-rel))
+                                 (throw-assert-failed))))
 
-                  (throw-assert-failed)))))
+                (throw-assert-failed)))))
 
-        (wrap-sql-args (.getParamCount pq)))))
+      (wrap-sql-args (.getParamCount pq))))
 
-(defn- query-indexer [allocator, ^IQuerySource q-src, db-cat, ^RelationIndexer rel-idxer, tx-opts, {:keys [stmt] :as query-opts}]
-  (let [^PreparedQuery pq (.prepareQuery q-src stmt db-cat tx-opts)]
-    (-> (fn eval-query [^RelationReader args]
-          (with-open [res (-> (.openQuery pq args (->query-opts tx-opts)))]
-            (.forEachRemaining res
-                               (fn [^RelationReader in-rel]
-                                 (.indexOp rel-idxer in-rel query-opts)))))
+(defn- query-indexer [^PreparedQuery pq, ^RelationIndexer rel-idxer, ^TableRef table, tx-opts]
+  (-> (fn eval-query [^RelationReader args]
+        (with-open [res (-> (.openQuery pq args (->query-opts tx-opts)))]
+          (.forEachRemaining res
+                             (fn [^RelationReader in-rel]
+                               (.indexOp rel-idxer in-rel {:table table})))))
 
-        (wrap-sql-args (.getParamCount pq)))))
+      (wrap-sql-args (.getParamCount pq))))
 
 (defn- open-args-rdr ^xtdb.arrow.Relation$Loader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
@@ -420,18 +415,7 @@
                             (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table)
                                                                                                   :schema (.getSchemaName table)
                                                                                                   :table (.getTableName table)}}
-                              (let [table-info (-> (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
-                                                     (.getTableInfo snap))
-                                                   (sql/xform-table-info [default-db] default-db))
-                                    pq (.prepareQuery q-src (-> (sql/plan-patch {:table-info table-info}
-                                                                                {:table table
-                                                                                 :valid-from valid-from
-                                                                                 :valid-to valid-to
-                                                                                 :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]
-                                                                                                                       :param ?patch_docs}]
-                                                                                                             '[_iid doc])})
-                                                                (lp/rewrite-plan))
-                                                      db-cat tx-opts)
+                              (let [pq (.preparePatchDocsQuery q-src table valid-from valid-to db-cat tx-opts)
                                     args (vr/rel-reader [(SingletonListReader.
                                                            "?patch_docs"
                                                            (RelationAsStructReader.
@@ -473,26 +457,27 @@
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
                             (util/with-open [^Relation$ILoader args-loader (open-args-rdr allocator args-rdr tx-op-idx)]
                               (metrics/with-span tracer "xtdb.transaction.sql" {:attributes {:query.text query-str}}
-                                (let [[q-tag q-args] (parse-sql/parse-statement query-str {:default-db default-db})
-                                      tx-opts (assoc tx-opts
+                                (let [tx-opts (assoc tx-opts
                                                      :arg-fields (some-> args-loader (.getSchema) (.getFields))
-                                                     :query-text query-str)]
-                                  (case q-tag
-                                    :insert (foreach-arg-row allocator args-loader
-                                                             (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                                    :patch (foreach-arg-row allocator args-loader
-                                                            (query-indexer allocator q-src db-cat patch-idxer tx-opts q-args))
-                                    :update (foreach-arg-row allocator args-loader
-                                                             (query-indexer allocator q-src db-cat upsert-idxer tx-opts q-args))
-                                    :delete (foreach-arg-row allocator args-loader
-                                                             (query-indexer allocator q-src db-cat delete-idxer tx-opts q-args))
-                                    :erase (foreach-arg-row allocator args-loader
-                                                            (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
-                                    :assert (foreach-arg-row allocator args-loader
-                                                             (->assert-idxer q-src db-cat tx-opts q-args))
+                                                     :query-text query-str)
+                                      ^PreparedDmlQuery pq (.prepareDmlQuery q-src query-str db-cat tx-opts)
+                                      kind (.getKind pq)]
+                                  (foreach-arg-row allocator args-loader
+                                                   (condp instance? kind
+                                                     PreparedDmlQuery$Put
+                                                     (query-indexer pq upsert-idxer (.getTable ^PreparedDmlQuery$Put kind) tx-opts)
 
-                                    (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
-                                                          {:query query-str}))))))))
+                                                     PreparedDmlQuery$Patch
+                                                     (query-indexer pq patch-idxer (.getTable ^PreparedDmlQuery$Patch kind) tx-opts)
+
+                                                     PreparedDmlQuery$Delete
+                                                     (query-indexer pq delete-idxer (.getTable ^PreparedDmlQuery$Delete kind) tx-opts)
+
+                                                     PreparedDmlQuery$Erase
+                                                     (query-indexer pq erase-idxer (.getTable ^PreparedDmlQuery$Erase kind) tx-opts)
+
+                                                     PreparedDmlQuery$Assert
+                                                     (->assert-idxer pq (.getMessage ^PreparedDmlQuery$Assert kind) tx-opts))))))))
 
         nil))))
 
