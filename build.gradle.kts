@@ -486,12 +486,14 @@ dependencies {
 
     implementation(project(":xtdb-main"))
     implementation(project(":modules:xtdb-kafka"))
+    implementation(project(":modules:xtdb-postgres-source"))
 
     projectDep(":xtdb-api")
     projectDep(":xtdb-core")
     projectDep(":xtdb-main")
 
     projectDep(":modules:xtdb-kafka")
+    projectDep(":modules:xtdb-postgres-source")
     projectDep(":modules:xtdb-aws")
     projectDep(":modules:xtdb-azure")
     projectDep(":modules:xtdb-google-cloud")
