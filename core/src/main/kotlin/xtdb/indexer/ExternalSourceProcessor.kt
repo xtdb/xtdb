@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import clojure.lang.Keyword
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -8,34 +7,26 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.ResultCursor
-import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
-import xtdb.arrow.RelationReader
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Interrupted
-import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.query.IQuerySource
-import xtdb.query.QueryOpts
 import xtdb.table.TableRef
-import xtdb.time.InstantUtil.asMicros
-import xtdb.time.InstantUtil.fromMicros
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.trace
 import java.time.Duration
-import java.time.Instant
 import java.time.InstantSource
 import kotlin.coroutines.CoroutineContext
 
@@ -54,10 +45,10 @@ class ExternalSourceProcessor(
     afterReplicaMsgId: MessageId,
     private val extSource: ExternalSource,
     afterToken: ExternalSourceToken?,
-    private val instantSource: InstantSource = InstantSource.system(),
+    instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
-) : LogProcessor.LeaderProcessor {
+) : LogProcessor.LeaderProcessor, TxCommitter {
 
     init {
         require(dbState.name != "xtdb") {
@@ -85,94 +76,15 @@ class ExternalSourceProcessor(
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
     // Serialises the two input streams — source-log records (via [processRecords]) and external-source txs
-    // (via the subscription coroutine below).
+    // (via [TxCommitter.commit] driven from the subscription coroutine below).
     // The transactional Kafka producer (replicaProducer) is not safe for concurrent `withTx`, so both paths
     // must hold this lock before touching it.
     private val mutex = Mutex()
 
-    private fun smoothSystemTime(systemTime: Instant): Instant {
-        val lct = liveIndex.latestCompletedTx?.systemTime ?: return systemTime
-        val floor = fromMicros(lct.asMicros + 1)
-        return if (systemTime.isBefore(floor)) floor else systemTime
-    }
-
-    // Wraps the inner [OpenTx] and exposes the narrow surface source authors see:
-    // writes via [table], reads via [openQuery]. The wrapper forwards query execution
-    // to the node's [IQuerySource], scoped to this database with a snapshot that includes
-    // the tx's in-flight writes.
-    private inner class WriterOpenTx(val inner: OpenTx) : TxIndexer.OpenTx {
-        override val systemFrom get() = inner.systemFrom
-
-        override fun table(ref: TableRef) = inner.table(ref)
-        override fun table(schemaName: String, tableName: String) =
-            inner.table(TableRef(dbName, schemaName, tableName))
-
-        override fun openQuery(
-            sql: String,
-            args: RelationReader?,
-            opts: TxIndexer.QueryOpts,
-        ): ResultCursor {
-            val currentTime = opts.currentTime ?: inner.txKey.systemTime
-
-            val snapSource = object : Snapshot.Source {
-                override fun openSnapshot() = liveIndex.openSnapshot(inner)
-            }
-            val queryCat = Indexer.queryCatalog(dbStorage, dbState, snapSource)
-
-            val prepareOpts = mapOf(
-                Keyword.intern("current-time") to currentTime,
-                Keyword.intern("default-tz") to opts.defaultTz,
-                Keyword.intern("default-db") to dbName,
-                Keyword.intern("query-text") to sql,
-            )
-
-            val pq = querySource.prepareQuery(sql, queryCat, prepareOpts)
-            return pq.openQuery(args, QueryOpts(currentTime = currentTime, defaultTz = opts.defaultTz))
-        }
-    }
-
-    private val txIndexer = object : TxIndexer {
-        override suspend fun indexTx(
-            externalSourceToken: ExternalSourceToken?,
-            systemTime: Instant?,
-            writer: suspend (TxIndexer.OpenTx) -> TxResult,
-        ): TxResult {
-            val txId = (liveIndex.latestCompletedTx?.txId ?: -1) + 1
-            val txKey = TransactionKey(txId, smoothSystemTime(systemTime ?: instantSource.instant()))
-
-            try {
-                val openTx = OpenTx(allocator, txKey)
-                val result = try {
-                    writer(WriterOpenTx(openTx))
-                } catch (e: Throwable) {
-                    openTx.close()
-                    throw e
-                }
-
-                when (result) {
-                    is TxResult.Committed -> openTx.use {
-                        it.addTxRow(dbName, txKey, null, result.userMetadata)
-                        commitAndPublish(it, txKey, result, externalSourceToken)
-                    }
-
-                    is TxResult.Aborted -> {
-                        openTx.close()
-                        OpenTx(allocator, txKey).use { abortTx ->
-                            abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
-                            commitAndPublish(abortTx, txKey, result, externalSourceToken)
-                        }
-                    }
-                }
-
-                return result
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                watchers.notifyError(e)
-                throw e
-            }
-        }
-    }
+    private val txIndexer = TxIndexer(
+        allocator, dbStorage, dbState, querySource, watchers,
+        committer = this, instantSource = instantSource,
+    )
 
     private val extJob = CoroutineScope(ctx).launch {
         try {
@@ -208,12 +120,9 @@ class ExternalSourceProcessor(
         pendingBlock = null
     }
 
-    private suspend fun commitAndPublish(
-        openTx: OpenTx,
-        txKey: TransactionKey,
-        result: TxResult,
-        externalSourceToken: ExternalSourceToken?,
-    ) {
+    override suspend fun commit(openTx: OpenTx, result: TxResult) {
+        val txKey = openTx.txKey
+        val externalSourceToken = openTx.externalSourceToken
         val tableData = openTx.serializeTableData()
 
         mutex.withLock {
