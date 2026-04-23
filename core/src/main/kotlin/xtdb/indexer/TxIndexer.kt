@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import clojure.lang.Keyword
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.tracing.Tracer
@@ -10,10 +9,12 @@ import xtdb.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.api.log.Watchers
 import xtdb.arrow.RelationReader
+import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSourceToken
 import xtdb.indexer.Indexer.Companion.addTxRow
+import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -52,6 +53,7 @@ class TxIndexer internal constructor(
 
     sealed interface TxResult {
         val userMetadata: Map<*, *>?
+
         data class Committed(override val userMetadata: Map<*, *>? = null) : TxResult
         data class Aborted(val error: Throwable, override val userMetadata: Map<*, *>? = null) : TxResult
     }
@@ -112,26 +114,35 @@ class TxIndexer internal constructor(
         override fun table(schemaName: String, tableName: String) =
             inner.table(TableRef(dbName, schemaName, tableName))
 
-        override fun openQuery(sql: String, args: RelationReader?, opts: QueryOpts): ResultCursor {
-            val currentTime = opts.currentTime ?: inner.txKey.systemTime
-
+        fun queryCatalog(): IQuerySource.QueryCatalog {
             val snapSource = object : Snapshot.Source {
                 override fun openSnapshot() = liveIndex.openSnapshot(inner)
             }
-            val queryCat = Indexer.queryCatalog(dbStorage, dbState, snapSource)
+
+            val queryDb = object : IQuerySource.QueryDatabase {
+                override val storage get() = dbStorage
+                override val queryState get() = dbState
+                override fun openSnapshot() = snapSource.openSnapshot()
+            }
+            return object : IQuerySource.QueryCatalog {
+                override val databaseNames: Collection<DatabaseName> get() = setOf(dbName)
+                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == this@TxIndexer.dbName }
+            }
+        }
+
+        override fun openQuery(sql: String, args: RelationReader?, opts: QueryOpts): ResultCursor {
+            val currentTime = opts.currentTime ?: inner.txKey.systemTime
 
             val prepareOpts = mapOf(
-                Keyword.intern("current-time") to currentTime,
-                Keyword.intern("default-tz") to opts.defaultTz,
-                Keyword.intern("default-db") to dbName,
-                Keyword.intern("query-text") to sql,
+                "current-time".kw to currentTime,
+                "default-tz".kw to opts.defaultTz,
+                "default-db".kw to dbName,
+                "query-text".kw to sql,
             )
 
-            val pq = querySource.prepareQuery(sql, queryCat, prepareOpts)
-            return pq.openQuery(
-                args,
-                xtdb.query.QueryOpts(currentTime = currentTime, defaultTz = opts.defaultTz, tracer = tracer),
-            )
+            return querySource
+                .prepareQuery(sql, queryCatalog(), prepareOpts)
+                .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
         }
     }
 
