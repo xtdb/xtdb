@@ -42,7 +42,7 @@ class LiveIndex private constructor(
     private val tables = HashMap<TableRef, LiveTable>()
 
     @Volatile
-    private var sharedSnap: xtdb.indexer.Snapshot? = null
+    private var sharedSnap: Snapshot? = null
     private val snapLock = StampedLock()
     private val snapRefCounter = RefCounter()
     private val rowCounter = RowCounter()
@@ -73,8 +73,6 @@ class LiveIndex private constructor(
 
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
-
-    fun startTx(txKey: TransactionKey) = OpenTx(allocator, txKey)
 
     fun commitTx(openTx: OpenTx) {
         val stamp = snapLock.writeLock()

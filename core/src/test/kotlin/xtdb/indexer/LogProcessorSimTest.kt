@@ -7,12 +7,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
-import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
+import xtdb.NodeBase
+import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
@@ -22,12 +24,14 @@ import xtdb.api.log.*
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
+import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import xtdb.error.Incorrect
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
@@ -37,7 +41,6 @@ import xtdb.tx.TxOp
 import xtdb.tx.toArrowBytes
 import xtdb.util.asIid
 import xtdb.util.debug
-import xtdb.error.Incorrect
 import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -49,13 +52,15 @@ private val LOG = LogProcessorSimTest::class.logger
 @Tag("property")
 class LogProcessorSimTest : SimulationTestBase() {
 
-    private lateinit var allocator: RootAllocator
+    private lateinit var nodeBase: NodeBase
+    private lateinit var allocator: BufferAllocator
     private lateinit var srcLog: SimLog<SourceMessage>
     private lateinit var replicaLog: SimLog<ReplicaMessage>
 
     @BeforeEach
     fun setUp() {
-        allocator = RootAllocator()
+        nodeBase = openBase(openMeterRegistry = false)
+        allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
         this.srcLog = SimLog("src", dispatcher, rand)
         this.replicaLog = SimLog("replica", dispatcher, rand)
     }
@@ -65,64 +70,74 @@ class LogProcessorSimTest : SimulationTestBase() {
         replicaLog.close()
         srcLog.close()
         allocator.close()
+        nodeBase.close()
     }
 
     private val docsTable = TableRef("test-db", "public", "docs")
 
-    private fun simIndexer(liveIndex: LiveIndex, dbName: String) = object : Indexer.ForDatabase {
-
-        private fun commitTx(openTx: OpenTx, txKey: TransactionKey, committed: Boolean): ReplicaMessage.ResolvedTx {
-            with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else Incorrect("aborted")) }
-            val tableData = openTx.serializeTableData()
-            liveIndex.commitTx(openTx)
-            openTx.close()
-            return ReplicaMessage.ResolvedTx(
-                txId = txKey.txId,
-                systemTime = txKey.systemTime,
-                committed = committed,
-                error = null,
-                tableData = tableData
-            )
-        }
-
-        override fun indexTx(
-            msgId: MessageId, msgTimestamp: Instant, txOps: xtdb.arrow.VectorReader?,
-            systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
-        ): ReplicaMessage.ResolvedTx {
-            val txKey = TransactionKey(msgId, systemTime ?: msgTimestamp)
-            val committed = rand.nextFloat() > 0.1f
-            val openTx = liveIndex.startTx(txKey)
-
-            if (committed) {
-                val table = openTx.table(docsTable)
-                val rowCount = rand.nextInt(1, 6)
-                repeat(rowCount) {
-                    val id = java.util.UUID(rand.nextLong(), rand.nextLong())
-                    table.logPut(
-                        ByteBuffer.wrap(id.asIid),
-                        txKey.systemTime.asMicros,
-                        Long.MAX_VALUE
-                    ) {
-                        table.docWriter.vectorFor("_id", VectorType.UUID.arrowType, false).writeObject(id)
-                        table.docWriter.vectorFor("tx_id", VectorType.I64.arrowType, false).writeLong(msgId)
-                        table.docWriter.endStruct()
-                    }
-                }
+    private fun simIndexer(al: BufferAllocator, dbName: String, dbStorage: DatabaseStorage, dbState: DatabaseState) =
+        object : Indexer.ForDatabase {
+            private fun commitTx(openTx: OpenTx, txKey: TransactionKey, committed: Boolean): ReplicaMessage.ResolvedTx {
+                with(Indexer) { openTx.addTxRow(dbName, txKey, if (committed) null else Incorrect("aborted")) }
+                val tableData = openTx.serializeTableData()
+                dbState.liveIndex.commitTx(openTx)
+                openTx.close()
+                return ReplicaMessage.ResolvedTx(
+                    txId = txKey.txId,
+                    systemTime = txKey.systemTime,
+                    committed = committed,
+                    error = null,
+                    tableData = tableData
+                )
             }
 
-            return commitTx(openTx, txKey, committed)
+            override fun indexTx(
+                msgId: MessageId, msgTimestamp: Instant, txOps: VectorReader?,
+                systemTime: Instant?, defaultTz: ZoneId?, user: String?, userMetadata: Any?
+            ): ReplicaMessage.ResolvedTx {
+                val txKey = TransactionKey(msgId, systemTime ?: msgTimestamp)
+                val committed = rand.nextFloat() > 0.1f
+                val openTx = OpenTx(al, nodeBase, dbStorage, dbState, txKey, externalSourceToken = null)
+
+                if (committed) {
+                    val table = openTx.table(docsTable)
+                    val rowCount = rand.nextInt(1, 6)
+                    repeat(rowCount) {
+                        val id = java.util.UUID(rand.nextLong(), rand.nextLong())
+                        table.logPut(
+                            ByteBuffer.wrap(id.asIid),
+                            txKey.systemTime.asMicros,
+                            Long.MAX_VALUE
+                        ) {
+                            table.docWriter.vectorFor("_id", VectorType.UUID.arrowType, false).writeObject(id)
+                            table.docWriter.vectorFor("tx_id", VectorType.I64.arrowType, false).writeLong(msgId)
+                            table.docWriter.endStruct()
+                        }
+                    }
+                }
+
+                return commitTx(openTx, txKey, committed)
+            }
+
+            override fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx {
+                val openTx = OpenTx(al, nodeBase, dbStorage, dbState, txKey, externalSourceToken = null)
+                return commitTx(openTx, txKey, committed = error == null)
+            }
+
+            override fun close() {}
         }
 
-        override fun addTxRow(txKey: TransactionKey, error: Throwable?): ReplicaMessage.ResolvedTx {
-            val openTx = liveIndex.startTx(txKey)
-            return commitTx(openTx, txKey, committed = error == null)
-        }
+    private fun simIndexerWrapper(dbName: String) = object : Indexer {
+        override fun openForDatabase(
+            allocator: BufferAllocator, storage: DatabaseStorage, state: DatabaseState,
+            liveIndex: LiveIndex, crashLogger: CrashLogger, txIndexer: TxIndexer,
+        ) = simIndexer(allocator, dbName, storage, state)
 
         override fun close() {}
     }
 
     private inner class SimNode(
-        val dbName: String, val bp: MemoryStorage, indexerConfig: IndexerConfig,
+        dbName: String, val bp: MemoryStorage, indexerConfig: IndexerConfig,
     ) : LogProcessor.ProcessorFactory, AutoCloseable {
 
         val blockCatalog = BlockCatalog(dbName, null)
@@ -133,9 +148,10 @@ class LogProcessorSimTest : SimulationTestBase() {
         val dbState = DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
 
         val watchers = Watchers(-1)
-        private val indexer = simIndexer(liveIndex, dbName)
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val crashLogger = CrashLogger(allocator, bp, "sim-node")
+        val indexer = simIndexerWrapper(dbName)
 
         override fun openLeaderSystem(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -143,8 +159,8 @@ class LogProcessorSimTest : SimulationTestBase() {
             afterReplicaMsgId: MessageId,
         ): LogProcessor.LeaderSystem {
             val proc = LeaderLogProcessor(
-                allocator, dbStorage, replicaProducer,
-                dbState, indexer, watchers,
+                allocator, nodeBase, dbStorage, replicaProducer,
+                dbState, indexer, crashLogger, watchers,
                 emptySet(), null, blockUploader,
                 afterSourceMsgId, afterReplicaMsgId
             )
@@ -193,22 +209,30 @@ class LogProcessorSimTest : SimulationTestBase() {
         for (upload in replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()) {
             val blockIdx = upload.blockIndex
 
-            assertTrue(BlockCatalog.blockFilePath(blockIdx) in storedPaths,
-                "block file missing for b$blockIdx")
+            assertTrue(
+                BlockCatalog.blockFilePath(blockIdx) in storedPaths,
+                "block file missing for b$blockIdx"
+            )
 
             val tables = upload.tries.map { TableRef.parse(dbName, it.tableName) }.toSet()
 
             for (trie in upload.tries) {
                 val table = TableRef.parse(dbName, trie.tableName)
-                assertTrue(table.dataFilePath(trie.trieKey) in storedPaths,
-                    "data file missing for ${trie.tableName}/${trie.trieKey}")
-                assertTrue(table.metaFilePath(trie.trieKey) in storedPaths,
-                    "meta file missing for ${trie.tableName}/${trie.trieKey}")
+                assertTrue(
+                    table.dataFilePath(trie.trieKey) in storedPaths,
+                    "data file missing for ${trie.tableName}/${trie.trieKey}"
+                )
+                assertTrue(
+                    table.metaFilePath(trie.trieKey) in storedPaths,
+                    "meta file missing for ${trie.tableName}/${trie.trieKey}"
+                )
             }
 
             for (table in tables) {
-                assertTrue(BlockCatalog.tableBlockPath(table, blockIdx) in storedPaths,
-                    "table-block file missing for ${table.schemaAndTable}/b$blockIdx")
+                assertTrue(
+                    BlockCatalog.tableBlockPath(table, blockIdx) in storedPaths,
+                    "table-block file missing for ${table.schemaAndTable}/b$blockIdx"
+                )
             }
         }
     }
@@ -231,8 +255,10 @@ class LogProcessorSimTest : SimulationTestBase() {
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode) {
         node.liveIndex.openSnapshot().use { snap ->
-            assertEquals(node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
-                "snapshot basis should equal liveIndex.latestCompletedTx")
+            assertEquals(
+                node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
+                "snapshot basis should equal liveIndex.latestCompletedTx"
+            )
 
             val tableSnap = snap.table(docsTable) ?: return
             val rel = tableSnap.liveRelation ?: return
@@ -244,10 +270,14 @@ class LogProcessorSimTest : SimulationTestBase() {
             for (i in 0 until rel.rowCount) {
                 if (op.getLeg(i) == "put") {
                     val txId = txIdVec.getLong(i)
-                    assertTrue(txId !in abortedTxIds(),
-                        "aborted txId=$txId left a row in live table")
-                    assertTrue(txId <= basisTxId,
-                        "row txId=$txId > snapshot basis=$basisTxId")
+                    assertTrue(
+                        txId !in abortedTxIds(),
+                        "aborted txId=$txId left a row in live table"
+                    )
+                    assertTrue(
+                        txId <= basisTxId,
+                        "row txId=$txId > snapshot basis=$basisTxId"
+                    )
                 }
             }
         }
@@ -291,27 +321,47 @@ class LogProcessorSimTest : SimulationTestBase() {
                             .filterIsInstance<ReplicaMessage.ResolvedTx>()
                             .map { it.txId }
 
-                        assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-                        assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-                        assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
+                        assertEquals(
+                            sourceTxIds,
+                            replicaTxIds,
+                            "every source tx should appear on the replica, in order"
+                        )
+                        assertEquals(
+                            replicaTxIds,
+                            replicaTxIds.sorted(),
+                            "replica txIds should be monotonically increasing"
+                        )
+                        assertEquals(
+                            replicaTxIds.size,
+                            replicaTxIds.toSet().size,
+                            "replica should have no duplicate txIds"
+                        )
 
                         val replicaMessages = replicaLog.topic.map { it.message }
-                        val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-                        val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
+                        val boundaries =
+                            replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
+                        val uploads =
+                            replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
                         assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
 
-                        assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
-                            "block indices should be contiguous starting from 0")
+                        assertEquals(
+                            boundaries.indices.map { it.toLong() }, boundaries,
+                            "block indices should be contiguous starting from 0"
+                        )
 
                         val expectedBlockIndex = uploads.maxOfOrNull { it }
-                        assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                            "block catalog should match latest uploaded block")
+                        assertEquals(
+                            expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                            "block catalog should match latest uploaded block"
+                        )
 
                         if (replicaTxIds.isNotEmpty()) {
                             val lastReplicaTx = replicaMessages
                                 .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
-                            assertEquals(lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
-                                "live index latestCompletedTx should match last replica tx")
+                            assertEquals(
+                                lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
+                                "live index latestCompletedTx should match last replica tx"
+                            )
                         }
 
                         assertBlockFilesExist(bp, "test-db", replicaMessages)
@@ -338,9 +388,12 @@ class LogProcessorSimTest : SimulationTestBase() {
                             leader.openLogProcessor(leaderScope).use { leaderProc ->
                                 followerA.openLogProcessor(followerScopeA).use { followerProcA ->
                                     followerB.openLogProcessor(followerScopeB).use { followerProcB ->
-                                        val groupJobLeader = launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
-                                        val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
-                                        val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
+                                        val groupJobLeader =
+                                            launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
+                                        val groupJobA =
+                                            launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
+                                        val groupJobB =
+                                            launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
 
                                         launch(dispatcher) {
                                             val totalTxs = rand.nextInt(50, 100)
@@ -381,24 +434,47 @@ class LogProcessorSimTest : SimulationTestBase() {
                                             .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                             .map { it.txId }
 
-                                        assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-                                        assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-                                        assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
+                                        assertEquals(
+                                            sourceTxIds,
+                                            replicaTxIds,
+                                            "every source tx should appear on the replica, in order"
+                                        )
+                                        assertEquals(
+                                            replicaTxIds,
+                                            replicaTxIds.sorted(),
+                                            "replica txIds should be monotonically increasing"
+                                        )
+                                        assertEquals(
+                                            replicaTxIds.size,
+                                            replicaTxIds.toSet().size,
+                                            "replica should have no duplicate txIds"
+                                        )
 
                                         val replicaMessages = replicaLog.topic.map { it.message }
-                                        val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-                                        val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
-                                        assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
+                                        val boundaries =
+                                            replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>()
+                                                .map { it.blockIndex }
+                                        val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()
+                                            .map { it.blockIndex }
+                                        assertEquals(
+                                            boundaries,
+                                            uploads,
+                                            "every BlockBoundary should have a matching BlockUploaded"
+                                        )
 
-                                        assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
-                                            "block indices should be contiguous starting from 0")
+                                        assertEquals(
+                                            boundaries.indices.map { it.toLong() }, boundaries,
+                                            "block indices should be contiguous starting from 0"
+                                        )
 
                                         val nodes = listOf(leader, followerA, followerB)
 
                                         val expectedBlockIndex = uploads.maxOfOrNull { it }
                                         for (node in nodes) {
-                                            assertEquals(expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                                                "block catalog should match latest uploaded block")
+                                            assertEquals(
+                                                expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                                                "block catalog should match latest uploaded block"
+                                            )
                                         }
 
                                         val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
@@ -407,14 +483,22 @@ class LogProcessorSimTest : SimulationTestBase() {
                                         val expectedSourceWatermark = leader.watchers.latestSourceMsgId
 
                                         for (node in nodes) {
-                                            assertEquals(expectedSourceWatermark, node.watchers.latestSourceMsgId,
-                                                "all nodes should converge on the same source watermark")
-                                            assertEquals(expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
-                                                "all nodes should agree on latestProcessedMsgId")
-                                            assertEquals(expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
-                                                "all nodes should agree on block catalog's latestCompletedTx")
-                                            assertEquals(expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
-                                                "all nodes should agree on live index's latestCompletedTx")
+                                            assertEquals(
+                                                expectedSourceWatermark, node.watchers.latestSourceMsgId,
+                                                "all nodes should converge on the same source watermark"
+                                            )
+                                            assertEquals(
+                                                expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
+                                                "all nodes should agree on latestProcessedMsgId"
+                                            )
+                                            assertEquals(
+                                                expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
+                                                "all nodes should agree on block catalog's latestCompletedTx"
+                                            )
+                                            assertEquals(
+                                                expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
+                                                "all nodes should agree on live index's latestCompletedTx"
+                                            )
                                         }
 
                                         assertBlockFilesExist(bp, "test-db", replicaMessages)
@@ -484,38 +568,70 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     .filterIsInstance<ReplicaMessage.ResolvedTx>()
                                     .map { it.txId }
 
-                                assertEquals(sourceTxIds, replicaTxIds, "every source tx should appear on the replica, in order")
-                                assertEquals(replicaTxIds, replicaTxIds.sorted(), "replica txIds should be monotonically increasing")
-                                assertEquals(replicaTxIds.size, replicaTxIds.toSet().size, "replica should have no duplicate txIds")
+                                assertEquals(
+                                    sourceTxIds,
+                                    replicaTxIds,
+                                    "every source tx should appear on the replica, in order"
+                                )
+                                assertEquals(
+                                    replicaTxIds,
+                                    replicaTxIds.sorted(),
+                                    "replica txIds should be monotonically increasing"
+                                )
+                                assertEquals(
+                                    replicaTxIds.size,
+                                    replicaTxIds.toSet().size,
+                                    "replica should have no duplicate txIds"
+                                )
 
                                 val replicaMessages = replicaLog.topic.map { it.message }
-                                val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>().map { it.blockIndex }
-                                val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex }
-                                assertEquals(boundaries, uploads, "every BlockBoundary should have a matching BlockUploaded")
+                                val boundaries = replicaMessages.filterIsInstance<ReplicaMessage.BlockBoundary>()
+                                    .map { it.blockIndex }
+                                val uploads = replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()
+                                    .map { it.blockIndex }
+                                assertEquals(
+                                    boundaries,
+                                    uploads,
+                                    "every BlockBoundary should have a matching BlockUploaded"
+                                )
 
-                                assertEquals(boundaries.indices.map { it.toLong() }, boundaries,
-                                    "block indices should be contiguous starting from 0")
+                                assertEquals(
+                                    boundaries.indices.map { it.toLong() }, boundaries,
+                                    "block indices should be contiguous starting from 0"
+                                )
 
                                 val expectedBlockIndex = replicaMessages
                                     .filterIsInstance<ReplicaMessage.BlockUploaded>()
                                     .maxOfOrNull { it.blockIndex }
 
-                                assertEquals(expectedBlockIndex, nodeA.blockCatalog.currentBlockIndex,
-                                    "node A block catalog should match latest uploaded block")
-                                assertEquals(expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
-                                    "node B block catalog should match latest uploaded block")
+                                assertEquals(
+                                    expectedBlockIndex, nodeA.blockCatalog.currentBlockIndex,
+                                    "node A block catalog should match latest uploaded block"
+                                )
+                                assertEquals(
+                                    expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
+                                    "node B block catalog should match latest uploaded block"
+                                )
 
-                                assertEquals(nodeA.watchers.latestSourceMsgId, nodeB.watchers.latestSourceMsgId,
-                                    "both nodes should converge on the same source watermark")
+                                assertEquals(
+                                    nodeA.watchers.latestSourceMsgId, nodeB.watchers.latestSourceMsgId,
+                                    "both nodes should converge on the same source watermark"
+                                )
 
-                                assertEquals(nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
-                                    "both nodes should agree on latestProcessedMsgId")
+                                assertEquals(
+                                    nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
+                                    "both nodes should agree on latestProcessedMsgId"
+                                )
 
-                                assertEquals(nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
-                                    "both nodes should agree on block catalog's latestCompletedTx")
+                                assertEquals(
+                                    nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
+                                    "both nodes should agree on block catalog's latestCompletedTx"
+                                )
 
-                                assertEquals(nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
-                                    "both nodes should agree on live index's latestCompletedTx")
+                                assertEquals(
+                                    nodeA.liveIndex.latestCompletedTx, nodeB.liveIndex.latestCompletedTx,
+                                    "both nodes should agree on live index's latestCompletedTx"
+                                )
 
                                 assertBlockFilesExist(bp, "test-db", replicaMessages)
 

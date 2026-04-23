@@ -7,9 +7,12 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.memory.BufferAllocator
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.NodeBase
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -32,12 +35,27 @@ import java.time.InstantSource
 
 class LeaderLogProcessorTest {
 
+    private lateinit var nodeBase: NodeBase
+    private lateinit var allocator: BufferAllocator
+
+    @BeforeEach
+    fun setUp() {
+        nodeBase = NodeBase.openBase(openMeterRegistry = false)
+        allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
+    }
+
+    @AfterEach
+    fun tearDown() {
+        allocator.close()
+        nodeBase.close()
+    }
+
     private fun leaderProc(
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
         liveIndex: LiveIndex = mockk(relaxed = true),
-        indexer: Indexer.ForDatabase = mockk(relaxed = true),
+        indexer: Indexer = mockk(relaxed = true),
         blockCatalog: BlockCatalog = BlockCatalog("test", null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
@@ -50,8 +68,8 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         return LeaderLogProcessor(
-            RootAllocator(), dbStorage, replicaProducer,
-            dbState, indexer, watchers,
+            allocator, nodeBase, dbStorage, replicaProducer, dbState,
+            indexer, mockk(relaxed = true), watchers,
             emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
         )
     }
@@ -103,8 +121,8 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         val lp = LeaderLogProcessor(
-            RootAllocator(), dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), Watchers(-1),
+            allocator, nodeBase, dbStorage, replicaProducer,
+            dbState, mockk(relaxed = true), mockk(relaxed = true), Watchers(-1),
             emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
         )
 
@@ -167,8 +185,8 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         val lp = LeaderLogProcessor(
-            RootAllocator(), dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), Watchers(-1),
+            allocator, nodeBase, dbStorage, replicaProducer,
+            dbState, mockk(relaxed = true), mockk(relaxed = true), Watchers(-1),
             emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
         )
 

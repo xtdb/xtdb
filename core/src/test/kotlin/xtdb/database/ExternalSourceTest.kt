@@ -3,9 +3,7 @@ package xtdb.database
 import com.google.protobuf.StringValue
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -16,7 +14,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import xtdb.ResultCursor
+import xtdb.NodeBase
+import xtdb.NodeBase.Companion.openBase
 import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
@@ -26,42 +25,48 @@ import xtdb.indexer.ExternalSourceProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
-import xtdb.query.IQuerySource
-import xtdb.query.PreparedQuery
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
 import com.google.protobuf.Any as ProtoAny
 
 class ExternalSourceTest {
 
     private lateinit var allocator: RootAllocator
+    private lateinit var nodeBase: NodeBase
     private lateinit var bufferPool: MemoryStorage
 
     @BeforeEach
     fun setUp() {
         allocator = RootAllocator()
+        nodeBase = openBase()
         bufferPool = MemoryStorage(allocator, 0)
     }
 
     @AfterEach
     fun tearDown() {
         bufferPool.close()
+        nodeBase.close()
         allocator.close()
     }
 
     /**
      * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel]; each signal submits a tx via [xtdb.TxIndexer.indexTx].
+     * Send signals to [channel]; each signal submits a tx via [xtdb.indexer.TxIndexer.indexTx].
      */
     class InMemoryExternalSource(
         val channel: Channel<ExternalSourceToken?> = Channel(100),
     ) : ExternalSource {
 
-        override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer) {
+        override suspend fun onPartitionAssigned(
+            partition: Int,
+            afterToken: ExternalSourceToken?,
+            txIndexer: TxIndexer
+        ) {
             for (token in channel) {
                 txIndexer.indexTx(token) { _ ->
                     TxResult.Committed()
@@ -81,7 +86,6 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(-1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
-        querySource: IQuerySource = mockk(relaxed = true),
         ctx: CoroutineContext,
     ): ExternalSourceProcessor {
         val blockCatalog = BlockCatalog("test", null)
@@ -94,9 +98,8 @@ class ExternalSourceTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
 
         return ExternalSourceProcessor(
-            allocator, dbStorage, replicaProducer, dbState, watchers, blockUploader, querySource,
-            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1,
-            extSource = extSource, afterToken = afterToken, ctx = ctx,
+            allocator, nodeBase, dbStorage, dbState, blockUploader, watchers, extSource, replicaProducer,
+            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1, afterToken = afterToken, ctx = ctx
         )
     }
 
@@ -109,9 +112,15 @@ class ExternalSourceTest {
         }
         val extSource = InMemoryExternalSource()
 
-        leaderProc(replicaLog = replicaLog, liveIndex = liveIndex, watchers = watchers, extSource = extSource, ctx = coroutineContext).use {
+        leaderProc(
+            replicaLog = replicaLog,
+            liveIndex = liveIndex,
+            watchers = watchers,
+            extSource = extSource,
+            ctx = coroutineContext
+        ).use {
             extSource.channel.send(null)
-            delay(500)
+            delay(500.milliseconds)
 
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
 
@@ -121,7 +130,7 @@ class ExternalSourceTest {
                     replicaMessages.addAll(records.map { it.message })
                 }
             }
-            delay(200)
+            delay(200.milliseconds)
             job.cancelAndJoin()
 
             assertEquals(1, replicaMessages.size)
@@ -147,7 +156,7 @@ class ExternalSourceTest {
             extSource.channel.send(null)
             extSource.channel.send(null)
 
-            delay(500)
+            delay(500.milliseconds)
 
             verify(exactly = 2) { liveIndex.commitTx(any()) }
             assertTrue(replicaLog.latestSubmittedOffset >= 1, "replica log should have 2 messages")
@@ -167,11 +176,13 @@ class ExternalSourceTest {
         try {
             val now = Instant.now()
 
-            lp.processRecords(listOf(
-                Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
-            ))
+            lp.processRecords(
+                listOf(
+                    Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
+                )
+            )
 
-            delay(500)
+            delay(500.milliseconds)
 
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through to the leader")
         } finally {
@@ -189,7 +200,7 @@ class ExternalSourceTest {
             val token = ProtoAny.pack(StringValue.of("kafka-offset:42"))
             extSource.channel.send(token)
 
-            delay(500)
+            delay(500.milliseconds)
 
             val watcherToken = watchers.externalSourceToken
             assertNotNull(watcherToken)
@@ -204,19 +215,20 @@ class ExternalSourceTest {
         val watchers = Watchers(-1)
 
         val failingSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer) {
+            override suspend fun onPartitionAssigned(
+                partition: Int,
+                afterToken: ExternalSourceToken?,
+                txIndexer: TxIndexer
+            ) {
                 throw RuntimeException("source poll failed")
             }
+
             override fun close() {}
         }
 
-        val lp = leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext)
-
-        try {
-            delay(500)
+        leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext).use {
+            delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
-        } finally {
-            lp.close()
         }
     }
 
@@ -232,63 +244,8 @@ class ExternalSourceTest {
 
         try {
             extSource.channel.send(null)
-            delay(500)
+            delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
-        } finally {
-            lp.close()
-        }
-    }
-
-    @Test
-    fun `openQuery on writer OpenTx delegates to querySource with tx-scoped snapshot`() = runTest {
-        val cursor = mockk<ResultCursor>(relaxed = true)
-        val pq = mockk<PreparedQuery> {
-            every { openQuery(any(), any()) } returns cursor
-        }
-
-        val sqlSlot = slot<Any>()
-        val catSlot = slot<IQuerySource.QueryCatalog>()
-        val querySource = mockk<IQuerySource> {
-            every { prepareQuery(capture(sqlSlot), capture(catSlot), any()) } returns pq
-        }
-
-        val receivedCursor = CompletableDeferred<ResultCursor>()
-        val receivedTable = CompletableDeferred<Unit>()
-
-        val extSource = object : ExternalSource {
-            override suspend fun onPartitionAssigned(
-                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer,
-            ) {
-                txIndexer.indexTx(null) { openTx ->
-                    openTx.table("public", "customers")
-                    receivedTable.complete(Unit)
-
-                    val cur = openTx.openQuery("SELECT _id FROM public.customers")
-                    receivedCursor.complete(cur)
-                    TxResult.Committed()
-                }
-            }
-
-            override fun close() {}
-        }
-
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { latestCompletedTx } returns null
-        }
-
-        val lp = leaderProc(
-            liveIndex = liveIndex, extSource = extSource,
-            querySource = querySource, ctx = coroutineContext,
-        )
-
-        try {
-            receivedTable.await()
-            val cur = receivedCursor.await()
-
-            assertSame(cursor, cur, "openQuery should return the querySource's cursor")
-            assertEquals("SELECT _id FROM public.customers", sqlSlot.captured)
-            assertEquals(setOf("test"), catSlot.captured.databaseNames.toSet())
-            verify { pq.openQuery(isNull(), any()) }
         } finally {
             lp.close()
         }

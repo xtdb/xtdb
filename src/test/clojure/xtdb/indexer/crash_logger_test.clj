@@ -33,7 +33,7 @@
             tx-ops [[:put-docs :public/foo {:xt/id 3, :version 0}]
                     [:put-docs :public/foo {:xt/id 4, :version 0}]]]
 
-        (with-open [open-tx (.startTx live-idx (serde/->TxKey 1 Instant/EPOCH))
+        (with-open [open-tx (tu/->open-tx al node (serde/->TxKey 1 Instant/EPOCH))
                     query-rel (Relation/openFromRows al [{:foo "bar", :baz 32}, {:foo "baz", :baz 64}])
                     tx-ops-rel (Relation/openFromArrowStream al (tu/serialize-tx-ops al (mapv tx-ops/parse-tx-op tx-ops)
                                                                                      {:default-db "xtdb"

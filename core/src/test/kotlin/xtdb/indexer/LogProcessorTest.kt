@@ -5,11 +5,13 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.apache.arrow.memory.BufferAllocator
+import xtdb.NodeBase
+import xtdb.NodeBase.Companion.openBase
 import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
@@ -24,16 +26,19 @@ import java.util.concurrent.TimeUnit
 @Timeout(10, unit = TimeUnit.SECONDS)
 class LogProcessorTest {
 
-    private lateinit var allocator: RootAllocator
+    private lateinit var nodeBase: NodeBase
+    private lateinit var allocator: BufferAllocator
 
     @BeforeEach
     fun setUp() {
-        allocator = RootAllocator()
+        nodeBase = openBase(openMeterRegistry = false)
+        allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
     }
 
     @AfterEach
     fun tearDown() {
         allocator.close()
+        nodeBase.close()
     }
 
     private fun mockBufferPool(epoch: Int = 0) =
@@ -49,7 +54,7 @@ class LogProcessorTest {
         )
 
     private fun procFactory(
-        allocator: RootAllocator,
+        allocator: BufferAllocator,
         bufferPool: BufferPool,
         dbState: DatabaseState,
         dbStorage: DatabaseStorage,
@@ -64,8 +69,8 @@ class LogProcessorTest {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
                 val leaderProc = LeaderLogProcessor(
-                    allocator, dbStorage, replicaProducer,
-                    dbState, mockk(relaxed = true), watchers,
+                    allocator, nodeBase, dbStorage, replicaProducer,
+                    dbState, mockk(relaxed = true), mockk(relaxed = true), watchers,
                     emptySet(), null, blockUploader, afterSourceMsgId, afterReplicaMsgId
                 )
                 return object : LogProcessor.LeaderSystem {
@@ -178,7 +183,7 @@ class LogProcessorTest {
 
         verify { liveIndex.importTx(any()) }
 
-        runBlocking { job.cancelAndJoin() }
+        job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -212,7 +217,7 @@ class LogProcessorTest {
 
         verify { liveIndex.importTx(any()) }
 
-        runBlocking { job.cancelAndJoin() }
+        job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()

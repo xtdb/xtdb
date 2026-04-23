@@ -39,7 +39,7 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (with-open [open-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
+      (with-open [open-tx (tu/->open-tx allocator tu/*node* (serde/->TxKey 0 (.toInstant #inst "2000")))]
         (let [open-tx-table (.table open-tx #xt/table my-table)
               put-doc-wrt (.getDocWriter open-tx-table)]
           (doseq [^UUID iid iids]
@@ -140,7 +140,7 @@
 (t/deftest test-uncommitted-tx-not-visible
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]
 
-    (with-open [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx0 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [foo-table-tx (.table live-tx0 #xt/table foo)
             doc-wtr (.getDocWriter foo-table-tx)]
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
@@ -149,7 +149,7 @@
         (.commitTx live-index live-tx0)))
 
     (t/testing "uncommitted tx data doesn't appear in live-index"
-      (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+      (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
         (let [bar-table-tx (.table live-tx1 #xt/table bar)
               doc-wtr (.getDocWriter bar-table-tx)]
           (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
@@ -187,7 +187,7 @@
         table #xt/table test-table
         iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
-    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
@@ -224,7 +224,7 @@
         iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
     ;; Commit first transaction
-    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
@@ -236,7 +236,7 @@
             row-count-before (.getRowCount (.getLiveRelation table-snap-before))]
 
         ;; Commit second transaction
-        (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+        (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
           (let [table-tx (.table live-tx2 table)
                 doc-wtr (.getDocWriter table-tx)]
             (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
@@ -263,7 +263,7 @@
         table #xt/table test-table
         iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
-    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx-1 (.table live-tx table)
             table-tx-2 (.table live-tx table)]
 
@@ -283,7 +283,7 @@
         table #xt/table test-table
         iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
-    (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx table)
             doc-wtr (.getDocWriter table-tx)]
 
@@ -313,7 +313,7 @@
         (let [table #xt/table test-table
               iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
-          (with-open [live-tx (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+          (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getDocWriter table-tx)]
               (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
@@ -335,14 +335,14 @@
         iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
 
     ;; First commit some data
-    (with-open [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
+    (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
         (.commitTx live-index live-tx1)))
 
     ;; Start second transaction and write more data
-    (with-open [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
+    (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
       (let [table-tx (.table live-tx2 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))

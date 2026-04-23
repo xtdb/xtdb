@@ -1,8 +1,7 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.Gauge
-import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.NodeBase
 import xtdb.database.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -17,6 +16,7 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.error.Anomaly
 import xtdb.error.Interrupted
+import xtdb.indexer.TxIndexer.TxResult
 import xtdb.table.TableRef
 import xtdb.tx.deserializeUserMetadata
 import xtdb.util.*
@@ -31,10 +31,12 @@ private val LOG = LeaderLogProcessor::class.logger
 
 class LeaderLogProcessor(
     allocator: BufferAllocator,
+    nodeBase: NodeBase,
     dbStorage: DatabaseStorage,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val dbState: DatabaseState,
-    private val indexer: Indexer.ForDatabase,
+    indexer: Indexer,
+    crashLogger: CrashLogger,
     private val watchers: Watchers,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
@@ -42,8 +44,7 @@ class LeaderLogProcessor(
     afterSourceMsgId: MessageId,
     afterReplicaMsgId: MessageId,
     flushTimeout: Duration = Duration.ofMinutes(5),
-    meterRegistry: MeterRegistry? = null,
-) : LogProcessor.LeaderProcessor {
+) : LogProcessor.LeaderProcessor, TxCommitter {
 
     init {
         require((dbCatalog != null) == (dbState.name == "xtdb")) {
@@ -60,6 +61,15 @@ class LeaderLogProcessor(
     private val trieCatalog = dbState.trieCatalog
 
     private val allocator = allocator.newChildAllocator("leader-log-processor", 0, Long.MAX_VALUE)
+
+    private val txIndexer = TxIndexer(this.allocator, nodeBase, dbStorage, dbState, watchers, committer = this)
+
+    private val indexer: Indexer.ForDatabase =
+        indexer.openForDatabase(this.allocator, dbStorage, dbState, liveIndex, crashLogger, txIndexer)
+
+    override suspend fun commit(openTx: OpenTx, result: TxResult) {
+        throw UnsupportedOperationException("LeaderLogProcessor.commit — internal-indexer migration not yet complete")
+    }
 
     override var pendingBlock: PendingBlock? = null
         private set
@@ -159,7 +169,8 @@ class LeaderLogProcessor(
     }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
-        val boundaryMsg = BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
+        val boundaryMsg =
+            BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("[$dbName] block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
@@ -190,7 +201,8 @@ class LeaderLogProcessor(
                 when (val msg = record.message) {
                     is SourceMessage.Tx -> {
                         val resolved = resolveTx(msgId, record, msg)
-                        handleResolvedTx(msg.externalSourceToken?.let { resolved.copy(externalSourceToken = it) } ?: resolved)
+                        handleResolvedTx(msg.externalSourceToken?.let { resolved.copy(externalSourceToken = it) }
+                            ?: resolved)
                     }
 
                     is SourceMessage.LegacyTx -> handleResolvedTx(resolveTx(msgId, record, msg))
@@ -294,6 +306,7 @@ class LeaderLogProcessor(
     }
 
     override fun close() {
+        indexer.close()
         allocator.close()
     }
 }

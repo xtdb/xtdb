@@ -13,7 +13,7 @@ import xtdb.api.RemoteAlias
 import xtdb.api.log.Log
 import xtdb.api.log.LogClusterAlias
 import xtdb.database.ExternalSource
-import xtdb.indexer.TxIndexer.OpenTx
+import xtdb.indexer.OpenTx
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.database.proto.DatabaseConfig

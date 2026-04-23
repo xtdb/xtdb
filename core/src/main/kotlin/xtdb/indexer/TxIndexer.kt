@@ -1,22 +1,16 @@
 package xtdb.indexer
 
 import io.micrometer.core.instrument.Counter
-import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.CancellationException
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.ResultCursor
+import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.log.Watchers
-import xtdb.arrow.RelationReader
-import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSourceToken
 import xtdb.indexer.Indexer.Companion.addTxRow
-import xtdb.kw
-import xtdb.query.IQuerySource
-import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import java.time.Instant
@@ -29,27 +23,25 @@ import java.time.ZoneId
  * indicating success or failure (with optional `userMetadata` — the source can decide metadata
  * after writing, not before).
  *
- * [indexTx] owns the full lifecycle: smoothing, opening the raw OpenTx, running the writer,
+ * [indexTx] owns the full lifecycle: smoothing, opening the OpenTx, running the writer,
  * adding the `xt/txs` row, delegating commit to the [TxCommitter], and closing the OpenTx.
  */
 class TxIndexer internal constructor(
     private val allocator: BufferAllocator,
+    private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
-    private val querySource: IQuerySource,
     private val watchers: Watchers,
     private val committer: TxCommitter,
     private val tracer: Tracer? = null,
-    meterRegistry: MeterRegistry? = null,
     private val instantSource: InstantSource = InstantSource.system(),
 ) {
 
     private val dbName get() = dbState.name
     private val liveIndex get() = dbState.liveIndex
 
-    private val txErrorCounter: Counter? = meterRegistry?.let {
-        Counter.builder("tx.error").register(it)
-    }
+    private val txErrorCounter: Counter? =
+        nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
     sealed interface TxResult {
         val userMetadata: Map<*, *>?
@@ -63,88 +55,16 @@ class TxIndexer internal constructor(
         val defaultTz: ZoneId? = null,
     )
 
-    /**
-     * The per-tx handle passed to the writer lambda in [TxIndexer.indexTx].
-     * Writes go via [table]; reads via [openQuery], with visibility into writes made earlier
-     * in the same writer call.
-     *
-     * Scoped to the writer's database — and, once XTDB supports multi-partition external sources,
-     * to the current partition. Other databases and partitions are not visible.
-     */
-    interface OpenTx {
-
-        val txKey: TransactionKey
-        val systemFrom: Long
-
-        fun table(ref: TableRef): xtdb.indexer.OpenTx.Table
-
-        fun table(schemaName: String, tableName: String): xtdb.indexer.OpenTx.Table
-
-        /**
-         * Run SQL against the database's live index, with visibility into writes made earlier
-         * in this transaction.
-         *
-         * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader].
-         * [xtdb.arrow.Relation.openFromRows] wraps a `List<Map<*, *>>` — keys can be column names
-         * or positional placeholders (`_0`, `_1`, …):
-         *
-         *     Relation.openFromRows(al, listOf(mapOf("_0" to pk))).use { rel ->
-         *         openTx.openQuery("SELECT * FROM t WHERE _id = ?", rel.relReader).use { cursor ->
-         *             …
-         *         }
-         *     }
-         *
-         * Defaults for [opts] are derived from the tx's system-time and the database's default
-         * timezone; most callers can omit it.
-         */
-        fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor
-    }
-
     private fun smoothSystemTime(systemTime: Instant): Instant {
         val lct = liveIndex.latestCompletedTx?.systemTime ?: return systemTime
         val floor = fromMicros(lct.asMicros + 1)
         return if (systemTime.isBefore(floor)) floor else systemTime
     }
 
-    private inner class WriterOpenTx(val inner: xtdb.indexer.OpenTx) : OpenTx {
-        override val txKey get() = inner.txKey
-        override val systemFrom get() = inner.systemFrom
+    private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
+        OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
 
-        override fun table(ref: TableRef) = inner.table(ref)
-        override fun table(schemaName: String, tableName: String) =
-            inner.table(TableRef(dbName, schemaName, tableName))
-
-        fun queryCatalog(): IQuerySource.QueryCatalog {
-            val snapSource = object : Snapshot.Source {
-                override fun openSnapshot() = liveIndex.openSnapshot(inner)
-            }
-
-            val queryDb = object : IQuerySource.QueryDatabase {
-                override val storage get() = dbStorage
-                override val queryState get() = dbState
-                override fun openSnapshot() = snapSource.openSnapshot()
-            }
-            return object : IQuerySource.QueryCatalog {
-                override val databaseNames: Collection<DatabaseName> get() = setOf(dbName)
-                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == this@TxIndexer.dbName }
-            }
-        }
-
-        override fun openQuery(sql: String, args: RelationReader?, opts: QueryOpts): ResultCursor {
-            val currentTime = opts.currentTime ?: inner.txKey.systemTime
-
-            val prepareOpts = mapOf(
-                "current-time".kw to currentTime,
-                "default-tz".kw to opts.defaultTz,
-                "default-db".kw to dbName,
-                "query-text".kw to sql,
-            )
-
-            return querySource
-                .prepareQuery(sql, queryCatalog(), prepareOpts)
-                .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
-        }
-    }
+    fun startTx(txKey: TransactionKey): OpenTx = openTx(txKey, null)
 
     suspend fun indexTx(
         externalSourceToken: ExternalSourceToken?,
@@ -155,9 +75,9 @@ class TxIndexer internal constructor(
         val txKey = TransactionKey(txId, smoothSystemTime(systemTime))
 
         try {
-            val openTx = OpenTx(allocator, txKey, externalSourceToken)
+            val openTx = openTx(txKey, externalSourceToken)
             val result = try {
-                writer(WriterOpenTx(openTx))
+                writer(openTx)
             } catch (e: Throwable) {
                 openTx.close()
                 throw e
@@ -172,7 +92,7 @@ class TxIndexer internal constructor(
                 is TxResult.Aborted -> {
                     txErrorCounter?.increment()
                     openTx.close()
-                    OpenTx(allocator, txKey, externalSourceToken).use { abortTx ->
+                    openTx(txKey, externalSourceToken).use { abortTx ->
                         abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
                         committer.commit(abortTx, result)
                     }

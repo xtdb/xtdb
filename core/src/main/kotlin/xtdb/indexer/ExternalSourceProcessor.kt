@@ -4,10 +4,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.NodeBase
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
@@ -20,7 +20,6 @@ import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Interrupted
 import xtdb.indexer.TxIndexer.TxResult
-import xtdb.query.IQuerySource
 import xtdb.table.TableRef
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -34,19 +33,18 @@ import kotlin.coroutines.CoroutineContext
 private val LOG = ExternalSourceProcessor::class.logger
 
 class ExternalSourceProcessor(
-    private val allocator: BufferAllocator,
-    private val dbStorage: DatabaseStorage,
-    private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+    allocator: BufferAllocator,
+    nodeBase: NodeBase,
+    dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
-    private val watchers: Watchers,
     private val blockUploader: BlockUploader,
-    private val querySource: IQuerySource,
+    private val watchers: Watchers,
+    private val extSource: ExternalSource,
+    private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     partition: Int,
     afterSourceMsgId: MessageId,
     afterReplicaMsgId: MessageId,
-    private val extSource: ExternalSource,
     afterToken: ExternalSourceToken?,
-    meterRegistry: MeterRegistry? = null,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
@@ -83,10 +81,8 @@ class ExternalSourceProcessor(
     // must hold this lock before touching it.
     private val mutex = Mutex()
 
-    private val txIndexer = TxIndexer(
-        allocator, dbStorage, dbState, querySource, watchers,
-        committer = this, meterRegistry = meterRegistry, instantSource = instantSource,
-    )
+    private val txIndexer =
+        TxIndexer(allocator, nodeBase, dbStorage, dbState, watchers, committer = this, instantSource = instantSource)
 
     private val extJob = CoroutineScope(ctx).launch {
         try {

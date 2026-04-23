@@ -26,7 +26,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer RelationIndexer Snapshot Snapshot$Source)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer RelationIndexer Snapshot Snapshot$Source TxIndexer)
            (xtdb.table TableRef)
            xtdb.NodeBase
            (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery QueryOpts)))
@@ -500,6 +500,7 @@
                                db-name, db-storage, db-state
                                ^LiveIndex live-index, table-catalog
                                ^CrashLogger crash-logger
+                               ^TxIndexer tx-indexer
                                ^Timer tx-timer
                                ^Counter tx-error-counter
                                ^Tracer tracer]
@@ -526,7 +527,7 @@
                        (pr-str system-time)
                        (pr-str (.getLatestCompletedTx live-index)))
 
-            (util/with-open [open-tx (.startTx live-index tx-key)]
+            (util/with-open [open-tx (.startTx tx-indexer tx-key)]
               (when tx-error-counter
                 (.increment tx-error-counter))
               (add-tx-row! db-name open-tx tx-key err user-metadata)
@@ -534,10 +535,10 @@
 
           (let [system-time (or system-time default-system-time)
                 tx-key (serde/->TxKey msg-id system-time)]
-            (util/with-open [open-tx (.startTx live-index tx-key)]
+            (util/with-open [open-tx (.startTx tx-indexer tx-key)]
               (if (nil? tx-ops-rdr)
                 (do
-                                    (util/with-open [open-tx (.startTx live-index tx-key)]
+                                    (util/with-open [open-tx (.startTx tx-indexer tx-key)]
                     (add-tx-row! db-name open-tx tx-key skipped-exn user-metadata)
                     (commit live-index open-tx false skipped-exn)))
 
@@ -586,7 +587,7 @@
                     (do
                       (log/debug e "aborted tx")
                       
-                      (util/with-open [open-tx (.startTx live-index tx-key)]
+                      (util/with-open [open-tx (.startTx tx-indexer tx-key)]
                         (when tx-error-counter
                           (.increment tx-error-counter))
                         (add-tx-row! db-name open-tx tx-key e user-metadata)
@@ -597,7 +598,7 @@
                       (commit live-index open-tx true nil)))))))))))
 
   (addTxRow [_ tx-key e]
-    (util/with-open [open-tx (.startTx live-index tx-key)]
+    (util/with-open [open-tx (.startTx tx-indexer tx-key)]
       (add-tx-row! db-name open-tx tx-key e {})
       (commit live-index open-tx (nil? e) e))))
 
@@ -613,13 +614,13 @@
                                         {:description "indicates the timing and number of transactions"})
             tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
         (reify Indexer
-          (openForDatabase [_ allocator db-storage db-state live-index crash-logger]
+          (openForDatabase [_ allocator db-storage db-state live-index crash-logger tx-indexer]
             (let [db-name (.getName db-state)]
               (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
                 (->IndexerForDatabase allocator (.getNodeId config) q-src
                                       db-name db-storage db-state
                                       live-index (.getTableCatalog db-state)
-                                      crash-logger
+                                      crash-logger tx-indexer
                                       tx-timer tx-error-counter tracer))))
 
           (close [_]))))))

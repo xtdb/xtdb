@@ -63,7 +63,6 @@ class Database(
     val gcOrNull: GarbageCollector.ForDatabase? = null,
     private val job: Job? = null,
     private val processor: AutoCloseable? = null,
-    private val indexerForDb: Indexer.ForDatabase? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
 ) : IQuerySource.QueryDatabase, AutoCloseable {
     val name: DatabaseName get() = queryState.name
@@ -107,7 +106,7 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         job?.let { runBlocking { it.cancelAndJoin() } }
-        listOf(processor, compactorOrNull, gcOrNull, indexerForDb, queryState, storage, allocator).closeAll()
+        listOf(processor, compactorOrNull, gcOrNull, queryState, storage, allocator).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -169,7 +168,6 @@ class Database(
             val watchers = Watchers(sourceMsgId, sourceMsgId, blockCatalog.externalSourceToken)
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
-            val indexerForDb = open { indexer.openForDatabase(allocator, storage, state, state.liveIndex, crashLogger) }
 
             val compactorForDb = open {
                 if (readOnly) Compactor.NOOP.openForDatabase(allocator, storage, state, watchers)
@@ -206,14 +204,14 @@ class Database(
 
                         return if (extFactory != null) {
                             val leaderProc = ExternalSourceProcessor(
-                                allocator, storage, replicaProducer, state,
-                                watchers, blockUploader, base.querySource,
-                                partition = 0, afterSourceMsgId, afterReplicaMsgId,
+                                allocator, base, storage, state, blockUploader, watchers,
                                 extSource = extFactory.open(dbName, base.logClusters, base.remotes),
+                                replicaProducer,
+                                partition = 0,
+                                afterSourceMsgId, afterReplicaMsgId,
                                 // watchers has the latest token from replica log replay,
                                 // which may be ahead of blockCatalog if no block boundary was flushed.
                                 afterToken = watchers.externalSourceToken,
-                                meterRegistry = base.meterRegistry,
                                 flushTimeout = indexerConfig.flushDuration,
                             )
 
@@ -223,13 +221,12 @@ class Database(
                             }
                         } else {
                             val leaderProc = LeaderLogProcessor(
-                                allocator, storage, replicaProducer, state,
-                                indexerForDb, watchers,
+                                allocator, base, storage, replicaProducer, state,
+                                indexer, crashLogger, watchers,
                                 indexerConfig.skipTxs.toSet(),
                                 dbCatalog, blockUploader,
                                 afterSourceMsgId, afterReplicaMsgId,
                                 indexerConfig.flushDuration,
-                                base.meterRegistry,
                             )
 
                             object : LogProcessor.LeaderSystem {
@@ -294,7 +291,6 @@ class Database(
                 gcOrNull = gcForDb,
                 job = job,
                 processor = processor,
-                indexerForDb = indexerForDb,
                 registeredGauges = gauges,
             )
         }

@@ -153,7 +153,7 @@
         (util/with-open [live-index (LiveIndex/open live-index-allocator
                                                                         block-cat table-catalog
                                                                         "xtdb")]
-          (with-open [open-tx (.startTx live-index (serde/->TxKey 0 (.toInstant #inst "2000")))]
+          (with-open [open-tx (tu/->open-tx allocator tu/*node* (serde/->TxKey 0 (.toInstant #inst "2000")))]
             (let [open-tx-table (.table open-tx table)
                   doc-wtr (.getDocWriter open-tx-table)]
 

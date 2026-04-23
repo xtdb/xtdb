@@ -105,6 +105,7 @@ interface Indexer : AutoCloseable {
         storage: DatabaseStorage,
         state: DatabaseState,
         liveIndex: LiveIndex,
-        crashLogger: CrashLogger
+        crashLogger: CrashLogger,
+        txIndexer: TxIndexer,
     ): ForDatabase
 }
