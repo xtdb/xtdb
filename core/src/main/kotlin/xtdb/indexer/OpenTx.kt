@@ -13,10 +13,14 @@ import xtdb.arrow.VectorWriter
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import clojure.lang.PersistentArrayMap
+import xtdb.arrow.RelationAsStructReader
 import xtdb.database.ExternalSourceToken
+import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.kw
 import xtdb.query.IQuerySource
+import xtdb.query.PreparedDmlQuery
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
@@ -99,7 +103,130 @@ class OpenTx(
             .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
     }
 
+    /**
+     * Execute a SQL DML statement (INSERT / UPDATE / PATCH / DELETE / ERASE / ASSERT)
+     * against this tx, with visibility into writes made earlier in the same writer call.
+     * Positional `?` parameters come from [args], like [openQuery].
+     *
+     * Writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) throw.
+     */
+    fun executeDml(
+        sql: String,
+        args: RelationReader? = null,
+        opts: TxIndexer.QueryOpts = TxIndexer.QueryOpts(),
+    ) {
+        val currentTime = opts.currentTime ?: txKey.systemTime
+        val currentTimeµs = currentTime.asMicros
+        val qOpts = xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
+
+        val prepareOpts = PersistentArrayMap.create(mapOf(
+            "current-time".kw to currentTime,
+            "default-tz".kw to opts.defaultTz,
+            "default-db".kw to dbState.name,
+            "query-text".kw to sql,
+            "arg-fields".kw to args?.schema?.fields,
+        ))
+
+        val prepared = nodeBase.querySource.prepareDmlQuery(sql, queryCatalog(), prepareOpts)
+
+        checkArgCount(args, prepared.paramCount)
+
+        when (val kind = prepared.kind) {
+            is PreparedDmlQuery.Assert -> {
+                val msg = kind.message ?: "Assert failed"
+                fun fail(): Nothing = throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
+                prepared.openQuery(args, qOpts).use { cursor ->
+                    if (!cursor.tryAdvance { rel -> if (rel.rowCount == 0) fail() }) fail()
+                }
+            }
+
+            is PreparedDmlQuery.Put -> {
+                checkNotForbidden(kind.table)
+                val table = table(kind.table)
+                prepared.openQuery(args, qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel ->
+                        // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
+                        // not the canonical `_iid` + `doc` shape `logPuts` expects.
+                        // Package content cols into a `doc` struct here.
+                        val tempColNames = setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
+                        val contentRel = RelationReader.from(
+                            rel.vectors.filter { it.name !in tempColNames },
+                            rel.rowCount,
+                        )
+                        val putCols = listOfNotNull(
+                            rel.vectorFor("_id"),
+                            RelationAsStructReader("doc", contentRel),
+                            rel.vectorForOrNull("_valid_from"),
+                            rel.vectorForOrNull("_valid_to"),
+                        )
+                        table.logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
+                    }
+                }
+            }
+
+            is PreparedDmlQuery.Patch -> {
+                checkNotForbidden(kind.table)
+                val table = table(kind.table)
+                prepared.openQuery(args, qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel -> table.logPuts(0, Long.MAX_VALUE, rel) }
+                }
+            }
+
+            is PreparedDmlQuery.Delete -> {
+                checkNotForbidden(kind.table)
+                val table = table(kind.table)
+                prepared.openQuery(args, qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel -> table.logDeletes(0, Long.MAX_VALUE, rel) }
+                }
+            }
+
+            is PreparedDmlQuery.Erase -> {
+                checkNotForbidden(kind.table)
+                val table = table(kind.table)
+                prepared.openQuery(args, qOpts).use { cursor ->
+                    cursor.forEachRemaining { rel -> table.logErases(rel.vectorFor("_iid")) }
+                }
+            }
+        }
+    }
+
     override fun close() = tableTxs.values.closeAll()
+
+    companion object {
+        // Must stay in sync with xtdb.log/forbidden-schemas and xtdb.tx.TxWriter's FORBIDDEN_SCHEMAS.
+        private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
+
+        private fun checkNotForbidden(tableRef: TableRef) {
+            if (tableRef.schemaName in FORBIDDEN_SCHEMAS) {
+                throw Incorrect(
+                    "Cannot write to table: ${tableRef.schemaAndTable}",
+                    "xtdb/forbidden-table",
+                    mapOf("table" to tableRef),
+                )
+            }
+        }
+
+        private fun checkArgCount(args: RelationReader?, paramCount: Int) {
+            if (args == null) {
+                if (paramCount != 0) {
+                    throw Incorrect(
+                        "Arguments list was expected but not provided",
+                        "xtdb.indexer/missing-sql-args",
+                        mapOf("param-count" to paramCount),
+                    )
+                }
+            } else {
+                val argCount = args.vectors.size
+                if (argCount != paramCount) {
+                    throw Incorrect(
+                        "Parameter error: $argCount provided, $paramCount expected",
+                        "xtdb.indexer/incorrect-sql-arg-count",
+                        mapOf("param-count" to paramCount, "arg-count" to argCount),
+                    )
+                }
+            }
+        }
+    }
 
     class Table(
         allocator: BufferAllocator,

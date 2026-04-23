@@ -26,10 +26,10 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer RelationIndexer Snapshot Snapshot$Source TxIndexer)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer Snapshot Snapshot$Source TxIndexer TxIndexer$QueryOpts)
            (xtdb.table TableRef)
            xtdb.NodeBase
-           (xtdb.query IQuerySource IQuerySource$QueryCatalog PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery QueryOpts)))
+           (xtdb.query IQuerySource IQuerySource$QueryCatalog QueryOpts)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -165,101 +165,8 @@
 
         nil))))
 
-(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
-                                                           {:keys [^Instant current-time, ^CrashLogger crash-logger tx-key]}]
-  (let [current-time-µs (time/instant->micros current-time)]
-    (reify RelationIndexer
-      (indexOp [_ in-rel {:keys [table]}]
-        (when (xt-log/forbidden-table? table)
-          (throw (xt-log/forbidden-table-ex table)))
-
-        (when-not (.vectorForOrNull in-rel "_id")
-          (throw (err/incorrect :xtdb.indexer/missing-xt-id-column
-                                "Missing ID column"
-                                {:column-names (vec (for [^VectorReader col in-rel] (.getName col)))})))
-
-        (let [row-count (.getRowCount in-rel)
-              content-rel (vr/rel-reader (->> in-rel
-                                              (remove (comp types/temporal-col-name? #(.getName ^VectorReader %))))
-                                         row-count)
-              put-rel (vr/rel-reader (concat [(-> (.vectorFor in-rel "_id") (.withName "_id"))
-                                              (-> (RelationAsStructReader. "doc" content-rel) (.withName "doc"))]
-                                             (some-> (.vectorForOrNull in-rel "_valid_from") vector)
-                                             (some-> (.vectorForOrNull in-rel "_valid_to") vector))
-                                     row-count)
-              live-table (.table open-tx table)]
-          (with-crash-log crash-logger "error upserting rows"
-            {:table table, :tx-key tx-key}
-            {:live-idx live-idx, :open-tx-table live-table, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
-            (.logPuts live-table current-time-µs Long/MAX_VALUE put-rel)))))))
-
-(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
-  (reify RelationIndexer
-    (indexOp [_ in-rel {:keys [table]}]
-      (when (xt-log/forbidden-table? table)
-        (throw (xt-log/forbidden-table-ex table)))
-
-      (let [live-table (.table open-tx table)]
-        (with-crash-log crash-logger "error deleting rows"
-          {:table table, :tx-key tx-key}
-          {:live-idx live-idx, :open-tx-table live-table, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
-          (.logDeletes live-table 0 Long/MAX_VALUE in-rel))))))
-
-(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr, {:keys [^CrashLogger crash-logger tx-key]}]
-  (reify RelationIndexer
-    (indexOp [_ in-rel {:keys [table]}]
-      (when (xt-log/forbidden-table? table)
-        (throw (xt-log/forbidden-table-ex table)))
-
-      (let [live-table (.table open-tx table)]
-        (with-crash-log crash-logger "error erasing rows"
-          {:table table, :tx-key tx-key}
-          {:live-idx live-idx, :open-tx-table live-table, :query-rel in-rel, :tx-ops-rdr tx-ops-rdr}
-          (.logErases live-table (.vectorFor in-rel "_iid")))))))
-
-(defn- wrap-sql-args [f ^long param-count]
-  (fn [^RelationReader args]
-    (if (not args)
-      (if (zero? param-count)
-        (f nil)
-        (throw (err/incorrect :xtdb.indexer/missing-sql-args
-                              "Arguments list was expected but not provided"
-                              {:param-count param-count})))
-
-      (let [arg-count (count args)]
-        (if (not= arg-count param-count)
-          (throw (err/incorrect :xtdb.indexer/incorrect-sql-arg-count
-                                (format "Parameter error: %d provided, %d expected" arg-count param-count)
-                                {:param-count param-count, :arg-count arg-count}))
-
-          (f args))))))
-
 (defn- ->query-opts ^xtdb.query.QueryOpts [{:keys [current-time default-tz snapshot-token snapshot-time tracer]}]
   (QueryOpts. current-time default-tz snapshot-token snapshot-time tracer))
-
-(defn- ->assert-idxer [^PreparedQuery pq, message, tx-opts]
-  (-> (fn eval-query [^RelationReader args]
-        (with-open [res (.openQuery pq args (->query-opts tx-opts))]
-
-          (letfn [(throw-assert-failed []
-                    (throw (err/conflict :xtdb/assert-failed (or message "Assert failed"))))]
-            (or (.tryAdvance res
-                             (fn [^RelationReader in-rel]
-                               (when-not (pos? (.getRowCount in-rel))
-                                 (throw-assert-failed))))
-
-                (throw-assert-failed)))))
-
-      (wrap-sql-args (.getParamCount pq))))
-
-(defn- query-indexer [^PreparedQuery pq, ^RelationIndexer rel-idxer, ^TableRef table, tx-opts]
-  (-> (fn eval-query [^RelationReader args]
-        (with-open [res (-> (.openQuery pq args (->query-opts tx-opts)))]
-          (.forEachRemaining res
-                             (fn [^RelationReader in-rel]
-                               (.indexOp rel-idxer in-rel {:table table})))))
-
-      (wrap-sql-args (.getParamCount pq))))
 
 (defn- open-args-rdr ^xtdb.arrow.Relation$Loader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
@@ -337,51 +244,22 @@
 
           nil)))))
 
-(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^OpenTx open-tx
-                                              ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db-cat,
-                                              {:keys [default-db ^CrashLogger crash-logger tx-key ^Tracer tracer] :as tx-opts}]
+(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^OpenTx open-tx,
+                                              ^VectorReader tx-ops-rdr,
+                                              {:keys [current-time default-tz tx-key ^Tracer tracer]}]
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
-        upsert-idxer (->upsert-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)
-        patch-idxer (reify RelationIndexer
-                      (indexOp [_ rel {:keys [table]}]
-                        (when (xt-log/forbidden-table? table)
-                          (throw (xt-log/forbidden-table-ex table)))
-                        (let [live-table (.table open-tx table)]
-                          (with-crash-log crash-logger "error patching rows"
-                            {:table table, :tx-key tx-key}
-                            {:live-idx live-idx, :open-tx-table live-table, :query-rel rel, :tx-ops-rdr tx-ops-rdr}
-                            (.logPuts live-table 0 Long/MAX_VALUE rel)))))
-        delete-idxer (->delete-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)
-        erase-idxer (->erase-rel-indexer live-idx open-tx tx-ops-rdr tx-opts)]
+        q-opts (TxIndexer$QueryOpts. current-time default-tz)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)]
           (err/wrap-anomaly {:sql query-str, :tx-op-idx tx-op-idx, :tx-key tx-key}
                             (util/with-open [^Relation$ILoader args-loader (open-args-rdr allocator args-rdr tx-op-idx)]
                               (metrics/with-span tracer "xtdb.transaction.sql" {:attributes {:query.text query-str}}
-                                (let [tx-opts (assoc tx-opts
-                                                     :arg-fields (some-> args-loader (.getSchema) (.getFields))
-                                                     :query-text query-str)
-                                      ^PreparedDmlQuery pq (.prepareDmlQuery q-src query-str db-cat tx-opts)
-                                      kind (.getKind pq)]
-                                  (foreach-arg-row allocator args-loader
-                                                   (condp instance? kind
-                                                     PreparedDmlQuery$Put
-                                                     (query-indexer pq upsert-idxer (.getTable ^PreparedDmlQuery$Put kind) tx-opts)
-
-                                                     PreparedDmlQuery$Patch
-                                                     (query-indexer pq patch-idxer (.getTable ^PreparedDmlQuery$Patch kind) tx-opts)
-
-                                                     PreparedDmlQuery$Delete
-                                                     (query-indexer pq delete-idxer (.getTable ^PreparedDmlQuery$Delete kind) tx-opts)
-
-                                                     PreparedDmlQuery$Erase
-                                                     (query-indexer pq erase-idxer (.getTable ^PreparedDmlQuery$Erase kind) tx-opts)
-
-                                                     PreparedDmlQuery$Assert
-                                                     (->assert-idxer pq (.getMessage ^PreparedDmlQuery$Assert kind) tx-opts))))))))
+                                (foreach-arg-row allocator args-loader
+                                                 (fn [^RelationReader args]
+                                                   (.executeDml open-tx query-str args q-opts)))))))
 
         nil))))
 
@@ -464,7 +342,7 @@
                       !patch-docs-idxer (delay (->patch-docs-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat system-time tx-opts))
                       !delete-docs-idxer (delay (->delete-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
                       !erase-docs-idxer (delay (->erase-docs-indexer live-index open-tx tx-ops-rdr tx-opts))
-                      !sql-idxer (delay (->sql-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat tx-opts))]
+                      !sql-idxer (delay (->sql-indexer allocator open-tx tx-ops-rdr tx-opts))]
 
                   (if-let [e (try
                                (err/wrap-anomaly {}
