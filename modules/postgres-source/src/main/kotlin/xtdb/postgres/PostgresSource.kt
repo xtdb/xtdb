@@ -40,6 +40,13 @@ private val LOG = PostgresSource::class.logger
 private const val PROTO_TAG = "proto.xtdb.com"
 private const val SNAPSHOT_BATCH_SIZE = 1000
 
+sealed interface RowOp {
+    val schema: String
+    val table: String
+    data class Put(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
+    data class Delete(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
+}
+
 class PostgresSource(
     private val dbName: String,
     private val driver: PgWireDriver,
@@ -209,8 +216,18 @@ class PostgresSource(
                         LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
                         handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
-                        for ((schema, table, batch) in readSnapshotBatches(handle)) {
-                            flushSnapshotBatch(txIndexer, slotLsn, schema, table, batch)
+                        for (batch in readSnapshotBatches(handle)) {
+                            val token = ProtoAny.pack(postgresSourceToken {
+                                latestCommittedLsn = slotLsn
+                                snapshotCompleted = false
+                            }, PROTO_TAG)
+
+                            txIndexer.indexTx(token) { openTx ->
+                                for (op in batch) {
+                                    writeOp(openTx, dbName, op)
+                                }
+                                TxResult.Committed()
+                            }
                         }
 
                         // Mark snapshot complete
@@ -233,7 +250,7 @@ class PostgresSource(
         }
     }
 
-    private fun readSnapshotBatches(handle: Handle): Sequence<Triple<String, String, List<Map<String, Any?>>>> = sequence {
+    private fun readSnapshotBatches(handle: Handle): Sequence<List<RowOp.Put>> = sequence {
         val tables = with(driver) { handle.discoverTables() }
         LOG.info("[$dbName] Discovered ${tables.size} tables: ${tables.joinToString { "${it.first}.${it.second}" }}")
 
@@ -253,7 +270,7 @@ class PostgresSource(
                         .forEach { batch ->
                             rowCount += batch.size
                             LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                            yield(Triple(schema, table, batch))
+                            yield(batch.map { row -> RowOp.Put(schema, table, row) })
                         }
                 }
 
@@ -275,7 +292,7 @@ class PostgresSource(
                 val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
                 // Accumulated operations within a single PG transaction
-                var currentTxOps = mutableListOf<Pair<PgOutputMessage.Relation, PgOutputMessage>>()
+                var currentTxOps = mutableListOf<RowOp>()
 
                 while (currentCoroutineContext().isActive) {
                     // read() blocks until a message is available; runInterruptible
@@ -308,7 +325,7 @@ class PostgresSource(
                                 ?: error("Relation $relationId not found — missing Relation message before data message")
 
                             LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
-                            currentTxOps.add(relation to parsed)
+                            currentTxOps.add(toRowOp(relation, parsed))
                         }
 
                         is PgOutputMessage.Commit -> {
@@ -326,8 +343,8 @@ class PostgresSource(
                                 val ops = currentTxOps.toList()
 
                                 txIndexer.indexTx(token, systemTime = commitTime) { openTx ->
-                                    for ((relation, op) in ops) {
-                                        applyStreamingOp(openTx, dbName, relation, op)
+                                    for (op in ops) {
+                                        writeOp(openTx, dbName, op)
                                     }
                                     TxResult.Committed()
                                 }
@@ -353,31 +370,11 @@ class PostgresSource(
         }
     }
 
-    private fun applyStreamingOp(
-        openTx: OpenTx,
-        dbName: String,
-        relation: PgOutputMessage.Relation,
-        op: PgOutputMessage,
-    ) {
-        when (op) {
-            is PgOutputMessage.Insert -> {
-                val row = toRowMap(relation, op.values)
-                writeRow(openTx, dbName, relation.schema, relation.table, "c", row, null)
-            }
-
-            is PgOutputMessage.Update -> {
-                val row = toRowMap(relation, op.newValues)
-                writeRow(openTx, dbName, relation.schema, relation.table, "u", row, null)
-            }
-
-            is PgOutputMessage.Delete -> {
-                val row = toRowMap(relation, op.oldValues)
-                writeRow(openTx, dbName, relation.schema, relation.table, "d", null, row)
-            }
-
-            is PgOutputMessage.Relation, is PgOutputMessage.Begin, is PgOutputMessage.Commit ->
-                error("Unexpected op type in applyStreamingOp: ${op::class.simpleName}")
-        }
+    private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp = when (msg) {
+        is PgOutputMessage.Insert -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.values))
+        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues))
+        is PgOutputMessage.Delete -> RowOp.Delete(relation.schema, relation.table, toRowMap(relation, msg.oldValues))
+        else -> error("Unexpected op type: ${msg::class.simpleName}")
     }
 
     private fun toRowMap(relation: PgOutputMessage.Relation, values: List<ColumnValue>): Map<String, Any?> =
@@ -405,26 +402,6 @@ class PostgresSource(
         LOG.info("[$dbName] Closing external source")
     }
 
-    private suspend fun flushSnapshotBatch(
-        txIndexer: TxIndexer,
-        slotLsn: Long,
-        schema: String,
-        table: String,
-        rows: List<Map<String, Any?>>,
-    ) {
-        val token = ProtoAny.pack(postgresSourceToken {
-            latestCommittedLsn = slotLsn
-            snapshotCompleted = false
-        }, PROTO_TAG)
-
-        txIndexer.indexTx(token) { openTx ->
-            for (row in rows) {
-                writeRow(openTx, dbName, schema, table, "r", row, null)
-            }
-            TxResult.Committed()
-        }
-    }
-
     companion object {
         // PG epoch is 2000-01-01T00:00:00Z, timestamps are in microseconds
         private val PG_EPOCH = Instant.parse("2000-01-01T00:00:00Z")
@@ -434,23 +411,19 @@ class PostgresSource(
     }
 }
 
-private fun writeRow(
+private fun writeOp(
     openTx: OpenTx,
     dbName: String,
-    schema: String,
-    table: String,
-    op: String,
-    after: Map<String, Any?>?,
-    before: Map<String, Any?>?,
+    op: RowOp,
 ) {
-    val openTxTable = openTx.table(TableRef(dbName, schema, table))
+    val openTxTable = openTx.table(TableRef(dbName, op.schema, op.table))
 
     when (op) {
-        "c", "r", "u" -> {
-            requireNotNull(after) { "Missing row data for $op operation" }
-            val docMap = after.toMutableMap()
+        is RowOp.Put -> {
+            val docMap = op.row.toMutableMap()
 
-            val id = docMap["_id"] ?: throw Incorrect("Missing '_id' in row from $schema.$table")
+            val id = docMap["_id"]
+                ?: throw Incorrect("Missing '_id' in row from ${op.schema}.${op.table}")
 
             val explicitValidFrom = (docMap.remove("_valid_from") as? Instant)?.asMicros
             val explicitValidTo = (docMap.remove("_valid_to") as? Instant)?.asMicros
@@ -465,9 +438,9 @@ private fun writeRow(
             ) { openTxTable.docWriter.writeObject(docMap) }
         }
 
-        "d" -> {
-            requireNotNull(before) { "Missing 'before' data for delete — check REPLICA IDENTITY on source table" }
-            val id = before["_id"] ?: throw Incorrect("Missing '_id' in 'before' for delete on $schema.$table")
+        is RowOp.Delete -> {
+            val id = op.row["_id"]
+                ?: throw Incorrect("Missing '_id' in delete on ${op.schema}.${op.table}")
 
             openTxTable.logDelete(
                 ByteBuffer.wrap(id.asIid),
@@ -475,7 +448,5 @@ private fun writeRow(
                 Long.MAX_VALUE,
             )
         }
-
-        else -> throw Incorrect("Unknown CDC op: '$op'")
     }
 }
