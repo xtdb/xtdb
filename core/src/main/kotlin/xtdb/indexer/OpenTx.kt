@@ -8,17 +8,21 @@ import xtdb.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorWriter
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSourceToken
+import xtdb.error.Incorrect
 import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
+import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
+import xtdb.util.asIid
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
@@ -102,6 +106,16 @@ class OpenTx(
         private val systemFrom: Long,
     ) : AutoCloseable {
 
+        private fun checkValidTimes(validFrom: Long, validTo: Long) {
+            if (validFrom >= validTo) {
+                throw Incorrect(
+                    "Invalid valid times",
+                    "xtdb.indexer/invalid-valid-times",
+                    mapOf("valid-from" to fromMicros(validFrom), "valid-to" to fromMicros(validTo)),
+                )
+            }
+        }
+
         val txRelation: Relation = Trie.openLogDataWriter(allocator)
 
         private val iidVec = txRelation["_iid"]
@@ -157,6 +171,108 @@ class OpenTx(
             txRelation.endRow()
 
             trie += pos
+        }
+
+        /**
+         * Batch put: writes every row in [rel], content from `doc`.
+         *
+         * iid source: `_iid` column (raw bytes, copied directly) if present; otherwise `_id` column
+         * (user-facing id — iid computed per row via [xtdb.util.asIid]).
+         *
+         * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
+         * otherwise the [validFrom] / [validTo] defaults apply.
+         * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
+         * temporal columns; otherwise per-row.
+         */
+        fun logPuts(validFrom: Long, validTo: Long, rel: RelationReader) {
+            val rowCount = rel.rowCount
+            if (rowCount == 0) return
+
+            val iidRdr = rel.vectorForOrNull("_iid")
+            val idRdr = if (iidRdr == null) rel.vectorFor("_id") else null
+            val docRdr = rel.vectorFor("doc")
+            val vfRdr = rel.vectorForOrNull("_valid_from")
+            val vtRdr = rel.vectorForOrNull("_valid_to")
+
+            val perRowCheck = vfRdr != null || vtRdr != null
+            if (!perRowCheck) checkValidTimes(validFrom, validTo)
+
+            val iidCopier = iidRdr?.rowCopier(iidVec)
+            val docCopier = docRdr.rowCopier(docWriter)
+
+            val startPos = txRelation.rowCount
+            repeat(rowCount) { idx ->
+                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFrom
+                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validTo
+                if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
+
+                if (iidCopier != null) iidCopier.copyRow(idx)
+                else iidVec.writeBytes(ByteBuffer.wrap(idRdr!!.getObject(idx).asIid))
+                systemFromVec.writeLong(systemFrom)
+                validFromVec.writeLong(rowValidFrom)
+                validToVec.writeLong(rowValidTo)
+                docCopier.copyRow(idx)
+                txRelation.endRow()
+            }
+            trie = trie.addRange(startPos, rowCount)
+        }
+
+        /**
+         * Batch delete: deletes every row in [rel] (keyed by `_iid`).
+         *
+         * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
+         * otherwise the [validFrom] / [validTo] defaults apply.
+         * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
+         * temporal columns; otherwise per-row.
+         */
+        fun logDeletes(validFrom: Long, validTo: Long, rel: RelationReader) {
+            val rowCount = rel.rowCount
+            if (rowCount == 0) return
+
+            val iidRdr = rel.vectorFor("_iid")
+            val vfRdr = rel.vectorForOrNull("_valid_from")
+            val vtRdr = rel.vectorForOrNull("_valid_to")
+
+            val perRowCheck = vfRdr != null || vtRdr != null
+            if (!perRowCheck) checkValidTimes(validFrom, validTo)
+
+            val iidCopier = iidRdr.rowCopier(iidVec)
+
+            val startPos = txRelation.rowCount
+            repeat(rowCount) { idx ->
+                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFrom
+                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validTo
+                if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
+
+                iidCopier.copyRow(idx)
+                systemFromVec.writeLong(systemFrom)
+                validFromVec.writeLong(rowValidFrom)
+                validToVec.writeLong(rowValidTo)
+                deleteVec.writeNull()
+                txRelation.endRow()
+            }
+            trie = trie.addRange(startPos, rowCount)
+        }
+
+        /**
+         * Batch erase: erases every iid in [iids] across all valid time.
+         */
+        fun logErases(iids: VectorReader) {
+            val rowCount = iids.valueCount
+            if (rowCount == 0) return
+
+            val iidCopier = iids.rowCopier(iidVec)
+
+            val startPos = txRelation.rowCount
+            repeat(rowCount) { idx ->
+                iidCopier.copyRow(idx)
+                systemFromVec.writeLong(systemFrom)
+                validFromVec.writeLong(MIN_LONG)
+                validToVec.writeLong(MAX_LONG)
+                eraseVec.writeNull()
+                txRelation.endRow()
+            }
+            trie = trie.addRange(startPos, rowCount)
         }
 
         fun serializeTxData(): ByteArray? =
