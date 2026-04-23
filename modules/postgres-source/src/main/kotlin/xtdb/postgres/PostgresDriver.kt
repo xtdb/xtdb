@@ -2,6 +2,13 @@ package xtdb.postgres
 
 import java.time.Instant
 
+sealed interface RowOp {
+    val schema: String
+    val table: String
+    data class Put(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
+    data class Delete(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
+}
+
 /**
  * Abstracts PostgreSQL I/O — connection management, replication slot lifecycle,
  * snapshot reads, and change streaming — behind a testable interface.

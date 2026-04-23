@@ -34,13 +34,6 @@ private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG = "proto.xtdb.com"
 
-sealed interface RowOp {
-    val schema: String
-    val table: String
-    data class Put(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
-    data class Delete(override val schema: String, override val table: String, val row: Map<String, Any?>) : RowOp
-}
-
 class PostgresSource(
     private val dbName: String,
     private val driver: PostgresDriver,
