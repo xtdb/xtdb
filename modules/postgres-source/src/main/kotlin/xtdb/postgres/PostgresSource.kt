@@ -5,8 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import org.jdbi.v3.core.Handle
-import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
@@ -38,7 +36,6 @@ import com.google.protobuf.Any as ProtoAny
 private val LOG = PostgresSource::class.logger
 
 private const val PROTO_TAG = "proto.xtdb.com"
-private const val SNAPSHOT_BATCH_SIZE = 1000
 
 sealed interface RowOp {
     val schema: String
@@ -182,99 +179,35 @@ class PostgresSource(
             finally { watcher.cancel() }
         }
 
-    /**
-     * Returns the slot LSN for streaming to resume from.
-     */
     private suspend fun initialSnapshot(txIndexer: TxIndexer): Long {
-        LOG.debug { "[$dbName] Opening replication connection" }
+        driver.openSnapshot().use { snapshot ->
+            closeOnCancel(snapshot) {
+                for (batch in snapshot.batches()) {
+                    val token = ProtoAny.pack(postgresSourceToken {
+                        latestCommittedLsn = snapshot.slotLsn
+                        snapshotCompleted = false
+                    }, PROTO_TAG)
 
-        driver.openReplicationConnection().use { replConn ->
-            return closeOnCancel(replConn) {
-                val pgReplConn = replConn.unwrap(PGConnection::class.java)
-
-                LOG.debug { "[$dbName] Creating replication slot '$slotName' with pgoutput" }
-
-                // Create replication slot and get exported snapshot
-                val slotInfo = pgReplConn.replicationAPI
-                    .createReplicationSlot()
-                    .logical()
-                    .withSlotName(slotName)
-                    .withOutputPlugin("pgoutput")
-                    .make()
-
-                val snapshotName = slotInfo.snapshotName
-                val slotLsn = slotInfo.consistentPoint.asLong()
-
-                LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slotLsn)}, snapshot=$snapshotName")
-
-                // Read tables using the exported snapshot for consistency
-                driver.jdbi.open().use { handle ->
-                    handle.begin()
-                    try {
-                        handle.transactionIsolationLevel = REPEATABLE_READ
-
-                        LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
-                        handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
-
-                        for (batch in readSnapshotBatches(handle)) {
-                            val token = ProtoAny.pack(postgresSourceToken {
-                                latestCommittedLsn = slotLsn
-                                snapshotCompleted = false
-                            }, PROTO_TAG)
-
-                            txIndexer.indexTx(token) { openTx ->
-                                for (op in batch) {
-                                    writeOp(openTx, dbName, op)
-                                }
-                                TxResult.Committed()
-                            }
+                    txIndexer.indexTx(token) { openTx ->
+                        for (op in batch) {
+                            writeOp(openTx, dbName, op)
                         }
-
-                        // Mark snapshot complete
-                        val completeToken = ProtoAny.pack(postgresSourceToken {
-                            latestCommittedLsn = slotLsn
-                            snapshotCompleted = true
-                        }, PROTO_TAG)
-
-                        LOG.debug { "[$dbName] Writing snapshot-complete marker" }
-                        txIndexer.indexTx(completeToken) {
-                            TxResult.Committed()
-                        }
-
-                        slotLsn
-                    } finally {
-                        handle.rollback()
+                        TxResult.Committed()
                     }
                 }
-            }
-        }
-    }
 
-    private fun readSnapshotBatches(handle: Handle): Sequence<List<RowOp.Put>> = sequence {
-        val tables = with(driver) { handle.discoverTables() }
-        LOG.info("[$dbName] Discovered ${tables.size} tables: ${tables.joinToString { "${it.first}.${it.second}" }}")
+                val completeToken = ProtoAny.pack(postgresSourceToken {
+                    latestCommittedLsn = snapshot.slotLsn
+                    snapshotCompleted = true
+                }, PROTO_TAG)
 
-        for ((schema, table) in tables) {
-            val columns = with(driver) { handle.discoverColumns(schema, table) }
-            val fullTableName = "$schema.$table"
-
-            LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
-
-            var rowCount = 0
-            handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
-                .setFetchSize(SNAPSHOT_BATCH_SIZE)
-                .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
-                .iterator().use { iter ->
-                    iter.asSequence()
-                        .chunked(SNAPSHOT_BATCH_SIZE)
-                        .forEach { batch ->
-                            rowCount += batch.size
-                            LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                            yield(batch.map { row -> RowOp.Put(schema, table, row) })
-                        }
+                LOG.debug { "[$dbName] Writing snapshot-complete marker" }
+                txIndexer.indexTx(completeToken) {
+                    TxResult.Committed()
                 }
+            }
 
-            LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
+            return snapshot.slotLsn
         }
     }
 
