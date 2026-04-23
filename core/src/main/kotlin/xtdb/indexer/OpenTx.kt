@@ -5,6 +5,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TY
 import xtdb.api.TransactionKey
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorWriter
+import xtdb.database.ExternalSourceToken
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.MemoryHashTrie
@@ -14,7 +15,11 @@ import java.nio.ByteBuffer
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
-class OpenTx(private val allocator: BufferAllocator, val txKey: TransactionKey) : AutoCloseable {
+class OpenTx(
+    private val allocator: BufferAllocator,
+    val txKey: TransactionKey,
+    val externalSourceToken: ExternalSourceToken? = null,
+) : AutoCloseable {
 
     val systemFrom = txKey.systemTime.asMicros
 

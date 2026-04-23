@@ -318,7 +318,7 @@ class PostgresSource(
 
                                 val ops = currentTxOps.toList()
 
-                                txIndexer.indexTx(token, commitTime) { openTx ->
+                                txIndexer.indexTx(token, systemTime = commitTime) { openTx ->
                                     for ((relation, op) in ops) {
                                         applyStreamingOp(openTx, dbName, relation, op)
                                     }
