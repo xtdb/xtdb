@@ -99,16 +99,6 @@ interface Authenticator : AutoCloseable {
     sealed interface Factory {
         fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator
 
-        @Serializable
-        @SerialName("!UserTable")
-        data class UserTable(var rules: List<MethodRule> = DEFAULT_RULES) : Factory {
-            fun rules(rules: List<MethodRule>) = apply { this.rules = rules }
-
-            override fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
-                requiringResolve("xtdb.authn/->user-table-authn")
-                    .invoke(this, allocator, querySource, dbCatalog) as Authenticator
-        }
-
         // One root user (`xtdb`) whose password is resolved at config-construction time:
         // the explicit YAML/Kotlin value first, then `XTDB_PASSWORD` env var.
         // With no password, connections run TRUST; with a password, PASSWORD is required.

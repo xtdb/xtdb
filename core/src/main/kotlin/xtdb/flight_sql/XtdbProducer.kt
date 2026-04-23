@@ -88,7 +88,7 @@ private fun isDml(sql: String, dbName: DatabaseName): Boolean {
         .invoke(sql, defaultDbOpts)
 
     val opKeyword = (parsed as? IPersistentVector)?.nth(0) as? clojure.lang.Keyword
-    return opKeyword?.name in setOf("insert", "update", "delete", "erase", "create-user", "alter-user")
+    return opKeyword?.name in setOf("insert", "update", "delete", "erase")
 }
 
 private fun FlightStream.toRows(allocator: BufferAllocator): List<List<Any?>> {

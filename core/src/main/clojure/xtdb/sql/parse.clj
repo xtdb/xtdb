@@ -42,16 +42,6 @@
   (visitShowTimeZone [_ _]
     [:show-time-zone])
 
-  (visitCreateUserStatement [_ stmt]
-    [:create-user {:username (-> (.userName stmt) (.getText))
-                   :password (-> (.password stmt)
-                                 (.accept sql/string-literal-visitor))}])
-
-  (visitAlterUserStatement [_ stmt]
-    [:alter-user {:username (-> (.userName stmt) (.getText))
-                  :password (-> (.password stmt)
-                                (.accept sql/string-literal-visitor))}])
-
   (visitExecuteStatement [_ stmt]
     [:execute {:stmt stmt}]))
 

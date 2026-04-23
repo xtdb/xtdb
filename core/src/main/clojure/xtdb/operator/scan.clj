@@ -29,7 +29,7 @@
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
-           (xtdb.segment BufferPoolSegment MemorySegment MergePlanner)
+           (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.table.TableRef
            (xtdb.trie Bucketer)
            (xtdb.util TemporalBounds TemporalDimension)))
@@ -202,8 +202,6 @@
               (or (types/temporal-vec-types col-name)
                   (-> (info-schema/derived-table table)
                       (get (symbol col-name)))
-                  (-> (info-schema/template-table table)
-                      (get (symbol col-name)))
                   (let [db-name (.getDbName table)
                         state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
@@ -270,8 +268,7 @@
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^Snapshot snapshot (get snaps db-name)
-                           derived-table-schema (info-schema/derived-table table)
-                           template-table? (boolean (info-schema/template-table table))]
+                           derived-table-schema (info-schema/derived-table table)]
                        (cond
                          (log-tables/log-table table)
                          (log-tables/->cursor db allocator table col-names col-preds selects schema args)
@@ -279,7 +276,7 @@
                          (block-tables/block-table table)
                          (block-tables/->cursor db allocator table col-names col-preds selects schema args)
 
-                         (and derived-table-schema (not template-table?))
+                         derived-table-schema
                          (info-schema/->cursor info-schema allocator db db-cat snapshot derived-table-schema table col-names col-preds schema args)
 
                          :else
@@ -326,11 +323,6 @@
                                ;; Add tx segment for read-own-writes (when snapshot opened from within transaction)
                                (when-let [tx-seg (.getTxSegment live-table-snap)]
                                  (.add !segments tx-seg)))
-
-                             (when template-table?
-                               (.add !segments
-                                     (let [[memory-rel trie] (info-schema/table-template info-schema table)]
-                                       (MemorySegment. trie memory-rel))))
 
                              (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % {:query-bounds temporal-bounds}))]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds

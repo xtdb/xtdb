@@ -54,7 +54,6 @@ dependencies {
     api(libs.hppc)
 
     api(libs.caffeine)
-    api(libs.buddy.hashers)
 
     // healthz server
     api(libs.ring.core)

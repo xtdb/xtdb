@@ -877,12 +877,6 @@
                                         (visitCopyFormatOption [_ ctx]
                                           [:format (sql/plan-expr (.format ctx) env)])
 
-                                        ;; could do pre-submit validation here
-                                        (visitCreateUserStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
-                                        (visitAlterUserStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :create-role, :query (subsql ctx)})
-
                                         (visitPrepareStatement [this ctx]
                                           (let [inner-ctx (.directlyExecutableStatement ctx)]
                                             {:statement-type :prepare

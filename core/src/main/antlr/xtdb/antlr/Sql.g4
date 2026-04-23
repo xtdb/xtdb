@@ -52,8 +52,6 @@ directlyExecutableStatement
     | SHOW AWAIT_TOKEN # ShowAwaitTokenStatement
     | SHOW SNAPSHOT_TOKEN # ShowSnapshotTokenStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
-    | CREATE USER userName=identifier WITH PASSWORD password=characterString # CreateUserStatement
-    | ALTER USER userName=identifier WITH PASSWORD password=characterString # AlterUserStatement
     | ATTACH DATABASE dbName=identifier (WITH configYaml=characterString)? # AttachDatabaseStatement
     | DETACH DATABASE dbName=identifier # DetachDatabaseStatement
     ;

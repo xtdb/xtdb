@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import xtdb.api.Authenticator.Factory.OpenIdConnect
 import xtdb.api.Authenticator.Factory.SingleRootUser
-import xtdb.api.Authenticator.Factory.UserTable
 import xtdb.api.Authenticator.Method.*
 import xtdb.api.Authenticator.MethodRule
 import xtdb.api.log.KafkaCluster
@@ -349,29 +348,6 @@ class YamlSerdeTest {
         assertEquals(8081, nodeConfig(input).healthz?.port)
 
         unmockkObject(EnvironmentVariableProvider)
-    }
-
-    @Test
-    fun testAuthnConfigDecoding() {
-        val input = """
-        authn: !UserTable
-          rules:
-              - user: admin
-                remoteAddress: 127.0.0.42
-                method: TRUST  
-              - remoteAddress: 127.0.0.1
-                method: PASSWORD  
-        """.trimIndent()
-
-        assertEquals(
-            UserTable(
-                listOf(
-                    MethodRule(TRUST, user = "admin", remoteAddress = "127.0.0.42"),
-                    MethodRule(PASSWORD, remoteAddress = "127.0.0.1")
-                )
-            ),
-            nodeConfig(input).authn
-        )
     }
 
     @Test

@@ -3501,9 +3501,7 @@
 
   (visitAssertStatement [_ _])
   (visitQueryExpr [_ _])
-  (visitShowVariableStatement [_ _])
-  (visitCreateUserStatement [_ _])
-  (visitAlterUserStatement [_ _]))
+  (visitShowVariableStatement [_ _]))
 
 (defn sql->static-ops
   ([sql arg-rows] (sql->static-ops sql arg-rows {}))

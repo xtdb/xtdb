@@ -1,39 +1,16 @@
 (ns xtdb.authn
-  (:require [buddy.hashers :as hashers]
-            [integrant.core :as ig]
+  (:require [integrant.core :as ig]
             [hato.client :as http]
-            [xtdb.api :as xt]
             [xtdb.node :as xtn]
-            [xtdb.query :as q]
-            [xtdb.error :as err]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.error :as err])
   (:import [java.io Writer]
-           [org.apache.arrow.memory BufferAllocator]
-           (xtdb.query QueryOpts)
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
-                     Authenticator$Factory$SingleRootUser Authenticator$Factory$UserTable
+                     Authenticator$Factory$SingleRootUser
                      Authenticator$Method Authenticator$MethodRule Xtdb$Config
-                     SimpleResult OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
-           (xtdb.query IQuerySource)
+                     OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
            xtdb.NodeBase
            [java.net URI]
            [java.time Duration Instant InstantSource]))
-
-(defn verify-pw
-  [^BufferAllocator allocator ^IQuerySource q-src db-cat user password]
-  (when-not password
-    (throw (err/incorrect :xtdb/authn-failed (format "password authentication failed for user: %s" user))))
-
-  (with-open [res (util/with-close-on-catch [args (vw/open-args allocator [user])]
-                    (-> (.prepareQuery q-src
-                                       "SELECT passwd AS encrypted FROM pg_user WHERE username = ?"
-                                       db-cat {:default-db "xtdb"})
-                        (.openQuery args (QueryOpts.))))]
-    (let [{:keys [encrypted]} (first (.toList (q/cursor->stream res {:key-fn #xt/key-fn :kebab-case-keyword})))]
-      (if (and encrypted (:valid (hashers/verify password encrypted)))
-        user
-        (throw (err/incorrect :xtdb/authn-failed (format "password authentication failed for user: %s" user)))))))
 
 (defn- method-for [rules {:keys [remote-addr user]}]
   (some (fn [{rule-user :user, rule-address :address, :keys [method]}]
@@ -72,27 +49,10 @@
 (defmethod xtn/apply-config! :xtdb/authn [^Xtdb$Config config, _, [tag opts]]
   (xtn/apply-config! config
                      (case tag
-                       :user-table ::user-table-authn
                        :single-root-user ::single-root-user-authn
                        :openid-connect ::openid-connect-authn
                        tag)
                      opts))
-
-(defmethod xtn/apply-config! ::user-table-authn [^Xtdb$Config config, _, {:keys [rules]}]
-  (.authn config (Authenticator$Factory$UserTable. (->rules-cfg rules))))
-
-(defrecord UserTableAuthn [rules ^BufferAllocator allocator q-src db-cat]
-  Authenticator
-  (methodFor [_ user remote-addr]
-    (method-for rules {:user user, :remote-addr remote-addr}))
-
-  (verifyPassword [_ user password]
-    (let [user-id (verify-pw allocator q-src db-cat user password)]
-      (SimpleResult. user-id))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->user-table-authn [^Authenticator$Factory$UserTable cfg, ^BufferAllocator allocator, q-src, db-cat]
-  (->UserTableAuthn (<-rules-cfg (.getRules cfg)) allocator q-src db-cat))
 
 (defmethod xtn/apply-config! ::single-root-user-authn [^Xtdb$Config config, _, {:keys [password]}]
   (.authn config (Authenticator$Factory$SingleRootUser. password)))

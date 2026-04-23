@@ -29,7 +29,6 @@ class NodeBase(
     val logClusters: Map<LogClusterAlias, Log.Cluster>,
     val remotes: Map<RemoteAlias, Remote>,
     val compactor: Compactor,
-    val infoSchema: AutoCloseable,
     val querySource: IQuerySource,
     val indexerFactory: Indexer.Factory,
 ) : AutoCloseable {
@@ -37,7 +36,6 @@ class NodeBase(
     override fun close() {
         compactor.close()
         querySource.close()
-        infoSchema.close()
         remotes.values.closeAll()
         logClusters.values.closeAll()
         memoryCache.close()
@@ -86,7 +84,7 @@ class NodeBase(
 
                 val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
 
-                val infoSchema = open { infoSchemaFactory.invoke(al, meterReg) as AutoCloseable }
+                val infoSchema = infoSchemaFactory.invoke(al, meterReg)
                 val scanEmitter = scanEmitterFactory.invoke(infoSchema)
                 val querySource = open { querySourceFactory.create(al, meterReg, scanEmitter) }
 
@@ -101,7 +99,6 @@ class NodeBase(
                     logClusters = logClusters,
                     remotes = remotes,
                     compactor = compactor,
-                    infoSchema = infoSchema,
                     querySource = querySource,
                     indexerFactory = idxFactory,
                 )

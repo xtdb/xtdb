@@ -2,7 +2,6 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.authn.crypt :as authn.crypt]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.indexer.crash-logger :refer [with-crash-log]]
@@ -456,30 +455,6 @@
             (.indexOp ^OpIndexer (get tables (.getLeg docs-rdr tx-op-idx))
                       tx-op-idx)))))))
 
-(def ^:private ^:const user-table #xt/table pg_catalog/pg_user)
-
-(defn- update-pg-user! [^OpenTx open-tx, ^TransactionKey tx-key, user, password]
-  (let [system-time-µs (time/instant->micros (.getSystemTime tx-key))
-
-        live-table (.table open-tx user-table)
-        doc-writer (.getDocWriter live-table)]
-
-    (.logPut live-table (ByteBuffer/wrap (util/->iid user)) system-time-µs Long/MAX_VALUE
-             (fn write-doc! []
-               (doto (.vectorFor doc-writer "_id" #xt.arrow/type :utf8 false)
-                 (.writeObject user))
-
-               (doto (.vectorFor doc-writer "username" #xt.arrow/type :utf8 false)
-                 (.writeObject user))
-
-               (doto (.vectorFor doc-writer "usesuper" #xt.arrow/type :bool false)
-                 (.writeObject false))
-
-               (doto (.vectorFor doc-writer "passwd" #xt.arrow/type :utf8 true)
-                 (.writeObject (authn.crypt/encrypt-pw password)))
-
-               (.endStruct doc-writer)))))
-
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^OpenTx open-tx
                                               ^VectorReader tx-ops-rdr, ^IQuerySource q-src, db-cat,
                                               {:keys [default-db tx-key ^Tracer tracer] :as tx-opts}]
@@ -515,12 +490,6 @@
                                                             (query-indexer allocator q-src db-cat erase-idxer tx-opts q-args))
                                     :assert (foreach-arg-row allocator args-loader
                                                              (->assert-idxer q-src db-cat tx-opts q-args))
-
-                                    :create-user (let [{:keys [username password]} q-args]
-                                                   (update-pg-user! open-tx tx-key username password))
-
-                                    :alter-user (let [{:keys [username password]} q-args]
-                                                  (update-pg-user! open-tx tx-key username password))
 
                                     (throw (err/incorrect ::invalid-sql-tx-op "Invalid SQL query sent as transaction operation"
                                                           {:query query-str}))))))))
