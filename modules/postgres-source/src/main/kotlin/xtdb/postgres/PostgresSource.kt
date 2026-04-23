@@ -5,9 +5,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import org.postgresql.PGConnection
 import org.postgresql.replication.LogSequenceNumber
-import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
 import xtdb.indexer.TxIndexer
 import xtdb.api.Remote
@@ -21,7 +19,6 @@ import xtdb.database.ExternalSourceToken
 import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Fault
 import xtdb.error.Incorrect
-import xtdb.postgres.PgOutputMessage.ColumnValue
 import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig
@@ -46,7 +43,7 @@ sealed interface RowOp {
 
 class PostgresSource(
     private val dbName: String,
-    private val driver: PgWireDriver,
+    private val driver: PostgresDriver,
     private val slotName: String,
 ) : ExternalSource {
 
@@ -212,135 +209,30 @@ class PostgresSource(
     }
 
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
-        LOG.debug { "[$dbName] Opening replication connection for streaming" }
-
-        driver.openReplicationConnection().use { replConn ->
-            closeOnCancel(replConn) {
-                val pgReplConn = replConn.unwrap(PGConnection::class.java)
-
-                LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
-
-                val stream: PGReplicationStream = driver.startReplicationStream(pgReplConn, startLsn)
-
-                val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
-
-                // Accumulated operations within a single PG transaction
-                var currentTxOps = mutableListOf<RowOp>()
-
+        driver.openStream(startLsn).use { stream ->
+            closeOnCancel(stream) {
                 while (currentCoroutineContext().isActive) {
-                    // read() blocks until a message is available; runInterruptible
-                    // lets coroutine cancellation interrupt the blocking call.
-                    val msg = runInterruptible(Dispatchers.IO) {
-                        stream.read()!!
-                    }
+                    stream.nextTransaction { tx ->
+                        val token = ProtoAny.pack(postgresSourceToken {
+                            latestCommittedLsn = tx.lsn
+                            snapshotCompleted = true
+                        }, PROTO_TAG)
 
-                    val parsed = PgOutputMessage.parse(msg)
-                    LOG.trace { "[$dbName] Received ${parsed::class.simpleName}" }
-
-                    when (parsed) {
-                        is PgOutputMessage.Relation -> {
-                            relations[parsed.relationId] = parsed
-                            LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
-                        }
-
-                        is PgOutputMessage.Begin -> {
-                            LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
-                            currentTxOps = mutableListOf()
-                        }
-
-                        is PgOutputMessage.Insert, is PgOutputMessage.Update, is PgOutputMessage.Delete -> {
-                            val relationId = when (parsed) {
-                                is PgOutputMessage.Insert -> parsed.relationId
-                                is PgOutputMessage.Update -> parsed.relationId
-                                is PgOutputMessage.Delete -> parsed.relationId
+                        txIndexer.indexTx(token, systemTime = tx.commitTime) { openTx ->
+                            for (op in tx.ops) {
+                                writeOp(openTx, dbName, op)
                             }
-                            val relation = relations[relationId]
-                                ?: error("Relation $relationId not found — missing Relation message before data message")
-
-                            LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
-                            currentTxOps.add(toRowOp(relation, parsed))
-                        }
-
-                        is PgOutputMessage.Commit -> {
-                            val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
-
-                            if (currentTxOps.isNotEmpty()) {
-                                val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
-                                LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
-
-                                val token = ProtoAny.pack(postgresSourceToken {
-                                    latestCommittedLsn = parsed.endLsn
-                                    snapshotCompleted = true
-                                }, PROTO_TAG)
-
-                                val ops = currentTxOps.toList()
-
-                                txIndexer.indexTx(token, systemTime = commitTime) { openTx ->
-                                    for (op in ops) {
-                                        writeOp(openTx, dbName, op)
-                                    }
-                                    TxResult.Committed()
-                                }
-                            } else {
-                                LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
-                            }
-
-                            // Acknowledge up to the commit LSN
-                            LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
-                            runInterruptible(Dispatchers.IO) {
-                                stream.setFlushedLSN(commitLsn)
-                                stream.setAppliedLSN(commitLsn)
-                                stream.forceUpdateStatus()
-                            }
-
-                            currentTxOps = mutableListOf()
+                            TxResult.Committed()
                         }
                     }
                 }
-
-                LOG.info("[$dbName] Streaming loop exiting (coroutine no longer active)")
             }
         }
     }
 
-    private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp = when (msg) {
-        is PgOutputMessage.Insert -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.values))
-        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues))
-        is PgOutputMessage.Delete -> RowOp.Delete(relation.schema, relation.table, toRowMap(relation, msg.oldValues))
-        else -> error("Unexpected op type: ${msg::class.simpleName}")
-    }
-
-    private fun toRowMap(relation: PgOutputMessage.Relation, values: List<ColumnValue>): Map<String, Any?> =
-        relation.columns
-            .mapIndexedNotNull { idx, col ->
-                values.getOrNull(idx)?.let { colValue ->
-                    col.name to when (colValue) {
-                        is ColumnValue.Null -> null
-                        is ColumnValue.Unchanged ->
-                            throw Incorrect(
-                                buildString {
-                                    appendLine("Received unchanged TOASTed column '${col.name}' on ${relation.schema}.${relation.table}. ")
-                                    appendLine("Set REPLICA IDENTITY FULL on the source table: ")
-                                    appendLine("ALTER TABLE \"${relation.schema}\".\"${relation.table}\" REPLICA IDENTITY FULL")
-                                }
-                            )
-
-                        is ColumnValue.Text -> PgTypeCoercion.coerce(colValue.value, col.typeOid)
-                    }
-                }
-            }
-            .toMap()
-
     override fun close() {
         LOG.info("[$dbName] Closing external source")
-    }
-
-    companion object {
-        // PG epoch is 2000-01-01T00:00:00Z, timestamps are in microseconds
-        private val PG_EPOCH = Instant.parse("2000-01-01T00:00:00Z")
-
-        fun pgTimestampToInstant(pgMicros: Long): Instant =
-            PG_EPOCH.plusNanos(pgMicros * 1000)
+        driver.close()
     }
 }
 

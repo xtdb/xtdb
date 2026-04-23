@@ -1,6 +1,6 @@
 package xtdb.postgres
 
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import org.jdbi.v3.core.Handle
 import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.KotlinPlugin
@@ -13,8 +13,10 @@ import org.postgresql.util.PSQLException
 import xtdb.util.debug
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.trace
 import java.sql.Connection
 import java.sql.DriverManager
+import java.time.Instant
 import java.util.*
 
 private val LOG = PgWireDriver::class.logger
@@ -171,12 +173,104 @@ class PgWireDriver(
 
     // --- Streaming ---
 
+    override suspend fun openStream(startLsn: Long): PostgresDriver.ChangeStream {
+        LOG.debug { "[$dbName] Opening replication connection for streaming" }
+        val replConn = openReplicationConnection()
+        val pgReplConn = replConn.unwrap(PGConnection::class.java)
+
+        LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
+
+        val stream = startReplicationStream(pgReplConn, startLsn)
+        return PgWireChangeStream(replConn, stream)
+    }
+
+    private inner class PgWireChangeStream(
+        private val replConn: Connection,
+        private val stream: PGReplicationStream,
+    ) : PostgresDriver.ChangeStream {
+
+        private val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
+
+        override suspend fun nextTransaction(block: suspend (PostgresDriver.Transaction) -> Unit) {
+            var currentTxOps = mutableListOf<RowOp>()
+
+            while (currentCoroutineContext().isActive) {
+                val msg = runInterruptible(Dispatchers.IO) { stream.read()!! }
+                val parsed = PgOutputMessage.parse(msg)
+                LOG.trace { "[$dbName] Received ${parsed::class.simpleName}" }
+
+                when (parsed) {
+                    is PgOutputMessage.Relation -> {
+                        relations[parsed.relationId] = parsed
+                        LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
+                    }
+
+                    is PgOutputMessage.Begin -> {
+                        LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
+                        currentTxOps = mutableListOf()
+                    }
+
+                    is PgOutputMessage.Insert, is PgOutputMessage.Update, is PgOutputMessage.Delete -> {
+                        val relationId = when (parsed) {
+                            is PgOutputMessage.Insert -> parsed.relationId
+                            is PgOutputMessage.Update -> parsed.relationId
+                            is PgOutputMessage.Delete -> parsed.relationId
+                        }
+                        val relation = relations[relationId]
+                            ?: error("Relation $relationId not found — missing Relation message before data message")
+
+                        LOG.trace { "[$dbName] ${parsed::class.simpleName} on ${relation.schema}.${relation.table}" }
+                        currentTxOps.add(toRowOp(relation, parsed))
+                    }
+
+                    is PgOutputMessage.Commit -> {
+                        val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
+
+                        suspend fun acknowledgeLsn() {
+                            LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
+                            runInterruptible(Dispatchers.IO) {
+                                stream.setFlushedLSN(commitLsn)
+                                stream.setAppliedLSN(commitLsn)
+                                stream.forceUpdateStatus()
+                            }
+                        }
+
+                        if (currentTxOps.isEmpty()) {
+                            LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
+                            acknowledgeLsn()
+                            continue
+                        }
+
+                        val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
+                        LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
+
+                        block(PostgresDriver.Transaction(
+                            lsn = parsed.endLsn,
+                            commitTime = commitTime,
+                            ops = currentTxOps.toList(),
+                        ))
+
+                        acknowledgeLsn()
+                        return
+                    }
+                }
+            }
+
+            throw CancellationException("Streaming loop cancelled")
+        }
+
+        override fun close() {
+            runCatching { stream.close() }
+            replConn.close()
+        }
+    }
+
     /**
      * Retries starting the replication stream when the slot is still held by a previous connection
      * (e.g. after leadership handover). PG's wal_sender_timeout (default 60s) will kill the old
      * connection eventually — we just need to wait it out.
      */
-    suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
+    private suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
         for (attempt in 1..SLOT_RETRY_MAX_ATTEMPTS) {
             try {
                 return pgReplConn.replicationAPI
@@ -202,5 +296,42 @@ class PgWireDriver(
         error("unreachable")
     }
 
+    // --- Row conversion ---
+
+    private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp = when (msg) {
+        is PgOutputMessage.Insert -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.values))
+        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues))
+        is PgOutputMessage.Delete -> RowOp.Delete(relation.schema, relation.table, toRowMap(relation, msg.oldValues))
+        else -> error("Unexpected op type: ${msg::class.simpleName}")
+    }
+
+    private fun toRowMap(relation: PgOutputMessage.Relation, values: List<PgOutputMessage.ColumnValue>): Map<String, Any?> =
+        relation.columns
+            .mapIndexedNotNull { idx, col ->
+                values.getOrNull(idx)?.let { colValue ->
+                    col.name to when (colValue) {
+                        is PgOutputMessage.ColumnValue.Null -> null
+                        is PgOutputMessage.ColumnValue.Unchanged ->
+                            throw xtdb.error.Incorrect(
+                                buildString {
+                                    appendLine("Received unchanged TOASTed column '${col.name}' on ${relation.schema}.${relation.table}. ")
+                                    appendLine("Set REPLICA IDENTITY FULL on the source table: ")
+                                    appendLine("ALTER TABLE \"${relation.schema}\".\"${relation.table}\" REPLICA IDENTITY FULL")
+                                }
+                            )
+
+                        is PgOutputMessage.ColumnValue.Text -> PgTypeCoercion.coerce(colValue.value, col.typeOid)
+                    }
+                }
+            }
+            .toMap()
+
     override fun close() {}
+
+    companion object {
+        private val PG_EPOCH = Instant.parse("2000-01-01T00:00:00Z")
+
+        fun pgTimestampToInstant(pgMicros: Long): Instant =
+            PG_EPOCH.plusNanos(pgMicros * 1000)
+    }
 }

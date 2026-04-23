@@ -1,5 +1,7 @@
 package xtdb.postgres
 
+import java.time.Instant
+
 /**
  * Abstracts PostgreSQL I/O — connection management, replication slot lifecycle,
  * snapshot reads, and change streaming — behind a testable interface.
@@ -21,4 +23,23 @@ interface PostgresDriver : AutoCloseable {
     }
 
     fun openSnapshot(): SnapshotReader
+
+    /**
+     * A committed PostgreSQL transaction, containing the row-level operations
+     * and metadata needed for indexing and acknowledgement.
+     */
+    data class Transaction(val lsn: Long, val commitTime: Instant, val ops: List<RowOp>)
+
+    /**
+     * Opens a logical replication stream from the given LSN.
+     *
+     * [ChangeStream.nextTransaction] blocks until a committed transaction with DML operations is available,
+     * then passes it to [block]. The LSN is acknowledged back to PostgreSQL only if [block] returns normally.
+     * If [block] throws, the LSN is not acknowledged — PG will re-send the changes on the next connection.
+     */
+    interface ChangeStream : AutoCloseable {
+        suspend fun nextTransaction(block: suspend (Transaction) -> Unit)
+    }
+
+    suspend fun openStream(startLsn: Long): ChangeStream
 }
