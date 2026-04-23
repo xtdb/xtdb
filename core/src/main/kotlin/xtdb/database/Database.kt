@@ -213,6 +213,7 @@ class Database(
                                 // watchers has the latest token from replica log replay,
                                 // which may be ahead of blockCatalog if no block boundary was flushed.
                                 afterToken = watchers.externalSourceToken,
+                                meterRegistry = base.meterRegistry,
                                 flushTimeout = indexerConfig.flushDuration,
                             )
 

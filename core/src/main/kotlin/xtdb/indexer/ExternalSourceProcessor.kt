@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.apache.arrow.memory.BufferAllocator
@@ -45,6 +46,7 @@ class ExternalSourceProcessor(
     afterReplicaMsgId: MessageId,
     private val extSource: ExternalSource,
     afterToken: ExternalSourceToken?,
+    meterRegistry: MeterRegistry? = null,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
@@ -83,7 +85,7 @@ class ExternalSourceProcessor(
 
     private val txIndexer = TxIndexer(
         allocator, dbStorage, dbState, querySource, watchers,
-        committer = this, instantSource = instantSource,
+        committer = this, meterRegistry = meterRegistry, instantSource = instantSource,
     )
 
     private val extJob = CoroutineScope(ctx).launch {

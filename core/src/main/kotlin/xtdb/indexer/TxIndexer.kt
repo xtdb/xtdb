@@ -1,6 +1,8 @@
 package xtdb.indexer
 
 import clojure.lang.Keyword
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CancellationException
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ResultCursor
@@ -35,11 +37,16 @@ class TxIndexer internal constructor(
     private val querySource: IQuerySource,
     private val watchers: Watchers,
     private val committer: TxCommitter,
+    meterRegistry: MeterRegistry? = null,
     private val instantSource: InstantSource = InstantSource.system(),
 ) {
 
     private val dbName get() = dbState.name
     private val liveIndex get() = dbState.liveIndex
+
+    private val txErrorCounter: Counter? = meterRegistry?.let {
+        Counter.builder("tx.error").register(it)
+    }
 
     sealed interface TxResult {
         val userMetadata: Map<*, *>?
@@ -147,6 +154,7 @@ class TxIndexer internal constructor(
                 }
 
                 is TxResult.Aborted -> {
+                    txErrorCounter?.increment()
                     openTx.close()
                     OpenTx(allocator, txKey, externalSourceToken).use { abortTx ->
                         abortTx.addTxRow(dbName, txKey, result.error, result.userMetadata)
