@@ -62,7 +62,9 @@ class TxIndexer internal constructor(
      */
     interface OpenTx {
 
+        val txKey: TransactionKey
         val systemFrom: Long
+
         fun table(ref: TableRef): xtdb.indexer.OpenTx.Table
 
         fun table(schemaName: String, tableName: String): xtdb.indexer.OpenTx.Table
@@ -94,6 +96,7 @@ class TxIndexer internal constructor(
     }
 
     private inner class WriterOpenTx(val inner: xtdb.indexer.OpenTx) : OpenTx {
+        override val txKey get() = inner.txKey
         override val systemFrom get() = inner.systemFrom
 
         override fun table(ref: TableRef) = inner.table(ref)
