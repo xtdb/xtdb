@@ -6,11 +6,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.jdbi.v3.core.Handle
-import org.jdbi.v3.core.Jdbi
-import org.jdbi.v3.core.kotlin.KotlinPlugin
 import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
-import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
@@ -35,11 +32,8 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.*
 import java.nio.ByteBuffer
-import java.sql.Connection
-import java.sql.DriverManager
 import java.time.Duration
 import java.time.Instant
-import java.util.*
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = PostgresSource::class.logger
@@ -54,11 +48,7 @@ private val SLOT_ACTIVE_PATTERN = Regex(".*replication slot .* is active.*")
 
 class PostgresSource(
     private val dbName: String,
-    private val hostname: String,
-    private val port: Int,
-    private val database: String,
-    private val username: String,
-    private val password: String,
+    private val driver: PgWireDriver,
     private val slotName: String,
     private val publicationName: String,
     private val schemaIncludeList: List<String>,
@@ -95,8 +85,10 @@ class PostgresSource(
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
 
+            val driver = PgWireDriver(pg.hostname, pg.port, pg.database, pg.username, pg.password)
+
             return PostgresSource(
-                dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
+                dbName, driver,
                 slotName, publicationName, schemaIncludeList,
             )
         }
@@ -129,31 +121,12 @@ class PostgresSource(
         }
     }
 
-    // PGProperty.set() is the correct API here — it resolves the internal property name string.
-    // props[PGProperty.USER] = "..." silently breaks: it puts the enum object as the key,
-    // but pgjdbc looks up by string (e.g. "user"), so the password is never found.
-    private fun openJdbcConnection(): Connection =
-        DriverManager.getConnection(
-            "jdbc:postgresql://$hostname:$port/$database",
-            Properties().also {
-                PGProperty.USER.set(it, username)
-                PGProperty.PASSWORD.set(it, password)
-                PGProperty.ASSUME_MIN_SERVER_VERSION.set(it, "15")
-                PGProperty.REPLICATION.set(it, "database")
-                PGProperty.PREFER_QUERY_MODE.set(it, "simple")
-            })
-
-    private val jdbi: Jdbi by lazy {
-        Jdbi.create("jdbc:postgresql://$hostname:$port/$database", username, password)
-            .installPlugin(KotlinPlugin())
-    }
-
     override suspend fun onPartitionAssigned(
         partition: Int,
         afterToken: ExternalSourceToken?,
         txIndexer: TxIndexer,
     ) {
-        LOG.info("[$dbName] Partition $partition assigned (hostname=$hostname, port=$port, database=$database, publication=$publicationName, slot=$slotName)")
+        LOG.info("[$dbName] Partition $partition assigned (publication=$publicationName, slot=$slotName)")
 
         val token = afterToken?.unpack(PostgresSourceToken::class.java)
         LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
@@ -215,9 +188,9 @@ class PostgresSource(
      * Returns the slot LSN for streaming to resume from.
      */
     private suspend fun initialSnapshot(txIndexer: TxIndexer): Long {
-        LOG.debug { "[$dbName] Opening replication connection to $hostname:$port/$database" }
+        LOG.debug { "[$dbName] Opening replication connection" }
 
-        openJdbcConnection().use { replConn ->
+        driver.openReplicationConnection().use { replConn ->
             return closeOnCancel(replConn) {
                 val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
@@ -237,7 +210,7 @@ class PostgresSource(
                 LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slotLsn)}, snapshot=$snapshotName")
 
                 // Read tables using the exported snapshot for consistency
-                jdbi.open().use { handle ->
+                driver.jdbi.open().use { handle ->
                     handle.begin()
                     try {
                         handle.transactionIsolationLevel = REPEATABLE_READ
@@ -355,7 +328,7 @@ class PostgresSource(
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
 
-        openJdbcConnection().use { replConn ->
+        driver.openReplicationConnection().use { replConn ->
             closeOnCancel(replConn) {
                 val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
