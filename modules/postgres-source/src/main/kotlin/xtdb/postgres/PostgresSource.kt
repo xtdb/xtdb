@@ -5,7 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import org.jdbi.v3.core.Handle
 import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
 import org.postgresql.replication.LogSequenceNumber
@@ -32,7 +31,6 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.*
 import java.nio.ByteBuffer
-import java.time.Duration
 import java.time.Instant
 import com.google.protobuf.Any as ProtoAny
 
@@ -41,18 +39,10 @@ private val LOG = PostgresSource::class.logger
 private const val PROTO_TAG = "proto.xtdb.com"
 private const val SNAPSHOT_BATCH_SIZE = 1000
 
-private const val SLOT_RETRY_MAX_ATTEMPTS = 7
-private const val SLOT_RETRY_BASE_DELAY_MS = 1000L
-
-private val SLOT_ACTIVE_PATTERN = Regex(".*replication slot .* is active.*")
-
 class PostgresSource(
     private val dbName: String,
     private val driver: PgWireDriver,
     private val slotName: String,
-    private val publicationName: String,
-    private val schemaIncludeList: List<String>,
-    private val pollDuration: Duration = Duration.ofSeconds(1),
 ) : ExternalSource {
 
     @Serializable
@@ -85,12 +75,12 @@ class PostgresSource(
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
 
-            val driver = PgWireDriver(pg.hostname, pg.port, pg.database, pg.username, pg.password)
-
-            return PostgresSource(
-                dbName, driver,
+            val driver = PgWireDriver(
+                dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
                 slotName, publicationName, schemaIncludeList,
             )
+
+            return PostgresSource(dbName, driver, slotName)
         }
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
@@ -126,7 +116,7 @@ class PostgresSource(
         afterToken: ExternalSourceToken?,
         txIndexer: TxIndexer,
     ) {
-        LOG.info("[$dbName] Partition $partition assigned (publication=$publicationName, slot=$slotName)")
+        LOG.info("[$dbName] Partition $partition assigned (slot=$slotName)")
 
         val token = afterToken?.unpack(PostgresSourceToken::class.java)
         LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
@@ -218,11 +208,11 @@ class PostgresSource(
                         LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
                         handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
-                        val tables = handle.discoverTables()
-                        LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
+                        val tables = with(driver) { handle.discoverTables() }
+                        LOG.info("[$dbName] Discovered ${tables.size} tables: ${tables.joinToString { "${it.first}.${it.second}" }}")
 
                         for ((schema, table) in tables) {
-                            val columns = handle.discoverColumns(schema, table)
+                            val columns = with(driver) { handle.discoverColumns(schema, table) }
                             val fullTableName = "$schema.$table"
 
                             LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
@@ -264,67 +254,6 @@ class PostgresSource(
         }
     }
 
-    private data class ColumnInfo(val name: String, val typeOid: Int)
-
-    private fun Handle.discoverTables(): List<Pair<String, String>> =
-        createQuery(
-            """
-            SELECT schemaname, tablename FROM pg_publication_tables
-            WHERE pubname = :pubName AND schemaname IN (<schemas>)
-            ORDER BY schemaname, tablename""".trimIndent()
-        )
-            .bind("pubName", publicationName)
-            .bindList("schemas", schemaIncludeList)
-            .map { rs, _ -> rs.getString("schemaname") to rs.getString("tablename") }
-            .list()
-
-    private fun Handle.discoverColumns(schema: String, table: String): List<ColumnInfo> =
-        createQuery(
-            """
-            SELECT a.attname, a.atttypid::int
-            FROM pg_attribute a
-              JOIN pg_class c ON a.attrelid = c.oid
-              JOIN pg_namespace n ON c.relnamespace = n.oid
-            WHERE n.nspname = :schema AND c.relname = :table
-              AND a.attnum > 0 AND NOT a.attisdropped
-            ORDER BY a.attnum""".trimIndent()
-        )
-            .bind("schema", schema)
-            .bind("table", table)
-            .map { rs, _ -> ColumnInfo(rs.getString("attname"), rs.getInt("atttypid")) }
-            .list()
-
-    /**
-     * Retries starting the replication stream when the slot is still held by a previous connection
-     * (e.g. after leadership handover). PG's wal_sender_timeout (default 60s) will kill the old
-     * connection eventually — we just need to wait it out.
-     */
-    private suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
-        for (attempt in 1..SLOT_RETRY_MAX_ATTEMPTS) {
-            try {
-                return pgReplConn.replicationAPI
-                    .replicationStream()
-                    .logical()
-                    .withSlotName(slotName)
-                    .withStartPosition(LogSequenceNumber.valueOf(startLsn))
-                    .withSlotOption("proto_version", "1")
-                    .withSlotOption("publication_names", publicationName)
-                    .start()
-            } catch (e: PSQLException) {
-                if (!SLOT_ACTIVE_PATTERN.matches(e.message ?: "")) throw e
-                if (attempt == SLOT_RETRY_MAX_ATTEMPTS) throw e
-
-                val baseDelay = SLOT_RETRY_BASE_DELAY_MS shl (attempt - 1)
-                val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
-
-                LOG.info("[$dbName] Replication slot '$slotName' is active (attempt $attempt/$SLOT_RETRY_MAX_ATTEMPTS), retrying in ${delayMs}ms")
-                delay(delayMs)
-            }
-        }
-
-        error("unreachable")
-    }
-
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
 
@@ -334,7 +263,7 @@ class PostgresSource(
 
                 LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
 
-                val stream: PGReplicationStream = startReplicationStream(pgReplConn, startLsn)
+                val stream: PGReplicationStream = driver.startReplicationStream(pgReplConn, startLsn)
 
                 val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
