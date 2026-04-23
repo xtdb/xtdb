@@ -3,6 +3,7 @@ package xtdb.indexer
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.CancellationException
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.ResultCursor
@@ -37,6 +38,7 @@ class TxIndexer internal constructor(
     private val querySource: IQuerySource,
     private val watchers: Watchers,
     private val committer: TxCommitter,
+    private val tracer: Tracer? = null,
     meterRegistry: MeterRegistry? = null,
     private val instantSource: InstantSource = InstantSource.system(),
 ) {
@@ -126,7 +128,10 @@ class TxIndexer internal constructor(
             )
 
             val pq = querySource.prepareQuery(sql, queryCat, prepareOpts)
-            return pq.openQuery(args, xtdb.query.QueryOpts(currentTime = currentTime, defaultTz = opts.defaultTz))
+            return pq.openQuery(
+                args,
+                xtdb.query.QueryOpts(currentTime = currentTime, defaultTz = opts.defaultTz, tracer = tracer),
+            )
         }
     }
 
