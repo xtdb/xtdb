@@ -67,7 +67,7 @@ class LeaderLogProcessor(
     private val txIndexer = TxIndexer(this.allocator, nodeBase, dbStorage, dbState, watchers, committer = this, tracer = tracer)
 
     private val indexer: Indexer.ForDatabase =
-        indexer.openForDatabase(this.allocator, dbStorage, dbState, liveIndex, crashLogger, txIndexer)
+        indexer.openForDatabase(this.allocator, dbState, liveIndex, crashLogger, txIndexer)
 
     override suspend fun commit(openTx: OpenTx, result: TxResult) {
         throw UnsupportedOperationException("LeaderLogProcessor.commit — internal-indexer migration not yet complete")

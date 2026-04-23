@@ -40,7 +40,7 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.) (partial trie/->live-trie 2 4))]
 
-          (with-open [open-tx-table (OpenTx$Table. allocator 0)]
+          (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
             (let [doc-wtr (.getDocWriter open-tx-table)]
               (dotimes [_n n]
                 (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid))
@@ -72,7 +72,7 @@
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo (RowCounter.))]
-          (with-open [open-tx-table (OpenTx$Table. allocator 0)]
+          (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
             (let [doc-wtr (.getDocWriter open-tx-table)]
 
               (dotimes [_n n]
@@ -117,7 +117,7 @@
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
                      live-table (LiveTable. allocator #xt/table foo rc)]
-      (let [open-tx-table (OpenTx$Table. allocator 0)
+      (let [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)
             doc-wtr (.getDocWriter open-tx-table)]
 
         (doseq [uuid uuids]

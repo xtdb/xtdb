@@ -8,8 +8,6 @@ import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
-import xtdb.query.IQuerySource
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.types.ClojureForm
@@ -77,23 +75,6 @@ interface Indexer : AutoCloseable {
                 docWriter.endStruct()
             }
         }
-
-        @JvmStatic
-        fun queryCatalog(
-            storage: DatabaseStorage,
-            state: DatabaseState,
-            snapSource: Snapshot.Source
-        ): IQuerySource.QueryCatalog {
-            val queryDb = object : IQuerySource.QueryDatabase {
-                override val storage get() = storage
-                override val queryState get() = state
-                override fun openSnapshot() = snapSource.openSnapshot()
-            }
-            return object : IQuerySource.QueryCatalog {
-                override val databaseNames: Collection<DatabaseName> get() = setOf(state.name)
-                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == state.name }
-            }
-        }
     }
 
     fun interface Factory {
@@ -102,7 +83,6 @@ interface Indexer : AutoCloseable {
 
     fun openForDatabase(
         allocator: BufferAllocator,
-        storage: DatabaseStorage,
         state: DatabaseState,
         liveIndex: LiveIndex,
         crashLogger: CrashLogger,

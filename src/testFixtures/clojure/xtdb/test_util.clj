@@ -354,7 +354,7 @@
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)]
-    (with-open [open-tx-table (OpenTx$Table. *allocator* (time/instant->micros system-time))]
+    (with-open [open-tx-table (OpenTx$Table. (.getTable live-table) *allocator* (time/instant->micros system-time))]
       (let [doc-wtr (.getDocWriter open-tx-table)]
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],

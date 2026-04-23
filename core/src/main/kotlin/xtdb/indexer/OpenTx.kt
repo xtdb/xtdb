@@ -15,20 +15,25 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import clojure.lang.PersistentArrayMap
 import xtdb.arrow.RelationAsStructReader
+import xtdb.arrow.SingletonListReader
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.query.PreparedDmlQuery
+import xtdb.table.SchemaName
+import xtdb.table.TableName
 import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
+import xtdb.time.microsAsInstant
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
 import xtdb.util.asIid
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
+import java.time.Instant
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
@@ -47,9 +52,9 @@ class OpenTx(
     private val tableTxs = HashMap<TableRef, Table>()
 
     fun table(table: TableRef): Table =
-        tableTxs.getOrPut(table) { Table(allocator, systemFrom) }
+        tableTxs.getOrPut(table) { Table(table, allocator, systemFrom) }
 
-    fun table(schemaName: String, tableName: String) =
+    fun table(schemaName: SchemaName, tableName: TableName) =
         table(TableRef(dbState.name, schemaName, tableName))
 
     val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
@@ -190,6 +195,68 @@ class OpenTx(
         }
     }
 
+    /**
+     * Bulk-patch docs into [table], keyed by `_iid`, preserving existing columns where
+     * the patched doc doesn't supply a new value.
+     *
+     * [docs] carries one row per doc, columns `_iid` (fixed-size binary) and `doc` (struct).
+     * [validFromµs] / [validToµs] default to [Long.MIN_VALUE] / [Long.MAX_VALUE] — the start/end of
+     * valid time — on the Instant overload, a null on either side means the same thing.
+     */
+    fun patchDocs(
+        table: Table,
+        validFromµs: Long,
+        validToµs: Long,
+        docs: RelationReader,
+    ) {
+        checkNotForbidden(table.ref)
+
+        val prepareOpts = PersistentArrayMap.create(mapOf(
+            "current-time".kw to txKey.systemTime,
+            "default-db".kw to dbState.name,
+            "arg-fields".kw to docs.schema.fields,
+        ))
+
+        // The planner (plan-patch in sql.clj) requires concrete Instant bounds — no nil support.
+        // The MIN/MAX µs bounds become start-of-time / end-of-time Instants; the planner treats
+        // them as literals and doesn't round-trip them through `asMicros`, so the lossiness of
+        // those sentinel Instants doesn't bite here.
+        val pq = nodeBase.querySource.preparePatchDocsQuery(
+            table.ref, validFromµs.microsAsInstant, validToµs.microsAsInstant,
+            queryCatalog(), prepareOpts,
+        )
+
+        val patchArgs = RelationReader.from(listOf(
+            SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs))
+        ))
+
+        val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
+
+        // openQuery takes ownership of the sliced args and closes them when the cursor closes —
+        // no separate `.use` on the slice here or it'd double-free.
+        pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
+            cursor.forEachRemaining { rel -> table.logPuts(validFromµs, validToµs, rel) }
+        }
+    }
+
+    /**
+     * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`
+     * (external-source writers typically do). Null on either bound means the same as passing
+     * [Long.MIN_VALUE] / [Long.MAX_VALUE] to the µs overload.
+     */
+    @JvmOverloads
+    fun patchDocs(
+        table: Table,
+        validFrom: Instant? = null,
+        validTo: Instant? = null,
+        docs: RelationReader,
+    ) = patchDocs(
+        table,
+        validFrom?.asMicros ?: Long.MIN_VALUE,
+        validTo?.asMicros ?: Long.MAX_VALUE,
+        docs,
+    )
+
     override fun close() = tableTxs.values.closeAll()
 
     companion object {
@@ -229,6 +296,7 @@ class OpenTx(
     }
 
     class Table(
+        val ref: TableRef,
         allocator: BufferAllocator,
         private val systemFrom: Long,
     ) : AutoCloseable {

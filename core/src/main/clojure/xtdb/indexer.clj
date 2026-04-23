@@ -23,13 +23,12 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.api.TransactionKey
            (xtdb.api.log ReplicaMessage$ResolvedTx)
-           (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier SingletonListReader VectorReader)
+           (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer Snapshot Snapshot$Source TxIndexer TxIndexer$QueryOpts)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer TxIndexer TxIndexer$QueryOpts)
            (xtdb.table TableRef)
-           xtdb.NodeBase
-           (xtdb.query IQuerySource IQuerySource$QueryCatalog QueryOpts)))
+           xtdb.NodeBase))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -165,9 +164,6 @@
 
         nil))))
 
-(defn- ->query-opts ^xtdb.query.QueryOpts [{:keys [current-time default-tz snapshot-token snapshot-time tracer]}]
-  (QueryOpts. current-time default-tz snapshot-token snapshot-time tracer))
-
 (defn- open-args-rdr ^xtdb.arrow.Relation$Loader [^BufferAllocator allocator, ^VectorReader args-rdr, ^long tx-op-idx]
   (when-not (.isNull args-rdr tx-op-idx)
     (Relation/streamLoader allocator ^bytes (.getObject args-rdr tx-op-idx))))
@@ -184,9 +180,8 @@
                               (aset selection 0 idx)
                               (eval-query (-> param-rel (.select selection) (.openSlice al))))))))))
 
-(defn- ->patch-docs-indexer [^BufferAllocator allocator, ^LiveIndex live-idx, ^OpenTx open-tx, ^VectorReader tx-ops-rdr,
-                             ^IQuerySource q-src, ^IQuerySource$QueryCatalog db-cat, ^Instant system-time
-                             {:keys [^String default-db, ^CrashLogger crash-logger, tx-key, ^Tracer tracer] :as tx-opts}]
+(defn- ->patch-docs-indexer [^OpenTx open-tx, ^VectorReader tx-ops-rdr, ^Instant system-time
+                             {:keys [^String default-db, tx-key, ^Tracer tracer]}]
   (let [patch-leg (.vectorFor tx-ops-rdr "patch-docs")
         iids-rdr (.vectorFor patch-leg "iids")
         iid-rdr (.getListElements iids-rdr)
@@ -197,51 +192,36 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [^String leg-name (.getLeg docs-rdr tx-op-idx)
-              ^TableRef table (table/->ref default-db leg-name)]
-          (when (xt-log/forbidden-table? table)
-            (throw (xt-log/forbidden-table-ex table)))
+              ^TableRef table-ref (table/->ref default-db leg-name)
+              table-docs-rdr (.vectorFor docs-rdr leg-name)
+              doc-rdr (.getListElements table-docs-rdr)
+              ks (.getKeyNames doc-rdr)]
+          (when-let [forbidden-cols (not-empty (->> ks
+                                                    (into #{} (filter (every-pred #(str/starts-with? % "_")
+                                                                                  (complement #{"_id" "_fn"}))))))]
+            (throw (err/incorrect :xtdb/forbidden-columns
+                                  (str "Cannot patch documents with columns: " (pr-str forbidden-cols))
+                                  {:table table-ref, :forbidden-cols forbidden-cols})))
 
-          (let [table-docs-rdr (.vectorFor docs-rdr leg-name)
-                doc-rdr (.getListElements table-docs-rdr)
-                ks (.getKeyNames doc-rdr)]
-            (when-let [forbidden-cols (not-empty (->> ks
-                                                      (into #{} (filter (every-pred #(str/starts-with? % "_")
-                                                                                    (complement #{"_id" "_fn"}))))))]
-              (throw (err/incorrect :xtdb/forbidden-columns
-                                    (str "Cannot patch documents with columns: " (pr-str forbidden-cols))
-                                    {:table table, :forbidden-cols forbidden-cols})))
-
-            (err/wrap-anomaly {:tx-op-idx tx-op-idx, :tx-key tx-key}
-              (let [valid-from-µs (if (.isNull valid-from-rdr tx-op-idx)
-                                    system-time-µs
-                                    (.getLong valid-from-rdr tx-op-idx))
-                    valid-to-µs (if (.isNull valid-to-rdr tx-op-idx)
-                                  Long/MAX_VALUE
-                                  (.getLong valid-to-rdr tx-op-idx))
-                    valid-from (time/micros->instant valid-from-µs)
-                    valid-to (when-not (.isNull valid-to-rdr tx-op-idx)
-                               (time/micros->instant valid-to-µs))
-                    live-table (.table open-tx table)]
-                (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table)
-                                                                                      :schema (.getSchemaName table)
-                                                                                      :table (.getTableName table)}}
-                  (let [pq (.preparePatchDocsQuery q-src table valid-from valid-to db-cat tx-opts)
-                        args (vr/rel-reader [(SingletonListReader.
-                                               "?patch_docs"
-                                               (RelationAsStructReader.
-                                                 "patch_doc"
-                                                 (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
-                                                                     (.withName "_iid"))
-                                                                 (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
-                                                                     (.withName "doc"))])))])]
-                    (util/with-open [res (.openQuery pq (.openSlice args allocator) (->query-opts tx-opts))]
-                      (.forEachRemaining res
-                                         (fn [^RelationReader rel]
-                                           (with-crash-log crash-logger "error patching documents"
-                                             {:table table, :tx-key tx-key, :tx-op-idx tx-op-idx}
-                                             {:live-idx live-idx, :open-tx-table live-table, :query-rel rel, :tx-ops-rdr tx-ops-rdr}
-                                             (.logPuts live-table valid-from-µs valid-to-µs rel))))))))))
-
+          (err/wrap-anomaly {:tx-op-idx tx-op-idx, :tx-key tx-key}
+            ;; Arrow-null `_valid_from` on a patch-docs tx-op means "from now" (matches put-docs /
+            ;; delete-docs). SQL `PATCH ... FROM NULL` doesn't go through this path as Arrow-null —
+            ;; the SQL planner writes the start-of-time µs sentinel explicitly (see sql.clj
+            ;; #visitPatchStatementValidTimePortion).
+            (let [valid-from-µs (if (.isNull valid-from-rdr tx-op-idx)
+                                  system-time-µs
+                                  (.getLong valid-from-rdr tx-op-idx))
+                  valid-to-µs (if (.isNull valid-to-rdr tx-op-idx)
+                                Long/MAX_VALUE
+                                (.getLong valid-to-rdr tx-op-idx))
+                  docs (vr/rel-reader [(-> (.select iid-rdr (.getListStartIndex iids-rdr tx-op-idx) (.getListCount iids-rdr tx-op-idx))
+                                           (.withName "_iid"))
+                                       (-> (.select doc-rdr (.getListStartIndex table-docs-rdr tx-op-idx) (.getListCount table-docs-rdr tx-op-idx))
+                                           (.withName "doc"))])]
+              (metrics/with-span tracer "xtdb.transaction.patch-docs" {:attributes {:db (.getDbName table-ref)
+                                                                                    :schema (.getSchemaName table-ref)
+                                                                                    :table (.getTableName table-ref)}}
+                (.patchDocs open-tx (.table open-tx table-ref) valid-from-µs valid-to-µs docs))))
           nil)))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^OpenTx open-tx,
@@ -278,9 +258,8 @@
                                 table-data
                                 nil nil)))
 
-(defrecord IndexerForDatabase [^BufferAllocator allocator, node-id, ^IQuerySource q-src
-                               db-name, db-storage, db-state
-                               ^LiveIndex live-index, table-catalog
+(defrecord IndexerForDatabase [^BufferAllocator allocator, node-id
+                               db-name, ^LiveIndex live-index
                                ^CrashLogger crash-logger
                                ^TxIndexer tx-indexer
                                ^Timer tx-timer
@@ -324,12 +303,7 @@
                     (add-tx-row! db-name open-tx tx-key skipped-exn user-metadata)
                     (commit live-index open-tx false skipped-exn)))
 
-                (let [db-cat (Indexer/queryCatalog db-storage db-state
-                                                   (reify Snapshot$Source
-                                                     (openSnapshot [_]
-                                                       (Snapshot/open allocator table-catalog live-index open-tx))))
-
-                      tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
+                (let [tx-opts {:snapshot-token (basis/->time-basis-str {db-name [system-time]})
                                :current-time system-time
                                :default-tz default-tz
                                :tx-key tx-key
@@ -339,7 +313,7 @@
                                :tracer tracer}
 
                       !put-docs-idxer (delay (->put-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
-                      !patch-docs-idxer (delay (->patch-docs-indexer allocator live-index open-tx tx-ops-rdr q-src db-cat system-time tx-opts))
+                      !patch-docs-idxer (delay (->patch-docs-indexer open-tx tx-ops-rdr system-time tx-opts))
                       !delete-docs-idxer (delay (->delete-docs-indexer live-index open-tx tx-ops-rdr system-time tx-opts))
                       !erase-docs-idxer (delay (->erase-docs-indexer live-index open-tx tx-ops-rdr tx-opts))
                       !sql-idxer (delay (->sql-indexer allocator open-tx tx-ops-rdr tx-opts))]
@@ -390,18 +364,16 @@
      create [_ ^NodeBase base]
       (let [config (.getConfig base)
             metrics-registry (.getMeterRegistry base)
-            q-src (.getQuerySource base)
             ^Tracer tracer (when (.getTransactionTracing (.getTracer config)) (.getTracer base))
             tx-timer (metrics/add-timer metrics-registry "tx.op.timer"
                                         {:description "indicates the timing and number of transactions"})
             tx-error-counter (metrics/add-counter metrics-registry "tx.error")]
         (reify Indexer
-          (openForDatabase [_ allocator db-storage db-state live-index crash-logger tx-indexer]
+          (openForDatabase [_ allocator db-state live-index crash-logger tx-indexer]
             (let [db-name (.getName db-state)]
               (util/with-close-on-catch [allocator (util/->child-allocator allocator (str "indexer/" db-name))]
-                (->IndexerForDatabase allocator (.getNodeId config) q-src
-                                      db-name db-storage db-state
-                                      live-index (.getTableCatalog db-state)
+                (->IndexerForDatabase allocator (.getNodeId config)
+                                      db-name live-index
                                       crash-logger tx-indexer
                                       tx-timer tx-error-counter tracer))))
 

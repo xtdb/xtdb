@@ -127,11 +127,11 @@ class LogProcessorSimTest : SimulationTestBase() {
             override fun close() {}
         }
 
-    private fun simIndexerWrapper(dbName: String) = object : Indexer {
+    private fun simIndexerWrapper(dbName: String, dbStorage: DatabaseStorage) = object : Indexer {
         override fun openForDatabase(
-            allocator: BufferAllocator, storage: DatabaseStorage, state: DatabaseState,
+            allocator: BufferAllocator, state: DatabaseState,
             liveIndex: LiveIndex, crashLogger: CrashLogger, txIndexer: TxIndexer,
-        ) = simIndexer(allocator, dbName, storage, state)
+        ) = simIndexer(allocator, dbName, dbStorage, state)
 
         override fun close() {}
     }
@@ -151,7 +151,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
-        val indexer = simIndexerWrapper(dbName)
+        val indexer = simIndexerWrapper(dbName, dbStorage)
 
         override fun openLeaderSystem(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
