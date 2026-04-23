@@ -103,7 +103,31 @@ class PgWireDriver(
                     LOG.debug { "[$dbName] SET TRANSACTION SNAPSHOT '$snapshotName'" }
                     handle.execute("SET TRANSACTION SNAPSHOT '$snapshotName'")
 
-                    yieldAll(readSnapshotBatches(handle))
+                    val tables = handle.discoverTables()
+                    LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
+
+                    for ((schema, table) in tables) {
+                        val columns = handle.discoverColumns(schema, table)
+                        val fullTableName = "$schema.$table"
+
+                        LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
+
+                        var rowCount = 0
+                        handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
+                            .setFetchSize(SNAPSHOT_BATCH_SIZE)
+                            .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
+                            .iterator().use { iter ->
+                                iter.asSequence()
+                                    .chunked(SNAPSHOT_BATCH_SIZE)
+                                    .forEach { batch ->
+                                        rowCount += batch.size
+                                        LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
+                                        yield(batch.map { row -> RowOp.Put(schema, table, row) })
+                                    }
+                            }
+
+                        LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
+                    }
                 } finally {
                     handle.rollback()
                 }
@@ -112,34 +136,6 @@ class PgWireDriver(
 
         override fun close() {
             replConn.close()
-        }
-    }
-
-    private fun readSnapshotBatches(handle: Handle): Sequence<List<RowOp.Put>> = sequence {
-        val tables = handle.discoverTables()
-        LOG.info("[$dbName] Discovered ${tables.size} tables in publication '$publicationName': ${tables.joinToString { "${it.first}.${it.second}" }}")
-
-        for ((schema, table) in tables) {
-            val columns = handle.discoverColumns(schema, table)
-            val fullTableName = "$schema.$table"
-
-            LOG.info("[$dbName] Snapshotting $fullTableName (${columns.size} columns: ${columns.joinToString { it.name }})")
-
-            var rowCount = 0
-            handle.createQuery("SELECT * FROM \"$schema\".\"$table\"")
-                .setFetchSize(SNAPSHOT_BATCH_SIZE)
-                .map { rs, _ -> columns.associate { col -> col.name to rs.getObject(col.name) } }
-                .iterator().use { iter ->
-                    iter.asSequence()
-                        .chunked(SNAPSHOT_BATCH_SIZE)
-                        .forEach { batch ->
-                            rowCount += batch.size
-                            LOG.debug { "[$dbName] Flushing $fullTableName batch: ${batch.size} rows (total: $rowCount)" }
-                            yield(batch.map { row -> RowOp.Put(schema, table, row) })
-                        }
-                }
-
-            LOG.info("[$dbName] Finished snapshotting $fullTableName ($rowCount rows)")
         }
     }
 
