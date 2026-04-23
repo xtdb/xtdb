@@ -125,10 +125,10 @@ class TxIndexer internal constructor(
 
     suspend fun indexTx(
         externalSourceToken: ExternalSourceToken?,
+        txId: Long = (liveIndex.latestCompletedTx?.txId ?: -1) + 1,
         systemTime: Instant = instantSource.instant(),
         writer: suspend (OpenTx) -> TxResult,
     ): TxResult {
-        val txId = (liveIndex.latestCompletedTx?.txId ?: -1) + 1
         val txKey = TransactionKey(txId, smoothSystemTime(systemTime))
 
         try {
