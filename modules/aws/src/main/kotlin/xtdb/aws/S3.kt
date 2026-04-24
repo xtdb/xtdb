@@ -22,6 +22,8 @@ import software.amazon.awssdk.services.s3.S3AsyncClient
 import software.amazon.awssdk.services.s3.S3Configuration
 import software.amazon.awssdk.services.s3.model.*
 import xtdb.api.PathSerde
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -316,7 +318,7 @@ class S3(
 
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
-        override fun openObjectStore(storageRoot: Path): S3 {
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): S3 {
             val client =
                 S3AsyncClient.builder()
                     .apply {

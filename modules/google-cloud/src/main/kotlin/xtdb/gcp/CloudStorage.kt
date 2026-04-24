@@ -16,6 +16,8 @@ import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import xtdb.api.PathSerde
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -182,7 +184,7 @@ class CloudStorage(
 
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
-        override fun openObjectStore(storageRoot: Path) =
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>) =
             CloudStorage(projectId, bucket, prefix?.resolve(storageRoot) ?: storageRoot, coroutineContext)
 
         override val configProto: ProtoAny by lazy {

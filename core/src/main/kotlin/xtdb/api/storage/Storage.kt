@@ -11,6 +11,8 @@ import kotlinx.serialization.UseSerializers
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
 import xtdb.api.PathSerde
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.DatabaseName
@@ -57,7 +59,8 @@ object Storage {
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName,
             meterRegistry: MeterRegistry? = null,
-            storageVersion: StorageVersion = VERSION
+            storageVersion: StorageVersion = VERSION,
+            remotes: Map<RemoteAlias, Remote> = emptyMap(),
         ): BufferPool
 
         companion object {
@@ -88,7 +91,8 @@ object Storage {
     data class InMemoryStorageFactory(override var epoch: Int = 0) : Factory {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            remotes: Map<RemoteAlias, Remote>,
         ): BufferPool = MemoryStorage(allocator, epoch)
     }
 
@@ -114,7 +118,8 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            remotes: Map<RemoteAlias, Remote>,
         ): BufferPool {
             val rootPath = path.resolve(storageRoot(storageVersion, epoch)).also { it.createDirectories() }
 
@@ -141,11 +146,12 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion
+            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            remotes: Map<RemoteAlias, Remote>,
         ): BufferPool {
             requireNotNull(diskCache) { "diskCache is required for remote storage" }
 
-            return objectStore.openObjectStore(storageRoot(storageVersion, epoch)).closeOnCatch { objectStore ->
+            return objectStore.openObjectStore(storageRoot(storageVersion, epoch), remotes).closeOnCatch { objectStore ->
                 RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName)
             }
         }

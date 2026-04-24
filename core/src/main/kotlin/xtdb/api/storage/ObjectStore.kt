@@ -3,6 +3,8 @@ package xtdb.api.storage
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
@@ -18,7 +20,7 @@ interface ObjectStore : AutoCloseable {
     }
 
     interface Factory {
-        fun openObjectStore(storageRoot: Path): ObjectStore
+        fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote> = emptyMap()): ObjectStore
         val configProto: ProtoAny
 
         companion object {

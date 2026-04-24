@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remote
@@ -36,7 +38,7 @@ class RemoteStorageTest : StorageTest() {
     private lateinit var remoteBufferPool: RemoteBufferPool
 
     object SimulatedObjectStoreFactory : ObjectStore.Factory {
-        override fun openObjectStore(storageRoot: Path): ObjectStore = SimulatedObjectStore()
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): ObjectStore = SimulatedObjectStore()
 
         override val configProto: ProtoAny
             get() = ProtoAny.newBuilder().build()

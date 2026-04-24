@@ -19,6 +19,8 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import reactor.core.Exceptions
 import xtdb.api.PathSerde
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -345,7 +347,8 @@ class BlobStorage(
 
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
-        override fun openObjectStore(storageRoot: Path) = BlobStorage(this, prefix?.resolve(storageRoot) ?: storageRoot, coroutineContext)
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>) =
+            BlobStorage(this, prefix?.resolve(storageRoot) ?: storageRoot, coroutineContext)
 
         override val configProto by lazy {
             ProtoAny.pack(azureBlobStorageConfig {
