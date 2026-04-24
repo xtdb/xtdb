@@ -200,39 +200,27 @@ class Database(
                         afterSourceMsgId: MessageId,
                         afterReplicaMsgId: MessageId,
                     ): LogProcessor.LeaderSystem {
-                        val extFactory = dbConfig.externalSource
+                        val extSource = dbConfig.externalSource?.open(dbName, base.logClusters, base.remotes)
 
-                        return if (extFactory != null) {
-                            val leaderProc = ExternalSourceProcessor(
-                                allocator, base, storage, state, blockUploader, watchers,
-                                extSource = extFactory.open(dbName, base.logClusters, base.remotes),
-                                replicaProducer,
-                                partition = 0,
-                                afterSourceMsgId, afterReplicaMsgId,
-                                // watchers has the latest token from replica log replay,
-                                // which may be ahead of blockCatalog if no block boundary was flushed.
-                                afterToken = watchers.externalSourceToken,
-                                flushTimeout = indexerConfig.flushDuration,
-                            )
+                        val leaderProc = LeaderLogProcessor(
+                            allocator, base, storage, indexer, crashLogger,
+                            state, blockUploader, watchers,
+                            extSource = extSource,
+                            replicaProducer = replicaProducer,
+                            skipTxs = indexerConfig.skipTxs.toSet(),
+                            dbCatalog = dbCatalog,
+                            partition = 0,
+                            afterSourceMsgId = afterSourceMsgId,
+                            afterReplicaMsgId = afterReplicaMsgId,
+                            // watchers has the latest token from replica log replay,
+                            // which may be ahead of blockCatalog if no block boundary was flushed.
+                            afterToken = watchers.externalSourceToken,
+                            flushTimeout = indexerConfig.flushDuration,
+                        )
 
-                            object : LogProcessor.LeaderSystem {
-                                override val proc get() = leaderProc
-                                override fun close() { leaderProc.close(); replicaProducer.close() }
-                            }
-                        } else {
-                            val leaderProc = LeaderLogProcessor(
-                                allocator, base, storage, replicaProducer, state,
-                                indexer, crashLogger, watchers,
-                                indexerConfig.skipTxs.toSet(),
-                                dbCatalog, blockUploader,
-                                afterSourceMsgId, afterReplicaMsgId,
-                                indexerConfig.flushDuration,
-                            )
-
-                            object : LogProcessor.LeaderSystem {
-                                override val proc get() = leaderProc
-                                override fun close() { leaderProc.close(); replicaProducer.close() }
-                            }
+                        return object : LogProcessor.LeaderSystem {
+                            override val proc get() = leaderProc
+                            override fun close() { leaderProc.close(); replicaProducer.close() }
                         }
                     }
 

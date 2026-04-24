@@ -384,7 +384,7 @@ class PostgresSourceIntegrationTest {
             // Streaming connection is now holding the slot
             assertEquals(true, pgSlotState(slotName), "Slot should be active while streaming")
         }
-        // node.close() triggers ExternalSourceProcessor.close() → extJob.cancel()
+        // node.close() triggers LeaderLogProcessor.close() → extJob.cancel()
         // The closeOnCancel child coroutine should force-close the PG connection,
         // releasing the replication slot.
 

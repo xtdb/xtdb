@@ -159,10 +159,12 @@ class LogProcessorSimTest : SimulationTestBase() {
             afterReplicaMsgId: MessageId,
         ): LogProcessor.LeaderSystem {
             val proc = LeaderLogProcessor(
-                allocator, nodeBase, dbStorage, replicaProducer,
-                dbState, indexer, crashLogger, watchers,
-                emptySet(), null, blockUploader,
-                afterSourceMsgId, afterReplicaMsgId
+                allocator, nodeBase, dbStorage, indexer, crashLogger,
+                dbState, blockUploader, watchers,
+                extSource = null, replicaProducer = replicaProducer,
+                skipTxs = emptySet(), dbCatalog = null,
+                partition = 0, afterSourceMsgId = afterSourceMsgId, afterReplicaMsgId = afterReplicaMsgId,
+                afterToken = null,
             )
             return object : LogProcessor.LeaderSystem {
                 override val proc get() = proc

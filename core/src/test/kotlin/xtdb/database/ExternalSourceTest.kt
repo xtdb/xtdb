@@ -21,7 +21,9 @@ import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.error.Incorrect
 import xtdb.indexer.BlockUploader
-import xtdb.indexer.ExternalSourceProcessor
+import xtdb.indexer.CrashLogger
+import xtdb.indexer.LeaderLogProcessor
+import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
@@ -87,7 +89,7 @@ class ExternalSourceTest {
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
         ctx: CoroutineContext,
-    ): ExternalSourceProcessor {
+    ): LeaderLogProcessor {
         val blockCatalog = BlockCatalog("test", null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
@@ -97,8 +99,13 @@ class ExternalSourceTest {
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
-        return ExternalSourceProcessor(
-            allocator, nodeBase, dbStorage, dbState, blockUploader, watchers, extSource, replicaProducer,
+        val indexer = mockk<Indexer>(relaxed = true)
+        val crashLogger = mockk<CrashLogger>(relaxed = true)
+
+        return LeaderLogProcessor(
+            allocator, nodeBase, dbStorage, indexer, crashLogger,
+            dbState, blockUploader, watchers, extSource, replicaProducer,
+            skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1, afterToken = afterToken, ctx = ctx
         )
     }

@@ -69,9 +69,12 @@ class LogProcessorTest {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
                 val leaderProc = LeaderLogProcessor(
-                    allocator, nodeBase, dbStorage, replicaProducer,
-                    dbState, mockk(relaxed = true), mockk(relaxed = true), watchers,
-                    emptySet(), null, blockUploader, afterSourceMsgId, afterReplicaMsgId
+                    allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+                    dbState, blockUploader, watchers,
+                    extSource = null, replicaProducer = replicaProducer,
+                    skipTxs = emptySet(), dbCatalog = null,
+                    partition = 0, afterSourceMsgId = afterSourceMsgId, afterReplicaMsgId = afterReplicaMsgId,
+                    afterToken = null,
                 )
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc

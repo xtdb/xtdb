@@ -68,9 +68,11 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         return LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, replicaProducer, dbState,
-            indexer, mockk(relaxed = true), watchers,
-            emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
+            allocator, nodeBase, dbStorage, indexer, mockk(relaxed = true),
+            dbState, blockUploader, watchers,
+            extSource = null, replicaProducer = replicaProducer,
+            skipTxs = emptySet(), dbCatalog = null,
+            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1, afterToken = null,
         )
     }
 
@@ -121,9 +123,11 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         val lp = LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), mockk(relaxed = true), Watchers(-1),
-            emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
+            allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+            dbState, blockUploader, Watchers(-1),
+            extSource = null, replicaProducer = replicaProducer,
+            skipTxs = emptySet(), dbCatalog = null,
+            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1, afterToken = null,
         )
 
         val now = Instant.now()
@@ -185,9 +189,11 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         val lp = LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, replicaProducer,
-            dbState, mockk(relaxed = true), mockk(relaxed = true), Watchers(-1),
-            emptySet(), null, blockUploader, afterSourceMsgId = -1, afterReplicaMsgId = -1
+            allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+            dbState, blockUploader, Watchers(-1),
+            extSource = null, replicaProducer = replicaProducer,
+            skipTxs = emptySet(), dbCatalog = null,
+            partition = 0, afterSourceMsgId = -1, afterReplicaMsgId = -1, afterToken = null,
         )
 
         val now = Instant.now()

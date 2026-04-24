@@ -34,6 +34,7 @@ import xtdb.util.asIid
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
@@ -46,6 +47,11 @@ class OpenTx(
     val externalSourceToken: ExternalSourceToken?,
     private val tracer: Tracer? = null,
 ) : AutoCloseable {
+
+    data class QueryOpts(
+        val currentTime: Instant? = null,
+        val defaultTz: ZoneId? = null,
+    )
 
     val systemFrom = txKey.systemTime.asMicros
 
@@ -92,7 +98,7 @@ class OpenTx(
     fun openQuery(
         sql: String,
         args: RelationReader? = null,
-        opts: TxIndexer.QueryOpts = TxIndexer.QueryOpts(),
+        opts: QueryOpts = QueryOpts(),
     ): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
 
@@ -118,7 +124,7 @@ class OpenTx(
     fun executeDml(
         sql: String,
         args: RelationReader? = null,
-        opts: TxIndexer.QueryOpts = TxIndexer.QueryOpts(),
+        opts: QueryOpts = QueryOpts(),
     ) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeµs = currentTime.asMicros

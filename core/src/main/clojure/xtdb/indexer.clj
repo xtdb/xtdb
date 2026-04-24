@@ -26,7 +26,7 @@
            (xtdb.arrow Relation Relation$ILoader RelationAsStructReader RelationReader RowCopier VectorReader)
            (xtdb.error Anomaly$Caller Interrupted)
            (xtdb.database DatabaseState)
-           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$Table OpIndexer TxIndexer TxIndexer$QueryOpts)
+           (xtdb.indexer CrashLogger Indexer Indexer$Factory Indexer$ForDatabase LiveIndex OpenTx OpenTx$QueryOpts OpenTx$Table OpIndexer TxIndexer)
            (xtdb.table TableRef)
            xtdb.NodeBase))
 
@@ -230,7 +230,7 @@
   (let [sql-leg (.vectorFor tx-ops-rdr "sql")
         query-rdr (.vectorFor sql-leg "query")
         args-rdr (.vectorFor sql-leg "args")
-        q-opts (TxIndexer$QueryOpts. current-time default-tz)]
+        q-opts (OpenTx$QueryOpts. current-time default-tz)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query-str (.getObject query-rdr tx-op-idx)]
