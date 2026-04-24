@@ -62,7 +62,9 @@ class LeaderLogProcessor(
 
     private val allocator = allocator.newChildAllocator("leader-log-processor", 0, Long.MAX_VALUE)
 
-    private val txIndexer = TxIndexer(this.allocator, nodeBase, dbStorage, dbState, watchers, committer = this)
+    private val tracer = nodeBase.tracer?.takeIf { nodeBase.config.tracer.transactionTracing }
+
+    private val txIndexer = TxIndexer(this.allocator, nodeBase, dbStorage, dbState, watchers, committer = this, tracer = tracer)
 
     private val indexer: Indexer.ForDatabase =
         indexer.openForDatabase(this.allocator, dbStorage, dbState, liveIndex, crashLogger, txIndexer)
