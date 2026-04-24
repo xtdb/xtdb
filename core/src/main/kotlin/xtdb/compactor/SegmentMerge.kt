@@ -1,6 +1,8 @@
 package xtdb.compactor
 
 import com.carrotsearch.hppc.ByteArrayList
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
@@ -223,8 +225,7 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
 
         return outWriter.use {
             for (task in MergePlanner.plan(segments, pathFilter?.toPathPredicate())) {
-                if (Thread.interrupted()) throw InterruptedException()
-
+                currentCoroutineContext().ensureActive()
                 task.merge(it, pathFilter)
             }
 

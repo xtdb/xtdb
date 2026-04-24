@@ -1,5 +1,7 @@
 package xtdb.util
 
+import xtdb.isCancellation
+import xtdb.rethrowIfCancellation
 import java.lang.System.Logger
 import java.lang.System.Logger.Level.*
 import java.util.function.Supplier
@@ -27,3 +29,23 @@ fun Logger.warn(throwable: Throwable, message: String) = log(WARNING, message, t
 fun Logger.error(message: String) = log(ERROR, message)
 fun Logger.error(throwable: Throwable, message: String) = log(ERROR, message, throwable)
 fun Logger.error(throwable: Throwable, message: Supplier<String>) = log(ERROR, message, throwable)
+
+/**
+ * Logs at start and end of block, also when failed or cancelled.
+ *
+ * Defensively transforms all known cancellation exceptions into CancellationException.
+ */
+suspend fun <T> Logger.debugBlock(message:String, block: suspend () -> T): T {
+    debug("starting: $message")
+    try {
+        return block()
+            .also { debug("finished: $message") }
+    } catch (e: Throwable) {
+        if (e.isCancellation()) {
+            debug(e, "cancelled: $message")
+            e.rethrowIfCancellation()
+        }
+        error(e, "failed: $message")
+        throw e
+    }
+}
