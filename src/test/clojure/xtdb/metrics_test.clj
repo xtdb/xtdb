@@ -164,3 +164,13 @@ $$"])
         (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"])))
         (let [^Timer timer (.timer (.find registry "pgwire.tx.latency"))]
           (t/is (= (.count timer) 3)))))))
+
+(t/deftest test-block-uploaded-timer
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))]
+    (t/testing "blocks uploaded to storage are recorded in block.upload.timer"
+      (xt/submit-tx node [[:put-docs :foo {:xt/id 1}]])
+      (tu/flush-block! node)
+      (let [^Timer timer (.timer (.find registry "block.upload.timer"))]
+        (t/is (= (.count timer) 1))
+        (t/is (> (.totalTime timer java.util.concurrent.TimeUnit/NANOSECONDS) 0))))))

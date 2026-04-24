@@ -65,7 +65,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         return LeaderLogProcessor(
             allocator, nodeBase, dbStorage, replicaProducer, dbState,
@@ -118,7 +118,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, replicaProducer,
@@ -182,7 +182,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, replicaProducer,
