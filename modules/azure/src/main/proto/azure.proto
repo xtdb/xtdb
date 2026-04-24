@@ -12,4 +12,5 @@ message AzureBlobStorageConfig {
     string user_managed_identity_client_id = 5;
     string storage_account_endpoint = 6;
     string connection_string = 7;
+    string remote = 8;
 }
