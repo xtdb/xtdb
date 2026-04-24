@@ -67,7 +67,7 @@ class LogProcessorTest {
                 afterReplicaMsgId: MessageId,
             ): LogProcessor.LeaderSystem {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-                val blockUploader = BlockUploader(dbStorage, dbState, compactor, null)
+                val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
                 val leaderProc = LeaderLogProcessor(
                     allocator, nodeBase, dbStorage, replicaProducer,
                     dbState, mockk(relaxed = true), mockk(relaxed = true), watchers,
@@ -86,7 +86,7 @@ class LogProcessorTest {
             ): LogProcessor.TransitionProcessor =
                 TransitionLogProcessor(
                     allocator, bufferPool, dbState, dbState.liveIndex,
-                    BlockUploader(dbStorage, dbState, mockk(relaxed = true), null),
+                    BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null),
                     replicaProducer, watchers, dbCatalog = null,
                     afterSourceMsgId = afterSourceMsgId,
                     afterReplicaMsgId = afterReplicaMsgId,
@@ -111,7 +111,7 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
         val watchers = Watchers(-1)
 
         val scope = CoroutineScope(SupervisorJob())
@@ -135,7 +135,7 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool(epoch = 1)
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
         val watchers = Watchers(-1)
 
         val scope = CoroutineScope(SupervisorJob())
@@ -162,7 +162,7 @@ class LogProcessorTest {
         }
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
         val watchers = Watchers(-1)
 
         // Pre-populate the replica log with a transaction
@@ -199,7 +199,7 @@ class LogProcessorTest {
         }
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
         val watchers = Watchers(-1)
 
         // Pre-populate the replica log

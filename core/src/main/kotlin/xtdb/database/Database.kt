@@ -183,7 +183,7 @@ class Database(
             })
 
             if (indexerConfig.enabled) {
-                val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog)
+                val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog, base.meterRegistry)
 
                 val procFactory = object : LogProcessor.ProcessorFactory {
                     override fun openFollower(

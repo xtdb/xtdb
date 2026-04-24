@@ -1,5 +1,9 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
+import java.nio.ByteBuffer
+import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import xtdb.api.log.Log
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
@@ -18,15 +22,15 @@ import xtdb.log.proto.TrieDetails
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.logger
-import java.nio.ByteBuffer
-import java.time.Instant
 
 private val LOG = BlockUploader::class.logger
 
 class BlockUploader(
-    dbStorage: DatabaseStorage, dbState: DatabaseState,
+    dbStorage: DatabaseStorage,
+    dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
+    private val meterRegistry: MeterRegistry?,
 ) {
     private val sourceLog = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
@@ -34,6 +38,11 @@ class BlockUploader(
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
     private val tableCatalog = dbState.tableCatalog
+    private val blockUploadTimer: Timer? = meterRegistry?.let {
+        Timer.builder("block.upload.timer")
+            .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
+            .register(it)
+    }
 
     suspend fun uploadBlock(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
@@ -41,6 +50,7 @@ class BlockUploader(
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
         LOG.debug("finishing block: 'b${blockIdx.asLexHex}'...")
+        val timer = meterRegistry?.let { Timer.start(it) }
 
         val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
@@ -99,6 +109,7 @@ class BlockUploader(
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
 
+        blockUploadTimer?.let { timer?.stop(it) }
         liveIndex.nextBlock()
         compactor.signalBlock()
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
