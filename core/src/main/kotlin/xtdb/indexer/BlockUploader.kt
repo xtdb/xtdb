@@ -1,6 +1,6 @@
 package xtdb.indexer
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -25,6 +25,12 @@ import java.nio.ByteBuffer
 import java.time.Instant
 
 private val LOG = BlockUploader::class.logger
+
+// Cap concurrent per-table block-metadata uploads to bound the heap held by in-flight
+// `TableBlock.toByteArray()` buffers. S3's default HTTP client caps concurrency at 50, so
+// parallelism beyond this would queue inside the SDK with the `byte[]`s still pinned on heap.
+private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
+private val blockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
 
 class BlockUploader(
     dbStorage: DatabaseStorage, dbState: DatabaseState,
@@ -73,7 +79,7 @@ class BlockUploader(
 
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
-                launch(Dispatchers.IO) {
+                launch(blockUploadDispatcher) {
                     val path = BlockCatalog.tableBlockPath(table, blockIdx)
                     bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
                 }
