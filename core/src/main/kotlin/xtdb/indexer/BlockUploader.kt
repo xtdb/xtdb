@@ -4,7 +4,10 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import java.nio.ByteBuffer
 import java.time.Instant
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import xtdb.api.log.Log
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.MessageId
@@ -78,10 +81,15 @@ class BlockUploader(
 
         val tableBlocks = tableCatalog.finishBlock(blockCatalog.currentBlockIndex, finishedBlocks, tablePartitions)
 
-        for ((table, tableBlock) in tableBlocks) {
-            val path = BlockCatalog.tableBlockPath(table, blockIdx)
-            bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+        coroutineScope {
+            tableBlocks.forEach { (table, tableBlock) ->
+                launch(Dispatchers.IO) {
+                    val path = BlockCatalog.tableBlockPath(table, blockIdx)
+                    bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
+                }
+            }
         }
+
         val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
 
         val externalSourceToken = boundary.externalSourceToken
