@@ -141,3 +141,26 @@ $$"])
       (xt/q node "SELECT 1")
       (let [^Timer timer (.timer (.find registry "query.timer"))]
         (t/is (= (.count timer) 4))))))
+
+(t/deftest test-tx-latency-timer
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))]
+
+    (with-open [conn (jdbc/get-connection node)]
+      (t/testing "synchronous transactions via pgwire are recorded in tx.latency timer"
+        (jdbc/execute! conn ["INSERT INTO foo (xt/id, a) VALUES (1, 42)"])
+        (let [^Timer timer (.timer (.find registry "tx.latency"))]
+          (t/is (= (.count timer) 1))
+          (t/is (> (.totalTime timer java.util.concurrent.TimeUnit/NANOSECONDS) 0))))
+
+      (t/testing "explicit transactions are recorded on commit"
+        (jdbc/execute! conn ["START TRANSACTION"])
+        (jdbc/execute! conn ["INSERT INTO foo (xt/id, a) VALUES (2, 43)"])
+        (jdbc/execute! conn ["COMMIT"])
+        (let [^Timer timer (.timer (.find registry "tx.latency"))]
+          (t/is (= (.count timer) 2))))
+
+      (t/testing "failed transactions are also recorded"
+        (t/is (thrown? Exception (jdbc/execute! conn ["INSERT INTO foo (a) VALUES (42)"])))
+        (let [^Timer timer (.timer (.find registry "tx.latency"))]
+          (t/is (= (.count timer) 3)))))))

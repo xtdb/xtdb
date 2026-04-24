@@ -557,7 +557,7 @@
   (swap! conn-state dissoc :transaction)
   (close-all-portals conn))
 
-(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter] :as conn}]
+(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter, tx-latency-timer] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
@@ -565,38 +565,39 @@
       (throw (pgio/err-protocol-violation "transaction failed"))
 
       (try
-        (when (= :read-write access-mode)
-          (let [tx-opts (TxOpts. default-tz
-                                 (some-> system-time (time/->instant {:default-tz default-tz}))
-                                 (get parameters "user")
-                                 user-metadata)]
-            (util/with-open [tx-ops (->> dml-buf
-                                         (mapcat (fn [op]
-                                                   (or (when (instance? Sql op)
-                                                         (let [^Sql op op]
-                                                           (seq (sql/sql->static-ops (.getSql op) (.getArgRows op)))))
-                                                       [op])))
-                                         (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
-              (if async?
-                (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))
-                      msg-id (.getTxId tx-id)]
-                  (swap! conn-state (fn [cs]
-                                      (-> cs
-                                          (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                          (assoc :latest-submitted-tx {:tx-id msg-id})))))
+        (metrics/record-callable! tx-latency-timer
+          (when (= :read-write access-mode)
+            (let [tx-opts (TxOpts. default-tz
+                                   (some-> system-time (time/->instant {:default-tz default-tz}))
+                                   (get parameters "user")
+                                   user-metadata)]
+              (util/with-open [tx-ops (->> dml-buf
+                                           (mapcat (fn [op]
+                                                     (or (when (instance? Sql op)
+                                                           (let [^Sql op op]
+                                                             (seq (sql/sql->static-ops (.getSql op) (.getArgRows op)))))
+                                                         [op])))
+                                           (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
+                (if async?
+                  (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))
+                        msg-id (.getTxId tx-id)]
+                    (swap! conn-state (fn [cs]
+                                        (-> cs
+                                            (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
+                                            (assoc :latest-submitted-tx {:tx-id msg-id})))))
 
-                (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))
-                      msg-id (.getTxId tx)]
-                  (swap! conn-state (fn [cs]
-                                      (-> cs
-                                          (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                          (assoc :latest-submitted-tx {:tx-id msg-id
-                                                                       :system-time (.getSystemTime tx)
-                                                                       :committed? (.getCommitted tx)
-                                                                       :error (.getError tx)}))))
+                  (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))
+                        msg-id (.getTxId tx)]
+                    (swap! conn-state (fn [cs]
+                                        (-> cs
+                                            (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
+                                            (assoc :latest-submitted-tx {:tx-id msg-id
+                                                                         :system-time (.getSystemTime tx)
+                                                                         :committed? (.getCommitted tx)
+                                                                         :error (.getError tx)}))))
 
-                  (when-let [error (.getError tx)]
-                    (throw error)))))))
+                    (when-let [error (.getError tx)]
+                      (throw error))))))))
         (catch Throwable t
           (metrics/inc-counter! tx-error-counter)
           (throw t))
@@ -1793,7 +1794,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1819,6 +1820,7 @@
                     :query-timer query-timer
                     :query-tracer query-tracer
                     :tx-error-counter tx-error-counter
+                    :tx-latency-timer tx-latency-timer
                     :cancelled-connections-counter cancelled-connections-counter)]
 
     (try
@@ -1913,6 +1915,7 @@
            query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
            query-timer (when metrics-registry (metrics/add-timer metrics-registry "query.timer" {}))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
+           tx-latency-timer (when metrics-registry (metrics/add-timer metrics-registry "tx.latency" {}))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
            cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections")) 
            server (map->Server {:allocator allocator
@@ -1947,6 +1950,7 @@
                          :query-timer query-timer
                          :query-tracer (when query-tracing? tracer)
                          :tx-error-counter tx-error-counter
+                         :tx-latency-timer tx-latency-timer
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
            accept-thread (-> (Thread/ofVirtual)
