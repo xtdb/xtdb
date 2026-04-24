@@ -173,12 +173,12 @@ class ReadOnlyLocalLog<M>(
     }
 
     override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
-        val spec = listener.onPartitionsAssignedSync(listOf(0))
+        val spec = listener.onPartitionsAssigned(listOf(0))
         if (spec != null) {
             try {
                 tailAll(spec.afterMsgId, spec.processor)
             } finally {
-                listener.onPartitionsRevokedSync(listOf(0))
+                listener.onPartitionsRevoked(listOf(0))
             }
         }
     }
