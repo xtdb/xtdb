@@ -1,29 +1,101 @@
 -- allium: 3
 -- gc.allium
 --
--- Garbage collection of superseded tries.
--- Runs periodically, deleting data and meta files from the object store
--- once a trie has been fully replaced by compaction output.
+-- Garbage collection of superseded tries (data + meta files) for one database.
 --
--- Tries transition to garbage during addTries (see trie-cat.allium), not here.
--- This spec handles the physical cleanup: deleting files and removing catalog entries.
+-- Per-database, leader-only, signal-driven. The same node that owns the
+-- replica-log atomic producer for this database also owns its trie GC; followers
+-- do not run trie GC at all. There is no periodic timer: the leader signals at
+-- every block boundary (the only moment new garbage can appear), and tx
+-- processing carries on without waiting for the GC cycle.
 --
--- See: garbage_collector/GarbageCollector.kt, trie_catalog.clj (garbage-tries, garbage-fn)
+-- Tries transition to `garbage` during addTries (see trie-cat.allium); this
+-- spec covers physical cleanup: deleting object-store files and atomically
+-- publishing those deletions to the replica log so followers drop them from
+-- their in-memory catalogs at the same logical position.
+--
+-- Block-file GC lives in block-gc.allium — block files are consumed only at
+-- startup/catch-up, so they don't need replica-log coordination.
+--
+-- See:
+--   garbage_collector/TrieGarbageCollector.kt
+--   indexer/LeaderLogProcessor.kt (commitTriesDeleted callback, finishBlock signal)
+--   indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt (TriesDeleted replay)
+--   api/log/ReplicaMessage.kt (TriesDeleted)
+--   api/GarbageCollectorConfig.kt
 
 use "./trie-cat.allium" as trie_cat
+use "./db.allium" as db
 
 ------------------------------------------------------------
--- Context
+-- Given
 ------------------------------------------------------------
 
--- No local entities; operates on trie_cat/trie_catalog and ObjectStore.
+given {
+    database: db/Database
+    log_processor: db/LogProcessor
+    block_catalog: db/BlockCatalog
+    trie_gc: TrieGarbageCollector
+}
 
 ------------------------------------------------------------
--- External Entities
+-- Entities
 ------------------------------------------------------------
 
-external entity ObjectStore {
-    -- Durable key-value storage for blocks, tries, table-blocks.
+-- ObjectStore (durable key-value storage owning trie data + meta files keyed
+-- by (table, trie_key); deletes are idempotent — 404 on a re-DELETE is fine)
+-- is reached via the ObjectStoreDelete deferred specification.
+
+
+entity TrieGarbageCollector {
+    -- One per (database, leader-system) pair. Constructed when the
+    -- LogProcessor enters a leader mode (db.allium: TransitionToLeader) and
+    -- closed when it leaves (TransitionToFollower or node shutdown). Followers
+    -- never construct one. See TrieGarbageCollector.kt.
+    --
+    -- The collector owns a single coroutine that loops: wait → run a cycle →
+    -- (drain new triggers) → run another cycle → ... . Two channels feed the
+    -- loop:
+    --   signal_channel:  fire-and-forget pokes (CONFLATED — bursts coalesce
+    --                    into one upcoming cycle).
+    --   await_channel:   one CompletableDeferred per awaiter (UNLIMITED —
+    --                    every waiter must be preserved so each gets a cycle
+    --                    that *started* after their suspension).
+    --
+    -- See `TrieGarbageCollector.kt` for the loop body.
+    enabled: Boolean              -- gates the auto-signal from finishBlock; awaitNoGarbage is unaffected
+    blocks_to_keep: Integer
+    garbage_lifetime: Duration
+
+    has_pending_signal: Boolean
+    pending_awaiters: List<Awaiter>
+
+    -- The coroutine context that runs garbage_collect_tries. Owned by the
+    -- leader system; cancelled and joined on close().
+    is_running: Boolean
+
+    -- Derived: the loop body fires whenever either channel has work.
+    has_work: has_pending_signal or pending_awaiters.count > 0
+}
+
+value Awaiter {
+    -- A single suspended caller of awaitNoGarbage. Resolved (or cancelled) by
+    -- the GC loop after a cycle that started at or after the call.
+}
+
+------------------------------------------------------------
+-- Replica-log message
+------------------------------------------------------------
+
+-- Published by the leader's trie GC after deleting (data, meta) files in
+-- object store; consumed by followers (and by the transition processor) to
+-- mirror the deletion in their in-memory trie catalogs. In the implementation
+-- this is a variant of db/ReplicaMessage; we model it as a local entity to
+-- keep ownership scoped to this spec.
+-- See: api/log/ReplicaMessage.kt (TriesDeleted)
+entity TriesDeletedMessage {
+    table_name: String
+    trie_keys: List<String>
 }
 
 ------------------------------------------------------------
@@ -31,60 +103,399 @@ external entity ObjectStore {
 ------------------------------------------------------------
 
 config {
+    -- See: api/GarbageCollectorConfig.kt
+    -- Defaults match the implementation. `enabled` is opt-in for now while the
+    -- leader-only flow gets some real-world miles.
+    enabled: Boolean = false
     blocks_to_keep: Integer = 10
     garbage_lifetime: Duration = 24.hours
+
+    -- Caps the number of trie keys per `TriesDeleted` message so a single
+    -- replica-log append stays under Kafka's `max.message.bytes` (1 MB by
+    -- default). Months of accumulated backlog on a hot table can produce tens
+    -- of thousands of garbage trie keys; one message per chunk keeps each
+    -- append small.
+    -- See: TrieGarbageCollector.kt (TRIES_DELETED_CHUNK_SIZE)
+    tries_deleted_chunk_size: Integer = 1024
 }
 
 ------------------------------------------------------------
--- Rules
+-- Rules: Lifecycle
 ------------------------------------------------------------
 
--- A trie is eligible for deletion when:
---   1. Its state is garbage (set by addTries when a new trie supersedes it).
---   2. Its level is not 0 (see below).
---   3. Its garbage_as_of is <= the as_of threshold.
---
--- The as_of threshold provides a grace period:
---   as_of = system_time_of(block[latest - config.blocks_to_keep]) - config.garbage_lifetime
--- This ensures recently-superseded tries survive long enough for in-flight queries to finish.
---
--- L0 files are excluded from trie GC.
--- L0 forms a complete set of the data, so if anything goes wrong with deeper levels
--- we can reconstruct them entirely from the L0s. This has proved valuable on several
--- occasions during compactor development.
--- L0 files are small relative to compacted data (one per block, typically ~100K rows)
--- so the storage overhead of retaining them is negligible.
--- See: trie_catalog.clj (garbage-fn)
+-- The trie GC's lifetime is bound to the LeaderSystem: constructed when the
+-- log processor enters a leader mode (Leader or ExternalSourceLeader, see
+-- db.allium: TransitionToLeader, openLeaderSystem) and closed when it leaves.
+-- Two rules cover the two leader modes; the ensures clauses are identical.
 
--- GC is scheduled externally on a periodic timer.
--- See: garbage_collector/GarbageCollector.kt (scheduleGc)
-
--- Returns the system_time of the block at `n` positions back from latest.
--- Returns null if fewer than `n` blocks exist.
--- See: buffer_pool/BufferPool.kt (blockFromLatest)
-deferred latest_block_system_time(n: Int) -> Instant?
-
-rule GarbageCollectorRuns {
-    -- See: garbage_collector/GarbageCollector.kt
-    when: GarbageCollectionScheduled()  -- external, periodic
-
-    let block_time = latest_block_system_time(config.blocks_to_keep)
-
-    -- If there aren't enough blocks yet, skip GC entirely.
-    -- See: GarbageCollector.kt (defaultGarbageAsOf returning null, short-circuit via ?: return)
-    requires: block_time != null
-
-    let as_of = block_time - config.garbage_lifetime
-
-    let eligible = trie_cat/trie_catalog.tries.values.flatten
-        .filter(t => t.trie_state = garbage
-                  and t.trie_key.level != 0
-                  and t.garbage_as_of <= as_of)
+rule LeaderOpensTrieGc {
+    -- See: indexer/LeaderLogProcessor.kt (init)
+    when: lp: db/LogProcessor.mode becomes Leader
 
     ensures:
-        for trie in eligible:
-            -- Paths derived from trie.table and trie.trie_key; see trie/Trie.kt
-            ObjectStore.delete(metaFilePath(trie.table, trie.trie_key))
-            ObjectStore.delete(dataFilePath(trie.table, trie.trie_key))
-        trie_cat/trie_catalog.deleteTries(eligible)
+        TrieGarbageCollector.created(
+            enabled: config.enabled,
+            blocks_to_keep: config.blocks_to_keep,
+            garbage_lifetime: config.garbage_lifetime,
+            has_pending_signal: false,
+            is_running: true
+        )
 }
+
+rule ExternalSourceLeaderOpensTrieGc {
+    -- See: indexer/LeaderLogProcessor.kt (init), database/Database.kt
+    when: lp: db/LogProcessor.mode becomes ExternalSourceLeader
+
+    ensures:
+        TrieGarbageCollector.created(
+            enabled: config.enabled,
+            blocks_to_keep: config.blocks_to_keep,
+            garbage_lifetime: config.garbage_lifetime,
+            has_pending_signal: false,
+            is_running: true
+        )
+}
+
+rule LeaderClosesTrieGc {
+    -- Cancels the GC loop. Any in-flight cycle is cancelled; pending awaiters
+    -- have their deferreds cancelled (their awaitNoGarbage call throws
+    -- CancellationException).
+    --
+    -- Fires when the log processor leaves a leader mode for Follower (revoke)
+    -- or Transition (intermediate state during handoff).
+    -- See: indexer/LeaderLogProcessor.kt (close), TrieGarbageCollector.close
+    when: lp: db/LogProcessor.mode transitions_to Follower
+    requires: trie_gc.is_running
+
+    ensures:
+        trie_gc.is_running = false
+        for awaiter in trie_gc.pending_awaiters:
+            CancelAwaiter(awaiter)
+}
+
+------------------------------------------------------------
+-- Rules: Triggering
+------------------------------------------------------------
+
+-- Two channels feed the loop, each playing a different role:
+--
+--   `signal()`:           fire-and-forget. Used by the leader's block-boundary
+--                         path (db.allium: LeaderFinishesBlock). The channel
+--                         is conflated, so a burst of block boundaries
+--                         coalesces into one upcoming cycle. Tx processing
+--                         never blocks on GC progress — the first cycle after
+--                         a long disabled period could take minutes.
+--
+--   `awaitNoGarbage()`:   suspending. Used by tests and admin pokes
+--                         (Database.gcAll). Every caller is enqueued into an
+--                         UNLIMITED channel and resumed only after a cycle
+--                         that started at or after their call has completed.
+--                         If two awaiters arrive while a cycle is running,
+--                         BOTH are guaranteed to see a fresh cycle — the loop
+--                         drains its triggers after each cycle and runs again
+--                         if any are pending.
+--
+-- The `enabled` config gates only the auto-`signal()` from finishBlock.
+-- Direct `awaitNoGarbage()` always runs a cycle, regardless of `enabled`.
+
+rule LeaderFinishBlockSignalsTrieGc {
+    -- Block boundaries are the only moments where new tries become garbage
+    -- (compaction supersedes inputs as part of an addTries triggered by a
+    -- block flush — see trie-cat.allium). After every block upload, the
+    -- leader pokes the trie GC so any backlog gets cleaned up promptly.
+    --
+    -- Called from inside the leader's replica-log mutex. Safe because
+    -- `signal` is non-suspending and only enqueues; the GC's
+    -- `commit_tries_deleted` callback only takes the mutex when its loop runs,
+    -- by which time finishBlock has long released it.
+    --
+    -- Chains from db.allium's LeaderFinishesBlock trigger emission.
+    when: LeaderFinishesBlock(latest_processed_msg_id)
+    requires: trie_gc.enabled
+    requires: trie_gc.is_running
+
+    ensures:
+        trie_gc.has_pending_signal = true
+}
+
+rule AdminTriggersTrieGc {
+    -- Tests and admin code call Database.gcAll(), which awaits one cycle of
+    -- both block GC and trie GC. Bypasses the `enabled` gate.
+    -- See: database/Database.kt (gcAll), indexer/LogProcessor.kt (gcAll)
+    when: AdminAwaitsNoTrieGarbage(caller, database)
+    requires: trie_gc.is_running
+
+    ensures:
+        let awaiter = Awaiter.created()
+        trie_gc.pending_awaiters.add(awaiter)
+        AwaiterSuspends(awaiter)
+}
+
+------------------------------------------------------------
+-- Rules: Cycle execution
+------------------------------------------------------------
+
+rule TrieGcLoopRunsCycle {
+    -- The loop body. Driven by either a signal or an awaiter arriving on the
+    -- corresponding channel.
+    --
+    -- Two structural guarantees the implementation upholds (see the loop in
+    -- TrieGarbageCollector.kt for the coroutine structure):
+    --
+    --   1. Every awaiter sees a cycle that *started* after their suspension.
+    --      The loop drains both channels into the current cycle's pending
+    --      list, runs the cycle, then re-checks both channels in
+    --      `drainTriggers`. If anything has arrived while we ran, we loop and
+    --      run again — that next cycle started post-arrival, so its waiters
+    --      are satisfied.
+    --
+    --   2. Awaiters never get stranded by a crashing cycle. On cycle failure,
+    --      every pending awaiter has `completeExceptionally(e)` invoked.
+    --      Cancellation propagates to all pending awaiters too.
+    when: gc: TrieGarbageCollector.has_work
+    requires: trie_gc.is_running
+
+    ensures:
+        GarbageCollectTries(garbage_as_of: null)
+        for awaiter in trie_gc.pending_awaiters:
+            CompleteAwaiter(awaiter)
+        trie_gc.has_pending_signal = false
+        for awaiter in trie_gc.pending_awaiters:
+            trie_gc.pending_awaiters.remove(awaiter)
+}
+
+rule GarbageCollectTries {
+    -- Run one cycle: collect garbage from every table in the block catalog.
+    -- Tables are processed concurrently up to `tableParallelism`, with DELETE
+    -- operations bounded across the cycle by `deleteParallelism`. Both bounds
+    -- are out-of-spec implementation parameters (see TrieGarbageCollector.kt).
+    --
+    -- Failures in one table are logged but don't abort the cycle —
+    -- supervisorScope isolates them.
+    when: GarbageCollectTries(garbage_as_of)
+
+    let as_of = garbage_as_of ?? default_garbage_as_of()
+
+    -- If fewer than `blocks_to_keep` blocks exist, default_garbage_as_of
+    -- returns null and the cycle is a no-op.
+    requires: as_of != null
+
+    ensures:
+        for table in block_catalog.all_tables:
+            GarbageCollectTable(table, as_of)
+}
+
+-- Returns the system_time of the block at `blocks_to_keep` positions back from
+-- latest, minus `garbage_lifetime`. This window is the grace period during
+-- which a superseded trie is still allowed to be referenced by an in-flight
+-- query. Returns null if fewer than `blocks_to_keep` blocks exist.
+-- See: TrieGarbageCollector.defaultGarbageAsOf
+
+rule GarbageCollectTable {
+    -- Per-table: ask the trie catalog which keys are garbage as of `as_of`,
+    -- then process them in chunks. Within a chunk, the order is mandatory:
+    --
+    --   (1) DELETE every (data, meta) file in object store.
+    --   (2) AND THEN atomically publish `TriesDeleted` to the replica log AND
+    --       remove the keys from the trie catalog.
+    --
+    -- The reverse order would leave followers (and the leader's own catalog)
+    -- thinking the deleted files were still live — unsafe if a query tried to
+    -- read them.
+    --
+    -- A crash mid-cycle leaves orphaned catalog entries pointing at deleted
+    -- files. Recovery: the next cycle re-asks the catalog (those entries are
+    -- still flagged garbage), re-DELETEs (S3 returns 404, idempotent), and
+    -- re-publishes. No special crash recovery code; the design is naturally
+    -- idempotent.
+    when: GarbageCollectTable(table, as_of)
+
+    -- The catalog's garbage-trie calculation is treated as a black box by
+    -- this spec — see trie-cat.allium for the rules that mark tries garbage.
+    let garbage_keys = trie_cat/trie_catalog.garbageTries(table, as_of)
+
+    requires: garbage_keys.count > 0
+
+    ensures:
+        for chunk in chunk_by(garbage_keys, config.tries_deleted_chunk_size):
+            -- Order matters within a chunk; chunks are processed sequentially.
+            DeleteAndCommitChunk(table, chunk)
+}
+
+rule DeleteAndCommitChunkRule {
+    -- One atomic step in the per-table per-chunk ordering. The DELETEs run
+    -- first, in parallel; only after every DELETE in the chunk has succeeded
+    -- do we publish + commit.
+    --
+    -- File order within a (data, meta) pair: data first, meta last. The meta
+    -- file is the "completion marker" for a trie — deleting it last keeps the
+    -- pair from ever transiently looking complete-but-empty to a concurrent
+    -- reader.
+    --
+    -- Any DELETE failure aborts the chunk before the publish happens.
+    -- Followers must never drop catalog entries for files still on disk.
+    when: DeleteAndCommitChunk(table, chunk)
+
+    ensures:
+        for trie_key in chunk:
+            ObjectStoreDelete(data_file_path(table, trie_key))
+            ObjectStoreDelete(meta_file_path(table, trie_key))
+
+        CommitTriesDeleted(table, chunk)
+}
+
+rule CommitTriesDeletedRule {
+    -- The atomicity invariant. The replica-log append AND the local catalog
+    -- mutation MUST happen under the SAME replica-log mutex held by the
+    -- LeaderLogProcessor. Without that mutex, this four-step interleaving
+    -- corrupts persistent state:
+    --
+    --   1. Trie GC takes the mutex, appends `TriesDeleted(G)` at replica
+    --      position N, releases the mutex.
+    --   2. Before Trie GC re-takes a (separate) lock to mutate its in-memory
+    --      catalog, another coroutine — say an external-source `commit` whose
+    --      `liveIndex.isFull()` is true — grabs the mutex.
+    --   3. That coroutine runs `finishBlock`, which uploads table-block files
+    --      that snapshot the current catalog. The catalog still contains G
+    --      (Trie GC's mutation hasn't happened yet), so the table-block file
+    --      at replica position M > N records "catalog includes G" — even
+    --      though the replica log already holds `TriesDeleted(G)` at N.
+    --   4. Trie GC finally mutates the catalog and removes G.
+    --
+    -- The table-block file from step 3 is now a persistent on-disk snapshot
+    -- of catalog state at replica position M, but it disagrees with the
+    -- replica log it claims to be a snapshot of. A later cold start that
+    -- hydrates from M will see G in its catalog — pointing at object-store
+    -- files that have already been deleted. The mutex prevents step 2 from
+    -- interleaving between the append at step 1 and the mutation at step 4.
+    --
+    -- See: indexer/LeaderLogProcessor.kt (commitTriesDeleted callback;
+    -- appendToReplica and trieCatalog.deleteTries inside one mutex.withLock).
+    when: CommitTriesDeleted(table, trie_keys)
+
+    ensures:
+        TriesDeletedMessage.created(
+            table_name: table.schema_and_table,
+            trie_keys: trie_keys
+        )
+        trie_cat/trie_catalog.deleteTries(table, trie_keys)
+}
+
+------------------------------------------------------------
+-- Rules: Follower replay
+------------------------------------------------------------
+
+rule FollowerReplaysTriesDeleted {
+    -- Both the FollowerLogProcessor and the TransitionLogProcessor handle
+    -- TriesDeleted by removing the keys from their local trie catalog.
+    --
+    -- Replay is unconditionally non-stale — `trieCatalog.deleteTries` is
+    -- set-removal and therefore idempotent, so even a redundant replay is
+    -- harmless. (Contrast with ResolvedTx, TriesAdded, BlockBoundary,
+    -- BlockUploaded, all of which have staleness guards based on
+    -- latest_source_msg_id.)
+    --
+    -- See: indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt
+    --      (TriesDeleted handler), api/log/ReplicaMessage.kt (TriesDeleted)
+    -- Fires when a follower (or transition processor) parses a TriesDeleted
+    -- record off the replica log into a TriesDeletedMessage entity.
+    when: msg: TriesDeletedMessage.created
+    requires: log_processor.mode = Follower or log_processor.mode = Transition
+
+    ensures:
+        trie_cat/trie_catalog.deleteTries(
+            parse_table_ref(database.name, msg.table_name),
+            msg.trie_keys
+        )
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract TrieGcDualWriteAtomicity {
+    -- Obligations on the LeaderLogProcessor that hosts the trie GC's
+    -- commitTriesDeleted callback. These can't be expressed as
+    -- single-snapshot invariants over entity state — they are about the
+    -- ordering of replica-log appends and catalog mutations across
+    -- coroutines. See the long comment on rule CommitTriesDeletedRule.
+
+    @invariant DualWriteAtomicity
+        -- For each (TriesDeleted append, trie catalog deleteTries) pair, no
+        -- other replica-log append (in particular BlockUploaded triggered by
+        -- finishBlock) may interleave between them. Enforced by holding the
+        -- shared replica-log mutex across both operations.
+
+    @invariant DeleteBeforeCommit
+        -- Within one (table, chunk) atomic step: every (data, meta) DELETE
+        -- must succeed before the corresponding `TriesDeleted` is appended
+        -- to the replica log and the keys are removed from the trie catalog.
+        -- Reversing this order would leave followers thinking deleted files
+        -- are still live.
+
+    @invariant LeaderOnly
+        -- TrieGarbageCollector instances exist only inside a LeaderSystem;
+        -- only one node is leader for a given database at a time. Followers
+        -- never DELETE trie files or append TriesDeleted — they only react
+        -- to TriesDeleted by mutating their local trie catalogs.
+}
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor AdminActor {
+    -- The admin/test entry point for gcAll. Any client invoking the admin
+    -- API qualifies.
+    identified_by: db/Client where true
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface TrieGcAdmin {
+    -- The admin/test entry point. `gcAll` runs one cycle of every leader-owned
+    -- collector (block + trie) and waits for both. No-op on follower nodes.
+    facing caller: AdminActor
+
+    context db: db/Database
+
+    provides:
+        AdminAwaitsNoTrieGarbage(caller, db)
+
+    contracts:
+        demands TrieGcDualWriteAtomicity
+
+    @guarantee AwaitsFreshCycle
+        -- The caller is unblocked only after a trie GC cycle that started at
+        -- or after their call has completed.
+
+    @guarantee BypassesEnabledFlag
+        -- AdminAwaitsNoTrieGarbage runs a cycle regardless of config.enabled.
+        -- The flag gates only the auto-signal from finishBlock.
+
+    @guarantee CycleAwaiterFairness
+        -- Every caller is resumed (or cancelled) by exactly one cycle whose
+        -- start time post-dates the call. The loop drains pending awaiters
+        -- and signals after each cycle and re-runs if any are present.
+}
+
+-- Black box helpers used in rule expressions (resolved by the implementation,
+-- not modelled in this spec):
+--   chunk_by(set, n)              — partition a set into Lists of size <= n
+--                                   (TrieGarbageCollector.kt)
+--   data_file_path(table, key)    — table + trie_key -> ObjectStore key (data)
+--                                   (storage/PathTools.kt)
+--   meta_file_path(table, key)    — table + trie_key -> ObjectStore key (meta)
+--                                   (storage/PathTools.kt)
+--   default_garbage_as_of()       — block-time threshold minus garbage_lifetime
+--                                   (TrieGarbageCollector.kt: defaultGarbageAsOf)
+--   parse_table_ref(db, name)     — TableRef.parse (api/.../table/TableRef.kt)
+--   ObjectStoreDelete(path)       — DELETE one key (storage/ObjectStore.kt)
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "First-cycle mutex contention: when an operator first flips `enabled = true` on a database that's been running without GC for months, the backlog can be enormous. Each chunk takes the replica-log mutex for the duration of `commitTriesDeleted` (Kafka append + catalog delete). Tx commits compete for the same mutex. Chunking caps message size but not mutex hold time. Worth measuring in practice and considering an explicit bound on chunks/cycle, or a yield between chunks."

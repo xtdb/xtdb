@@ -320,7 +320,6 @@
          :xtdb/base opts
          :xtdb/db-catalog {}
          :xtdb/authn {:authn-factory (.getAuthn opts)}
-         :xtdb/garbage-collector (.getGarbageCollector opts)
          :xtdb/modules (.getModules opts)}
         (cond-> srv-config (assoc :xtdb.pgwire/server srv-config)
                 flight-sql-config (assoc :xtdb.flight-sql/server flight-sql-config)

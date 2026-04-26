@@ -370,7 +370,8 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         node-opts {:node-dir node-dir, :rows-per-block 1000 :rows-per-page 100
                    :instant-src (InstantSource/system)
-                   :compactor-threads 0}]
+                   :compactor-threads 0
+                   :gc? false}]
     (util/delete-dir node-dir)
 
     (with-open [info-reader (io/reader (io/resource "devices_mini_device_info.csv"))

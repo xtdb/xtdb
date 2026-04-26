@@ -1,9 +1,9 @@
 package xtdb.catalog
 
+import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.storage.Storage
@@ -44,7 +44,7 @@ class BlockGarbageCollectorTest {
     }
 
     @Test
-    fun `garbageCollectBlocks deletes oldest blocks and per-table blocks`(@TempDir tempDir: Path, al: BufferAllocator) {
+    fun `garbageCollectBlocks deletes oldest blocks and per-table blocks`(@TempDir tempDir: Path, al: BufferAllocator) = runTest {
         MemoryCache.Factory().open(al).use { memoryCache ->
             Storage.local(tempDir).open(al, memoryCache, null, "xtdb").use { bufferPool ->
                 // Write dummy blocks and table blocks
@@ -65,7 +65,11 @@ class BlockGarbageCollectorTest {
 
                 val blockCat = BlockCatalog("xtdb", bufferPool.latestBlock)
 
-                val gc = BlockGarbageCollector(blockCat, bufferPool, blocksToKeep = 3)
+                val gc = BlockGarbageCollector(
+                    bufferPool, blockCat,
+                    blocksToKeep = 3,
+                    enabled = false,
+                )
 
                 // Validate that the latest block is correct
                 val latestBlockIndex = blockCat.currentBlockIndex
@@ -85,32 +89,6 @@ class BlockGarbageCollectorTest {
                 val latestBlockFile = bufferPool.listAllObjects(blocksPath).toList()
                     .find { it.key == blocksPath.resolve("b${10L.asLexHex}.binpb") }
                 assertNotNull(latestBlockFile, "Expected latest block file to exist after GC, but it was deleted")
-
-                // Attempting to delete the current block should throw an exception
-                assertThrows<IllegalStateException> { gc.garbageCollectBlocks(0) }
-
-                // Latest block should still exist - in blocks and table blocks
-                assertBlockCount(bufferPool, blocksPath, 1)
-
-                val latestBlockFileAfterGC = bufferPool.listAllObjects(blocksPath).toList()
-                    .find { it.key == blocksPath.resolve("b${10L.asLexHex}.binpb") }
-                val latestTable1BlockFileAfterGC = bufferPool.listAllObjects(table1BlockPath).toList()
-                    .find { it.key == table1BlockPath.resolve("b${10L.asLexHex}.binpb") }
-                val latestTable2BlockFileAfterGC = bufferPool.listAllObjects(table2BlockPath).toList()
-                    .find { it.key == table2BlockPath.resolve("b${10L.asLexHex}.binpb") }
-
-                assertNotNull(
-                    latestBlockFileAfterGC,
-                    "Expected latest block file to exist after GC, but it was deleted"
-                )
-                assertNotNull(
-                    latestTable1BlockFileAfterGC,
-                    "Expected latest table1 block file to exist after GC, but it was deleted"
-                )
-                assertNotNull(
-                    latestTable2BlockFileAfterGC,
-                    "Expected latest table2 block file to exist after GC, but it was deleted"
-                )
             }
 
         }

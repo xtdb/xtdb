@@ -82,6 +82,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.NoOp -> false
+            // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
+            is ReplicaMessage.TriesDeleted -> false
         }
 
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
@@ -139,6 +141,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             )
 
             is ReplicaMessage.NoOp -> Unit
+
+            is ReplicaMessage.TriesDeleted -> {
+                trieCatalog.deleteTries(TableRef.parse(dbState.name, msg.tableName), msg.trieKeys)
+            }
         }
 
     }

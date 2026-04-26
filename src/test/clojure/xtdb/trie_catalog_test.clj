@@ -601,7 +601,6 @@
 
       (with-open [node (tu/->local-node opts)]
         (let [db (db/primary-db node)
-              gc (.getGcOrNull db)
               bp (.getBufferPool db)
               cat (.getTrieCatalog db)]
           (doseq [i (range 4)]
@@ -609,7 +608,7 @@
             (tu/flush-block! node)
             (c/compact-all! node #xt/duration "PT1S"))
 
-          (.collectAllGarbage gc)
+          (.gcAll db)
 
           ;; we keep block 01 and 02
           ;; the 01 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 1 block 01 remains as it is compacted later
@@ -623,7 +622,9 @@
                    (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
                         (map :trie-key))))
 
-          ;; all l0 files are present
+          ;; `.gcAll` runs both block GC and trie GC. With `:blocks-to-keep 2`, block GC keeps
+          ;; only the latest two per-table block files (b02, b03); trie GC leaves data/meta files
+          ;; alone here because all current tries are still live in the catalog.
           (t/is (= ["tables/public$foo/blocks/b02.binpb"
                     "tables/public$foo/blocks/b03.binpb"
                     "tables/public$foo/data/l00-rc-b00.arrow"

@@ -13,10 +13,12 @@ import xtdb.log.proto.noOp
 import xtdb.log.proto.replicaLogMessage
 import xtdb.log.proto.resolvedTx
 import xtdb.log.proto.triesAdded
+import xtdb.log.proto.triesDeleted
 import xtdb.storage.StorageEpoch
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.BlockIndex
+import xtdb.trie.TrieKey
 import xtdb.util.TransitFormat.MSGPACK
 import xtdb.util.readTransit
 import xtdb.util.writeTransit
@@ -78,6 +80,10 @@ sealed interface ReplicaMessage {
                         }
 
                         ReplicaLogMessage.MessageCase.NO_OP -> NoOp
+
+                        ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
+                            TriesDeleted(it.tableName, it.trieKeysList.toSet())
+                        }
 
                         else -> null
                     }
@@ -179,5 +185,17 @@ sealed interface ReplicaMessage {
 
     data object NoOp : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage { noOp = noOp {} }
+    }
+
+    data class TriesDeleted(
+        val tableName: String,
+        val trieKeys: Set<TrieKey>,
+    ) : ProtobufMessage() {
+        override fun toLogMessage() = replicaLogMessage {
+            triesDeleted = triesDeleted {
+                tableName = this@TriesDeleted.tableName
+                trieKeys.addAll(this@TriesDeleted.trieKeys)
+            }
+        }
     }
 }

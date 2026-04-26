@@ -25,6 +25,8 @@ import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Anomaly
 import xtdb.error.Interrupted
+import xtdb.garbage_collector.BlockGarbageCollector
+import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.table.TableRef
@@ -92,6 +94,14 @@ class LeaderLogProcessor(
     private val indexer: Indexer.ForDatabase =
         indexer.openForDatabase(this.allocator, dbState, liveIndex, crashLogger, this)
 
+    internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
+        BlockGarbageCollector(
+            bufferPool, blockCatalog,
+            blocksToKeep = cfg.blocksToKeep,
+            enabled = cfg.enabled,
+        )
+    }
+
     override var pendingBlock: PendingBlock? = null
         private set
 
@@ -103,11 +113,44 @@ class LeaderLogProcessor(
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
-    // Serialises the two input streams — source-log records (via [processRecords]) and external-source txs
-    // (via [indexTx] driven from the subscription coroutine below).
-    // The transactional Kafka producer (replicaProducer) is not safe for concurrent `withTx`, so both paths
-    // must hold this lock before touching it.
+    // Serialises every writer to the replica log: source-log records (via [processRecords]),
+    // external-source txs (via [indexTx]), and the trie-GC `TriesDeleted` publishes (via
+    // [trieGc]'s commit callback). The transactional Kafka producer is not safe for concurrent
+    // `withTx`, so every path holds this lock before touching it.
     private val mutex = Mutex()
+
+    internal val trieGc = nodeBase.config.garbageCollector.let { cfg ->
+        TrieGarbageCollector(
+            bufferPool, dbState,
+            // The replica-log append and the local catalog mutation are one atom under the
+            // replica-log mutex. If they were split, this interleaving would corrupt persistent
+            // state:
+            //
+            //   1. Trie GC takes the mutex, appends `TriesDeleted(G)` at replica position N,
+            //      releases the mutex.
+            //   2. Before Trie GC re-takes a (separate) lock to mutate the catalog, another
+            //      coroutine — say an ext-source `commit` whose `liveIndex.isFull()` — grabs
+            //      the mutex.
+            //   3. That coroutine runs `finishBlock`, which uploads table-block files snapshotting
+            //      the current catalog. The catalog still has G in it (Trie GC's mutation hasn't
+            //      happened yet), so the table-block file at replica position M > N records
+            //      "catalog includes G" — even though the replica log already has `TriesDeleted`
+            //      for G at N.
+            //   4. Trie GC finally mutates the catalog and removes G.
+            //
+            // The table-block file uploaded at (3) is now a persistent snapshot of state that
+            // disagrees with the replica log it claims to be a snapshot of.
+            commitTriesDeleted = { tableName, trieKeys ->
+                mutex.withLock {
+                    appendToReplica(ReplicaMessage.TriesDeleted(tableName.schemaAndTable, trieKeys))
+                    trieCatalog.deleteTries(tableName, trieKeys)
+                }
+            },
+            blocksToKeep = cfg.blocksToKeep,
+            garbageLifetime = cfg.garbageLifetime,
+            enabled = cfg.enabled,
+        )
+    }
 
     private val txErrorCounter: Counter? =
         nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
@@ -201,6 +244,13 @@ class LeaderLogProcessor(
 
         latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
         pendingBlock = null
+
+        // Fire-and-forget: a non-suspending [signal] just enqueues a cycle on the GC's own
+        // coroutine. We can call this from inside the replica-log mutex without deadlock — the
+        // GC's `commitTriesDeleted` callback only takes the mutex when its loop actually runs,
+        // by which time we've long released it. Tx processing carries on without waiting for GC.
+        blockGc.signal()
+        trieGc.signal()
     }
 
     private fun resolveTx(
@@ -443,6 +493,8 @@ class LeaderLogProcessor(
         // HACK: we cancel without joining because a blocking join deadlocks under runTest's virtual time.
         extJob?.cancel()
         extSource?.close()
+        blockGc.close()
+        trieGc.close()
         indexer.close()
         allocator.close()
     }

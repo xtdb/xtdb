@@ -14,7 +14,13 @@ message ReplicaLogMessage {
         BlockBoundary block_boundary = 3;
         BlockUploaded block_uploaded = 4;
         NoOp no_op = 5;
+        TriesDeleted tries_deleted = 6;
     }
+}
+
+message TriesDeleted {
+    string table_name = 1;
+    repeated string trie_keys = 2;
 }
 
 message ResolvedTx {
