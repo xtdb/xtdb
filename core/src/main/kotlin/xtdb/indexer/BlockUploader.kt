@@ -6,8 +6,9 @@ import java.nio.ByteBuffer
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import xtdb.api.log.Log
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.MessageId
@@ -87,13 +88,13 @@ class BlockUploader(
 
         val tableBlocks = tableCatalog.finishBlock(blockCatalog.currentBlockIndex, finishedBlocks, tablePartitions)
 
-        coroutineScope {
-            tableBlocks.forEach { (table, tableBlock) ->
-                launch(blockUploadDispatcher) {
+        runBlocking {
+            tableBlocks.map { (table, tableBlock) ->
+                async(blockUploadDispatcher) {
                     val path = BlockCatalog.tableBlockPath(table, blockIdx)
                     bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
                 }
-            }
+            }.awaitAll()
         }
 
         val secondaryDatabasesForBlock = dbCatalog?.serialisedSecondaryDatabases
