@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import java.nio.ByteBuffer
 import java.time.Instant
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
@@ -32,7 +33,7 @@ private val LOG = BlockUploader::class.logger
 // `TableBlock.toByteArray()` buffers. S3's default HTTP client caps concurrency at 50, so
 // parallelism beyond this would queue inside the SDK with the `byte[]`s still pinned on heap.
 private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
-private val blockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
+private val defaultBlockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
 
 class BlockUploader(
     dbStorage: DatabaseStorage,
@@ -40,6 +41,7 @@ class BlockUploader(
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
+    private val uploadDispatcher: CoroutineDispatcher = defaultBlockUploadDispatcher,
 ) {
     private val sourceLog = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
@@ -89,7 +91,7 @@ class BlockUploader(
 
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
-                launch(blockUploadDispatcher) {
+                launch(uploadDispatcher) {
                     val path = BlockCatalog.tableBlockPath(table, blockIdx)
                     bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
                 }

@@ -149,7 +149,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         val watchers = Watchers(-1)
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
         val indexer = simIndexerWrapper(dbName, dbStorage)
 
