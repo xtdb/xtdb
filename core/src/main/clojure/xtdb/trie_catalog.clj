@@ -491,7 +491,7 @@
          (mapv (fn [partition]
                  (table-cat/->partition
                    (update partition :tries
-                           (partial mapv #(trie/->trie-details table %))))))))
+                           (partial mapv trie/->table-block-trie-details)))))))
 
   PTrieCatalog
   (trie-state [_ table] (.get ^Map (:table-cats @!state) table))

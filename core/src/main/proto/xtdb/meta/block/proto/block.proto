@@ -14,6 +14,8 @@ message Partition {
   int32 level = 1;
   int64 recency = 2;
   bytes part = 3;
+  // The `table_name` field on each TrieDetails is left unset inside a block —
+  // the table is fixed by the enclosing TableBlock's path. See #5512.
   repeated xtdb.log.proto.TrieDetails tries = 4;
   int64 max_block_index = 5;
 }

@@ -34,6 +34,22 @@
                           :trie-metadata trie-metadata
                           :state state})))
 
+(defn ->table-block-trie-details ^TrieDetails
+  ;; In-block companion to ->trie-details. Builds a TrieDetails without table_name,
+  ;; since inside a block the table is already fixed by the file path. Saves the
+  ;; per-trie name bytes on garbage-heavy tables — see #5512.
+  [{:keys [trie-key, ^long data-file-size, ^TrieMetadata trie-metadata state garbage-as-of]}]
+  (-> (TrieDetails/newBuilder)
+      (.setTrieKey trie-key)
+      (.setDataFileSize data-file-size)
+      (cond-> trie-metadata (.setTrieMetadata trie-metadata))
+      (cond-> state (.setTrieState (case state
+                                     :live TrieState/LIVE
+                                     :nascent TrieState/NASCENT
+                                     :garbage TrieState/GARBAGE)))
+      (cond-> garbage-as-of (.setGarbageAsOf (time/instant->micros garbage-as-of)))
+      (.build)))
+
 (declare parse-trie-key)
 
 (defn <-trie-details [^TrieDetails trie-details]

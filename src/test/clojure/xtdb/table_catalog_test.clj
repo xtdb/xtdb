@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.object-store :as os]
-            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -23,8 +22,9 @@
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
-  (cond-> {:table (table/->ref "xtdb" (.getTableName trie)) ; TODO multi-db, db is likely going to be part of the TrieDetails msg
-           :trie-key (.getTrieKey trie)
+  ;; In-block tries don't carry table_name (#5512); the table comes from the
+  ;; surrounding TableBlock's path, not the trie itself.
+  (cond-> {:trie-key (.getTrieKey trie)
            :data-file-size (.getDataFileSize trie)}
     (.hasTrieMetadata trie) (assoc :trie-metadata (trie-cat/<-trie-metadata (.getTrieMetadata trie)))))
 
@@ -47,8 +47,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/flush-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4427)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4581)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4415)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4557)]
                  (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
@@ -70,12 +70,8 @@
 
           (t/is (= 1 (-> partitions first :max-block-idx)))
 
-          (t/is (= [{:table #xt/table foo,
-                     :trie-key "l00-rc-b00",
-                     :data-file-size 1918}
-                    {:table #xt/table foo,
-                     :trie-key "l00-rc-b01",
-                     :data-file-size 1918}]
+          (t/is (= [{:trie-key "l00-rc-b00", :data-file-size 1918}
+                    {:trie-key "l00-rc-b01", :data-file-size 1918}]
                    (map #(dissoc % :trie-metadata) current-tries)))
 
           (t/is (= [{:min-valid-from #xt/instant "2020-01-01T00:00:00Z",
