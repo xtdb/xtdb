@@ -28,6 +28,7 @@ import xtdb.arrow.unsupported
 import xtdb.database.DatabaseName
 import xtdb.table.TableRef
 import xtdb.query.PreparedQuery
+import xtdb.query.QueryOpts
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
@@ -44,16 +45,23 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
+        private var prepared: PreparedQuery? = null
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
+            this.prepared = null
+        }
+
+        override fun prepare() {
+            val sql = this.sql ?: error("SQL query not set")
+            prepared = node.prepareSql(sql, dbName)
         }
 
         override fun executeQuery(): QueryResult {
-            val sql = this.sql ?: error("SQL query not set")
-            val cursor = node.openSqlQuery(sql, dbName)
+            val cursor = prepared
+                ?.openQuery(null, QueryOpts())
+                ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
             val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
-
             return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
 
@@ -62,9 +70,9 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             return UpdateResult(-1)
         }
 
-        override fun prepare() = TODO("Not yet implemented")
-
-        override fun close() = Unit
+        override fun close() {
+            prepared = null
+        }
     }
 
     internal fun executeDml(op: TxOp) {

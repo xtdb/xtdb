@@ -186,6 +186,34 @@ class AdbcTest {
         }
     }
 
+    // -- Prepared statements (in-process ADBC) --
+    //
+    // NB: `conn` above is the FlightSQL-over-the-wire ADBC client; tests that
+    // need to exercise our in-process `XtdbConnection` directly use `xtdb.connect()`.
+
+    @Test
+    fun `prepare and execute simple query (in-process)`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id, n FROM foo")
+                stmt.prepare()
+
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 1L, "n" to "one")),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                    assertFalse(rdr.loadNextBatch())
+                }
+            }
+        }
+    }
+
     // -- Error handling --
 
     @Test
