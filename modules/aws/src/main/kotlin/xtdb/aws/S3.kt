@@ -19,6 +19,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.FileTransformerConfiguration
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation
 import software.amazon.awssdk.core.interceptor.Context
 import software.amazon.awssdk.core.interceptor.ExecutionAttributes
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor
@@ -275,21 +276,27 @@ class S3(
             @Serializable(StringWithEnvVarSerde::class) val secretKey: String
         )
 
-        /** Logs when the SDK unexpectedly signs the payload or uses chunked encoding, which would indicate heap ByteBuffer allocations on the upload path. */
+        /** Logs when the SDK unexpectedly signs the payload, uses chunked encoding, or computes an integrity checksum — all of which indicate heap ByteBuffer allocations on the upload path. */
         internal object HeapCopyDetector : ExecutionInterceptor {
             override fun beforeTransmission(context: Context.BeforeTransmission, attrs: ExecutionAttributes) {
                 val headers = context.httpRequest().headers()
                 val contentSha = headers["x-amz-content-sha256"]?.firstOrNull()
                 val contentEncoding = headers["Content-Encoding"]?.firstOrNull()
+                val checksumHeader = headers.keys.firstOrNull { it.startsWith("x-amz-checksum-") }
 
                 fun headersSummary() =
-                    "x-amz-content-sha256=$contentSha, Content-Encoding=$contentEncoding, checksum header is ${headers.keys.firstOrNull { it.startsWith("x-amz-checksum-") }}"
+                    "x-amz-content-sha256=$contentSha, Content-Encoding=$contentEncoding, checksum header is $checksumHeader"
 
                 LOG.trace { "S3 ${context.httpRequest().method().name}: ${headersSummary()}" }
 
                 if (contentEncoding == "aws-chunked"
                     || (contentSha != null && contentSha != "UNSIGNED-PAYLOAD")) {
                     LOG.warn { "S3 request using payload signing/chunked encoding: ${headersSummary()}" }
+                }
+
+                // x-amz-checksum-* on a PUT means ChecksumSubscriber ran, thus buffering the whole payload on heap before transmission
+                if (checksumHeader != null && context.httpRequest().method().name == "PUT") {
+                    LOG.warn { "S3 PUT carrying integrity checksum header — buffered ChecksumSubscriber ran: ${headersSummary()}" }
                 }
             }
         }
@@ -350,6 +357,10 @@ class S3(
                                 LOG.warn(OpenSsl.unavailabilityCause(),
                                     "OpenSSL (BoringSSL) not available for S3 client — TLS will use JDK SSLEngine with heap copies")
                             }
+                            // With chunkedEncodingEnabled=false forces to put an integrity checksum -
+                            // ChecksumSubscriber buffers the whole payload onto heap before transmission.
+                            // WHEN_REQUIRED skips that path for operations that don't require a checksum (incl. PutObject).
+                            requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                             overrideConfiguration { it.addExecutionInterceptor(HeapCopyDetector) }
                         }
 
