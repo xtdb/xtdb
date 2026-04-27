@@ -11,6 +11,12 @@ import org.apache.arrow.flight.Location
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach

@@ -46,6 +46,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
+        private var boundArgs: Relation? = null
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
@@ -57,10 +58,26 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             prepared = node.prepareSql(sql, dbName)
         }
 
+        override fun bind(root: VectorSchemaRoot) {
+            boundArgs?.close()
+            boundArgs = Relation.fromRoot(node.allocator, root)
+        }
+
+        override fun bind(rel: RelationReader) {
+            boundArgs?.close()
+            boundArgs = rel.openDirectSlice(node.allocator)
+        }
+
         override fun executeQuery(): QueryResult {
-            val cursor = prepared
-                ?.openQuery(null, QueryOpts())
-                ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
+            // openQuery takes ownership on success; null our ref to avoid double-close.
+            val args = boundArgs.also { boundArgs = null }
+            val cursor = try {
+                prepared?.openQuery(args, QueryOpts())
+                    ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
+            } catch (t: Throwable) {
+                args?.close()
+                throw t
+            }
             val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
             return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
@@ -71,6 +88,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun close() {
+            boundArgs?.close()
+            boundArgs = null
             prepared = null
         }
     }

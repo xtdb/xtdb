@@ -2,6 +2,12 @@ package xtdb
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -60,6 +66,43 @@ class InProcessAdbcTest {
                         )
                     }
                     assertFalse(rdr.loadNextBatch())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `prepare with bound parameter`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
+
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("?_0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("?_0") as BigIntVector).apply {
+                        setSafe(0, 2L)
+                        valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+
+                    stmt.executeQuery().reader.use { rdr ->
+                        assertTrue(rdr.loadNextBatch())
+                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                            assertEquals(
+                                listOf(mapOf("_id" to 2L)),
+                                rel.toMaps(SNAKE_CASE_STRING)
+                            )
+                        }
+                        assertFalse(rdr.loadNextBatch())
+                    }
                 }
             }
         }
