@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
 import xtdb.api.log.Log
 import xtdb.api.log.LogOffset
 import xtdb.api.log.MessageId
@@ -50,33 +51,42 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
     private val scope = CoroutineScope(ctx + job)
 
     /**
-     * Delivers records to the current group leader.
+     * Unified group loop: delivers records and handles rebalances in a single coroutine.
+     * Rebalances and record delivery are serialized via `select` — a rebalance can only
+     * fire between `processRecords` calls, matching real Kafka consumer-thread semantics
+     * where rebalance callbacks fire inside `poll()`, never during record processing.
      */
-    suspend fun processMessagesLoop() {
+    suspend fun groupLoop() {
         while (true) {
-            wakeLeader.receive()
+            // Rebalance branch first: Kafka processes pending rebalances before fetching records.
+            select<Unit> {
+                rebalanceTrigger.onReceive { doRebalance() }
+                wakeLeader.onReceive { deliverGroupRecords() }
+            }
             yield()
+        }
+    }
 
-            this.leader?.let { leader ->
-                val tailSpec = leader.tailSpec
-                    ?: run {
-                        LOG.debug("$name/processMessages: leader has no tail spec, skipping")
-                        return@let
-                    }
-
-                val nextOffset = leader.nextOffset
-                val lag = topic.size - nextOffset
-
-                if (lag > 0) {
-                    val messageCount = rand.nextInt(1, lag + 1)
-                    LOG.debug("$name/processMessages: delivering $messageCount group record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
-                    tailSpec.processor.processRecords(topic.subList(nextOffset, nextOffset + messageCount).toList())
-                    leader.nextOffset += messageCount
+    private suspend fun deliverGroupRecords() {
+        this.leader?.let { leader ->
+            val tailSpec = leader.tailSpec
+                ?: run {
+                    LOG.debug("$name/processMessages: leader has no tail spec, skipping")
+                    return@let
                 }
 
-                if (leader.nextOffset < topic.size)
-                    wakeLeader.send(Unit)
+            val nextOffset = leader.nextOffset
+            val lag = topic.size - nextOffset
+
+            if (lag > 0) {
+                val messageCount = rand.nextInt(1, lag + 1)
+                LOG.debug("$name/processMessages: delivering $messageCount group record(s) [$nextOffset..${nextOffset + messageCount - 1}] (lag=$lag)")
+                tailSpec.processor.processRecords(topic.subList(nextOffset, nextOffset + messageCount).toList())
+                leader.nextOffset += messageCount
             }
+
+            if (leader.nextOffset < topic.size)
+                wakeLeader.send(Unit)
         }
     }
 
@@ -105,45 +115,36 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
         }
     }
 
-    /**
-     * Handles leader election — reacts to consumer join/leave events.
-     */
-    suspend fun chooseLeaderLoop() {
-        while (true) {
-            rebalanceTrigger.receive()
-            yield()
+    private suspend fun doRebalance() {
+        LOG.debug("$name/chooseLeader: rebalance triggered (${groupConsumers.size} consumers)")
 
-            LOG.debug("$name/chooseLeader: rebalance triggered (${groupConsumers.size} consumers)")
+        leader?.let { old ->
+            LOG.debug("$name/chooseLeader: revoking old leader")
+            old.listener.onPartitionsRevoked(listOf(0))
+            old.tailSpec = null
+            leader = null
+        }
 
-            leader?.let { old ->
-                LOG.debug("$name/chooseLeader: revoking old leader")
-                old.listener.onPartitionsRevoked(listOf(0))
-                old.tailSpec = null
-                leader = null
+        if (groupConsumers.isNotEmpty()) {
+            val newLeader = groupConsumers.random(rand)
+            LOG.debug("$name/chooseLeader: assigning new leader")
+            val tailSpec = newLeader.listener.onPartitionsAssigned(listOf(0))
+            newLeader.tailSpec = tailSpec
+            if (tailSpec != null) {
+                val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
+                newLeader.nextOffset = startOffset
             }
-
-            if (groupConsumers.isNotEmpty()) {
-                val newLeader = groupConsumers.random(rand)
-                LOG.debug("$name/chooseLeader: assigning new leader")
-                val tailSpec = newLeader.listener.onPartitionsAssigned(listOf(0))
-                newLeader.tailSpec = tailSpec
-                if (tailSpec != null) {
-                    val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
-                    newLeader.nextOffset = startOffset
-                }
-                leader = newLeader
-                wakeLeader.send(Unit)
-            } else {
-                LOG.debug("$name/chooseLeader: no consumers, no leader elected")
-            }
+            leader = newLeader
+            wakeLeader.send(Unit)
+        } else {
+            LOG.debug("$name/chooseLeader: no consumers, no leader elected")
         }
     }
 
     init {
         LOG.debug("$name: starting loops")
-        scope.launch(CoroutineName("SimLog/processMessages")) { processMessagesLoop() }
+        scope.launch(CoroutineName("SimLog/group")) { groupLoop() }
         scope.launch(CoroutineName("SimLog/plainConsumers")) { plainConsumerLoop() }
-        scope.launch(CoroutineName("SimLog/chooseLeader")) { chooseLeaderLoop() }
     }
 
     private fun appendSync(message: M): Log.MessageMetadata {
