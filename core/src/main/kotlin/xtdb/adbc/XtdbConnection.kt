@@ -24,6 +24,7 @@ import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
 import xtdb.database.DatabaseName
 import xtdb.table.TableRef
@@ -46,7 +47,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
-        private var boundArgs: Relation? = null
+        // Owned by the statement until handed off to openQuery in executeQuery.
+        // Vectors are always renamed to the planner-internal `?_N` convention so
+        // the inbound `$N` names from clients (per getParameterSchema) match up.
+        private var boundArgs: RelationReader? = null
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
@@ -58,14 +62,42 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             prepared = node.prepareSql(sql, dbName)
         }
 
+        override fun getParameterSchema(): Schema {
+            val pq = prepared ?: error("call prepare() first")
+            // placeholder type until bind supplies real ones
+            return Schema(
+                (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
+            )
+        }
+
         override fun bind(root: VectorSchemaRoot) {
             boundArgs?.close()
-            boundArgs = Relation.fromRoot(node.allocator, root)
+            // External `$N` → planner-internal `?_N`, by position.
+            // `$N` is 0-indexed by XTDB convention, not Postgres-faithful.
+            val rel = Relation.fromRoot(node.allocator, root)
+            boundArgs = try {
+                RelationReader.from(
+                    rel.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }.toList(),
+                    rel.rowCount
+                )
+            } catch (t: Throwable) {
+                rel.close()
+                throw t
+            }
         }
 
         override fun bind(rel: RelationReader) {
             boundArgs?.close()
-            boundArgs = rel.openDirectSlice(node.allocator)
+            val owned = rel.openDirectSlice(node.allocator)
+            boundArgs = try {
+                RelationReader.from(
+                    owned.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }.toList(),
+                    owned.rowCount
+                )
+            } catch (t: Throwable) {
+                owned.close()
+                throw t
+            }
         }
 
         override fun executeQuery(): QueryResult {

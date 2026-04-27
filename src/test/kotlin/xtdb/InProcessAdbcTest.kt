@@ -5,6 +5,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -81,11 +82,11 @@ class InProcessAdbcTest {
                 stmt.prepare()
 
                 val schema = Schema(listOf(
-                    Field("?_0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
                 ))
                 VectorSchemaRoot.create(schema, al).use { params ->
                     params.allocateNew()
-                    (params.getVector("?_0") as BigIntVector).apply {
+                    (params.getVector("\$0") as BigIntVector).apply {
                         setSafe(0, 2L)
                         valueCount = 1
                     }
@@ -104,6 +105,23 @@ class InProcessAdbcTest {
                         assertFalse(rdr.loadNextBatch())
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `getParameterSchema reports columns in $ N convention`() {
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ? AND name = ?")
+                stmt.prepare()
+
+                val paramSchema = stmt.parameterSchema
+                assertEquals(2, paramSchema.fields.size, "expected 2 parameter slots")
+                assertEquals("\$0", paramSchema.fields[0].name)
+                assertEquals("\$1", paramSchema.fields[1].name)
+                assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[0].type)
+                assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[1].type)
             }
         }
     }
