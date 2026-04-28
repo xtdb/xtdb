@@ -99,6 +99,7 @@ class LeaderLogProcessor(
             bufferPool, blockCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
+            meterRegistry = nodeBase.meterRegistry,
         )
     }
 
@@ -149,6 +150,7 @@ class LeaderLogProcessor(
             blocksToKeep = cfg.blocksToKeep,
             garbageLifetime = cfg.garbageLifetime,
             enabled = cfg.enabled,
+            meterRegistry = nodeBase.meterRegistry,
         )
     }
 

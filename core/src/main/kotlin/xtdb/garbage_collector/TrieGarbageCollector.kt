@@ -1,5 +1,8 @@
 package xtdb.garbage_collector
 
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
@@ -61,6 +64,7 @@ class TrieGarbageCollector(
     private val garbageLifetime: Duration,
     /** Gates [signal]s from the leader's block-boundary path; direct [awaitNoGarbage] is unaffected. */
     val enabled: Boolean,
+    private val meterRegistry: MeterRegistry? = null,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -79,6 +83,12 @@ class TrieGarbageCollector(
     private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
     private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
 
+    private val deleteTimer: Timer? = meterRegistry?.let {
+        Timer.builder("xtdb.gc.tries.delete.timer")
+            .publishPercentiles(0.75, 0.95, 0.99)
+            .register(it)
+    }
+    
     init {
         LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
 
@@ -160,8 +170,10 @@ class TrieGarbageCollector(
             coroutineScope {
                 for (trieKey in chunk) {
                     launch(deleteDispatcher) {
+                        val timer = meterRegistry?.let { Timer.start(it) }
                         bufferPool.deleteIfExists(tableName.dataFilePath(trieKey))
                         bufferPool.deleteIfExists(tableName.metaFilePath(trieKey))
+                        deleteTimer?.let { timer?.stop(it) }
                     }
                 }
             }
