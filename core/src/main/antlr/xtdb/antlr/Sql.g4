@@ -256,7 +256,8 @@ numericExpr
     ;
 
 exprPrimary
-    : '(' expr ')' #WrappedExpr
+    : subquery # ScalarSubqueryExpr
+    | '(' expr ')' #WrappedExpr
     | literal # LiteralExpr
     | exprPrimary '.' fieldName=identifier #FieldAccess
     | exprPrimary '[' expr ']' #ArrayAccess
@@ -272,7 +273,6 @@ exprPrimary
     | aggregateFunction # AggregateFunctionExpr
     | windowFunctionType 'OVER' windowNameOrSpecification # WindowFunctionExpr
     | nestedWindowFunction # NestedWindowFunctionExpr
-    | subquery # ScalarSubqueryExpr
     | 'NEST_ONE' subquery # NestOneSubqueryExpr
     | 'NEST_MANY' subquery # NestManySubqueryExpr
     | 'CASE' expr simpleWhenClause+ elseClause? 'END' #SimpleCaseExpr
