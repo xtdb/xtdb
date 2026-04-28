@@ -262,24 +262,26 @@ class LogProcessorSimTest : SimulationTestBase() {
                 "snapshot basis should equal liveIndex.latestCompletedTx"
             )
 
-            val tableSnap = snap.table(docsTable) ?: return
-            val rel = tableSnap.liveRelation ?: return
-            val op = rel["op"]
-            val put = op.vectorForOrNull("put") ?: return
-            val txIdVec = put.vectorFor("tx_id")
             val basisTxId = snap.txBasis?.txId ?: -1L
 
-            for (i in 0 until rel.rowCount) {
-                if (op.getLeg(i) == "put") {
-                    val txId = txIdVec.getLong(i)
-                    assertTrue(
-                        txId !in abortedTxIds(),
-                        "aborted txId=$txId left a row in live table"
-                    )
-                    assertTrue(
-                        txId <= basisTxId,
-                        "row txId=$txId > snapshot basis=$basisTxId"
-                    )
+            for (tableSnap in snap.table(docsTable)) {
+                val rel = tableSnap.relation
+                val op = rel["op"]
+                val put = op.vectorForOrNull("put") ?: continue
+                val txIdVec = put.vectorFor("tx_id")
+
+                for (i in 0 until rel.rowCount) {
+                    if (op.getLeg(i) == "put") {
+                        val txId = txIdVec.getLong(i)
+                        assertTrue(
+                            txId !in abortedTxIds(),
+                            "aborted txId=$txId left a row in live table"
+                        )
+                        assertTrue(
+                            txId <= basisTxId,
+                            "row txId=$txId > snapshot basis=$basisTxId"
+                        )
+                    }
                 }
             }
         }

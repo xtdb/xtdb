@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
+import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.table.TableRef
@@ -16,17 +17,23 @@ import kotlin.collections.iterator
 
 class Snapshot(
     val txBasis: TransactionKey?,
-    private val tableSnaps: Map<TableRef, TableSnapshot>,
+    // Each table can have multiple TableSnapshots once dual-slot LiveTable lands;
+    // for now the list is always size 0 or 1, but readers must iterate.
+    private val tableSnaps: Map<TableRef, List<TableSnapshot>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>
 ) : AutoCloseable {
     interface Source {
         fun openSnapshot(): Snapshot
     }
 
-    fun table(table: TableRef) = tableSnaps[table]
+    fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()
     val tables get() = tableSnaps.keys
-    fun columnType(table: TableRef, column: ColumnName) = table(table)?.columnType(column)
-    val allColumnTypes get() = tableSnaps.mapValues { (_, snap) -> snap.types }
+    fun columnType(table: TableRef, column: ColumnName): VectorType? {
+        val snaps = table(table)
+        if (snaps.isEmpty()) return null
+        return mergeTypes(snaps.map { it.columnType(column) })
+    }
+    val allColumnTypes get() = tableSnaps.mapValues { (_, snaps) -> snaps.mergeTypes() }
 
     private val refCount = AtomicInteger(1)
 
@@ -35,10 +42,20 @@ class Snapshot(
     }
 
     override fun close() {
-        if (0 == refCount.decrementAndGet()) tableSnaps.closeAll()
+        if (0 == refCount.decrementAndGet()) tableSnaps.values.flatten().closeAll()
     }
 
     companion object {
+        private fun List<TableSnapshot>.mergeTypes(): Map<ColumnName, VectorType> =
+            when {
+                isEmpty() -> emptyMap()
+                size == 1 -> first().types
+                else -> {
+                    val allCols = flatMapTo(mutableSetOf()) { it.types.keys }
+                    allCols.associateWith { col -> mergeTypes(map { it.columnType(col) }) }
+                }
+            }
+
         @JvmStatic
         private fun buildTableInfo(
             allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>>?, tableCatalog: TableCatalog
@@ -56,20 +73,24 @@ class Snapshot(
 
         @JvmStatic
         fun open(al: BufferAllocator, tableCat: TableCatalog, liveIndex: LiveIndex, openTx: OpenTx?): Snapshot =
-            HashMap<TableRef, TableSnapshot>().closeAllOnCatch { snaps ->
-                if (openTx != null)
-                    for ((tableRef, tableTx) in openTx.tables) {
-                        snaps[tableRef] = TableSnapshot.open(al, liveIndex.table(tableRef), tableTx)
-                    }
+            mutableListOf<TableSnapshot>().closeAllOnCatch { allSnaps ->
+                val byTable = HashMap<TableRef, MutableList<TableSnapshot>>()
+                val openTxTables: Map<TableRef, OpenTx.Table> =
+                    openTx?.tables?.associate { it.key to it.value }.orEmpty()
 
-                for (tableRef in liveIndex.tableRefs)
-                    snaps.computeIfAbsent(tableRef) {
-                        TableSnapshot.open(al, liveIndex.table(tableRef), tableTx = null)
-                    }
+                fun addSnap(tableRef: TableRef, ts: TableSnapshot) {
+                    allSnaps.add(ts)
+                    byTable.getOrPut(tableRef) { mutableListOf() }.add(ts)
+                }
 
-                val tableInfo = buildTableInfo(snaps.mapValues { (_, snap) -> snap.types }, tableCat)
+                for (tableRef in openTxTables.keys + liveIndex.tableRefs) {
+                    liveIndex.table(tableRef)?.let { addSnap(tableRef, TableSnapshot.open(al, it)) }
+                    openTxTables[tableRef]?.let { tx -> TableSnapshot.openTx(al, tx)?.let { addSnap(tableRef, it) } }
+                }
 
-                Snapshot(openTx?.txKey ?: liveIndex.latestCompletedTx, snaps, tableInfo)
+                val tableInfo = buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() }, tableCat)
+
+                Snapshot(openTx?.txKey ?: liveIndex.latestCompletedTx, byTable, tableInfo)
             }
     }
 }

@@ -44,8 +44,8 @@ class LiveTableTest {
                 assertEquals(2, liveTable.liveRelation.rowCount)
                 assertEquals(2L, rowCounter.blockRowCount)
 
-                TableSnapshot.open(allocator, liveTable, tableTx = null).use { snap ->
-                    assertEquals(2, snap.liveRelation!!.rowCount)
+                TableSnapshot.open(allocator, liveTable).use { snap ->
+                    assertEquals(2, snap.relation.rowCount)
                     assertTrue(snap.columnType("foo").toString().isNotEmpty())
                 }
             }

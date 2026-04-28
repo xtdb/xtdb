@@ -25,7 +25,7 @@
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            (xtdb ICursor Bytes)
-           (xtdb.indexer Snapshot Snapshot$Source)
+           (xtdb.indexer Snapshot Snapshot$Source TableSnapshot)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
@@ -303,26 +303,21 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               live-table-snap (.table snapshot table)
+                               live-table-snaps (.table snapshot table)
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [db-name 0])))]
 
                            (util/with-close-on-catch [!segments (LinkedList.)]
-                             
+
                              (doseq [{:keys [^String trie-key]} (-> (cat/trie-state trie-catalog table)
                                                                     (cat/current-tries)
                                                                     (cat/filter-tries temporal-bounds))]
                                (.add !segments
                                      (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
-                             (when live-table-snap
-                               (when-let [live-table-seg (.getSegment live-table-snap)]
-                                 (.add !segments live-table-seg))
-
-                               ;; Add tx segment for read-own-writes (when snapshot opened from within transaction)
-                               (when-let [tx-seg (.getTxSegment live-table-snap)]
-                                 (.add !segments tx-seg)))
+                             (doseq [^TableSnapshot live-table-snap live-table-snaps]
+                               (.add !segments (.getSegment live-table-snap)))
 
                              (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % {:query-bounds temporal-bounds}))]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds

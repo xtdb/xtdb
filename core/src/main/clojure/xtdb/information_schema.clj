@@ -18,7 +18,7 @@
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorType VectorReader)
            xtdb.pgwire.PgType
-           (xtdb.indexer Snapshot)
+           (xtdb.indexer Snapshot TableSnapshot)
            xtdb.operator.SelectionSpec
            (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.table.TableRef
@@ -348,16 +348,18 @@
      :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count))}))
 
 (defn live-tables [^Snapshot snap]
-  (for [^TableRef table (.getTables snap)
-        :let [live-table (.table snap table)]]
+  (for [^TableRef table (.getTables snap)]
     {:schema-name (.getSchemaName table)
      :table-name (.getTableName table)
-     :row-count (long (or (some-> (.getLiveRelation live-table) (.getRowCount))
-                          0))}))
+     :row-count (long (transduce (map (fn [^TableSnapshot ts]
+                                        (.getRowCount (.getRelation ts))))
+                                 + 0
+                                 (.table snap table)))}))
 
 (defn live-columns [^Snapshot snap]
   (for [^TableRef table (.getTables snap)
-        [col-name col-type] (.getTypes (.table snap table))]
+        ^TableSnapshot ts (.table snap table)
+        [col-name col-type] (.getTypes ts)]
     {:schema-name (.getSchemaName table)
      :table-name (.getTableName table)
      :col-name col-name

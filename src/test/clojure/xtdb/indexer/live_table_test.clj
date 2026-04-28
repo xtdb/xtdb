@@ -98,8 +98,8 @@
                                        (.resolve path "objects")))))))))
 
 (defn live-table-snap->data [^TableSnapshot live-table-snap]
-  (let [live-rel-data (.getAsMaps (.getLiveRelation live-table-snap))
-        live-trie (.compactLogs (.getLiveTrie live-table-snap))
+  (let [live-rel-data (.getAsMaps (.getRelation live-table-snap))
+        live-trie (.compactLogs (.getTrie live-table-snap))
         live-trie-leaf-data (->> live-trie
                                  (.getLeaves)
                                  (mapcat #(.getData ^MemoryHashTrie$Leaf %))
@@ -127,7 +127,7 @@
 
         (.importData live-table (.getTxRelation open-tx-table))
 
-        (util/with-open [live-table-snap (TableSnapshot/open allocator live-table nil)]
+        (util/with-open [live-table-snap (TableSnapshot/open allocator live-table)]
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table bp 0)
@@ -165,11 +165,11 @@
               (.commitTx live-index open-tx)
 
               (with-open [snap (.openSnapshot live-index)]
-                (let [live-table-before (live-table-snap->data (.table snap table))]
+                (let [live-table-before (live-table-snap->data (first (.table snap table)))]
 
                   (.finishBlock live-index bp 0)
 
-                  (let [live-table-after (live-table-snap->data (.table snap table))]
+                  (let [live-table-after (live-table-snap->data (first (.table snap table)))]
 
                     (t/is (= (:live-trie-iids live-table-before)
                              (:live-trie-iids live-table-after)

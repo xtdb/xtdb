@@ -194,27 +194,25 @@
 
         ;; External snapshot (from live-index, not from tx) should NOT see the uncommitted row
         (with-open [external-snap (.openSnapshot live-index)]
-          (t/is (nil? (.table external-snap table))
+          (t/is (empty? (.table external-snap table))
                 "External snapshot should not see table created in uncommitted tx"))
 
-        ;; But the transaction's own snapshot SHOULD see its data (in txRelation)
+        ;; But the transaction's own snapshot SHOULD see its data (one TableSnapshot for the tx slot)
         (with-open [tx-snap (.openSnapshot live-index live-tx)]
-          (let [table-snap (.table tx-snap table)]
-            (t/is (some? table-snap)
-                  "Transaction snapshot should see its own uncommitted table")
-            (t/is (some? (.getTxRelation table-snap))
-                  "Transaction snapshot should have tx relation for uncommitted data")
-            (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
-                  "Transaction snapshot should see its own uncommitted row in txRelation")))
+          (let [table-snaps (.table tx-snap table)]
+            (t/is (= 1 (count table-snaps))
+                  "Transaction snapshot should have one entry (just the uncommitted tx data)")
+            (t/is (= 1 (.getRowCount (.getRelation (first table-snaps))))
+                  "Transaction snapshot should see its own uncommitted row")))
 
         (.commitTx live-index live-tx))
 
       ;; After commit, external snapshot should now see the data
       (with-open [external-snap (.openSnapshot live-index)]
-        (let [table-snap (.table external-snap table)]
+        (let [table-snap (first (.table external-snap table))]
           (t/is (some? table-snap)
                 "External snapshot should see committed table")
-          (t/is (= 1 (.getRowCount (.getLiveRelation table-snap)))
+          (t/is (= 1 (.getRowCount (.getRelation table-snap)))
                 "External snapshot should see committed row"))))))
 
 (t/deftest concurrent-external-snapshot-unaffected-by-later-commit
@@ -232,8 +230,8 @@
 
     ;; Take a snapshot BEFORE second transaction
     (with-open [snap-before (.openSnapshot live-index)]
-      (let [table-snap-before (.table snap-before table)
-            row-count-before (.getRowCount (.getLiveRelation table-snap-before))]
+      (let [table-snap-before (first (.table snap-before table))
+            row-count-before (.getRowCount (.getRelation table-snap-before))]
 
         ;; Commit second transaction
         (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
@@ -244,15 +242,15 @@
 
         ;; The snapshot taken before should still show only 1 row (immutability)
         (t/is (= row-count-before
-                 (.getRowCount (.getLiveRelation table-snap-before)))
+                 (.getRowCount (.getRelation table-snap-before)))
               "Snapshot taken before commit should be unaffected by later commit")
         (t/is (= 1 row-count-before)
               "Pre-commit snapshot should have 1 row"))
 
       ;; New snapshot should see both rows
       (with-open [snap-after (.openSnapshot live-index)]
-        (let [table-snap-after (.table snap-after table)]
-          (t/is (= 2 (.getRowCount (.getLiveRelation table-snap-after)))
+        (let [table-snap-after (first (.table snap-after table))]
+          (t/is (= 2 (.getRowCount (.getRelation table-snap-after)))
                 "Post-commit snapshot should have 2 rows"))))))
 
 ; abort-updates-latest-completed-tx removed — abort no longer exists as a concept.
@@ -274,9 +272,10 @@
           (.logPut table-tx-1 iid 0 0 #(.endStruct doc-wtr)))
 
         (with-open [tx-snap (.openSnapshot live-index live-tx)]
-          (let [table-snap (.table tx-snap table)]
-            (t/is (= 1 (.getRowCount (.getTxRelation table-snap)))
-                  "Row written via first reference should be visible in txRelation")))))))
+          (let [table-snaps (.table tx-snap table)]
+            (t/is (= 1 (count table-snaps)))
+            (t/is (= 1 (.getRowCount (.getRelation (first table-snaps))))
+                  "Row written via first reference should be visible")))))))
 
 (t/deftest multiple-puts-same-iid-records-all
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
@@ -294,8 +293,8 @@
         (.commitTx live-index live-tx))
 
       (with-open [snap (.openSnapshot live-index)]
-        (let [table-snap (.table snap table)]
-          (t/is (= 3 (.getRowCount (.getLiveRelation table-snap)))
+        (let [table-snap (first (.table snap table))]
+          (t/is (= 3 (.getRowCount (.getRelation table-snap)))
                 "All puts should be recorded (temporal history)"))))))
 
 (t/deftest next-block-removes-tables
@@ -347,16 +346,14 @@
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
 
-        ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2)
+        ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2),
+        ;; now as two separate TableSnapshot entries: live (committed) + tx (uncommitted).
         (with-open [tx-snap (.openSnapshot live-index live-tx2)]
-          (let [table-snap (.table tx-snap table)
-                live-rel (.getLiveRelation table-snap)
-                tx-rel (.getTxRelation table-snap)]
-
-            (t/is (= 1 (.getRowCount live-rel))
-                  "Transaction snapshot should see 1 committed row")
-
-            (t/is (= 1 (.getRowCount tx-rel))
-                  "Transaction snapshot should see 1 uncommitted row")))
+          (let [table-snaps (.table tx-snap table)
+                row-counts (mapv #(.getRowCount (.getRelation %)) table-snaps)]
+            (t/is (= 2 (count table-snaps))
+                  "Transaction snapshot should have two entries: committed live + uncommitted tx")
+            (t/is (= [1 1] row-counts)
+                  "Each entry should hold one row (1 committed + 1 uncommitted)")))
 
         ))))
