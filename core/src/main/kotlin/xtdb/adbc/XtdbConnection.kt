@@ -14,13 +14,11 @@ import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
-import org.apache.arrow.vector.ipc.ArrowStreamWriter
-import java.io.ByteArrayOutputStream
-import java.nio.channels.Channels
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ResultCursor
 import xtdb.api.Xtdb
@@ -31,12 +29,15 @@ import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
 import xtdb.arrow.withName
 import xtdb.database.DatabaseName
-import xtdb.table.TableRef
 import xtdb.query.PreparedQuery
 import xtdb.query.QueryOpts
+import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.nio.channels.Channels
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
 
@@ -51,16 +52,16 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
-        // Bound params kept in two forms: a reader view for `openQuery`, IPC bytes
-        // for `TxOp.SqlBytes`. We can't go via `Relation.load` (the obvious choice)
-        // because Arrow's `transferOwnership` fails across allocator roots, and
-        // callers can pass a VSR from an independent RootAllocator. Bytes don't care.
-        private var boundArgs: RelationReader? = null
+        // Arrow IPC bytes — allocator-agnostic, caller can close their VSR
+        // straight after bind. Cleared only by another bind() or close().
         private var argBytes: ByteArray? = null
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
+            // New SQL invalidates both the compiled plan and any prior bind —
+            // the parameter shape can have changed.
             this.prepared = null
+            this.argBytes = null
         }
 
         override fun prepare() {
@@ -77,24 +78,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun bind(root: VectorSchemaRoot) {
-            boundArgs?.close()
+            argBytes = null
             // External `$N` → planner-internal `?_N`, by position.
-            // `$N` is 0-indexed by XTDB convention, not Postgres-faithful.
+            // `$N` is 0-indexed
             val renamedFields = root.schema.fields.mapIndexed { idx, f -> f.withName("?_$idx") }
-
-            // fromRoot doesn't transfer — the buffers stay in the source's allocator,
-            // openQuery reads them, and the cursor releases the wrappers on close.
-            val rel = Relation.fromRoot(node.allocator, root)
-            boundArgs = try {
-                RelationReader.from(
-                    rel.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }.toList(),
-                    rel.rowCount
-                )
-            } catch (t: Throwable) {
-                rel.close()
-                throw t
-            }
-
             argBytes = ByteArrayOutputStream().use { baos ->
                 val renamedRoot = VectorSchemaRoot(renamedFields, root.fieldVectors, root.rowCount)
                 ArrowStreamWriter(renamedRoot, null, Channels.newChannel(baos)).use { writer ->
@@ -107,26 +94,30 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun bind(rel: RelationReader) {
-            boundArgs?.close()
-            // XTDB-internal; assumes the source shares a root with node.allocator.
-            val owned = rel.openDirectSlice(node.allocator)
-            boundArgs = try {
-                RelationReader.from(
-                    owned.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }.toList(),
-                    owned.rowCount
-                )
-            } catch (t: Throwable) {
-                owned.close()
-                throw t
-            }
-            // DML through this path isn't wired — executeUpdate will raise on the
-            // unbound `?` rather than silently dropping params.
             argBytes = null
+            rel.openDirectSlice(node.allocator).use { sliced ->
+                val renamedFields = sliced.vectors.mapIndexed { idx, v -> v.field.withName("?_$idx") }
+                Relation(node.allocator, renamedFields).use { renamed ->
+                    sliced.openArrowRecordBatch().use { rb -> renamed.load(rb) }
+                    argBytes = renamed.asArrowStream
+                }
+            }
         }
 
+        private fun deserialiseArgs(bytes: ByteArray): Relation =
+            Relation.StreamLoader(node.allocator, Channels.newChannel(ByteArrayInputStream(bytes))).use { loader ->
+                Relation(node.allocator, loader.schema).also { rel ->
+                    try {
+                        loader.loadNextPage(rel)
+                    } catch (t: Throwable) {
+                        rel.close()
+                        throw t
+                    }
+                }
+            }
+
         override fun executeQuery(): QueryResult {
-            // openQuery takes ownership on success; null our ref to avoid double-close.
-            val args = boundArgs.also { boundArgs = null }
+            val args = argBytes?.let(::deserialiseArgs)
             val cursor = try {
                 prepared?.openQuery(args, QueryOpts())
                     ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
@@ -140,15 +131,12 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun executeUpdate(): UpdateResult {
             val sql = sql ?: error("SQL query not set")
-            val bytes = argBytes.also { argBytes = null }
-            val op = if (bytes != null) TxOp.SqlBytes(sql, bytes) else TxOp.Sql(sql)
+            val op = argBytes?.let { TxOp.SqlBytes(sql, it) } ?: TxOp.Sql(sql)
             executeDml(op)
             return UpdateResult(-1)
         }
 
         override fun close() {
-            boundArgs?.close()
-            boundArgs = null
             argBytes = null
             prepared = null
         }
