@@ -9,7 +9,6 @@
            [java.time Instant LocalDate ZoneOffset]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
-           xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)
            (xtdb.util TemporalBounds)))
@@ -433,35 +432,34 @@
                           :nascent (into empty-trie-state-list nascent)}
                          (assoc :max-block-idx max-block-idx)))))
 
-(defrecord TrieCatalog [!state, ^long file-size-target]
+(defrecord TrieCatalog [^Map !table-cats, ^long file-size-target]
   xtdb.trie.TrieCatalog
   (addTries [_ table added-tries as-of]
-    (let [^Map table-cats (:table-cats @!state)]
-      (.compute table-cats table
-                (fn [_table tries]
-                  (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
-                  (try
-                    (let [{:keys [tries] :as new-trie-cat}  (reduce (fn [table-cat ^TrieDetails added-trie]
-                                                                      (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
-                                                                        (apply-trie-notification table-cat
-                                                                                                 (-> parsed-key
-                                                                                                     (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                                                            :trie-metadata (.getTrieMetadata added-trie)))
-                                                                                                 {:file-size-target file-size-target,  :as-of as-of})
-                                                                        table-cat))
-                                                                    (or tries {})
-                                                                    added-tries)]
-                      (s/assert ::catalog-tries tries)
-                      new-trie-cat)
-                    (catch InterruptedException e (throw e))
-                    (catch Throwable e
-                      (log/error e "Failed to add tries to table" table)
-                      (throw e)))))))
+    (.compute !table-cats table
+              (fn [_table tries]
+                (log/tracef "Adding tries to table '%s': %s" table (mapv #(.getTrieKey ^TrieDetails %) added-tries))
+                (try
+                  (let [{:keys [tries] :as new-trie-cat} (reduce (fn [table-cat ^TrieDetails added-trie]
+                                                                   (if-let [parsed-key (trie/parse-trie-key (.getTrieKey added-trie))]
+                                                                     (apply-trie-notification table-cat
+                                                                                              (-> parsed-key
+                                                                                                  (assoc :data-file-size (.getDataFileSize added-trie)
+                                                                                                         :trie-metadata (.getTrieMetadata added-trie)))
+                                                                                              {:file-size-target file-size-target, :as-of as-of})
+                                                                     table-cat))
+                                                                 (or tries {})
+                                                                 added-tries)]
+                    (s/assert ::catalog-tries tries)
+                    new-trie-cat)
+                  (catch InterruptedException e (throw e))
+                  (catch Throwable e
+                    (log/error e "Failed to add tries to table" table)
+                    (throw e))))))
 
-  (getTables [_] (set (keys (:table-cats @!state))))
+  (getTables [_] (set (keys !table-cats)))
 
   (garbageTries [_ table as-of]
-    (->> (garbage-tries (.get ^Map (:table-cats @!state) table) as-of)
+    (->> (garbage-tries (.get !table-cats table) as-of)
          (into #{} (map :trie-key))))
 
   (listAllGarbageTrieKeys [this table]
@@ -470,7 +468,7 @@
          (into #{} (map :trie-key))))
 
   (deleteTries [_ table garbage-trie-keys]
-    (.compute ^Map (:table-cats @!state) table
+    (.compute !table-cats table
               (fn [_table tries]
                 (let [{:keys [tries] :as res} (remove-garbage tries garbage-trie-keys)]
                   (s/assert ::catalog-tries tries)
@@ -491,11 +489,11 @@
                            (partial mapv trie/->table-block-trie-details)))))))
 
   PTrieCatalog
-  (trie-state [_ table] (.get ^Map (:table-cats @!state) table))
+  (trie-state [_ table] (.get !table-cats table))
 
   (reset->l0! [this]
     (doseq [table (.getTables this)]
-      (.compute ^Map (:table-cats @!state) table
+      (.compute !table-cats table
                 (fn [_table table-cat]
                   (reset->l0 table-cat))))))
 
@@ -522,22 +520,19 @@
 
     ;; TODO: This else statement is here to support block files that have not yet passed to the new extended TrieDetails format
     ;; see #4526
-    (let [cat (TrieCatalog. (volatile! {:block-idx nil, :table-cats (ConcurrentHashMap.)}) file-size-target)
+    (let [cat (TrieCatalog. (ConcurrentHashMap.) file-size-target)
           now (Instant/now)]
       (doseq [[table {:keys [partitions]}] table->table-block
               {:keys [tries]} partitions]
         ;; As all tries get added afresh, max-block-idx is up to date for all existing partitions
         (.addTries cat table tries now))
-      (:table-cats @(:!state cat)))))
+      (:!table-cats cat))))
 
 (defn ->factory ^xtdb.trie.TrieCatalog$Factory []
   (reify xtdb.trie.TrieCatalog$Factory
     (open [_ buffer-pool block-cat]
       (log/debug "starting trie catalog...")
       (let [table->table-block (table-cat/load-tables-to-metadata buffer-pool block-cat)
-            block-idx (or (.getCurrentBlockIndex ^BlockCatalog block-cat) -1)
-            cat (TrieCatalog. (volatile! {:block-idx block-idx
-                                          :table-cats (load-tries table->table-block *file-size-target*)})
-                              *file-size-target*)]
+            cat (TrieCatalog. (load-tries table->table-block *file-size-target*) *file-size-target*)]
         (log/debug "trie catalog started")
         cat))))

@@ -38,19 +38,8 @@ class SimulationTestUtils {
         fun createJobCalculator(): Compactor.JobCalculator =
             createJobCalculatorFn.invoke() as Compactor.JobCalculator
 
-        private val volatileFn = requiringResolve("clojure.core/volatile!")
-
-        fun createTrieCatalog(): TrieCatalog {
-            val state = volatileFn.invoke(
-                clojure.lang.PersistentArrayMap.create(
-                    mapOf(
-                        clojure.lang.Keyword.intern("block-idx") to null,
-                        clojure.lang.Keyword.intern("table-cats") to ConcurrentHashMap<Any, Any>()
-                    )
-                )
-            )
-            return createTrieCatalogFn.invoke(state, 100 * 1024 * 1024) as TrieCatalog
-        }
+        fun createTrieCatalog(): TrieCatalog =
+            createTrieCatalogFn.invoke(ConcurrentHashMap<Any, Any>(), 100 * 1024 * 1024) as TrieCatalog
 
         val L0TrieKeys = sequence {
             var blockIndex = 0
