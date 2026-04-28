@@ -69,6 +69,7 @@ class BlockGarbageCollectorTest {
                     bufferPool, blockCat,
                     blocksToKeep = 3,
                     enabled = false,
+                    dbName = "xtdb",
                 )
 
                 // Validate that the latest block is correct

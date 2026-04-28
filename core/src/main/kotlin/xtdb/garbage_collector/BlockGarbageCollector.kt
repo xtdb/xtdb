@@ -1,5 +1,7 @@
 package xtdb.garbage_collector
 
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
@@ -9,6 +11,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.catalog.BlockCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
+import xtdb.table.DatabaseName
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.debug
 import xtdb.util.logger
@@ -39,9 +42,11 @@ class BlockGarbageCollector(
     private val blocksToKeep: Int,
     /** Gates the auto-signal from the leader's block-boundary path; direct `awaitNoGarbage()` is unaffected. */
     val enabled: Boolean,
+    private val meterRegistry: MeterRegistry? = null,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    dbName: DatabaseName,
 ) : AutoCloseable {
 
     private val dbJob = Job()
@@ -56,6 +61,20 @@ class BlockGarbageCollector(
 
     private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
     private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
+
+    private val blockDeleteTimer: Timer? = meterRegistry?.let {
+        Timer.builder("xtdb.gc.block_files.delete.timer")
+            .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
+            .register(it)
+    }
+
+    private val tableBlockDeleteTimer: Timer? = meterRegistry?.let {
+        Timer.builder("xtdb.gc.table_block_files.delete.timer")
+            .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
+            .register(it)
+    }
 
     init {
         require(blocksToKeep >= 1) { "blocksToKeep must be >= 1, got $blocksToKeep" }
@@ -117,24 +136,28 @@ class BlockGarbageCollector(
         fun Path.isGarbage(): Boolean =
             parseBlockIndex()?.let { it != latestBlockIndex && it <= latestBlockIndex - blocksToKeep } ?: false
 
-        suspend fun deleteGarbage(paths: Sequence<Path>) {
+        suspend fun deleteGarbage(paths: Sequence<Path>, gcTimer: Timer? = null) {
             coroutineScope {
                 paths.filter { it.isGarbage() }.forEach { path ->
-                    launch(deleteDispatcher) { bufferPool.deleteIfExists(path) }
+                    launch(deleteDispatcher) {
+                        val timer = meterRegistry?.let { Timer.start(it) }
+                        bufferPool.deleteIfExists(path)
+                        gcTimer?.let { timer?.stop(it) }
+                    }
                 }
             }
         }
 
         supervisorScope {
             launch(tableDispatcher) {
-                deleteGarbage(bufferPool.allBlockFiles.asSequence().map { it.key })
+                deleteGarbage(bufferPool.allBlockFiles.asSequence().map { it.key }, blockDeleteTimer)
             }
         }
 
         supervisorScope {
             for (table in blockCatalog.allTables) {
                 launch(tableDispatcher) {
-                    deleteGarbage(bufferPool.tableBlocks(table).asSequence().map { it.key })
+                    deleteGarbage(bufferPool.tableBlocks(table).asSequence().map { it.key }, tableBlockDeleteTimer)
                 }
             }
         }

@@ -2,11 +2,15 @@
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
+            [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
+            [xtdb.trie-catalog :as cat]
             [xtdb.types]
             [xtdb.util :as util])
-  (:import (io.micrometer.core.instrument Counter Gauge Timer)))
+  (:import (io.micrometer.core.instrument Counter Gauge Timer)
+           (java.time Duration)))
 
 (t/use-fixtures :each tu/with-mock-clock)
 
@@ -174,3 +178,35 @@ $$"])
       (let [^Timer timer (.timer (.find registry "block.upload.timer"))]
         (t/is (= (.count timer) 1))
         (t/is (> (.totalTime timer java.util.concurrent.TimeUnit/NANOSECONDS) 0))))))
+
+(t/deftest test-gc-metrics
+  (binding [c/*ignore-signal-block?* true
+            ;; Drive L1 supersession: each new L1 trie marks earlier same-recency L1 tries as
+            ;; garbage when their data-file-size < `*file-size-target*`. A small target keeps
+            ;; the test scoped — without this trie GC has no eligible tries to delete.
+            cat/*file-size-target* 16]
+    (let [node-dir (util/->path "target/metrics-test/test-gc-metrics")
+          clock (tu/->mock-clock (tu/->instants :hour))
+          opts {:node-dir node-dir, :compactor-threads 1, :instant-src clock
+                :gc? false, :blocks-to-keep 2, :garbage-lifetime (Duration/ofHours 0)
+                :instant-source-for-non-tx-msgs? true}]
+      (util/delete-dir node-dir)
+
+      (with-open [node (tu/->local-node opts)]
+        (let [primary (db/primary-db node)
+              registry (.getMeterRegistry (util/node-base node))]
+
+          (doseq [i (range 6)]
+            (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
+            (tu/flush-block! node)
+            (c/compact-all! node #xt/duration "PT1S"))
+
+          (.gcAll primary)
+
+          (t/testing "block GC meters"
+            (t/is (= 4 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.block_files.delete.timer") "db" "xtdb")))))
+            ;; Deletes table blocks for foo and xt$txs (4 each)
+            (t/is (= 8 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.table_block_files.delete.timer") "db" "xtdb"))))))
+
+          (t/testing "trie GC meters"
+            (t/is (= 8 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.tries.delete.timer") "db" "xtdb")))))))))))
