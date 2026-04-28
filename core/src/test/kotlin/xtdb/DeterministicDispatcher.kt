@@ -13,8 +13,7 @@ class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() 
 
     private val jobs = mutableListOf<DispatchJob>()
 
-    @Volatile
-    private var running = false
+    private var runningThread: Thread? = null
 
     /** Total number of jobs picked from the queue. */
     var totalPicks = 0
@@ -25,10 +24,14 @@ class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() 
         private set
 
     override fun dispatch(context: CoroutineContext, block: Runnable) {
+        check(runningThread == null || runningThread == Thread.currentThread()) {
+            "Cross-thread dispatch from ${Thread.currentThread().name} while running on ${runningThread?.name}"
+        }
+
         jobs.add(DispatchJob(context, block))
 
-        if (!running) {
-            running = true
+        if (runningThread == null) {
+            runningThread = Thread.currentThread()
             while (jobs.isNotEmpty()) {
                 totalPicks++
                 if (jobs.size > 1) interleavedPicks++
@@ -36,7 +39,7 @@ class DeterministicDispatcher(private val rand: Random) : CoroutineDispatcher() 
                 val job = jobs.removeAt(idx)
                 job.block.run()
             }
-            running = false
+            runningThread = null
         }
     }
 }
