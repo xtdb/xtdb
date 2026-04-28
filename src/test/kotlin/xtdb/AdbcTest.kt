@@ -258,6 +258,43 @@ class AdbcTest {
     }
 
     @Test
+    fun `prepared DML with bound parameters (in-process)`() {
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 42L); valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+                    stmt.executeUpdate()
+                }
+            }
+
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo")
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 42L)),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `getParameterSchema reports columns in $ N convention (in-process)`() {
         xtdb.connect().use { ipConn ->
             ipConn.createStatement().use { stmt ->
