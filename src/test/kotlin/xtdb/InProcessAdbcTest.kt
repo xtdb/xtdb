@@ -163,4 +163,78 @@ class InProcessAdbcTest {
             }
         }
     }
+
+    @Test
+    fun `bind state is sticky across executes`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
+
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 2L)
+                        valueCount = 1
+                    }
+                    params.rowCount = 1
+                    stmt.bind(params)
+                }
+
+                fun runOnce(): List<*> =
+                    stmt.executeQuery().reader.use { rdr ->
+                        rdr.loadNextBatch()
+                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        }
+                    }
+
+                val expected = listOf(mapOf("_id" to 2L))
+                assertEquals(expected, runOnce(), "first execute")
+                assertEquals(expected, runOnce(), "second execute reuses the same bind")
+            }
+        }
+    }
+
+    @Test
+    fun `setSqlQuery clears prior bind`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+                val paramSchema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(paramSchema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 1L)
+                        valueCount = 1
+                    }
+                    params.rowCount = 1
+                    stmt.bind(params)
+                }
+
+                stmt.setSqlQuery("SELECT _id FROM foo")
+                stmt.prepare()
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 1L)),
+                            rel.toMaps(SNAKE_CASE_STRING),
+                            "stale bind from prior SQL must not leak into new SQL"
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

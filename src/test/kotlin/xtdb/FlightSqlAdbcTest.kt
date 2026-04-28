@@ -11,13 +11,6 @@ import org.apache.arrow.flight.Location
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.BigIntVector
-import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.types.Types
-import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
-import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -87,8 +80,6 @@ class FlightSqlAdbcTest {
         }
     }
 
-    // -- Basic round-trip --
-
     @Test
     fun `test simple round-trip`() {
         insertData("""
@@ -122,8 +113,6 @@ class FlightSqlAdbcTest {
             }
         }
     }
-
-    // -- FlightSQL metadata (via FlightSqlClient) --
 
     @Test
     fun `test FlightSQL getTableTypes`() {
@@ -167,8 +156,6 @@ class FlightSqlAdbcTest {
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
     }
 
-    // -- ADBC metadata (through FlightSQL ADBC client) --
-
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream
     // (allocates on the wrong root). Tested at the FlightSQL level via `test FlightSQL getSqlInfo` instead.
 
@@ -192,74 +179,6 @@ class FlightSqlAdbcTest {
             assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows with table data")
         }
     }
-
-<<<<<<< HEAD
-=======
-    // -- Prepared statements (in-process ADBC) --
-    //
-    // NB: `conn` above is the FlightSQL-over-the-wire ADBC client; tests that
-    // need to exercise our in-process `XtdbConnection` directly use `xtdb.connect()`.
-
-    @Test
-    fun `prepare and execute simple query (in-process)`() {
-        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
-
-        xtdb.connect().use { ipConn ->
-            ipConn.createStatement().use { stmt ->
-                stmt.setSqlQuery("SELECT _id, n FROM foo")
-                stmt.prepare()
-
-                stmt.executeQuery().reader.use { rdr ->
-                    assertTrue(rdr.loadNextBatch())
-                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                        assertEquals(
-                            listOf(mapOf("_id" to 1L, "n" to "one")),
-                            rel.toMaps(SNAKE_CASE_STRING)
-                        )
-                    }
-                    assertFalse(rdr.loadNextBatch())
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `prepare with bound parameter (in-process)`() {
-        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
-
-        xtdb.connect().use { ipConn ->
-            ipConn.createStatement().use { stmt ->
-                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
-                stmt.prepare()
-
-                val schema = Schema(listOf(
-                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
-                ))
-                VectorSchemaRoot.create(schema, al).use { params ->
-                    params.allocateNew()
-                    (params.getVector("\$0") as BigIntVector).apply {
-                        setSafe(0, 2L); valueCount = 1
-                    }
-                    params.rowCount = 1
-
-                    stmt.bind(params)
-
-                    stmt.executeQuery().reader.use { rdr ->
-                        assertTrue(rdr.loadNextBatch())
-                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                            assertEquals(
-                                listOf(mapOf("_id" to 2L)),
-                                rel.toMaps(SNAKE_CASE_STRING)
-                            )
-                        }
-                        assertFalse(rdr.loadNextBatch())
-                    }
-                }
-            }
-        }
-    }
-
-    // -- Error handling --
 
     @Test
     fun `test DML via query path returns INVALID_ARGUMENT`() {
