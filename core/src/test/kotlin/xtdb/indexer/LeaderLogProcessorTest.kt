@@ -3,9 +3,11 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
@@ -51,6 +53,7 @@ class LeaderLogProcessorTest {
     }
 
     private fun leaderProc(
+        uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
@@ -65,7 +68,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, uploadDispatcher)
 
         return LeaderLogProcessor(
             allocator, nodeBase, dbStorage, indexer, mockk(relaxed = true),
@@ -80,7 +83,7 @@ class LeaderLogProcessorTest {
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = mockk<TrieCatalog>(relaxed = true)
-        val lp = leaderProc(replicaLog = replicaLog, trieCatalog = trieCatalog)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog)
 
         val tries = listOf(
             TrieDetails.newBuilder()
@@ -120,7 +123,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
@@ -144,7 +147,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
         val liveIndex = mockk<LiveIndex>(relaxed = true)
-        val lp = leaderProc(liveIndex = liveIndex)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex)
 
         val now = Instant.now()
         lp.processRecords(listOf(
@@ -186,7 +189,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
