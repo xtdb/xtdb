@@ -11,6 +11,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.catalog.BlockCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
+import xtdb.table.DatabaseName
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.debug
 import xtdb.util.logger
@@ -45,6 +46,7 @@ class BlockGarbageCollector(
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    dbName: DatabaseName,
 ) : AutoCloseable {
 
     private val dbJob = Job()
@@ -63,12 +65,14 @@ class BlockGarbageCollector(
     private val blockDeleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.block_files.delete.timer")
             .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
             .register(it)
     }
 
     private val tableBlockDeleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.table_block_files.delete.timer")
             .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
             .register(it)
     }
 

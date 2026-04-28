@@ -128,6 +128,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 garbageLifetime = garbageLifetime,
                 enabled = false,
                 dispatcher = dispatcher,
+                dbName = "xtdb"
             )
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
         }

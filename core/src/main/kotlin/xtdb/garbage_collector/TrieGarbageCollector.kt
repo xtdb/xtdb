@@ -1,6 +1,5 @@
 package xtdb.garbage_collector
 
-import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.*
@@ -11,6 +10,7 @@ import kotlinx.coroutines.selects.select
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
+import xtdb.table.DatabaseName
 import xtdb.table.TableRef
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie.dataFilePath
@@ -68,6 +68,7 @@ class TrieGarbageCollector(
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    dbName: DatabaseName,
 ) : AutoCloseable {
 
     private val blockCatalog = dbState.blockCatalog
@@ -86,6 +87,7 @@ class TrieGarbageCollector(
     private val deleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.tries.delete.timer")
             .publishPercentiles(0.75, 0.95, 0.99)
+            .tag("db", dbName)
             .register(it)
     }
     

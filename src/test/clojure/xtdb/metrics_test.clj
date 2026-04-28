@@ -204,9 +204,9 @@ $$"])
           (.gcAll primary)
 
           (t/testing "block GC meters"
-            (t/is (= 4 (.count ^Timer (.timer (.find registry "xtdb.gc.block_files.delete.timer")))))
+            (t/is (= 4 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.block_files.delete.timer") "db" "xtdb")))))
             ;; Deletes table blocks for foo and xt$txs (4 each)
-            (t/is (= 8 (.count ^Timer (.timer (.find registry "xtdb.gc.table_block_files.delete.timer"))))))
+            (t/is (= 8 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.table_block_files.delete.timer") "db" "xtdb"))))))
 
           (t/testing "trie GC meters"
-            (t/is (= 8 (.count ^Timer (.timer (.find registry "xtdb.gc.tries.delete.timer")))))))))))
+            (t/is (= 8 (.count ^Timer (.timer (.tag (.find registry "xtdb.gc.tries.delete.timer") "db" "xtdb")))))))))))
