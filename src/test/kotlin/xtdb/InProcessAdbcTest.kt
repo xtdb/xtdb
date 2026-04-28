@@ -125,4 +125,42 @@ class InProcessAdbcTest {
             }
         }
     }
+
+    @Test
+    fun `prepared DML with bound parameters`() {
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 42L)
+                        valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+                    stmt.executeUpdate()
+                }
+            }
+
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo")
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 42L)),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

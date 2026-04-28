@@ -193,6 +193,72 @@ class FlightSqlAdbcTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // -- Prepared statements (in-process ADBC) --
+    //
+    // NB: `conn` above is the FlightSQL-over-the-wire ADBC client; tests that
+    // need to exercise our in-process `XtdbConnection` directly use `xtdb.connect()`.
+
+    @Test
+    fun `prepare and execute simple query (in-process)`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id, n FROM foo")
+                stmt.prepare()
+
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 1L, "n" to "one")),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                    assertFalse(rdr.loadNextBatch())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `prepare with bound parameter (in-process)`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 2L); valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+
+                    stmt.executeQuery().reader.use { rdr ->
+                        assertTrue(rdr.loadNextBatch())
+                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                            assertEquals(
+                                listOf(mapOf("_id" to 2L)),
+                                rel.toMaps(SNAKE_CASE_STRING)
+                            )
+                        }
+                        assertFalse(rdr.loadNextBatch())
+                    }
+                }
+            }
+        }
+    }
+
     // -- Error handling --
 
     @Test
