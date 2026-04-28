@@ -3,15 +3,13 @@
             [xtdb.util :as util])
   (:import xtdb.NodeBase
            [xtdb.database Database$Catalog DatabaseCatalog]
-           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]
-           [xtdb.garbage_collector GarbageCollector]))
+           [xtdb.database.proto DatabaseConfig DatabaseConfig$LogCase DatabaseConfig$StorageCase DatabaseMode]))
 
 (defmethod ig/expand-key :xtdb/db-catalog [k _]
-  {k {:base (ig/ref :xtdb/base)
-      :gc (ig/ref :xtdb/garbage-collector)}})
+  {k {:base (ig/ref :xtdb/base)}})
 
-(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base ^GarbageCollector gc]}]
-  (DatabaseCatalog/open base gc))
+(defmethod ig/init-key :xtdb/db-catalog [_ {:keys [^NodeBase base]}]
+  (DatabaseCatalog/open base))
 
 (defmethod ig/halt-key! :xtdb/db-catalog [_ db-cat]
   (util/close db-cat))

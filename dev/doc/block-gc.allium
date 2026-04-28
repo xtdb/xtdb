@@ -1,0 +1,329 @@
+-- allium: 3
+-- block-gc.allium
+--
+-- Garbage collection of superseded block-catalog and per-table block files
+-- for one database.
+--
+-- Block files (`blocks/b{idx}.binpb`) and per-table block files
+-- (`tables/{table}/blocks/b{idx}.binpb`) are snapshots of catalog state at a
+-- given block index. They are consumed only at node startup or catch-up, to
+-- hydrate the in-memory catalogs (BlockCatalog.open, load-tries in
+-- trie_catalog.clj). Followers do not reference them during online query
+-- execution, so a concurrent delete by the leader cannot break a running
+-- read path. As a result this collector needs NO replica-log coordination —
+-- the leader just DELETEs its garbage and moves on.
+--
+-- Per-database, leader-only, signal-driven. Same lifecycle and trigger model
+-- as Trie GC (see gc.allium): constructed when the LeaderSystem opens,
+-- closed when it closes, signalled at every block boundary, awaitable for
+-- tests and admin pokes.
+--
+-- See:
+--   garbage_collector/BlockGarbageCollector.kt
+--   indexer/LeaderLogProcessor.kt (blockGc.signal in finishBlock, close in close)
+--   indexer/LogProcessor.kt (gcAll)
+--   api/GarbageCollectorConfig.kt
+
+use "./db.allium" as db
+
+------------------------------------------------------------
+-- Given
+------------------------------------------------------------
+
+given {
+    database: db/Database
+    log_processor: db/LogProcessor
+    block_catalog: db/BlockCatalog
+    block_gc: BlockGarbageCollector
+}
+
+------------------------------------------------------------
+-- Entities
+------------------------------------------------------------
+
+-- ObjectStore (durable key-value storage owning block files at
+-- `blocks/b{idx}.binpb` and per-table block files at
+-- `tables/{table}/blocks/b{idx}.binpb`; deletes are idempotent) is reached
+-- via the ObjectStoreDelete deferred specification.
+
+
+entity BlockGarbageCollector {
+    -- Lifetime mirrors TrieGarbageCollector (see gc.allium): one per
+    -- (database, leader-system) pair, owned by the LeaderLogProcessor. Loop
+    -- structure (signal channel + await channel + drain-after-cycle
+    -- semantics) is identical — every awaitNoGarbage caller sees a cycle
+    -- that started at or after their suspension. See BlockGarbageCollector.kt.
+    enabled: Boolean              -- gates the auto-signal from finishBlock; awaitNoGarbage is unaffected
+    blocks_to_keep: Integer
+
+    has_pending_signal: Boolean
+    pending_awaiters: List<Awaiter>
+
+    is_running: Boolean
+
+    -- Derived: the loop body fires whenever either channel has work.
+    has_work: has_pending_signal or pending_awaiters.count > 0
+}
+
+value Awaiter {
+    -- A single suspended caller of awaitNoGarbage. Resolved (or cancelled) by
+    -- the GC loop after a cycle that started at or after the call.
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- See: api/GarbageCollectorConfig.kt
+    -- Defaults match the implementation. `enabled` is opt-in for now while
+    -- the leader-only flow gets some real-world miles.
+    enabled: Boolean = false
+    blocks_to_keep: Integer = 10
+}
+
+------------------------------------------------------------
+-- Rules: Lifecycle
+------------------------------------------------------------
+
+-- The block GC's lifetime is bound to the LeaderSystem: constructed when the
+-- log processor enters a leader mode (Leader or ExternalSourceLeader, see
+-- db.allium: TransitionToLeader, openLeaderSystem) and closed when it leaves.
+
+rule LeaderOpensBlockGc {
+    -- See: indexer/LeaderLogProcessor.kt (init)
+    when: lp: db/LogProcessor.mode becomes Leader
+
+    ensures:
+        BlockGarbageCollector.created(
+            enabled: config.enabled,
+            blocks_to_keep: config.blocks_to_keep,
+            has_pending_signal: false,
+            is_running: true
+        )
+}
+
+rule ExternalSourceLeaderOpensBlockGc {
+    -- See: indexer/LeaderLogProcessor.kt (init), database/Database.kt
+    when: lp: db/LogProcessor.mode becomes ExternalSourceLeader
+
+    ensures:
+        BlockGarbageCollector.created(
+            enabled: config.enabled,
+            blocks_to_keep: config.blocks_to_keep,
+            has_pending_signal: false,
+            is_running: true
+        )
+}
+
+rule LeaderClosesBlockGc {
+    -- Cancels the GC loop. In-flight DELETEs are cancelled; pending awaiters
+    -- have their deferreds cancelled.
+    -- See: indexer/LeaderLogProcessor.kt (close), BlockGarbageCollector.close
+    when: lp: db/LogProcessor.mode transitions_to Follower
+    requires: block_gc.is_running
+
+    ensures:
+        block_gc.is_running = false
+        for awaiter in block_gc.pending_awaiters:
+            CancelAwaiter(awaiter)
+}
+
+------------------------------------------------------------
+-- Rules: Triggering
+------------------------------------------------------------
+
+-- Same two-channel pattern as TrieGarbageCollector (see gc.allium for the
+-- detailed rationale):
+--
+--   `signal()`           — fire-and-forget, conflated. Used by finishBlock.
+--                          Block boundaries are the only moments where new
+--                          block-file garbage appears, so this is the natural
+--                          trigger; no periodic timer needed.
+--
+--   `awaitNoGarbage()`   — suspending, UNLIMITED queue. Used by
+--                          Database.gcAll for tests and admin pokes; bypasses
+--                          the `enabled` gate.
+
+rule LeaderFinishBlockSignalsBlockGc {
+    -- Auto-poke from the leader's block-boundary path. Bursts of block
+    -- finishes coalesce because the signal channel is conflated.
+    -- See: LeaderLogProcessor.finishBlock (`blockGc.signal()`).
+    --
+    -- The `enabled` gate lives inside the loop's `select` — `signal()` always
+    -- enqueues, but the loop only listens to the signal channel when enabled.
+    --
+    -- Chains from db.allium's LeaderFinishesBlock trigger emission.
+    when: LeaderFinishesBlock(latest_processed_msg_id)
+    requires: block_gc.enabled
+    requires: block_gc.is_running
+
+    ensures:
+        block_gc.has_pending_signal = true
+}
+
+rule AdminTriggersBlockGc {
+    -- Database.gcAll → LogProcessor.gcAll →
+    --   blockGc.awaitNoGarbageBlocking(); trieGc.awaitNoGarbageBlocking()
+    -- Bypasses `enabled`. See LogProcessor.gcAll.
+    when: AdminAwaitsNoBlockGarbage(caller, database)
+    requires: block_gc.is_running
+
+    ensures:
+        let awaiter = Awaiter.created()
+        block_gc.pending_awaiters.add(awaiter)
+        AwaiterSuspends(awaiter)
+}
+
+------------------------------------------------------------
+-- Rules: Cycle execution
+------------------------------------------------------------
+
+rule BlockGcLoopRunsCycle {
+    -- The loop body. Identical structural guarantees to TrieGarbageCollector
+    -- (see gc.allium: TrieGcLoopRunsCycle): every awaiter sees a cycle that
+    -- started post-arrival; awaiters never get stranded by a crashing cycle.
+    when: gc: BlockGarbageCollector.has_work
+    requires: block_gc.is_running
+
+    ensures:
+        GarbageCollectBlocks()
+        for awaiter in block_gc.pending_awaiters:
+            CompleteAwaiter(awaiter)
+        block_gc.has_pending_signal = false
+        for awaiter in block_gc.pending_awaiters:
+            block_gc.pending_awaiters.remove(awaiter)
+}
+
+rule GarbageCollectBlocks {
+    -- Run one cycle: drop stale top-level block files, then for each known
+    -- table drop its stale per-table block files. Both passes are bounded by
+    -- `tableParallelism` (concurrent table workers) and `deleteParallelism`
+    -- (DELETEs in flight across the cycle); these are out-of-spec
+    -- implementation parameters (see BlockGarbageCollector.kt).
+    --
+    -- The currently active block (block_catalog.current_block_index) is never
+    -- deleted — preserved by `is_garbage`'s `it != latestBlockIndex` clause.
+    --
+    -- A `blocks_to_keep = 0` configuration is treated as a programming error.
+    -- The implementation deliberately runs the top-level sweep BEFORE the
+    -- check so even in that case every non-current block gets deleted from
+    -- top-level — a behaviour `BlockGarbageCollectorTest` exercises — and
+    -- THEN the check fires before doing the per-table sweep, surfacing the
+    -- misconfig.
+    when: GarbageCollectBlocks()
+
+    -- If the leader has never produced a block, there's nothing to GC.
+    requires: block_catalog.current_block_index != null
+
+    ensures:
+        DeleteGarbage(top_level_block_files())
+
+        -- Misconfig surface. The top-level sweep above has already run.
+        require_or_fail(config.blocks_to_keep >= 1)
+
+        for table in block_catalog.all_tables:
+            DeleteGarbage(table_block_files(table))
+}
+
+rule DeleteGarbageRule {
+    -- Per source path-set: keep only files older than the current block by
+    -- more than `blocks_to_keep`, never the current block itself, then DELETE.
+    -- DELETEs are idempotent — a re-DELETE on a 404 is fine.
+    when: DeleteGarbage(paths)
+
+    let latest_block_index = block_catalog.current_block_index
+
+    ensures:
+        for path in paths
+            where parse_block_index(path) != null
+              and parse_block_index(path) != latest_block_index
+              and parse_block_index(path) <= latest_block_index - block_gc.blocks_to_keep:
+            ObjectStoreDelete(path)
+}
+
+------------------------------------------------------------
+-- Contracts
+------------------------------------------------------------
+
+contract BlockGcLeaderOnly {
+    -- Obligations on the LogProcessor that hosts the block GC. These can't
+    -- be expressed as single-snapshot invariants over entity state — they
+    -- are about who runs the collector and what it must never delete.
+
+    @invariant LeaderOnly
+        -- BlockGarbageCollector instances exist only inside a LeaderSystem;
+        -- only one node is leader for a given database at a time. Followers
+        -- never DELETE block files.
+
+    @invariant CurrentBlockNeverDeleted
+        -- The block at block_catalog.current_block_index is never DELETEd by
+        -- this collector, even if `blocks_to_keep` is misconfigured.
+
+    @invariant NoReplicaLogCoordination
+        -- Block-file GC produces no replica-log messages. Block files are
+        -- consumed only at startup/catch-up, not during online query
+        -- execution, so concurrent leader-side DELETE cannot affect any
+        -- follower's read path. Contrast with trie GC (gc.allium), which
+        -- must publish TriesDeleted to keep follower trie catalogs in sync
+        -- with on-disk reality.
+}
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor AdminActor {
+    -- The admin/test entry point for gcAll. Any client invoking the admin
+    -- API qualifies.
+    identified_by: db/Client where true
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface BlockGcAdmin {
+    -- Admin/test entry point. Reached via Database.gcAll (which awaits both
+    -- block GC and trie GC).
+    facing caller: AdminActor
+
+    context db: db/Database
+
+    provides:
+        AdminAwaitsNoBlockGarbage(caller, db)
+
+    contracts:
+        demands BlockGcLeaderOnly
+
+    @guarantee AwaitsFreshCycle
+        -- The caller is unblocked only after a block GC cycle that started
+        -- at or after their call has completed.
+
+    @guarantee BypassesEnabledFlag
+        -- AdminAwaitsNoBlockGarbage runs a cycle regardless of config.enabled.
+        -- The flag gates only the auto-signal from finishBlock.
+
+    @guarantee CycleAwaiterFairness
+        -- Every awaitNoGarbage caller is resumed (or cancelled) by exactly
+        -- one cycle whose start time post-dates the call.
+}
+
+-- Black box helpers used in rule expressions (resolved by the implementation,
+-- not modelled in this spec):
+--   top_level_block_files()       — enumerate ObjectStore `blocks/b*.binpb`
+--                                   (BlockGarbageCollector.kt)
+--   table_block_files(table)      — enumerate `tables/{table}/blocks/b*.binpb`
+--                                   (BlockGarbageCollector.kt)
+--   parse_block_index(path)       — decode lex-hex block index from a path
+--                                   (storage/PathTools.kt)
+--   require_or_fail(cond)         — assertion that throws on false
+--   ObjectStoreDelete(path)       — DELETE one key (storage/ObjectStore.kt)
+
+------------------------------------------------------------
+-- Open Questions
+------------------------------------------------------------
+
+open question "Per-table sweep enumerates ObjectStore directories per table. On a database with thousands of tables this scales linearly with table count per cycle. Earlier versions sampled at most 100 tables per cycle (randomised) — that cap is gone in the current implementation. Fine for now; revisit if table counts grow."
+
+open question "Block GC has no replica-log coordination on the assumption that block files are consumed only at startup/catch-up. If a future feature ever causes a follower to read a block file online (e.g. for cross-block range scans, or for some new replication mode), this assumption breaks silently. Worth marking the assumption load-bearing in BlockCatalog/BufferPool so a future change can spot it."

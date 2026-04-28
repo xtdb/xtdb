@@ -31,8 +31,7 @@ import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.garbage_collector.GarbageCollector
-import xtdb.garbage_collector.GarbageCollectorMockDriver
+import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
@@ -56,7 +55,7 @@ data class MockDatabase(
     val blockCatalog: BlockCatalog,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
-    val garbageCollector: GarbageCollector.ForDatabase,
+    val garbageCollector: TrieGarbageCollector,
 ) {
     fun close() {
         garbageCollector.close()
@@ -106,7 +105,6 @@ class NodeSimulationTest : SimulationTestBase() {
 
         val jobCalculator = createJobCalculator()
         compactorDriver = CompactorMockDriver(dispatcher, currentSeed, CompactorDriverConfig())
-        val gcDriver = GarbageCollectorMockDriver()
         allocator = RootAllocator()
 
         // Create a single shared buffer pool for all systems
@@ -119,7 +117,18 @@ class NodeSimulationTest : SimulationTestBase() {
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(-1))
-            val garbageCollector = GarbageCollector.ForDatabaseImpl(sharedBufferPool, dbState, gcDriver, 2, garbageLifetime, Duration.ofSeconds(30), false, dispatcher)
+            val garbageCollector = TrieGarbageCollector(
+                sharedBufferPool, dbState,
+                commitTriesDeleted = { tableName, trieKeys ->
+                    // No replica log in the mock — apply the catalog mutation directly so the
+                    // simulation's view of the catalog still converges as the test asserts.
+                    trieCatalog.deleteTries(tableName, trieKeys)
+                },
+                blocksToKeep = 2,
+                garbageLifetime = garbageLifetime,
+                enabled = false,
+                dispatcher = dispatcher,
+            )
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
         }
     }

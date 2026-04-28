@@ -52,6 +52,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.NoOp -> false
+            is ReplicaMessage.TriesDeleted -> false
         }
 
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
@@ -120,6 +121,10 @@ class TransitionLogProcessor(
             }
 
             is ReplicaMessage.NoOp -> Unit
+
+            is ReplicaMessage.TriesDeleted -> {
+                trieCatalog.deleteTries(TableRef.parse(dbState.name, msg.tableName), msg.trieKeys)
+            }
         }
     }
 

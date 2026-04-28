@@ -25,7 +25,6 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
-import xtdb.garbage_collector.GarbageCollector
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
 import xtdb.error.Incorrect
@@ -60,7 +59,6 @@ class Database(
     val watchers: Watchers,
     private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
-    val gcOrNull: GarbageCollector.ForDatabase? = null,
     private val job: Job? = null,
     private val processor: AutoCloseable? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
@@ -106,7 +104,7 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         job?.let { runBlocking { it.cancelAndJoin() } }
-        listOf(processor, compactorOrNull, gcOrNull, queryState, storage, allocator).closeAll()
+        listOf(processor, compactorOrNull, queryState, storage, allocator).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -142,6 +140,15 @@ class Database(
         sourceLog.appendMessage(SourceMessage.DetachDatabase(dbName))
     }
 
+    /**
+     * Run one cycle of every garbage collector on the leader (block + trie), waiting for both.
+     * No-op on non-leader nodes — GC only runs on the leader for a database.
+     * Intended for tests and manual admin pokes; bypasses the `enabled` flag.
+     */
+    fun gcAll() {
+        (processor as? LogProcessor)?.gcAll()
+    }
+
     companion object {
         @JvmStatic
         fun open(
@@ -150,7 +157,6 @@ class Database(
             dbConfig: Config,
             indexer: Indexer,
             compactor: Compactor,
-            gc: GarbageCollector,
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
@@ -173,8 +179,6 @@ class Database(
                 if (readOnly) Compactor.NOOP.openForDatabase(allocator, storage, state, watchers)
                 else compactor.openForDatabase(allocator, storage, state, watchers)
             }
-
-            val gcForDb = open { gc.openForDatabase(storage.bufferPool, state) }
 
             var processor: AutoCloseable? = null
             val job = Job()
@@ -276,7 +280,6 @@ class Database(
                 watchers = watchers,
                 meterRegistry = meterRegistry,
                 compactorOrNull = compactorForDb,
-                gcOrNull = gcForDb,
                 job = job,
                 processor = processor,
                 registeredGauges = gauges,

@@ -198,4 +198,15 @@ class LogProcessor(
     override fun close() {
         sys.close()
     }
+
+    /**
+     * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
+     * both. No-op on follower systems — GC only runs on the leader. Bypasses the collectors'
+     * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
+     */
+    fun gcAll() {
+        val proc = (sys as? LeaderSystem)?.proc as? LeaderLogProcessor ?: return
+        proc.blockGc.awaitNoGarbageBlocking()
+        proc.trieGc.awaitNoGarbageBlocking()
+    }
 }
