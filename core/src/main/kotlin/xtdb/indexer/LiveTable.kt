@@ -38,7 +38,7 @@ class LiveTable @JvmOverloads constructor(
     private val opVec = liveRelation["op"]
 
     private val trieMetadataCalculator = TrieMetadataCalculator(
-        iidVec, validFromVec, validToVec, systemFromVec
+        validFromVec, validToVec, systemFromVec
     )
 
     private val hllCalculator = HllCalculator()

@@ -24,6 +24,5 @@
       :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-      :row-count 2,
-      :iid-bloom [218706493 10]}}],
+      :row-count 2}}],
    :max-block-idx 0}]}

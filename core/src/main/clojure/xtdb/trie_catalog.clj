@@ -6,11 +6,9 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import [clojure.lang MapEntry]
-           [java.nio ByteBuffer]
            [java.time Instant LocalDate ZoneOffset]
            [java.util Map]
            [java.util.concurrent ConcurrentHashMap]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            xtdb.catalog.BlockCatalog
            (xtdb.log.proto TemporalMetadata TrieDetails TrieMetadata)
            (xtdb.segment Segment$PageMeta)
@@ -372,8 +370,7 @@
        :max-valid-to (time/micros->instant (.getMaxValidTo temporal-metadata))
        :min-system-from (time/micros->instant (.getMinSystemFrom temporal-metadata))
        :max-system-from (time/micros->instant (.getMaxSystemFrom temporal-metadata))
-       :row-count (.getRowCount trie-metadata)
-       :iid-bloom (ImmutableRoaringBitmap. (ByteBuffer/wrap (.toByteArray (.getIidBloom trie-metadata))))})))
+       :row-count (.getRowCount trie-metadata)})))
 
 (defn compacted-trie-keys [{:keys [tries]}]
   (for [[k tries] tries

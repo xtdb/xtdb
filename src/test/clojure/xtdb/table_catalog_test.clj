@@ -13,12 +13,8 @@
            [java.time Instant]
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
-           [xtdb.arrow VectorReader]
            (xtdb.block.proto TableBlock)
-           [xtdb.block.proto TableBlock]
-           [xtdb.bloom BloomUtils]
            (xtdb.log.proto TrieDetails)
-           [xtdb.log.proto TrieDetails]
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
@@ -27,11 +23,6 @@
   (cond-> {:trie-key (.getTrieKey trie)
            :data-file-size (.getDataFileSize trie)}
     (.hasTrieMetadata trie) (assoc :trie-metadata (trie-cat/<-trie-metadata (.getTrieMetadata trie)))))
-
-(defn- ->singleton-rdr [v]
-  (reify VectorReader
-    (hashCode [_ _ hasher]
-      (.hash hasher (util/->iid v)))))
 
 (deftest current-tries-on-finish-block
   (let [node-dir (util/->path "target/table-catalog-test/current-tries-on-finish-block")]
@@ -47,8 +38,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/flush-block! node)
 
-        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4415)
-                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4557)]
+        (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4353)
+                  (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4435)]
                  (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
@@ -65,8 +56,7 @@
                                  (map trie-details->edn)
                                  ;; they are sorted by block index descending
                                  reverse)
-              trie-metas (map :trie-metadata current-tries)
-              [trie1-bloom _trie2-bloom] (map :iid-bloom trie-metas)]
+              trie-metas (map :trie-metadata current-tries)]
 
           (t/is (= 1 (-> partitions first :max-block-idx)))
 
@@ -88,10 +78,7 @@
                      :min-system-from #xt/instant "2020-01-02T00:00:00Z",
                      :max-system-from #xt/instant "2020-01-02T00:00:00Z",
                      :row-count 1}]
-                   (map #(dissoc % :iid-bloom) trie-metas)))
-
-          (t/is (true? (BloomUtils/contains trie1-bloom (BloomUtils/bloomHashes (->singleton-rdr 1) 0))))
-          (t/is (false? (BloomUtils/contains trie1-bloom (BloomUtils/bloomHashes (->singleton-rdr 2) 0))))
+                   trie-metas))
 
           (t/is (<= 0.99 (HyperLogLog/estimate (get hlls1 "_id")) 1.01))
           (t/is (<= 1.99 (HyperLogLog/estimate (get hlls2 "_id")) 2.01)))

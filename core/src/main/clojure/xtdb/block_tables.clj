@@ -235,7 +235,7 @@
                              xtdb.log.proto.TrieState/NASCENT :nascent
                              xtdb.log.proto.TrieState/GARBAGE :garbage)))
       "row_count" (:row-count trie-meta)
-      "temporal_metadata" (some-> trie-meta (dissoc :row-count :iid-bloom) not-empty pr-str)})))
+      "temporal_metadata" (some-> trie-meta (dissoc :row-count) not-empty pr-str)})))
 
 (defn- ->table-block-file-tries-cursor
   [^Database db ^BufferAllocator allocator col-names col-preds selects schema args]

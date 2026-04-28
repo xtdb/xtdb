@@ -4,7 +4,6 @@
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import [java.nio.file Files]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
            (xtdb.util HyperLogLog)))
@@ -23,8 +22,7 @@
                                               (fn [^TrieDetails trie-details]
                                                 {:trie-key (.getTrieKey trie-details)
                                                  :data-file-size (.getDataFileSize trie-details)
-                                                 :trie-metadata (some-> (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))
-                                                                        (update :iid-bloom (juxt hash #(.getCardinality ^ImmutableRoaringBitmap %))))})))))))))
+                                                 :trie-metadata (trie-cat/<-trie-metadata (.getTrieMetadata trie-details))})))))))))
 
 (defn read-table-block-file
   "Reads a TableBlock protobuf file (.binpb) and returns a parsed map representation."

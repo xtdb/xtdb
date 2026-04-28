@@ -421,9 +421,7 @@
                                          :row-count 1}}
                    (->> tries
                         (filter #(str/starts-with? (:trie-key %) "l01"))
-                        (into {} (map (juxt :trie-key
-                                            (fn [{:keys [trie-metadata]}]
-                                              (dissoc trie-metadata :iid-bloom)))))))))))))
+                        (into {} (map (juxt :trie-key :trie-metadata)))))))))))
 
 (t/deftest different-recency-partitioning
   (binding [c/*recency-partition* RecencyPartition/YEAR]

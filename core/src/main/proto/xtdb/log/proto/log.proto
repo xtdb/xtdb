@@ -61,6 +61,8 @@ message TemporalMetadata {
 message TrieMetadata {
     TemporalMetadata temporal_metadata = 1;
     int64 row_count = 2 [default = 0];
+    // deprecated, see #5355: never consulted at query time;
+    // retained for backwards compatibility with existing block files.
     bytes iid_bloom = 8;
 }
 

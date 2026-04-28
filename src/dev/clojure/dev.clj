@@ -18,7 +18,6 @@
            [java.util List]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap
            (xtdb.arrow Relation Vector)
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
@@ -180,10 +179,7 @@
                        (mapv (fn [^TrieDetails td]
                                {:trie-key (.getTrieKey td)
                                 :trie-meta (some-> (.getTrieMetadata td)
-                                                   (trie-cat/<-trie-metadata)
-                                                   (update :iid-bloom
-                                                           (fn [^ImmutableRoaringBitmap bloom]
-                                                             (some-> bloom .serializedSizeInBytes))))}))))))))
+                                                   (trie-cat/<-trie-metadata))}))))))))
 
 (comment
   (read-table-block-file "/home/james/tmp/readings-bench/objects/v06" "public/readings" 0x213))

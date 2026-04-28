@@ -16,8 +16,7 @@
     :max-valid-to #xt/instant "+294247-01-10T04:00:54.775807Z",
     :min-system-from #xt/instant "2020-01-01T00:00:00Z",
     :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-    :row-count 6,
-    :iid-bloom [788818467 30]}}],
+    :row-count 6}}],
  :hlls
  {"_id" [-1707429676 6.01764709272061],
   "list" [-791736731 3.004403133222472],

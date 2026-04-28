@@ -70,7 +70,7 @@ class MetadataFileWriter(
     private var pageIdx = 0
 
     private val trieMetaCalc =
-        if (writeTrieMetadata) TrieMetadataCalculator(iidVec, validFromVec, validToVec, systemFromVec) else null
+        if (writeTrieMetadata) TrieMetadataCalculator(validFromVec, validToVec, systemFromVec) else null
 
     fun writeNull(): RowIndex {
         val pos = nodeWtr.valueCount

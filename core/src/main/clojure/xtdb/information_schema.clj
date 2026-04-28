@@ -345,7 +345,7 @@
         :let [{:keys [row-count] :as trie-meta} (some-> trie-metadata trie-cat/<-trie-metadata)]]
     {:schema-name (.getSchemaName table), :table-name (.getTableName table)
      :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
-     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count :iid-bloom))}))
+     :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count))}))
 
 (defn live-tables [^Snapshot snap]
   (for [^TableRef table (.getTables snap)

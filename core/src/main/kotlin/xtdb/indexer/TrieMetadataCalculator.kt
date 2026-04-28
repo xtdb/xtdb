@@ -1,23 +1,16 @@
 package xtdb.indexer
 
-import com.google.protobuf.ByteString
-import org.roaringbitmap.RoaringBitmap
 import xtdb.arrow.VectorReader
-import xtdb.bloom.bloomHashes
-import xtdb.bloom.toByteBuffer
 import xtdb.log.proto.TemporalMetadata
 import xtdb.log.proto.TrieMetadata
-import xtdb.util.toByteArray
 
 class TrieMetadataCalculator(
-    private val iidRdr: VectorReader,
     private val validFromRdr: VectorReader,
     private val validToRdr: VectorReader,
     private val systemFromRdr: VectorReader
 ) {
 
     private var rowCount = 0L
-    private var iidBloom = RoaringBitmap()
     private val temporalBuilder = TemporalMetadata.newBuilder()
 
     fun update(startPos: Int, endPos: Int) {
@@ -37,15 +30,12 @@ class TrieMetadataCalculator(
                 minSystemFrom = minOf(minSystemFrom, systemFrom)
                 maxSystemFrom = maxOf(maxSystemFrom, systemFrom)
             }
-
-            iidBloom.add(*bloomHashes(iidRdr, i))
         }
     }
 
     fun build(): TrieMetadata =
         TrieMetadata.newBuilder()
             .setTemporalMetadata(temporalBuilder.build())
-            .setIidBloom(ByteString.copyFrom(iidBloom.toByteBuffer().toByteArray()))
             .setRowCount(rowCount)
             .build()
 }

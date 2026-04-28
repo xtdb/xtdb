@@ -14,8 +14,7 @@
       :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
       :min-system-from #xt/instant "2020-01-02T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-      :row-count 1,
-      :iid-bloom [314116840 5]}}
+      :row-count 1}}
     {:trie-key "l00-rc-b00",
      :data-file-size 1918,
      :trie-metadata nil}],
@@ -32,8 +31,7 @@
       :max-valid-to #xt/instant "2011-01-01T00:00:00Z",
       :min-system-from #xt/instant "2020-01-01T00:00:00Z",
       :max-system-from #xt/instant "2020-01-01T00:00:00Z",
-      :row-count 1,
-      :iid-bloom [-2050569905 5]}}],
+      :row-count 1}}],
    :max-block-idx 0,
    :recency #xt/date "2011-01-03"}
   {:level 1,
