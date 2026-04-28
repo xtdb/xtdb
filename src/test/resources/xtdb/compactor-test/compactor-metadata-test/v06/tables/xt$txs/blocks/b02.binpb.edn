@@ -12,14 +12,7 @@
   "user_metadata" [1743287434 1.0004885993744506],
   "error" [1743287434 1.0004885993744506]},
  :partitions
- [{:level 0,
-   :part [],
-   :tries
-   [{:trie-key "l00-rc-b01", :data-file-size 2894, :trie-metadata nil}
-    {:trie-key "l00-rc-b00",
-     :data-file-size 2894,
-     :trie-metadata nil}],
-   :max-block-idx 1}
+ [{:level 0, :part [], :tries [], :max-block-idx 1}
   {:level 1,
    :part [],
    :tries

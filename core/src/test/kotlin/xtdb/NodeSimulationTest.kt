@@ -564,14 +564,17 @@ class NodeSimulationTest : SimulationTestBase() {
         val l1Count = triesInCatalog.prefix("l01-rc-").size
         val l2Count = triesInCatalog.prefix("l02-rc-").size
         val l3Count = triesInCatalog.prefix("l03-rc-").size
-        assertEquals(16, l0Count, "L0 tries should still be present in catalog")
+        assertEquals(0, l0Count, "L0 entries leave the catalog when superseded by L1Cs (their files stay on disk)")
         assertEquals(0, l1Count, "L1 tries should be fully compacted and garbage collected")
         assertEquals(0, l2Count, "L2 tries should be fully compacted and garbage collected")
         assertEquals(16, l3Count, "Should have at least 16 L3 tries after cascading compaction")
 
-        val triesInBufferPool = sharedBufferPool.listTrieNames(table)
-        assertEquals(triesInCatalog.toSet(), triesInBufferPool.toSet(), "Buffer pool should match catalog after compaction and GC")
-
+        // Buffer pool keeps L0 files as the recovery substrate for `reset-compactor!`,
+        // even though the catalog has stopped tracking them. So the buffer pool has
+        // 16 L0s + 16 L3s, the catalog has just the L3s.
+        val triesInBufferPool = sharedBufferPool.listTrieNames(table).toSet()
+        assertEquals(l0Tries.toSet() + triesInCatalog.toSet(), triesInBufferPool,
+                     "Buffer pool retains L0 files plus whatever's in the catalog")
     }
 
     @RepeatableSimulationTest
@@ -627,7 +630,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val l0Count = triesInCatalog.prefix("l00-rc-").size
             val l3Count = triesInCatalog.prefix("l03-rc-").size
 
-            assertEquals(16, l0Count, "L0 tries should still be present in catalog")
+            assertEquals(0, l0Count, "L0 entries leave the catalog when superseded by L1Cs (their files stay on disk)")
             assertEquals(16, l3Count, "Should have at least 16 L3 tries after cascading compaction")
         }
 
@@ -648,15 +651,17 @@ class NodeSimulationTest : SimulationTestBase() {
         val l2Count = finalTries.count { it.startsWith("l02-rc-") }
         val l3Count = finalTries.count { it.startsWith("l03-rc-") }
 
-        assertEquals(16, l0Count, "L0 tries are never marked as garbage")
+        assertEquals(0, l0Count, "L0 entries leave the catalog when superseded by L1Cs (their files stay on disk)")
         assertEquals(0, l1Count, "L1 tries should be fully GCed after final pass")
         assertEquals(0, l2Count, "L2 tries should be fully GCed after final pass")
         assertEquals(16, l3Count, "Should have at 16 L3 tries after final GC")
 
-        // Verify buffer pool matches catalog
+        // Buffer pool keeps L0 files as the recovery substrate for `reset-compactor!`,
+        // even though the catalog has stopped tracking them. So the buffer pool has
+        // 16 L0s + 16 L3s, the catalog has just the L3s.
         val bufferPoolTries = sharedBufferPool.listTrieNames(table).toSet()
-        assertEquals(finalTries.size, bufferPoolTries.size, "Buffer pool trie count should match catalog")
-        assertEquals(finalTries, bufferPoolTries, "Buffer pool should match catalog")
+        assertEquals(l0Tries.toSet() + finalTries, bufferPoolTries,
+                     "Buffer pool retains L0 files plus whatever's in the catalog")
     }
 
     @RepeatableSimulationTest

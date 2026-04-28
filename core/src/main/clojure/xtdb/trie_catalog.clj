@@ -102,9 +102,14 @@
 (defprotocol PTrieCatalog
   (trie-state [trie-cat table])
 
-  (reset->l0! [trie-cat]
-    "DANGER: resets the trie-catalog back to L0,
-     use if compaction has gone awry, and you want to completely recompact."))
+  (reset->l0! [trie-cat table->l0-entries]
+    "DANGER: resets the trie-catalog back to L0, use if compaction has gone awry and you
+     want to completely recompact.
+
+     `table->l0-entries` is a `Map<TableRef, Seq<L0Entry>>`; entries are typically enumerated
+     from the object store by the caller (the catalog is no longer the authoritative source
+     for L0 files). Each L0Entry should at minimum have `:level 0`, `:block-idx`, `:trie-key`,
+     `:recency nil`, `:part []`."))
 
 (def ^:const branch-factor 4)
 
@@ -176,6 +181,16 @@
         (assoc :live (reduce disj live new-garbage))
         (assoc :garbage (into garbage new-garbage)))))
 
+(defn- drop-superseded-l0 [tries, ^long block-idx]
+  ;; L0 files become irrelevant to the catalog the moment they're superseded by an L1C —
+  ;; we keep them on the object store as a recovery substrate (see `reset-compactor!`),
+  ;; but tracking them in the catalog (live or garbage) serves no purpose, so drop outright.
+  (let [{:keys [live] :as tries} (or tries (empty-shared block-idx))
+        to-drop (filter (fn [{^long other-block-idx :block-idx}]
+                          (<= other-block-idx block-idx))
+                        live)]
+    (assoc tries :live (reduce disj live to-drop))))
+
 (defn- sibling-tries [table-tries, {:keys [^long level, recency, part]}]
   (let [pop-part (pop part)]
     (for [p (range branch-factor)]
@@ -234,8 +249,9 @@
                           ;; L1C files are levelled, so this supersedes any previous partial files
                           (update [1 nil []] insert-levelled-trie trie opts)
 
-                          ;; and supersede L0 files
-                          (update [0 nil []] supersede-by-block-idx block-idx opts))))
+                          ;; and drop the L0 entries it covers — the L0 files stay on the object
+                          ;; store as recovery substrate, but the catalog stops tracking them
+                          (update [0 nil []] drop-superseded-l0 block-idx))))
 
             (update :l1h-recencies dissoc block-idx)))
 
@@ -379,16 +395,17 @@
         {:keys [trie-key]} tries]
     trie-key))
 
-(defn reset->l0 [{:keys [tries]}]
-  ;; combine live & garbage (there should be no nascent)
-  (let [{:keys [live garbage]} (get tries [0 nil []])
-        l0-tries (concat live garbage)
-        live-tries (->> l0-tries
+(defn reset->l0 [l0-entries]
+  ;; Build a fresh table-cat state with the supplied L0 entries marked :live.
+  ;; All higher levels are wiped — they'll be rebuilt by compaction after the reset.
+  ;; The entries themselves come from the caller — at reset time, the catalog is no longer
+  ;; the authoritative list of L0 files; the object store is.
+  (let [live-tries (->> l0-entries
                         (map #(assoc % :state :live))
                         (into empty-trie-state-list))]
-
-    {:tries {[0 nil []] {:max-block-idx (:block-idx (first live-tries))
-                         :live live-tries}}
+    {:tries {[0 nil []] {:max-block-idx (or (:block-idx (first live-tries)) -1)
+                         :live live-tries
+                         :garbage empty-trie-state-list}}
      :l1h-recencies {}}))
 
 (defn new-trie-details? [^TrieDetails trie-details]
@@ -414,7 +431,7 @@
   (some? (:max-block-idx partition)))
 
 (defn- repair-l0-l1c-consistency
-  "If a live L1C exists, ensure all L0s with block-idx <= the L1C's max live block-idx are marked garbage.
+  "If a live L1C exists, drop any L0s with block-idx <= the L1C's max live block-idx.
    Repairs an inconsistency where L0 and L1C are both live at the same block-idx,
    caused by concurrent MW/SW operation — see #5395."
   [tries]
@@ -422,12 +439,14 @@
         l1c-max-live-block-idx (some-> (first l1c-live) :block-idx)]
     (cond-> tries
       l1c-max-live-block-idx
-      (update [0 nil []] supersede-by-block-idx l1c-max-live-block-idx {:as-of (Instant/now)}))))
+      (update [0 nil []] drop-superseded-l0 l1c-max-live-block-idx))))
 
-(defn partition->entry [{:keys [level recency part tries max-block-idx] :as _partition}]
+(defn partition->entry [{:keys [^long level recency part tries max-block-idx] :as _partition}]
   (MapEntry/create [level recency part]
                    (let [{:keys [live nascent garbage]} (group-by :state tries)]
-                     (-> {:garbage (into empty-trie-state-list garbage)
+                     (-> {;; L0 garbage entries are no longer tracked — drop any persisted
+                          ;; from older block files. The L0 files themselves stay on disk.
+                          :garbage (if (zero? level) empty-trie-state-list (into empty-trie-state-list garbage))
                           :live (into empty-trie-state-list live)
                           :nascent (into empty-trie-state-list nascent)}
                          (assoc :max-block-idx max-block-idx)))))
@@ -491,11 +510,14 @@
   PTrieCatalog
   (trie-state [_ table] (.get !table-cats table))
 
-  (reset->l0! [this]
-    (doseq [table (.getTables this)]
+  (reset->l0! [_ table->l0-entries]
+    ;; Caller supplies the full set of L0 entries per table — typically enumerated from the
+    ;; object store (see `xtdb.compactor.reset/reset-compactor!`). Each table named in the map
+    ;; has its catalog state reset to those L0s; higher levels are wiped.
+    (doseq [[table l0-entries] table->l0-entries]
       (.compute !table-cats table
-                (fn [_table table-cat]
-                  (reset->l0 table-cat))))))
+                (fn [_table _table-cat]
+                  (reset->l0 l0-entries))))))
 
 
 (defn load-tries ^java.util.Map [table->table-block file-size-target]

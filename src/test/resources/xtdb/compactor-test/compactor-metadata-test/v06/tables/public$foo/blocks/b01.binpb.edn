@@ -14,10 +14,7 @@
       :max-valid-to #xt/instant "2016-01-01T00:00:00Z",
       :min-system-from #xt/instant "2020-01-02T00:00:00Z",
       :max-system-from #xt/instant "2020-01-02T00:00:00Z",
-      :row-count 1}}
-    {:trie-key "l00-rc-b00",
-     :data-file-size 1918,
-     :trie-metadata nil}],
+      :row-count 1}}],
    :max-block-idx 1}
   {:level 1,
    :part [],

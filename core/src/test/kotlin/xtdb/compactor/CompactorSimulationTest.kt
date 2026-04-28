@@ -342,8 +342,10 @@ class CompactorSimulationTest : SimulationTestBase() {
             listOf("l01-rc-b00"),
             db.trieCatalog.listLiveAndNascentTrieKeys(docsTable),
         )
+        // L0 entries are dropped from the catalog when the L1C lands — they leave no
+        // :garbage trace behind, although the L0 files remain on the object store.
         assertEquals(
-            setOf("l00-rc-b00"),
+            emptySet<String>(),
             db.trieCatalog.listAllGarbageTrieKeys(docsTable),
         )
     }
@@ -378,9 +380,9 @@ class CompactorSimulationTest : SimulationTestBase() {
                 listOf("l01-rc-b02"),
                 db.trieCatalog.listLiveAndNascentTrieKeys(table)
             )
-            // 3 L0s garbage + 2 superseded L1Cs (b00, b01)
+            // L0s leave the catalog on supersession; only the 2 superseded L1Cs remain in :garbage
             assertEquals(
-                setOf("l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l01-rc-b00", "l01-rc-b01"),
+                setOf("l01-rc-b00", "l01-rc-b01"),
                 db.trieCatalog.listAllGarbageTrieKeys(table)
             )
 
@@ -401,12 +403,9 @@ class CompactorSimulationTest : SimulationTestBase() {
                 listOf("l01-rc-b05"),
                 db.trieCatalog.listLiveAndNascentTrieKeys(table)
             )
-            // 6 L0s garbage + 5 superseded L1Cs (b00-b04)
+            // L0s leave the catalog on supersession; only the 5 superseded L1Cs (b00-b04) remain in :garbage
             assertEquals(
-                setOf(
-                    "l00-rc-b00", "l00-rc-b01", "l00-rc-b02", "l00-rc-b03", "l00-rc-b04", "l00-rc-b05",
-                    "l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04",
-                ),
+                setOf("l01-rc-b00", "l01-rc-b01", "l01-rc-b02", "l01-rc-b03", "l01-rc-b04"),
                 db.trieCatalog.listAllGarbageTrieKeys(table)
             )
         }
@@ -431,7 +430,7 @@ class CompactorSimulationTest : SimulationTestBase() {
             val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
             val garbageTries = db.trieCatalog.listAllGarbageTrieKeys(docsTable)
             assertEquals(0, liveTries.prefix("l00-rc-").size)
-            assertTrue(garbageTries.any { it.startsWith("l00-rc-") }, "L0s should be in garbage")
+            assertTrue(garbageTries.none { it.startsWith("l00-rc-") }, "L0s leave the catalog on supersession; they never become :garbage")
             assertTrue(liveTries.prefix("l01-rc-").isNotEmpty(), "Some L1Cs should be live")
             assertTrue(liveTries.prefix("l02-rc-").isNotEmpty(), "Some L2Cs should be live")
         }
@@ -583,8 +582,8 @@ class CompactorSimulationTest : SimulationTestBase() {
             assertEquals(0, docsKeys.prefix("l01-rc-").size)
             assertEquals(0, docsKeys.prefix("l02-rc-").size)
             assertEquals(16, docsKeys.prefix("l03-rc-").size)
-            // 16 L0 + 16 L1C + 16 L2C all superseded
-            assertEquals(48, db.trieCatalog.listAllGarbageTrieKeys(docsTable).size)
+            // 16 L1C + 16 L2C superseded; L0s leave the catalog on supersession (no :garbage trace)
+            assertEquals(32, db.trieCatalog.listAllGarbageTrieKeys(docsTable).size)
             assertEquals(docsKeys.toSet(), usersKeys.toSet(), "Docs and Users tables should have identical trie keys")
             assertEquals(docsKeys.toSet(), ordersKeys.toSet(), "Docs and Orders tables should have identical trie keys")
         }
@@ -634,7 +633,8 @@ class CompactorSimulationTest : SimulationTestBase() {
             trieKeys.first(),
         )
         dbs.forEach { db ->
-            assertEquals(setOf("l00-rc-b00"), db.trieCatalog.listAllGarbageTrieKeys(docsTable))
+            // L0 entries leave the catalog when the L1C lands; no :garbage trace remains.
+            assertEquals(emptySet<String>(), db.trieCatalog.listAllGarbageTrieKeys(docsTable))
         }
     }
 

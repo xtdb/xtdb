@@ -400,7 +400,9 @@
                          :partitions
                          (mapcat :tries)
                          (into #{} (map table-test/trie-details->edn)))]
-          (t/is (= #{"l00-rc-b00" "l01-r20110103-b00" "l01-rc-b00" "l00-rc-b01" "l01-r20160104-b01" "l01-rc-b01"}
+          ;; L0 entries left the catalog when their L1Cs landed, so they don't appear in the
+          ;; persisted block file either — although the L0 .arrow files themselves remain on disk.
+          (t/is (= #{"l01-r20110103-b00" "l01-rc-b00" "l01-r20160104-b01" "l01-rc-b01"}
                    (into #{} (map :trie-key) tries)))
 
           (t/is (= {"l01-rc-b00" nil,

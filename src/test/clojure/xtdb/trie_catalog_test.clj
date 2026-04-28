@@ -15,6 +15,7 @@
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
+           (xtdb.trie Trie)
            (xtdb.trie_catalog TrieCatalog)
            (xtdb.table TableRef)))
 
@@ -372,6 +373,28 @@
   (TrieCatalog. (cat/load-tries table->table-block cat/*file-size-target*)
                 cat/*file-size-target*))
 
+(t/deftest test-startup-drops-persisted-l0-garbage
+  ;; Block files written before the "drop L0 on supersession" change may persist L0 entries
+  ;; in the :garbage state. partition->entry filters those out at load time, even when no
+  ;; L1C is present (so repair-l0-l1c-consistency doesn't run).
+  (let [->trie-details (partial trie/->trie-details #xt/table foo)
+        table-blocks {:partitions
+                      [{:level 0 :recency nil :part []
+                        :max-block-idx 1
+                        :tries [(->trie-details {:trie-key "l00-rc-b00" :data-file-size 10
+                                                 :state :garbage
+                                                 :garbage-as-of #xt/instant "2000-01-01T00:00:00Z"})
+                                (->trie-details {:trie-key "l00-rc-b01" :data-file-size 10 :state :live})]}]}
+        cat (trie-catalog-init {#xt/table foo table-blocks})
+        l0-state (get-in (cat/trie-state cat #xt/table foo) [:tries [0 nil []]])]
+
+    (t/is (= #{"l00-rc-b01"}
+             (into #{} (map :trie-key) (:live l0-state)))
+          "L0 b01 (live) is loaded")
+
+    (t/is (empty? (:garbage l0-state))
+          "L0 b00 (persisted as :garbage) is dropped at load time — no L1C needed to trigger repair")))
+
 (t/deftest test-trie-catalog-init-old-and-new-block-files-mixed-4664
   (let [->trie-details (partial trie/->trie-details #xt/table foo)
         old-table-blocks {:partitions
@@ -549,21 +572,18 @@
       (add-tries [["l00-rc-b01" 1] ["l01-rc-b01" 1]]
                  #xt/instant "2001-01-01T00:00:00Z")
 
-      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
-                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
-                ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
+      (t/is (= [["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
                 ["l01-rc-b01" :live nil]]
-               (all-tries)))
+               (all-tries))
+            "L0s superseded by L1C are dropped from the catalog outright; the L0 files
+             stay on the object store as the recovery substrate for `reset-compactor!`")
 
       (add-tries [["l00-rc-b02" 1] ["l00-rc-b03" 1]
                   ["l01-rc-b02" 2]
                   ["l02-rc-p0-b01" 4] ["l02-rc-p1-b01" 4] ["l02-rc-p2-b01" 4] ["l02-rc-p3-b01" 4]]
                  #xt/instant "2002-01-01T00:00:00Z")
 
-      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
-                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
-                ["l00-rc-b02" :garbage #xt/instant "2002-01-01T00:00:00Z"]
-                ["l00-rc-b03" :live nil]
+      (t/is (= [["l00-rc-b03" :live nil]
                 ["l01-rc-b00" :garbage #xt/instant "2001-01-01T00:00:00Z"]
                 ["l01-rc-b01" :garbage #xt/instant "2002-01-01T00:00:00Z"]
                 ["l01-rc-b02" :live nil]
@@ -579,10 +599,7 @@
 
       (delete-tries #{"l01-rc-b00" "l01-rc-b01"})
 
-      (t/is (= [["l00-rc-b00" :garbage #xt/instant "2000-01-01T00:00:00Z"]
-                ["l00-rc-b01" :garbage #xt/instant "2001-01-01T00:00:00Z"]
-                ["l00-rc-b02" :garbage #xt/instant "2002-01-01T00:00:00Z"]
-                ["l00-rc-b03" :live nil]
+      (t/is (= [["l00-rc-b03" :live nil]
                 ["l01-rc-b02" :live nil]
                 ["l02-rc-p0-b01" :live nil]
                 ["l02-rc-p1-b01" :live nil]
@@ -610,13 +627,10 @@
 
           (.gcAll db)
 
-          ;; we keep block 01 and 02
-          ;; the 01 latest-complete-tx is cutoff (no garbage lifetime), i.e. the level 1 block 01 remains as it is compacted later
-          (t/is (= ["l00-rc-b00"
-                    "l00-rc-b01"
-                    "l00-rc-b02"
-                    "l00-rc-b03"
-                    "l01-rc-b01"
+          ;; All L0s have been compacted into L1Cs. L0 supersession drops outright (no :garbage),
+          ;; so the catalog only sees the L1Cs — but the L0 files themselves stay on the object
+          ;; store as the recovery substrate for `reset-compactor!` (asserted below).
+          (t/is (= ["l01-rc-b01"
                     "l01-rc-b02"
                     "l01-rc-b03"]
                    (->> (cat/all-tries (cat/trie-state cat #xt/table foo))
@@ -624,7 +638,7 @@
 
           ;; `.gcAll` runs both block GC and trie GC. With `:blocks-to-keep 2`, block GC keeps
           ;; only the latest two per-table block files (b02, b03); trie GC leaves data/meta files
-          ;; alone here because all current tries are still live in the catalog.
+          ;; alone here — no non-L0 garbage in the catalog, and L0 files are explicitly preserved.
           (t/is (= ["tables/public$foo/blocks/b02.binpb"
                     "tables/public$foo/blocks/b03.binpb"
                     "tables/public$foo/data/l00-rc-b00.arrow"
@@ -656,10 +670,14 @@
     (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l01-rc-b02" "l01-rc-b03"}
              (set (cat/compacted-trie-keys table-trie-cat))))
 
-    (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03" "l00-rc-b04"}
-             (->> (cat/reset->l0 table-trie-cat)
-                  (cat/current-tries)
-                  (into #{} (map :trie-key)))))))
+    ;; reset->l0 is now a passive sink — the caller (xtdb.compactor.reset/reset-compactor!)
+    ;; enumerates L0 files from the object store and supplies them, since the catalog drops
+    ;; L0 entries on supersession and is no longer the authoritative list.
+    (let [l0-entries (map trie/parse-trie-key ["l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03" "l00-rc-b04"])]
+      (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03" "l00-rc-b04"}
+               (->> (cat/reset->l0 l0-entries)
+                    (cat/current-tries)
+                    (into #{} (map :trie-key))))))))
 
 (t/deftest max-block-index-always-set-test-5139
   (let [{:keys [tries] :as _table-trie-cat} (apply-msgs ["l02-r20200203-b00" 10])]
@@ -755,9 +773,9 @@
         (t/is (= #{"l01-rc-b00" "l01-rc-b01" "l02-rc-p0-b01"} garbage))
         (.deleteTries cat table garbage))
 
-      ;; Verify remaining tries
-      (t/is (= #{"l00-rc-b00" "l00-rc-b01"
-                 "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"
+      ;; Verify remaining tries — L0s left the catalog when L1Cs landed (no :garbage trace),
+      ;; so they don't reappear here even though their files still exist on the object store.
+      (t/is (= #{"l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"
                  "l03-rc-p00-b01" "l03-rc-p01-b01" "l03-rc-p02-b01" "l03-rc-p03-b01"}
                (trie-keys (cat/all-tries (cat/trie-state cat table))))
             "garbage tries are removed"))))
@@ -788,7 +806,10 @@
           (t/is (= [0 1] (map :block-idx blocks)))
           (t/is (= [[:table_a :table_b :txs] [:table_c :txs]] tables)))))))
 
-(t/deftest test-l0-blocks-includes-garbage
+(t/deftest test-reset-rebuilds-l0-from-object-store
+  ;; After compaction, the catalog has no L0 entries — they're dropped on supersession.
+  ;; reset->l0! is a passive sink: callers (xtdb.compactor.reset) enumerate L0s from the
+  ;; object store and pass them in. This exercises that flow at the unit level.
   (tu/with-tmp-dirs #{node-dir}
     (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
       (doseq [i (range 4)]
@@ -796,16 +817,57 @@
         (tu/flush-block! node))
       (c/compact-all! node #xt/duration "PT1S")
 
-      (let [trie-cat (.getTrieCatalog (db/primary-db node))
-            blocks (cat/l0-blocks trie-cat)]
+      (let [db (db/primary-db node)
+            bp (.getBufferPool db)
+            trie-cat (.getTrieCatalog db)
+            foo-state #(cat/trie-state trie-cat #xt/table foo)]
+
+        (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :live])))
+              "All L0s for foo have been compacted into an L1C — none remain in the catalog")
+        (t/is (empty? (->> (foo-state) :tries (get-in [[0 nil []] :garbage])))
+              "L0 supersession drops outright; no :garbage entries linger")
+
+        ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
+        ;; build minimal entries, hand them to reset->l0!.
+        (let [meta-dir (Trie/metaFileDir #xt/table foo)
+              l0-entries (->> (.listAllObjects bp meta-dir)
+                              (keep (fn [^ObjectStore$StoredObject obj]
+                                      (let [name (str (.getFileName ^Path (.getKey obj)))
+                                            trie-key (subs name 0 (.lastIndexOf name "."))]
+                                        (when-some [parsed (trie/parse-trie-key trie-key)]
+                                          (when (zero? ^long (:level parsed))
+                                            parsed))))))]
+          (t/is (= 4 (count l0-entries)) "All four L0 files still on disk")
+
+          (cat/reset->l0! trie-cat {#xt/table foo l0-entries})
+
+          (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"}
+                   (->> (cat/current-tries (foo-state))
+                        (into #{} (map :trie-key))))
+                "Catalog is now repopulated with the L0s enumerated from the object store"))))))
+
+(t/deftest test-l0-blocks-dropped-on-compaction
+  ;; L0 entries leave the catalog the moment they're superseded by an L1C — so `l0-blocks`
+  ;; reflects only un-compacted L0s. The L0 *files* remain on the object store as the
+  ;; recovery substrate for `reset-compactor!`, but the catalog stops tracking them.
+  (tu/with-tmp-dirs #{node-dir}
+    (with-open [node (tu/->local-node {:node-dir node-dir :compactor-threads 1})]
+      (doseq [i (range 4)]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id i}]])
+        (tu/flush-block! node))
+      (c/compact-all! node #xt/duration "PT1S")
+
+      (let [trie-cat (.getTrieCatalog (db/primary-db node))]
         (t/is (seq (cat/compacted-trie-keys (cat/trie-state trie-cat #xt/table foo)))
               "Compaction should have created non-L0 files")
-        (t/is (= 4 (count blocks))
-              "All L0 blocks should be visible even after compaction")))))
+        (t/is (empty? (->> (cat/l0-blocks trie-cat)
+                           (filter (fn [{:keys [tables]}]
+                                     (some #(= #xt/table foo (:table %)) tables)))))
+              "All L0s for foo have been compacted into an L1C — no L0 blocks remain in the catalog")))))
 
 (t/deftest test-repair-l0-l1c-consistency-5395
   (let [->trie-details (partial trie/->trie-details #xt/table foo)]
-    (t/testing "L0 and L1C both live at same block-idx — L0 should be repaired to garbage"
+    (t/testing "L0 and L1C both live at same block-idx — covered L0 should be dropped"
       (let [table-blocks {:partitions
                           [{:level 0 :recency nil :part []
                             :max-block-idx 2
@@ -821,7 +883,13 @@
         (t/is (= #{"l00-rc-b03" "l01-rc-b02"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into (sorted-set) (map :trie-key))))
-              "L0 b02 should be garbage (superseded by L1C b02), L0 b03 should remain live")))
+              "L0 b02 dropped (superseded by L1C b02); L0 b03 remains live")
+
+        (t/is (= #{}
+                 (->> (cat/l0-tries (cat/trie-state cat #xt/table foo))
+                      (filter (comp #{:garbage} :state))
+                      (into #{} (map :trie-key))))
+              "no L0 garbage entries — L0 supersession drops outright, not via :garbage")))
 
     (t/testing "no L1C — L0s should be unaffected"
       (let [table-blocks {:partitions

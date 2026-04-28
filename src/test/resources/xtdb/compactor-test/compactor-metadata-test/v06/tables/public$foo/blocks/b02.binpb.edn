@@ -2,14 +2,7 @@
  :fields {"_id" #xt/field {"_id" :i64}},
  :hlls {"_id" [-179776705 2.001955671862574]},
  :partitions
- [{:level 0,
-   :part [],
-   :tries
-   [{:trie-key "l00-rc-b01", :data-file-size 1918, :trie-metadata nil}
-    {:trie-key "l00-rc-b00",
-     :data-file-size 1918,
-     :trie-metadata nil}],
-   :max-block-idx 1}
+ [{:level 0, :part [], :tries [], :max-block-idx 1}
   {:level 1,
    :part [],
    :tries

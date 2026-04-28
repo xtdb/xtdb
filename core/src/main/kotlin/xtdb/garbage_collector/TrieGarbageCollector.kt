@@ -13,6 +13,7 @@ import xtdb.storage.BufferPool
 import xtdb.table.DatabaseName
 import xtdb.table.TableRef
 import xtdb.time.microsAsInstant
+import xtdb.trie.Trie
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
@@ -171,6 +172,13 @@ class TrieGarbageCollector(
             // deleting it last keeps the pair from ever transiently looking complete-but-empty.
             coroutineScope {
                 for (trieKey in chunk) {
+                    // Defence in depth: trieCatalog.garbageTries already filters L0 out — L0
+                    // files are the recovery substrate for `reset-compactor!` and must never
+                    // be deleted by GC. If anything ever flips that filter, we want to fail
+                    // loud here rather than silently nuke the recovery path.
+                    check(Trie.parseKey(trieKey).level != 0L) {
+                        "L0 trie keys must never reach GC deletion: $trieKey"
+                    }
                     launch(deleteDispatcher) {
                         val timer = meterRegistry?.let { Timer.start(it) }
                         bufferPool.deleteIfExists(tableName.dataFilePath(trieKey))

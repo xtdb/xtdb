@@ -99,8 +99,11 @@ object Trie {
             tablesDir.resolve("$schemaName$$tableName".replace(Regex("[./]"), "\\$"))
 
     @JvmStatic
+    fun TableRef.dataFileDir(): Path = tablePath.resolve("data")
+
+    @JvmStatic
     fun TableRef.dataFilePath(trieKey: TrieKey): Path =
-        tablePath.resolve("data").resolve("$trieKey.arrow")
+        dataFileDir().resolve("$trieKey.arrow")
 
     @JvmStatic
     fun TableRef.metaFileDir(): Path = tablePath.resolve("meta")

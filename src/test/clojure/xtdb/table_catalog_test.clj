@@ -93,7 +93,9 @@
 
           (tu/flush-block! node)
 
-          (t/is (= #{"l00-rc-b00" "l00-rc-b01" "l00-rc-b02" "l00-rc-b03"
+          ;; L0 entries are dropped from the catalog when their L1C lands. L0-b03 has no
+          ;; covering L1C yet, so it stays. The L0 *files* on the object store are kept.
+          (t/is (= #{"l00-rc-b03"
                      "l01-rc-b00" "l01-rc-b01" "l01-rc-b02"
                      "l02-rc-p0-b01" "l02-rc-p1-b01" "l02-rc-p2-b01" "l02-rc-p3-b01"}
                    (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b02.binpb"))
@@ -126,10 +128,9 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [bp (.getBufferPool (db/primary-db node))]
-        (t/is (= #{"l00-rc-b00"
-                   "l00-rc-b01"
-                   "l00-rc-b02"
-                   "l00-rc-b03"
+        ;; L0 entries are dropped from the catalog when their L1C lands. L0-b03 has no
+        ;; covering L1C yet, so it stays. The L0 *files* on the object store are kept.
+        (t/is (= #{"l00-rc-b03"
                    "l01-r20200101-b00"
                    "l01-rc-b00"
                    "l01-r20200102-b01"
