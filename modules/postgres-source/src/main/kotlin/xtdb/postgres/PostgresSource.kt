@@ -163,7 +163,10 @@ class PostgresSource(
         coroutineScope {
             val watcher = launch {
                 try { awaitCancellation() }
-                finally { runCatching { closeable.close() } }
+                finally {
+                    runCatching { closeable.close() }
+                        .onFailure { LOG.warn(it, "[$dbName] Failed to force-close $closeable on cancellation") }
+                }
             }
             try { block() }
             finally { watcher.cancel() }
