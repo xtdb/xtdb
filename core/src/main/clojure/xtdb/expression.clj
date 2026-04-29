@@ -2336,21 +2336,30 @@
                                               false
                                               (recur (inc ~n-sym)))))))))))}))
 
-(defn series [^long start, ^long end, ^long step]
-  (let [box (ValueBox.)]
+(defn series [^long start, ^long end, ^long step, inclusive?]
+  (let [box (ValueBox.)
+        end (long (if inclusive? (+ end (Long/signum step)) end))
+        size (Math/toIntExact (Math/max 0 (Math/ceilDiv (Math/subtractExact end start) step)))]
     (reify ListValueReader
-      (size [_]
-        (Math/max (int 0)
-                  (int (Math/ceil (/ (Math/subtractExact end start) step)))))
+      (size [_] size)
 
       (nth [_ idx]
         (doto box
           (.writeLong (+ start (* step idx))))))))
 
-(defmethod codegen-call [:generate_series :int :int :int] [_]
+(defn delegate-exclusive-default
+  "Delegates a 3-arg codegen-call to its 4-arg variant, defaulting inclusive? to false."
+  [expr]
+  (let [{:keys [->call-code] :as result} (codegen-call (update expr :arg-types conj (types/->type :bool)))]
+    (assoc result :->call-code (fn [args] (->call-code (conj (vec args) false))))))
+
+(defmethod codegen-call [:generate_series :int :int :int] [expr]
+  (delegate-exclusive-default expr))
+
+(defmethod codegen-call [:generate_series :int :int :int :bool] [_]
   {:return-type #xt/type [:list :i64]
-   :->call-code (fn [[start end step]]
-                  `(series (long ~start) (long ~end) (long ~step)))})
+   :->call-code (fn [[start end step inclusive?]]
+                  `(series (long ~start) (long ~end) (long ~step) (boolean ~inclusive?)))})
 
 (defmethod codegen-call [:== :set :set] [_]
   (throw (UnsupportedOperationException. "TODO: `==` on sets")))

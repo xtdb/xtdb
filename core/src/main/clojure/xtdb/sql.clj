@@ -25,7 +25,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlVisitor)
+           (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            xtdb.table.TableRef
            xtdb.util.StringUtil))
 
@@ -1244,6 +1244,11 @@
                             "PostgreSQL JSON operators currently only support string/integer literal field names"
                             {:obj-expr obj-expr :field-expr field-expr}))))
 
+(def ^:dynamic *generate-series-end-exclusive?*
+  ;; Pre-2.2 escape hatch: GENERATE_SERIES used to be end-exclusive, like RANGE.
+  ;; Set XTDB_GENERATE_SERIES_END_EXCLUSIVE=true to keep that behaviour while migrating queries to RANGE.
+  (some-> (System/getenv "XTDB_GENERATE_SERIES_END_EXCLUSIVE") Boolean/parseBoolean))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1826,10 +1831,13 @@
     (.accept (.generateSeries ctx) this))
 
   (visitGenerateSeries [this ctx]
-    (xt/template (generate_series ~(.accept (.seriesStart ctx) this)
-                                  ~(.accept (.seriesEnd ctx) this)
-                                  ~(or (some-> (.seriesStep ctx) (.accept this))
-                                       1))))
+    (let [inclusive? (and (not= SqlLexer/RANGE (.getType (.fn ctx)))
+                          (not *generate-series-end-exclusive?*))]
+      (xt/template (generate_series ~(.accept (.seriesStart ctx) this)
+                                    ~(.accept (.seriesEnd ctx) this)
+                                    ~(or (some-> (.seriesStep ctx) (.accept this))
+                                         1)
+                                    ~inclusive?))))
 
   (visitObjectExpr [this ctx] (.accept (.objectConstructor ctx) this))
 
