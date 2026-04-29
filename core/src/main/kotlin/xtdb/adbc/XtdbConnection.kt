@@ -18,19 +18,26 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ResultCursor
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
+import xtdb.arrow.withName
 import xtdb.database.DatabaseName
-import xtdb.table.TableRef
 import xtdb.query.PreparedQuery
+import xtdb.query.QueryOpts
+import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.nio.channels.Channels
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
 
@@ -44,27 +51,95 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
+        private var prepared: PreparedQuery? = null
+        // Arrow IPC bytes — allocator-agnostic, caller can close their VSR
+        // straight after bind. Cleared only by another bind() or close().
+        private var argBytes: ByteArray? = null
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
+            // New SQL invalidates both the compiled plan and any prior bind —
+            // the parameter shape can have changed.
+            this.prepared = null
+            this.argBytes = null
         }
 
-        override fun executeQuery(): QueryResult {
+        override fun prepare() {
             val sql = this.sql ?: error("SQL query not set")
-            val cursor = node.openSqlQuery(sql, dbName)
-            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
+            prepared = node.prepareSql(sql, dbName)
+        }
 
+        override fun getParameterSchema(): Schema {
+            val pq = prepared ?: error("call prepare() first")
+            // placeholder type until bind supplies real ones
+            return Schema(
+                (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
+            )
+        }
+
+        override fun bind(root: VectorSchemaRoot) {
+            argBytes = null
+            // External `$N` → planner-internal `?_N`, by position.
+            // `$N` is 0-indexed
+            val renamedFields = root.schema.fields.mapIndexed { idx, f -> f.withName("?_$idx") }
+            argBytes = ByteArrayOutputStream().use { baos ->
+                val renamedRoot = VectorSchemaRoot(renamedFields, root.fieldVectors, root.rowCount)
+                ArrowStreamWriter(renamedRoot, null, Channels.newChannel(baos)).use { writer ->
+                    writer.start()
+                    writer.writeBatch()
+                    writer.end()
+                }
+                baos.toByteArray()
+            }
+        }
+
+        override fun bind(rel: RelationReader) {
+            argBytes = null
+            rel.openDirectSlice(node.allocator).use { sliced ->
+                val renamedFields = sliced.vectors.mapIndexed { idx, v -> v.field.withName("?_$idx") }
+                Relation(node.allocator, renamedFields).use { renamed ->
+                    sliced.openArrowRecordBatch().use { rb -> renamed.load(rb) }
+                    argBytes = renamed.asArrowStream
+                }
+            }
+        }
+
+        private fun deserialiseArgs(bytes: ByteArray): Relation =
+            Relation.StreamLoader(node.allocator, Channels.newChannel(ByteArrayInputStream(bytes))).use { loader ->
+                Relation(node.allocator, loader.schema).also { rel ->
+                    try {
+                        loader.loadNextPage(rel)
+                    } catch (t: Throwable) {
+                        rel.close()
+                        throw t
+                    }
+                }
+            }
+
+        override fun executeQuery(): QueryResult {
+            val args = argBytes?.let(::deserialiseArgs)
+            val cursor = try {
+                prepared?.openQuery(args, QueryOpts())
+                    ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
+            } catch (t: Throwable) {
+                args?.close()
+                throw t
+            }
+            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
             return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
 
         override fun executeUpdate(): UpdateResult {
-            executeDml(TxOp.Sql(sql ?: error("SQL query not set")))
+            val sql = sql ?: error("SQL query not set")
+            val op = argBytes?.let { TxOp.SqlBytes(sql, it) } ?: TxOp.Sql(sql)
+            executeDml(op)
             return UpdateResult(-1)
         }
 
-        override fun prepare() = TODO("Not yet implemented")
-
-        override fun close() = Unit
+        override fun close() {
+            argBytes = null
+            prepared = null
+        }
     }
 
     internal fun executeDml(op: TxOp) {

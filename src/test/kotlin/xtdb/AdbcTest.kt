@@ -11,6 +11,13 @@ import org.apache.arrow.flight.Location
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -183,6 +190,204 @@ class AdbcTest {
         conn.getObjects(GetObjectsDepth.TABLES, null, null, null, null, null).use { rdr ->
             assertTrue(rdr.loadNextBatch())
             assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows with table data")
+        }
+    }
+
+    // -- Prepared statements (in-process ADBC) --
+    //
+    // NB: `conn` above is the FlightSQL-over-the-wire ADBC client; tests that
+    // need to exercise our in-process `XtdbConnection` directly use `xtdb.connect()`.
+
+    @Test
+    fun `prepare and execute simple query (in-process)`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id, n FROM foo")
+                stmt.prepare()
+
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 1L, "n" to "one")),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                    assertFalse(rdr.loadNextBatch())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `prepare with bound parameter (in-process)`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 2L); valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+
+                    stmt.executeQuery().reader.use { rdr ->
+                        assertTrue(rdr.loadNextBatch())
+                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                            assertEquals(
+                                listOf(mapOf("_id" to 2L)),
+                                rel.toMaps(SNAKE_CASE_STRING)
+                            )
+                        }
+                        assertFalse(rdr.loadNextBatch())
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `prepared DML with bound parameters (in-process)`() {
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 42L); valueCount = 1
+                    }
+                    params.rowCount = 1
+
+                    stmt.bind(params)
+                    stmt.executeUpdate()
+                }
+            }
+
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo")
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 42L)),
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `getParameterSchema reports columns in $ N convention (in-process)`() {
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ? AND name = ?")
+                stmt.prepare()
+
+                val paramSchema = stmt.parameterSchema
+                assertEquals(2, paramSchema.fields.size, "expected 2 parameter slots")
+                assertEquals("\$0", paramSchema.fields[0].name)
+                assertEquals("\$1", paramSchema.fields[1].name)
+                // Types are deliberately the Null placeholder pre-bind.
+                assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[0].type)
+                assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[1].type)
+            }
+        }
+    }
+
+    @Test
+    fun `bind state is sticky across executes (in-process)`() {
+        // ADBC contract: parameters are bound until either a new bind() call is
+        // made, or close() is called. Re-executing without re-binding reruns
+        // with the same parameters.
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}, {_id: 3}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+
+                val schema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(schema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 2L); valueCount = 1
+                    }
+                    params.rowCount = 1
+                    stmt.bind(params)
+                }
+                // params VSR is closed here; bind state must still be valid.
+
+                fun runOnce(): List<*> =
+                    stmt.executeQuery().reader.use { rdr ->
+                        rdr.loadNextBatch()
+                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                            rel.toMaps(SNAKE_CASE_STRING)
+                        }
+                    }
+
+                val expected = listOf(mapOf("_id" to 2L))
+                assertEquals(expected, runOnce(), "first execute")
+                assertEquals(expected, runOnce(), "second execute reuses the same bind")
+            }
+        }
+    }
+
+    @Test
+    fun `setSqlQuery clears prior bind (in-process)`() {
+        // A new SQL string can have a different parameter shape, so any prior
+        // bind must be dropped — otherwise stale args from the previous SQL
+        // would carry into the next prepare/execute.
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+        xtdb.connect().use { ipConn ->
+            ipConn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                stmt.prepare()
+                val paramSchema = Schema(listOf(
+                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
+                ))
+                VectorSchemaRoot.create(paramSchema, al).use { params ->
+                    params.allocateNew()
+                    (params.getVector("\$0") as BigIntVector).apply {
+                        setSafe(0, 1L); valueCount = 1
+                    }
+                    params.rowCount = 1
+                    stmt.bind(params)
+                }
+
+                stmt.setSqlQuery("SELECT _id FROM foo")        // ← zero params
+                stmt.prepare()
+                stmt.executeQuery().reader.use { rdr ->
+                    assertTrue(rdr.loadNextBatch())
+                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                        assertEquals(
+                            listOf(mapOf("_id" to 1L)),
+                            rel.toMaps(SNAKE_CASE_STRING),
+                            "stale bind from prior SQL must not leak into new SQL"
+                        )
+                    }
+                }
+            }
         }
     }
 
