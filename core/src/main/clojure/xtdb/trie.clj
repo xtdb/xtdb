@@ -59,7 +59,8 @@
             :data-file-size (.getDataFileSize trie-details)}
 
      (.hasTrieMetadata trie-details)
-     (assoc :trie-metadata (.getTrieMetadata trie-details))
+     ;; temporarily (remove after 2.2): clear existing IID blooms (#5355)
+     (assoc :trie-metadata (-> (.getTrieMetadata trie-details) .toBuilder .clearIidBloom .build))
 
      (.hasTrieState trie-details)
      (assoc :state (condp = (.getTrieState trie-details)

@@ -463,7 +463,8 @@
                                                                      (apply-trie-notification table-cat
                                                                                               (-> parsed-key
                                                                                                   (assoc :data-file-size (.getDataFileSize added-trie)
-                                                                                                         :trie-metadata (.getTrieMetadata added-trie)))
+                                                                                                         ;; temporarily (remove after 2.2): clear existing IID blooms (#5355)
+                                                                                                         :trie-metadata (-> (.getTrieMetadata added-trie) .toBuilder .clearIidBloom .build)))
                                                                                               {:file-size-target file-size-target, :as-of as-of})
                                                                      table-cat))
                                                                  (or tries {})
