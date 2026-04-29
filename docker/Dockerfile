@@ -1,11 +1,7 @@
-# Build JRE
-FROM eclipse-temurin:21-jdk-alpine AS jlink
-WORKDIR /build
-COPY gradlew gradlew
-COPY gradle/wrapper gradle/wrapper
-COPY build-logic/jlink/settings.gradle.kts settings.gradle.kts
-COPY build-logic/jlink/build.gradle.kts build.gradle.kts
-RUN chmod +x gradlew && ./gradlew buildCustomJre --no-daemon
+# Pre-built custom JRE — see docker/builder.Dockerfile and the repo-root docker-bake.hcl.
+# Bump the default (and the matching TAG in the bake file) when build-logic/jlink/ or the JDK base image changes.
+ARG BUILDER_IMAGE=ghcr.io/xtdb/xtdb-builder:20260429-1
+FROM ${BUILDER_IMAGE} AS jlink
 
 # Runtime
 FROM alpine:3.23.3
@@ -27,7 +23,7 @@ LABEL usage="For custom logging: \
 # For healthcheck
 RUN apk add --no-cache wget gcompat
 
-COPY --from=jlink /build/build/custom-jre /opt/java
+COPY --from=jlink /opt/java /opt/java
 ENV PATH="/opt/java/bin:$PATH"
 ENV JAVA_HOME="/opt/java"
 
