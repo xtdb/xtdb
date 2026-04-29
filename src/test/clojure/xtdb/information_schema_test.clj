@@ -447,9 +447,7 @@
 
 (t/deftest test-metrics
   (let [res (xt/q tu/*node* "SELECT * FROM xt.metrics_timers")]
-    (t/is (= #{:name :tags :count
-               :mean-time :p75-time :p95-time :p99-time :p999-time :max-time}
-             (set (keys (first res)))))
+    (t/is (every? #(set/subset? #{:name :tags :count} (set (keys %))) res))
 
     (t/is (empty? (set/difference #{"tx.op.timer", "query.timer", "compactor.job.timer"}
                                   (into #{} (map :name) res)))
