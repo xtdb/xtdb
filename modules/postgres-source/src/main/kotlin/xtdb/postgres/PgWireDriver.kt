@@ -259,8 +259,9 @@ class PgWireDriver(
             throw CancellationException("Streaming loop cancelled")
         }
 
+        // stream.close() takes a lock held by the in-progress read.
+        // replConn.close() bypasses the lock and closes the socket, releasing the slot.
         override fun close() {
-            runCatching { stream.close() }
             replConn.close()
         }
     }
