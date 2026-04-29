@@ -1832,7 +1832,8 @@
 
         (conn-loop conn))
       (catch SocketException e
-        (when (or (= "Broken pipe (Write failed)" (.getMessage e))
+        (when (or (= "Broken pipe" (.getMessage e))
+                  (= "Broken pipe (Write failed)" (.getMessage e))
                   (= "Connection reset by peer" (.getMessage e)))
           (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
           (.close conn-socket))
