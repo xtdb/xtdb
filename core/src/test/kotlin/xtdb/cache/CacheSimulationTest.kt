@@ -209,6 +209,29 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    fun `cancelled fetch on cache hit does not leak`(iteration: Int) = runTest {
+        val loader = TestPathLoader()
+        MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
+            val path = Path.of("test/100")
+            val slice = Slice(0, 100)
+
+            async(dispatcher) {
+                val jobs = (0..1).map {
+                    launch {
+                        cache.get(path, slice) { it to null }.use { yield() }
+                    }
+                }
+                yield()
+                jobs.forEach { it.cancel() }
+                jobs.forEach { it.join() }
+            }.await()
+
+            assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
+        }
+    }
+
+    @RepeatableSimulationTest
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun `deterministic concurrent fetches with some OOMs`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 100L, loader, dispatcher).use { cache ->

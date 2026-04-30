@@ -108,7 +108,7 @@ class MemoryCache @JvmOverloads internal constructor(
 
             if (openSlice != null) {
                 LOGGER.trace("FetchReq: Fast path cache hit for $pathSlice")
-                res.complete(openSlice)
+                if (!res.complete(openSlice)) openSlice.referenceManager.release()
             } else {
                 yieldIfSimulation() // interleave between openSlice check and compute
                 val path = pathSlice.path
@@ -222,9 +222,9 @@ class MemoryCache @JvmOverloads internal constructor(
         yieldIfSimulation() // interleave between cache check and fetch request
 
         val res = CompletableDeferred<ArrowBuf>()
-        fetchCh.send(FetchReq(pathSlice, fetch, res))
 
         return try {
+            fetchCh.send(FetchReq(pathSlice, fetch, res))
             res.await()
         } catch (e: Throwable) {
             res.cancel()
