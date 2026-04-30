@@ -1,7 +1,6 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.selects.*
 import kotlinx.serialization.SerialName
@@ -18,14 +17,12 @@ import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
     override val epoch: Int,
-    coroutineContext: CoroutineContext = Dispatchers.Default
+    @Suppress("unused") coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Log<M> {
-    private val scope = CoroutineScope(coroutineContext)
 
     @SerialName("!InMemory")
     @Serializable
@@ -55,23 +52,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
-    internal data class NewMessage<M>(
-        val message: M,
-        val onCommit: CompletableDeferred<MessageMetadata>
-    )
-
-    private val appendCh: Channel<NewMessage<M>> = Channel(100)
-    private val committedCh = appendCh.receiveAsFlow()
-        .map { (message, onCommit) ->
-            // we only use the instantSource for Tx messages so that the tests
-            // that check files can be deterministic
-            val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
-
-            val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
-            onCommit.complete(MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS)))
-            record
-        }
-        .shareIn(scope, SharingStarted.Eagerly, REPLAY_BUFFER_SIZE)
+    private val committedCh = MutableSharedFlow<Record<M>>(replay = REPLAY_BUFFER_SIZE)
 
     companion object {
         private const val REPLAY_BUFFER_SIZE = 4096
@@ -81,10 +62,20 @@ class InMemoryLog<M> @JvmOverloads constructor(
     override var latestSubmittedOffset: LogOffset = -1
         private set
 
-    override suspend fun appendMessage(message: M): MessageMetadata =
-        CompletableDeferred<MessageMetadata>()
-            .also { scope.launch { appendCh.send(NewMessage(message, it)) } }
-            .await()
+    // Assigns a sequential offset and emits the record to the flow.
+    // @Synchronized ensures offset assignment + emission are atomic,
+    // so subscribers always see records in offset order.
+    // we only use the instantSource for Tx messages so that the tests
+    // that check files can be deterministic
+    @Synchronized
+    private fun appendRecord(message: M): MessageMetadata {
+        val ts = if (message is SourceMessage.Tx || message is SourceMessage.LegacyTx) instantSource.instant() else Instant.now()
+        val record = Record(epoch, ++latestSubmittedOffset, ts.truncatedTo(MICROS), message)
+        check(committedCh.tryEmit(record)) { "InMemoryLog replay buffer overflow ($REPLAY_BUFFER_SIZE capacity)" }
+        return MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS))
+    }
+
+    override suspend fun appendMessage(message: M): MessageMetadata = appendRecord(message)
 
     override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
         override fun openTx() = object : AtomicProducer.Tx<M> {
@@ -100,10 +91,8 @@ class InMemoryLog<M> @JvmOverloads constructor(
             override fun commit() {
                 check(isOpen) { "Transaction already closed" }
                 isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@InMemoryLog.appendMessage(message))
-                    }
+                for ((message, res) in buffer) {
+                    res.complete(this@InMemoryLog.appendRecord(message))
                 }
             }
 
@@ -171,7 +160,5 @@ class InMemoryLog<M> @JvmOverloads constructor(
         }
     }
 
-    override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
-    }
+    override fun close() {}
 }
