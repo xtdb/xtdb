@@ -8,6 +8,6 @@ COPY src/ src/
 RUN cargo fetch
 
 ENTRYPOINT ["cargo"]
-CMD ["test"]
+CMD ["test", "--", "--test-threads=1"]
 
 COPY tests/ tests/
