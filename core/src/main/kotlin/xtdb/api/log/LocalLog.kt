@@ -44,7 +44,7 @@ class LocalLog<M>(
     private val instantSource: InstantSource,
     override val epoch: Int,
     val useInstantSourceForNonTx: Boolean,
-    coroutineContext: CoroutineContext = Dispatchers.Default,
+    coroutineContext: CoroutineContext = Dispatchers.IO,
     logFileName: String = "LOG"
 ) : Log<M> {
     private val scope = CoroutineScope(coroutineContext)
@@ -369,7 +369,7 @@ class LocalLog<M>(
         @Transient var instantSource: InstantSource = InstantSource.system(),
         var epoch: Int = 0,
         var useInstantSourceForNonTx: Boolean = false,
-        @Transient var coroutineContext: CoroutineContext = Dispatchers.Default
+        @Transient var coroutineContext: CoroutineContext = Dispatchers.IO
     ) : Log.Factory {
 
         @Suppress("unused")
