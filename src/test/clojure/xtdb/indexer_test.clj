@@ -2,7 +2,6 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.test :as t]
-            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.basis :as basis]
@@ -10,7 +9,6 @@
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
-            [xtdb.indexer :as idx]
             [xtdb.log :as xt-log]
             [xtdb.object-store :as os]
             [xtdb.protocols :as xtp]
@@ -495,17 +493,6 @@
         ;; so we render the type to compare.
         (t/is (= #{:utf8 :keyword :uuid :transit}
                  (st/render-type (.getType tc2 #xt/table xt_docs "v"))))))))
-
-(t/deftest test-await-fails-fast
-  (let [e (UnsupportedOperationException. "oh no!")]
-    (with-redefs [idx/->put-docs-indexer (fn [& _args]
-                                           (throw e))
-                  log/log* (let [log* log/log*]
-                             (fn [logger level throwable message]
-                               (when-not (identical? e throwable)
-                                 (log* logger level throwable message))))]
-      (t/is (anomalous? [:unsupported ::err/unsupported]
-                        (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo", :count 42}]]))))))
 
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]

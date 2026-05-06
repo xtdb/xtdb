@@ -23,7 +23,6 @@ import xtdb.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.LeaderLogProcessor
-import xtdb.indexer.Indexer
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
@@ -105,11 +104,10 @@ class ExternalSourceTest {
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
-        val indexer = mockk<Indexer>(relaxed = true)
         val crashLogger = mockk<CrashLogger>(relaxed = true)
 
         return LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, indexer, crashLogger,
+            allocator, nodeBase, dbStorage, crashLogger,
             dbState, blockUploader, watchers, extSource, replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1, afterToken = afterToken, ctx = ctx

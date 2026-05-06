@@ -10,6 +10,7 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
+import xtdb.arrow.VectorType
 import xtdb.arrow.VectorWriter
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
@@ -20,7 +21,6 @@ import xtdb.arrow.SingletonListReader
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
-import xtdb.indexer.Indexer.Companion.addTxRow
 import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.query.PreparedDmlQuery
@@ -32,13 +32,18 @@ import xtdb.time.InstantUtil.fromMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
+import xtdb.types.ClojureForm
 import xtdb.util.asIid
 import xtdb.util.closeAll
+import xtdb.util.logger
+import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
+
+private val LOG = OpenTx::class.logger
 
 class OpenTx(
     private val allocator: BufferAllocator,
@@ -84,7 +89,7 @@ class OpenTx(
         error: Throwable? = null,
         userMetadata: Map<*, *>? = null,
     ): ReplicaMessage.ResolvedTx {
-        addTxRow(dbState.name, txKey, error, userMetadata)
+        writeTxRow(error, userMetadata)
         return ReplicaMessage.ResolvedTx(
             txKey.txId, txKey.systemTime,
             committed = error == null,
@@ -93,6 +98,43 @@ class OpenTx(
             dbOp = null,
             externalSourceToken = externalSourceToken,
         )
+    }
+
+    private fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
+        val txId = txKey.txId
+        val systemTimeMicros = txKey.systemTime.asMicros
+
+        val liveTable = table(TableRef(dbState.name, "xt", "txs"))
+        val docWriter = liveTable.docWriter
+
+        liveTable.logPut(ByteBuffer.wrap(txId.asIid), systemTimeMicros, Long.MAX_VALUE) {
+            docWriter.vectorFor("_id", VectorType.I64.arrowType, false)
+                .writeLong(txId)
+
+            docWriter.vectorFor("system_time", VectorType.INSTANT.arrowType, false)
+                .writeLong(systemTimeMicros)
+
+            docWriter.vectorFor("committed", VectorType.BOOL.arrowType, false)
+                .writeBoolean(error == null)
+
+            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true)
+                .writeObject(userMetadata)
+
+            val errorWriter = docWriter.vectorFor("error", VectorType.TRANSIT.arrowType, true)
+            if (error == null) {
+                errorWriter.writeNull()
+            } else {
+                try {
+                    errorWriter.writeObject(error)
+                } catch (e: Exception) {
+                    error.addSuppressed(e)
+                    LOG.warn(error, "Error serializing error, tx $txId")
+                    errorWriter.writeObject(ClojureForm("error serializing error - see server logs"))
+                }
+            }
+
+            docWriter.endStruct()
+        }
     }
 
     private fun queryCatalog(): IQuerySource.QueryCatalog {

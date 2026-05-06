@@ -377,7 +377,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
            #_(xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
 (t/deftest test-txs-table-485
-  (logging/with-log-level 'xtdb.indexer :error
+  (logging/with-log-level "xtdb.indexer.Indexer" :error
     (t/is (= (serde/->TxKey 0 #xt/instant "2020-01-01T00:00:00Z")
              (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo}]])))
 

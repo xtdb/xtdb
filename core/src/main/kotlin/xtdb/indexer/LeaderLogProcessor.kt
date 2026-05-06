@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.RENDEZVOUS
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.Metrics.withSpan
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult.Aborted
@@ -16,9 +17,12 @@ import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorReader
 import xtdb.arrow.asChannel
 import xtdb.database.*
 import xtdb.error.Anomaly
+import xtdb.error.Fault
+import xtdb.error.Incorrect
 import xtdb.error.Interrupted
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
@@ -35,13 +39,14 @@ import java.nio.ByteBuffer
 import java.time.*
 import kotlin.coroutines.CoroutineContext
 
+private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
+
 private val LOG = LeaderLogProcessor::class.logger
 
 class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,
-    indexer: Indexer,
     crashLogger: CrashLogger,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,
@@ -76,8 +81,7 @@ class LeaderLogProcessor(
 
     private val tracer = nodeBase.tracer?.takeIf { nodeBase.config.tracer.transactionTracing }
 
-    private val indexer: Indexer.ForDatabase =
-        indexer.openForDatabase(this.allocator, dbState, liveIndex, crashLogger, this)
+    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
@@ -162,8 +166,7 @@ class LeaderLogProcessor(
                     }
                 } else null
 
-                val resolvedTx = indexer.addTxRow(txKey, error)
-                    .copy(srcMsgId = msgId)
+                val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
                     .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
 
                 appendToReplica(resolvedTx)
@@ -185,8 +188,7 @@ class LeaderLogProcessor(
                     }
                 } else null
 
-                val resolvedTx = indexer.addTxRow(txKey, error)
-                    .copy(srcMsgId = msgId)
+                val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
                     .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
 
                 appendToReplica(resolvedTx)
@@ -339,8 +341,6 @@ class LeaderLogProcessor(
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
 
-    override fun startTx(txKey: TransactionKey): OpenTx = openTx(txKey, null)
-
     private suspend fun commit(openTx: OpenTx, error: Throwable?, userMetadata: Map<*, *>?) {
         submit(ExtSourceTask.ResolvedTx(openTx.commitTx(error, userMetadata)))
     }
@@ -417,6 +417,77 @@ class LeaderLogProcessor(
         trieGc.signal()
     }
 
+    private fun indexSourceLogTx(
+        msgId: MessageId,
+        msgTimestamp: Instant,
+        txOps: VectorReader?,
+        systemTime: Instant?,
+        defaultTz: ZoneId?,
+        userMetadata: Any?,
+    ): ReplicaMessage.ResolvedTx = tracer.withSpan(
+        "xtdb.transaction",
+        attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
+    ) {
+        val userMetadataMap = userMetadata as? Map<*, *>
+        val lcTx = liveIndex.latestCompletedTx
+
+        // If lc-tx's systemTime >= msgTimestamp, bump past it by 1µs; otherwise use msgTimestamp.
+        // (`+1000ns` is `+1µs`.)
+        val defaultSystemTime: Instant = lcTx?.systemTime?.let { lcSysTime ->
+            if (lcSysTime >= msgTimestamp) lcSysTime.plusNanos(1_000) else null
+        } ?: msgTimestamp
+
+        // Specified system-time before lc-tx → invalid; abort with that error.
+        // The aborted tx-key uses the *default* (smoothed) systemTime, not the rejected one,
+        // so the tx-key still satisfies the monotonicity invariant.
+        if (systemTime != null && lcTx != null && systemTime < lcTx.systemTime) {
+            val txKey = TransactionKey(msgId, defaultSystemTime)
+            val err = Incorrect(
+                "specified system-time older than current tx",
+                "invalid-system-time",
+                mapOf(
+                    "tx-key" to TransactionKey(msgId, systemTime),
+                    "latest-completed-tx" to lcTx,
+                ),
+            )
+            LOG.warn { "specified system-time '$systemTime' older than current tx '$lcTx'" }
+
+            return@withSpan openTx(txKey, null).use { openTx ->
+                txErrorCounter?.increment()
+                openTx.commitTx(err, userMetadataMap)
+            }
+        }
+
+        val effectiveSystemTime = systemTime ?: defaultSystemTime
+        val txKey = TransactionKey(msgId, effectiveSystemTime)
+
+        openTx(txKey, null).use { openTx ->
+            if (txOps == null) {
+                return@withSpan openTx.commitTx(SKIPPED_EXN, userMetadataMap)
+            }
+
+            val opts = SourceLogTxIndexer.TxOpts(
+                txKey = txKey,
+                currentTime = effectiveSystemTime,
+                systemTime = effectiveSystemTime.asMicros,
+                defaultTz = defaultTz,
+            )
+
+            when (val result = sourceLogTxIndexer.ForTx(txOps, opts).indexTx(openTx)) {
+                is TxResult.Committed -> openTx.commitTx(null, userMetadataMap)
+
+                is TxResult.Aborted -> {
+                    LOG.debug(result.error) { "aborted tx" }
+                    // Open a fresh tx for the abort row — the original openTx may have partial writes.
+                    return@withSpan openTx(txKey, null).use { abortTx ->
+                        txErrorCounter?.increment()
+                        abortTx.commitTx(result.error, userMetadataMap)
+                    }
+                }
+            }
+        }
+    }
+
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage
     ): ReplicaMessage.ResolvedTx {
@@ -430,7 +501,7 @@ class LeaderLogProcessor(
             }
             bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
 
-            return indexer.indexTx(msgId, record.logTimestamp, null, null, null, null, null)
+            return indexSourceLogTx(msgId, record.logTimestamp, null, null, null, null)
         }
 
         return when (msg) {
@@ -442,10 +513,10 @@ class LeaderLogProcessor(
 
                             val userMetadata = msg.userMetadata?.let { deserializeUserMetadata(allocator, it) }
 
-                            indexer.indexTx(
+                            indexSourceLogTx(
                                 msgId, record.logTimestamp,
                                 rel["tx-ops"],
-                                msg.systemTime, msg.defaultTz, msg.user, userMetadata
+                                msg.systemTime, msg.defaultTz, userMetadata
                             )
                         }
                     }
@@ -464,14 +535,12 @@ class LeaderLogProcessor(
                             val defaultTz =
                                 (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
 
-                            val user = rel["user"].getObject(0) as String?
-
                             val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
 
-                            indexer.indexTx(
+                            indexSourceLogTx(
                                 msgId, record.logTimestamp,
                                 rel["tx-ops"].listElements,
-                                systemTime, defaultTz, user, userMetadata
+                                systemTime, defaultTz, userMetadata
                             )
                         }
                     }
@@ -509,7 +578,6 @@ class LeaderLogProcessor(
         extSourceCh.close()
         gcCh.close()
         persisterJob.join()
-        indexer.close()
         allocator.close()
     }
 }

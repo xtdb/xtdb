@@ -2673,7 +2673,7 @@ UNION ALL
                     (xt/execute-tx tu/*node* ["INSERT INTO address (_id, \"zip/code\") VALUES (1, 123)"]))))
 
 (t/deftest disallow-inserting-to-system-time-cols-3748
-  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: #\{\"_system_from\" \"_valid_time\"\}"]
+  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: \[_system_from, _valid_time\]"]
                     (xt/execute-tx tu/*node* ["INSERT INTO docs (_id, _system_from, _valid_time) VALUES (1, TIMESTAMP '2024-01-01T00:00:00Z', 'foo')"])))
 
   (let [ex (t/is (anomalous? [:incorrect nil]
@@ -2682,7 +2682,7 @@ UNION ALL
     (t/is (str/includes? ex-msg "Cannot INSERT _valid_time column"))
     (t/is (str/includes? ex-msg "Cannot INSERT _system_from column")))
 
-  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: #\{\"_system_from\"\}"]
+  (t/is (anomalous? [:incorrect nil #"Cannot put documents with columns: \[_system_from\]"]
                     (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: 1, _system_from: TIMESTAMP '2024-01-01T00:00:00Z'}"]))))
 
 (t/deftest can-not-write-to-reserved-tables
@@ -2930,11 +2930,11 @@ UNION ALL
 
 (t/deftest forbid-invalid-columns-insert
   (t/is (anomalous? [:incorrect nil
-                     #"Cannot put documents with columns: #\{\"_foo\"\}"]
+                     #"Cannot put documents with columns: \[_foo\]"]
                     (xt/execute-tx tu/*node* ["INSERT INTO foo(_id, _foo) VALUES(1, 2)"])))
 
   (t/is (anomalous? [:incorrect nil
-                     #"Cannot put documents with columns: #\{\"_system_time\"\}"]
+                     #"Cannot put documents with columns: \[_system_time\]"]
                     (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, _system_time: 2}"])))
 
   (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1}"])

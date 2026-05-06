@@ -12,7 +12,6 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.error.NotFound
-import xtdb.indexer.Indexer
 import xtdb.table.DatabaseName
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
@@ -26,7 +25,6 @@ private val LOG = DatabaseCatalog::class.logger
 
 class DatabaseCatalog @JvmOverloads constructor(
     private val base: NodeBase,
-    private val indexer: Indexer,
     private val compactor: Compactor,
     closerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Database.Catalog, AutoCloseable {
@@ -77,7 +75,7 @@ class DatabaseCatalog @JvmOverloads constructor(
         val readOnlyConfig = if (base.config.readOnlyDatabases) dbConfig.mode(Database.Mode.READ_ONLY) else dbConfig
 
         val db = try {
-            Database.open(base, dbName, readOnlyConfig, indexer, compactor, this.takeIf { dbName == "xtdb" })
+            Database.open(base, dbName, readOnlyConfig, compactor, this.takeIf { dbName == "xtdb" })
         } catch (t: Throwable) {
             LOG.debug { "Failed to open database: db-name=$dbName, exception=${t.javaClass}, message=${t.message}" }
             t.cause?.let { LOG.debug { "Cause: class=${it.javaClass}, message=${it.message}" } }
@@ -120,7 +118,6 @@ class DatabaseCatalog @JvmOverloads constructor(
         runBlocking { closerJob.children.toList().forEach { it.join() } }
         closerJob.cancel()
         databases.values.closeAll()
-        indexer.close()
     }
 
     companion object {
@@ -130,8 +127,7 @@ class DatabaseCatalog @JvmOverloads constructor(
             base: NodeBase,
             closerDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ): DatabaseCatalog {
-            val indexer = base.indexerFactory.create(base)
-            val catalog = DatabaseCatalog(base, indexer, base.compactor, closerDispatcher)
+            val catalog = DatabaseCatalog(base, base.compactor, closerDispatcher)
 
             catalog.closeOnCatch {
                 val conf = base.config

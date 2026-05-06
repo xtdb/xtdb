@@ -68,7 +68,7 @@ class LogProcessorTest {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
                 val leaderProc = LeaderLogProcessor(
-                    allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+                    allocator, nodeBase, dbStorage, mockk(relaxed = true),
                     dbState, blockUploader, watchers,
                     extSource = null, replicaProducer = replicaProducer,
                     skipTxs = emptySet(), dbCatalog = null,

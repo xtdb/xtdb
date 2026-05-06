@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import xtdb.api.TransactionKey
 import xtdb.database.ExternalSourceToken
 import java.time.Instant
 
@@ -21,8 +20,6 @@ interface TxIndexer {
         data class Committed(override val userMetadata: Map<*, *>? = null) : TxResult
         data class Aborted(val error: Throwable, override val userMetadata: Map<*, *>? = null) : TxResult
     }
-
-    fun startTx(txKey: TransactionKey): OpenTx
 
     suspend fun indexTx(
         externalSourceToken: ExternalSourceToken?,

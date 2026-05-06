@@ -58,7 +58,6 @@ class LeaderLogProcessorTest {
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
         liveIndex: LiveIndex = mockk(relaxed = true),
-        indexer: Indexer = mockk(relaxed = true),
         blockCatalog: BlockCatalog = BlockCatalog("test", null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
@@ -71,7 +70,7 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, uploadDispatcher)
 
         return LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, indexer, mockk(relaxed = true),
+            allocator, nodeBase, dbStorage, mockk(relaxed = true),
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
@@ -126,7 +125,7 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+            allocator, nodeBase, dbStorage, mockk(relaxed = true),
             dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
@@ -192,7 +191,7 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, mockk(relaxed = true), mockk(relaxed = true),
+            allocator, nodeBase, dbStorage, mockk(relaxed = true),
             dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,

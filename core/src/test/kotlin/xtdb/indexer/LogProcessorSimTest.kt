@@ -186,12 +186,8 @@ class LogProcessorSimTest : SimulationTestBase() {
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterReplicaMsgId: MessageId,
         ): LogProcessor.LeaderSystem {
-            // Fresh `Indexer` per leadership transition is fine — the outer Indexer is
-            // stateless and `close()` is a no-op; the per-database `Indexer.ForDatabase` is
-            // closed by `LeaderLogProcessor.close()` via its existing flow.
-            val indexer = nodeBase.indexerFactory.create(nodeBase)
             val proc = LeaderLogProcessor(
-                allocator, nodeBase, dbStorage, indexer, crashLogger,
+                allocator, nodeBase, dbStorage, crashLogger,
                 dbState, blockUploader, watchers,
                 extSource = simExtSource, replicaProducer = replicaProducer,
                 skipTxs = emptySet(), dbCatalog = null,

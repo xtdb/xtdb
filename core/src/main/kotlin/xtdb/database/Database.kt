@@ -216,7 +216,6 @@ class Database(
             base: NodeBase,
             dbName: DatabaseName,
             dbConfig: Config,
-            indexer: Indexer,
             compactor: Compactor,
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
@@ -281,7 +280,7 @@ class Database(
                         val extSource = dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry)
 
                         val leaderProc = LeaderLogProcessor(
-                            allocator, base, storage, indexer, crashLogger,
+                            allocator, base, storage, crashLogger,
                             state, blockUploader, watchers,
                             extSource = extSource,
                             replicaProducer = replicaProducer,
