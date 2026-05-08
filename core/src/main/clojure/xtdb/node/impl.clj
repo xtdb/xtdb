@@ -88,7 +88,8 @@
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicReference !await-token
                  system, close-fn,
-                 query-timer, ^Counter query-error-counter, ^Counter tx-error-counter]
+                 query-timer, ^Counter query-error-counter, ^Counter tx-error-counter
+                 tx-await-timer]
   Xtdb
   (getAllocator [_] allocator)
 
@@ -170,7 +171,8 @@
   (executeTx [this db-name tx-ops tx-opts]
     (let [tx-id (.getTxId (.submitTx this db-name tx-ops tx-opts))
           db (.databaseOrNull db-cat db-name)
-          {:keys [tx-id system-time committed? error]} (await-msg-result this db tx-id)]
+          {:keys [tx-id system-time committed? error]} (metrics/record-callable! tx-await-timer
+                                                                                 (await-msg-result this db tx-id))]
       (Xtdb$ExecutedTx. tx-id system-time committed? error)))
 
   Xtdb$XtdbInternal
@@ -188,7 +190,8 @@
   (execute-tx [this tx-ops opts]
     (let [tx-id (xtp/submit-tx this tx-ops opts)
           db (.databaseOrNull db-cat ^String (:default-db opts))]
-      (await-msg-result this db tx-id)))
+      (metrics/record-callable! tx-await-timer
+                                (await-msg-result this db tx-id))))
 
   (open-sql-query [this query query-opts]
     (let [query-opts (-> query-opts (with-query-opts-defaults this))]
@@ -292,7 +295,9 @@
                             (assoc :query-timer (metrics/add-timer metrics-registry "query.timer"
                                                                    {:description "indicates the timings for queries"})
                                    :query-error-counter (metrics/add-counter metrics-registry "query.error")
-                                   :tx-error-counter (metrics/add-counter metrics-registry "tx.error"))))]
+                                   :tx-error-counter (metrics/add-counter metrics-registry "tx.error")
+                                   :tx-await-timer (metrics/add-timer metrics-registry "node.tx.await"
+                                                                      {:description "Time spent in executeTx waiting for the indexer to catch up to a just-submitted tx (sync-path indexer await)."}))))]
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
