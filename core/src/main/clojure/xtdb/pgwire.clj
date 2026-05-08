@@ -557,7 +557,7 @@
   (swap! conn-state dissoc :transaction)
   (close-all-portals conn))
 
-(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter, tx-latency-timer] :as conn}]
+(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
@@ -579,14 +579,18 @@
                                                                                  [op])))
                                                                    (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
                                         (if async?
-                                          (let [tx-id (with-auth-check conn (.submitTx node default-db tx-ops tx-opts))
+                                          (let [tx-id (with-auth-check conn
+                                                        (metrics/record-callable! tx-submit-timer
+                                                                                  (.submitTx node default-db tx-ops tx-opts)))
                                                 msg-id (.getTxId tx-id)]
                                             (swap! conn-state (fn [cs]
                                                                 (-> cs
                                                                     (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
                                                                     (assoc :latest-submitted-tx {:tx-id msg-id})))))
 
-                                          (let [tx (with-auth-check conn (.executeTx node default-db tx-ops tx-opts))
+                                          (let [tx (with-auth-check conn
+                                                     (metrics/record-callable! tx-execute-timer
+                                                                               (.executeTx node default-db tx-ops tx-opts)))
                                                 msg-id (.getTxId tx)]
                                             (swap! conn-state (fn [cs]
                                                                 (-> cs
@@ -1794,7 +1798,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1821,6 +1825,8 @@
                     :query-tracer query-tracer
                     :tx-error-counter tx-error-counter
                     :tx-latency-timer tx-latency-timer
+                    :tx-submit-timer tx-submit-timer
+                    :tx-execute-timer tx-execute-timer
                     :cancelled-connections-counter cancelled-connections-counter)]
 
     (try
@@ -1916,6 +1922,8 @@
            query-timer (when metrics-registry (metrics/add-timer metrics-registry "query.timer" {}))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            tx-latency-timer (when metrics-registry (metrics/add-timer metrics-registry "pgwire.tx.latency" {}))
+           tx-submit-timer (when metrics-registry (metrics/add-timer metrics-registry "pgwire.tx.submit" {:description "Time spent in async-path Node.submitTx (log append + ack)."}))
+           tx-execute-timer (when metrics-registry (metrics/add-timer metrics-registry "pgwire.tx.execute" {:description "Time spent in sync-path Node.executeTx (log append + indexer await)."}))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
            cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections")) 
            server (map->Server {:allocator allocator
@@ -1951,6 +1959,8 @@
                          :query-tracer (when query-tracing? tracer)
                          :tx-error-counter tx-error-counter
                          :tx-latency-timer tx-latency-timer
+                         :tx-submit-timer tx-submit-timer
+                         :tx-execute-timer tx-execute-timer
                          :total-connections-counter total-connections-counter
                          :cancelled-connections-counter cancelled-connections-counter)
            accept-thread (-> (Thread/ofVirtual)

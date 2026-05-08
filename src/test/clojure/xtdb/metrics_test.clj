@@ -169,6 +169,22 @@ $$"])
         (let [^Timer timer (.timer (.find registry "pgwire.tx.latency"))]
           (t/is (= (.count timer) 3)))))))
 
+(t/deftest test-pgwire-tx-submit-and-execute-timers
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))
+        timer-count #(.count ^Timer (.timer (.find registry %)))]
+
+    (with-open [conn (jdbc/get-connection node)]
+      (jdbc/execute! conn ["INSERT INTO foo (_id, a) VALUES (1, 42)"])
+      (t/is (= 1 (timer-count "pgwire.tx.execute")) "sync commit bumps execute timer")
+      (t/is (= 0 (timer-count "pgwire.tx.submit")) "sync commit does not bump submit timer")
+
+      (jdbc/execute! conn ["BEGIN READ WRITE WITH (ASYNC = TRUE)"])
+      (jdbc/execute! conn ["INSERT INTO foo (_id, a) VALUES (2, 43)"])
+      (jdbc/execute! conn ["COMMIT"])
+      (t/is (= 1 (timer-count "pgwire.tx.submit")) "async commit bumps submit timer")
+      (t/is (= 1 (timer-count "pgwire.tx.execute")) "async commit does not bump execute timer"))))
+
 (t/deftest test-block-uploaded-timer
   (let [node (xtn/start-node tu/*node-opts*)
         registry (.getMeterRegistry (util/node-base node))]
