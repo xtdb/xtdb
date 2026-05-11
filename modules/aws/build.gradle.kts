@@ -26,6 +26,10 @@ dependencies {
     api(project(":xtdb-core"))
 
     api(libs.aws.s3)
+    api(libs.aws.netty.nio.client)
+    api(platform(libs.netty.bom))
+    for (classifier in listOf("linux-x86_64", "linux-aarch_64", "osx-x86_64", "osx-aarch_64"))
+        runtimeOnly("io.netty:netty-tcnative-boringssl-static") { artifact { this.classifier = classifier } }
 
     // metrics
     api(libs.micrometer.registry.cloudwatch2)
