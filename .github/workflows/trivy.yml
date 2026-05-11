@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
 
       - name: Run Trivy against sample XTDBk8s
-        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # v0.34.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.34.1
         with:
           scan-type: "fs"
           scan-ref: ./modules/azure/docs/azure-setup-guide/kubernetes/xtdb.yaml
