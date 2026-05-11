@@ -176,7 +176,8 @@
                              to-col-type-head)
                   (contains? var-width-comparable-types to-col-type-head))
       (throw (err/unsupported :xtdb.group-by/unsupported-min-max-type
-                              "Unsupported type in min/max aggregate"
+                              (format "Unsupported type in min/max aggregate: %s"
+                                      (pr-str to-col-type))
                               {:unsupported-type to-col-type})))))
 
 (defn- min-max-factory
@@ -186,7 +187,8 @@
   (let [to-arrow-type (LeastUpperBound/of [from-type])
         to-type (or (some-> to-arrow-type types/->type)
                     (throw (err/incorrect :xtdb.group-by/incomparable-min-max-types
-                                          "Incomparable types in min/max aggregate"
+                                          (format "Incomparable types in min/max aggregate: %s"
+                                                  (pr-str from-type))
                                           {:from-type from-type})))]
     (assert-supported-min-max-type to-type)
 

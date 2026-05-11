@@ -2470,6 +2470,28 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (thrown-with-msg? PSQLException #"ERROR: Negative substring length"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
 
+(t/deftest test-anomaly-with-vector-type-encodes-on-json-pgwire
+  (xt/submit-tx tu/*node*
+                [[:put-docs :docs {:xt/id 1, :v 12}]
+                 [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
+
+  (with-open [conn (pgjdbc-conn)]
+    (let [ex (try
+               (jdbc/execute! conn ["SELECT MAX(v) AS m FROM docs"])
+               (catch PSQLException e e))]
+      (t/is (instance? PSQLException ex))
+      (t/is (re-find #"Incomparable types in min/max aggregate" (.getMessage ex)))
+
+      (let [detail (some-> ^PSQLException ex .getServerErrorMessage .getDetail)
+            decoded (some-> detail JsonLdSerde/decodeJsonLd)
+            from-type (some-> decoded ex-data :from-type)]
+        (t/is (some? detail) "server sent a JSON-encoded error detail")
+        (t/is (instance? xtdb.error.Incorrect decoded)
+              "detail decodes back to the original anomaly type")
+        (t/is (re-find #"Incomparable types in min/max aggregate" (ex-message decoded)))
+        (t/is (instance? xtdb.arrow.VectorType from-type)
+              ":from-type round-tripped to a VectorType — encoder shipped canonical form")))))
+
 (def display-tables-query
   "
 SELECT n.nspname as \"Schema\",

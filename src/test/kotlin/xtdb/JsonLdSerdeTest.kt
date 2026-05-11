@@ -2,8 +2,11 @@ package xtdb
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import xtdb.arrow.VectorType
 import xtdb.error.Incorrect
 import xtdb.error.Unsupported
 import java.math.BigDecimal
@@ -159,5 +162,22 @@ class JsonLdSerdeTest {
               }
             }""".trimJson()
         )
+    }
+
+    @Test
+    fun `round-trips vector types`() {
+        VectorType.I64.assertRoundTrip(
+            """{"@type":"xt:type","@value":{"@type":"xt:keyword","@value":"i64"}}"""
+        )
+
+        VectorType.maybe(VectorType.I64).assertRoundTrip(
+            """{"@type":"xt:type","@value":[{"@type":"xt:keyword","@value":"?"},{"@type":"xt:keyword","@value":"i64"}]}"""
+        )
+    }
+
+    @Test
+    fun `round-trips fields`() {
+        Field("foo", FieldType.notNullable(VectorType.I64.arrowType), emptyList())
+            .assertRoundTrip("""{"@type":"xt:field","@value":{"foo":{"@type":"xt:keyword","@value":"i64"}}}""")
     }
 }

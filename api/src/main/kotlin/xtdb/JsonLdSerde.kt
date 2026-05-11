@@ -26,9 +26,17 @@ import java.io.OutputStream
 import java.math.BigDecimal
 import java.time.*
 import java.util.*
+import org.apache.arrow.vector.types.pojo.Field
+import xtdb.arrow.VectorType
 import xtdb.table.TableRef
 import xtdb.time.Interval
 import xtdb.time.asInterval
+import xtdb.util.requiringResolve
+
+private val RENDER_TYPE by lazy { requiringResolve("xtdb.serde.types/render-type") }
+private val RENDER_FIELD by lazy { requiringResolve("xtdb.serde.types/render-field") }
+private val PARSE_TYPE by lazy { requiringResolve("xtdb.serde.types/->type") }
+private val PARSE_FIELD by lazy { requiringResolve("xtdb.serde.types/->field") }
 
 /**
  * JSON-LD serializer with @type/@value wrappers for non-native JSON types
@@ -124,6 +132,9 @@ object AnyJsonLdSerde : KSerializer<Any> {
                         )
                     }
 
+                    "xt:type" -> PARSE_TYPE.invoke(value.fromLdValue().toCljColl())
+                    "xt:field" -> PARSE_FIELD.invoke(value.fromLdValue().toCljColl())
+
                     in ANOMALY_TYPES -> toThrowable(
                         type,
                         value as? JsonObject ?: throw jsonIAEwithMessage(
@@ -144,6 +155,13 @@ object AnyJsonLdSerde : KSerializer<Any> {
     }
 
     fun Any?.toJsonLdElement(type: String) = mapOf("@type" to type, "@value" to toString()).toJsonLdElement()
+
+    private fun Any?.toCljColl(): Any? = when (this) {
+        is Map<*, *> -> PersistentHashMap.create(entries.associate { (k, v) -> k to v?.toCljColl() })
+        is Set<*> -> PersistentHashSet.create(map { it?.toCljColl() })
+        is List<*> -> PersistentVector.create(map { it?.toCljColl() })
+        else -> this
+    }
 
     fun Throwable.toJsonLdElement(): JsonElement {
         val type = when (this) {
@@ -202,6 +220,9 @@ object AnyJsonLdSerde : KSerializer<Any> {
             "@type" to "xt:table",
             "@value" to mapOf("db" to dbName, "schema" to schemaName, "table" to tableName)
         ).toJsonLdElement()
+
+        is VectorType -> mapOf("@type" to "xt:type", "@value" to RENDER_TYPE.invoke(this)).toJsonLdElement()
+        is Field -> mapOf("@type" to "xt:field", "@value" to RENDER_FIELD.invoke(this)).toJsonLdElement()
 
         is Throwable -> toJsonLdElement()
         else -> throw Incorrect("unknown type: ${this.javaClass.name}")
