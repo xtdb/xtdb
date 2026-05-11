@@ -115,7 +115,7 @@ class JsonSerdeTest {
             data = mapOf("a" to 1L),
         ))
         assertEquals(
-            """{"@type":"xt:incorrect","@value":{"xtdb.error/message":"sort your request out!","xtdb.error/data":{"xtdb.error/code":{"@type":"xt:keyword","@value":"xtdb/malformed-req"},"a":1}}}""",
+            """{"category":"incorrect","code":"xtdb/malformed-req","message":"sort your request out!","data":{"a":1}}""",
             json
         )
     }
@@ -128,7 +128,7 @@ class JsonSerdeTest {
             mapOf("a" to 1L)
         ))
         assertEquals(
-            """{"@type":"xt:unsupported","@value":{"xtdb.error/message":"ruh roh.","xtdb.error/data":{"xtdb.error/code":{"@type":"xt:keyword","@value":"xtdb/boom"},"a":1}}}""",
+            """{"category":"unsupported","code":"xtdb/boom","message":"ruh roh.","data":{"a":1}}""",
             json
         )
     }

@@ -220,9 +220,10 @@
                    :localized-severity "ERROR",
                    :sql-state "22P02",
                    :message "Text 'alan' could not be parsed at index 0"
-                   :detail #xt/error [:incorrect :xtdb.pgwire/invalid-arg-representation 
-                                      "Text 'alan' could not be parsed at index 0"
-                                      {:arg-idx 0, :arg-format :text}]}}]
+                   :detail {"category" "incorrect"
+                            "code" "xtdb.pgwire/invalid-arg-representation"
+                            "message" "Text 'alan' could not be parsed at index 0"
+                            "data" {"arg-idx" 0, "arg-format" "text"}}}}]
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
@@ -293,9 +294,10 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "DML is not allowed in a READ ONLY transaction"
-                                       :detail #xt/error [:incorrect :xtdb/dml-in-read-only-tx 
-                                                          "DML is not allowed in a READ ONLY transaction"
-                                                          {:query "INSERT INTO foo RECORDS {_id: 1}"}]}}]
+                                       :detail {"category" "incorrect"
+                                                "code" "xtdb/dml-in-read-only-tx"
+                                                "message" "DML is not allowed in a READ ONLY transaction"
+                                                "data" {"query" "INSERT INTO foo RECORDS {_id: 1}"}}}}]
                 [:msg-ready {:status :idle}]]
 
                (test "SELECT 1 one; INSERT INTO foo RECORDS {_id: 1}"))))
@@ -306,9 +308,10 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "Queries are unsupported in a DML transaction"
-                                       :detail #xt/error [:incorrect :xtdb/queries-in-read-write-tx
-                                                          "Queries are unsupported in a DML transaction"
-                                                          {:query "SELECT 1 one"}]}}]
+                                       :detail {"category" "incorrect"
+                                                "code" "xtdb/queries-in-read-write-tx"
+                                                "message" "Queries are unsupported in a DML transaction"
+                                                "data" {"query" "SELECT 1 one"}}}}]
                 [:msg-ready {:status :idle}]]
 
                (test "INSERT INTO foo RECORDS {_id: 1}; SELECT 1 one"))))
@@ -327,7 +330,9 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01"
                                        :message "data exception - division by zero"
-                                       :detail #xt/error [:incorrect :xtdb.expression/division-by-zero "data exception - division by zero" {}]}}]
+                                       :detail {"category" "incorrect"
+                                                "code" "xtdb.expression/division-by-zero"
+                                                "message" "data exception - division by zero"}}}]
                 [:msg-ready {:status :failed-transaction}]]
                (test "BEGIN; SELECT 1/0 boom;"))))
 

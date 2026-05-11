@@ -12,7 +12,16 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.contextual
 import xtdb.AnyJsonLdSerde.fromLdValue
 import xtdb.AnyJsonLdSerde.toJsonLdElement
+import xtdb.error.Anomaly.Companion.CATEGORY
+import xtdb.error.Busy
+import xtdb.error.Conflict
+import xtdb.error.Fault
+import xtdb.error.Forbidden
 import xtdb.error.Incorrect
+import xtdb.error.Interrupted
+import xtdb.error.NotFound
+import xtdb.error.Unavailable
+import xtdb.error.Unsupported
 import java.io.InputStream
 import java.io.OutputStream
 import java.math.BigDecimal
@@ -21,6 +30,10 @@ import java.time.temporal.Temporal
 import java.util.*
 import xtdb.table.TableRef
 import xtdb.time.Interval
+import xtdb.util.requiringResolve
+
+private val PR_STR by lazy { requiringResolve("clojure.core/pr-str") }
+private val ERROR_CODE_KW = Keyword.intern("xtdb.error", "code")
 
 /**
  * Simple JSON serializer - non-native types become strings
@@ -57,8 +70,57 @@ object AnySerde : KSerializer<Any> {
         is Duration -> JsonPrimitive(toString())
         is Interval -> JsonPrimitive(toString())
         is TableRef -> toJsonLdElement()
-        is Throwable -> toJsonLdElement()
+        is Throwable -> toSimpleJsonElement()
         else -> throw Incorrect("unknown type: ${this.javaClass.name}")
+    }
+
+    fun Throwable.toSimpleJsonElement(): JsonElement {
+        val category = when (this) {
+            is Incorrect -> "incorrect"
+            is Unsupported -> "unsupported"
+            is Conflict -> "conflict"
+            is Fault -> "fault"
+            is Interrupted -> "interrupted"
+            is NotFound -> "not-found"
+            is Forbidden -> "forbidden"
+            is Busy -> "busy"
+            is Unavailable -> "unavailable"
+            else -> "error"
+        }
+        val rawData = (this as? IExceptionInfo)?.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        val code = (rawData[ERROR_CODE_KW] as? Keyword)?.sym?.toString()
+        val displayData = rawData
+            .filterKeys { it != CATEGORY && it != ERROR_CODE_KW }
+            .mapKeys { (k, _) -> (k as? Keyword)?.sym?.toString() ?: k.toString() }
+
+        return buildJsonObject {
+            put("category", category)
+            code?.let { put("code", it) }
+            message?.let { put("message", it) }
+            if (displayData.isNotEmpty()) {
+                putJsonObject("data") {
+                    for ((k, v) in displayData) {
+                        put(k, v.toSimpleJsonValue())
+                    }
+                }
+            }
+        }
+    }
+
+    private fun Any?.toSimpleJsonValue(): JsonElement = when (this) {
+        null -> JsonNull
+        is String -> JsonPrimitive(this)
+        is Number -> JsonPrimitive(this)
+        is Boolean -> JsonPrimitive(this)
+        is Keyword -> JsonPrimitive(sym.toString())
+        is Symbol -> JsonPrimitive(toString())
+        is Map<*, *> -> JsonObject(entries.associate { (k, v) ->
+            val keyStr = (k as? Keyword)?.sym?.toString() ?: k?.toString() ?: "null"
+            keyStr to v.toSimpleJsonValue()
+        })
+        is Set<*> -> JsonArray(map { it.toSimpleJsonValue() })
+        is Collection<*> -> JsonArray(map { it.toSimpleJsonValue() })
+        else -> JsonPrimitive(PR_STR.invoke(this) as String)
     }
 
     override fun deserialize(decoder: Decoder) =

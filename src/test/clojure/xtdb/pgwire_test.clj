@@ -720,13 +720,13 @@
        (testing "error during query execution"
          (send "select (1 / 0) from (values (42)) a (a);\n")
          (is (= ["ERROR:  data exception - division by zero"
-                 "DETAIL:  {\"@type\":\"xt:incorrect\",\"@value\":{\"xtdb.error/message\":\"data exception - division by zero\",\"xtdb.error/data\":{\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"xtdb.expression/division-by-zero\"}}}}"]
+                 "DETAIL:  {\"category\":\"incorrect\",\"code\":\"xtdb.expression/division-by-zero\",\"message\":\"data exception - division by zero\"}"]
                 (read :stderr)))
 
          (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (Exception. "unexpected")))]
            (send "select 1;\n")
            (is (= ["ERROR:  unexpected"
-                   "DETAIL:  {\"@type\":\"xt:fault\",\"@value\":{\"xtdb.error/message\":\"unexpected\",\"xtdb.error/data\":{\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"xtdb.error/unknown\"}}}}"]
+                   "DETAIL:  {\"category\":\"fault\",\"code\":\"xtdb.error/unknown\",\"message\":\"unexpected\"}"]
                   (read :stderr))))
 
          (with-redefs [pgw/cmd-exec-query (fn [& _]  (throw (ex-info "with pg code" {::pgw/severity :error, ::pgw/error-code "XXXXX"})))]
@@ -744,7 +744,7 @@
        (testing "error query"
          (send "INSERT INTO foo (id, a) VALUES (1, 2);\n")
          (is (= ["ERROR:  missing '_id'"
-                 "DETAIL:  {\"@type\":\"xt:incorrect\",\"@value\":{\"xtdb.error/message\":\"missing '_id'\",\"xtdb.error/data\":{\"doc\":{\"id\":1,\"a\":2},\"xtdb.error/code\":{\"@type\":\"xt:keyword\",\"@value\":\"missing-id\"}}}}"]
+                 "DETAIL:  {\"category\":\"incorrect\",\"code\":\"missing-id\",\"message\":\"missing '_id'\",\"data\":{\"doc\":{\"id\":1,\"a\":2}}}"]
                 (read :stderr)))
          ;; to drain the standard stream
          (read))
@@ -2470,7 +2470,7 @@ ORDER BY t.oid DESC LIMIT 1"
     (t/is (thrown-with-msg? PSQLException #"ERROR: Negative substring length"
                             (jdbc/execute! conn ["SELECT SUBSTRING('asf' FROM 0 FOR -1);"])))))
 
-(t/deftest test-anomaly-with-vector-type-encodes-on-json-pgwire
+(t/deftest test-min-max-incomparable-default-json-pgwire
   (xt/submit-tx tu/*node*
                 [[:put-docs :docs {:xt/id 1, :v 12}]
                  [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
@@ -2481,16 +2481,39 @@ ORDER BY t.oid DESC LIMIT 1"
                (catch PSQLException e e))]
       (t/is (instance? PSQLException ex))
       (t/is (re-find #"Incomparable types in min/max aggregate" (.getMessage ex)))
+      (t/is (re-find #"#xt/type" (.getMessage ex))
+            "message includes the rendered VectorType (call-site enrichment)")
+
+      (let [detail (some-> ^PSQLException ex .getServerErrorMessage .getDetail)
+            decoded (some-> detail JsonSerde/decode)]
+        (t/is (some? detail) "server sent a JSON-encoded error detail")
+        (t/is (= "incorrect" (get decoded "category")))
+        (t/is (= "xtdb.group-by/incomparable-min-max-types" (get decoded "code")))
+        (t/is (re-find #"Incomparable types in min/max aggregate" (get decoded "message")))
+        (t/is (re-find #"#xt/type" (get-in decoded ["data" "from-type"]))
+              "data.from-type is the pr-str'd VectorType form")))))
+
+(t/deftest test-min-max-incomparable-json-ld-pgwire
+  (xt/submit-tx tu/*node*
+                [[:put-docs :docs {:xt/id 1, :v 12}]
+                 [:put-docs :docs {:xt/id 2, :v #xt/zoned-date-time "2022-08-01T13:34+01:00[Europe/London]"}]])
+
+  (with-open [conn (pgjdbc-conn)]
+    (jdbc/execute! conn ["SET fallback_output_format = 'json-ld'"])
+    (let [ex (try
+               (jdbc/execute! conn ["SELECT MAX(v) AS m FROM docs"])
+               (catch PSQLException e e))]
+      (t/is (instance? PSQLException ex))
+      (t/is (re-find #"Incomparable types in min/max aggregate" (.getMessage ex)))
 
       (let [detail (some-> ^PSQLException ex .getServerErrorMessage .getDetail)
             decoded (some-> detail JsonLdSerde/decodeJsonLd)
             from-type (some-> decoded ex-data :from-type)]
-        (t/is (some? detail) "server sent a JSON-encoded error detail")
+        (t/is (some? detail))
         (t/is (instance? xtdb.error.Incorrect decoded)
               "detail decodes back to the original anomaly type")
-        (t/is (re-find #"Incomparable types in min/max aggregate" (ex-message decoded)))
         (t/is (instance? xtdb.arrow.VectorType from-type)
-              ":from-type round-tripped to a VectorType — encoder shipped canonical form")))))
+              ":from-type round-tripped to a VectorType via the json-ld opt-in")))))
 
 (def display-tables-query
   "
