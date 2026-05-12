@@ -18,7 +18,6 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
-import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ResultCursor
 import xtdb.api.Xtdb
@@ -35,9 +34,6 @@ import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.nio.channels.Channels
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
 
@@ -52,16 +48,45 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
-        // Arrow IPC bytes — allocator-agnostic, caller can close their VSR
-        // straight after bind. Cleared only by another bind() or close().
-        private var argBytes: ByteArray? = null
+        private var args: Relation? = null
+
+        private fun clearArgs() {
+            args.also { args = null }?.close()
+        }
+
+        private fun copyArgs(rel: RelationReader): Relation {
+            val copied = Relation(node.allocator, rel.schema)
+
+            return try {
+                rel.rowCopier(copied).copyRange(0, rel.rowCount)
+                copied
+            } catch (t: Throwable) {
+                copied.close()
+                throw t
+            }
+        }
+
+        private fun openArgs(): Relation? =
+            args?.let { stored ->
+                Relation(node.allocator, stored.schema).also { copy ->
+                    try {
+                        stored.rowCopier(copy).copyRange(0, stored.rowCount)
+                    } catch (t: Throwable) {
+                        copy.close()
+                        throw t
+                    }
+                }
+            }
+
+        private fun openQueryArgs(): RelationReader? =
+            openArgs()?.let { RelationReader.from(it.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }, it.rowCount) }
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
             // New SQL invalidates both the compiled plan and any prior bind —
             // the parameter shape can have changed.
             this.prepared = null
-            this.argBytes = null
+            clearArgs()
         }
 
         override fun prepare() {
@@ -78,51 +103,21 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun bind(root: VectorSchemaRoot) {
-            argBytes = null
-            // External `$N` → planner-internal `?_N`, by position.
-            // `$N` is 0-indexed
-            val renamedFields = root.schema.fields.mapIndexed { idx, f -> f.withName("?_$idx") }
-            argBytes = ByteArrayOutputStream().use { baos ->
-                val renamedRoot = VectorSchemaRoot(renamedFields, root.fieldVectors, root.rowCount)
-                ArrowStreamWriter(renamedRoot, null, Channels.newChannel(baos)).use { writer ->
-                    writer.start()
-                    writer.writeBatch()
-                    writer.end()
-                }
-                baos.toByteArray()
-            }
+            Relation.fromRoot(node.allocator, root).use(::bind)
         }
 
         override fun bind(rel: RelationReader) {
-            argBytes = null
-            rel.openDirectSlice(node.allocator).use { sliced ->
-                val renamedFields = sliced.vectors.mapIndexed { idx, v -> v.field.withName("?_$idx") }
-                Relation(node.allocator, renamedFields).use { renamed ->
-                    sliced.openArrowRecordBatch().use { rb -> renamed.load(rb) }
-                    argBytes = renamed.asArrowStream
-                }
-            }
+            clearArgs()
+            args = copyArgs(rel)
         }
 
-        private fun deserialiseArgs(bytes: ByteArray): Relation =
-            Relation.StreamLoader(node.allocator, Channels.newChannel(ByteArrayInputStream(bytes))).use { loader ->
-                Relation(node.allocator, loader.schema).also { rel ->
-                    try {
-                        loader.loadNextPage(rel)
-                    } catch (t: Throwable) {
-                        rel.close()
-                        throw t
-                    }
-                }
-            }
-
         override fun executeQuery(): QueryResult {
-            val args = argBytes?.let(::deserialiseArgs)
+            val queryArgs = openQueryArgs()
             val cursor = try {
-                prepared?.openQuery(args, QueryOpts())
+                prepared?.openQuery(queryArgs, QueryOpts())
                     ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
             } catch (t: Throwable) {
-                args?.close()
+                queryArgs?.close()
                 throw t
             }
             val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
@@ -131,13 +126,13 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun executeUpdate(): UpdateResult {
             val sql = sql ?: error("SQL query not set")
-            val op = argBytes?.let { TxOp.SqlBytes(sql, it) } ?: TxOp.Sql(sql)
+            val op = TxOp.Sql(sql, openQueryArgs())
             executeDml(op)
             return UpdateResult(-1)
         }
 
         override fun close() {
-            argBytes = null
+            clearArgs()
             prepared = null
         }
     }
