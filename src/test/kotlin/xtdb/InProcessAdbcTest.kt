@@ -1,23 +1,19 @@
 package xtdb
 
+import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.BigIntVector
-import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.types.Types
 import org.apache.arrow.vector.types.pojo.ArrowType
-import org.apache.arrow.vector.types.pojo.Field
-import org.apache.arrow.vector.types.pojo.FieldType
-import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.ofType
 
 class InProcessAdbcTest {
 
@@ -49,6 +45,24 @@ class InProcessAdbcTest {
         }
     }
 
+    private fun queryRows(stmt: AdbcStatement): List<Map<*, *>> =
+        stmt.executeQuery().reader.use { rdr ->
+            assertTrue(rdr.loadNextBatch())
+            Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                rel.toMaps(SNAKE_CASE_STRING)
+            }
+        }
+
+    private fun bindLongParam(stmt: AdbcStatement, value: Long) {
+        Relation(al, "\$0" ofType I64).use { rel ->
+            rel.writeRow(mapOf("\$0" to value))
+
+            rel.openAsRoot(al).use { params ->
+                stmt.bind(params)
+            }
+        }
+    }
+
     @Test
     fun `prepare and execute simple query`() {
         insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
@@ -58,16 +72,7 @@ class InProcessAdbcTest {
                 stmt.setSqlQuery("SELECT _id, n FROM foo")
                 stmt.prepare()
 
-                stmt.executeQuery().reader.use { rdr ->
-                    assertTrue(rdr.loadNextBatch())
-                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                        assertEquals(
-                            listOf(mapOf("_id" to 1L, "n" to "one")),
-                            rel.toMaps(SNAKE_CASE_STRING)
-                        )
-                    }
-                    assertFalse(rdr.loadNextBatch())
-                }
+                assertEquals(listOf(mapOf("_id" to 1L, "n" to "one")), queryRows(stmt))
             }
         }
     }
@@ -80,31 +85,8 @@ class InProcessAdbcTest {
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
                 stmt.prepare()
-
-                val schema = Schema(listOf(
-                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
-                ))
-                VectorSchemaRoot.create(schema, al).use { params ->
-                    params.allocateNew()
-                    (params.getVector("\$0") as BigIntVector).apply {
-                        setSafe(0, 2L)
-                        valueCount = 1
-                    }
-                    params.rowCount = 1
-
-                    stmt.bind(params)
-
-                    stmt.executeQuery().reader.use { rdr ->
-                        assertTrue(rdr.loadNextBatch())
-                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                            assertEquals(
-                                listOf(mapOf("_id" to 2L)),
-                                rel.toMaps(SNAKE_CASE_STRING)
-                            )
-                        }
-                        assertFalse(rdr.loadNextBatch())
-                    }
-                }
+                bindLongParam(stmt, 2L)
+                assertEquals(listOf(mapOf("_id" to 2L)), queryRows(stmt))
             }
         }
     }
@@ -132,34 +114,13 @@ class InProcessAdbcTest {
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
                 stmt.prepare()
-
-                val schema = Schema(listOf(
-                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
-                ))
-                VectorSchemaRoot.create(schema, al).use { params ->
-                    params.allocateNew()
-                    (params.getVector("\$0") as BigIntVector).apply {
-                        setSafe(0, 42L)
-                        valueCount = 1
-                    }
-                    params.rowCount = 1
-
-                    stmt.bind(params)
-                    stmt.executeUpdate()
-                }
+                bindLongParam(stmt, 42L)
+                stmt.executeUpdate()
             }
 
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("SELECT _id FROM foo")
-                stmt.executeQuery().reader.use { rdr ->
-                    assertTrue(rdr.loadNextBatch())
-                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                        assertEquals(
-                            listOf(mapOf("_id" to 42L)),
-                            rel.toMaps(SNAKE_CASE_STRING)
-                        )
-                    }
-                }
+                assertEquals(listOf(mapOf("_id" to 42L)), queryRows(stmt))
             }
         }
     }
@@ -172,27 +133,9 @@ class InProcessAdbcTest {
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
                 stmt.prepare()
+                bindLongParam(stmt, 2L)
 
-                val schema = Schema(listOf(
-                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
-                ))
-                VectorSchemaRoot.create(schema, al).use { params ->
-                    params.allocateNew()
-                    (params.getVector("\$0") as BigIntVector).apply {
-                        setSafe(0, 2L)
-                        valueCount = 1
-                    }
-                    params.rowCount = 1
-                    stmt.bind(params)
-                }
-
-                fun runOnce(): List<*> =
-                    stmt.executeQuery().reader.use { rdr ->
-                        rdr.loadNextBatch()
-                        Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                            rel.toMaps(SNAKE_CASE_STRING)
-                        }
-                    }
+                fun runOnce(): List<Map<*, *>> = queryRows(stmt)
 
                 val expected = listOf(mapOf("_id" to 2L))
                 assertEquals(expected, runOnce(), "first execute")
@@ -209,31 +152,15 @@ class InProcessAdbcTest {
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
                 stmt.prepare()
-                val paramSchema = Schema(listOf(
-                    Field("\$0", FieldType.notNullable(Types.MinorType.BIGINT.type), null)
-                ))
-                VectorSchemaRoot.create(paramSchema, al).use { params ->
-                    params.allocateNew()
-                    (params.getVector("\$0") as BigIntVector).apply {
-                        setSafe(0, 1L)
-                        valueCount = 1
-                    }
-                    params.rowCount = 1
-                    stmt.bind(params)
-                }
+                bindLongParam(stmt, 1L)
 
                 stmt.setSqlQuery("SELECT _id FROM foo")
                 stmt.prepare()
-                stmt.executeQuery().reader.use { rdr ->
-                    assertTrue(rdr.loadNextBatch())
-                    Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
-                        assertEquals(
-                            listOf(mapOf("_id" to 1L)),
-                            rel.toMaps(SNAKE_CASE_STRING),
-                            "stale bind from prior SQL must not leak into new SQL"
-                        )
-                    }
-                }
+                assertEquals(
+                    listOf(mapOf("_id" to 1L)),
+                    queryRows(stmt),
+                    "stale bind from prior SQL must not leak into new SQL"
+                )
             }
         }
     }
