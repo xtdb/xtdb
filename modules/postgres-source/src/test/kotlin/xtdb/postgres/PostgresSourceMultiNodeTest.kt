@@ -4,6 +4,13 @@ import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
+import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.OffsetSpec
+import org.apache.kafka.clients.admin.RecordsToDelete
+import org.apache.kafka.clients.producer.KafkaProducer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -18,6 +25,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import software.amazon.awssdk.regions.Region.AWS_ISO_GLOBAL
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
+import xtdb.api.log.ReplicaMessage
 import xtdb.api.storage.Storage
 import xtdb.aws.S3
 import xtdb.cache.DiskCache
@@ -39,14 +47,17 @@ class PostgresSourceMultiNodeTest {
         private const val MINIO_BUCKET = "xtdb-test"
         private const val SOURCE_TOPIC = "test-src"
         private const val CDC_SOURCE_TOPIC = "test-cdc"
+        // KafkaCluster.LogFactory auto-derives the replica topic as "${log}-replica".
+        private const val CDC_REPLICA_TOPIC = "$CDC_SOURCE_TOPIC-replica"
         private const val CDC_DB = "cdc"
 
         // 1 tx per table snapshot + 1 snapshot-complete marker
         private const val SNAPSHOT_TXS = (NUM_TABLES + 1).toLong()
         private const val SNAPSHOT_ROWS = (NUM_TABLES * ROWS_PER_TABLE).toLong()
 
-        // Time to let nodes converge on the replica log before asserting state.
-        // Comfortably longer than typical convergence under happy-path conditions.
+        // Time to let the late follower attempt to catch up (and the streamed tx propagate)
+        // before asserting state. Bigger than typical convergence; just long enough that
+        // a working follower would converge well within this window.
         private val SETTLE_TIME = 5.seconds
 
         private fun tableName(idx: Int) = "pg_mn_t${"%02d".format(idx)}"
@@ -175,6 +186,39 @@ class PostgresSourceMultiNodeTest {
     private fun txCount(node: Xtdb): Long =
         scalarLong(node, "SELECT count(*) FROM xt.txs FOR ALL VALID_TIME")
 
+    private fun seedReplicaTopicNoOps(count: Int = 10) {
+        val props = mapOf<String, Any>("bootstrap.servers" to kafka.bootstrapServers, "acks" to "all")
+        KafkaProducer(props, ByteArraySerializer(), ByteArraySerializer()).use { producer ->
+            val bytes = ReplicaMessage.NoOp.encode()
+            repeat(count) { producer.send(ProducerRecord(CDC_REPLICA_TOPIC, bytes)) }
+            producer.flush()
+        }
+    }
+
+    /**
+     * Mimics a replica topic that's been written to by an earlier CDC attempt
+     * whose oldest messages have since aged out via Kafka retention — low-watermark
+     * advances past 0 with no block on object store anchoring follower recovery.
+     */
+    private fun truncateReplicaTopicPrefix(deleteBefore: Long) {
+        val props = mapOf<String, Any>("bootstrap.servers" to kafka.bootstrapServers)
+        AdminClient.create(props).use { admin ->
+            val tp = TopicPartition(CDC_REPLICA_TOPIC, 0)
+            admin.deleteRecords(mapOf(tp to RecordsToDelete.beforeOffset(deleteBefore))).all().get()
+        }
+        logReplicaOffsets("after truncate")
+    }
+
+    private fun logReplicaOffsets(label: String) {
+        val props = mapOf<String, Any>("bootstrap.servers" to kafka.bootstrapServers)
+        AdminClient.create(props).use { admin ->
+            val tp = TopicPartition(CDC_REPLICA_TOPIC, 0)
+            val earliest = admin.listOffsets(mapOf(tp to OffsetSpec.earliest())).all().get()[tp]?.offset()
+            val latest = admin.listOffsets(mapOf(tp to OffsetSpec.latest())).all().get()[tp]?.offset()
+            log.info("replica topic offsets ($label): earliest=$earliest, latest=$latest")
+        }
+    }
+
     private suspend fun settleThenAssert(
         label: String, nodes: List<Xtdb>, expectedRows: Long, expectedTxs: Long,
     ) {
@@ -222,6 +266,48 @@ class PostgresSourceMultiNodeTest {
                             nodes + postStreamLate, SNAPSHOT_ROWS + 1, SNAPSHOT_TXS + 1)
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Regression test for #5618: a prior CDC attempt left messages on the replica topic and
+     * retention has aged the oldest offsets out, so the partition's low-watermark sits past 0.
+     * No block has been written to object store yet, so a fresh follower comes up with
+     * `replica: -1` and must catch up on the snapshot from the replica log alone.
+     *
+     * Expected behaviour (post-fix): the late follower converges on the leader's state for
+     * both the snapshot and the subsequent streamed tx.
+     *
+     * Pre-fix, this test will fail because the consumer seeks to offset 0 (out-of-range on a
+     * truncated topic) and `auto.offset.reset=latest` skips it past the snapshot batch —
+     * leaving the follower with only the streamed tx and missing all the snapshot rows.
+     */
+    @Test
+    fun `postgres-source snapshot converges with truncated replica topic prefix`(
+        @TempDir leaderDir: Path, @TempDir lateFollowerDir: Path,
+    ) = runTest(timeout = 90.seconds) {
+        seedPostgres()
+        // Mimic an earlier CDC attempt's messages on the replica topic, with the oldest
+        // offsets having aged out under retention.
+        seedReplicaTopicNoOps(count = 20)
+        truncateReplicaTopicPrefix(deleteBefore = 15L)
+
+        openNode(leaderDir).use { leader ->
+            attachPostgresSource(leader)
+            settleThenAssert("leader after snapshot (truncated prefix)", listOf(leader), SNAPSHOT_ROWS, SNAPSHOT_TXS)
+            logReplicaOffsets("after snapshot, before late follower opens")
+
+            // Fresh follower joins post-snapshot — pod-1 shape from the #5618 logs.
+            openNode(lateFollowerDir).use { lateFollower ->
+                logReplicaOffsets("late follower opened")
+                settleThenAssert("late follower caught up on snapshot",
+                    listOf(leader, lateFollower), SNAPSHOT_ROWS, SNAPSHOT_TXS)
+
+                // And after a streamed insert, both nodes still agree.
+                pgExecute("INSERT INTO ${tableName(1)} (_id, payload) VALUES (9999, 'streamed')")
+                settleThenAssert("late follower caught up after streaming",
+                    listOf(leader, lateFollower), SNAPSHOT_ROWS + 1, SNAPSHOT_TXS + 1)
             }
         }
     }
