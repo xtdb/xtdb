@@ -302,7 +302,8 @@ class PostgresSourceMultiNodeTest {
             logReplicaOffsets("after snapshot, before late follower opens")
 
             // Fresh follower joins post-snapshot — pod-1 shape from the #5618 logs.
-            openNode(lateFollowerDir).use { lateFollower ->
+            val lateFollower = openNode(lateFollowerDir)
+            val testFailure = try {
                 logReplicaOffsets("late follower opened")
                 settleThenAssert("late follower caught up on snapshot",
                     listOf(leader, lateFollower), SNAPSHOT_ROWS, SNAPSHOT_TXS)
@@ -311,7 +312,16 @@ class PostgresSourceMultiNodeTest {
                 pgExecute("INSERT INTO ${tableName(1)} (_id, payload) VALUES (9999, 'streamed')")
                 settleThenAssert("late follower caught up after streaming",
                     listOf(leader, lateFollower), SNAPSHOT_ROWS + 1, SNAPSHOT_TXS + 1)
-            }
+                null
+            } catch (e: Throwable) { e }
+
+            // Close the late follower first, then let node1's post-rebalance leader transition
+            // settle before the outer .use closes it. Without this, leader.close() lands while
+            // node1 is mid-rebalance and we hit a separate close-during-rebalance deadlock that
+            // masks the #5618 assertion failure as an indefinite hang.
+            lateFollower.close()
+            runInterruptible { Thread.sleep(SETTLE_TIME.inWholeMilliseconds) }
+            testFailure?.let { throw it }
         }
     }
 
