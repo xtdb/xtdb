@@ -224,8 +224,11 @@ class PostgresSourceMultiNodeTest {
     ) {
         runInterruptible { Thread.sleep(SETTLE_TIME.inWholeMilliseconds) }
         nodes.forEachIndexed { i, n ->
-            assertEquals(expectedRows, rowCount(n), "$label: node${i + 1} row total")
-            assertEquals(expectedTxs, txCount(n), "$label: node${i + 1} tx count")
+            val rows = rowCount(n)
+            val txs = txCount(n)
+            log.info("$label: node${i + 1} rows=$rows (expected $expectedRows), txs=$txs (expected $expectedTxs)")
+            assertEquals(expectedRows, rows, "$label: node${i + 1} row total")
+            assertEquals(expectedTxs, txs, "$label: node${i + 1} tx count")
         }
     }
 
