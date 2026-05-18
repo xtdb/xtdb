@@ -95,17 +95,32 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun bind(rel: RelationReader) {
             clearArgs()
-            // `openDirectSlice` transfers ownership of the inbound buffers into our
-            // allocator — a ref-count bump for same-root allocators, a real copy when
-            // they differ. Caller can close their reader as soon as bind() returns.
-            args = rel.openDirectSlice(node.allocator)
+            // Copy row-by-row into a Relation owned by node.allocator so the caller
+            // can close their reader as soon as bind() returns, per the ADBC contract.
+            // openDirectSlice would be cheaper but only works when the caller's
+            // allocator shares a root with ours — Arrow's transferOwnership doesn't
+            // do cross-root copies, it just refuses. The row copy here is the
+            // one-shot cost paid per bind; openQueryArgs avoids paying it per execute.
+            args = Relation(node.allocator, rel.schema).closeOnCatch { copy ->
+                rel.rowCopier(copy).copyRange(0, rel.rowCount)
+                copy
+            }
         }
 
         override fun executeQuery(): QueryResult {
+            val sql = sql ?: error("SQL query not set")
+            // Bind without prepare is ambiguous for queries: node.openSqlQuery has no
+            // args parameter, so we'd silently drop the bind. Force the caller to
+            // prepare() first when parameters are bound, rather than failing later or
+            // (worse) returning a result that ignored their args.
+            if (prepared == null && args != null)
+                error("call prepare() before executeQuery() when parameters are bound")
+
             val queryArgs = openQueryArgs()
+            // PreparedQuery.openQuery takes ownership of args on success (see
+            // xtdb/query.clj's `wrap-closeables`); only need to close on throw.
             val cursor = try {
-                prepared?.openQuery(queryArgs, QueryOpts())
-                    ?: node.openSqlQuery(sql ?: error("SQL query not set"), dbName)
+                prepared?.openQuery(queryArgs, QueryOpts()) ?: node.openSqlQuery(sql, dbName)
             } catch (t: Throwable) {
                 queryArgs?.close()
                 throw t

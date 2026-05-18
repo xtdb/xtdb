@@ -6,6 +6,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -140,6 +141,31 @@ class InProcessAdbcTest {
                 val expected = listOf(mapOf("_id" to 2L))
                 assertEquals(expected, runOnce(), "first execute")
                 assertEquals(expected, runOnce(), "second execute reuses the same bind")
+            }
+        }
+    }
+
+    @Test
+    fun `executeQuery without prepare fails loud when parameters are bound`() {
+        // Locks in the contract: bind without prepare is ambiguous for queries
+        // (node.openSqlQuery has no args parameter), so we refuse to silently drop
+        // the bind and instead force the caller to prepare() first.
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
+                // deliberately skip prepare(); bind directly with the planner-known shape
+                Relation(al, "\$0" ofType I64).use { rel ->
+                    rel.writeRow(mapOf("\$0" to 1L))
+                    rel.openAsRoot(al).use { stmt.bind(it) }
+                }
+
+                val ex = assertThrows(IllegalStateException::class.java) {
+                    stmt.executeQuery()
+                }
+                assertTrue(
+                    ex.message?.contains("prepare") == true,
+                    "expected prepare-required message, got: ${ex.message}"
+                )
             }
         }
     }
