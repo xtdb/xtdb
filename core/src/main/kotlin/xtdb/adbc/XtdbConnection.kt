@@ -27,6 +27,7 @@ import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
 import xtdb.arrow.withName
+import xtdb.util.closeOnCatch
 import xtdb.database.DatabaseName
 import xtdb.query.PreparedQuery
 import xtdb.query.QueryOpts
@@ -54,32 +55,18 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             args.also { args = null }?.close()
         }
 
-        private fun copyArgs(rel: RelationReader): Relation {
-            val copied = Relation(node.allocator, rel.schema)
-
-            return try {
-                rel.rowCopier(copied).copyRange(0, rel.rowCount)
-                copied
-            } catch (t: Throwable) {
-                copied.close()
-                throw t
-            }
-        }
-
-        private fun openArgs(): Relation? =
-            args?.let { stored ->
-                Relation(node.allocator, stored.schema).also { copy ->
-                    try {
-                        stored.rowCopier(copy).copyRange(0, stored.rowCount)
-                    } catch (t: Throwable) {
-                        copy.close()
-                        throw t
-                    }
-                }
-            }
-
+        // Per-execution view onto the stored bind. `openSlice` on a Relation we already
+        // own (same-root allocator) bumps ref counts on the underlying buffers rather
+        // than copying — cheap to re-execute the same plan with the same args.
+        // The rename converts the external `$N` parameter names (per getParameterSchema)
+        // to the planner-internal `?_N` convention; positional, ignoring inbound names.
         private fun openQueryArgs(): RelationReader? =
-            openArgs()?.let { RelationReader.from(it.vectors.mapIndexed { idx, v -> v.withName("?_$idx") }, it.rowCount) }
+            args?.openSlice(node.allocator)?.closeOnCatch { sliced ->
+                RelationReader.from(
+                    sliced.vectors.mapIndexed { idx, v -> v.withName("?_$idx") },
+                    sliced.rowCount
+                )
+            }
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
@@ -108,7 +95,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun bind(rel: RelationReader) {
             clearArgs()
-            args = copyArgs(rel)
+            // `openDirectSlice` transfers ownership of the inbound buffers into our
+            // allocator — a ref-count bump for same-root allocators, a real copy when
+            // they differ. Caller can close their reader as soon as bind() returns.
+            args = rel.openDirectSlice(node.allocator)
         }
 
         override fun executeQuery(): QueryResult {
