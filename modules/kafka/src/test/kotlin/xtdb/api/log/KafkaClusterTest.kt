@@ -491,4 +491,31 @@ class KafkaClusterTest {
                 job2.cancelAndJoin()
             }
         }
+
+    @Test
+    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `DETACH on Kafka-backed secondary completes promptly (#5613)`() {
+        val primaryTopic = "kafka-detach-primary-${UUID.randomUUID()}"
+        val secondaryTopic = "kafka-detach-secondary-${UUID.randomUUID()}"
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", primaryTopic))
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute(
+                        """
+                        ATTACH DATABASE secondary WITH ${'$'}${'$'}
+                            log: !Kafka
+                              cluster: kafka
+                              topic: $secondaryTopic
+                        ${'$'}${'$'}""".trimIndent()
+                    )
+                    stmt.execute("DETACH DATABASE secondary")
+                }
+            }
+        }
+    }
 }

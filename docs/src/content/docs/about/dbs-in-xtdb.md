@@ -5,6 +5,14 @@ title: Databases in XTDB
 <details>
   <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: DETACH DATABASE is asynchronous
+
+: `DETACH` returns once the database is hidden from queries; resource teardown continues in the background — see ['Attaching/Detaching secondary databases'](#attachingdetaching-secondary-databases-v21) below.
+
+  Previously `DETACH` blocked until all resources were released, which could deadlock when detaching a Kafka-backed secondary.
+
+  No upgrade steps needed; if you script rapid `DETACH X; ATTACH X` flows, handle the new `xtdb/db-being-detached` error by retrying.
+
 v2.2: single-writer indexing
 
 : Indexing within a database is now single-writer — see ['Database architecture'](#database-architecture) above for how it works today.
@@ -267,6 +275,9 @@ $$
 ```
 
 - To detach a database, send `DETACH DATABASE my_secondary`.
+
+  (v2.2+) `DETACH` returns once the database is no longer queryable; resource cleanup (closing the log subscription, flushing buffers) continues in the background.
+  Re-attaching the same name before cleanup completes returns a transient `xtdb/db-being-detached` conflict — clients should retry.
 - **Read-only mode (v2.2+)**: specify `mode: 'read-only'` in the configuration to attach a database read-only.
   A read-only cluster still indexes transactions locally so it can serve queries, but it won't write blocks to the object store or compact — it pauses at block boundaries and picks up blocks written by another (read-write) cluster on the same database instead.
 

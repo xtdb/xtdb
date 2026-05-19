@@ -1,5 +1,11 @@
 package xtdb.database
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import xtdb.NodeBase
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
@@ -11,24 +17,32 @@ import xtdb.table.DatabaseName
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
+import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
 import java.util.concurrent.ConcurrentHashMap
 
 private val LOG = DatabaseCatalog::class.logger
 
-class DatabaseCatalog(
+class DatabaseCatalog @JvmOverloads constructor(
     private val base: NodeBase,
     private val indexer: Indexer,
     private val compactor: Compactor,
+    closerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Database.Catalog, AutoCloseable {
 
     private val databases = ConcurrentHashMap<DatabaseName, Database>()
     private val dormantDatabases = ConcurrentHashMap<DatabaseName, DatabaseConfig>()
 
-    override val databaseNames: Collection<DatabaseName> get() = databases.keys.toSet()
+    // Closing databases stay in `databases` until their close completes — see #5613.
+    private val closerJob = SupervisorJob()
+    private val closerScope = CoroutineScope(closerJob + closerDispatcher)
 
-    override fun databaseOrNull(dbName: DatabaseName): Database? = databases[dbName]
+    override val databaseNames: Collection<DatabaseName>
+        get() = databases.entries.asSequence().filter { !it.value.isClosing }.map { it.key }.toSet()
+
+    override fun databaseOrNull(dbName: DatabaseName): Database? =
+        databases[dbName]?.takeUnless { it.isClosing }
 
     override val serialisedSecondaryDatabases: Map<DatabaseName, DatabaseConfig>
         get() {
@@ -40,7 +54,16 @@ class DatabaseCatalog(
     private val skipDbs: Set<String> get() = base.config.skipDbs
 
     override fun attach(dbName: DatabaseName, config: Database.Config?) {
-        if (databases.containsKey(dbName) || dormantDatabases.containsKey(dbName))
+        databases[dbName]?.let { existing ->
+            if (existing.isClosing)
+                throw Conflict(
+                    "Database is still being detached — retry once the previous detach has completed",
+                    "xtdb/db-being-detached",
+                    mapOf("db-name" to dbName)
+                )
+            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
+        }
+        if (dormantDatabases.containsKey(dbName))
             throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
 
         val dbConfig = config ?: Database.Config()
@@ -73,24 +96,42 @@ class DatabaseCatalog(
 
         if (dormantDatabases.remove(dbName) != null) return
 
-        val db = databases.remove(dbName)
+        val db = databases[dbName]
             ?: throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
 
-        db.close()
+        if (db.isClosing)
+            throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
+
+        // Close off the persister's stack — see #5613.
+        db.isClosing = true
+        closerScope.launch {
+            try {
+                db.close()
+            } catch (t: Throwable) {
+                LOG.error(t) { "Failed to close detaching database '$dbName'" }
+            } finally {
+                databases.remove(dbName, db)
+            }
+        }
     }
 
     override fun close() {
+        // Join without cancelling — cancelling would interrupt each db.close() mid-teardown.
+        runBlocking { closerJob.children.toList().forEach { it.join() } }
+        closerJob.cancel()
         databases.values.closeAll()
         indexer.close()
     }
 
     companion object {
         @JvmStatic
+        @JvmOverloads
         fun open(
             base: NodeBase,
+            closerDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ): DatabaseCatalog {
             val indexer = base.indexerFactory.create(base)
-            val catalog = DatabaseCatalog(base, indexer, base.compactor)
+            val catalog = DatabaseCatalog(base, indexer, base.compactor, closerDispatcher)
 
             catalog.closeOnCatch {
                 val conf = base.config

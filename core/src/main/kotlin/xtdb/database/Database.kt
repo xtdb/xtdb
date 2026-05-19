@@ -47,6 +47,7 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.util.*
+import kotlin.concurrent.Volatile
 
 private val LOG = Database::class.logger
 
@@ -82,6 +83,10 @@ class Database(
 
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
     val ingestionError: IngestionStoppedException? get() = watchers.exception
+
+    @Volatile
+    var isClosing: Boolean = false
+        internal set
 
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
