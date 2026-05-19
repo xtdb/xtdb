@@ -9,7 +9,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.admin.RecordsToDelete
+import org.apache.kafka.clients.producer.KafkaProducer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.RecordTooLargeException
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -491,4 +496,92 @@ class KafkaClusterTest {
                 job2.cancelAndJoin()
             }
         }
+
+    // `AdminClient.deleteRecords` advances the low-watermark via the same mechanism Kafka retention uses.
+    private fun seedAndTruncate(topic: String, count: Int, payload: ByteArray) {
+        val props = mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers, "acks" to "all")
+        KafkaProducer(props, ByteArraySerializer(), ByteArraySerializer()).use { producer ->
+            repeat(count) { producer.send(ProducerRecord(topic, payload)) }
+            producer.flush()
+        }
+        AdminClient.create(mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers)).use { admin ->
+            val tp = TopicPartition(topic, 0)
+            admin.deleteRecords(mapOf(tp to RecordsToDelete.beforeOffset(count.toLong()))).all().get()
+        }
+    }
+
+    // Regression for #5618 — source-log path.
+    @Test
+    fun `tailAll picks up source messages appended past a truncated prefix`() = runTest(timeout = 30.seconds) {
+        val topicName = "trunc-src-${UUID.randomUUID()}"
+        // Bytes are arbitrary — never decoded, just truncated.
+        seedAndTruncate(topicName, count = 20, payload = ByteArray(8) { 0 })
+
+        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
+            coEvery { processRecords(capture(msgs)) } returns Unit
+        }
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topicName)
+                    .openSourceLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.appendMessage(txMessage(1))
+                        log.appendMessage(txMessage(2))
+                        log.appendMessage(txMessage(3))
+
+                        val job = launch { log.tailAll(-1, subscriber) }
+                        try {
+                            while (synchronized(msgs) { msgs.flatten().size } < 3) {
+                                delay(100.milliseconds)
+                            }
+                        } finally {
+                            job.cancelAndJoin()
+                        }
+                    }
+            }
+
+        assertEquals(3, synchronized(msgs) { msgs.flatten().size })
+    }
+
+    // Regression for #5618 — replica-log path via SharedGroupConsumer.onPartitionAssigned.
+    @Test
+    fun `openGroupSubscription picks up replica messages appended past a truncated prefix`() = runTest(timeout = 30.seconds) {
+        val sourceTopic = "trunc-repl-src-${UUID.randomUUID()}"
+        val replicaTopic = "$sourceTopic-replica"
+        seedAndTruncate(replicaTopic, count = 20, payload = ReplicaMessage.NoOp.encode())
+
+        val msgs = synchronizedList(mutableListOf<List<Record<ReplicaMessage>>>())
+        val processor = RecordProcessor<ReplicaMessage> { records -> msgs.add(records) }
+        val listener = object : SubscriptionListener<ReplicaMessage> {
+            override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<ReplicaMessage> =
+                TailSpec(afterMsgId = -1L, processor = processor)
+            override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+        }
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", sourceTopic)
+                    .openReplicaLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.appendMessage(ReplicaMessage.NoOp)
+                        log.appendMessage(ReplicaMessage.NoOp)
+                        log.appendMessage(ReplicaMessage.NoOp)
+
+                        val job = launch { log.openGroupSubscription(listener) }
+                        try {
+                            while (synchronized(msgs) { msgs.flatten().size } < 3) {
+                                delay(100.milliseconds)
+                            }
+                        } finally {
+                            job.cancelAndJoin()
+                        }
+                    }
+            }
+
+        assertEquals(3, synchronized(msgs) { msgs.flatten().size })
+    }
 }
