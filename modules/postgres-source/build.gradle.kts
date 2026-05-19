@@ -21,11 +21,14 @@ dependencies {
     implementation(libs.jdbi.kotlin)
 
     testImplementation(project(":modules:xtdb-kafka"))
+    testImplementation(project(":modules:xtdb-aws"))
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers)
     testImplementation(libs.testcontainers.kafka)
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.minio)
+    testImplementation(libs.minio)
     testImplementation(libs.pgjdbc)
 }
 
