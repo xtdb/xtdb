@@ -56,11 +56,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             args.also { args = null }?.close()
         }
 
-        // Per-execution view onto the stored bind. `openSlice` on a Relation we already
-        // own (same-root allocator) bumps ref counts on the underlying buffers rather
-        // than copying — cheap to re-execute the same plan with the same args.
-        // The rename converts the external `$N` parameter names (per getParameterSchema)
-        // to the planner-internal `?_N` convention; positional, ignoring inbound names.
         private fun openQueryArgs(): RelationReader? =
             args?.openSlice(node.allocator)?.closeOnCatch { sliced ->
                 RelationReader.from(
@@ -71,8 +66,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
-            // New SQL invalidates both the compiled plan and any prior bind —
-            // the parameter shape can have changed.
             this.prepared = null
             clearArgs()
         }
@@ -84,7 +77,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun getParameterSchema(): Schema {
             val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
-            // placeholder type until bind supplies real ones
             return Schema(
                 (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
             )
@@ -96,12 +88,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun bind(rel: RelationReader) {
             clearArgs()
-            // Copy row-by-row into a Relation owned by node.allocator so the caller
-            // can close their reader as soon as bind() returns, per the ADBC contract.
-            // openDirectSlice would be cheaper but only works when the caller's
-            // allocator shares a root with ours — Arrow's transferOwnership doesn't
-            // do cross-root copies, it just refuses. The row copy here is the
-            // one-shot cost paid per bind; openQueryArgs avoids paying it per execute.
             args = Relation(node.allocator, rel.schema).closeOnCatch { copy ->
                 rel.rowCopier(copy).copyRange(0, rel.rowCount)
                 copy
@@ -110,10 +96,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun executeQuery(): QueryResult {
             val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
-            // Bind without prepare is ambiguous for queries: node.openSqlQuery has no
-            // args parameter, so we'd silently drop the bind. Force the caller to
-            // prepare() first when parameters are bound, rather than failing later or
-            // (worse) returning a result that ignored their args.
             if (prepared == null && args != null)
                 throw Incorrect(
                     "call prepare() before executeQuery() when parameters are bound",
@@ -121,8 +103,6 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
                 )
 
             val queryArgs = openQueryArgs()
-            // PreparedQuery.openQuery takes ownership of args on success (see
-            // xtdb/query.clj's `wrap-closeables`); only need to close on throw.
             val cursor = try {
                 prepared?.openQuery(queryArgs, QueryOpts()) ?: node.openSqlQuery(sql, dbName)
             } catch (t: Throwable) {

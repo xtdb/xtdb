@@ -148,13 +148,9 @@ class InProcessAdbcTest {
 
     @Test
     fun `executeQuery without prepare fails loud when parameters are bound`() {
-        // Locks in the contract: bind without prepare is ambiguous for queries
-        // (node.openSqlQuery has no args parameter), so we refuse to silently drop
-        // the bind and instead force the caller to prepare() first.
         xtdb.connect().use { conn ->
             conn.createStatement().use { stmt ->
                 stmt.setSqlQuery("SELECT _id FROM foo WHERE _id = ?")
-                // deliberately skip prepare(); bind directly with the planner-known shape
                 Relation(al, "\$0" ofType I64).use { rel ->
                     rel.writeRow(mapOf("\$0" to 1L))
                     rel.openAsRoot(al).use { stmt.bind(it) }
