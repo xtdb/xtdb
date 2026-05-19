@@ -29,6 +29,7 @@ import xtdb.arrow.unsupported
 import xtdb.arrow.withName
 import xtdb.util.closeOnCatch
 import xtdb.database.DatabaseName
+import xtdb.error.Incorrect
 import xtdb.query.PreparedQuery
 import xtdb.query.QueryOpts
 import xtdb.table.TableRef
@@ -77,12 +78,12 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun prepare() {
-            val sql = this.sql ?: error("SQL query not set")
+            val sql = this.sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
             prepared = node.prepareSql(sql, dbName)
         }
 
         override fun getParameterSchema(): Schema {
-            val pq = prepared ?: error("call prepare() first")
+            val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
             // placeholder type until bind supplies real ones
             return Schema(
                 (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
@@ -108,13 +109,16 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun executeQuery(): QueryResult {
-            val sql = sql ?: error("SQL query not set")
+            val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
             // Bind without prepare is ambiguous for queries: node.openSqlQuery has no
             // args parameter, so we'd silently drop the bind. Force the caller to
             // prepare() first when parameters are bound, rather than failing later or
             // (worse) returning a result that ignored their args.
             if (prepared == null && args != null)
-                error("call prepare() before executeQuery() when parameters are bound")
+                throw Incorrect(
+                    "call prepare() before executeQuery() when parameters are bound",
+                    "xtdb.adbc/bind-without-prepare",
+                )
 
             val queryArgs = openQueryArgs()
             // PreparedQuery.openQuery takes ownership of args on success (see
@@ -130,7 +134,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun executeUpdate(): UpdateResult {
-            val sql = sql ?: error("SQL query not set")
+            val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
             val op = TxOp.Sql(sql, openQueryArgs())
             executeDml(op)
             return UpdateResult(-1)
@@ -179,8 +183,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         val schemaName = splitTable.getOrNull(1) ?: "public"
 
         return object : XtdbStatement {
-            override fun executeQuery() = error("Bulk ingest does not support queries")
-            override fun prepare() = error("Bulk ingest does not support prepare")
+            override fun executeQuery(): QueryResult =
+                throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
+            override fun prepare(): Unit =
+                throw Incorrect("Bulk ingest does not support prepare", "xtdb.adbc/bulk-ingest-no-prepare")
 
             private var rel: Relation? = null
 

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import xtdb.error.Incorrect
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
@@ -159,7 +160,7 @@ class InProcessAdbcTest {
                     rel.openAsRoot(al).use { stmt.bind(it) }
                 }
 
-                val ex = assertThrows(IllegalStateException::class.java) {
+                val ex = assertThrows(Incorrect::class.java) {
                     stmt.executeQuery()
                 }
                 assertTrue(
