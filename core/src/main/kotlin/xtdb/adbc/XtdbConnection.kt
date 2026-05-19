@@ -45,6 +45,16 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     interface XtdbStatement : AdbcStatement {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
+
+        /**
+         * Take ownership of [rel] as the statement's parameters, bypassing the defensive copy
+         * that [bind] performs. The caller MUST NOT close [rel]; the statement owns it from
+         * this point and will close it on the next [bind] / [bindOwning] / [close].
+         *
+         * [rel] must be allocated by an allocator compatible with the statement's connection
+         * (typically the node's allocator or one of its descendants).
+         */
+        fun bindOwning(rel: Relation): Unit = unsupported("bindOwning(Relation) not supported")
     }
 
     override fun createStatement() = object : XtdbStatement {
@@ -92,6 +102,11 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
                 rel.rowCopier(copy).copyRange(0, rel.rowCount)
                 copy
             }
+        }
+
+        override fun bindOwning(rel: Relation) {
+            clearArgs()
+            args = rel
         }
 
         override fun executeQuery(): QueryResult {
