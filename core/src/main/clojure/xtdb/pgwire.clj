@@ -274,19 +274,32 @@
      (validate-and-refresh-token ~conn)
      ~@body))
 
+(defn- encode-error-detail
+  "Encodes an anomaly into the `:detail` field of a pgwire ErrorResponse.
+  Returns nil if encoding fails — losing the detail is preferable to the whole
+  error frame failing to send, which would present to the client as a connection
+  drop (EOFException) rather than a SQLException."
+  [anomaly format]
+  (try
+    (case format
+      :json (String. (JsonSerde/encodeToBytes anomaly) StandardCharsets/UTF_8)
+      :json-ld (String. (JsonLdSerde/encodeJsonLdToBytes anomaly) StandardCharsets/UTF_8)
+      :transit (serde/write-transit anomaly :json))
+    (catch Throwable t
+      (log/warn t "Failed to encode pgwire error detail; sending error frame without detail"
+                {:format format})
+      nil)))
+
 (defn send-ex [{:keys [conn-state] :as conn}, ^Throwable ex]
   (let [ex-msg (ex-message ex)
 
         {::keys [severity error-code routine], :keys [detail]}
         (if (::error-code (ex-data ex))
           (ex-data ex)
-          (let [ex (err/->anomaly ex {})]
-            (-> (ex->pgw-err ex)
-                (assoc :detail (let [format (get-in @conn-state [:session :parameters "fallback_output_format"] :json)]
-                                 (case format
-                                   :json (String. (JsonSerde/encodeToBytes ex) StandardCharsets/UTF_8)
-                                   :json-ld (String. (JsonLdSerde/encodeJsonLdToBytes ex) StandardCharsets/UTF_8)
-                                   :transit (serde/write-transit ex :json)))))))
+          (let [anomaly (err/->anomaly ex {})
+                format (get-in @conn-state [:session :parameters "fallback_output_format"] :json)]
+            (-> (ex->pgw-err anomaly)
+                (assoc :detail (encode-error-detail anomaly format)))))
 
         severity-str (str/upper-case (name severity))]
     (pgio/cmd-write-msg conn pgio/msg-error-response
