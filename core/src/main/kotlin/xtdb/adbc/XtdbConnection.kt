@@ -24,10 +24,15 @@ import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
+import xtdb.arrow.withName
+import xtdb.util.closeOnCatch
 import xtdb.database.DatabaseName
-import xtdb.table.TableRef
+import xtdb.error.Incorrect
 import xtdb.query.PreparedQuery
+import xtdb.query.QueryOpts
+import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.useAll
@@ -44,27 +49,81 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
+        private var prepared: PreparedQuery? = null
+        private var args: Relation? = null
+
+        private fun clearArgs() {
+            args.also { args = null }?.close()
+        }
+
+        private fun openQueryArgs(): RelationReader? =
+            args?.openSlice(node.allocator)?.closeOnCatch { sliced ->
+                RelationReader.from(
+                    sliced.vectors.mapIndexed { idx, v -> v.withName("?_$idx") },
+                    sliced.rowCount
+                )
+            }
 
         override fun setSqlQuery(sql: String) {
             this.sql = sql
+            this.prepared = null
+            clearArgs()
+        }
+
+        override fun prepare() {
+            val sql = this.sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+            prepared = node.prepareSql(sql, dbName)
+        }
+
+        override fun getParameterSchema(): Schema {
+            val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+            return Schema(
+                (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
+            )
+        }
+
+        override fun bind(root: VectorSchemaRoot) {
+            Relation.fromRoot(node.allocator, root).use(::bind)
+        }
+
+        override fun bind(rel: RelationReader) {
+            clearArgs()
+            args = Relation(node.allocator, rel.schema).closeOnCatch { copy ->
+                rel.rowCopier(copy).copyRange(0, rel.rowCount)
+                copy
+            }
         }
 
         override fun executeQuery(): QueryResult {
-            val sql = this.sql ?: error("SQL query not set")
-            val cursor = node.openSqlQuery(sql, dbName)
-            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
+            val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+            if (prepared == null && args != null)
+                throw Incorrect(
+                    "call prepare() before executeQuery() when parameters are bound",
+                    "xtdb.adbc/bind-without-prepare",
+                )
 
+            val queryArgs = openQueryArgs()
+            val cursor = try {
+                prepared?.openQuery(queryArgs, QueryOpts()) ?: node.openSqlQuery(sql, dbName)
+            } catch (t: Throwable) {
+                queryArgs?.close()
+                throw t
+            }
+            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
             return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
 
         override fun executeUpdate(): UpdateResult {
-            executeDml(TxOp.Sql(sql ?: error("SQL query not set")))
+            val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+            val op = TxOp.Sql(sql, openQueryArgs())
+            executeDml(op)
             return UpdateResult(-1)
         }
 
-        override fun prepare() = TODO("Not yet implemented")
-
-        override fun close() = Unit
+        override fun close() {
+            clearArgs()
+            prepared = null
+        }
     }
 
     internal fun executeDml(op: TxOp) {
@@ -104,8 +163,10 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         val schemaName = splitTable.getOrNull(1) ?: "public"
 
         return object : XtdbStatement {
-            override fun executeQuery() = error("Bulk ingest does not support queries")
-            override fun prepare() = error("Bulk ingest does not support prepare")
+            override fun executeQuery(): QueryResult =
+                throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
+            override fun prepare(): Unit =
+                throw Incorrect("Bulk ingest does not support prepare", "xtdb.adbc/bulk-ingest-no-prepare")
 
             private var rel: Relation? = null
 

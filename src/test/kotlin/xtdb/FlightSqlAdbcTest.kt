@@ -80,8 +80,6 @@ class FlightSqlAdbcTest {
         }
     }
 
-    // -- Basic round-trip --
-
     @Test
     fun `test simple round-trip`() {
         insertData("""
@@ -115,8 +113,6 @@ class FlightSqlAdbcTest {
             }
         }
     }
-
-    // -- FlightSQL metadata (via FlightSqlClient) --
 
     @Test
     fun `test FlightSQL getTableTypes`() {
@@ -160,8 +156,6 @@ class FlightSqlAdbcTest {
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
     }
 
-    // -- ADBC metadata (through FlightSQL ADBC client) --
-
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream
     // (allocates on the wrong root). Tested at the FlightSQL level via `test FlightSQL getSqlInfo` instead.
 
@@ -185,8 +179,6 @@ class FlightSqlAdbcTest {
             assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows with table data")
         }
     }
-
-    // -- Error handling --
 
     @Test
     fun `test DML via query path returns INVALID_ARGUMENT`() {
