@@ -7,7 +7,9 @@ import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
 import org.apache.arrow.flight.CallOption
 import org.apache.arrow.flight.FlightClient
 import org.apache.arrow.flight.FlightInfo
+import org.apache.arrow.flight.GetSessionOptionsRequest
 import org.apache.arrow.flight.Location
+import org.apache.arrow.flight.NoOpSessionOptionValueVisitor
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
@@ -155,6 +157,20 @@ class FlightSqlAdbcTest {
         val rows = fsqlClient.getSqlInfo(intArrayOf(), *emptyCallOpts).readRows()
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
     }
+
+    @Test
+    fun `test FlightSQL getSessionOptions returns catalog and schema`() {
+        val result = fsqlClient.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+
+        val asString = object : NoOpSessionOptionValueVisitor<String?>() {
+            override fun visit(value: String) = value
+        }
+        val opts = result.sessionOptions
+        assertEquals("xtdb", opts["catalog"]?.acceptVisitor(asString))
+        assertEquals("public", opts["schema"]?.acceptVisitor(asString))
+    }
+
+    // -- ADBC metadata (through FlightSQL ADBC client) --
 
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream
     // (allocates on the wrong root). Tested at the FlightSQL level via `test FlightSQL getSqlInfo` instead.
