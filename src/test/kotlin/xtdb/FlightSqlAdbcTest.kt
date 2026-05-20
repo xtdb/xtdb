@@ -13,6 +13,14 @@ import org.apache.arrow.flight.NoOpSessionOptionValueVisitor
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.complex.ListVector
+import org.apache.arrow.vector.ipc.ReadChannel
+import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.types.pojo.Schema
+import org.apache.arrow.vector.util.Text
+import java.io.ByteArrayInputStream
+import java.nio.channels.Channels
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -195,6 +203,64 @@ class FlightSqlAdbcTest {
             assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows with table data")
         }
     }
+
+    @Test
+    fun `test ADBC getObjects at ALL depth doesn't crash on IPC parse`() {
+        insertData("INSERT INTO users (_id, name) VALUES (1, 'jms')")
+
+        conn.getObjects(GetObjectsDepth.ALL, null, "public", "users", null, null).use { rdr ->
+            assertTrue(rdr.loadNextBatch(), "Expected at least one batch")
+            assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows")
+        }
+    }
+
+    private fun Any?.asList() = this as List<*>
+    private fun Any?.asMap() = this as Map<*, *>
+
+    @Test
+    fun `test ADBC getObjects at ALL depth populates table_columns`() {
+        insertData("INSERT INTO users (_id, name) VALUES (1, 'jms')")
+
+        conn.getObjects(GetObjectsDepth.ALL, null, "public", "users", null, null).use { rdr ->
+            assertTrue(rdr.loadNextBatch())
+            val root = rdr.vectorSchemaRoot
+
+            val catalogDbSchemas = (root.getVector("catalog_db_schemas") as ListVector).getObject(0).asList()
+            val publicSchema = catalogDbSchemas.first { it.asMap()["db_schema_name"].toString() == "public" }.asMap()
+            val tables = publicSchema["db_schema_tables"].asList()
+            val usersTable = tables.first { it.asMap()["table_name"].toString() == "users" }.asMap()
+            val columns = usersTable["table_columns"].asList()
+            val columnNames = columns.map { it.asMap()["column_name"].toString() }.toSet()
+            assertEquals(setOf("_id", "name"), columnNames)
+        }
+    }
+
+    @Test
+    fun `test FlightSQL getTables with includeSchema returns columns`() {
+        insertData("INSERT INTO users (_id, name) VALUES (1, 'jms')")
+
+        val info = fsqlClient.getTables(null, null, "users", null, true, *emptyCallOpts)
+        val ticket = info.endpoints.first().ticket
+        fsqlClient.getStream(ticket, *emptyCallOpts).use { stream ->
+            assertTrue(stream.next())
+            val root = stream.root
+            assertTrue(root.rowCount > 0, "Expected at least one table row")
+
+            val schemaVec = root.getVector("table_schema") as VarBinaryVector
+            val rowIdx = (0 until root.rowCount).first {
+                (root.getVector("table_name").getObject(it) as? Text)?.toString() == "users"
+            }
+            val schemaBytes = schemaVec.getObject(rowIdx) ?: error("table_schema bytes were null")
+
+            val tableSchema = schemaBytes.deserialiseArrowSchema()
+            assertEquals(setOf("_id", "name"), tableSchema.fields.map { it.name }.toSet())
+        }
+    }
+
+    private fun ByteArray.deserialiseArrowSchema(): Schema =
+        MessageSerializer.deserializeSchema(ReadChannel(Channels.newChannel(ByteArrayInputStream(this))))
+
+    // -- Error handling --
 
     @Test
     fun `test DML via query path returns INVALID_ARGUMENT`() {

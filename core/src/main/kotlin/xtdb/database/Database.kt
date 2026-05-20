@@ -70,7 +70,12 @@ class Database(
     val blockCatalog: BlockCatalog get() = queryState.blockCatalog
     val tableCatalog: TableCatalog get() = queryState.tableCatalog
 
-    fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? = tableCatalog.getTypes(table)
+    fun getColumnTypes(table: TableRef, snap: Snapshot): Map<ColumnName, VectorType>? {
+        val historical = tableCatalog.getTypes(table)
+        val live = snap.allColumnTypes[table]
+        return if (historical == null && live == null) null
+        else (historical ?: emptyMap()) + (live ?: emptyMap())
+    }
     val trieCatalog: TrieCatalog get() = queryState.trieCatalog
     val liveIndex: LiveIndex get() = queryState.liveIndex
 
