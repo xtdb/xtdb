@@ -14,38 +14,30 @@ import org.apache.arrow.flight.sql.NoOpFlightSqlProducer
 import org.apache.arrow.flight.sql.impl.FlightSql.*
 import org.apache.arrow.flight.sql.impl.FlightSql.ActionEndTransactionRequest.EndTransaction
 import xtdb.database.DatabaseName
+import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
-import xtdb.arrow.ArrowUnloader
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
-import xtdb.arrow.Vector
 import xtdb.arrow.VectorType
 import xtdb.asBytes
 import xtdb.ResultCursor
-import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.withName
 import xtdb.kw
-import xtdb.query.PreparedQuery
 import xtdb.tx.TxOp
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
-import xtdb.util.safeMapIndexed
 import xtdb.util.logger
 import xtdb.util.requiringResolve
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
-import java.io.ByteArrayOutputStream
-import java.nio.channels.Channels
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -91,46 +83,29 @@ private fun isDml(sql: String, dbName: DatabaseName): Boolean {
     return opKeyword?.name in setOf("insert", "update", "delete", "erase")
 }
 
-private fun FlightStream.toRows(allocator: BufferAllocator): List<List<Any?>> {
-    val rows = ArrayList<List<Any?>>()
-
-    Relation.fromRoot(allocator, root).use { rel ->
-        while (next()) {
-            rel.loadFromArrow(root)
-            rows.addAll(rel.toTuples())
-        }
-    }
-
-    return rows
-}
-
-private fun FlightStream.toBytes(allocator: BufferAllocator): ByteArray =
-    ByteArrayOutputStream().use { out ->
-        val rootUnl = VectorUnloader(root)
-        Relation(allocator, root.schema.fields.mapIndexed { idx, f -> f.withName("?_$idx") })
-            .use { rel ->
-                rel.startUnload(Channels.newChannel(out), ArrowUnloader.Mode.STREAM).use { unl ->
-                    while (next()) {
-                        rootUnl.recordBatch.use { rb -> rel.load(rb) }
-                        unl.writePage()
-                    }
-                    unl.end()
-
-                    out.toByteArray()
-                }
+private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
+    Relation(allocator, root.schema).closeOnCatch { acc ->
+        Relation(allocator, root.schema).use { batch ->
+            val copier = batch.rowCopier(acc)
+            while (next()) {
+                batch.loadFromArrow(root)
+                copier.copyRange(0, batch.rowCount)
             }
+        }
+        acc
     }
+
+private val AdbcStatement.QueryResult.schema: Schema
+    get() = reader.vectorSchemaRoot.schema
 
 private class PreparedStatement(
-    val sql: String,
-    val txHandle: TxHandle?,
-    val dbName: DatabaseName,
-    val prepdQuery: PreparedQuery?,
-    var cursor: ResultCursor? = null
+    val xtdbStmt: XtdbConnection.XtdbStatement,
+    var queryResult: AdbcStatement.QueryResult? = null
 ) : AutoCloseable {
     override fun close() {
-        cursor?.close()
-        cursor = null
+        queryResult?.close()
+        queryResult = null
+        xtdbStmt.close()
     }
 }
 
@@ -249,27 +224,16 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        // TODO in tx?
-        val psId = cmd.preparedStatementHandle
-
-        stmts
-            .computeIfPresent(psId) { _, ps ->
-                // TODO we likely needn't take these out and put them back.
-                val row = flightStream.toRows(allocator).firstOrNull().orEmpty()
-
-                val newArgs = row.safeMapIndexed { idx, v ->
-                    Vector.fromList(allocator, "?_$idx", listOf(v))
-                }
-
-                RelationReader.from(newArgs, 1).closeOnCatch { argsRel ->
-                    ps.cursor?.close()
-                    ps.cursor = ps.prepdQuery?.openQuery(argsRel, QueryOpts())
-                    ps
-                }
-            }
-            .also { requireNotNull(it) { "invalid ps-id" } }
-
-        ackStream.onCompleted()
+        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+        try {
+            flightStream.next()
+            ps.queryResult?.close()
+            ps.xtdbStmt.bind(flightStream.root)
+            ps.queryResult = ps.xtdbStmt.executeQuery()
+            ackStream.onCompleted()
+        } catch (t: Throwable) {
+            ackStream.onError(t)
+        }
     }
 
     override fun acceptPutPreparedStatementUpdate(
@@ -278,14 +242,12 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        // NOTE atm the PSs are either created within a tx and then assumed to be within that tx
-        // my mental model would be that you could create a PS outside a tx and then use it inside,
-        // but (maybe out of date?) this doesn't seem possible in FSQL.
         val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
-
-        val op = TxOp.SqlBytes(ps.sql, flightStream.toBytes(allocator))
         try {
-            execDml(op, ps.txHandle, ps.dbName)
+            flightStream.toRelation(node.allocator).use { acc ->
+                ps.xtdbStmt.bind(acc)
+                ps.xtdbStmt.executeUpdate()
+            }
             ackStream.sendDoPutUpdateRes(allocator)
         } catch (t: Throwable) {
             ackStream.onError(t)
@@ -345,8 +307,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo {
         val psId = cmd.preparedStatementHandle
-
         val ps = requireNotNull(stmts[psId]) { "invalid ps-id" }
+
+        val queryResult = ps.queryResult ?: ps.xtdbStmt.executeQuery().also { ps.queryResult = it }
 
         val ticket = Ticket(
             ProtoAny.pack(
@@ -356,11 +319,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             ).toByteArray()
         )
 
-        val cursor = checkNotNull(ps.cursor ?: ps.prepdQuery?.openQuery(null, QueryOpts())) { "invalid ps-id" }
-
-        ps.cursor = cursor
         return FlightInfo(
-            resultTypesToSchema(cursor.resultTypes),
+            queryResult.schema,
             descriptor,
             listOf(FlightEndpoint(ticket)),
             -1,
@@ -372,7 +332,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ticket: CommandPreparedStatementQuery, ctx: CallContext?, listener: ServerStreamListener
     ) {
         val ps = requireNotNull(stmts[ticket.preparedStatementHandle]) { "invalid ps-id" }
-        handleGetStream(checkNotNull(ps.cursor) { "cursor not open" }, listener)
+        val queryResult = checkNotNull(ps.queryResult) { "no cursor open for ps-id" }
+        ps.queryResult = null
+        streamArrowReader(queryResult.reader, listener)
     }
 
     override fun createPreparedStatement(
@@ -383,28 +345,19 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
         val dbName = dbNameFromContext(ctx)
-        val pq = defaultConnectionFor(dbName).prepareSql(sql)
-        val ps = PreparedStatement(
-            sql,
-            if (req.hasTransactionId()) req.transactionId else null,
-            dbName,
-            pq.takeIf { !isDml(sql, dbName) }
-        )
-
-        stmts[psId] = ps
+        val txHandle = if (req.hasTransactionId()) req.transactionId else null
+        val xtdbStmt = connectionFor(txHandle, dbName).createStatement().also {
+            it.setSqlQuery(sql)
+            it.prepare()
+        }
+        stmts[psId] = PreparedStatement(xtdbStmt)
 
         listener.onNext(
             packResult(
                 ActionCreatePreparedStatementResult.newBuilder()
                     .setPreparedStatementHandle(psId)
                     .setParameterSchema(
-                        ByteString.copyFrom(
-                            Schema(
-                                (0 until pq.paramCount).map { idx ->
-                                    "$$idx" ofType VectorType.fromLegs()
-                                }
-                            ).serializeAsMessageInterruptibly()
-                        )
+                        ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
                     )
                     .build()
             )
@@ -418,9 +371,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ctx: CallContext?,
         listener: StreamListener<Result>
     ) {
-        val ps = stmts.remove(req.preparedStatementHandle)
-        ps?.cursor?.close()
-
+        stmts.remove(req.preparedStatementHandle)?.close()
         listener.onCompleted()
     }
 

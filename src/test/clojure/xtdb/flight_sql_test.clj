@@ -140,6 +140,27 @@
       (t/is (= #{{:name "James"} {:name "Matt"} {:name "Håkan"} {:name "Dan"}}
                (q))))))
 
+(t/deftest test-prepared-stmt-no-params
+  (xt/execute-tx tu/*node* [[:put-docs :users {:xt/id "jms", :name "James"}]])
+
+  (with-open [ps (.prepare *client* "SELECT users.name FROM users" empty-call-opts)]
+    (t/is (= [{:name "James"}]
+             (-> (.execute ps empty-call-opts)
+                 (flight-info->rows))))))
+
+(t/deftest test-prepared-stmt-explicit-close-mid-session
+  (xt/execute-tx tu/*node* [[:put-docs :users {:xt/id "jms", :name "James"}]])
+
+  (t/testing "close after execute, before streaming — queryResult populated"
+    (let [ps (.prepare *client* "SELECT users.name FROM users" empty-call-opts)]
+      (.execute ps empty-call-opts)
+      (.close ps)))
+
+  (t/testing "close after streaming — queryResult cleared"
+    (let [ps (.prepare *client* "SELECT users.name FROM users" empty-call-opts)]
+      (-> (.execute ps empty-call-opts) flight-info->rows)
+      (.close ps))))
+
 (t/deftest test-dml-via-query-path-returns-helpful-error
   ;; #5082 - DML sent through executeQuery path should give a clear error
   (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException

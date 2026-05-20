@@ -50,7 +50,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
-        private var args: Relation? = null
+        private var args: RelationReader? = null
 
         private fun clearArgs() {
             args.also { args = null }?.close()
@@ -83,15 +83,18 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun bind(root: VectorSchemaRoot) {
-            Relation.fromRoot(node.allocator, root).use(::bind)
+            clearArgs()
+            args = Relation(node.allocator, root.schema).closeOnCatch { copy ->
+                Relation.fromRoot(node.allocator, root).use { src ->
+                    src.rowCopier(copy).copyRange(0, src.rowCount)
+                }
+                copy
+            }
         }
 
         override fun bind(rel: RelationReader) {
             clearArgs()
-            args = Relation(node.allocator, rel.schema).closeOnCatch { copy ->
-                rel.rowCopier(copy).copyRange(0, rel.rowCount)
-                copy
-            }
+            args = rel.openSlice(node.allocator)
         }
 
         override fun executeQuery(): QueryResult {
