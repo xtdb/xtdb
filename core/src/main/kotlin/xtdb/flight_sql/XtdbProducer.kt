@@ -17,6 +17,7 @@ import xtdb.database.DatabaseName
 import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.UInt4Vector
+import org.apache.arrow.vector.VarBinaryVector
 import org.apache.arrow.vector.VarCharVector
 import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
@@ -562,18 +563,38 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 val schemaVec = root.getVector("db_schema_name") as VarCharVector
                 val tableVec = root.getVector("table_name") as VarCharVector
                 val typeVec = root.getVector("table_type") as VarCharVector
+                val tableSchemaVec =
+                    if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
 
-                var idx = 0
-                cursor.forEachRemaining { rel ->
-                    for (i in 0 until rel.rowCount) {
-                        catalogVec.setSafe(idx, dbName.toByteArray())
-                        schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
-                        tableVec.setSafe(idx, rel.get("table_name").getObject(i).toString().toByteArray())
-                        typeVec.setSafe(idx, "TABLE".toByteArray())
-                        idx++
+                val conn = defaultConnectionFor(dbName)
+                val snap = if (command.includeSchema) conn.openSnapshot() else null
+
+                try {
+                    var idx = 0
+                    cursor.forEachRemaining { rel ->
+                        for (i in 0 until rel.rowCount) {
+                            val dbSchemaName = rel.get("table_schema").getObject(i).toString()
+                            val tableName = rel.get("table_name").getObject(i).toString()
+                            catalogVec.setSafe(idx, dbName.toByteArray())
+                            schemaVec.setSafe(idx, dbSchemaName.toByteArray())
+                            tableVec.setSafe(idx, tableName.toByteArray())
+                            typeVec.setSafe(idx, "TABLE".toByteArray())
+
+                            if (snap != null && tableSchemaVec != null) {
+                                tableSchemaVec.setSafe(
+                                    idx,
+                                    conn.getTableSchema(dbSchemaName, tableName, snap)
+                                        .serializeAsMessageInterruptibly()
+                                )
+                            }
+
+                            idx++
+                        }
                     }
+                    root.rowCount = idx
+                } finally {
+                    snap?.close()
                 }
-                root.rowCount = idx
             }
         }
     }

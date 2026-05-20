@@ -35,7 +35,7 @@ class Snapshot(
         if (snaps.isEmpty()) return null
         return mergeTypes(snaps.map { it.columnType(column) })
     }
-    val allColumnTypes get() = tableSnaps.mapValues { (_, snaps) -> snaps.mergeTypes() }
+    val allColumnTypes by lazy { tableSnaps.mapValues { (_, snaps) -> snaps.mergeTypes() } }
 
     /** The frozen per-table trie-cat state for [table], for downstream `current-tries` planning. */
     fun trieTableState(table: TableRef): Any? = trieCatSnap.tableState(table)

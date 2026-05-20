@@ -128,9 +128,15 @@
          (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
            (xtp/prepare-sql this-node sql query-opts)))
 
-       (getColumnTypes [_ table]
+       (getColumnTypes [_ table snap]
          (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
-           (.getColumnTypes db table))))))
+           (.getColumnTypes db table snap)))
+
+       (openSnapshot [_ db-name]
+         (-> (or (.databaseOrNull db-cat db-name)
+                 (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                                       {:db-name db-name})))
+             (.openSnapshot))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))

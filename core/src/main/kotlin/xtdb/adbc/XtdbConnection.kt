@@ -32,6 +32,7 @@ import xtdb.database.DatabaseName
 import xtdb.error.Incorrect
 import xtdb.query.PreparedQuery
 import xtdb.query.QueryOpts
+import xtdb.indexer.Snapshot
 import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
@@ -287,9 +288,18 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
     }
 
-    override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema {
-        val table = TableRef(catalog ?: dbName, dbSchema ?: "public", tableName)
-        val types = node.getColumnTypes(table) ?: return Schema(emptyList())
+    override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema =
+        openSnapshot().use { snap ->
+            getTableSchema(TableRef(catalog ?: dbName, dbSchema ?: "public", tableName), snap)
+        }
+
+    fun openSnapshot(): Snapshot = node.openSnapshot(dbName)
+
+    fun getTableSchema(dbSchema: String, tableName: String, snap: Snapshot): Schema =
+        getTableSchema(TableRef(dbName, dbSchema, tableName), snap)
+
+    private fun getTableSchema(table: TableRef, snap: Snapshot): Schema {
+        val types = node.getColumnTypes(table, snap) ?: return Schema(emptyList())
         return Schema(types.entries.map { (name, type) -> type.toField(name) })
     }
 
@@ -463,7 +473,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
         fun openSqlQuery(sql: String, dbName: DatabaseName): ResultCursor
         fun prepareSql(sql: String, dbName: DatabaseName): PreparedQuery
-        fun getColumnTypes(table: TableRef): Map<String, VectorType>?
+        fun getColumnTypes(table: TableRef, snap: Snapshot): Map<String, VectorType>?
+        fun openSnapshot(dbName: DatabaseName): Snapshot
     }
 
     override fun close() {
