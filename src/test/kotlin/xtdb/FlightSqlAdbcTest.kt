@@ -676,6 +676,19 @@ class FlightSqlAdbcTest {
         }
     }
 
+    @Test
+    fun `test same-connection INSERT then executeSchema sees real column names`() {
+        conn.createStatement().use { ins ->
+            ins.setSqlQuery("INSERT INTO same_conn_repro (_id, n) VALUES (1, 100)")
+            ins.executeUpdate()
+        }
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT n FROM same_conn_repro")
+            stmt.prepare()
+            assertEquals(listOf("n"), stmt.executeSchema().fields.map { it.name })
+        }
+    }
+
     // -- ADBC metadata (through FlightSQL ADBC client) --
 
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream
