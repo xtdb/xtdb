@@ -244,8 +244,10 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): Runnable = Runnable {
         val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
         try {
-            ps.xtdbStmt.bindOwning(flightStream.toRelation(node.allocator))
-            ps.xtdbStmt.executeUpdate()
+            flightStream.toRelation(node.allocator).use { acc ->
+                ps.xtdbStmt.bind(acc)
+                ps.xtdbStmt.executeUpdate()
+            }
             ackStream.sendDoPutUpdateRes(allocator)
         } catch (t: Throwable) {
             ackStream.onError(t)

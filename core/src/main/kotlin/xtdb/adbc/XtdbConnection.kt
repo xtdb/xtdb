@@ -45,22 +45,12 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     interface XtdbStatement : AdbcStatement {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
-
-        /**
-         * Take ownership of [rel] as the statement's parameters, bypassing the defensive copy
-         * that [bind] performs. The caller MUST NOT close [rel]; the statement owns it from
-         * this point and will close it on the next [bind] / [bindOwning] / [close].
-         *
-         * [rel] must be allocated by an allocator compatible with the statement's connection
-         * (typically the node's allocator or one of its descendants).
-         */
-        fun bindOwning(rel: Relation): Unit = unsupported("bindOwning(Relation) not supported")
     }
 
     override fun createStatement() = object : XtdbStatement {
         private var sql: String? = null
         private var prepared: PreparedQuery? = null
-        private var args: Relation? = null
+        private var args: RelationReader? = null
 
         private fun clearArgs() {
             args.also { args = null }?.close()
@@ -93,20 +83,18 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
 
         override fun bind(root: VectorSchemaRoot) {
-            Relation.fromRoot(node.allocator, root).use(::bind)
-        }
-
-        override fun bind(rel: RelationReader) {
             clearArgs()
-            args = Relation(node.allocator, rel.schema).closeOnCatch { copy ->
-                rel.rowCopier(copy).copyRange(0, rel.rowCount)
+            args = Relation(node.allocator, root.schema).closeOnCatch { copy ->
+                Relation.fromRoot(node.allocator, root).use { src ->
+                    src.rowCopier(copy).copyRange(0, src.rowCount)
+                }
                 copy
             }
         }
 
-        override fun bindOwning(rel: Relation) {
+        override fun bind(rel: RelationReader) {
             clearArgs()
-            args = rel
+            args = rel.openSlice(node.allocator)
         }
 
         override fun executeQuery(): QueryResult {
