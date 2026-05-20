@@ -375,6 +375,22 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener.onCompleted()
     }
 
+    // -- Session options --
+
+    override fun getSessionOptions(
+        request: GetSessionOptionsRequest,
+        ctx: CallContext?,
+        listener: StreamListener<GetSessionOptionsResult>
+    ) {
+        val conn = defaultConnectionFor(dbNameFromContext(ctx))
+        val opts = mapOf(
+            "catalog" to SessionOptionValueFactory.makeSessionOptionValue(conn.currentCatalog),
+            "schema" to SessionOptionValueFactory.makeSessionOptionValue(conn.currentDbSchema),
+        )
+        listener.onNext(GetSessionOptionsResult(opts))
+        listener.onCompleted()
+    }
+
     // -- Metadata endpoints --
 
     private fun metadataFlightInfo(cmd: Message, schema: Schema, descriptor: FlightDescriptor): FlightInfo {
