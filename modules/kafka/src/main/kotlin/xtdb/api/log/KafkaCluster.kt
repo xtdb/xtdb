@@ -27,6 +27,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
+import org.apache.kafka.clients.consumer.OffsetOutOfRangeException
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -92,7 +93,7 @@ private fun KafkaConfigMap.openConsumer() =
         mapOf(
             "enable.auto.commit" to "false",
             "isolation.level" to "read_committed",
-            "auto.offset.reset" to "latest",
+            "auto.offset.reset" to "none",
             "partition.assignment.strategy" to "org.apache.kafka.clients.consumer.CooperativeStickyAssignor",
         ) + this,
         UnitDeserializer,
@@ -144,6 +145,7 @@ class KafkaCluster(
     private sealed interface GroupCommand {
         class Register(val topic: String, val subscription: SharedGroupConsumer.TopicSubscription<*>) : GroupCommand
         class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
+        class UnregisterOnFailure(val topics: Collection<String>, val cause: Throwable) : GroupCommand
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -236,6 +238,16 @@ class KafkaCluster(
                     applySubscriptions()
                     cmd.cont.resume(Unit)
                 }
+
+                // No `onPartitionsRevokedSync` — the subscriber learns about the failure via
+                // `completion.completeExceptionally`; firing the revoke would also trigger
+                // LogProcessor's leader→follower transition during a Failed-state cleanup.
+                is GroupCommand.UnregisterOnFailure -> {
+                    for (topic in cmd.topics) {
+                        subscriptions.remove(topic)?.completion?.completeExceptionally(cmd.cause)
+                    }
+                    applySubscriptions()
+                }
             }
         }
 
@@ -264,13 +276,18 @@ class KafkaCluster(
                         if (subscriptions.isNotEmpty()) {
                             @OptIn(ExperimentalCoroutinesApi::class)
                             onTimeout(0.milliseconds) {
-                                consumer.pollRecords()?.let { consumerRecords ->
-                                    for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
-                                        val sub = subscriptions[topic]
-                                            ?: error("Received records for unsubscribed topic $topic")
+                                try {
+                                    consumer.pollRecords()?.let { consumerRecords ->
+                                        for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
+                                            val sub = subscriptions[topic]
+                                                ?: error("Received records for unsubscribed topic $topic")
 
-                                        sub.processRecords(recs)
+                                            sub.processRecords(recs)
+                                        }
                                     }
+                                } catch (e: OffsetOutOfRangeException) {
+                                    LOG.error(e) { "evicting subscriptions for OffsetOutOfRange partitions: ${e.partitions()}" }
+                                    processCommand(GroupCommand.UnregisterOnFailure(e.partitions().map { it.topic() }.toSet(), e))
                                 }
                             }
                         }

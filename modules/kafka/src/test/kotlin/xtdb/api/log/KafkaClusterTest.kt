@@ -3,31 +3,45 @@ package xtdb.api.log
 import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.admin.RecordsToDelete
+import org.apache.kafka.clients.producer.KafkaProducer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.RecordTooLargeException
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import xtdb.api.Xtdb
 import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
+import xtdb.cache.DiskCache
 import xtdb.database.Database
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
+import xtdb.util.MsgIdUtil
 import xtdb.util.asPath
 import xtdb.util.closeAll
 import java.nio.ByteBuffer
+import java.nio.file.Path
 import java.time.Duration
 import java.util.*
 import java.util.Collections.synchronizedList
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -516,6 +530,230 @@ class KafkaClusterTest {
                     stmt.execute("DETACH DATABASE secondary")
                 }
             }
+        }
+    }
+
+    private suspend fun Log<SourceMessage>.seedAndTruncate(topic: String, count: Int, truncateBefore: Long) {
+        repeat(count) { i -> appendMessage(txMessage((i + 1).toByte())) }
+        AdminClient.create(mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers)).use { admin ->
+            admin.deleteRecords(
+                mapOf(TopicPartition(topic, 0) to RecordsToDelete.beforeOffset(truncateBefore))
+            ).all().get()
+        }
+    }
+
+    @Test
+    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `tailAll fails when its anchor offset has been truncated`() = runBlocking {
+        val topic = "trunc-anchored-${UUID.randomUUID()}"
+        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
+            coEvery { processRecords(capture(msgs)) } returns Unit
+        }
+        val caught = AtomicReference<Throwable?>(null)
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topic)
+                    .openSourceLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.seedAndTruncate(topic, count = 5, truncateBefore = 3L)
+
+                        // Anchor inside the now-truncated prefix — seek lands below the earliest available offset.
+                        val anchorInTruncatedPrefix = MsgIdUtil.offsetToMsgId(0, 1L)
+                        val job = launch(SupervisorJob()) {
+                            try { log.tailAll(anchorInTruncatedPrefix, subscriber) }
+                            catch (e: Throwable) { caught.set(e) }
+                        }
+                        val completed = withTimeoutOrNull(3.seconds) { job.join() } != null
+                        job.cancelAndJoin()
+
+                        assertTrue(completed, "tailAll silently polled past the truncation — should have thrown")
+                    }
+            }
+
+        assertEquals(0, synchronized(msgs) { msgs.flatten().size },
+            "received records past a truncated anchor — silent skip is data loss")
+        assertNotNull(caught.get(), "tailAll must throw, not silently auto-reset")
+    }
+
+    @Test
+    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `openGroupSubscription surfaces error when anchor truncated`() = runBlocking {
+        val topic = "trunc-grp-${UUID.randomUUID()}"
+        val anchorInTruncatedPrefix = MsgIdUtil.offsetToMsgId(0, 1L)
+        val caught = AtomicReference<Throwable?>(null)
+        val listener = object : SubscriptionListener<SourceMessage> {
+            override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> =
+                TailSpec(afterMsgId = anchorInTruncatedPrefix, processor = RecordProcessor { _ -> })
+            override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+        }
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topic)
+                    .openSourceLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.seedAndTruncate(topic, count = 5, truncateBefore = 3L)
+
+                        val job = launch(SupervisorJob()) {
+                            try { log.openGroupSubscription(listener) }
+                            catch (e: Throwable) { caught.set(e) }
+                        }
+                        val completed = withTimeoutOrNull(5.seconds) { job.join() } != null
+                        job.cancelAndJoin()
+
+                        assertTrue(completed, "openGroupSubscription silently polled past the truncation — should have thrown")
+                    }
+            }
+
+        assertNotNull(caught.get(), "openGroupSubscription must surface OffsetOutOfRange to its subscriber")
+    }
+
+    @Test
+    @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `node surfaces error on restart when replica log truncated past stored boundary`(
+        @TempDir storageDir: Path, @TempDir cacheDir1: Path, @TempDir cacheDir2: Path,
+    ) {
+        val sourceTopic = "trunc-node-${UUID.randomUUID()}"
+        val replicaTopic = "$sourceTopic-replica"
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir1))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(Storage.local(storageDir))
+            compactor { threads(0) }
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
+                }
+            }
+            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            cat.primary.sendFlushBlockMessage()
+            cat.syncAll(Duration.ofSeconds(10))
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('b', 2)")
+                }
+            }
+        }
+
+        // Truncate the entire replica log — the earliest available offset is now past the persisted boundary.
+        AdminClient.create(mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers)).use { admin ->
+            val tp = TopicPartition(replicaTopic, 0)
+            val endOffset = admin.listOffsets(mapOf(tp to org.apache.kafka.clients.admin.OffsetSpec.latest()))
+                .all().get()[tp]!!.offset()
+            admin.deleteRecords(mapOf(tp to RecordsToDelete.beforeOffset(endOffset))).all().get()
+        }
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir2))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(Storage.local(storageDir))
+            compactor { threads(0) }
+        }.use { node ->
+            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            val deadline = System.currentTimeMillis() + 30_000
+            while (primary.ingestionError == null && System.currentTimeMillis() < deadline) {
+                Thread.sleep(100)
+            }
+            assertNotNull(primary.ingestionError,
+                "node must surface IngestionStoppedException when replica log truncated past stored boundary")
+        }
+    }
+
+    @Test
+    @Timeout(value = 90, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `secondary failure does not affect primary and can still be detached`(
+        @TempDir primaryStorage: Path,
+        @TempDir secondaryStorage: Path,
+        @TempDir cacheDir1: Path,
+        @TempDir cacheDir2: Path,
+    ) {
+        val primaryTopic = "trunc-secondary-primary-${UUID.randomUUID()}"
+        val secondaryTopic = "trunc-secondary-${UUID.randomUUID()}"
+        val secondaryReplicaTopic = "$secondaryTopic-replica"
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir1))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", primaryTopic))
+            storage(Storage.local(primaryStorage))
+            compactor { threads(0) }
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute(
+                        """
+                        ATTACH DATABASE secondary WITH ${'$'}${'$'}
+                            log: !Kafka
+                              cluster: kafka
+                              topic: $secondaryTopic
+                            storage: !Local
+                              path: "${secondaryStorage.toString().replace("\\", "/")}"
+                        ${'$'}${'$'}""".trimIndent()
+                    )
+                }
+            }
+
+            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            node.createConnectionBuilder().database("secondary").build().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
+                }
+            }
+            cat["secondary"]!!.sendFlushBlockMessage()
+            cat.syncAll(Duration.ofSeconds(10))
+            node.createConnectionBuilder().database("secondary").build().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('b', 2)")
+                }
+            }
+        }
+
+        AdminClient.create(mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers)).use { admin ->
+            val tp = TopicPartition(secondaryReplicaTopic, 0)
+            val endOffset = admin.listOffsets(mapOf(tp to org.apache.kafka.clients.admin.OffsetSpec.latest()))
+                .all().get()[tp]!!.offset()
+            admin.deleteRecords(mapOf(tp to RecordsToDelete.beforeOffset(endOffset))).all().get()
+        }
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir2))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", primaryTopic))
+            storage(Storage.local(primaryStorage))
+            compactor { threads(0) }
+        }.use { node ->
+            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            val primary = cat.primary
+            val deadline = System.currentTimeMillis() + 30_000
+            while (cat["secondary"]?.ingestionError == null && System.currentTimeMillis() < deadline) {
+                Thread.sleep(100)
+            }
+            assertNotNull(cat["secondary"]?.ingestionError,
+                "secondary must surface IngestionStoppedException when its replica log is truncated past the stored boundary")
+            assertEquals(null, primary.ingestionError,
+                "primary must remain healthy when an unrelated secondary fails")
+
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("DETACH DATABASE secondary")
+                }
+            }
+            assertEquals(null, cat["secondary"],
+                "DETACH on a failed secondary must complete and remove it from the catalog")
+            assertEquals(null, primary.ingestionError,
+                "primary must remain healthy after detaching the failed secondary")
         }
     }
 }

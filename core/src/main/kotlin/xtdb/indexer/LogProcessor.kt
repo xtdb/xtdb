@@ -41,6 +41,7 @@ class LogProcessor(
     interface FollowerProcessor : Processor<ReplicaMessage> {
         val pendingBlock: PendingBlock?
         suspend fun awaitReplicaMsgId(target: MessageId)
+        fun notifyError(e: Throwable)
     }
 
     private val dbName = dbState.name
@@ -90,7 +91,13 @@ class LogProcessor(
                 }
             }
 
-            FollowerSystem(proc, scope.launch { replicaLog.tailAll(latestReplicaMsgId, proc) })
+            FollowerSystem(proc, scope.launch {
+                try {
+                    replicaLog.tailAll(latestReplicaMsgId, proc)
+                } catch (e: Throwable) {
+                    proc.notifyError(e); throw e
+                }
+            })
         }
 
     @Volatile

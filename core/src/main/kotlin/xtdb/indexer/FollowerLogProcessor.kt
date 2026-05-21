@@ -263,6 +263,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
         LOG.debug("[$dbName] transition: replica watchers caught up to $target")
     }
 
+    override fun notifyError(e: Throwable) {
+        replicaState.value = ReplicaState.Failed(latestReplicaMsgId, e)
+    }
+
     override fun close() {
         allocator.close()
     }
