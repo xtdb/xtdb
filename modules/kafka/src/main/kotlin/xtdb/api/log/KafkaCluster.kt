@@ -88,6 +88,12 @@ private fun KafkaConfigMap.openProducer() =
         ByteArraySerializer()
     )
 
+private fun KafkaConsumer<*, *>.resolveSeekOffset(tp: TopicPartition, epoch: Int, afterMsgId: MessageId): LogOffset {
+    val previousOffset = afterMsgIdToOffset(epoch, afterMsgId)
+    val seekFromBeginning = previousOffset < 0L
+    return if (seekFromBeginning) beginningOffsets(listOf(tp))[tp] ?: 0L else previousOffset + 1
+}
+
 private fun KafkaConfigMap.openConsumer() =
     KafkaConsumer(
         mapOf(
@@ -169,7 +175,7 @@ class KafkaCluster(
                 listener.onPartitionsAssigned(listOf(tp.partition()))
                     ?.let { tailSpec ->
                         processor = tailSpec.processor
-                        consumer.seek(tp, afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1)
+                        consumer.seek(tp, consumer.resolveSeekOffset(tp, epoch, tailSpec.afterMsgId))
                     }
             }
 
@@ -588,7 +594,7 @@ class KafkaCluster(
             kafkaConfigMap.openConsumer().use { c ->
                 val tp = TopicPartition(topic, 0)
                 c.assign(listOf(tp))
-                c.seek(tp, afterMsgIdToOffset(epoch, afterMsgId) + 1)
+                c.seek(tp, c.resolveSeekOffset(tp, epoch, afterMsgId))
 
                 while (isActive) {
                     val records = runInterruptible(Dispatchers.IO) { c.pollRecords() }

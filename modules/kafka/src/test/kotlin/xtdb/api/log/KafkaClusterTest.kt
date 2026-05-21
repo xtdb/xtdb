@@ -756,4 +756,174 @@ class KafkaClusterTest {
                 "primary must remain healthy after detaching the failed secondary")
         }
     }
+
+    @Test
+    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `tailAll picks up records appended past a truncated prefix when starting fresh`() = runBlocking {
+        val topic = "trunc-fresh-${UUID.randomUUID()}"
+        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
+        val subscriber = mockk<RecordProcessor<SourceMessage>> {
+            coEvery { processRecords(capture(msgs)) } returns Unit
+        }
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topic)
+                    .openSourceLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.seedAndTruncate(topic, count = 20, truncateBefore = 20L)
+                        log.appendMessage(txMessage(1))
+                        log.appendMessage(txMessage(2))
+                        log.appendMessage(txMessage(3))
+
+                        val job = launch { log.tailAll(-1L, subscriber) }
+                        try {
+                            withTimeoutOrNull(5.seconds) {
+                                while (synchronized(msgs) { msgs.flatten().size } < 3) delay(100.milliseconds)
+                            }
+                        } finally {
+                            job.cancelAndJoin()
+                        }
+                    }
+            }
+
+        assertEquals(3, synchronized(msgs) { msgs.flatten().size })
+    }
+
+    @Test
+    @Timeout(value = 30, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `openGroupSubscription picks up records appended past a truncated prefix when starting fresh`() = runBlocking {
+        val topic = "trunc-fresh-grp-${UUID.randomUUID()}"
+        val msgs = synchronizedList(mutableListOf<List<Record<SourceMessage>>>())
+        val processor = RecordProcessor<SourceMessage> { records -> msgs.add(records) }
+        val listener = object : SubscriptionListener<SourceMessage> {
+            override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> =
+                TailSpec(afterMsgId = -1L, processor = processor)
+            override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+        }
+
+        KafkaCluster.ClusterFactory(container.bootstrapServers)
+            .pollDuration(Duration.ofMillis(100))
+            .open().use { cluster ->
+                KafkaCluster.LogFactory("my-cluster", topic)
+                    .openSourceLog(mapOf("my-cluster" to cluster))
+                    .use { log ->
+                        log.seedAndTruncate(topic, count = 20, truncateBefore = 20L)
+                        log.appendMessage(txMessage(1))
+                        log.appendMessage(txMessage(2))
+                        log.appendMessage(txMessage(3))
+
+                        val job = launch { log.openGroupSubscription(listener) }
+                        try {
+                            withTimeoutOrNull(5.seconds) {
+                                while (synchronized(msgs) { msgs.flatten().size } < 3) delay(100.milliseconds)
+                            }
+                        } finally {
+                            job.cancelAndJoin()
+                        }
+                    }
+            }
+
+        assertEquals(3, synchronized(msgs) { msgs.flatten().size })
+    }
+
+    @Test
+    @Timeout(value = 90, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `node re-indexes from the truncated prefix on restart without a persisted block`(
+        @TempDir storage: Path,
+        @TempDir cacheDir1: Path,
+        @TempDir cacheDir2: Path,
+    ) {
+        val sourceTopic = "trunc-restart-${UUID.randomUUID()}"
+
+        val props = mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers, "acks" to "all")
+        KafkaProducer(props, ByteArraySerializer(), ByteArraySerializer()).use { producer ->
+            repeat(20) { producer.send(ProducerRecord(sourceTopic, ByteArray(8) { 0 })) }
+            producer.flush()
+        }
+        AdminClient.create(props).use { admin ->
+            admin.deleteRecords(
+                mapOf(TopicPartition(sourceTopic, 0) to RecordsToDelete.beforeOffset(20L))
+            ).all().get()
+        }
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir1))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(Storage.local(storage))
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('b', 2)")
+                }
+            }
+        }
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir2))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(Storage.local(storage))
+        }.use { node ->
+            // An INSERT blocks on awaitTx for its own tx, which is processed strictly after
+            // session 1's records on the source log — so by the time this returns, the prior
+            // session's txs have been re-indexed.
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('c', 3)")
+                    stmt.executeQuery("SELECT _id, x FROM foo ORDER BY _id").use { rs ->
+                        assertTrue(rs.next()); assertEquals("a", rs.getString("_id")); assertEquals(1, rs.getInt("x"))
+                        assertTrue(rs.next()); assertEquals("b", rs.getString("_id")); assertEquals(2, rs.getInt("x"))
+                        assertTrue(rs.next()); assertEquals("c", rs.getString("_id")); assertEquals(3, rs.getInt("x"))
+                        assertTrue(!rs.next())
+                    }
+                }
+            }
+            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            assertEquals(null, primary.ingestionError, "node must replay cleanly from the truncated prefix")
+        }
+    }
+
+    @Test
+    @Timeout(value = 60, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `node starts cleanly against a pre-truncated topic prefix`(@TempDir cacheDir: Path) {
+        val sourceTopic = "trunc-fresh-node-${UUID.randomUUID()}"
+
+        val props = mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers, "acks" to "all")
+        KafkaProducer(props, ByteArraySerializer(), ByteArraySerializer()).use { producer ->
+            repeat(20) { producer.send(ProducerRecord(sourceTopic, ByteArray(8) { 0 })) }
+            producer.flush()
+        }
+        AdminClient.create(props).use { admin ->
+            admin.deleteRecords(
+                mapOf(TopicPartition(sourceTopic, 0) to RecordsToDelete.beforeOffset(20L))
+            ).all().get()
+        }
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
+                    stmt.executeQuery("SELECT _id, x FROM foo").use { rs ->
+                        assertTrue(rs.next())
+                        assertEquals("a", rs.getString("_id"))
+                        assertEquals(1, rs.getInt("x"))
+                    }
+                }
+            }
+            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            assertEquals(null, primary.ingestionError,
+                "a fresh node must not error when the topic's earliest offset is past 0")
+        }
+    }
 }
