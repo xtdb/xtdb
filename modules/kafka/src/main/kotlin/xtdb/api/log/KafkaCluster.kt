@@ -159,6 +159,7 @@ class KafkaCluster(
             val epoch: Int,
             val listener: Log.SubscriptionListener<M>,
             var processor: Log.RecordProcessor<M>?,
+            val completion: CompletableDeferred<Unit> = CompletableDeferred(),
         ) {
             // expecting a load of change here for multi-part.
 
@@ -228,7 +229,10 @@ class KafkaCluster(
                 }
 
                 is GroupCommand.Unregister -> {
-                    subscriptions.remove(cmd.topic)?.listener?.onPartitionsRevokedSync(listOf(0))
+                    subscriptions.remove(cmd.topic)?.let { sub ->
+                        sub.listener.onPartitionsRevokedSync(listOf(0))
+                        sub.completion.complete(Unit)
+                    }
                     applySubscriptions()
                     cmd.cont.resume(Unit)
                 }
@@ -284,10 +288,12 @@ class KafkaCluster(
             topic: String,
             codec: MessageCodec<M>,
             epoch: Int,
-            listener: Log.SubscriptionListener<M>
-        ) {
-            commandCh.send(GroupCommand.Register(topic, TopicSubscription(codec, epoch, listener, null)))
+            listener: Log.SubscriptionListener<M>,
+        ): TopicSubscription<M> {
+            val sub = TopicSubscription(codec, epoch, listener, null)
+            commandCh.send(GroupCommand.Register(topic, sub))
             consumer.wakeup()
+            return sub
         }
 
         suspend fun unregister(topic: String) {
@@ -575,10 +581,10 @@ class KafkaCluster(
         }
 
         override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
-            sharedGroupConsumer.register(topic, codec, epoch, listener)
+            val sub = sharedGroupConsumer.register(topic, codec, epoch, listener)
             LOG.info { "registered group subscription for topic '$topic'" }
             try {
-                suspendCancellableCoroutine<Unit> { } // wait until cancelled
+                sub.completion.await()
             } finally {
                 withContext(NonCancellable) { sharedGroupConsumer.unregister(topic) }
             }
