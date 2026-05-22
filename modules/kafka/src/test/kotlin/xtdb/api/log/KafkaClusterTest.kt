@@ -3,6 +3,7 @@ package xtdb.api.log
 import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -10,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.admin.RecordsToDelete
@@ -418,6 +420,54 @@ class KafkaClusterTest {
             check(msg is SourceMessage.LegacyTx)
             assertArrayEquals(byteArrayOf(-1, 3), msg.payload)
 
+            job2.cancelAndJoin()
+        }
+    }
+
+    private class RacingListener : SubscriptionListener<SourceMessage> {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val records = CopyOnWriteArrayList<Record<SourceMessage>>()
+
+        override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> {
+            entered.complete(Unit)
+            release.await()
+            return TailSpec(-1L, RecordProcessor { recs -> records.addAll(recs) })
+        }
+
+        override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+    }
+
+    @Test
+    fun `wakeup during seek does not skip seek (regression for #5633)`() = runTest(timeout = 10.seconds) {
+        val topic1 = "test-seek-race-${UUID.randomUUID()}"
+        val topic2 = "test-seek-race-${UUID.randomUUID()}"
+
+        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
+            val (log1, log2) = logs
+            val listener1 = RacingListener()
+            val listener2 = RacingListener()
+
+            val job1 = launch { log1.openGroupSubscription(listener1) }
+            listener1.entered.await()
+
+            // second register() arms consumer.wakeup() while topic1's callback is parked.
+            val job2 = launch { log2.openGroupSubscription(listener2) }
+            yield()
+
+            listener1.release.complete(Unit)
+
+            listener2.entered.await()
+            listener2.release.complete(Unit)
+
+            log1.appendMessage(txMessage(1))
+            log2.appendMessage(txMessage(2))
+
+            // an inner withTimeout would use the TestScope's virtual clock and trip before
+            // records flow; rely on the outer real-time runTest timeout instead.
+            while (listener1.records.isEmpty() || listener2.records.isEmpty()) delay(50.milliseconds)
+
+            job1.cancelAndJoin()
             job2.cancelAndJoin()
         }
     }
