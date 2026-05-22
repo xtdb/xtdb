@@ -121,7 +121,6 @@ class PostgresSource(
         val remote: RemoteAlias,
         val slotName: String,
         val publicationName: String,
-        val schemaIncludeList: List<String> = listOf("public"),
     ) : ExternalSource.Factory {
 
         override fun open(
@@ -147,7 +146,7 @@ class PostgresSource(
 
             val driver = PgWireDriver(
                 dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
-                slotName, publicationName, schemaIncludeList,
+                slotName, publicationName,
             )
 
             return PostgresSource(dbName, driver, slotName, meterRegistry)
@@ -158,7 +157,6 @@ class PostgresSource(
                 remote = this@Factory.remote
                 slotName = this@Factory.slotName
                 publicationName = this@Factory.publicationName
-                schemaIncludeList += this@Factory.schemaIncludeList
             }, PROTO_TAG_PREFIX)
         }
 
@@ -171,7 +169,6 @@ class PostgresSource(
                     remote = config.remote,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
-                    schemaIncludeList = config.schemaIncludeListList,
                 )
             }
 

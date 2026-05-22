@@ -8,7 +8,6 @@ message PostgresSourceConfig {
     string remote = 1;
     string slot_name = 2;
     string publication_name = 3;
-    repeated string schema_include_list = 4;
 }
 
 message PostgresSourceToken {

@@ -52,7 +52,6 @@ class PgWireDriver(
     private val password: String,
     private val slotName: String,
     private val publicationName: String,
-    private val schemaIncludeList: List<String>,
 ) : PostgresDriver {
 
     private data class ColumnInfo(val name: String, val typeOid: Int)
@@ -170,11 +169,10 @@ class PgWireDriver(
         createQuery(
             """
             SELECT schemaname, tablename FROM pg_publication_tables
-            WHERE pubname = :pubName AND schemaname IN (<schemas>)
+            WHERE pubname = :pubName
             ORDER BY schemaname, tablename""".trimIndent()
         )
             .bind("pubName", publicationName)
-            .bindList("schemas", schemaIncludeList)
             .map { rs, _ -> rs.getString("schemaname") to rs.getString("tablename") }
             .list()
 

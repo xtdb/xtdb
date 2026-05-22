@@ -100,7 +100,6 @@ class PostgresSourceIntegrationTest {
                           remote: pg
                           slotName: $slotName
                           publicationName: $publicationName
-                          schemaIncludeList: [public]
                     $$""".trimIndent()
                 )
             }
@@ -316,6 +315,54 @@ class PostgresSourceIntegrationTest {
                 xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users WHERE _id = 3").isNotEmpty() &&
                     xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders WHERE _id = 2").isNotEmpty()
             }
+        }
+    }
+
+    @Test
+    fun `tables outside the publication are not replicated`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_pub_in (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE TABLE IF NOT EXISTS pg_pub_out (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_pub_in (_id, name) VALUES (1, 'in-snap')",
+            "INSERT INTO pg_pub_out (_id, name) VALUES (1, 'out-snap')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_pub_in",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            awaitCondition("included table snapshotted", timeout = 30.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 1").isNotEmpty()
+                }.getOrDefault(false)
+            }
+
+            // Stream a change to both tables; only the included one should land.
+            pgExecute(
+                "INSERT INTO pg_pub_in (_id, name) VALUES (2, 'in-stream')",
+                "INSERT INTO pg_pub_out (_id, name) VALUES (2, 'out-stream')",
+            )
+
+            awaitCondition("streaming change to included table", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 2").isNotEmpty()
+            }
+
+            // pg_pub_out is not in the publication — neither its snapshot row
+            // nor its streamed insert should ever appear, so the table is never
+            // materialised in XTDB at all.
+            val publicTables = xtQueryDb(
+                node, "cdc",
+                """
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public'
+                """.trimIndent(),
+            ).map { it["table_name"] as String }
+            assertTrue(publicTables.contains("pg_pub_in"), "expected pg_pub_in in $publicTables")
+            assertTrue(!publicTables.contains("pg_pub_out"), "pg_pub_out should not be replicated, got $publicTables")
         }
     }
 

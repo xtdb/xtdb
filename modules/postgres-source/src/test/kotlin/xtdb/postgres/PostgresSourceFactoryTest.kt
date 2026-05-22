@@ -19,7 +19,6 @@ class PostgresSourceFactoryTest {
             remote = "pg",
             slotName = "my_slot",
             publicationName = "my_pub",
-            schemaIncludeList = listOf("public", "analytics"),
         )
 
         val restored = protoRoundTrip(original)
@@ -27,7 +26,6 @@ class PostgresSourceFactoryTest {
         assertEquals("pg", restored.remote)
         assertEquals("my_slot", restored.slotName)
         assertEquals("my_pub", restored.publicationName)
-        assertEquals(listOf("public", "analytics"), restored.schemaIncludeList)
     }
 
     @Test
@@ -37,7 +35,6 @@ class PostgresSourceFactoryTest {
               remote: pg
               slotName: my_slot
               publicationName: my_pub
-              schemaIncludeList: [public]
         """.trimIndent()
 
         val config = Database.Config.fromYaml(yaml)
@@ -46,7 +43,6 @@ class PostgresSourceFactoryTest {
         assertEquals("pg", factory.remote)
         assertEquals("my_slot", factory.slotName)
         assertEquals("my_pub", factory.publicationName)
-        assertEquals(listOf("public"), factory.schemaIncludeList)
     }
 
     @Test
