@@ -50,7 +50,7 @@
 (defn object-store ^xtdb.azure.BlobStorage [prefix]
   (-> (BlobStorage/azureBlobStorage storage-account container)
       (.prefix (util/->path (str prefix)))
-      (.openObjectStore (util/->path "azure-test"))))
+      (.openObjectStore (util/->path "azure-test") {})))
 
 (t/deftest ^:azure put-delete-test
   (with-open [os (object-store (random-uuid))]

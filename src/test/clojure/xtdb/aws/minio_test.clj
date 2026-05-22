@@ -35,7 +35,7 @@
         (.prefix (util/->path (str prefix)))
         (.credentials access-key secret-key)
         (.endpoint "http://127.0.0.1:9000")
-        (.openObjectStore (util/->path "os-test")))))
+        (.openObjectStore (util/->path "os-test") {}))))
 
 (t/deftest ^:minio put-delete-test
   (with-open [os (object-store (random-uuid))]
