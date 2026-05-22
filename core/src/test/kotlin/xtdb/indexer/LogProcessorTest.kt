@@ -77,7 +77,7 @@ class LogProcessorTest {
                 )
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc
-                    override fun close() = leaderProc.close()
+                    override suspend fun close() = leaderProc.close()
                 }
             }
 

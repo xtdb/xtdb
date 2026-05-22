@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
@@ -26,10 +27,11 @@ class LogProcessor(
     private val blockUploader: BlockUploader,
     private val scope: CoroutineScope,
     meterRegistry: MeterRegistry? = null,
-) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
+) : Log.SubscriptionListener<SourceMessage> {
 
-    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
+    interface Processor<M> : Log.RecordProcessor<M> {
         val latestReplicaMsgId: MessageId
+        suspend fun close()
     }
 
     interface LeaderProcessor : Processor<SourceMessage> {
@@ -64,14 +66,16 @@ class LogProcessor(
         ): FollowerProcessor
     }
 
-    sealed interface SubSystem : AutoCloseable
+    sealed interface SubSystem {
+        suspend fun close()
+    }
 
     interface LeaderSystem : SubSystem {
         val proc: LeaderProcessor
     }
 
     private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
-        override fun close() {
+        override suspend fun close() {
             job.cancel()
             proc.close()
         }
@@ -80,8 +84,9 @@ class LogProcessor(
     private fun openFollowerSystem(
         latestReplicaMsgId: MessageId,
         pendingBlock: PendingBlock? = null,
-    ): FollowerSystem =
-        procFactory.openFollower(pendingBlock, latestReplicaMsgId).closeOnCatch { proc ->
+    ): FollowerSystem {
+        val proc = procFactory.openFollower(pendingBlock, latestReplicaMsgId)
+        return try {
             LOG.info {
                 buildString {
                     append("[$dbName] starting follower: ")
@@ -98,7 +103,11 @@ class LogProcessor(
                     proc.notifyError(e); throw e
                 }
             })
+        } catch (t: Throwable) {
+            runBlocking { proc.close() }
+            throw t
         }
+    }
 
     @Volatile
     private var sys: SubSystem =
@@ -140,26 +149,28 @@ class LogProcessor(
 
                         val pendingBlock = followerProc.pendingBlock
 
-                        procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId)
-                            .use { transition ->
-                                if (pendingBlock != null) {
-                                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                                    blockUploader.uploadBlock(
-                                        replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
-                                    )
-                                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                                    transition.processRecords(pendingBlock.bufferedRecords)
-                                }
-
-                                LOG.debug("[$dbName] transition: opening leader processor")
-
-                                val sys = procFactory.openLeaderSystem(replicaProducer, replayTarget)
-                                this.sys = sys
-
-                                val resumeMsgId = watchers.latestSourceMsgId
-                                LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
-                                Log.TailSpec(resumeMsgId, sys.proc)
+                        val transition = procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId)
+                        try {
+                            if (pendingBlock != null) {
+                                LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+                                blockUploader.uploadBlock(
+                                    replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
+                                )
+                                LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
+                                transition.processRecords(pendingBlock.bufferedRecords)
                             }
+
+                            LOG.debug("[$dbName] transition: opening leader processor")
+
+                            val sys = procFactory.openLeaderSystem(replicaProducer, replayTarget)
+                            this.sys = sys
+
+                            val resumeMsgId = watchers.latestSourceMsgId
+                            LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
+                            Log.TailSpec(resumeMsgId, sys.proc)
+                        } finally {
+                            transition.close()
+                        }
                     }
                 } catch (e: InterruptedException) {
                     throw e
@@ -193,7 +204,7 @@ class LogProcessor(
         }
     }
 
-    override fun close() {
+    suspend fun close() {
         sys.close()
     }
 

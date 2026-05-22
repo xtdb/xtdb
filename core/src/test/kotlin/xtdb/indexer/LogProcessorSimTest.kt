@@ -201,7 +201,7 @@ class LogProcessorSimTest : SimulationTestBase() {
             )
             return object : LogProcessor.LeaderSystem {
                 override val proc get() = proc
-                override fun close() = proc.close()
+                override suspend fun close() = proc.close()
             }
         }
 
@@ -353,7 +353,8 @@ class LogProcessorSimTest : SimulationTestBase() {
             MemoryStorage(allocator, epoch = 0).use { bp ->
                 SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
                     val logProcScope = CoroutineScope(dispatcher + Job(coroutineContext.job))
-                    node.openLogProcessor(logProcScope).use { logProc ->
+                    val logProc = node.openLogProcessor(logProcScope)
+                    try {
                         val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
 
                         launch(dispatcher) {
@@ -401,6 +402,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                         assertBlockFilesExist(bp, "test-db", replicaMessages)
                         assertSnapshotHasNoAbortedRows(node)
+                    } finally {
+                        logProc.close()
                     }
                 }
             }
@@ -432,9 +435,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                             val followerScopeA = CoroutineScope(dispatcher + Job(coroutineContext.job))
                             val followerScopeB = CoroutineScope(dispatcher + Job(coroutineContext.job))
 
-                            leader.openLogProcessor(leaderScope).use { leaderProc ->
-                                followerA.openLogProcessor(followerScopeA).use { followerProcA ->
-                                    followerB.openLogProcessor(followerScopeB).use { followerProcB ->
+                            val leaderProc = leader.openLogProcessor(leaderScope)
+                            val followerProcA = followerA.openLogProcessor(followerScopeA)
+                            val followerProcB = followerB.openLogProcessor(followerScopeB)
+                            try {
                                         val groupJobLeader =
                                             launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
                                         val groupJobA =
@@ -514,8 +518,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                                         assertSnapshotHasNoAbortedRows(leader)
                                         assertSnapshotHasNoAbortedRows(followerA)
                                         assertSnapshotHasNoAbortedRows(followerB)
-                                    }
-                                }
+                            } finally {
+                                leaderProc.close()
+                                followerProcA.close()
+                                followerProcB.close()
                             }
                         }
                     }
@@ -547,8 +553,9 @@ class LogProcessorSimTest : SimulationTestBase() {
                         val scopeA = CoroutineScope(dispatcher + Job(coroutineContext.job))
                         val scopeB = CoroutineScope(dispatcher + Job(coroutineContext.job))
 
-                        nodeA.openLogProcessor(scopeA).use { logProcA ->
-                            nodeB.openLogProcessor(scopeB).use { logProcB ->
+                        val logProcA = nodeA.openLogProcessor(scopeA)
+                        val logProcB = nodeB.openLogProcessor(scopeB)
+                        try {
                                 val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(logProcA) }
                                 val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(logProcB) }
 
@@ -621,7 +628,9 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                 assertSnapshotHasNoAbortedRows(nodeA)
                                 assertSnapshotHasNoAbortedRows(nodeB)
-                            }
+                        } finally {
+                            logProcA.close()
+                            logProcB.close()
                         }
                     }
                 }

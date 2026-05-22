@@ -500,18 +500,15 @@ class LeaderLogProcessor(
         }
     }
 
-    override fun close() {
-        // HACK: we cancel without joining because a blocking join deadlocks under runTest's virtual time.
-        extJob?.cancel()
+    override suspend fun close() {
+        extJob?.cancelAndJoin()
         extSource?.close()
         blockGc.close()
         trieGc.close()
-        // `persisterJob.cancel()` only — `CoroutineScope(ctx)` may share ctx's Job (e.g. under
-        // runTest), so `scope.cancel()` would tear down the surrounding scope.
-        persisterJob.cancel()
         sourceLogCh.close()
         extSourceCh.close()
         gcCh.close()
+        persisterJob.join()
         indexer.close()
         allocator.close()
     }

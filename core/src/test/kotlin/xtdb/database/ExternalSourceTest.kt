@@ -121,7 +121,8 @@ class ExternalSourceTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
 
-        leaderProc(replicaLog = replicaLog, extSource = extSource, ctx = coroutineContext).use {
+        val lp = leaderProc(replicaLog = replicaLog, extSource = extSource, ctx = coroutineContext)
+        try {
             extSource.channel.send(null)
             delay(500.milliseconds)
 
@@ -141,6 +142,8 @@ class ExternalSourceTest {
             assertEquals(true, resolved.committed)
             assertEquals(0L, resolved.txId)
             assertNull(resolved.srcMsgId, "ext-source ResolvedTx should not carry a source-log msgId")
+        } finally {
+            lp.close()
         }
     }
 
@@ -230,9 +233,12 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext).use {
+        val lp = leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext)
+        try {
             delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
+        } finally {
+            lp.close()
         }
     }
 

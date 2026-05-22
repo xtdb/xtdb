@@ -61,7 +61,7 @@ class Database(
     private val meterRegistry: MeterRegistry?,
     val compactorOrNull: Compactor.ForDatabase? = null,
     private val job: Job? = null,
-    private val processor: AutoCloseable? = null,
+    private val processor: LogProcessor? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
 ) : IQuerySource.QueryDatabase, AutoCloseable {
     val name: DatabaseName get() = queryState.name
@@ -113,8 +113,11 @@ class Database(
 
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        job?.let { runBlocking { it.cancelAndJoin() } }
-        listOf(processor, compactorOrNull, queryState, storage, allocator).closeAll()
+        runBlocking {
+            job?.cancelAndJoin()
+            processor?.close()
+        }
+        listOf(compactorOrNull, queryState, storage, allocator).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -156,7 +159,7 @@ class Database(
      * Intended for tests and manual admin pokes; bypasses the `enabled` flag.
      */
     fun gcAll() {
-        (processor as? LogProcessor)?.gcAll()
+        processor?.gcAll()
     }
 
     companion object {
@@ -198,7 +201,7 @@ class Database(
                 else compactor.openForDatabase(allocator, storage, state, watchers)
             }
 
-            var processor: AutoCloseable? = null
+            var processor: LogProcessor? = null
             val job = Job()
             val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
                 watchers.notifyError(e)
@@ -242,7 +245,7 @@ class Database(
 
                         return object : LogProcessor.LeaderSystem {
                             override val proc get() = leaderProc
-                            override fun close() { leaderProc.close(); replicaProducer.close() }
+                            override suspend fun close() { leaderProc.close(); replicaProducer.close() }
                         }
                     }
 
