@@ -4,6 +4,10 @@ import kotlinx.coroutines.flow.*
 import xtdb.api.TransactionResult
 import xtdb.api.TxId
 import xtdb.database.ExternalSourceToken
+import xtdb.util.error
+import xtdb.util.logger
+
+private val LOG = Watchers::class.logger
 
 class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceToken: ExternalSourceToken? = null) {
 
@@ -82,6 +86,7 @@ class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceTok
 
     fun notifyError(exception: Throwable) {
         state.updateIfActive {
+            LOG.error(exception) { "ingestion stopping" }
             Failed(
                 latestSourceMsgId = it.latestSourceMsgId,
                 latestTxId = it.latestTxId,
