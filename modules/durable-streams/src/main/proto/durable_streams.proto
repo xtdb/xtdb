@@ -1,0 +1,13 @@
+edition = "2023";
+
+package xtdb.durable_streams.proto;
+
+option java_multiple_files = true;
+
+message DurableStreamsLogConfig {
+    string cluster_alias = 1;
+    string topic = 2;
+    int32 epoch = 3;
+    string replica_topic = 4;
+    string tenant = 5;
+}

@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.dokka)
+
+    alias(libs.plugins.protobuf)
 }
 
 publishing {
@@ -30,8 +32,21 @@ dependencies {
     api(kotlin("stdlib"))
 
     implementation(libs.kotlinx.coroutines)
-    testImplementation(libs.kotlinx.coroutines.test)
 
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.asProvider().get()}"
+    }
+
+    generateProtoTasks {
+        all().forEach {
+            it.builtins {
+                create("kotlin")
+            }
+        }
+    }
 }

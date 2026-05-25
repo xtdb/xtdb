@@ -8,14 +8,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
+import java.util.UUID
 import xtdb.DurationSerde
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.database.proto.DatabaseConfig
+import xtdb.durable_streams.proto.DurableStreamsLogConfig
+import xtdb.durable_streams.proto.durableStreamsLogConfig
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.logger
+import xtdb.util.warn
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -256,12 +260,89 @@ class DurableStreamsLog(
                         }
 
                         else -> {
-                            LOG.warn { "Unexpected ${resp.statusCode()} from long-poll $url — backing off 1 s" }
+                            LOG.warn("Unexpected ${resp.statusCode()} from long-poll $url — backing off 1 s")
                             delay(1_000)
                         }
                     }
                 }
             }
+
+        // DS has no transaction protocol, so we follow InMemoryLog's buffered model:
+        // appendMessage queues into the tx; commit() flushes synchronously with
+        // monotonic Producer-Seq headers so transport retries dedupe (§5.2.1).
+        // abort() drops the buffer without ever hitting the network.
+        override fun openAtomicProducer(transactionalId: String): Log.AtomicProducer<M> {
+            // Append a UUID so each producer instance has a unique Producer-Id —
+            // we don't persist an epoch across restarts, so this avoids 403 "stale
+            // producer epoch" against prior incarnations of the same transactionalId.
+            val producerId = "$transactionalId-${UUID.randomUUID()}"
+            val seqGen = AtomicLong(0L)
+            val producerEpoch = 0
+
+            return object : Log.AtomicProducer<M> {
+                @Volatile
+                private var producerClosed = false
+
+                override fun openTx(): Log.AtomicProducer.Tx<M> {
+                    check(!producerClosed) { "Atomic producer is closed" }
+                    val buffer = mutableListOf<Pair<M, CompletableDeferred<Log.MessageMetadata>>>()
+                    var isOpen = true
+
+                    return object : Log.AtomicProducer.Tx<M> {
+                        override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
+                            check(isOpen) { "Transaction already closed" }
+                            return CompletableDeferred<Log.MessageMetadata>()
+                                .also { buffer.add(message to it) }
+                        }
+
+                        override fun commit() {
+                            check(isOpen) { "Transaction already closed" }
+                            isOpen = false
+                            for ((msg, deferred) in buffer) {
+                                try {
+                                    val body = encodeOne(codec.encode(msg))
+                                    val seq = seqGen.getAndIncrement()
+                                    val req = HttpRequest.newBuilder(URI.create(streamUrl))
+                                        .POST(BodyPublishers.ofByteArray(body))
+                                        .header("Content-Type", DS_CONTENT_TYPE)
+                                        .header("Producer-Id", producerId)
+                                        .header("Producer-Epoch", producerEpoch.toString())
+                                        .header("Producer-Seq", seq.toString())
+                                        .build()
+                                    val resp = http.send(req, BodyHandlers.discarding())
+                                    check(resp.statusCode() in 200..204) {
+                                        "POST $streamUrl returned ${resp.statusCode()}"
+                                    }
+                                    val nextOffset = resp.headers().firstValue(HDR_NEXT_OFFSET)
+                                        .orElseThrow { IllegalStateException("Missing $HDR_NEXT_OFFSET in POST response from $streamUrl") }
+                                        .toLong()
+                                    val logOffset = nextOffset - 1L
+                                    latestOffset0.updateAndGet { it.coerceAtLeast(logOffset) }
+                                    deferred.complete(Log.MessageMetadata(epoch, logOffset, Instant.now()))
+                                } catch (e: Throwable) {
+                                    deferred.completeExceptionally(e)
+                                    throw e
+                                }
+                            }
+                        }
+
+                        override fun abort() {
+                            check(isOpen) { "Transaction already closed" }
+                            isOpen = false
+                            buffer.clear()
+                        }
+
+                        override fun close() {
+                            if (isOpen) abort()
+                        }
+                    }
+                }
+
+                override fun close() {
+                    producerClosed = true
+                }
+            }
+        }
 
         // Group subscription: DS has no consumer-group protocol, so we model the stream
         // as a single-partition group.  The listener assigns itself to partition 0 and
@@ -347,14 +428,14 @@ class DurableStreamsLog(
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>) =
             ReadOnlyLog(openReplicaLog(remotes))
 
-        // writeTo serialises the log config to protobuf for multi-node followers to
-        // reconstruct their log handle.  Single-node DS deployments don't need this;
-        // a proto definition can be added when multi-node support is required.
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            throw UnsupportedOperationException(
-                "DurableStreams log does not yet support multi-node log config persistence via writeTo; " +
-                "add a proto definition when follower nodes are needed."
-            )
+            dbConfig.setOtherLog(ProtoAny.pack(durableStreamsLogConfig {
+                this.clusterAlias = this@LogFactory.cluster
+                this.topic = this@LogFactory.topic
+                this.epoch = this@LogFactory.epoch
+                this.replicaTopic = this@LogFactory.replicaTopic
+                this.tenant = this@LogFactory.tenant
+            }, "proto.xtdb.com"))
         }
     }
 
@@ -365,10 +446,17 @@ class DurableStreamsLog(
      */
     class Registration : Log.Registration {
         override val protoTag: String
-            get() = throw UnsupportedOperationException("DurableStreams log has no proto tag")
+            get() = "proto.xtdb.com/xtdb.durable_streams.proto.DurableStreamsLogConfig"
 
         override fun fromProto(msg: ProtoAny): Log.Factory =
-            throw UnsupportedOperationException("DurableStreams log cannot be reconstructed from proto")
+            msg.unpack(DurableStreamsLogConfig::class.java).let {
+                LogFactory(it.clusterAlias, it.topic).apply {
+                    if (it.epoch != 0) epoch = it.epoch
+                    if (it.hasReplicaTopic()) replicaTopic = it.replicaTopic
+                    if (it.hasTenant()) tenant = it.tenant
+                    createStream = false
+                }
+            }
 
         override fun registerSerde(builder: PolymorphicModuleBuilder<Log.Factory>) {
             builder.subclass(LogFactory::class)
