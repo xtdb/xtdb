@@ -82,7 +82,7 @@ jobs:
         run: ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
 
       - name: Push Standalone
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: docker/Dockerfile
@@ -96,7 +96,7 @@ jobs:
             XTDB_VERSION=${{ steps.standalone-meta.outputs.version }}
 
       - name: Push Azure
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: docker/Dockerfile
@@ -111,7 +111,7 @@ jobs:
             XTDB_LOG_JSON_TEMPLATE=classpath:xtdb/logging/AzureMonitorLayout.json
 
       - name: Push AWS
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: docker/Dockerfile
@@ -126,7 +126,7 @@ jobs:
             XTDB_LOG_JSON_TEMPLATE=classpath:xtdb/logging/AwsCloudWatchLayout.json
 
       - name: Push Google Cloud
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
           file: docker/Dockerfile
