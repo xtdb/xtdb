@@ -56,12 +56,37 @@ For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, n
 ## Running tests
 
 - You MUST NOT run tests yourself - use sub-agents.
-- For Clojure tests (testing Clojure code in `/src/test/clojure`): you SHOULD use the `repl-explorer` agent via the Task tool. This gives faster feedback and allows interactive debugging.
-- For all other tests (Java, integration tests, or when REPL isn't available): you SHOULD use the `gradle-tests` agent via the Task tool.
+- You SHOULD use the `gradle-tests` agent via the Task tool.
+  Clojure tests can also be exercised through the REPL via the `/clojure-eval` skill (see the "REPL evaluation" rule above), which gives faster feedback for pure-Clojure work.
 - You MUST NOT launch multiple `gradle-tests` agents concurrently.
   Combine test namespaces into a single agent invocation instead.
   The test agent will decide what/how to invoke it.
 - You SHOULD proactively run relevant tests after code changes to verify they work.
+
+### Gradle test conventions
+
+The `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace); the XTDB-specific knowledge it needs lives here.
+
+Test tasks:
+- `./gradlew test` — standard unit tests.
+- `./gradlew integration-test` — integration tests (longer running).
+- `./gradlew property-test` — property-based tests (default 100 iterations).
+- `./gradlew property-test -Piterations=500` — custom iteration count.
+- `./gradlew kafka-test` — tests requiring Kafka (needs `docker-compose up`).
+
+Module addressing (per the commit-tag rules above):
+- Top-level modules: `:xtdb-core:test`, `:xtdb-api:test`, etc.
+- Modules under `modules/`: `:modules:xtdb-kafka:test`, `:modules:xtdb-aws:test`, etc.
+
+Clojure test filtering:
+- In `--tests` patterns, Clojure namespaces use underscores, not dashes — `xtdb.api_test`, not `xtdb.api-test`.
+- Example: `./gradlew :xtdb-core:test --tests 'xtdb.api_test*'`.
+
+Typical durations:
+- Single namespace: 30–60s.
+- Module test suite: 2–5 min.
+- Full project suite: 10+ min.
+- Integration tests: 5–15 min (I/O bound).
 
 ## GitHub project board, milestones, labels
 

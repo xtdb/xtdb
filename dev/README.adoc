@@ -314,4 +314,28 @@ See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and the
 
 === Git
 
-see link:GIT.adoc[] for details on git practices in XTDB.
+We follow https://martinfowler.com/articles/ship-show-ask.html[Ship/Show/Ask] — classify each change by how much pre-merge scrutiny it needs:
+
+Ship::
++
+Commit straight to `main`, no PR.
+Use for routine, low-risk changes where established patterns apply — small bug fixes, doc tweaks, obvious refactors.
+Simple, uncontroversial changes (typos, say, or other non-code changes) can go this way, but be aware of the curse of the 'simple change' — err on the side of caution if need be.
+
+Show::
++
+Open a PR, then merge it promptly yourself.
+The PR exists for async visibility and post-hoc feedback, *not* as a review gate.
+Use when you're confident in the change but want it seen — new approaches, non-trivial refactors, anything worth a teammate noticing.
+
+Ask::
++
+Open a PR and wait for input before merging.
+Use when the change is uncertain, experimental, or invites discussion — you're genuinely asking, not informing.
+
+The key distinction between show and ask: show merges without waiting; ask waits.
+Default toward show over ask when you're confident — don't manufacture review gates for changes you'd stand behind anyway.
+
+NOTE: AI agents working in this repo — if you're not sure which path applies, ask the human you're paired with rather than guessing.
+
+See link:GIT.adoc[] for further details on git practices in XTDB.
