@@ -83,6 +83,27 @@
            :committed? committed?
            :error error}))))
 
+(defn- ->session-node ^Session$Node [this-node ^Database$Catalog db-cat]
+  (reify Session$Node
+    (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
+    (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
+
+    (openSqlQuery [_ sql db-name await-token]
+      (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
+        (-> (xtp/prepare-sql this-node sql query-opts)
+            (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
+
+    (prepareSql [_ sql db-name await-token]
+      (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
+        (xtp/prepare-sql this-node sql query-opts)))
+
+    (openSnapshot [_ db-name await-token]
+      (let [^Database db (or (.databaseOrNull db-cat db-name)
+                             (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                                                   {:db-name db-name})))]
+        (.awaitAll db-cat await-token nil)
+        (.openSnapshot db)))))
+
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
@@ -112,35 +133,20 @@
       (.createConnectionBuilder data-source)))
 
   (connect [this-node]
-    (XtdbConnection.
-     (reify XtdbConnection$Node
-       (getAllocator [_] allocator)
-       (getDatabaseNames [_] (.getDatabaseNames db-cat))
-       (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
-       (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
+    (let [session-node (->session-node this-node db-cat)]
+      (XtdbConnection.
+       (reify XtdbConnection$Node
+         (getAllocator [_] allocator)
+         (getDatabaseNames [_] (.getDatabaseNames db-cat))
+         (submitTx [_ db-name ops opts] (.submitTx session-node db-name ops opts))
+         (executeTx [_ db-name ops opts] (.executeTx session-node db-name ops opts))
+         (openSqlQuery [_ sql db-name await-token] (.openSqlQuery session-node sql db-name await-token))
+         (prepareSql [_ sql db-name await-token] (.prepareSql session-node sql db-name await-token))
+         (openSnapshot [_ db-name await-token] (.openSnapshot session-node db-name await-token))
 
-       (openSqlQuery [_ sql db-name await-token]
-         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-           (-> (xtp/prepare-sql this-node sql query-opts)
-               (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
-
-       (prepareSql [_ sql db-name await-token]
-         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-           (xtp/prepare-sql this-node sql query-opts)))
-
-       (mergeAwaitToken [_ existing-token db-name tx-id]
-         (basis/merge-tx-tokens existing-token (basis/->tx-basis-str {db-name [tx-id]})))
-
-       (getColumnTypes [_ table snap]
-         (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
-           (.getColumnTypes db table snap)))
-
-       (openSnapshot [_ db-name await-token]
-         (let [^Database db (or (.databaseOrNull db-cat db-name)
-                                (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                                      {:db-name db-name})))]
-           (.awaitAll db-cat await-token nil)
-           (.openSnapshot db))))))
+         (getColumnTypes [_ table snap]
+           (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
+             (.getColumnTypes db table snap)))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
