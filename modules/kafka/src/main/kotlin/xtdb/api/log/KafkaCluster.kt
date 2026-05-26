@@ -150,7 +150,6 @@ class KafkaCluster(
     private sealed interface GroupCommand {
         class Register(val topic: String, val subscription: SharedGroupConsumer.TopicSubscription<*>) : GroupCommand
         class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
-        class UnregisterOnFailure(val topics: Collection<String>, val cause: Throwable) : GroupCommand
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -253,17 +252,18 @@ class KafkaCluster(
                     applySubscriptions()
                     cmd.cont.resume(Unit)
                 }
+            }
+        }
 
-                // No `onPartitionsRevokedSync` — the subscriber learns about the failure via
-                // `completion.completeExceptionally`; firing the revoke would also trigger
-                // LogProcessor's leader→follower transition during a Failed-state cleanup.
-                is GroupCommand.UnregisterOnFailure -> {
-                    for (topic in cmd.topics) {
-                        subscriptions.remove(topic)?.completion?.completeExceptionally(cmd.cause)
-                    }
-                    applySubscriptions()
+        // Deliberately no `onPartitionsRevokedSync` — would trigger LogProcessor's
+        // leader→follower transition during a Failed-state cleanup.
+        private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) {
+            for (topic in topics) {
+                subscriptions.remove(topic)?.completion?.let { completion ->
+                    if (completion.isActive) completion.completeExceptionally(cause)
                 }
             }
+            applySubscriptions()
         }
 
         private suspend fun KafkaConsumer<*, ByteArray>.pollRecords() =
@@ -302,7 +302,7 @@ class KafkaCluster(
                                     }
                                 } catch (e: OffsetOutOfRangeException) {
                                     LOG.error(e) { "evicting subscriptions for OffsetOutOfRange partitions: ${e.partitions()}" }
-                                    processCommand(GroupCommand.UnregisterOnFailure(e.partitions().map { it.topic() }.toSet(), e))
+                                    evictSubscriptions(e.partitions().map { it.topic() }.toSet(), e)
                                 }
                             }
                         }
