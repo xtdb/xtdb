@@ -49,6 +49,7 @@ class DatabaseStorage(
         }
 
         private fun throwIllegalLogState(
+            dbName: DatabaseName,
             latestSubmittedOffset: LogOffset, logEpoch: Int, completedEpoch: Int, completedOffset: MessageId
         ): Nothing {
             val logState =
@@ -57,7 +58,7 @@ class DatabaseStorage(
 
             error(
                 buildString {
-                    appendLine("Node failed to start due to an invalid transaction log state ($logState) " +
+                    appendLine("Database '$dbName' failed to start due to an invalid transaction log state ($logState) " +
                             "that does not correspond with the latest indexed transaction " +
                             "(epoch=$completedEpoch and offset=$completedOffset).")
                     appendLine()
@@ -67,7 +68,7 @@ class DatabaseStorage(
             )
         }
 
-        private fun validateOffsets(log: Log<SourceMessage>, latestCompletedTx: TransactionKey?) {
+        private fun validateOffsets(dbName: DatabaseName, log: Log<SourceMessage>, latestCompletedTx: TransactionKey?) {
             if (latestCompletedTx == null) return
 
             val completedTxId = latestCompletedTx.txId
@@ -80,7 +81,7 @@ class DatabaseStorage(
                 completedEpoch != logEpoch -> logNewEpoch()
 
                 latestSubmittedOffset < completedOffset ->
-                    throwIllegalLogState(latestSubmittedOffset, logEpoch, completedEpoch, completedOffset)
+                    throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, completedEpoch, completedOffset)
             }
         }
 
@@ -114,7 +115,7 @@ class DatabaseStorage(
                 val log = if (readOnly) dbConfig.log.openReadOnlySourceLog(remotes)
                 else dbConfig.log.openSourceLog(remotes)
 
-                validateOffsets(log, latestCompletedTx)
+                validateOffsets(dbName, log, latestCompletedTx)
                 log
             }
 

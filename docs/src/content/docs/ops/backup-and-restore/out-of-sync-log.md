@@ -7,15 +7,15 @@ This is a safety mechanism designed to prevent divergence between the transactio
 
 You may encounter an error such as:
 
-> "**Node failed to start due to an invalid transaction log state
-> (epoch=0, offset=200) that does not correspond with the latest indexed
-> transaction (epoch=0 and offset=289).**"
+> "**Database 'xtdb' failed to start due to an invalid transaction log
+> state (epoch=0, offset=200) that does not correspond with the latest
+> indexed transaction (epoch=0 and offset=289).**"
 
 or:
 
-> "**Node failed to start due to an invalid transaction log state (the
-> log is empty) that does not correspond with the latest indexed
-> transaction (epoch=0 and offset=289).**"
+> "**Database 'xtdb' failed to start due to an invalid transaction log
+> state (the log is empty) that does not correspond with the latest
+> indexed transaction (epoch=0 and offset=289).**"
 
 ## What Is Preserved
 
