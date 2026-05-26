@@ -13,6 +13,8 @@ import org.apache.arrow.flight.sql.FlightSqlProducer
 import org.apache.arrow.flight.sql.NoOpFlightSqlProducer
 import org.apache.arrow.flight.sql.impl.FlightSql.*
 import org.apache.arrow.flight.sql.impl.FlightSql.ActionEndTransactionRequest.EndTransaction
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableExistsOption
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
 import xtdb.database.DatabaseName
 import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
@@ -25,6 +27,7 @@ import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
+import org.apache.arrow.adbc.core.BulkIngestMode
 import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
@@ -212,6 +215,59 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 if (cmd.hasTransactionId()) cmd.transactionId else null,
                 dbNameFromContext(ctx)
             )
+
+            ackStream.sendDoPutUpdateRes(allocator)
+        } catch (t: Throwable) {
+            ackStream.onError(t)
+        }
+    }
+
+    override fun acceptPutStatementBulkIngest(
+        cmd: CommandStatementIngest,
+        ctx: CallContext?,
+        flightStream: FlightStream,
+        ackStream: StreamListener<PutResult>
+    ): Runnable = Runnable {
+        try {
+            if (cmd.hasTableDefinitionOptions()) {
+                val tdo = cmd.tableDefinitionOptions
+                val ifExists = tdo.ifExists
+                if (ifExists != TableExistsOption.TABLE_EXISTS_OPTION_UNSPECIFIED
+                    && ifExists != TableExistsOption.TABLE_EXISTS_OPTION_APPEND
+                ) throw CallStatus.INVALID_ARGUMENT
+                    .withDescription("Bulk ingest only supports append-on-exists for now (got $ifExists)")
+                    .toRuntimeException()
+                val ifNotExist = tdo.ifNotExist
+                if (ifNotExist != TableNotExistOption.TABLE_NOT_EXIST_OPTION_UNSPECIFIED
+                    && ifNotExist != TableNotExistOption.TABLE_NOT_EXIST_OPTION_CREATE
+                ) throw CallStatus.INVALID_ARGUMENT
+                    .withDescription("Bulk ingest cannot honour fail-if-not-exist: XTDB auto-creates tables on insert (got $ifNotExist)")
+                    .toRuntimeException()
+            }
+
+            val dbName = dbNameFromContext(ctx)
+
+            if (cmd.hasCatalog() && cmd.catalog.isNotEmpty() && cmd.catalog != dbName)
+                throw CallStatus.INVALID_ARGUMENT
+                    .withDescription("Bulk ingest catalog must match the connection catalog (got '${cmd.catalog}', connection '$dbName')")
+                    .toRuntimeException()
+
+            val tableName = cmd.table
+            if ('.' in tableName) throw CallStatus.INVALID_ARGUMENT
+                .withDescription("Bulk ingest table name must not contain '.'; use the schema field for schema-qualified targets (got '$tableName')")
+                .toRuntimeException()
+
+            val dbSchemaName = if (cmd.hasSchema()) cmd.schema else "public"
+            val txHandle = if (cmd.hasTransactionId()) cmd.transactionId else null
+
+            connectionFor(txHandle, dbName)
+                .bulkIngest("$dbSchemaName.$tableName", BulkIngestMode.CREATE_APPEND)
+                .use { stmt ->
+                    while (flightStream.next()) {
+                        stmt.bind(flightStream.root)
+                        stmt.executeUpdate()
+                    }
+                }
 
             ackStream.sendDoPutUpdateRes(allocator)
         } catch (t: Throwable) {
