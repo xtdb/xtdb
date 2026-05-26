@@ -83,6 +83,13 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             )
         }
 
+        override fun executeSchema(): Schema {
+            val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+            val paramFields = (0 until pq.paramCount)
+                .map { idx -> "?_$idx" ofType VectorType.fromLegs() }
+            return Schema(pq.getColumnFields(paramFields))
+        }
+
         override fun bind(root: VectorSchemaRoot) {
             clearArgs()
             args = Relation(node.allocator, root.schema).closeOnCatch { copy ->
