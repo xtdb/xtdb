@@ -13,8 +13,10 @@ import xtdb.NodeBase
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
+import xtdb.api.TransactionKey
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
+import xtdb.api.log.LogOffset
 import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
@@ -23,6 +25,7 @@ import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.applyStorage
 import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
+import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
@@ -33,6 +36,7 @@ import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.table.DatabaseName
+import xtdb.time.microsAsInstant
 import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
@@ -40,8 +44,11 @@ import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.tx.serializeUserMetadata
 import xtdb.tx.toArrowBytes
+import xtdb.util.MsgIdUtil.msgIdToEpoch
+import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.closeAll
+import xtdb.util.info
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -163,6 +170,51 @@ class Database(
     }
 
     companion object {
+        private fun logNewEpoch() {
+            LOG.info(
+                "Starting node with a log that has a different epoch than the latest completed tx " +
+                        "(this is expected if you are starting a new epoch) " +
+                        "- skipping offset validation."
+            )
+        }
+
+        private fun throwIllegalLogState(
+            dbName: DatabaseName,
+            latestSubmittedOffset: LogOffset, logEpoch: Int, completedEpoch: Int, completedOffset: MessageId
+        ): Nothing {
+            val logState =
+                if (latestSubmittedOffset == -1L) "the log is empty"
+                else "epoch=$logEpoch, offset=$latestSubmittedOffset"
+
+            error(
+                buildString {
+                    appendLine("Database '$dbName' failed to start due to an invalid transaction log state ($logState) " +
+                            "that does not correspond with the latest indexed transaction " +
+                            "(epoch=$completedEpoch and offset=$completedOffset).")
+                    appendLine()
+                    append("Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html " +
+                            "for more information and next steps.")
+                }
+            )
+        }
+
+        private fun validateOffsets(dbName: DatabaseName, log: Log<SourceMessage>, latestCompletedTx: TransactionKey?) {
+            if (latestCompletedTx == null) return
+
+            val completedTxId = latestCompletedTx.txId
+            val completedOffset = msgIdToOffset(completedTxId)
+            val completedEpoch = msgIdToEpoch(completedTxId)
+            val logEpoch = log.epoch
+            val latestSubmittedOffset = log.latestSubmittedOffset
+
+            when {
+                completedEpoch != logEpoch -> logNewEpoch()
+
+                latestSubmittedOffset < completedOffset ->
+                    throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, completedEpoch, completedOffset)
+            }
+        }
+
         @JvmStatic
         fun open(
             base: NodeBase,
@@ -178,7 +230,6 @@ class Database(
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
             val storage = open { DatabaseStorage.open(allocator, base, dbName, dbConfig) }
             val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
-
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(
                 blockCatalog.latestProcessedMsgId ?: -1,
@@ -188,6 +239,16 @@ class Database(
             // tx-id from the live-index's last committed tx, source-msg-id from the persisted
             // block-catalog watermark (or the source-log epoch floor on a fresh epoch).
             val txId = state.liveIndex.latestCompletedTx?.txId ?: -1L
+
+            val latestCompletedTx = storage.bufferPool.latestBlock
+                ?.takeIf { it.hasLatestCompletedTx() }
+                ?.latestCompletedTx
+                ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
+
+            // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
+            // the indexer — see /ops/backup-and-restore/out-of-sync-log.
+            validateOffsets(dbName, storage.sourceLog, latestCompletedTx)
+
             val watchers = Watchers(
                 latestTxId = txId,
                 latestSourceMsgId = sourceMsgId,

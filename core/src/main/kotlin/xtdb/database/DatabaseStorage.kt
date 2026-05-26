@@ -2,27 +2,16 @@ package xtdb.database
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
-import xtdb.api.TransactionKey
 import xtdb.api.log.Log
-import xtdb.api.log.LogOffset
-import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.storage.Storage
-import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.storage.ReadOnlyBufferPool
 import xtdb.table.DatabaseName
-import xtdb.time.microsAsInstant
-import xtdb.util.MsgIdUtil.msgIdToEpoch
-import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.closeAll
-import xtdb.util.info
-import xtdb.util.logger
 import xtdb.util.safelyOpening
-
-private val LOG = DatabaseStorage::class.logger
 
 class DatabaseStorage(
     val sourceLogOrNull: Log<SourceMessage>?,
@@ -40,51 +29,6 @@ class DatabaseStorage(
     }
 
     companion object {
-        private fun logNewEpoch() {
-            LOG.info(
-                "Starting node with a log that has a different epoch than the latest completed tx " +
-                        "(this is expected if you are starting a new epoch) " +
-                        "- skipping offset validation."
-            )
-        }
-
-        private fun throwIllegalLogState(
-            dbName: DatabaseName,
-            latestSubmittedOffset: LogOffset, logEpoch: Int, completedEpoch: Int, completedOffset: MessageId
-        ): Nothing {
-            val logState =
-                if (latestSubmittedOffset == -1L) "the log is empty"
-                else "epoch=$logEpoch, offset=$latestSubmittedOffset"
-
-            error(
-                buildString {
-                    appendLine("Database '$dbName' failed to start due to an invalid transaction log state ($logState) " +
-                            "that does not correspond with the latest indexed transaction " +
-                            "(epoch=$completedEpoch and offset=$completedOffset).")
-                    appendLine()
-                    append("Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html " +
-                            "for more information and next steps.")
-                }
-            )
-        }
-
-        private fun validateOffsets(dbName: DatabaseName, log: Log<SourceMessage>, latestCompletedTx: TransactionKey?) {
-            if (latestCompletedTx == null) return
-
-            val completedTxId = latestCompletedTx.txId
-            val completedOffset = msgIdToOffset(completedTxId)
-            val completedEpoch = msgIdToEpoch(completedTxId)
-            val logEpoch = log.epoch
-            val latestSubmittedOffset = log.latestSubmittedOffset
-
-            when {
-                completedEpoch != logEpoch -> logNewEpoch()
-
-                latestSubmittedOffset < completedOffset ->
-                    throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, completedEpoch, completedOffset)
-            }
-        }
-
         @JvmStatic
         fun open(
             allocator: BufferAllocator,
@@ -106,17 +50,9 @@ class DatabaseStorage(
 
             val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
 
-            val latestCompletedTx = bufferPool.latestBlock
-                ?.takeIf { it.hasLatestCompletedTx() }
-                ?.latestCompletedTx
-                ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
-
             val sourceLog = open {
-                val log = if (readOnly) dbConfig.log.openReadOnlySourceLog(remotes)
+                if (readOnly) dbConfig.log.openReadOnlySourceLog(remotes)
                 else dbConfig.log.openSourceLog(remotes)
-
-                validateOffsets(dbName, log, latestCompletedTx)
-                log
             }
 
             val replicaLog = open {
