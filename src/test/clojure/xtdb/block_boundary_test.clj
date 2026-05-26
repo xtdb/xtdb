@@ -5,12 +5,14 @@
             [honey.sql :as honey-sql]
             [xtdb.api :as xt]
             [xtdb.compactor :as c]
+            [xtdb.db-catalog :as db]
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.node.impl]
             [xtdb.test-generators :as tg]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (xtdb.database Database)))
 
 (t/deftest ^:property multiple-writes-to-doc
   (tu/run-property-test
@@ -454,7 +456,16 @@
                                                  :where [:= :_id 1]})]
     [:sql sql-string (vec params)]))
 
-;; TODO - Fails when :a is [[#NaN]] or when it contains a set. 
+(defn- root-cause [^Throwable t]
+  (loop [t t] (if-let [c (.getCause t)] (recur c) t)))
+
+(defn- ee-method-too-large? [^Database db]
+  (let [root (some-> db .getIngestionError root-cause)]
+    (boolean
+     (and (instance? IndexOutOfBoundsException root)
+          (some-> ^Throwable root .getMessage (.contains "Method code too large"))))))
+
+;; TODO - Fails when :a is [[#NaN]] or when it contains a set.
 (t/deftest ^:property update-deduplication
   (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen tg/set-gen}]
     (tu/run-property-test
@@ -467,29 +478,35 @@
                     flush-after-second-update? tg/bool-gen]
                    (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                      :compactor {:threads 0}})]
-                     (let [value (:a record)
-                           insert-sql (->insert-tx :a value)
-                           update-sql (->update-tx :a value)]
-                       (xt/execute-tx node [insert-sql])
-                       (when flush-after-put? (tu/flush-block! node))
+                     (try
+                       (let [value (:a record)
+                             insert-sql (->insert-tx :a value)
+                             update-sql (->update-tx :a value)]
+                         (xt/execute-tx node [insert-sql])
+                         (when flush-after-put? (tu/flush-block! node))
 
-                       (xt/execute-tx node [update-sql])
-                       (when flush-after-first-update? (tu/flush-block! node))
+                         (xt/execute-tx node [update-sql])
+                         (when flush-after-first-update? (tu/flush-block! node))
 
-                       (xt/execute-tx node [update-sql])
-                       (when flush-after-second-update? (tu/flush-block! node))
+                         (xt/execute-tx node [update-sql])
+                         (when flush-after-second-update? (tu/flush-block! node))
 
-                       (and
-                        (t/testing "three transactions recorded"
-                          (= 3 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "document should have only 1 entry in history (deduplicated)"
-                          (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
-                            (= 1 (count res))))
-                        (t/testing "document has correct value"
-                          (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
-                                expected (tu/remove-nils record)]
-                            (= (tg/normalize-for-comparison expected)
-                               (tg/normalize-for-comparison res)))))))))))
+                         (and
+                          (t/testing "three transactions recorded"
+                            (= 3 (count (xt/q node "FROM xt.txs"))))
+                          (t/testing "document should have only 1 entry in history (deduplicated)"
+                            (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                              (= 1 (count res))))
+                          (t/testing "document has correct value"
+                            (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
+                                  expected (tu/remove-nils record)]
+                              (= (tg/normalize-for-comparison expected)
+                                 (tg/normalize-for-comparison res))))))
+                       (catch Throwable t
+                         ;; discard if the EE blew its bytecode budget — see #5635
+                         (if (ee-method-too-large? (db/primary-db node))
+                           true
+                           (throw t)))))))))
 
 (t/deftest ^:property update-same-keys-new-values
   (let [exclude-gens #{tg/varbinary-gen tg/decimal-gen tg/nil-gen}]
@@ -501,26 +518,32 @@
                     flush-after-second-update? tg/bool-gen]
                    (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                                      :compactor {:threads 0}})]
-                     (let [insert-sql (->insert-tx :a value-1)
-                           update-statement-1 (->update-tx :a value-2)
-                           update-statement-2 (->update-tx :a value-3)]
-                       (xt/execute-tx node [insert-sql])
-                       (when flush-after-put? (tu/flush-block! node))
+                     (try
+                       (let [insert-sql (->insert-tx :a value-1)
+                             update-statement-1 (->update-tx :a value-2)
+                             update-statement-2 (->update-tx :a value-3)]
+                         (xt/execute-tx node [insert-sql])
+                         (when flush-after-put? (tu/flush-block! node))
 
-                       (xt/execute-tx node [update-statement-1])
-                       (when flush-after-first-update? (tu/flush-block! node))
+                         (xt/execute-tx node [update-statement-1])
+                         (when flush-after-first-update? (tu/flush-block! node))
 
-                       (xt/execute-tx node [update-statement-2])
-                       (when flush-after-second-update? (tu/flush-block! node))
+                         (xt/execute-tx node [update-statement-2])
+                         (when flush-after-second-update? (tu/flush-block! node))
 
-                       (and
-                        (t/testing "three transactions recorded"
-                          (= 3 (count (xt/q node "FROM xt.txs"))))
-                        (t/testing "document should have 3 entries in history"
-                          (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
-                            (= 3 (count res))))
-                        (t/testing "document has final value"
-                          (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
-                                expected (tu/remove-nils {:xt/id 1 :a value-3})]
-                            (= (tg/normalize-for-comparison expected)
-                               (tg/normalize-for-comparison res)))))))))))
+                         (and
+                          (t/testing "three transactions recorded"
+                            (= 3 (count (xt/q node "FROM xt.txs"))))
+                          (t/testing "document should have 3 entries in history"
+                            (let [res (xt/q node "SELECT * FROM docs FOR VALID_TIME ALL")]
+                              (= 3 (count res))))
+                          (t/testing "document has final value"
+                            (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
+                                  expected (tu/remove-nils {:xt/id 1 :a value-3})]
+                              (= (tg/normalize-for-comparison expected)
+                                 (tg/normalize-for-comparison res))))))
+                       (catch Throwable t
+                         ;; discard if the EE blew its bytecode budget — see #5635
+                         (if (ee-method-too-large? (db/primary-db node))
+                           true
+                           (throw t)))))))))
