@@ -12,6 +12,7 @@ import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
 import xtdb.pgwire.PgType
 import xtdb.util.debug
+import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.trace
@@ -307,7 +308,7 @@ class PgWireDriver(
     private suspend fun startReplicationStream(pgReplConn: PGConnection, startLsn: Long): PGReplicationStream {
         for (attempt in 1..SLOT_RETRY_MAX_ATTEMPTS) {
             try {
-                return pgReplConn.replicationAPI
+                val stream = pgReplConn.replicationAPI
                     .replicationStream()
                     .logical()
                     .withSlotName(slotName)
@@ -315,9 +316,17 @@ class PgWireDriver(
                     .withSlotOption("proto_version", "1")
                     .withSlotOption("publication_names", publicationName)
                     .start()
+
+                if (attempt > 1)
+                    LOG.info("[$dbName] Replication slot '$slotName' acquired after $attempt attempts")
+
+                return stream
             } catch (e: PSQLException) {
                 if (!SLOT_ACTIVE_PATTERN.matches(e.message ?: "")) throw e
-                if (attempt == SLOT_RETRY_MAX_ATTEMPTS) throw e
+                if (attempt == SLOT_RETRY_MAX_ATTEMPTS) {
+                    LOG.error(e) { "[$dbName] Replication slot '$slotName' still held after $SLOT_RETRY_MAX_ATTEMPTS attempts; giving up (startLsn=${LogSequenceNumber.valueOf(startLsn)})" }
+                    throw e
+                }
 
                 val baseDelay = SLOT_RETRY_BASE_DELAY_MS shl (attempt - 1)
                 val delayMs = baseDelay + (baseDelay * 0.5 * Math.random()).toLong()
