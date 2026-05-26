@@ -208,20 +208,30 @@ class KafkaCluster(
             else consumer.subscribe(topics, object : ConsumerRebalanceListener {
                 override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        runBlocking {
-                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
-                                val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
-                                sub.onPartitionAssigned(tps.single())
+                        try {
+                            runBlocking {
+                                for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                    val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
+                                    sub.onPartitionAssigned(tps.single())
+                                }
                             }
+                        } catch (e: Throwable) {
+                            LOG.error(e) { "rebalance listener onPartitionsAssigned failed for partitions $partitions" }
+                            throw e
                         }
                     }
 
                 override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        runBlocking {
-                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
-                                subscriptions[topic]?.onPartitionRevoked(tps.single())
+                        try {
+                            runBlocking {
+                                for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                    subscriptions[topic]?.onPartitionRevoked(tps.single())
+                                }
                             }
+                        } catch (e: Throwable) {
+                            LOG.error(e) { "rebalance listener onPartitionsRevoked failed for partitions $partitions" }
+                            throw e
                         }
                     }
             })
