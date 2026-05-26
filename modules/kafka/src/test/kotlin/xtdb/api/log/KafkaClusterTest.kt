@@ -472,6 +472,59 @@ class KafkaClusterTest {
         }
     }
 
+    private class ThrowingOnAssignListener(private val toThrow: Throwable) : SubscriptionListener<SourceMessage> {
+        override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> {
+            throw toThrow
+        }
+
+        override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+    }
+
+    @Test
+    fun `poll loop failure evicts all subscriptions with cause and unblocks shutdown`() = runTest(timeout = 30.seconds) {
+        val topic1 = "test-poll-fail-${UUID.randomUUID()}"
+        val topic2 = "test-poll-fail-${UUID.randomUUID()}"
+
+        val boom = RuntimeException("listener boom")
+        val healthy = TrackingListener()
+        val throwing = ThrowingOnAssignListener(boom)
+
+        val caughtHealthy = AtomicReference<Throwable?>(null)
+        val caughtThrowing = AtomicReference<Throwable?>(null)
+
+        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
+            val (logHealthy, logThrowing) = logs
+
+            // register the healthy subscriber first and wait for it to be assigned —
+            // guarantees it's in the subscriptions map when the throwing one tanks the poll loop
+            val jobHealthy = launch(SupervisorJob()) {
+                try { logHealthy.openGroupSubscription(healthy) }
+                catch (e: Throwable) { caughtHealthy.set(e) }
+            }
+            while (!healthy.isAssigned) delay(100.milliseconds)
+
+            val jobThrowing = launch(SupervisorJob()) {
+                try { logThrowing.openGroupSubscription(throwing) }
+                catch (e: Throwable) { caughtThrowing.set(e) }
+            }
+
+            // both subscribers should surface a failure (no hang) — the outer runTest timeout
+            // is the regression canary for the pre-fix shutdown-hang behaviour
+            jobHealthy.join()
+            jobThrowing.join()
+        }
+
+        val exThrowing = caughtThrowing.get()
+            ?: error("throwing subscriber must surface a failure, not hang")
+        val exHealthy = caughtHealthy.get()
+            ?: error("healthy subscriber must surface a failure when the poll loop dies, not hang")
+
+        assertTrue(generateSequence<Throwable>(exThrowing) { it.cause }.any { it === boom },
+            "throwing subscriber must see the listener exception in its cause chain, got: $exThrowing")
+        assertTrue(generateSequence<Throwable>(exHealthy) { it.cause }.any { it === boom },
+            "healthy subscriber must see the listener exception in its cause chain, got: $exHealthy")
+    }
+
     @Test
     fun `database can resubscribe after unsubscribing`() = runTest(timeout = 60.seconds) {
         val topic1 = "test-shared-resub-${UUID.randomUUID()}"

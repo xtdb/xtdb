@@ -10,7 +10,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.onClosed
 import kotlinx.coroutines.channels.onSuccess
-import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
@@ -52,6 +51,7 @@ import xtdb.util.close
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.warn
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant.ofEpochMilli
@@ -266,6 +266,27 @@ class KafkaCluster(
             applySubscriptions()
         }
 
+        // Order matters: close before drain (no new commands can land mid-drain),
+        // drain before evict (queued unregister continuations need resuming before
+        // subscribers wake into their finally and find the channel closed).
+        private fun cleanupOnFailure(cause: Throwable) {
+            commandCh.close()
+            while (true) {
+                val cmd = commandCh.tryReceive().getOrNull() ?: break
+                when (cmd) {
+                    is GroupCommand.Register -> cmd.subscription.completion.let { completion ->
+                        if (completion.isActive) completion.completeExceptionally(cause)
+                    }
+                    is GroupCommand.Unregister -> cmd.cont.resume(Unit)
+                }
+            }
+            try {
+                evictSubscriptions(subscriptions.keys.toList(), cause)
+            } catch (cleanup: Throwable) {
+                LOG.warn(cleanup, "error during subscription cleanup after poll loop failure")
+            }
+        }
+
         private suspend fun KafkaConsumer<*, ByteArray>.pollRecords() =
             runInterruptible(Dispatchers.IO) {
                 try {
@@ -309,10 +330,12 @@ class KafkaCluster(
                     }
                 }
             } catch (e: CancellationException) {
+                cleanupOnFailure(e)
                 throw e
             } catch (e: Throwable) {
                 LOG.error(e) { "SharedGroupConsumer poll loop failed" }
-                throw e
+                cleanupOnFailure(e)
+                // Don't rethrow — already handled; the scope has no handler, so it'd just double-log.
             }
         }
 
@@ -330,8 +353,13 @@ class KafkaCluster(
 
         suspend fun unregister(topic: String) {
             suspendCancellableCoroutine { cont ->
-                commandCh.trySendBlocking(GroupCommand.Unregister(topic, cont)).getOrThrow()
-                consumer.wakeup()
+                val result = commandCh.trySend(GroupCommand.Unregister(topic, cont))
+                when {
+                    // consumer shut down; subscription already evicted via cleanupOnFailure
+                    result.isClosed -> cont.resume(Unit)
+                    result.isSuccess -> consumer.wakeup()
+                    else -> error("commandCh trySend failed: $result")
+                }
             }
         }
 
