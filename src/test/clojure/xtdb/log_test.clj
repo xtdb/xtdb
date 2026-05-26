@@ -4,19 +4,16 @@
             [xtdb.api :as xt]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
-            [xtdb.log :as log]
             [xtdb.node :as xtn]
-            [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
   (:import [java.time Duration Instant InstantSource]
            xtdb.api.Xtdb$Config
-           [xtdb.api.log InMemoryLog IngestionStoppedException Log Log$Factory ReadOnlyLog
-                         ReplicaMessage$ResolvedTx SourceMessage$DetachDatabase]
-           xtdb.arrow.Relation
-           [xtdb.util MsgIdUtil]))
+           [xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog
+            ReplicaMessage$ResolvedTx SourceMessage$DetachDatabase]
+           xtdb.arrow.Relation))
 
 (t/use-fixtures :each
                 tu/with-allocator
