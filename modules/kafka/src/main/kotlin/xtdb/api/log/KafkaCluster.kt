@@ -83,6 +83,7 @@ private fun KafkaConfigMap.openProducer() =
             "enable.idempotence" to "true",
             "acks" to "all",
             "compression.type" to "snappy",
+            "linger.ms" to "0",
         ) + this,
         UnitSerializer,
         ByteArraySerializer()
@@ -514,6 +515,7 @@ class KafkaCluster(
                     "enable.idempotence" to "true",
                     "acks" to "all",
                     "compression.type" to "snappy",
+                    "linger.ms" to "0",
                     "transactional.id" to prefixedTxId,
                 ) + kafkaConfigMap,
                 UnitSerializer,
