@@ -63,6 +63,31 @@ For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, n
   The test agent will decide what/how to invoke it.
 - You SHOULD proactively run relevant tests after code changes to verify they work.
 
+### Gradle test conventions
+
+The `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace); the XTDB-specific knowledge it needs lives here.
+
+Test tasks:
+- `./gradlew test` — standard unit tests.
+- `./gradlew integration-test` — integration tests (longer running).
+- `./gradlew property-test` — property-based tests (default 100 iterations).
+- `./gradlew property-test -Piterations=500` — custom iteration count.
+- `./gradlew kafka-test` — tests requiring Kafka (needs `docker-compose up`).
+
+Module addressing (per the commit-tag rules above):
+- Top-level modules: `:xtdb-core:test`, `:xtdb-api:test`, etc.
+- Modules under `modules/`: `:modules:xtdb-kafka:test`, `:modules:xtdb-aws:test`, etc.
+
+Clojure test filtering:
+- In `--tests` patterns, Clojure namespaces use underscores, not dashes — `xtdb.api_test`, not `xtdb.api-test`.
+- Example: `./gradlew :xtdb-core:test --tests 'xtdb.api_test*'`.
+
+Typical durations:
+- Single namespace: 30–60s.
+- Module test suite: 2–5 min.
+- Full project suite: 10+ min.
+- Integration tests: 5–15 min (I/O bound).
+
 ## GitHub project board, milestones, labels
 
 XTDB 2.x work is tracked on the https://github.com/orgs/xtdb/projects/13[xtdb org "2.x" project board], with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
