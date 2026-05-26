@@ -152,32 +152,6 @@
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
 
-
-(def out-of-sync-log-message
-  "Database '%s' failed to start due to an invalid transaction log state (%s) that does not correspond with the latest indexed transaction (epoch=%s and offset=%s).
-
-  Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html for more information and next steps.")
-
-(defn ->out-of-sync-exception [db-name latest-completed-offset ^long latest-submitted-offset ^long epoch]
-  (let [log-state-str (if (= -1 latest-submitted-offset)
-                        "the log is empty"
-                        (format "epoch=%s, offset=%s" epoch latest-submitted-offset))]
-    (IllegalStateException.
-      (format out-of-sync-log-message db-name log-state-str epoch latest-completed-offset))))
-
-(defn validate-offsets [db-name ^Log log ^TransactionKey latest-completed-tx]
-  (when latest-completed-tx
-    (let [latest-completed-tx-id (.getTxId latest-completed-tx)
-          latest-completed-offset (MsgIdUtil/msgIdToOffset latest-completed-tx-id)
-          latest-completed-epoch (MsgIdUtil/msgIdToEpoch latest-completed-tx-id)
-          epoch (.getEpoch log)
-          latest-submitted-offset (.getLatestSubmittedOffset log)]
-      (if (= latest-completed-epoch epoch)
-        (cond
-          (< latest-submitted-offset latest-completed-offset)
-          (throw (->out-of-sync-exception db-name latest-completed-offset latest-submitted-offset epoch)))
-        (log/info "Starting node with a log that has a different epoch than the latest completed tx (This is expected if you are starting a new epoch) - Skipping offset validation.")))))
-
 (defn- ->TxOps [tx-ops]
   (->> tx-ops
        (mapv (fn [tx-op]

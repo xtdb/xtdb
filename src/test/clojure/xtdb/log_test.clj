@@ -145,42 +145,6 @@
                                                                                        {:xt/id 3, :x "hello"}]]}]]}])
                (util/->clj (.getAsMaps rel)))))))
 
-(t/deftest validate-offset-returns-proper-errors
-  (letfn [(->simulated-log [epoch latest-submitted-offset]
-            (reify Log
-              (getEpoch [_] epoch)
-              (getLatestSubmittedOffset [_] latest-submitted-offset)))
-
-          (->latest-completed-tx [epoch offset]
-            (serde/->TxKey (MsgIdUtil/offsetToMsgId epoch offset) (Instant/now)))]
-
-    (t/testing "no error when latestSubmittedOffset >= latestCompletedOffset and same epoch"
-      (t/is (nil? (log/validate-offsets "xtdb" (->simulated-log 0 5) (->latest-completed-tx 0 5))))
-      (t/is (nil? (log/validate-offsets "xtdb" (->simulated-log 0 10) (->latest-completed-tx 0 5))))
-      (t/is (nil? (log/validate-offsets "xtdb" (->simulated-log 1 5) (->latest-completed-tx 1 5)))))
-
-    (t/testing "throws when latestSubmittedOffset < latestCompletedOffset and same epoch - stale log"
-      (t/is (thrown-with-msg? IllegalStateException
-                              #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=1\)"
-                              (log/validate-offsets "xtdb" (->simulated-log 0 1) (->latest-completed-tx 0 2))))
-      (t/is (thrown-with-msg? IllegalStateException
-                              #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=1, offset=1\)"
-                              (log/validate-offsets "xtdb" (->simulated-log 1 1) (->latest-completed-tx 1 2)))))
-
-    (t/testing "throws when latestSubmittedOffset is -1 and latestCompletedOffset is not for the same epoch - empty log"
-      (t/is (thrown-with-msg? IllegalStateException
-                              #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
-                              (log/validate-offsets "xtdb" (->simulated-log 0 -1) (->latest-completed-tx 0 2))))
-      (t/is (thrown-with-msg? IllegalStateException
-                              #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
-                              (log/validate-offsets "xtdb" (->simulated-log 1 -1) (->latest-completed-tx 1 2)))))
-
-    (t/testing "no error for empty log when epochs differ - validation skipped"
-      (t/is (nil? (log/validate-offsets "xtdb" (->simulated-log 1 -1) (->latest-completed-tx 0 2)))))
-
-    (t/testing "no error when latestCompletedTx is nil"
-      (t/is (nil? (log/validate-offsets "xtdb" (->simulated-log 0 5) nil))))))
-
 (t/deftest test-memory-log-epochs
   (util/with-tmp-dirs #{local-disk-path}
     ;; Node with local storage and memory log 
