@@ -22,6 +22,7 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
+           (xtdb Session Session$Node)
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
@@ -193,6 +194,9 @@
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)
+
+  (openSession [this-node db-name]
+    (Session. (->session-node this-node db-cat) db-name))
 
   xtp/PNode
   (submit-tx [this tx-ops opts]

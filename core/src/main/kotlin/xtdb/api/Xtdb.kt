@@ -47,6 +47,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     interface XtdbInternal : Xtdb {
         val dbCatalog: Database.Catalog
+        fun openSession(dbName: DatabaseName): xtdb.Session
     }
 
     fun <T : XtdbModule> module(type: Class<T>): T?

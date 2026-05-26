@@ -8,7 +8,6 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
-            [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -42,7 +41,8 @@
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
+           xtdb.Session
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -369,7 +369,9 @@
                  (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
-        conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)]
+        xt-session (.openSession ^Xtdb$XtdbInternal node db-name)
+        conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)
+        _ (swap! (:conn-state conn) assoc :xt-session xt-session)]
     (if authn
       (condp = (.methodFor authn user (pgio/host-address frontend))
         #xt.authn/method :trust
@@ -508,8 +510,9 @@
 
   (pgio/cmd-write-msg conn pgio/msg-close-complete))
 
-(defmethod handle-msg* :msg-terminate [{:keys [!closing?] :as conn} _]
+(defmethod handle-msg* :msg-terminate [{:keys [conn-state !closing?] :as conn} _]
   (close-all-portals conn)
+  (util/close (:xt-session @conn-state))
   (reset! !closing? true))
 
 ;;; server impl
@@ -536,10 +539,10 @@
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
-         (fn [{:keys [session await-token] :as st}]
+         (fn [{:keys [session ^Session xt-session] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
                                (apply-args tok args)
-                               await-token)
+                               (.getAwaitToken xt-session))
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
@@ -571,7 +574,7 @@
   (close-all-portals conn))
 
 (defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer] :as conn}]
-  (let [{:keys [transaction session]} @conn-state
+  (let [{:keys [transaction session ^Session xt-session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
     (if failed
@@ -592,26 +595,19 @@
                                                                                  [op])))
                                                                    (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
                                         (if async?
-                                          (let [tx-id (with-auth-check conn
-                                                        (metrics/record-callable! tx-submit-timer
-                                                                                  (.submitTx node default-db tx-ops tx-opts)))
-                                                msg-id (.getTxId tx-id)]
-                                            (swap! conn-state (fn [cs]
-                                                                (-> cs
-                                                                    (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                                                    (assoc :latest-submitted-tx {:tx-id msg-id})))))
+                                          (let [submitted-tx (with-auth-check conn
+                                                               (metrics/record-callable! tx-submit-timer
+                                                                                         (.submitTx xt-session tx-ops tx-opts)))
+                                                msg-id (.getTxId submitted-tx)]
+                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id}))
 
                                           (let [tx (with-auth-check conn
                                                      (metrics/record-callable! tx-execute-timer
-                                                                               (.executeTx node default-db tx-ops tx-opts)))
-                                                msg-id (.getTxId tx)]
-                                            (swap! conn-state (fn [cs]
-                                                                (-> cs
-                                                                    (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                                                    (assoc :latest-submitted-tx {:tx-id msg-id
-                                                                                                 :system-time (.getSystemTime tx)
-                                                                                                 :committed? (.getCommitted tx)
-                                                                                                 :error (.getError tx)}))))
+                                                                               (.executeTx xt-session tx-ops tx-opts)))]
+                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id (.getTxId tx)
+                                                                                          :system-time (.getSystemTime tx)
+                                                                                          :committed? (.getCommitted tx)
+                                                                                          :error (.getError tx)})
 
                                             (when-let [error (.getError tx)]
                                               (throw error))))))))
@@ -981,10 +977,10 @@
     (try
       (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
 
-            {:keys [session await-token]} @conn-state
+            {:keys [session ^Session xt-session]} @conn-state
             {:keys [^Clock clock]} session
 
-            query-opts {:await-token await-token
+            query-opts {:await-token (.getAwaitToken xt-session)
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?
@@ -1110,9 +1106,9 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction await-token]} @conn-state
+  (let [{:keys [session transaction ^Session xt-session]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
-        await-token (:await-token transaction await-token)
+        await-token (:await-token transaction (.getAwaitToken xt-session))
 
         query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
                                             (time/->instant))
@@ -1291,7 +1287,7 @@
 
 (defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [await-token args]}]
   (let [await-token (-> await-token (apply-args args))]
-    (swap! conn-state assoc :await-token await-token)
+    (.setAwaitToken ^Session (:xt-session @conn-state) await-token)
     (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"})))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
@@ -1458,10 +1454,8 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
-      (swap! conn-state (fn [cs]
-                          (-> cs
-                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
-                              (assoc :latest-submitted-tx tx))))
+      (.recordTx ^Session (:xt-session @conn-state) "xtdb" tx-id)
+      (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error
         (throw error)))))
@@ -1477,10 +1471,8 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/detach-db node db-name)]
-      (swap! conn-state (fn [cs]
-                          (-> cs
-                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
-                              (assoc :latest-submitted-tx tx))))
+      (.recordTx ^Session (:xt-session @conn-state) "xtdb" tx-id)
+      (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error
         (throw error)))))
