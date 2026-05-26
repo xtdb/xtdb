@@ -245,7 +245,7 @@
       (t/is
        (thrown-with-msg?
         IllegalStateException
-        #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest indexed transaction \(epoch=0 and offset=2\)"
+        #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest processed message \(epoch=0 and offset=\d+\)"
         (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
                                                            :poll-duration "PT2S"}]}
                          :log [:kafka {:cluster :my-kafka

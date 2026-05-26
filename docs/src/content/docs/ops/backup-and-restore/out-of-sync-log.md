@@ -9,13 +9,13 @@ You may encounter an error such as:
 
 > "**Database 'xtdb' failed to start due to an invalid transaction log
 > state (epoch=0, offset=200) that does not correspond with the latest
-> indexed transaction (epoch=0 and offset=289).**"
+> processed message (epoch=0 and offset=289).**"
 
 or:
 
 > "**Database 'xtdb' failed to start due to an invalid transaction log
 > state (the log is empty) that does not correspond with the latest
-> indexed transaction (epoch=0 and offset=289).**"
+> processed message (epoch=0 and offset=289).**"
 
 ## What Is Preserved
 
