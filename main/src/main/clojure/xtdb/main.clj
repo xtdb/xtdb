@@ -249,6 +249,25 @@
           (println "Usage: `read-table-block-file <file>`")
           (System/exit 2))))))
 
+(def read-block-file-cli-spec
+  [["-h" "--help"]])
+
+(defn read-block-file [args]
+  (let [{{:keys [help]} :options} (-> (parse-args args read-block-file-cli-spec)
+                                      (handling-arg-errors-or-help))]
+    (if help
+      (do
+        (println "Usage: read-block-file <file>")
+        (System/exit 0))
+
+      (if-let [file (first args)]
+        (binding [pp/*print-right-margin* 120]
+          (pp/pprint ((requiring-resolve 'xtdb.pbuf/read-block-file) file)))
+
+        (binding [*out* *err*]
+          (println "Usage: `read-block-file <file>`")
+          (System/exit 2))))))
+
 (defn -main [& args]
   (binding [*out* *err*]
     (println (str "Starting " (util/xtdb-version-string) " ...")))
@@ -287,6 +306,10 @@
         "read-table-block-file" (do
                                   (read-table-block-file more-args)
                                   (System/exit 0))
+
+        "read-block-file" (do
+                            (read-block-file more-args)
+                            (System/exit 0))
 
         ("help" "-h" "--help") (do
                                  (print-help)

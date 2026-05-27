@@ -875,6 +875,18 @@ tasks.register<JavaExec>("readTableBlockFile") {
         args(project.property("file") as? String ?: error("file property must be a string"))
 }
 
+tasks.register<JavaExec>("readBlockFile") {
+    dependsOn(":xtdb-core:compileClojure", ":xtdb-core:compileKotlin")
+
+    classpath = sourceSets.dev.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    args("-m", "xtdb.main", "read-block-file")
+
+    if (project.hasProperty("file"))
+        args(project.property("file") as? String ?: error("file property must be a string"))
+}
+
 tasks.register("printClasspath") {
     description = "Prints the dev classpath for clojure-lsp integration"
     doLast {

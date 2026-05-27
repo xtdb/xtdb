@@ -1,10 +1,11 @@
 (ns xtdb.pbuf
   "Utilities for working with Protocol Buffer things"
-  (:require [xtdb.table-catalog :as table-cat]
+  (:require [xtdb.block-catalog :as block-cat]
+            [xtdb.table-catalog :as table-cat]
             [xtdb.trie-catalog :as trie-cat]
             [xtdb.util :as util])
   (:import [java.nio.file Files]
-           (xtdb.block.proto TableBlock)
+           (xtdb.block.proto Block TableBlock)
            (xtdb.log.proto TrieDetails)
            (xtdb.util HyperLogLog)))
 
@@ -31,3 +32,11 @@
         ba (Files/readAllBytes path)
         table-block (TableBlock/parseFrom ba)]
     (<-TableBlock table-block)))
+
+(defn read-block-file
+  "Reads a Block protobuf file (.binpb) and returns a parsed map representation."
+  [path-ish]
+  (let [path (util/->path path-ish)
+        ba (Files/readAllBytes path)
+        block (Block/parseFrom ^bytes ba)]
+    (block-cat/<-Block block)))
