@@ -1,13 +1,15 @@
 (ns xtdb.healthz-test
   (:require [clj-http.client :as clj-http]
             [clojure.test :as t]
+            [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.healthz :as healthz]
             [xtdb.node :as xtn]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [xtdb.database Database Database$Catalog Database$Config]
+  (:import [xtdb.api.log IngestionStoppedException]
+           [xtdb.database Database Database$Catalog Database$Config]
            xtdb.storage.BufferPoolKt))
 
 (defn ->healthz-url [port endpoint]
@@ -232,3 +234,57 @@
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
               (t/is (= 503 (:status resp)))
               (t/is (re-find #"xtdb.*Primary error" (:body resp))))))))))
+
+;; --- end-to-end: a genuinely out-of-sync database is poisoned (not a node failure) and
+;;     drives healthz the same way a runtime ingestion error does (#5644) ---
+
+(t/deftest test-out-of-sync-noncritical-secondary-stays-alive-5644
+  (util/with-tmp-dirs #{node-dir sec-dir}
+    (let [port (tu/free-port)
+          sec-log (.resolve sec-dir "log")
+          sec-storage (.resolve sec-dir "storage")]
+      ;; set up: attach a (non-critical) secondary with its own log + storage, write a tx, flush a block
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
+        (jdbc/execute! node [(format "ATTACH DATABASE secondary WITH $$
+  log: !Local
+    path: '%s'
+  storage: !Local
+    path: '%s'
+$$" sec-log sec-storage)])
+        (with-open [conn (-> (.createConnectionBuilder node) (.database "secondary") (.build))]
+          (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"]))
+        (tu/flush-block! node))
+
+      ;; clear the secondary's log but keep its storage -> out of sync on restart
+      (util/delete-dir sec-log)
+
+      (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0, :healthz-port port})]
+        (t/testing "the secondary is poisoned"
+          (t/is (instance? IngestionStoppedException
+                           (.getIngestionError (.databaseOrNull (db/<-node node) "secondary")))))
+
+        (t/testing "node stays alive - a non-critical out-of-sync secondary doesn't fail liveness"
+          (let [{:keys [status headers]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 200 status))
+            (t/is (= "1" (get headers "X-XTDB-Databases-Unhealthy")))))))))
+
+(t/deftest test-out-of-sync-primary-unhealthy-5644
+  (util/with-tmp-dirs #{storage-path}
+    (let [port (tu/free-port)
+          node-cfg {:log [:in-memory {}]
+                    :storage [:local {:path storage-path}]}]
+      ;; flush a block, then submit a further tx that lives only in the (volatile) in-memory log
+      (with-open [node (xtn/start-node node-cfg)]
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 1}]])
+        (tu/flush-block! node)
+        (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]]))
+
+      ;; restart with intact storage + a fresh, empty log: storage is ahead of the log
+      (with-open [node (xtn/start-node (assoc node-cfg :healthz {:port port}))]
+        (t/testing "the primary is poisoned"
+          (t/is (instance? IngestionStoppedException (.getIngestionError (db/primary-db node)))))
+
+        (t/testing "the primary is always critical -> node is unhealthy"
+          (let [{:keys [status body]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 503 status))
+            (t/is (re-find #"xtdb" body))))))))

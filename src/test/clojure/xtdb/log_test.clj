@@ -11,7 +11,7 @@
             [xtdb.util :as util])
   (:import [java.time Duration Instant InstantSource]
            xtdb.api.Xtdb$Config
-           [xtdb.api.log InMemoryLog Log$Factory ReadOnlyLog
+           [xtdb.api.log InMemoryLog IngestionStoppedException Log$Factory ReadOnlyLog
             ReplicaMessage$ResolvedTx SourceMessage$DetachDatabase]
            xtdb.arrow.Relation))
 
@@ -142,6 +142,29 @@
                                                                                        {:xt/id 3, :x "hello"}]]}]]}])
                (util/->clj (.getAsMaps rel)))))))
 
+(t/deftest test-out-of-sync-log-poisons-db-not-fails-node-5644
+  (util/with-tmp-dirs #{local-disk-path}
+    (let [node-cfg {:log [:in-memory {}]
+                    :storage [:local {:path local-disk-path}]}]
+      ;; flush a block, then submit a further tx that lives only in the (volatile) in-memory log
+      (with-open [node (xtn/start-node node-cfg)]
+        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
+        (t/is (nil? (tu/flush-block! node)))
+        (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]]))
+
+      ;; restart with intact storage + a fresh, empty log: storage is ahead of the log
+      (with-open [node (xtn/start-node node-cfg)]
+        (t/testing "node starts rather than throwing"
+          (t/is (some? node)))
+
+        (t/testing "the out-of-sync database is poisoned with an ingestion error"
+          (let [err (.getIngestionError (db/primary-db node))]
+            (t/is (instance? IngestionStoppedException err))
+            (t/is (re-find #"Database 'xtdb' has an invalid transaction log state \(the log is empty\)"
+                           (.getMessage err)))
+            (t/is (re-find #"out-of-sync-log" (.getMessage err))
+                  "keeps the link to the recovery docs")))))))
+
 (t/deftest test-memory-log-epochs
   (util/with-tmp-dirs #{local-disk-path}
     ;; Node with local storage and memory log 
@@ -164,13 +187,13 @@
                      {:xt/id :lost}])
                (set (xt/q node "SELECT _id FROM xt_docs")))))
 
-    ;; Node with intact storage and (now) empty memory log 
-    (t/is
-      (thrown-with-msg?
-        IllegalStateException
-        #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
-        (xtn/start-node {:log [:in-memory {}]
-                         :storage [:local {:path local-disk-path}]})))
+    ;; Node with intact storage and (now) empty memory log: starts but poisoned, not a node failure
+    (with-open [node (xtn/start-node {:log [:in-memory {}]
+                                      :storage [:local {:path local-disk-path}]})]
+      (let [err (.getIngestionError (db/primary-db node))]
+        (t/is (instance? IngestionStoppedException err))
+        (t/is (re-find #"Database 'xtdb' has an invalid transaction log state \(the log is empty\)"
+                       (.getMessage err)))))
 
     ;; Node with intact storage and empty memory log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:in-memory {:epoch 1}]
@@ -213,13 +236,13 @@
                      {:xt/id :lost}])
                (set (xt/q node "SELECT _id FROM xt_docs")))))
 
-    ;; Node with intact storage and empty directory-log
-    (t/is
-      (thrown-with-msg?
-        IllegalStateException
-        #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
-        (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
-                         :storage [:local {:path (.resolve node-dir "objects")}]})))
+    ;; Node with intact storage and empty directory-log: starts but poisoned, not a node failure
+    (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")}]
+                                      :storage [:local {:path (.resolve node-dir "objects")}]})]
+      (let [err (.getIngestionError (db/primary-db node))]
+        (t/is (instance? IngestionStoppedException err))
+        (t/is (re-find #"Database 'xtdb' has an invalid transaction log state \(the log is empty\)"
+                       (.getMessage err)))))
 
     ;; Node with intact storage and empty directory-log with epoch set to 1
     (with-open [node (xtn/start-node {:log [:local {:path (.resolve node-dir "new-log")
