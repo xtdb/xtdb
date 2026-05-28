@@ -480,38 +480,45 @@ class KafkaClusterTest {
         override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
     }
 
+    private class ThrowingOnRecordsListener(private val toThrow: Throwable) : SubscriptionListener<SourceMessage> {
+        override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> =
+            TailSpec(afterMsgId = -1L, processor = RecordProcessor { throw toThrow })
+
+        override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+    }
+
     @Test
-    fun `poll loop failure evicts all subscriptions with cause and unblocks shutdown`() = runTest(timeout = 30.seconds) {
-        val topic1 = "test-poll-fail-${UUID.randomUUID()}"
-        val topic2 = "test-poll-fail-${UUID.randomUUID()}"
+    fun `processRecords failure tears down poll loop and evicts all subscriptions`() = runTest(timeout = 30.seconds) {
+        val throwingTopic = "test-records-fail-throwing-${UUID.randomUUID()}"
+        val healthyTopic = "test-records-fail-healthy-${UUID.randomUUID()}"
 
-        val boom = RuntimeException("listener boom")
+        val boom = RuntimeException("processRecords boom")
+        val throwing = ThrowingOnRecordsListener(boom)
         val healthy = TrackingListener()
-        val throwing = ThrowingOnAssignListener(boom)
 
-        val caughtHealthy = AtomicReference<Throwable?>(null)
         val caughtThrowing = AtomicReference<Throwable?>(null)
+        val caughtHealthy = AtomicReference<Throwable?>(null)
 
-        withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
-            val (logHealthy, logThrowing) = logs
+        withClusterAndLogs(listOf(throwingTopic, healthyTopic)) { _, logs ->
+            val (logThrowing, logHealthy) = logs
 
-            // register the healthy subscriber first and wait for it to be assigned —
-            // guarantees it's in the subscriptions map when the throwing one tanks the poll loop
+            val jobThrowing = launch(SupervisorJob()) {
+                try { logThrowing.openGroupSubscription(throwing) }
+                catch (e: Throwable) { caughtThrowing.set(e) }
+            }
             val jobHealthy = launch(SupervisorJob()) {
                 try { logHealthy.openGroupSubscription(healthy) }
                 catch (e: Throwable) { caughtHealthy.set(e) }
             }
             while (!healthy.isAssigned) delay(100.milliseconds)
 
-            val jobThrowing = launch(SupervisorJob()) {
-                try { logThrowing.openGroupSubscription(throwing) }
-                catch (e: Throwable) { caughtThrowing.set(e) }
-            }
+            // both subscribers have completed onPartitionsAssigned. Send a record to the
+            // throwing topic — its processor throws inside the records-loop, propagating
+            // out of the for-loop, past the OOR catch, into pollingJob's outer catch.
+            logThrowing.appendMessage(txMessage(1))
 
-            // both subscribers should surface a failure (no hang) — the outer runTest timeout
-            // is the regression canary for the pre-fix shutdown-hang behaviour
-            jobHealthy.join()
             jobThrowing.join()
+            jobHealthy.join()
         }
 
         val exThrowing = caughtThrowing.get()
@@ -520,9 +527,51 @@ class KafkaClusterTest {
             ?: error("healthy subscriber must surface a failure when the poll loop dies, not hang")
 
         assertTrue(generateSequence<Throwable>(exThrowing) { it.cause }.any { it === boom },
-            "throwing subscriber must see the listener exception in its cause chain, got: $exThrowing")
+            "throwing subscriber must see the processRecords exception in its cause chain, got: $exThrowing")
         assertTrue(generateSequence<Throwable>(exHealthy) { it.cause }.any { it === boom },
-            "healthy subscriber must see the listener exception in its cause chain, got: $exHealthy")
+            "healthy subscriber must see the processRecords exception in its cause chain, got: $exHealthy")
+    }
+
+    @Test
+    fun `listener failure on assignment evicts only that topic, healthy subscribers keep working`() = runTest(timeout = 60.seconds) {
+        val healthyTopic = "test-isolated-fail-healthy-${UUID.randomUUID()}"
+        val throwingTopic = "test-isolated-fail-throwing-${UUID.randomUUID()}"
+
+        val boom = RuntimeException("listener boom")
+        val healthy = TrackingListener()
+        val throwing = ThrowingOnAssignListener(boom)
+        val caughtThrowing = AtomicReference<Throwable?>(null)
+
+        withClusterAndLogs(listOf(healthyTopic, throwingTopic)) { _, logs ->
+            val (logHealthy, logThrowing) = logs
+
+            // healthy subscriber first, wait until it's assigned and processing
+            val jobHealthy = launch { logHealthy.openGroupSubscription(healthy) }
+            while (!healthy.isAssigned) delay(100.milliseconds)
+
+            // throwing subscriber registers; its onPartitionsAssigned tanks
+            val jobThrowing = launch(SupervisorJob()) {
+                try { logThrowing.openGroupSubscription(throwing) }
+                catch (e: Throwable) { caughtThrowing.set(e) }
+            }
+
+            jobThrowing.join()
+            val exThrowing = caughtThrowing.get()
+                ?: error("throwing subscriber must surface its own failure")
+            assertTrue(generateSequence<Throwable>(exThrowing) { it.cause }.any { it === boom },
+                "throwing subscriber must see the listener exception in its cause chain, got: $exThrowing")
+
+            // the healthy subscriber must still be alive — receive a fresh record after the failure
+            logHealthy.appendMessage(txMessage(42))
+            while (healthy.records.isEmpty()) delay(100.milliseconds)
+            assertEquals(1, healthy.records.size,
+                "healthy subscriber must keep processing after an unrelated topic's listener failed")
+            val msg = healthy.records[0].message
+            check(msg is SourceMessage.LegacyTx)
+            assertArrayEquals(byteArrayOf(-1, 42), msg.payload)
+
+            jobHealthy.cancelAndJoin()
+        }
     }
 
     @Test

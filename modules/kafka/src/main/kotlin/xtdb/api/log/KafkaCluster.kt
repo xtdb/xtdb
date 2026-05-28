@@ -29,6 +29,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.consumer.OffsetOutOfRangeException
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
@@ -152,6 +153,14 @@ class KafkaCluster(
         class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
     }
 
+    private class ListenerAssignmentFailures(val byTopic: Map<String, Throwable>) :
+        RuntimeException(
+            byTopic.entries.joinToString(", ") { (topic, e) ->
+                "$topic (${e.javaClass.simpleName}: ${e.message})"
+            },
+            byTopic.values.firstOrNull(),
+        )
+
     @Suppress("UNCHECKED_CAST")
     private inner class SharedGroupConsumer : AutoCloseable {
         private val subscriptions = mutableMapOf<String, TopicSubscription<*>>()
@@ -207,17 +216,19 @@ class KafkaCluster(
             else consumer.subscribe(topics, object : ConsumerRebalanceListener {
                 override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        try {
-                            runBlocking {
-                                for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                        val failures = mutableMapOf<String, Throwable>()
+                        runBlocking {
+                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                try {
                                     val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
                                     sub.onPartitionAssigned(tps.single())
+                                } catch (e: Throwable) {
+                                    failures[topic] = e
+                                    LOG.error(e) { "rebalance listener onPartitionsAssigned failed for partitions $tps" }
                                 }
                             }
-                        } catch (e: Throwable) {
-                            LOG.error(e) { "rebalance listener onPartitionsAssigned failed for partitions $partitions" }
-                            throw e
                         }
+                        if (failures.isNotEmpty()) throw ListenerAssignmentFailures(failures)
                     }
 
                 override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
@@ -327,6 +338,14 @@ class KafkaCluster(
                                 } catch (e: OffsetOutOfRangeException) {
                                     LOG.error(e) { "evicting subscriptions for OffsetOutOfRange partitions: ${e.partitions()}" }
                                     evictSubscriptions(e.partitions().map { it.topic() }.toSet(), e)
+                                } catch (e: KafkaException) {
+                                    val failures = generateSequence<Throwable>(e) { it.cause }
+                                        .filterIsInstance<ListenerAssignmentFailures>()
+                                        .firstOrNull() ?: throw e
+                                    failures.byTopic.forEach { (topic, cause) ->
+                                        LOG.error(cause) { "evicting topic '$topic' after listener failure on assignment" }
+                                    }
+                                    evictSubscriptions(failures.byTopic)
                                 }
                             }
                         }
