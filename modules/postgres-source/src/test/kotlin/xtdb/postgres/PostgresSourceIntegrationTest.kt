@@ -17,6 +17,8 @@ import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.time.Interval
 import java.math.BigDecimal
+import java.nio.file.Files
+import java.nio.file.Path
 import java.sql.DriverManager
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -93,6 +95,35 @@ class PostgresSourceIntegrationTest {
                 stmt.execute(
                     """
                     ATTACH DATABASE $dbName WITH $$
+                        log: !Kafka
+                          cluster: kafka
+                          topic: test-replica-${UUID.randomUUID()}
+                        externalSource: !Postgres
+                          remote: pg
+                          slotName: $slotName
+                          publicationName: $publicationName
+                    $$""".trimIndent()
+                )
+            }
+        }
+    }
+
+    /** Attaches a Postgres source whose secondary keeps a durable (local-disk) block
+     * catalog, so a flushed block survives a node restart. */
+    private fun attachPostgresSourceWithLocalStorage(
+        node: Xtdb,
+        storagePath: Path,
+        dbName: String = "cdc",
+        slotName: String = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}",
+        publicationName: String = "test_pub",
+    ) {
+        node.getConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute(
+                    """
+                    ATTACH DATABASE $dbName WITH $$
+                        storage: !Local
+                          path: $storagePath
                         log: !Kafka
                           cluster: kafka
                           topic: test-replica-${UUID.randomUUID()}
@@ -193,6 +224,66 @@ class PostgresSourceIntegrationTest {
             assertEquals("Alice", rows[0]["name"])
             assertEquals("Bob", rows[1]["name"])
             assertEquals("Charlie", rows[2]["name"])
+        }
+    }
+
+    @Test
+    fun `restart succeeds when txId has diverged from the source-log offset`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val storageDir = Files.createTempDirectory("pg-cdc-storage")
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_diverge (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_diverge (_id, name) VALUES (1, 'row-1')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_diverge",
+        )
+
+        try {
+            // Phase 1: ingest enough CDC events that the indexer's txId climbs well past
+            // the secondary's source-log offset. Each committed CDC event bumps txId, but
+            // the source log only carries control messages (attach, flush, block-uploaded) —
+            // so the two counters diverge under entirely normal operation.
+            openNode(sourceTopic).use { node ->
+                attachPostgresSourceWithLocalStorage(node, storageDir, slotName = slotName, publicationName = pubName)
+
+                // snapshot: 1 table batch + 1 completion marker = 2 txs
+                awaitTxs(node, 2, db = "cdc")
+
+                for (i in 2..21) pgExecute("INSERT INTO pg_diverge (_id, name) VALUES ($i, 'row-$i')")
+                awaitCondition("all streamed rows ingested", timeout = 60.seconds) {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21
+                }
+
+                // Flush a block so the cdc block catalog persists latestCompletedTx (high txId)
+                // and latestProcessedMsgId (low source-log offset) to durable storage.
+                val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+                cdc.sendFlushBlockMessage()
+                awaitCondition("block persisted for cdc", timeout = 30.seconds) {
+                    cdc.blockCatalog.currentBlockIndex != null
+                }
+
+                val txId = cdc.blockCatalog.latestCompletedTx!!.txId
+                val sourceOffset = cdc.sourceLog.latestSubmittedOffset
+                assertTrue(
+                    txId > sourceOffset,
+                    "test precondition: txId ($txId) should exceed source-log offset ($sourceOffset)"
+                )
+            }
+
+            // Phase 2: restart against the same source topic + persisted storage.
+            // Pre-31b825623 openNode would throw IllegalStateException (due to us validating offsets against txId)
+            // and the node would fail to start.
+            openNode(sourceTopic).use { node ->
+                awaitCondition("cdc db queryable after restart", timeout = 60.seconds) {
+                    runCatching {
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21
+                    }.getOrDefault(false)
+                }
+            }
+        } finally {
+            storageDir.toFile().deleteRecursively()
         }
     }
 
