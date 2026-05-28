@@ -175,39 +175,48 @@ class Database(
             )
         }
 
-        private fun throwIllegalLogState(
-            dbName: DatabaseName,
+        private fun illegalLogState(
+            dbName: DatabaseName, latestProcessedMsgId: MessageId,
             latestSubmittedOffset: LogOffset, logEpoch: Int, processedEpoch: Int, processedOffset: MessageId
-        ): Nothing {
+        ): IngestionStoppedException {
             val logState =
                 if (latestSubmittedOffset == -1L) "the log is empty"
                 else "epoch=$logEpoch, offset=$latestSubmittedOffset"
 
-            error(
-                buildString {
-                    appendLine("Database '$dbName' failed to start due to an invalid transaction log state ($logState) " +
-                            "that does not correspond with the latest processed message " +
-                            "(epoch=$processedEpoch and offset=$processedOffset).")
-                    appendLine()
-                    append("Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html " +
-                            "for more information and next steps.")
-                }
-            )
+            val msg = buildString {
+                appendLine("Database '$dbName' has an invalid transaction log state ($logState) " +
+                        "that does not correspond with the latest processed message " +
+                        "(epoch=$processedEpoch and offset=$processedOffset).")
+                appendLine()
+                append("Please see https://docs.xtdb.com/ops/backup-and-restore/out-of-sync-log.html " +
+                        "for more information and next steps.")
+            }
+
+            return IngestionStoppedException(latestProcessedMsgId, IllegalStateException(msg))
         }
 
-        private fun validateOffsets(dbName: DatabaseName, log: Log<SourceMessage>, latestProcessedMsgId: MessageId?) {
-            if (latestProcessedMsgId == null) return
+        /**
+         * Returns an [IngestionStoppedException] if the log/storage offsets diverge
+         * (rotated/truncated/wrong topic), otherwise null.
+         * A divergent epoch is expected when starting a new epoch and is not an error.
+         */
+        private fun offsetMismatchOrNull(
+            dbName: DatabaseName, log: Log<SourceMessage>, latestProcessedMsgId: MessageId?
+        ): IngestionStoppedException? {
+            if (latestProcessedMsgId == null) return null
 
             val processedOffset = msgIdToOffset(latestProcessedMsgId)
             val processedEpoch = msgIdToEpoch(latestProcessedMsgId)
             val logEpoch = log.epoch
             val latestSubmittedOffset = log.latestSubmittedOffset
 
-            when {
-                processedEpoch != logEpoch -> logNewEpoch()
+            return when {
+                processedEpoch != logEpoch -> { logNewEpoch(); null }
 
                 latestSubmittedOffset < processedOffset ->
-                    throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, processedEpoch, processedOffset)
+                    illegalLogState(dbName, latestProcessedMsgId, latestSubmittedOffset, logEpoch, processedEpoch, processedOffset)
+
+                else -> null
             }
         }
 
@@ -236,15 +245,18 @@ class Database(
             // block-catalog watermark (or the source-log epoch floor on a fresh epoch).
             val txId = state.liveIndex.latestCompletedTx?.txId ?: -1L
 
-            // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
-            // the indexer — see /ops/backup-and-restore/out-of-sync-log.
-            validateOffsets(dbName, storage.sourceLog, blockCatalog.latestProcessedMsgId)
-
             val watchers = Watchers(
                 latestTxId = txId,
                 latestSourceMsgId = sourceMsgId,
                 externalSourceToken = blockCatalog.externalSourceToken,
             )
+
+            // Catch log/storage divergence (rotated/truncated/wrong topic). Rather than failing
+            // node startup, poison this database's watchers — it surfaces as an ingestion error
+            // (healthz red, queries throw) while the node, and any healthy siblings, stay up.
+            // See /ops/backup-and-restore/out-of-sync-log (#5644).
+            val offsetMismatch = offsetMismatchOrNull(dbName, storage.sourceLog, blockCatalog.latestProcessedMsgId)
+            if (offsetMismatch != null) watchers.notifyError(offsetMismatch)
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
 
@@ -259,7 +271,7 @@ class Database(
                 watchers.notifyError(e)
             })
 
-            if (indexerConfig.enabled) {
+            if (indexerConfig.enabled && offsetMismatch == null) {
                 val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog, base.meterRegistry)
                 val hasExternalSource = dbConfig.externalSource != null
 
