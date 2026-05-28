@@ -257,14 +257,17 @@ class KafkaCluster(
 
         // Deliberately no `onPartitionsRevokedSync` — would trigger LogProcessor's
         // leader→follower transition during a Failed-state cleanup.
-        private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) {
-            for (topic in topics) {
+        private fun evictSubscriptions(byTopic: Map<String, Throwable>) {
+            for ((topic, cause) in byTopic) {
                 subscriptions.remove(topic)?.completion?.let { completion ->
                     if (completion.isActive) completion.completeExceptionally(cause)
                 }
             }
             applySubscriptions()
         }
+
+        private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) =
+            evictSubscriptions(topics.associateWith { cause })
 
         // Order matters: close before drain (no new commands can land mid-drain),
         // drain before evict (queued unregister continuations need resuming before
