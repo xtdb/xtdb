@@ -155,6 +155,19 @@ class PostgresSourceIntegrationTest {
         }
     }
 
+    private fun assertPrimaryDbHealthy(node: Xtdb) {
+        val id = UUID.randomUUID().toString()
+        node.createConnectionBuilder().database("xtdb").build().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute("INSERT INTO primary_health (_id, v) VALUES ('$id', 'ok')")
+                stmt.executeQuery("SELECT v FROM primary_health WHERE _id = '$id'").use { rs ->
+                    assertTrue(rs.next(), "primary insert should be visible")
+                    assertEquals("ok", rs.getString("v"))
+                }
+            }
+        }
+    }
+
     private suspend fun awaitTxs(node: Xtdb, expected: Int, db: String = "cdc", timeout: Duration = 5.seconds) {
         val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
         var count = 0L
@@ -283,6 +296,8 @@ class PostgresSourceIntegrationTest {
                         xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21
                     }.getOrDefault(false)
                 }
+
+                assertPrimaryDbHealthy(node)
             }
         } finally {
             storageDir.toFile().deleteRecursively()
@@ -361,6 +376,8 @@ class PostgresSourceIntegrationTest {
                 result.isFailure || result.getOrNull().isNullOrEmpty(),
                 "Snapshot should fail when slot already exists — expected error or no data, got: ${result.getOrNull()}"
             )
+
+            assertPrimaryDbHealthy(node)
         }
     }
 
