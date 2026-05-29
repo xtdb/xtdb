@@ -42,7 +42,9 @@ class PostgresSourceIntegrationTest {
             .withDatabaseName("testdb")
             .withUsername("testuser")
             .withPassword("testpass")
-            .withCommand("postgres", "-c", "wal_level=logical")
+            // tests share this one container and don't drop their slots, so raise the
+            // ceiling above the default 10 to leave headroom as the suite grows
+            .withCommand("postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=50", "-c", "max_wal_senders=50")
 
         private val kafka = ConfluentKafkaContainer("confluentinc/cp-kafka:7.8.0")
             .withNetwork(network)
@@ -707,6 +709,42 @@ class PostgresSourceIntegrationTest {
 
         awaitCondition("slot released after node close", timeout = 10.seconds) {
             pgSlotState(slotName) == false
+        }
+    }
+
+    @Test
+    fun `successive updates are each preserved in history`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_collapse (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_collapse",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            pgExecute("INSERT INTO pg_collapse (_id, name) VALUES (1, 'v0')")
+            awaitCondition("v0 ingested", timeout = 30.seconds) {
+                runCatching { xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_collapse WHERE _id = 1").isNotEmpty() }
+                    .getOrDefault(false)
+            }
+
+            pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v1' WHERE _id = 1", "COMMIT")
+            pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v2' WHERE _id = 1", "COMMIT")
+            pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v3' WHERE _id = 1", "COMMIT")
+
+            awaitCondition("final update applied", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT name FROM public.pg_collapse WHERE _id = 1")
+                    .firstOrNull()?.get("name") == "v3"
+            }
+
+            val history = xtQueryDb(node, "cdc", "SELECT name FROM public.pg_collapse FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")
+                .map { it["name"] as String }
+
+            assertEquals(listOf("v0", "v1", "v2", "v3"), history)
         }
     }
 
