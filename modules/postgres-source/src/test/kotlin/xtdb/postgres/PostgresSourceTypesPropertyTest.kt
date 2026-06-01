@@ -266,6 +266,18 @@ class PostgresSourceTypesPropertyTest {
         fail("Timed out waiting for: $description")
     }
 
+    /** Polls `f` until `done` holds or the timeout elapses, returning the last value either way —
+     * so a caller can assert on it and surface what actually showed up rather than a bare timeout. */
+    private suspend fun <T> await(timeout: Duration = 30.seconds, done: (T) -> Boolean, f: () -> T): T {
+        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
+        var v = f()
+        while (!done(v) && System.currentTimeMillis() < deadline) {
+            runInterruptible { Thread.sleep(200) }
+            v = f()
+        }
+        return v
+    }
+
     private suspend fun flushBlock(node: Xtdb) {
         val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
         cdc.sendFlushBlockMessage()
@@ -342,10 +354,10 @@ class PostgresSourceTypesPropertyTest {
                 fun versions() = xtQuery(node, q).map { normalizeRow(columns, it) }
 
                 suspend fun assertHistory(stage: String) {
-                    awaitCondition("all ${states.size} versions present ($stage)", timeout = 30.seconds) {
-                        versions().size == states.size
-                    }
-                    assertEquals(expected, versions(), stage)
+                    // assert on the awaited value (not a bare awaitCondition) so a shortfall reports
+                    // exactly which versions showed up vs the expected list, rather than just timing out
+                    val actual = await(done = { it.size == expected.size }) { versions() }
+                    assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
                 }
 
                 assertHistory("every committed row-state is a distinct version")
