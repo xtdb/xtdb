@@ -403,26 +403,26 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val sql = req.queryBytes.toStringUtf8()
         val dbName = dbNameFromContext(ctx)
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
-        val xtdbStmt = connectionFor(txHandle, dbName).createStatement().also {
-            it.setSqlQuery(sql)
-            it.prepare()
+        connectionFor(txHandle, dbName).createStatement().closeOnCatch { xtdbStmt ->
+            xtdbStmt.setSqlQuery(sql)
+            xtdbStmt.prepare()
+
+            val resultBuilder = ActionCreatePreparedStatementResult.newBuilder()
+                .setPreparedStatementHandle(psId)
+                .setParameterSchema(
+                    ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
+                )
+
+            if (!isDml(sql, dbName)) {
+                resultBuilder.setDatasetSchema(
+                    ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
+                )
+            }
+
+            stmts[psId] = PreparedStatement(xtdbStmt)
+            listener.onNext(packResult(resultBuilder.build()))
+            listener.onCompleted()
         }
-        stmts[psId] = PreparedStatement(xtdbStmt)
-
-        val resultBuilder = ActionCreatePreparedStatementResult.newBuilder()
-            .setPreparedStatementHandle(psId)
-            .setParameterSchema(
-                ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
-            )
-
-        if (!isDml(sql, dbName)) {
-            resultBuilder.setDatasetSchema(
-                ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
-            )
-        }
-
-        listener.onNext(packResult(resultBuilder.build()))
-        listener.onCompleted()
     }
 
     override fun getSchemaPreparedStatement(

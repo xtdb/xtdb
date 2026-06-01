@@ -235,6 +235,15 @@ class FlightSqlAdbcTest {
         )
     }
 
+    @Test
+    fun `test FlightSQL fetchSchema on prepared query`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        fsqlClient.prepare("SELECT _id, n FROM foo", *emptyCallOpts).use { prepared ->
+            assertEquals(listOf("_id", "n"), prepared.fetchSchema(*emptyCallOpts).schema.fields.map { it.name })
+        }
+    }
+
     // -- ADBC metadata (through FlightSQL ADBC client) --
 
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream
