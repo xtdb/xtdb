@@ -207,30 +207,30 @@ class KafkaCluster(
             else consumer.subscribe(topics, object : ConsumerRebalanceListener {
                 override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        try {
-                            runBlocking {
-                                for ((topic, tps) in partitions.groupBy { it.topic() }) {
-                                    val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
+                        runBlocking {
+                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
+                                try {
                                     sub.onPartitionAssigned(tps.single())
+                                } catch (e: Throwable) {
+                                    LOG.error(e) { "onPartitionsAssigned($partitions): failed handling assignment for topic '$topic' ($tps)" }
+                                    throw e
                                 }
                             }
-                        } catch (e: Throwable) {
-                            LOG.error(e) { "rebalance listener onPartitionsAssigned failed for partitions $partitions" }
-                            throw e
                         }
                     }
 
                 override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
                     launderInterruptedException {
-                        try {
-                            runBlocking {
-                                for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                        runBlocking {
+                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                                try {
                                     subscriptions[topic]?.onPartitionRevoked(tps.single())
+                                } catch (e: Throwable) {
+                                    LOG.error(e) { "onPartitionsRevoked($partitions): failed handling revocation for topic '$topic' ($tps)" }
+                                    throw e
                                 }
                             }
-                        } catch (e: Throwable) {
-                            LOG.error(e) { "rebalance listener onPartitionsRevoked failed for partitions $partitions" }
-                            throw e
                         }
                     }
             })
