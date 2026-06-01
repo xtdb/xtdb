@@ -27,6 +27,8 @@ dependencies {
     testImplementation(libs.testcontainers.kafka)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.pgjdbc)
+    testImplementation(libs.kotest)
+    testImplementation(libs.kotest.props)
 }
 
 protobuf {
