@@ -90,7 +90,7 @@ Typical durations:
 
 ## GitHub project board, milestones, labels
 
-XTDB 2.x work is tracked on the https://github.com/orgs/xtdb/projects/13[xtdb org "2.x" project board], with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
+XTDB 2.x work is tracked on the [xtdb org "2.x" project board](https://github.com/orgs/xtdb/projects/13), with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
 
 ### What goes where
 
