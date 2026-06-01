@@ -65,23 +65,37 @@ class PostgresSourceIntegrationTest {
         }
     }
 
-    private fun pgExecute(vararg statements: String) {
-        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+    private fun PostgreSQLContainer.executeSql(vararg statements: String) {
+        DriverManager.getConnection(jdbcUrl, username, password).use { conn ->
             conn.createStatement().use { stmt ->
                 for (sql in statements) stmt.execute(sql)
             }
         }
     }
 
-    private fun openNode(sourceTopic: String): Xtdb = Xtdb.openNode {
+    private fun pgExecute(vararg statements: String) = postgres.executeSql(*statements)
+
+    private fun newDedicatedPostgres(): PostgreSQLContainer =
+        PostgreSQLContainer("postgres:17-alpine")
+            .withNetwork(network)
+            .withDatabaseName("testdb")
+            .withUsername("testuser")
+            .withPassword("testpass")
+            .withCommand("postgres", "-c", "wal_level=logical")
+
+    private fun openNode(
+        sourceTopic: String,
+        pgContainer: PostgreSQLContainer = postgres,
+        pgPassword: String = pgContainer.password,
+    ): Xtdb = Xtdb.openNode {
         server { port = 0 }; flightSql = null
         logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
         remote("pg", PostgresRemote.Factory(
-            hostname = postgres.host,
-            port = postgres.getMappedPort(5432),
-            database = "testdb",
-            username = "testuser",
-            password = "testpass",
+            hostname = pgContainer.host,
+            port = pgContainer.getMappedPort(5432),
+            database = pgContainer.databaseName,
+            username = pgContainer.username,
+            password = pgPassword,
         ))
         log(KafkaCluster.LogFactory("kafka", sourceTopic))
     }
