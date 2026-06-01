@@ -54,10 +54,9 @@ class TrieGarbageCollector(
     private val bufferPool: BufferPool,
     dbState: DatabaseState,
     /**
-     * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie
-     * catalog — atomically under the leader's replica-log mutex.
-     * The two writes MUST happen under the same lock: see the call site for the block-file
-     * consistency rationale.
+     * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.
+     * The Persister channel is the sole ordering point, so no other replica-log write interleaves between the two.
+     * See the call site for the block-file consistency rationale.
      */
     private val commitTriesDeleted: suspend (tableName: TableRef, trieKeys: Set<TrieKey>) -> Unit,
     private val blocksToKeep: Int,
