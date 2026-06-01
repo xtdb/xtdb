@@ -67,17 +67,14 @@ class BlockGarbageCollectorTest {
 
                 val gc = BlockGarbageCollector(
                     bufferPool, blockCat,
-                    blocksToKeep = 3,
-                    enabled = false,
                     dbName = "xtdb",
+                    enabled = false,
+                    blocksToKeep = 3,
                 )
 
                 // Validate that the latest block is correct
-                val latestBlockIndex = blockCat.currentBlockIndex
-                assertEquals(10L, latestBlockIndex)
-
-                val latestCompletedTx = blockCat.latestCompletedTx
-                assertEquals(10L, latestCompletedTx?.txId)
+                assertEquals(10L, blockCat.currentBlockIndex)
+                assertEquals(10L, blockCat.latestCompletedTx?.txId)
 
                 gc.garbageCollectBlocks()
 

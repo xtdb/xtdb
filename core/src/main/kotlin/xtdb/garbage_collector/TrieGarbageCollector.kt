@@ -21,7 +21,6 @@ import xtdb.util.logger
 import xtdb.util.warn
 import java.time.Duration
 import java.time.Instant
-import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = TrieGarbageCollector::class.logger
 
@@ -36,50 +35,30 @@ private const val TRIES_DELETED_CHUNK_SIZE = 1024
 /**
  * Leader-owned cleanup of stale trie files (meta + data).
  *
- * The leader [signal]s at every block boundary; followers never construct one. Fire-and-forget:
- * tx processing never waits for a GC cycle (GC has been off for months on existing deployments —
- * the first cycle's backlog could stall the indexer for minutes if it were awaited, so the
- * leader's block-boundary path uses non-suspending [signal] instead — see PR #5511).
- *
  * Per-table ordering: obj-store DELETE → atomic ([commitTriesDeleted]) publish-and-commit.
  * A crash mid-cycle leaves orphaned catalog entries that the next cycle re-DELETEs idempotently
  * (S3 returns 404, fine); the reverse order would leave followers thinking deleted files were
  * still live, which is unsafe.
- *
- * Parallelism is bounded in two dimensions: [tableParallelism] tables in flight concurrently,
- * [deleteParallelism] DELETEs in flight across the whole cycle (shared pool).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrieGarbageCollector(
     private val bufferPool: BufferPool,
     dbState: DatabaseState,
-    /**
-     * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.
-     * The Persister channel is the sole ordering point, so no other replica-log write interleaves between the two.
-     * See the call site for the block-file consistency rationale.
-     */
-    private val commitTriesDeleted: suspend (tableName: TableRef, trieKeys: Set<TrieKey>) -> Unit,
+    val enabled: Boolean,
     private val blocksToKeep: Int,
     private val garbageLifetime: Duration,
-    val enabled: Boolean,
+    private val commitTriesDeleted: suspend (tableName: TableRef, trieKeys: Set<TrieKey>) -> Unit,
     private val meterRegistry: MeterRegistry? = null,
-    tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
-    deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
-    dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : AutoCloseable {
+    private val tableDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(DEFAULT_TABLE_PARALLELISM),
+    private val deleteDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(DEFAULT_DELETE_PARALLELISM),
+) {
 
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
 
-    private val dbJob = Job()
-    private val scope = CoroutineScope(dispatcher + dbJob)
-
     // [signal] is fire-and-forget; bursts coalesce into one upcoming cycle.
     private val signalCh = Channel<Unit>(CONFLATED)
     private val awaitCh = Channel<CompletableDeferred<Unit>>(UNLIMITED, onUndeliveredElement = { it.cancel() })
-
-    private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
-    private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
 
     private val deleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.tries.delete.timer")
@@ -88,37 +67,6 @@ class TrieGarbageCollector(
             .register(it)
     }
     
-    init {
-        LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
-
-        scope.launch {
-            while (isActive) {
-                val pending = mutableListOf<CompletableDeferred<Unit>>()
-
-                select<Unit> {
-                    if (enabled) signalCh.onReceive { }
-                    awaitCh.onReceive { pending += it }
-                }
-
-                try {
-                    do {
-                        signalCh.tryReceive()
-                        while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
-                        garbageCollectTries()
-                    } while (drainTriggers(pending))
-
-                    pending.forEach { it.complete(Unit) }
-                } catch (e: CancellationException) {
-                    pending.forEach { it.cancel() }
-                    throw e
-                } catch (e: Exception) {
-                    LOGGER.warn(e, "Trie garbage collection cycle failed")
-                    pending.forEach { it.completeExceptionally(e) }
-                }
-            }
-        }
-    }
-
     private fun drainTriggers(pending: MutableList<CompletableDeferred<Unit>>): Boolean {
         var any = signalCh.tryReceive().isSuccess
         while (true) {
@@ -132,26 +80,6 @@ class TrieGarbageCollector(
     private fun defaultGarbageAsOf(): Instant? =
         bufferPool.blockFromLatest(blocksToKeep)
             ?.let { it.latestCompletedTx.systemTime.microsAsInstant - garbageLifetime }
-
-    suspend fun garbageCollectTries(garbageAsOf: Instant? = null) {
-        val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
-
-        LOGGER.debug("Garbage collecting tries older than $asOf")
-
-        supervisorScope {
-            for (tableName in blockCatalog.allTables) {
-                launch(tableDispatcher) {
-                    try {
-                        garbageCollectTable(tableName, asOf)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        LOGGER.warn(e, "Trie GC failed for table $tableName")
-                    }
-                }
-            }
-        }
-    }
 
     private suspend fun garbageCollectTable(tableName: TableRef, asOf: Instant) {
         val garbageTries = trieCatalog.garbageTries(tableName, asOf)
@@ -188,10 +116,55 @@ class TrieGarbageCollector(
         }
     }
 
-    /**
-     * Schedule a cycle, fire-and-forget. Bursts coalesce into a single upcoming cycle. Used by
-     * the leader's block-boundary path so tx processing never blocks on GC progress.
-     */
+    suspend fun garbageCollectTries(garbageAsOf: Instant? = null) {
+        val asOf = garbageAsOf ?: defaultGarbageAsOf() ?: return
+
+        LOGGER.debug("Garbage collecting tries older than $asOf")
+
+        supervisorScope {
+            for (tableName in blockCatalog.allTables) {
+                launch(tableDispatcher) {
+                    try {
+                        garbageCollectTable(tableName, asOf)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        LOGGER.warn(e, "Trie GC failed for table $tableName")
+                    }
+                }
+            }
+        }
+    }
+
+    fun runOn(scope: CoroutineScope) = scope.launch {
+        LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
+
+        while (isActive) {
+            val pending = mutableListOf<CompletableDeferred<Unit>>()
+
+            select {
+                if (enabled) signalCh.onReceive { }
+                awaitCh.onReceive { pending += it }
+            }
+
+            try {
+                do {
+                    signalCh.tryReceive()
+                    while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
+                    garbageCollectTries()
+                } while (drainTriggers(pending))
+
+                pending.forEach { it.complete(Unit) }
+            } catch (e: CancellationException) {
+                pending.forEach { it.cancel() }
+                throw e
+            } catch (e: Exception) {
+                LOGGER.warn(e, "Trie garbage collection cycle failed")
+                pending.forEach { it.completeExceptionally(e) }
+            }
+        }
+    }
+
     fun signal() {
         signalCh.trySend(Unit)
     }
@@ -199,7 +172,6 @@ class TrieGarbageCollector(
     /**
      * Suspend until a cycle that started at or after this call has completed — every waiter sees
      * a cycle whose start post-dated their arrival, even if another waiter joined mid-cycle.
-     * Intended for tests and admin pokes; production triggers via [signal].
      */
     suspend fun awaitNoGarbage() {
         val deferred = CompletableDeferred<Unit>()
@@ -215,11 +187,4 @@ class TrieGarbageCollector(
     }
 
     fun awaitNoGarbageBlocking() = runBlocking { awaitNoGarbage() }
-
-    override fun close() {
-        runBlocking {
-            withTimeoutOrNull(5.seconds) { dbJob.cancelAndJoin() }
-                ?: LOGGER.warn("Trie GC coroutine did not stop within 5s")
-        }
-    }
 }
