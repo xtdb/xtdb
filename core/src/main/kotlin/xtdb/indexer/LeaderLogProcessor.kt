@@ -38,6 +38,7 @@ import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.seconds
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -83,15 +84,21 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
-    internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
-        BlockGarbageCollector(
-            bufferPool, blockCatalog,
-            blocksToKeep = cfg.blocksToKeep,
-            enabled = cfg.enabled,
-            meterRegistry = nodeBase.meterRegistry,
-            dbName = dbName
-        )
-    }
+    private val scope = CoroutineScope(ctx)
+    private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
+
+    internal val blockGc =
+        nodeBase.config.garbageCollector
+            .let { cfg ->
+                BlockGarbageCollector(
+                    bufferPool, blockCatalog,
+                    dbName = dbName,
+                    enabled = cfg.enabled,
+                    blocksToKeep = cfg.blocksToKeep,
+                    meterRegistry = nodeBase.meterRegistry
+                )
+            }
+            .also { it.runOn(gcScope) }
 
     override var pendingBlock: PendingBlock? = null
         private set
@@ -136,8 +143,6 @@ class LeaderLogProcessor(
         Channel<ExtSourceTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
-
-    private val scope = CoroutineScope(ctx)
 
     private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
         val record = task.record
@@ -312,11 +317,11 @@ class LeaderLogProcessor(
 
         TrieGarbageCollector(
             bufferPool, dbState,
-            commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
-            cfg.enabled,
+            cfg.enabled, cfg.blocksToKeep, cfg.garbageLifetime,
+            commitTriesDeleted,
             nodeBase.meterRegistry
         )
-    }
+    }.also { it.runOn(gcScope) }
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
@@ -572,8 +577,8 @@ class LeaderLogProcessor(
     override suspend fun close() {
         extJob?.cancelAndJoin()
         extSource?.close()
-        blockGc.close()
-        trieGc.close()
+        withTimeoutOrNull(5.seconds) { gcScope.coroutineContext.job.cancelAndJoin() }
+            ?: LOG.warn("GC coroutines did not stop within 5s")
         sourceLogCh.close()
         extSourceCh.close()
         gcCh.close()
