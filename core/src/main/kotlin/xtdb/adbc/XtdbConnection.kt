@@ -20,6 +20,7 @@ import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ResultCursor
+import xtdb.Session
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
@@ -40,7 +41,8 @@ import xtdb.util.useAll
 
 class XtdbConnection(private val node: Node) : AdbcConnection {
 
-    private var dbName: DatabaseName = "xtdb"
+    private val session = Session(node, "xtdb")
+    private val dbName get() = session.dbName
     private var autoCommit = true
     private val pendingOps = mutableListOf<TxOp>()
 
@@ -73,7 +75,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun prepare() {
             val sql = this.sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
-            prepared = node.prepareSql(sql, dbName)
+            prepared = session.prepareSql(sql)
         }
 
         override fun getParameterSchema(): Schema {
@@ -115,7 +117,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
             val queryArgs = openQueryArgs()
             val cursor = try {
-                prepared?.openQuery(queryArgs, QueryOpts()) ?: node.openSqlQuery(sql, dbName)
+                prepared?.openQuery(queryArgs, QueryOpts()) ?: session.openSqlQuery(sql)
             } catch (t: Throwable) {
                 queryArgs?.close()
                 throw t
@@ -139,9 +141,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     internal fun executeDml(op: TxOp) {
         if (autoCommit) {
-            listOf(op).useAll { ops ->
-                node.executeTx(dbName, ops)
-            }
+            listOf(op).useAll { ops -> session.executeTx(ops) }
         } else {
             pendingOps.add(op)
         }
@@ -155,9 +155,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         val ops = pendingOps.toList()
         pendingOps.clear()
         if (ops.isNotEmpty()) {
-            ops.useAll {
-                node.executeTx(dbName, ops)
-            }
+            ops.useAll { session.executeTx(it) }
         }
     }
 
@@ -209,8 +207,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
     }
 
-    fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql, dbName)
-    fun openSqlQuery(sql: String): ResultCursor = node.openSqlQuery(sql, dbName)
+    fun prepareSql(sql: String): PreparedQuery = session.prepareSql(sql)
+    fun openSqlQuery(sql: String): ResultCursor = session.openSqlQuery(sql)
 
     private fun cursorToArrowReader(cursor: ResultCursor, schema: Schema): ArrowReader =
         object : ArrowReader(node.allocator) {
@@ -301,7 +299,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             getTableSchema(TableRef(catalog ?: dbName, dbSchema ?: "public", tableName), snap)
         }
 
-    fun openSnapshot(): Snapshot = node.openSnapshot(dbName)
+    fun openSnapshot(): Snapshot = session.openSnapshot()
 
     fun getTableSchema(dbSchema: String, tableName: String, snap: Snapshot): Schema =
         getTableSchema(TableRef(dbName, dbSchema, tableName), snap)
@@ -411,7 +409,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         if (depth == GetObjectsDepth.DB_SCHEMAS) {
             val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
             val result = linkedMapOf<String, List<TableInfo>>()
-            node.openSqlQuery(sql, dbName).use { cursor ->
+            session.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         result[rel.get("table_schema").getObject(i).toString()] = emptyList()
@@ -435,7 +433,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         if (needColumns) {
             val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
-            node.openSqlQuery(sql, dbName).use { cursor ->
+            session.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -452,7 +450,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
                     .add(TableInfo(key.second, cols))
             }
         } else {
-            node.openSqlQuery(sql, dbName).use { cursor ->
+            session.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -470,23 +468,19 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun getCurrentCatalog(): String = dbName
 
     override fun setCurrentCatalog(catalog: String) {
-        dbName = catalog
+        session.dbName = catalog
     }
     override fun getCurrentDbSchema(): String = "public"
 
-    interface Node {
+    interface Node : Session.Node {
         val allocator: BufferAllocator
         val databaseNames: Collection<DatabaseName>
-        fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
-        fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
-        fun openSqlQuery(sql: String, dbName: DatabaseName): ResultCursor
-        fun prepareSql(sql: String, dbName: DatabaseName): PreparedQuery
         fun getColumnTypes(table: TableRef, snap: Snapshot): Map<String, VectorType>?
-        fun openSnapshot(dbName: DatabaseName): Snapshot
     }
 
     override fun close() {
         rollback()
+        session.close()
     }
 
     companion object {
