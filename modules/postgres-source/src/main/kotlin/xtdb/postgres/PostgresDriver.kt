@@ -55,4 +55,6 @@ interface PostgresDriver : AutoCloseable {
      * Returns null if the slot is not (yet) visible.
      */
     fun queryWalLagBytes(): Long?
+
+    fun publicationExists(): Boolean
 }

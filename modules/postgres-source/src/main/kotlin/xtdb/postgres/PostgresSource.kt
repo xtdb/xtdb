@@ -188,6 +188,14 @@ class PostgresSource(
         val token = afterToken?.let { PostgresSourceToken.parseFrom(it) }
         LOG.debug { "[$dbName] Recovered token: ${token ?: "none"}" }
 
+        if (!driver.publicationExists()) {
+            throw Incorrect(
+                "Publication does not exist on the upstream — create it before attaching the source",
+                errorCode = "xtdb.postgres/missing-publication",
+                data = mapOf("db-name" to dbName, "slot-name" to slotName),
+            )
+        }
+
         try {
             when {
                 token != null && !token.snapshotCompleted ->

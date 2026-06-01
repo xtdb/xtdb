@@ -369,6 +369,14 @@ class PgWireDriver(
             }
             .toMap()
 
+    override fun publicationExists(): Boolean =
+        jdbi.withHandle<Boolean, Exception> { handle ->
+            handle.createQuery("SELECT 1 FROM pg_publication WHERE pubname = :pub")
+                .bind("pub", publicationName)
+                .mapTo(Int::class.java)
+                .findOne().isPresent
+        }
+
     override fun queryWalLagBytes(): Long? =
         jdbi.withHandle<Long?, Exception> { handle ->
             handle.createQuery(

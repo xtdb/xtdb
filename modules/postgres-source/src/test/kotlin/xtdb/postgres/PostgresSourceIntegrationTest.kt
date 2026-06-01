@@ -8,6 +8,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
@@ -390,6 +391,34 @@ class PostgresSourceIntegrationTest {
                 result.isFailure || result.getOrNull().isNullOrEmpty(),
                 "Snapshot should fail when slot already exists — expected error or no data, got: ${result.getOrNull()}"
             )
+
+            assertPrimaryDbHealthy(node)
+        }
+    }
+
+    @Test
+    fun `source fails when publication does not exist`() = runTest(timeout = 60.seconds) {
+        // No CREATE PUBLICATION — pgoutput silently emits no events when the publication
+        // is missing, so without an explicit check the source would create the slot and
+        // "stream" forever yielding nothing. The source MUST surface ingestionError instead.
+        val pubName = "missing_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_missing_pub (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_missing_pub (_id, name) VALUES (1, 'Alice')",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            awaitCondition("cdc surfaces ingestionError for missing publication", timeout = 30.seconds) {
+                cdc["cdc"]?.ingestionError != null
+            }
+            assertNotNull(cdc["cdc"]?.ingestionError,
+                "missing publication must surface IngestionStoppedException, not silently stall")
 
             assertPrimaryDbHealthy(node)
         }
