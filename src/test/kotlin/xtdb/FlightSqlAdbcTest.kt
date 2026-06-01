@@ -11,9 +11,21 @@ import org.apache.arrow.flight.FlightClient
 import org.apache.arrow.flight.FlightDescriptor
 import org.apache.arrow.flight.FlightInfo
 import org.apache.arrow.flight.FlightRuntimeException
+import org.apache.arrow.flight.CallHeaders
+import org.apache.arrow.flight.CallInfo
+import org.apache.arrow.flight.CallStatus
+import org.apache.arrow.flight.CloseSessionRequest
+import org.apache.arrow.flight.CloseSessionResult
+import org.apache.arrow.flight.FlightCallHeaders
+import org.apache.arrow.flight.FlightClientMiddleware
 import org.apache.arrow.flight.GetSessionOptionsRequest
+import org.apache.arrow.flight.HeaderCallOption
 import org.apache.arrow.flight.Location
 import org.apache.arrow.flight.NoOpSessionOptionValueVisitor
+import org.apache.arrow.flight.SessionOptionValueFactory
+import org.apache.arrow.flight.SetSessionOptionsRequest
+import org.apache.arrow.flight.SetSessionOptionsResult
+import org.apache.arrow.flight.client.ClientCookieMiddleware
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
@@ -54,6 +66,7 @@ class FlightSqlAdbcTest {
     private lateinit var conn: AdbcConnection
     private lateinit var flightClient: FlightClient
     private lateinit var fsqlClient: FlightSqlClient
+    private var flightPort: Int = -1
 
     private val emptyCallOpts = arrayOf<CallOption>()
 
@@ -64,7 +77,7 @@ class FlightSqlAdbcTest {
             flightSql { port = 0 }
         }
 
-        val flightPort = xtdb.flightSqlPort
+        flightPort = xtdb.flightSqlPort
 
         al = RootAllocator()
         db = FlightSqlDriver(al).open(mapOf("uri" to "grpc+tcp://127.0.0.1:${flightPort}"))
@@ -73,6 +86,24 @@ class FlightSqlAdbcTest {
         flightClient = FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort)).build()
         fsqlClient = FlightSqlClient(flightClient)
     }
+
+    /**
+     * A FlightSQL client that carries the `arrow_flight_session_id` cookie across calls
+     * (the ClientCookieMiddleware) — mirrors how the real ADBC drivers behave, so the
+     * server-side ServerSessionMiddleware sees a stable session across the call sequence.
+     */
+    private fun cookieAwareClient(): FlightSqlClient =
+        FlightSqlClient(
+            FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort))
+                .intercept(ClientCookieMiddleware.Factory())
+                .build()
+        )
+
+    /** A second cookieless FlightSQL client (distinct from `fsqlClient`). */
+    private fun plainClient(): FlightSqlClient =
+        FlightSqlClient(
+            FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort)).build()
+        )
 
     @AfterEach
     fun tearDown() {
@@ -181,16 +212,417 @@ class FlightSqlAdbcTest {
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
     }
 
+    private val asString = object : NoOpSessionOptionValueVisitor<String?>() {
+        override fun visit(value: String) = value
+    }
+
     @Test
     fun `test FlightSQL getSessionOptions returns catalog and schema`() {
         val result = fsqlClient.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
 
-        val asString = object : NoOpSessionOptionValueVisitor<String?>() {
-            override fun visit(value: String) = value
-        }
         val opts = result.sessionOptions
         assertEquals("xtdb", opts["catalog"]?.acceptVisitor(asString))
         assertEquals("public", opts["schema"]?.acceptVisitor(asString))
+    }
+
+    @Test
+    fun `test FlightSQL setSessionOptions rejects unknown option and bad catalog`() {
+        cookieAwareClient().use { client ->
+            val result = client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf(
+                        "bogus" to SessionOptionValueFactory.makeSessionOptionValue("x"),
+                        "catalog" to SessionOptionValueFactory.makeSessionOptionValue("no-such-db"),
+                    )
+                ),
+                *emptyCallOpts
+            )
+            assertTrue(result.hasErrors())
+            assertEquals(
+                SetSessionOptionsResult.ErrorValue.INVALID_NAME,
+                result.errors["bogus"]?.value
+            )
+            assertEquals(
+                SetSessionOptionsResult.ErrorValue.INVALID_VALUE,
+                result.errors["catalog"]?.value
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL set then get catalog round-trips within a session`() {
+        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        dbCat.attach("other-db", null)
+
+        cookieAwareClient().use { client ->
+            assertEquals(
+                "xtdb",
+                client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                    .sessionOptions["catalog"]?.acceptVisitor(asString)
+            )
+
+            val setResult = client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue("other-db"))
+                ),
+                *emptyCallOpts
+            )
+            assertFalse(setResult.hasErrors(), "set catalog should succeed: ${setResult.errors}")
+
+            assertEquals(
+                "other-db",
+                client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                    .sessionOptions["catalog"]?.acceptVisitor(asString)
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL catalog session option routes queries to that database`() {
+        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        dbCat.attach("other-db", null)
+
+        cookieAwareClient().use { client ->
+            client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue("other-db"))
+                ),
+                *emptyCallOpts
+            )
+
+            assertEquals(
+                -1L,
+                client.executeUpdate("INSERT INTO t (_id, n) VALUES (1, 'a')", *emptyCallOpts)
+            )
+            assertEquals(
+                listOf(mapOf("_id" to 1L, "n" to "a")),
+                client.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
+            )
+
+            assertEquals(
+                emptyList<Map<*, *>>(),
+                fsqlClient.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL closeSession invalidates the session`() {
+        cookieAwareClient().use { client ->
+            // setSessionOptions is the mutating RPC that mints the session
+            client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue("xtdb"))
+                ),
+                *emptyCallOpts
+            )
+
+            val result = client.closeSession(CloseSessionRequest(), *emptyCallOpts)
+            assertEquals(CloseSessionResult.Status.CLOSED, result.status)
+        }
+    }
+
+    @Test
+    fun `test FlightSQL closeSession with no session errors NOT_FOUND`() {
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.closeSession(CloseSessionRequest(), *emptyCallOpts)
+        }
+        assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, ex.status().code())
+    }
+
+    private fun dbCallOpts(db: String): Array<CallOption> =
+        arrayOf(HeaderCallOption(FlightCallHeaders().apply { insert("x-xtdb-database", db) }))
+
+    private fun catalogOpt(db: String) =
+        SetSessionOptionsRequest(mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue(db)))
+
+    @Test
+    fun `test FlightSQL closeSession aborts an open session-bound transaction`() {
+        cookieAwareClient().use { client ->
+            // session must exist before beginTransaction for the tx to be session-bound
+            client.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+
+            val txn = client.beginTransaction(*emptyCallOpts)
+            client.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'in-tx')", txn, *emptyCallOpts)
+
+            client.closeSession(CloseSessionRequest(), *emptyCallOpts)
+
+            // closeSession reclaimed the tx connection, so the handle is now unknown
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                client.commit(txn, *emptyCallOpts)
+            }
+            assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, ex.status().code())
+        }
+
+        assertEquals(
+            emptyList<Map<*, *>>(),
+            fsqlClient.execute("SELECT _id, n FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `test FlightSQL endTransaction on a stale handle errors NOT_FOUND`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.commit(txn, *emptyCallOpts)
+        }
+        assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, ex.status().code())
+    }
+
+    @Test
+    fun `test FlightSQL a transaction is scoped to its own session`() {
+        cookieAwareClient().use { sessionA ->
+            cookieAwareClient().use { sessionB ->
+                // each client establishes its own session
+                sessionA.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+                sessionB.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+
+                val txnA = sessionA.beginTransaction(*emptyCallOpts)
+
+                // session B may not drive session A's transaction - it doesn't exist for B
+                val onCommit = assertThrows(FlightRuntimeException::class.java) {
+                    sessionB.commit(txnA, *emptyCallOpts)
+                }
+                assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, onCommit.status().code())
+
+                val onDml = assertThrows(FlightRuntimeException::class.java) {
+                    sessionB.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'x')", txnA, *emptyCallOpts)
+                }
+                assertEquals(org.apache.arrow.flight.FlightStatusCode.NOT_FOUND, onDml.status().code())
+
+                // the owning session can still use and commit it
+                sessionA.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'a')", txnA, *emptyCallOpts)
+                sessionA.commit(txnA, *emptyCallOpts)
+            }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 2L, "n" to "a")),
+            fsqlClient.execute("SELECT _id, n FROM users", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `test FlightSQL empty catalog erases the session option back to default`() {
+        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        dbCat.attach("other-db", null)
+
+        cookieAwareClient().use { client ->
+            client.setSessionOptions(catalogOpt("other-db"), *emptyCallOpts)
+            assertEquals(
+                "other-db",
+                client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                    .sessionOptions["catalog"]?.acceptVisitor(asString)
+            )
+
+            client.setSessionOptions(catalogOpt(""), *emptyCallOpts)
+            assertEquals(
+                "xtdb",
+                client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                    .sessionOptions["catalog"]?.acceptVisitor(asString)
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL setSessionOptions accepts schema public and rejects other schemas`() {
+        cookieAwareClient().use { client ->
+            val ok = client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("schema" to SessionOptionValueFactory.makeSessionOptionValue("public"))
+                ),
+                *emptyCallOpts
+            )
+            assertFalse(ok.hasErrors(), "schema=public should be a confirming no-op: ${ok.errors}")
+
+            val bad = client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("schema" to SessionOptionValueFactory.makeSessionOptionValue("other"))
+                ),
+                *emptyCallOpts
+            )
+            assertEquals(
+                SetSessionOptionsResult.ErrorValue.INVALID_VALUE,
+                bad.errors["schema"]?.value
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL two sessions keep independent catalog and data`() {
+        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        dbCat.attach("other-db", null)
+
+        cookieAwareClient().use { sessionA ->
+            cookieAwareClient().use { sessionB ->
+                sessionA.setSessionOptions(catalogOpt("other-db"), *emptyCallOpts)
+                // sessionB deliberately left on the default catalog
+
+                assertEquals(
+                    "other-db",
+                    sessionA.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                        .sessionOptions["catalog"]?.acceptVisitor(asString)
+                )
+                assertEquals(
+                    "xtdb",
+                    sessionB.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+                        .sessionOptions["catalog"]?.acceptVisitor(asString)
+                )
+
+                sessionA.executeUpdate("INSERT INTO t (_id, n) VALUES (1, 'A')", *emptyCallOpts)
+                sessionB.executeUpdate("INSERT INTO t (_id, n) VALUES (2, 'B')", *emptyCallOpts)
+
+                assertEquals(
+                    listOf(mapOf("_id" to 1L, "n" to "A")),
+                    sessionA.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
+                )
+                assertEquals(
+                    listOf(mapOf("_id" to 2L, "n" to "B")),
+                    sessionB.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `test FlightSQL x-xtdb-database header beats the session catalog option`() {
+        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        dbCat.attach("other-db", null)
+
+        cookieAwareClient().use { client ->
+            client.setSessionOptions(catalogOpt("other-db"), *emptyCallOpts)
+
+            // header must override the session catalog: write targets xtdb, not other-db
+            client.executeUpdate("INSERT INTO t (_id, n) VALUES (1, 'hdr')", *dbCallOpts("xtdb"))
+
+            assertEquals(
+                listOf(mapOf("_id" to 1L, "n" to "hdr")),
+                client.execute("SELECT _id, n FROM t", *dbCallOpts("xtdb")).readRows()
+            )
+            assertEquals(
+                emptyList<Map<*, *>>(),
+                client.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
+            )
+        }
+    }
+
+    private class SetCookieRecorder : FlightClientMiddleware.Factory {
+        val values = mutableListOf<String>()
+
+        override fun onCallStarted(info: CallInfo) = object : FlightClientMiddleware {
+            override fun onBeforeSendingHeaders(outgoingHeaders: CallHeaders) {}
+            override fun onHeadersReceived(incomingHeaders: CallHeaders) {
+                incomingHeaders.getAll("set-cookie").forEach(values::add)
+            }
+            override fun onCallCompleted(status: CallStatus) {}
+        }
+    }
+
+    @Test
+    fun `test FlightSQL getSessionOptions does not mint a session`() {
+        val recorder = SetCookieRecorder()
+        FlightSqlClient(
+            FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort))
+                .intercept(recorder)
+                .build()
+        ).use { client ->
+            client.getSessionOptions(GetSessionOptionsRequest(), *emptyCallOpts)
+            assertEquals(emptyList<String>(), recorder.values)
+
+            client.setSessionOptions(
+                SetSessionOptionsRequest(
+                    mapOf("catalog" to SessionOptionValueFactory.makeSessionOptionValue("xtdb"))
+                ),
+                *emptyCallOpts
+            )
+            assertTrue(
+                recorder.values.any { it.startsWith("arrow_flight_session_id=") },
+                "setSessionOptions should establish the Flight SQL session cookie; saw ${recorder.values}"
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL transaction does not capture another cookieless clients autocommit write`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        try {
+            assertEquals(
+                -1L,
+                fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'tx')", txn, *emptyCallOpts)
+            )
+
+            plainClient().use { other ->
+                assertEquals(
+                    -1L,
+                    other.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'auto')", *emptyCallOpts)
+                )
+            }
+
+            assertEquals(
+                listOf(mapOf("_id" to 2L, "n" to "auto")),
+                fsqlClient.execute("SELECT _id, n FROM users ORDER BY _id", *emptyCallOpts).readRows()
+            )
+
+            fsqlClient.commit(txn, *emptyCallOpts)
+
+            assertEquals(
+                listOf(
+                    mapOf("_id" to 1L, "n" to "tx"),
+                    mapOf("_id" to 2L, "n" to "auto"),
+                ),
+                fsqlClient.execute("SELECT _id, n FROM users ORDER BY _id", *emptyCallOpts).readRows()
+            )
+        } catch (t: Throwable) {
+            runCatching { fsqlClient.rollback(txn, *emptyCallOpts) }
+            throw t
+        }
+    }
+
+    @Test
+    fun `test FlightSQL open transaction does not poison autocommit path`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        try {
+            assertEquals(
+                -1L,
+                fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'tx')", txn, *emptyCallOpts)
+            )
+
+            assertEquals(
+                -1L,
+                fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'auto')", *emptyCallOpts)
+            )
+
+            assertEquals(
+                listOf(mapOf("_id" to 2L, "n" to "auto")),
+                fsqlClient.execute("SELECT _id, n FROM users ORDER BY _id", *emptyCallOpts).readRows()
+            )
+        } finally {
+            runCatching { fsqlClient.rollback(txn, *emptyCallOpts) }
+        }
+    }
+
+    @Test
+    fun `test FlightSQL double begin uses isolated transaction connections`() {
+        val tx1 = fsqlClient.beginTransaction(*emptyCallOpts)
+        val tx2 = fsqlClient.beginTransaction(*emptyCallOpts)
+        try {
+            assertEquals(-1L, fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (1, 'commit')", tx1, *emptyCallOpts))
+            assertEquals(-1L, fsqlClient.executeUpdate("INSERT INTO users (_id, n) VALUES (2, 'rollback')", tx2, *emptyCallOpts))
+
+            fsqlClient.commit(tx1, *emptyCallOpts)
+            fsqlClient.rollback(tx2, *emptyCallOpts)
+
+            assertEquals(
+                listOf(mapOf("_id" to 1L, "n" to "commit")),
+                fsqlClient.execute("SELECT _id, n FROM users ORDER BY _id", *emptyCallOpts).readRows()
+            )
+        } catch (t: Throwable) {
+            runCatching { fsqlClient.rollback(tx1, *emptyCallOpts) }
+            runCatching { fsqlClient.rollback(tx2, *emptyCallOpts) }
+            throw t
+        }
     }
 
     // -- executeSchema --

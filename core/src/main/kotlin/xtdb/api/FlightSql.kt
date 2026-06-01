@@ -5,6 +5,7 @@ import org.apache.arrow.flight.Location.forGrpcInsecure
 import xtdb.flight_sql.XtdbProducer
 import xtdb.flight_sql.withDatabaseMiddleware
 import xtdb.flight_sql.withErrorLoggingMiddleware
+import xtdb.flight_sql.withSessionMiddleware
 import xtdb.util.closeOnCatch
 import xtdb.util.info
 import xtdb.util.logger
@@ -23,6 +24,7 @@ interface FlightSql : AutoCloseable {
                 val server = builder(xtdb.allocator, forGrpcInsecure(host, config.port), producer)
                     .also { it.withErrorLoggingMiddleware() }
                     .also { it.withDatabaseMiddleware() }
+                    .also { it.withSessionMiddleware() }
                     .build()
                     .also { it.start() }
 
