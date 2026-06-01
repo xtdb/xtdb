@@ -304,4 +304,18 @@ class AdbcTest {
             }
         }
     }
+
+    @Test
+    fun `same-connection INSERT then getTableSchema sees the columns`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { ins ->
+                    ins.setSqlQuery("INSERT INTO same_conn_table (_id, n) VALUES (1, 100)")
+                    ins.executeUpdate()
+                }
+                conn.getTableSchema(null, "public", "same_conn_table")
+                    .fields.map { it.name }.toSet() shouldBe setOf("_id", "n")
+            }
+        }
+    }
 }
