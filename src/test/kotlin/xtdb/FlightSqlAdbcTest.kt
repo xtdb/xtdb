@@ -193,6 +193,57 @@ class FlightSqlAdbcTest {
         assertEquals("public", opts["schema"]?.acceptVisitor(asString))
     }
 
+    // -- executeSchema --
+
+    @Test
+    fun `test ADBC executeSchema on prepared query`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT _id, n FROM foo")
+            stmt.prepare()
+            assertEquals(listOf("_id", "n"), stmt.executeSchema().fields.map { it.name })
+        }
+    }
+
+    @Test
+    fun `test ADBC executeSchema on ad-hoc query`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT _id, n FROM foo")
+            assertEquals(listOf("_id", "n"), stmt.executeSchema().fields.map { it.name })
+        }
+    }
+
+    @Test
+    fun `test FlightSQL getExecuteSchema`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        val result = fsqlClient.getExecuteSchema("SELECT _id, n FROM foo", *emptyCallOpts)
+        assertEquals(listOf("_id", "n"), result.schema.fields.map { it.name })
+    }
+
+    @Test
+    fun `test FlightSQL getExecuteSchema rejects DML`() {
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.getExecuteSchema("INSERT INTO foo RECORDS {_id: 1}", *emptyCallOpts)
+        }
+        assertTrue(
+            ex.message?.contains("only supports queries") == true,
+            "expected message containing 'only supports queries', got: ${ex.message}"
+        )
+    }
+
+    @Test
+    fun `test FlightSQL fetchSchema on prepared query`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, n: 'one'}")
+
+        fsqlClient.prepare("SELECT _id, n FROM foo", *emptyCallOpts).use { prepared ->
+            assertEquals(listOf("_id", "n"), prepared.fetchSchema(*emptyCallOpts).schema.fields.map { it.name })
+        }
+    }
+
     // -- ADBC metadata (through FlightSQL ADBC client) --
 
     // getInfo via ADBC client hits a bug in GetInfoMetadataReader.processRootFromStream

@@ -403,24 +403,50 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val sql = req.queryBytes.toStringUtf8()
         val dbName = dbNameFromContext(ctx)
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
-        val xtdbStmt = connectionFor(txHandle, dbName).createStatement().also {
-            it.setSqlQuery(sql)
-            it.prepare()
+        connectionFor(txHandle, dbName).createStatement().closeOnCatch { xtdbStmt ->
+            xtdbStmt.setSqlQuery(sql)
+            xtdbStmt.prepare()
+
+            val resultBuilder = ActionCreatePreparedStatementResult.newBuilder()
+                .setPreparedStatementHandle(psId)
+                .setParameterSchema(
+                    ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
+                )
+
+            if (!isDml(sql, dbName)) {
+                resultBuilder.setDatasetSchema(
+                    ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
+                )
+            }
+
+            stmts[psId] = PreparedStatement(xtdbStmt)
+            listener.onNext(packResult(resultBuilder.build()))
+            listener.onCompleted()
         }
-        stmts[psId] = PreparedStatement(xtdbStmt)
+    }
 
-        listener.onNext(
-            packResult(
-                ActionCreatePreparedStatementResult.newBuilder()
-                    .setPreparedStatementHandle(psId)
-                    .setParameterSchema(
-                        ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
-                    )
-                    .build()
-            )
-        )
+    override fun getSchemaPreparedStatement(
+        cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
+    ): SchemaResult {
+        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
+        return SchemaResult(ps.xtdbStmt.executeSchema())
+    }
 
-        listener.onCompleted()
+    override fun getSchemaStatement(
+        cmd: CommandStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
+    ): SchemaResult {
+        val sql = cmd.query
+        val dbName = dbNameFromContext(ctx)
+        if (isDml(sql, dbName)) {
+            throw CallStatus.INVALID_ARGUMENT
+                .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
+                .toRuntimeException()
+        }
+        defaultConnectionFor(dbName).createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            stmt.prepare()
+            return SchemaResult(stmt.executeSchema())
+        }
     }
 
     override fun closePreparedStatement(

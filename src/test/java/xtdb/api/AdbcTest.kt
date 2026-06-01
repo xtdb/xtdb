@@ -5,9 +5,11 @@ import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.BulkIngestMode
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import xtdb.error.Incorrect
 import xtdb.adbc.XtdbConnection
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
@@ -256,6 +258,48 @@ class AdbcTest {
                             ),
                         )
                     }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `executeSchema after prepare returns projected column names`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("INSERT INTO users RECORDS {_id: 1, name: 'alice'}")
+                    stmt.executeUpdate()
+                }
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT _id, name FROM users")
+                    stmt.prepare()
+                    stmt.executeSchema().fields.map { it.name } shouldBe listOf("_id", "name")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `executeSchema before prepare throws Incorrect`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT 1")
+                    assertThrows(Incorrect::class.java) { stmt.executeSchema() }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `executeSchema on parameterised query exposes one column per projection`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT ? AS p")
+                    stmt.prepare()
+                    stmt.executeSchema().fields.map { it.name } shouldBe listOf("p")
                 }
             }
         }
