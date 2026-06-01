@@ -1,15 +1,20 @@
 package xtdb
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.extension.BeforeEachCallback
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.ExtensionContext
+import xtdb.SimulationTestUtils.Companion.L0TrieKeys
 import xtdb.SimulationTestUtils.Companion.L1TrieKeys
+import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
 import xtdb.SimulationTestUtils.Companion.createJobCalculator
@@ -23,11 +28,6 @@ import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
 import xtdb.compactor.CompactorMockDriver
-import org.junit.jupiter.api.extension.BeforeEachCallback
-import org.junit.jupiter.api.extension.ExtendWith
-import org.junit.jupiter.api.extension.ExtensionContext
-import xtdb.SimulationTestUtils.Companion.L0TrieKeys
-import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -38,14 +38,12 @@ import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.asPath
-import xtdb.util.debug
 import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.Instant
+import java.util.*
 import java.util.concurrent.TimeUnit
-import java.util.UUID
-import kotlin.time.Duration.Companion.microseconds
 
 data class MockDatabase(
     val name: DatabaseName,
@@ -56,9 +54,10 @@ data class MockDatabase(
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
+    val gcScope: CoroutineScope,
 ) {
     fun close() {
-        garbageCollector.close()
+        runBlocking { gcScope.coroutineContext.job.cancelAndJoin() }
         compactorForDb.close()
         compactor.close()
     }
@@ -117,19 +116,23 @@ class NodeSimulationTest : SimulationTestBase() {
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            val gcScope = CoroutineScope(SupervisorJob() + dispatcher)
+
             val garbageCollector = TrieGarbageCollector(
                 sharedBufferPool, dbState,
+                enabled = false,
+                blocksToKeep = 2,
+                garbageLifetime = garbageLifetime,
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
                     // simulation's view of the catalog still converges as the test asserts.
                     trieCatalog.deleteTries(tableName, trieKeys)
                 },
-                blocksToKeep = 2,
-                garbageLifetime = garbageLifetime,
-                enabled = false,
-                dispatcher = dispatcher,
-            )
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
+                tableDispatcher = dispatcher,
+                deleteDispatcher = dispatcher,
+            ).also { it.runOn(gcScope) }
+
+            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope)
         }
     }
 

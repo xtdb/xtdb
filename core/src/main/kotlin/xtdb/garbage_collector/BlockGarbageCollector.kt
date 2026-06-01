@@ -17,7 +17,6 @@ import xtdb.util.debug
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.file.Path
-import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = BlockGarbageCollector::class.logger
 
@@ -29,38 +28,29 @@ private const val DEFAULT_DELETE_PARALLELISM = 64
  *
  * The leader [signal]s at every block boundary; followers never construct one. Block garbage
  * only appears as a side-effect of block uploads, so this is the natural trigger — no timer
- * needed. Fire-and-forget: tx processing never waits for a GC cycle to complete (GC has been
- * disabled for months, so the first cycle's backlog could be huge — see PR #5511).
+ * needed. Fire-and-forget: tx processing never waits for a GC cycle to complete.
  *
- * Parallelism is bounded in two dimensions: [tableParallelism] tables concurrently,
- * [deleteParallelism] DELETEs in flight across the whole cycle (shared pool).
+ * Construction is inert (channels only); [runOn] launches the loop into the caller's scope and
+ * the caller owns its lifetime — cancelling that scope stops the loop. No close.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BlockGarbageCollector(
     private val bufferPool: BufferPool,
     private val blockCatalog: BlockCatalog,
-    private val blocksToKeep: Int,
-    /** Gates the auto-signal from the leader's block-boundary path; direct `awaitNoGarbage()` is unaffected. */
-    val enabled: Boolean,
-    private val meterRegistry: MeterRegistry? = null,
-    tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
-    deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
-    dispatcher: CoroutineDispatcher = Dispatchers.IO,
     dbName: DatabaseName,
-) : AutoCloseable {
-
-    private val dbJob = Job()
-    private val scope = CoroutineScope(dispatcher + dbJob)
+    /** Gates the auto-signal from the leader's block-boundary path; direct [awaitNoGarbage] is unaffected. */
+    private val enabled: Boolean,
+    private val blocksToKeep: Int,
+    private val meterRegistry: MeterRegistry? = null,
+    private val tableDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(DEFAULT_TABLE_PARALLELISM),
+    private val deleteDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(DEFAULT_DELETE_PARALLELISM),
+) {
 
     // [signal] is fire-and-forget; bursts coalesce into one upcoming cycle.
     private val signalCh = Channel<Unit>(CONFLATED)
-
     // [awaitNoGarbage] callers each get a `CompletableDeferred` resumed after the next cycle —
     // every waiter must be preserved.
     private val awaitCh = Channel<CompletableDeferred<Unit>>(UNLIMITED, onUndeliveredElement = { it.cancel() })
-
-    private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
-    private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
 
     private val blockDeleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.block_files.delete.timer")
@@ -78,38 +68,6 @@ class BlockGarbageCollector(
 
     init {
         require(blocksToKeep >= 1) { "blocksToKeep must be >= 1, got $blocksToKeep" }
-
-        LOGGER.debug("Starting BlockGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep)")
-
-        scope.launch {
-            while (isActive) {
-                val pending = mutableListOf<CompletableDeferred<Unit>>()
-
-                // Wait for any trigger. Drain both channels each cycle so waiters arriving while
-                // a cycle is running see a cycle that *started* after their suspension — not just
-                // one that finished after it.
-                select {
-                    if (enabled) signalCh.onReceive { }
-                    awaitCh.onReceive { pending += it }
-                }
-
-                try {
-                    do {
-                        signalCh.tryReceive()
-                        while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
-                        garbageCollectBlocks()
-                    } while (drainTriggers(pending))
-
-                    pending.forEach { it.complete(Unit) }
-                } catch (e: CancellationException) {
-                    pending.forEach { it.cancel() }
-                    throw e
-                } catch (e: Exception) {
-                    LOGGER.warn(e, "Block garbage collection cycle failed")
-                    pending.forEach { it.completeExceptionally(e) }
-                }
-            }
-        }
     }
 
     private fun drainTriggers(pending: MutableList<CompletableDeferred<Unit>>): Boolean {
@@ -163,6 +121,38 @@ class BlockGarbageCollector(
         }
     }
 
+    fun runOn(scope: CoroutineScope) = scope.launch {
+        LOGGER.debug("Starting BlockGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep)")
+
+        while (isActive) {
+            val pending = mutableListOf<CompletableDeferred<Unit>>()
+
+            // Wait for any trigger. Drain both channels each cycle so waiters arriving while
+            // a cycle is running see a cycle that *started* after their suspension — not just
+            // one that finished after it.
+            select {
+                if (enabled) signalCh.onReceive { }
+                awaitCh.onReceive { pending += it }
+            }
+
+            try {
+                do {
+                    signalCh.tryReceive()
+                    while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
+                    garbageCollectBlocks()
+                } while (drainTriggers(pending))
+
+                pending.forEach { it.complete(Unit) }
+            } catch (e: CancellationException) {
+                pending.forEach { it.cancel() }
+                throw e
+            } catch (e: Exception) {
+                LOGGER.warn(e, "Block garbage collection cycle failed")
+                pending.forEach { it.completeExceptionally(e) }
+            }
+        }
+    }
+
     /**
      * Schedule a cycle, fire-and-forget. Bursts coalesce into a single upcoming cycle (the
      * underlying signal channel is conflated). Used by the leader's block-boundary path so tx
@@ -191,11 +181,4 @@ class BlockGarbageCollector(
     }
 
     fun awaitNoGarbageBlocking() = runBlocking { awaitNoGarbage() }
-
-    override fun close() {
-        runBlocking {
-            withTimeoutOrNull(5.seconds) { dbJob.cancelAndJoin() }
-                ?: LOGGER.warn("Block GC coroutine did not stop within 5s")
-        }
-    }
 }
