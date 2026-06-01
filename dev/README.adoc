@@ -29,6 +29,30 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1
 
 See link:../skills/clojure-eval/SKILL.md[skills/clojure-eval/SKILL.md] for usage details.
 
+=== Optional: Rosetta
+
+https://griddynamics.github.io/rosetta/[Rosetta] is a centralised, versioned instruction set for AI coding agents, distributed as a Claude Code plugin.
+Once installed, its workflows and skills (`rosetta:*`) are available natively.
+Using it is opt-in and per-developer: it is *not* a mandatory project process, and not installing it changes nothing about the build, the tests, or anyone else's workflow — the `dev/` docs are then just additional Markdown.
+This repo's `gain.json` and the Rosetta-managed docs under `dev/` (`CONTEXT.md`, `ARCHITECTURE.md`, `CODEMAP.md`, etc.) come with the checkout, so there's no per-developer doc setup — only the plugin install below.
+
+Install it (into Claude Code only — see the notes):
+
+```bash
+claude plugin marketplace add griddynamics/rosetta
+claude plugin install rosetta@rosetta
+```
+
+No restart is required; Claude Code loads plugins dynamically.
+
+Notes:
+
+* Requires manager/company approval, and a capable model (Sonnet 4.6, GPT-5.4-medium, gemini-3.1-pro, or better) — avoid Auto model selection.
+* Install to Claude Code only: Cursor picks up all Claude Code plugins, so installing it elsewhere duplicates it in Cursor's context.
+* The plugin is the supported integration. If you previously wired Rosetta in as an MCP server, that's now redundant and can be removed.
+
+See the https://griddynamics.github.io/rosetta/docs/plugins/[plugin installation guide] and the https://griddynamics.github.io/rosetta/[Rosetta documentation] for details.
+
 == Getting started
 
 XT2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.

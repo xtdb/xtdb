@@ -1,0 +1,30 @@
+{
+  "$comment": "Rosetta SDLC config. Overrides default Rosetta file locations; wins in conflicts. In this repo the live Astro documentation site occupies docs/, so all Rosetta-managed docs are relocated under dev/ to avoid collision.",
+  "rosetta": {
+    "release": "R2.0",
+    "mode": "plugin"
+  },
+  "paths": {
+    "docsRoot": "dev",
+    "agentsRoot": "dev/agents",
+    "plansRoot": "dev/plans",
+    "refsrcRoot": "dev/refsrc"
+  },
+  "files": {
+    "context": "dev/CONTEXT.md",
+    "architecture": "dev/ARCHITECTURE.md",
+    "todo": "dev/TODO.md",
+    "assumptions": "dev/ASSUMPTIONS.md",
+    "techstack": "dev/TECHSTACK.md",
+    "dependencies": "dev/DEPENDENCIES.md",
+    "codemap": "dev/CODEMAP.md",
+    "requirements": "dev/REQUIREMENTS",
+    "patterns": "dev/PATTERNS",
+    "implementation": "dev/agents/IMPLEMENTATION.md",
+    "memory": "dev/agents/MEMORY.md"
+  },
+  "scm": {
+    "exclude": ["dev/agents/TEMP", "dev/refsrc"],
+    "excludeException": ["dev/refsrc/INDEX.md"]
+  }
+}
