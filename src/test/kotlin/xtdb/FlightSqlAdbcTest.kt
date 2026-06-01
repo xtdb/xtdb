@@ -1,22 +1,36 @@
 package xtdb
 
+import com.google.protobuf.Any as ProtoAny
 import org.apache.arrow.adbc.core.AdbcConnection
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcDatabase
 import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver
+import org.apache.arrow.flight.AsyncPutListener
 import org.apache.arrow.flight.CallOption
 import org.apache.arrow.flight.FlightClient
+import org.apache.arrow.flight.FlightDescriptor
 import org.apache.arrow.flight.FlightInfo
+import org.apache.arrow.flight.FlightRuntimeException
 import org.apache.arrow.flight.GetSessionOptionsRequest
 import org.apache.arrow.flight.Location
 import org.apache.arrow.flight.NoOpSessionOptionValueVisitor
 import org.apache.arrow.flight.sql.FlightSqlClient
+import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableExistsOption
+import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BigIntVector
 import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.vector.util.Text
 import java.io.ByteArrayInputStream
@@ -38,6 +52,7 @@ class FlightSqlAdbcTest {
     private lateinit var al: BufferAllocator
     private lateinit var db: AdbcDatabase
     private lateinit var conn: AdbcConnection
+    private lateinit var flightClient: FlightClient
     private lateinit var fsqlClient: FlightSqlClient
 
     private val emptyCallOpts = arrayOf<CallOption>()
@@ -55,7 +70,7 @@ class FlightSqlAdbcTest {
         db = FlightSqlDriver(al).open(mapOf("uri" to "grpc+tcp://127.0.0.1:${flightPort}"))
         conn = db.connect()
 
-        val flightClient = FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort)).build()
+        flightClient = FlightClient.builder(al, Location.forGrpcInsecure("127.0.0.1", flightPort)).build()
         fsqlClient = FlightSqlClient(flightClient)
     }
 
@@ -203,6 +218,171 @@ class FlightSqlAdbcTest {
             assertTrue(rdr.vectorSchemaRoot.rowCount > 0, "Expected catalog rows with table data")
         }
     }
+
+    // -- Bulk ingest --
+
+    private fun defaultIngestTdo(): TableDefinitionOptions =
+        TableDefinitionOptions.newBuilder()
+            .setIfNotExist(TableNotExistOption.TABLE_NOT_EXIST_OPTION_CREATE)
+            .setIfExists(TableExistsOption.TABLE_EXISTS_OPTION_APPEND)
+            .build()
+
+    private fun ingestOpts(
+        table: String,
+        catalog: String? = null,
+        schema: String? = null,
+        tdo: TableDefinitionOptions = defaultIngestTdo(),
+    ) = ExecuteIngestOptions(table, tdo, catalog, schema, null)
+
+    private val usersSchema = Schema(listOf(
+        Field("_id", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+        Field("n", FieldType.notNullable(Types.MinorType.BIGINT.type), null),
+    ))
+
+    private fun <R> usersRoot(rows: List<Pair<Long, Long>>, block: (VectorSchemaRoot) -> R): R =
+        VectorSchemaRoot.create(usersSchema, al).use { root ->
+            val idVec = root.getVector("_id") as BigIntVector
+            val nVec = root.getVector("n") as BigIntVector
+            rows.forEachIndexed { i, (id, n) -> idVec.setSafe(i, id); nVec.setSafe(i, n) }
+            root.rowCount = rows.size
+            block(root)
+        }
+
+    private fun assertUsersTableContains(table: String, expected: List<Map<String, Long>>) {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT _id, n FROM $table ORDER BY _id")
+            stmt.executeQuery().reader.use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                Relation.fromRoot(al, rdr.vectorSchemaRoot).use { rel ->
+                    assertEquals(expected, rel.toMaps(SNAKE_CASE_STRING))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest via executeIngest`() {
+        usersRoot(listOf(1L to 10L, 2L to 20L)) { root ->
+            fsqlClient.executeIngest(root, ingestOpts("users"), *emptyCallOpts)
+        }
+        assertUsersTableContains("users", listOf(
+            mapOf("_id" to 1L, "n" to 10L),
+            mapOf("_id" to 2L, "n" to 20L),
+        ))
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest within an FSQL transaction`() {
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        usersRoot(listOf(1L to 100L)) { root ->
+            fsqlClient.executeIngest(root, ingestOpts("users"), txn, *emptyCallOpts)
+        }
+        fsqlClient.commit(txn, *emptyCallOpts)
+
+        assertUsersTableContains("users", listOf(mapOf("_id" to 1L, "n" to 100L)))
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest rolled back doesn't persist`() {
+        usersRoot(listOf(1L to 1L)) { root ->
+            fsqlClient.executeIngest(root, ingestOpts("users"), *emptyCallOpts)
+        }
+
+        val txn = fsqlClient.beginTransaction(*emptyCallOpts)
+        usersRoot(listOf(99L to 999L)) { root ->
+            fsqlClient.executeIngest(root, ingestOpts("users"), txn, *emptyCallOpts)
+        }
+        fsqlClient.rollback(txn, *emptyCallOpts)
+
+        assertUsersTableContains("users", listOf(mapOf("_id" to 1L, "n" to 1L)))
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest honours cmd_schema`() {
+        usersRoot(listOf(1L to 10L)) { root ->
+            fsqlClient.executeIngest(root, ingestOpts("users", schema = "my_schema"), *emptyCallOpts)
+        }
+        assertUsersTableContains("my_schema.users", listOf(mapOf("_id" to 1L, "n" to 10L)))
+    }
+
+    private fun assertIngestRejected(
+        opts: ExecuteIngestOptions,
+        descriptionContains: String,
+    ) {
+        usersRoot(listOf(1L to 0L)) { root ->
+            val ex = assertThrows(FlightRuntimeException::class.java) {
+                fsqlClient.executeIngest(root, opts, *emptyCallOpts)
+            }
+            assertTrue(
+                ex.message?.contains(descriptionContains) == true,
+                "expected message containing '$descriptionContains', got: ${ex.message}"
+            )
+        }
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest rejects per-call catalog override`() {
+        assertIngestRejected(ingestOpts("users", catalog = "some_other_catalog"), "catalog")
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest rejects fail-if-not-exist`() {
+        val tdo = TableDefinitionOptions.newBuilder()
+            .setIfNotExist(TableNotExistOption.TABLE_NOT_EXIST_OPTION_FAIL)
+            .setIfExists(TableExistsOption.TABLE_EXISTS_OPTION_APPEND)
+            .build()
+        assertIngestRejected(ingestOpts("users", tdo = tdo), "fail-if-not-exist")
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest rejects fail-if-exists`() {
+        val tdo = TableDefinitionOptions.newBuilder()
+            .setIfNotExist(TableNotExistOption.TABLE_NOT_EXIST_OPTION_CREATE)
+            .setIfExists(TableExistsOption.TABLE_EXISTS_OPTION_FAIL)
+            .build()
+        assertIngestRejected(ingestOpts("users", tdo = tdo), "append-on-exists")
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest rejects dotted table name`() {
+        assertIngestRejected(ingestOpts("my_schema.users"), "must not contain '.'")
+    }
+
+    private fun multiBatchIngest(table: String, batches: List<List<Pair<Long, Long>>>) {
+        val cmd = CommandStatementIngest.newBuilder()
+            .setTable(table)
+            .setTableDefinitionOptions(defaultIngestTdo())
+            .build()
+        val descriptor = FlightDescriptor.command(ProtoAny.pack(cmd).toByteArray())
+        VectorSchemaRoot.create(usersSchema, al).use { root ->
+            val idVec = root.getVector("_id") as BigIntVector
+            val nVec = root.getVector("n") as BigIntVector
+            val listener = flightClient.startPut(descriptor, root, AsyncPutListener())
+            for (batch in batches) {
+                batch.forEachIndexed { i, (id, n) -> idVec.setSafe(i, id); nVec.setSafe(i, n) }
+                root.rowCount = batch.size
+                listener.putNext()
+            }
+            listener.completed()
+            listener.getResult()
+        }
+    }
+
+    @Test
+    fun `test FlightSQL bulk ingest streams multiple batches`() {
+        multiBatchIngest("users", listOf(
+            listOf(1L to 10L, 2L to 20L),
+            listOf(3L to 30L, 4L to 40L),
+        ))
+        assertUsersTableContains("users", listOf(
+            mapOf("_id" to 1L, "n" to 10L),
+            mapOf("_id" to 2L, "n" to 20L),
+            mapOf("_id" to 3L, "n" to 30L),
+            mapOf("_id" to 4L, "n" to 40L),
+        ))
+    }
+
+    // -- Error handling --
 
     @Test
     fun `test ADBC getObjects at ALL depth doesn't crash on IPC parse`() {

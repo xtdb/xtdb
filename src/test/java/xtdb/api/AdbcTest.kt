@@ -4,6 +4,7 @@ import io.kotest.matchers.shouldBe
 import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.BulkIngestMode
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -118,6 +119,40 @@ class AdbcTest {
                         res.consumeAsMaps() shouldBe listOf(
                             mapOf("_id" to 10L, "product" to "Widget", "price" to 99.99),
                             mapOf("_id" to 20L, "product" to "Gadget", "price" to 149.99),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `bulkIngest with standalone allocator VSR binding`() {
+        val standaloneAl = RootAllocator()
+        val rows = listOf(
+            mapOf("_id" to 100, "name" to "standalone-first"),
+            mapOf("_id" to 200, "name" to "standalone-second"),
+        )
+
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.bulkIngest("standalone_test", BulkIngestMode.CREATE_APPEND).use { stmt ->
+                    Relation.openFromRows(standaloneAl, rows).use { rel ->
+                        rel.openAsRoot(standaloneAl).use { root ->
+                            stmt.bind(root)
+                        }
+                    }
+                    standaloneAl.close()
+                    val result = stmt.executeUpdate()
+                    result.affectedRows shouldBe 2
+                }
+
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT * FROM standalone_test ORDER BY _id")
+                    stmt.executeQuery().use { res ->
+                        res.consumeAsMaps() shouldBe listOf(
+                            mapOf("_id" to 100L, "name" to "standalone-first"),
+                            mapOf("_id" to 200L, "name" to "standalone-second"),
                         )
                     }
                 }

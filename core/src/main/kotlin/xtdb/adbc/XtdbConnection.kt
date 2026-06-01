@@ -172,31 +172,32 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             override fun prepare(): Unit =
                 throw Incorrect("Bulk ingest does not support prepare", "xtdb.adbc/bulk-ingest-no-prepare")
 
-            private var rel: Relation? = null
+            private var docs: Relation? = null
 
             override fun close() {
-                rel.also { rel = null }?.close()
+                docs.also { docs = null }?.close()
             }
 
             override fun bind(root: VectorSchemaRoot) {
-                this.rel?.close()
-                rel = Relation.fromRoot(node.allocator, root)
+                this.docs?.close()
+                docs = Relation(node.allocator, root.schema).closeOnCatch { copy ->
+                    Relation.fromRoot(node.allocator, root).use { src ->
+                        src.rowCopier(copy).copyRange(0, src.rowCount)
+                    }
+                    copy
+                }
             }
 
             override fun bind(rel: RelationReader) {
-                this.rel = rel.openDirectSlice(node.allocator)
+                this.docs = rel.openDirectSlice(node.allocator)
             }
 
             override fun executeUpdate(): UpdateResult {
-                return (rel.also { this.rel = null } ?: return UpdateResult(0))
-                    .use { rel ->
-                        // TODO valid-from/valid-to for the batch
-                        node.executeTx(dbName, listOf(TxOp.PutDocs(schemaName, tableName, docs = rel)))
-
-                        close()
-
-                        UpdateResult(rel.rowCount.toLong())
-                    }
+                val docs = docs.also { this.docs = null } ?: return UpdateResult(0)
+                val rowCount = docs.rowCount.toLong()
+                // TODO valid-from/valid-to for the batch
+                executeDml(TxOp.PutDocs(schemaName, tableName, docs = docs))
+                return UpdateResult(rowCount)
             }
         }
     }
