@@ -444,7 +444,6 @@ class Database(
 
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
-            private suspend fun Database.awaitSource(msgId: MessageId) = watchers.awaitSource(msgId)
             private suspend fun Database.sync() = watchers.awaitSource(sourceLog.latestSubmittedMsgId)
 
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
@@ -453,7 +452,15 @@ class Database(
                 databaseNames
                     .mapNotNull { databaseOrNull(it) }
                     .filter { it.isIndexing }
-                    .map { db -> launch { basis[db.name]?.first()?.let { db.awaitSource(it) } } }
+                    .map { db ->
+                        launch {
+                            val basisVec = basis[db.name] ?: return@launch
+                            db.partitions.entries.sortedBy { it.key }
+                                .forEach { (partIdx, part) ->
+                                    basisVec.getOrNull(partIdx)?.let { part.watchers.awaitSource(it) }
+                                }
+                        }
+                    }
                     .joinAll()
             }
 

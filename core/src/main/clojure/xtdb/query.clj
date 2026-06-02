@@ -142,12 +142,10 @@
     expr))
 
 (defn- validate-basis-not-before [basis snaps]
-  (doseq [[db-name ^DatabaseSnapshot snap] snaps]
-    ;; TODO (#5557 unit 3) iterate `snap.partitions` and validate each partition's basis against
-    ;; the corresponding position. For now we're still single-partition, so the size-1 vector
-    ;; collapses to its first element.
-    (let [snap-tx (first (.getTxBasis snap))
-          system-time (get-in basis [db-name 0])]
+  (doseq [[db-name ^DatabaseSnapshot snap] snaps
+          [partition-idx ^Snapshot part-snap] (map-indexed vector (.getPartitions snap))]
+    (let [snap-tx (.getTxBasis part-snap)
+          system-time (get-in basis [db-name partition-idx])]
       (when (and system-time
                  (or (nil? snap-tx)
                      (neg? (compare (.getSystemTime snap-tx) system-time))))
@@ -159,11 +157,11 @@
 
 (defn- default-basis [snaps]
   (->> (for [[db-name ^DatabaseSnapshot snap] snaps
-             ;; TODO (#5557 unit 3) the singleton wrap is left over from the pre-multi-partition
-             ;; world; once basis iteration is partition-aware we'll emit one entry per partition.
-             :let [sys-time (some-> (.getTxBasis snap) first (.getSystemTime))]
-             :when sys-time]
-         [db-name [sys-time]])
+             :let [sys-times (->> (.getPartitions snap)
+                                  (mapv (fn [^Snapshot part-snap]
+                                          (some-> (.getTxBasis part-snap) (.getSystemTime)))))]
+             :when (some identity sys-times)]
+         [db-name sys-times])
        (into {})
        (not-empty)))
 
