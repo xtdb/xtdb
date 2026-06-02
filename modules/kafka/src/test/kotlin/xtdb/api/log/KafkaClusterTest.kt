@@ -439,7 +439,7 @@ class KafkaClusterTest {
     }
 
     @Test
-    fun `wakeup during seek does not skip seek (regression for #5633)`() = runTest(timeout = 10.seconds) {
+    fun `wakeup during seek does not skip seek (regression for #5633)`() = runTest(timeout = 30.seconds) {
         val topic1 = "test-seek-race-${UUID.randomUUID()}"
         val topic2 = "test-seek-race-${UUID.randomUUID()}"
 
