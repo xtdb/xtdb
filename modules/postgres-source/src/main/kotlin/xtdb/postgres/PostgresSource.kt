@@ -221,7 +221,7 @@ class PostgresSource(
                 }
             }
         } catch (e: PSQLException) {
-            if (e.cause is java.net.SocketException) {
+            if (e.cause is java.net.SocketException && !currentCoroutineContext().isActive) {
                 LOG.warn("[$dbName] Database connection failed when reading from copy (connection closed)")
             } else {
                 LOG.error(e, "[$dbName] External source failed")
