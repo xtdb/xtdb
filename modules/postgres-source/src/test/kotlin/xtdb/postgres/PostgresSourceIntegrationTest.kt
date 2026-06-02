@@ -8,8 +8,10 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import xtdb.postgres.proto.PostgresSourceToken
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
@@ -205,6 +207,15 @@ class PostgresSourceIntegrationTest {
         fail("Timed out waiting for: $description")
     }
 
+    /** Reads the most-recently applied source token from the live index (no flush required).
+     *  Reflects the *last tx the source committed* — useful for asserting the source's
+     *  progress against the snapshotCompleted flag. */
+    private fun latestPostgresToken(node: Xtdb, db: String = "cdc"): PostgresSourceToken {
+        val bytes = (node as Xtdb.XtdbInternal).dbCatalog[db]?.watchers?.externalSourceToken
+            ?: fail("db '$db' has not applied any source tx yet — no token to read")
+        return PostgresSourceToken.parseFrom(bytes)
+    }
+
     @Test
     fun `resume from token after restart`() = runTest(timeout = 180.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
@@ -393,6 +404,94 @@ class PostgresSourceIntegrationTest {
             )
 
             assertPrimaryDbHealthy(node)
+        }
+    }
+
+    @Test
+    fun `source fails when postgres dies during snapshot`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val dedicatedPg = newDedicatedPostgres()
+        Startables.deepStart(dedicatedPg).join()
+
+        try {
+            dedicatedPg.executeSql(
+                "CREATE TABLE pg_snap_kill (_id INT PRIMARY KEY, name TEXT)",
+                // Enough rows that the snapshot makes many round trips, leaving a
+                // wide window to kill the container mid-stream.
+                "INSERT INTO pg_snap_kill SELECT g, 'row-' || g FROM generate_series(1, 50000) g",
+                "CREATE PUBLICATION $pubName FOR TABLE pg_snap_kill",
+            )
+
+            openNode(sourceTopic, pgContainer = dedicatedPg).use { node ->
+                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+                // Wait until the first batch lands — proves the snapshot has started.
+                awaitCondition("snapshot in flight", timeout = 30.seconds) {
+                    runCatching {
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_kill LIMIT 1").isNotEmpty()
+                    }.getOrDefault(false)
+                }
+
+                dedicatedPg.stop()
+
+                val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+                awaitCondition("cdc surfaces ingestionError when PG dies during snapshot", timeout = 30.seconds) {
+                    cdc["cdc"]?.ingestionError != null
+                }
+                assertNotNull(cdc["cdc"]?.ingestionError,
+                    "snapshot failure must surface IngestionStoppedException, not silently exit")
+
+                assertFalse(latestPostgresToken(node).snapshotCompleted,
+                    "must catch PG mid-snapshot; snapshot completed before kill")
+
+                assertPrimaryDbHealthy(node)
+            }
+        } finally {
+            runCatching { dedicatedPg.stop() }
+        }
+    }
+
+    @Test
+    fun `source surfaces ingestion error when postgres connection is lost mid-stream`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val dedicatedPg = newDedicatedPostgres()
+        Startables.deepStart(dedicatedPg).join()
+
+        try {
+            dedicatedPg.executeSql(
+                "CREATE TABLE pg_stream_kill (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO pg_stream_kill (_id, name) VALUES (1, 'Alice')",
+                "CREATE PUBLICATION $pubName FOR TABLE pg_stream_kill",
+            )
+
+            openNode(sourceTopic, pgContainer = dedicatedPg).use { node ->
+                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+                // Snapshot completes, then a streamed insert proves the replication
+                // stream is live before we kill the upstream.
+                awaitTxs(node, 2, db = "cdc")
+                dedicatedPg.executeSql("INSERT INTO pg_stream_kill (_id, name) VALUES (2, 'Bob')")
+                awaitCondition("streamed row visible", timeout = 30.seconds) {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_stream_kill WHERE _id = 2").isNotEmpty()
+                }
+
+                dedicatedPg.stop()
+
+                val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+                awaitCondition("cdc surfaces ingestionError when PG dies mid-stream", timeout = 60.seconds) {
+                    cdc["cdc"]?.ingestionError != null
+                }
+                assertNotNull(cdc["cdc"]?.ingestionError,
+                    "stream failure must surface IngestionStoppedException, not silently exit")
+
+                assertPrimaryDbHealthy(node)
+            }
+        } finally {
+            runCatching { dedicatedPg.stop() }
         }
     }
 
