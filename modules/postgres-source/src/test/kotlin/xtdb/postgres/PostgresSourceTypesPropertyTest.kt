@@ -11,6 +11,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
 import xtdb.api.log.Log.Companion.localLog
 import xtdb.api.storage.Storage
+import xtdb.postgres.proto.PostgresSourceToken
 import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
@@ -284,15 +285,21 @@ class PostgresSourceTypesPropertyTest {
         awaitCondition("block persisted for cdc", timeout = 30.seconds) { cdc.blockCatalog.currentBlockIndex != null }
     }
 
-    /** Waits until the source has finished its initial snapshot and streaming is live, so a write
-     *  won't race the snapshot→stream handoff (a row committed ahead of the slot's consistent point
-     *  would only be seen as the snapshot's current-state read, not streamed as its own valid-time
-     *  version). An attach indexes at least one tx — any snapshot data batches plus the completion
-     *  marker — so `xt.txs >= 1` signals the snapshot is landing and streaming is live. */
-    private suspend fun awaitStreaming(node: Xtdb) =
-        awaitCondition("cdc snapshot complete (streaming live)", timeout = 30.seconds) {
-            (xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs").first()["cnt"] as Long) >= 1L
+    /** Waits until the source has finished its initial snapshot and switched to streaming, so a
+     *  write won't race the snapshot→stream handoff (a row committed ahead of the slot's consistent
+     *  point would only be seen as the snapshot's current-state read, not streamed as its own
+     *  valid-time version).
+     *
+     *  The source stamps each snapshot batch with a `snapshotCompleted = false` token and writes a
+     *  final `snapshotCompleted = true` marker before streaming begins; the cdc db's watchers track
+     *  the latest applied token, so `snapshotCompleted` going true means the whole snapshot is in
+     *  (indexTx awaits application) and streaming is live. */
+    private suspend fun awaitStreaming(node: Xtdb) {
+        val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+        awaitCondition("cdc snapshot complete, streaming live", timeout = 30.seconds) {
+            cdc.watchers.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
         }
+    }
 
     /** Creates a table + publication, runs `beforeAttach` (e.g. to seed rows the initial snapshot
      *  should pick up), opens a local-log/storage node, attaches the cdc db, waits for streaming to
