@@ -284,30 +284,35 @@ class PostgresSourceTypesPropertyTest {
         awaitCondition("block persisted for cdc", timeout = 30.seconds) { cdc.blockCatalog.currentBlockIndex != null }
     }
 
-    /** Waits until the cdc db's initial snapshot has completed (its completion-marker tx is
-     *  indexed) — which is also when streaming goes live and the slot's consistent point is
-     *  safely in the past. Writing before this races the snapshot→stream handoff: a row committed
-     *  ahead of the consistent point is only seen as the snapshot's current-state read, not
-     *  streamed as its own valid-time version. The empty table we create snapshots to a single tx
-     *  (no data batches + the completion marker). */
+    /** Waits until the source has finished its initial snapshot and streaming is live, so a write
+     *  won't race the snapshot→stream handoff (a row committed ahead of the slot's consistent point
+     *  would only be seen as the snapshot's current-state read, not streamed as its own valid-time
+     *  version). An attach indexes at least one tx — any snapshot data batches plus the completion
+     *  marker — so `xt.txs >= 1` signals the snapshot is landing and streaming is live. */
     private suspend fun awaitStreaming(node: Xtdb) =
         awaitCondition("cdc snapshot complete (streaming live)", timeout = 30.seconds) {
             (xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs").first()["cnt"] as Long) >= 1L
         }
 
-    /** Creates a table + publication, opens a local-log/storage node, attaches the cdc db, waits
-     *  for streaming to go live, runs `f`, then drops the replication slot.
+    /** Creates a table + publication, runs `beforeAttach` (e.g. to seed rows the initial snapshot
+     *  should pick up), opens a local-log/storage node, attaches the cdc db, waits for streaming to
+     *  go live, runs `f`, then drops the replication slot.
      *
-     *  `suspend inline` (with a non-suspend `f`) so both this body and the inlined `f` can call the
-     *  `suspend` `awaitStreaming` / `awaitCondition` / `flushBlock` helpers inside `checkAll`'s
-     *  suspend block. */
-    private suspend inline fun runCdc(columns: List<Col>, f: (Xtdb, String) -> Unit) {
+     *  `suspend inline` (with non-suspend lambdas) so both this body and the inlined lambdas can
+     *  call the `suspend` `awaitStreaming` / `awaitCondition` / `flushBlock` helpers inside
+     *  `checkAll`'s suspend block. */
+    private suspend inline fun runCdc(
+        columns: List<Col>,
+        beforeAttach: (String) -> Unit = {},
+        f: (Xtdb, String) -> Unit,
+    ) {
         val table = unique("t"); val pub = unique("pub"); val slot = unique("slot")
         val colDdl = columns.joinToString { "${it.name} ${it.ddl}" }
         pgExecute(
             "CREATE TABLE $table (_id BIGINT PRIMARY KEY, $colDdl)",
             "CREATE PUBLICATION $pub FOR TABLE $table",
         )
+        beforeAttach(table)
         val dirs = List(4) { Files.createTempDirectory("pg-prop") }
         try {
             openNode(dirs[0], dirs[1]).use { node ->
@@ -321,6 +326,28 @@ class PostgresSourceTypesPropertyTest {
         }
     }
 
+    /** Awaits all `rows` appearing in `table` (by `_id`) over pgwire, then asserts every column
+     *  value round-trips unchanged. Shared by the streaming and snapshot round-trip tests. */
+    private suspend fun assertRowsPresent(
+        node: Xtdb, table: String, columns: List<Col>, rows: List<Row>, stage: String,
+    ) {
+        val cols = (listOf("_id") + columns.map { it.name }).joinToString()
+        val ids = rows.map { it.id }.toSet()
+        fun fetch() = xtQuery(node, "SELECT $cols FROM public.$table")
+            .associateBy { (it["_id"] as Number).toLong() }
+
+        awaitCondition("rows appear in $table ($stage)", timeout = 30.seconds) {
+            fetch().keys.containsAll(ids)
+        }
+        val actual = fetch()
+        rows.forEach { row ->
+            assertEquals(
+                normalizeRow(columns, row.vals), normalizeRow(columns, actual.getValue(row.id)),
+                "row ${row.id} $stage",
+            )
+        }
+    }
+
     // --- property tests -----------------------------------------------------------------------
 
     @Test
@@ -328,28 +355,23 @@ class PostgresSourceTypesPropertyTest {
         checkAll(ITERATIONS, schemaRows(maxRows = 20, maxCols = 5)) { (columns, rows) ->
             runCdc(columns) { node, table ->
                 rows.forEach { insertRow(columns, table, it) }
-
-                val cols = (listOf("_id") + columns.map { it.name }).joinToString()
-                val ids = rows.map { it.id }.toSet()
-                fun fetch() = xtQuery(node, "SELECT $cols FROM public.$table")
-                    .associateBy { (it["_id"] as Number).toLong() }
-
-                suspend fun assertRoundTrip(stage: String) {
-                    awaitCondition("rows appear in $table ($stage)", timeout = 30.seconds) {
-                        fetch().keys.containsAll(ids)
-                    }
-                    val actual = fetch()
-                    rows.forEach { row ->
-                        assertEquals(
-                            normalizeRow(columns, row.vals), normalizeRow(columns, actual.getValue(row.id)),
-                            "row ${row.id} $stage",
-                        )
-                    }
-                }
-
-                assertRoundTrip("after insert")
+                assertRowsPresent(node, table, columns, rows, "after insert")
                 flushBlock(node)
-                assertRoundTrip("after block flush")
+                assertRowsPresent(node, table, columns, rows, "after block flush")
+            }
+        }
+    }
+
+    // Exercises the snapshot path specifically: rows are inserted before attach, so the source's
+    // initial snapshot (SET TRANSACTION SNAPSHOT + text coercion) is what ingests them — a distinct
+    // code path from the streaming pgoutput decode the test above covers.
+    @Test
+    fun `rows inserted before attach are captured by the initial snapshot`() = runTest(timeout = 30.minutes) {
+        checkAll(ITERATIONS, schemaRows(maxRows = 20, maxCols = 5)) { (columns, rows) ->
+            runCdc(columns, beforeAttach = { table -> rows.forEach { insertRow(columns, table, it) } }) { node, table ->
+                assertRowsPresent(node, table, columns, rows, "after snapshot")
+                flushBlock(node)
+                assertRowsPresent(node, table, columns, rows, "after block flush")
             }
         }
     }
