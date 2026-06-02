@@ -524,6 +524,31 @@ class PostgresSourceIntegrationTest {
     }
 
     @Test
+    fun `source fails when postgres credentials are wrong`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_bad_creds (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_bad_creds",
+        )
+
+        openNode(sourceTopic, pgPassword = "wrong-password").use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            awaitCondition("cdc surfaces ingestionError on auth failure", timeout = 30.seconds) {
+                cdc["cdc"]?.ingestionError != null
+            }
+            assertNotNull(cdc["cdc"]?.ingestionError,
+                "auth failure must surface IngestionStoppedException")
+
+            assertPrimaryDbHealthy(node)
+        }
+    }
+
+    @Test
     fun `multi-table snapshot and streaming`() = runTest(timeout = 120.seconds) {
         val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
         val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
