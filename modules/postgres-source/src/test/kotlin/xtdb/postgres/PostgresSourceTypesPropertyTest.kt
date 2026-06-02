@@ -284,12 +284,24 @@ class PostgresSourceTypesPropertyTest {
         awaitCondition("block persisted for cdc", timeout = 30.seconds) { cdc.blockCatalog.currentBlockIndex != null }
     }
 
-    /** Creates a table + publication, opens a local-log/storage node, attaches the cdc db,
-     *  runs `f`, then drops the replication slot.
+    /** Waits until the cdc db's initial snapshot has completed (its completion-marker tx is
+     *  indexed) — which is also when streaming goes live and the slot's consistent point is
+     *  safely in the past. Writing before this races the snapshot→stream handoff: a row committed
+     *  ahead of the consistent point is only seen as the snapshot's current-state read, not
+     *  streamed as its own valid-time version. The empty table we create snapshots to a single tx
+     *  (no data batches + the completion marker). */
+    private suspend fun awaitStreaming(node: Xtdb) =
+        awaitCondition("cdc snapshot complete (streaming live)", timeout = 30.seconds) {
+            (xtQuery(node, "SELECT count(*) AS cnt FROM xt.txs").first()["cnt"] as Long) >= 1L
+        }
+
+    /** Creates a table + publication, opens a local-log/storage node, attaches the cdc db, waits
+     *  for streaming to go live, runs `f`, then drops the replication slot.
      *
-     *  `inline` (with a non-suspend `f`) so the body can call the `suspend` `awaitCondition` /
-     *  `flushBlock` helpers when invoked inside `checkAll`'s suspend block. */
-    private inline fun runCdc(columns: List<Col>, f: (Xtdb, String) -> Unit) {
+     *  `suspend inline` (with a non-suspend `f`) so both this body and the inlined `f` can call the
+     *  `suspend` `awaitStreaming` / `awaitCondition` / `flushBlock` helpers inside `checkAll`'s
+     *  suspend block. */
+    private suspend inline fun runCdc(columns: List<Col>, f: (Xtdb, String) -> Unit) {
         val table = unique("t"); val pub = unique("pub"); val slot = unique("slot")
         val colDdl = columns.joinToString { "${it.name} ${it.ddl}" }
         pgExecute(
@@ -300,6 +312,7 @@ class PostgresSourceTypesPropertyTest {
         try {
             openNode(dirs[0], dirs[1]).use { node ->
                 attachCdc(node, dirs[2], dirs[3], slot, pub)
+                awaitStreaming(node)
                 f(node, table)
             }
         } finally {
@@ -341,10 +354,6 @@ class PostgresSourceTypesPropertyTest {
         }
     }
 
-    // Intermittently loses the first write after attach: a row committed during the
-    // snapshot→stream handoff window falls in the gap (neither snapshotted nor streamed),
-    // so its valid-time version is missing. Tracked as a source-side bug; re-enable once fixed.
-    @Disabled("flaky: snapshot→stream handoff drops writes committed during the handoff window")
     @Test
     fun `successive commits each land as a distinct valid-time version`() = runTest(timeout = 30.minutes) {
         checkAll(ITERATIONS, history(maxCols = 4, maxUpdates = 8)) { (columns, states) ->
