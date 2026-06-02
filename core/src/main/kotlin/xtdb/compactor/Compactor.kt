@@ -26,7 +26,6 @@ import xtdb.trie.*
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlin.use
 
 typealias JobKey = Pair<TableRef, TrieKey>
@@ -52,6 +51,9 @@ interface Compactor : AutoCloseable {
     }
 
     interface ForDatabase : AutoCloseable {
+        /** Launches the compaction loop into [scope]; the caller owns its lifetime — cancelling [scope] stops it. */
+        fun runOn(scope: CoroutineScope)
+
         fun signalBlock()
         suspend fun compactAll()
 
@@ -167,9 +169,6 @@ interface Compactor : AutoCloseable {
 
         override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
-            private val dbJob = Job()
-            private val scope = CoroutineScope(dbJob + dispatcher)
-
             private val trieCatalog = dbState.trieCatalog
             private val liveIndex = dbState.liveIndexOrNull
 
@@ -197,10 +196,12 @@ interface Compactor : AutoCloseable {
                 }
             }
 
-            init {
-                val jobsScope = CoroutineScope(SupervisorJob(dbJob) + jobsDispatcher)
+            // Pinned to the compactor's own [dispatcher] (the owner scope supplies only the lifetime),
+            // so the seeded `DeterministicDispatcher` injected in the simulation tests drives the loop.
+            override fun runOn(scope: CoroutineScope) {
+                val jobsScope = CoroutineScope(SupervisorJob(scope.coroutineContext.job) + jobsDispatcher)
 
-                scope.launch(CoroutineName("outer loop")) {
+                scope.launch(dispatcher + CoroutineName("outer loop")) {
                     while (true) {
                         availableJobs =
                             jobCalculator.availableJobs(trieCatalog)
@@ -273,15 +274,10 @@ interface Compactor : AutoCloseable {
                 liveIndex?.refreshSnap()
             }
 
+            // State teardown only: the loop is a Service, stopped by the owner cancelling its scope
+            // before this runs (so no buffer is live when the driver's child allocator closes).
             override fun close() {
-
-                runBlocking {
-                    withTimeoutOrNull(10.seconds) { dbJob.cancelAndJoin() }
-                        ?: LOGGER.warn("failed to close compactor cleanly in 10s")
-                }
-
                 driver.close()
-
                 LOGGER.debug("compactor closed")
             }
         }
@@ -293,6 +289,7 @@ interface Compactor : AutoCloseable {
         @JvmField
         val NOOP = object : Compactor {
             override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+                override fun runOn(scope: CoroutineScope) = Unit
                 override fun signalBlock() = Unit
                 override suspend fun compactAll() = Unit
                 override fun close() = Unit

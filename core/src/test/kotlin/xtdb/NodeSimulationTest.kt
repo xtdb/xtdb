@@ -53,11 +53,16 @@ data class MockDatabase(
     val blockCatalog: BlockCatalog,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
+    val compactorScope: CoroutineScope,
     val garbageCollector: TrieGarbageCollector,
     val gcScope: CoroutineScope,
 ) {
     fun close() {
-        runBlocking { gcScope.coroutineContext.job.cancelAndJoin() }
+        runBlocking {
+            // cancel the compaction loop before `compactorForDb.close()` frees its driver allocator
+            compactorScope.coroutineContext.job.cancelAndJoin()
+            gcScope.coroutineContext.job.cancelAndJoin()
+        }
         compactorForDb.close()
         compactor.close()
     }
@@ -116,6 +121,8 @@ class NodeSimulationTest : SimulationTestBase() {
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            val compactorScope = CoroutineScope(SupervisorJob() + dispatcher)
+                .also { compactorForDb.runOn(it) }
             val gcScope = CoroutineScope(SupervisorJob() + dispatcher)
 
             val garbageCollector = TrieGarbageCollector(
@@ -132,7 +139,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 deleteDispatcher = dispatcher,
             ).also { it.runOn(gcScope) }
 
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope)
+            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, compactorScope, garbageCollector, gcScope)
         }
     }
 

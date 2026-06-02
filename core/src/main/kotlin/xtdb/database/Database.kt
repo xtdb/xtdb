@@ -52,6 +52,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.util.*
 import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.seconds
 
 private val LOG = Database::class.logger
 
@@ -62,6 +63,7 @@ class Database(
     val isIndexing: Boolean,
     val partitions: Map<Int, DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
+    private val compactorScope: CoroutineScope? = null,
     private val job: Job? = null,
     private val processor: LogProcessor? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
@@ -133,6 +135,11 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         runBlocking {
+            // Stop the compaction loop + its jobs before `compactorOrNull.close()` frees the
+            // driver's child allocator below — an outstanding compaction buffer would otherwise
+            // outlive its allocator. Bounded so a stuck job can't hang shutdown.
+            withTimeoutOrNull(10.seconds) { compactorScope?.coroutineContext?.job?.cancelAndJoin() }
+                ?: LOG.warn("compactor did not stop within 10s")
             job?.cancelAndJoin()
             processor?.close()
         }
@@ -267,6 +274,20 @@ class Database(
                 else compactor.openForDatabase(allocator, storage, state, watchers)
             }
 
+            // Independent root owned by this Database: cancelled (bounded) in `close()` before the
+            // compactor's driver allocator is freed. NOOP's `runOn` is a no-op (read-only nodes).
+            // Registered with `safelyOpening` so a failure later in `open` also stops the loop —
+            // it runs against the driver, which `safelyOpening` would otherwise free out from under it.
+            val compactorScope = CoroutineScope(Job())
+            open {
+                AutoCloseable {
+                    runBlocking {
+                        withTimeoutOrNull(10.seconds) { compactorScope.coroutineContext.job.cancelAndJoin() }
+                    }
+                }
+            }
+            compactorForDb.runOn(compactorScope)
+
             var processor: LogProcessor? = null
             val job = Job()
             val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
@@ -372,6 +393,7 @@ class Database(
                 isIndexing = indexerConfig.enabled,
                 partitions = mapOf(0 to partition),
                 meterRegistry = meterRegistry,
+                compactorScope = compactorScope,
                 job = job,
                 processor = processor,
                 registeredGauges = gauges,
