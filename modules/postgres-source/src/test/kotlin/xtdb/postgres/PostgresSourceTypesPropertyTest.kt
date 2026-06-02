@@ -69,6 +69,10 @@ class PostgresSourceTypesPropertyTest {
         private const val MAX_TZ_OFFSET_HOURS = 12
         private const val MAX_TEXT_LEN = 32
         private const val MAX_COL_NAME_LEN = 20
+
+        // Anchor for explicit `_valid_from` histories: each update steps one day on from here, so
+        // the valid-times are distinct and strictly ascending regardless of the generated data.
+        private val VALID_FROM_BASE: OffsetDateTime = OffsetDateTime.parse("2020-01-01T00:00:00Z")
     }
 
     // --- generators -----------------------------------------------------------------------
@@ -145,17 +149,28 @@ class PostgresSourceTypesPropertyTest {
 
     private data class History(val columns: List<Col>, val states: List<Map<String, Any?>>)
 
-    // a schema plus a sequence of full row-states for a single _id: the first inserts the row,
-    // each subsequent one rewrites every column
-    private fun history(maxCols: Int, maxUpdates: Int): Arb<History> = arbitrary {
+    // a schema plus a sequence of full row-states for a single _id: the first inserts the row, each
+    // subsequent one rewrites every column. With `withValidFrom`, appends a `_valid_from` TIMESTAMPTZ
+    // column carrying a distinct, ascending explicit valid-time per state — exercising the source
+    // honouring `_valid_from` (PostgresSource.writeOp) instead of deriving it from the commit time.
+    private fun history(maxCols: Int, maxUpdates: Int, withValidFrom: Boolean = false): Arb<History> = arbitrary {
         val columns = schema(1, maxCols).bind()
         val states = Arb.list(rowValues(columns), 1..maxUpdates).bind()
         // XTDB dedups an unchanged put, so an identical successive state yields no new valid-time
-        // version — drop consecutive duplicates so "one version per commit" actually holds
+        // version — drop consecutive duplicates so "one version per commit" actually holds. Dedup on
+        // the data columns only; _valid_from is consumed by the source, not stored as content.
         val changing = states.filterIndexed { i, s ->
             i == 0 || normalizeRow(columns, states[i - 1]) != normalizeRow(columns, s)
         }
-        History(columns, changing)
+        if (!withValidFrom) return@arbitrary History(columns, changing)
+
+        // step one day per update from the base so valid-times are distinct and ascending (commit
+        // order == valid-time order → clean [Vᵢ, Vᵢ₊₁) segments). Injected by index rather than drawn
+        // from the column's arb, since the ascending-across-the-sequence constraint is cross-state.
+        History(
+            columns + Col("_valid_from", "TIMESTAMPTZ", offsetDateTime),
+            changing.mapIndexed { i, s -> s + ("_valid_from" to VALID_FROM_BASE.plusDays(i.toLong())) },
+        )
     }
 
     // --- comparison -----------------------------------------------------------------------
@@ -355,6 +370,22 @@ class PostgresSourceTypesPropertyTest {
         }
     }
 
+    /** Awaits the FOR ALL VALID_TIME history of `_id = 1` (ordered by `_valid_from`) and asserts it
+     *  matches `states` one-version-per-state, every column round-tripping. Shared by the commit-time
+     *  and explicit-`_valid_from` history tests; when `states` carry a `_valid_from` column it's just
+     *  another column to compare, so the version's valid-time is checked against what we set. */
+    private suspend fun assertHistoryVersions(
+        node: Xtdb, table: String, columns: List<Col>, states: List<Map<String, Any?>>, stage: String,
+    ) {
+        val cols = columns.joinToString { it.name }
+        val q = "SELECT $cols FROM public.$table FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"
+        val expected = states.map { normalizeRow(columns, it) }
+        // assert on the awaited value (not a bare awaitCondition) so a shortfall reports exactly which
+        // versions showed up vs the expected list, rather than just timing out
+        val actual = await(done = { it.size == expected.size }) { xtQuery(node, q).map { normalizeRow(columns, it) } }
+        assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
+    }
+
     // --- property tests -----------------------------------------------------------------------
 
     @Test
@@ -390,21 +421,23 @@ class PostgresSourceTypesPropertyTest {
                 insertRow(columns, table, Row(1, states.first()))
                 states.drop(1).forEach { updateRow(columns, table, 1, it) }
 
-                val cols = columns.joinToString { it.name }
-                val q = "SELECT $cols FROM public.$table FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"
-                val expected = states.map { normalizeRow(columns, it) }
-                fun versions() = xtQuery(node, q).map { normalizeRow(columns, it) }
-
-                suspend fun assertHistory(stage: String) {
-                    // assert on the awaited value (not a bare awaitCondition) so a shortfall reports
-                    // exactly which versions showed up vs the expected list, rather than just timing out
-                    val actual = await(done = { it.size == expected.size }) { versions() }
-                    assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
-                }
-
-                assertHistory("every committed row-state is a distinct version")
+                assertHistoryVersions(node, table, columns, states, "every committed row-state is a distinct version")
                 flushBlock(node)
-                assertHistory("history intact after block flush")
+                assertHistoryVersions(node, table, columns, states, "history intact after block flush")
+            }
+        }
+    }
+
+    @Test
+    fun `an explicit _valid_from column sets each version's valid-time`() = runTest(timeout = 30.minutes) {
+        checkAll(ITERATIONS, history(maxCols = 4, maxUpdates = 8, withValidFrom = true)) { (columns, states) ->
+            runCdc(columns) { node, table ->
+                insertRow(columns, table, Row(1, states.first()))
+                states.drop(1).forEach { updateRow(columns, table, 1, it) }
+
+                assertHistoryVersions(node, table, columns, states, "each version lands at its explicit _valid_from")
+                flushBlock(node)
+                assertHistoryVersions(node, table, columns, states, "history intact after block flush")
             }
         }
     }
