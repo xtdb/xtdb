@@ -179,7 +179,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             override fun prepare(): Unit =
                 throw Incorrect("Bulk ingest does not support prepare", "xtdb.adbc/bulk-ingest-no-prepare")
 
-            private var docs: Relation? = null
+            private var docs: RelationReader? = null
 
             override fun close() {
                 docs.also { docs = null }?.close()
@@ -196,7 +196,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             }
 
             override fun bind(rel: RelationReader) {
-                this.docs = rel.openDirectSlice(node.allocator)
+                this.docs = rel.openSlice(node.allocator)
             }
 
             override fun executeUpdate(): UpdateResult {
