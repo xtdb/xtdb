@@ -115,8 +115,12 @@ abstract class PostgresSourceTestBase {
 
     protected suspend fun flushBlock(node: Xtdb) {
         val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+        val before = cdc.blockCatalog.currentBlockIndex
         cdc.sendFlushBlockMessage()
-        awaitCondition("block persisted for cdc", timeout = 30.seconds) { cdc.blockCatalog.currentBlockIndex != null }
+        // wait for *this* flush's block, not just any block — matters when flushing repeatedly
+        awaitCondition("block persisted for cdc", timeout = 30.seconds) {
+            cdc.blockCatalog.currentBlockIndex.let { it != null && (before == null || it > before) }
+        }
     }
 
     /** Waits until the source has finished its initial snapshot and switched to streaming, so a
@@ -128,12 +132,13 @@ abstract class PostgresSourceTestBase {
      *  final `snapshotCompleted = true` marker before streaming begins; the cdc db's watchers track
      *  the latest applied token, so `snapshotCompleted` going true means the whole snapshot is in
      *  (indexTx awaits application) and streaming is live. */
-    protected suspend fun awaitStreaming(node: Xtdb) {
-        val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+    protected suspend fun awaitStreaming(node: Xtdb) =
+        // cdc may be momentarily absent right after a restart (it re-attaches from the replayed log),
+        // so resolve it inside the poll rather than up front
         awaitCondition("cdc snapshot complete, streaming live", timeout = 30.seconds) {
-            cdc.watchers.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
+            val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]
+            cdc?.watchers?.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
         }
-    }
 
     companion object {
         // slots are dropped per run, but keep headroom across the whole property suite
