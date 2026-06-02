@@ -59,20 +59,31 @@ class Database(
     val allocator: BufferAllocator,
     val config: Config,
     override val storage: DatabaseStorage,
-    override val queryState: DatabaseState,
     val isIndexing: Boolean,
-    val watchers: Watchers,
+    val partitions: Map<Int, DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
-    val compactorOrNull: Compactor.ForDatabase? = null,
     private val job: Job? = null,
     private val processor: LogProcessor? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
 ) : IQuerySource.QueryDatabase, AutoCloseable {
-    val name: DatabaseName get() = queryState.name
-    override fun openSnapshot(): Snapshot = queryState.liveIndex.openSnapshot()
 
-    val blockCatalog: BlockCatalog get() = queryState.blockCatalog
-    val tableCatalog: TableCatalog get() = queryState.tableCatalog
+    init {
+        require(partitions.isNotEmpty()) { "Database must have at least one partition" }
+    }
+
+    // Single-partition delegate. Per the stage-4 design, this becomes a per-partition
+    // lookup once `partitions > 1` is enabled; for now every Database has exactly one.
+    private val partition0: DatabasePartition get() = partitions.getValue(0)
+
+    val name: DatabaseName get() = partition0.state.name
+    override val queryState: DatabaseState get() = partition0.state
+    val watchers: Watchers get() = partition0.watchers
+    val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
+
+    override fun openSnapshot(): Snapshot = partition0.openSnapshot()
+
+    val blockCatalog: BlockCatalog get() = partition0.blockCatalog
+    val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
     fun getColumnTypes(table: TableRef, snap: Snapshot): Map<ColumnName, VectorType>? {
         val historical = tableCatalog.getTypes(table)
@@ -80,15 +91,15 @@ class Database(
         return if (historical == null && live == null) null
         else (historical ?: emptyMap()) + (live ?: emptyMap())
     }
-    val trieCatalog: TrieCatalog get() = queryState.trieCatalog
-    val liveIndex: LiveIndex get() = queryState.liveIndex
+    val trieCatalog: TrieCatalog get() = partition0.trieCatalog
+    val liveIndex: LiveIndex get() = partition0.liveIndex
 
     val sourceLog: Log<SourceMessage> get() = storage.sourceLog
     val replicaLog: Log<ReplicaMessage> get() = storage.replicaLog
     val bufferPool: BufferPool get() = storage.bufferPool
     val metadataManager: PageMetadata.Factory get() = storage.metadataManager
 
-    val compactor: Compactor.ForDatabase get() = compactorOrNull ?: error("compactor not initialised")
+    val compactor: Compactor.ForDatabase get() = partition0.compactor
 
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
     val ingestionError: IngestionStoppedException? get() = watchers.exception
@@ -121,7 +132,7 @@ class Database(
             job?.cancelAndJoin()
             processor?.close()
         }
-        listOf(compactorOrNull, queryState, storage, allocator).closeAll()
+        (partitions.values + listOf(storage, allocator)).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -343,15 +354,20 @@ class Database(
                 )
             } ?: emptyList()
 
+            val partition = DatabasePartition(
+                partition = 0,
+                state = state,
+                watchers = watchers,
+                compactorOrNull = compactorForDb,
+            )
+
             Database(
                 allocator = allocator,
                 config = dbConfig,
                 storage = storage,
-                queryState = state,
                 isIndexing = indexerConfig.enabled,
-                watchers = watchers,
+                partitions = mapOf(0 to partition),
                 meterRegistry = meterRegistry,
-                compactorOrNull = compactorForDb,
                 job = job,
                 processor = processor,
                 registeredGauges = gauges,

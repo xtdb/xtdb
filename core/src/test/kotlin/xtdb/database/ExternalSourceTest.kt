@@ -265,13 +265,17 @@ class ExternalSourceTest {
         val config = Database.Config(externalSource = extFactory)
 
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
+        val partition = DatabasePartition(
+            partition = 0,
+            state = DatabaseState("cdc", null, null, null, null),
+            watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+        )
         val db = Database(
             allocator = allocator,
             config = config,
             storage = DatabaseStorage(null, null, null, null),
-            queryState = DatabaseState("cdc", null, null, null, null),
             isIndexing = false,
-            watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+            partitions = mapOf(0 to partition),
             meterRegistry = null,
         )
 
