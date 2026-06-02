@@ -31,6 +31,7 @@ import xtdb.time.InstantUtil.asMicros
 import xtdb.util.*
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import com.google.protobuf.Any as ProtoAny
@@ -318,6 +319,16 @@ class PostgresSource(
     }
 }
 
+private fun explicitValidTimeMicros(name: String, value: Any?): Long? = when (value) {
+    null -> null
+    is ZonedDateTime -> value.toInstant().asMicros
+    else -> throw Incorrect(
+        "'$name' must be a TIMESTAMPTZ column",
+        errorCode = "xtdb.postgres/invalid-explicit-valid-time",
+        data = mapOf("column" to name, "type" to (value::class.qualifiedName ?: value::class.simpleName)),
+    )
+}
+
 private fun writeOp(
     openTx: OpenTx,
     dbName: String,
@@ -332,8 +343,8 @@ private fun writeOp(
             val id = docMap["_id"]
                 ?: throw Incorrect("Missing '_id' in row from ${op.schema}.${op.table}")
 
-            val explicitValidFrom = (docMap.remove("_valid_from") as? Instant)?.asMicros
-            val explicitValidTo = (docMap.remove("_valid_to") as? Instant)?.asMicros
+            val explicitValidFrom = explicitValidTimeMicros("_valid_from", docMap.remove("_valid_from"))
+            val explicitValidTo = explicitValidTimeMicros("_valid_to", docMap.remove("_valid_to"))
 
             if (explicitValidTo != null && explicitValidFrom == null)
                 throw Incorrect("'_valid_to' requires '_valid_from'")

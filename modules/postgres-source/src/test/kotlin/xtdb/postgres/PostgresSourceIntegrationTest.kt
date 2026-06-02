@@ -808,6 +808,105 @@ class PostgresSourceIntegrationTest {
         }
     }
 
+    @Test
+    fun `explicit _valid_from on a CDC row sets the version valid-time`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        // empty at attach time, so the row streams through writeOp (where _valid_from is handled)
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_vf (_id INT PRIMARY KEY, name TEXT, _valid_from TIMESTAMPTZ)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_vf",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            pgExecute("INSERT INTO pg_vf (_id, name, _valid_from) VALUES (1, 'Alice', TIMESTAMPTZ '2020-01-01 00:00:00+00')")
+
+            awaitCondition("row ingested", timeout = 30.seconds) {
+                runCatching { xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vf WHERE _id = 1").isNotEmpty() }
+                    .getOrDefault(false)
+            }
+
+            val document = xtQueryDb(node, "cdc", "SELECT *, _valid_from FROM public.pg_vf WHERE _id = 1").single()
+            assertEquals("Alice", document["name"])
+
+            val validFrom = (document["_valid_from"] as ZonedDateTime).toInstant()
+            assertEquals(java.time.Instant.parse("2020-01-01T00:00:00Z"), validFrom)
+        }
+    }
+
+    @Test
+    fun `explicit _valid_from and _valid_to on a CDC row sets the version bounds`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_vt (_id INT PRIMARY KEY, name TEXT, _valid_from TIMESTAMPTZ, _valid_to TIMESTAMPTZ)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_vt",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            pgExecute(
+                """INSERT INTO pg_vt (_id, name, _valid_from, _valid_to)
+                   VALUES (1, 'Alice',
+                           TIMESTAMPTZ '2020-01-01 00:00:00+00',
+                           TIMESTAMPTZ '2021-01-01 00:00:00+00')"""
+            )
+
+            awaitCondition("row ingested", timeout = 30.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vt FOR ALL VALID_TIME WHERE _id = 1").isNotEmpty()
+                }.getOrDefault(false)
+            }
+
+            val document = xtQueryDb(node, "cdc",
+                "SELECT *, _valid_from, _valid_to FROM public.pg_vt FOR ALL VALID_TIME WHERE _id = 1").single()
+            assertEquals("Alice", document["name"])
+
+            val validFrom = (document["_valid_from"] as ZonedDateTime).toInstant()
+            val validTo = (document["_valid_to"] as ZonedDateTime).toInstant()
+            assertEquals(java.time.Instant.parse("2020-01-01T00:00:00Z"), validFrom)
+            assertEquals(java.time.Instant.parse("2021-01-01T00:00:00Z"), validTo)
+        }
+    }
+
+    @Test
+    fun `non-TIMESTAMPTZ _valid_from fails the source loudly`() = runTest(timeout = 60.seconds) {
+        // Anything other than TIMESTAMPTZ is ambiguous (no session zone in CDC) — surface
+        // an ingestionError rather than silently falling back to system time.
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_vf_bad (_id INT PRIMARY KEY, name TEXT, _valid_from TIMESTAMP)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_vf_bad",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            pgExecute("INSERT INTO pg_vf_bad (_id, name, _valid_from) VALUES (1, 'Alice', TIMESTAMP '2020-01-01 00:00:00')")
+
+            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            awaitCondition("cdc surfaces ingestionError for non-TIMESTAMPTZ _valid_from", timeout = 30.seconds) {
+                cdc["cdc"]?.ingestionError != null
+            }
+
+            val cause = generateSequence(cdc["cdc"]?.ingestionError as Throwable?) { it.cause }.toList()
+            assertTrue(cause.any { it.message?.contains("'_valid_from' must be a TIMESTAMPTZ") == true },
+                "expected loud TIMESTAMPTZ-required error, got: ${cause.map { "${it::class.simpleName}: ${it.message}" }}")
+
+            assertPrimaryDbHealthy(node)
+        }
+    }
+
     /**
      * Returns true if the slot is active, false if it exists but is inactive, null if the slot doesn't exist.
      */
