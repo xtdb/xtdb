@@ -330,9 +330,23 @@ class Database(
                             flushTimeout = indexerConfig.flushDuration,
                         )
 
+                        // This Database owns the leader's process tree: a SupervisorJob child of
+                        // its scope, so a leader failure is isolated from the rest of the node.
+                        // Step-down cancels it (bounded), then frees the processor's resources —
+                        // cancellation leaves the watermarks consistent-or-behind, so the follower
+                        // the transition opens next replays any gap idempotently.
+                        val leaderScope =
+                            CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
+                        leaderProc.runOn(leaderScope)
+
                         return object : LogProcessor.LeaderSystem {
                             override val proc get() = leaderProc
-                            override suspend fun close() { leaderProc.close(); replicaProducer.close() }
+                            override suspend fun close() {
+                                withTimeoutOrNull(10.seconds) { leaderScope.coroutineContext.job.cancelAndJoin() }
+                                    ?: LOG.warn("[$dbName] leader did not stop within 10s")
+                                leaderProc.close()
+                                replicaProducer.close()
+                            }
                         }
                     }
 

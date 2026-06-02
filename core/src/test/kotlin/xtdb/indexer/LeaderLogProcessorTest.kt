@@ -4,8 +4,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -34,6 +37,7 @@ import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
 import java.time.Instant
 import java.time.InstantSource
+import kotlin.coroutines.coroutineContext
 
 class LeaderLogProcessorTest {
 
@@ -78,28 +82,43 @@ class LeaderLogProcessorTest {
         )
     }
 
+    // The leader is now a scope-managed Service: `runOn` a scope, run the body, then cancel-and-join
+    // that scope before `close()` frees the allocator.
+    private suspend fun LeaderLogProcessor.runScoped(block: suspend () -> Unit) {
+        val scope = CoroutineScope(coroutineContext + Job())
+        runOn(scope)
+        try {
+            block()
+        } finally {
+            scope.coroutineContext.job.cancelAndJoin()
+            close()
+        }
+    }
+
     @Test
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = mockk<TrieCatalog>(relaxed = true)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog)
 
-        val tries = listOf(
-            TrieDetails.newBuilder()
-                .setTableName("public/foo")
-                .setTrieKey("trie-key-1")
-                .setDataFileSize(100)
-                .setTrieMetadata(trieMetadata {})
-                .build()
-        )
+        lp.runScoped {
+            val tries = listOf(
+                TrieDetails.newBuilder()
+                    .setTableName("public/foo")
+                    .setTrieKey("trie-key-1")
+                    .setDataFileSize(100)
+                    .setTrieMetadata(trieMetadata {})
+                    .build()
+            )
 
-        val now = Instant.now()
-        lp.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
-        ))
+            val now = Instant.now()
+            lp.processRecords(listOf(
+                Log.Record(0, 0, now, SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
+            ))
 
-        verify { trieCatalog.addTries(any(), any(), any()) }
-        assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
+            verify { trieCatalog.addTries(any(), any(), any()) }
+            assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
+        }
     }
 
     @Test
@@ -132,15 +151,17 @@ class LeaderLogProcessorTest {
             partition = 0, afterReplicaMsgId = -1, afterToken = null,
         )
 
-        val now = Instant.now()
-        lp.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
-        ))
+        lp.runScoped {
+            val now = Instant.now()
+            lp.processRecords(listOf(
+                Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
+            ))
 
-        verify { liveIndex.finishBlock(any(), eq(0)) }
-        verify { liveIndex.nextBlock() }
-        verify { compactor.signalBlock() }
-        assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have block messages")
+            verify { liveIndex.finishBlock(any(), eq(0)) }
+            verify { liveIndex.nextBlock() }
+            verify { compactor.signalBlock() }
+            assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have block messages")
+        }
     }
 
     @Test
@@ -148,12 +169,14 @@ class LeaderLogProcessorTest {
         val liveIndex = mockk<LiveIndex>(relaxed = true)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex)
 
-        val now = Instant.now()
-        lp.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
-        ))
+        lp.runScoped {
+            val now = Instant.now()
+            lp.processRecords(listOf(
+                Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
+            ))
 
-        verify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
+            verify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
+        }
     }
 
     @Test
@@ -198,28 +221,30 @@ class LeaderLogProcessorTest {
             partition = 0, afterReplicaMsgId = -1, afterToken = null,
         )
 
-        val now = Instant.now()
-        lp.processRecords(listOf(
-            Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
-        ))
+        lp.runScoped {
+            val now = Instant.now()
+            lp.processRecords(listOf(
+                Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
+            ))
 
-        val replicaMessages = mutableListOf<ReplicaMessage>()
-        val job = launch { replicaLog.tailAll(-1) { records ->
-            replicaMessages.addAll(records.map { it.message })
-        } }
+            val replicaMessages = mutableListOf<ReplicaMessage>()
+            val job = launch { replicaLog.tailAll(-1) { records ->
+                replicaMessages.addAll(records.map { it.message })
+            } }
 
-        delay(200)
-        job.cancelAndJoin()
+            delay(200)
+            job.cancelAndJoin()
 
-        assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
-        assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)
-        assertTrue(replicaMessages[1] is ReplicaMessage.BlockUploaded)
+            assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
+            assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)
+            assertTrue(replicaMessages[1] is ReplicaMessage.BlockUploaded)
 
-        val boundary = replicaMessages[0] as ReplicaMessage.BlockBoundary
-        assertEquals(0, boundary.blockIndex)
+            val boundary = replicaMessages[0] as ReplicaMessage.BlockBoundary
+            assertEquals(0, boundary.blockIndex)
 
-        val uploaded = replicaMessages[1] as ReplicaMessage.BlockUploaded
-        assertEquals(0, uploaded.blockIndex)
-        assertTrue(uploaded.tries.isNotEmpty(), "BlockUploaded should contain trie details")
+            val uploaded = replicaMessages[1] as ReplicaMessage.BlockUploaded
+            assertEquals(0, uploaded.blockIndex)
+            assertTrue(uploaded.tries.isNotEmpty(), "BlockUploaded should contain trie details")
+        }
     }
 }

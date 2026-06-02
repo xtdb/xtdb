@@ -4,6 +4,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -193,11 +194,15 @@ class LogProcessorSimTest : SimulationTestBase() {
                 skipTxs = emptySet(), dbCatalog = null,
                 partition = 0, afterReplicaMsgId = afterReplicaMsgId,
                 afterToken = null,
-                ctx = dispatcher
             )
+            val leaderScope = CoroutineScope(dispatcher + Job())
+            proc.runOn(leaderScope)
             return object : LogProcessor.LeaderSystem {
                 override val proc get() = proc
-                override suspend fun close() = proc.close()
+                override suspend fun close() {
+                    leaderScope.coroutineContext.job.cancelAndJoin()
+                    proc.close()
+                }
             }
         }
 

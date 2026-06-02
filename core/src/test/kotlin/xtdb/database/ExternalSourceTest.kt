@@ -2,10 +2,14 @@ package xtdb.database
 
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
@@ -31,7 +35,6 @@ import xtdb.tx.TxOpts
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
-import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.milliseconds
 
 class ExternalSourceTest {
@@ -93,7 +96,7 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
-        ctx: CoroutineContext,
+        scope: CoroutineScope,
     ): LeaderLogProcessor {
         val blockCatalog = BlockCatalog("test", null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
@@ -110,8 +113,30 @@ class ExternalSourceTest {
             allocator, nodeBase, dbStorage, crashLogger,
             dbState, blockUploader, watchers, extSource, replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1, afterToken = afterToken, ctx = ctx
-        )
+            partition = 0, afterReplicaMsgId = -1, afterToken = afterToken,
+        ).also { it.runOn(scope) }
+    }
+
+    // The leader is now a scope-managed Service: `runOn` a scope, and on teardown cancel-and-join
+    // that scope *before* `close()` frees the processor's allocator (cancellation stops the loop;
+    // the synchronous in-memory effects can't be cleaved off, so nothing is left holding a buffer).
+    private suspend fun TestScope.withLeader(
+        sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
+        replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
+        liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
+        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+        extSource: ExternalSource = InMemoryExternalSource(),
+        afterToken: ExternalSourceToken? = null,
+        block: suspend (LeaderLogProcessor) -> Unit,
+    ) {
+        val scope = CoroutineScope(coroutineContext + Job())
+        val lp = leaderProc(sourceLog, replicaLog, liveIndex, watchers, extSource, afterToken, scope)
+        try {
+            block(lp)
+        } finally {
+            scope.coroutineContext.job.cancelAndJoin()
+            lp.close()
+        }
     }
 
     @Test
@@ -119,8 +144,7 @@ class ExternalSourceTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
 
-        val lp = leaderProc(replicaLog = replicaLog, extSource = extSource, ctx = coroutineContext)
-        try {
+        withLeader(replicaLog = replicaLog, extSource = extSource) { lp ->
             extSource.channel.send(null)
             delay(500.milliseconds)
 
@@ -140,8 +164,6 @@ class ExternalSourceTest {
             assertEquals(true, resolved.committed)
             assertEquals(0L, resolved.txId)
             assertNull(resolved.srcMsgId, "ext-source ResolvedTx should not carry a source-log msgId")
-        } finally {
-            lp.close()
         }
     }
 
@@ -150,9 +172,7 @@ class ExternalSourceTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
 
-        val lp = leaderProc(replicaLog = replicaLog, extSource = extSource, ctx = coroutineContext)
-
-        try {
+        withLeader(replicaLog = replicaLog, extSource = extSource) { lp ->
             extSource.channel.send(null)
             extSource.channel.send(null)
             delay(500.milliseconds)
@@ -168,17 +188,14 @@ class ExternalSourceTest {
 
             assertEquals(listOf(0L, 1L), resolvedTxs.map { it.txId })
             assertTrue(resolvedTxs.all { it.committed }, "both txs should be committed")
-        } finally {
-            lp.close()
         }
     }
 
     @Test
     fun `processRecords flows source records through the leader processor`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val lp = leaderProc(replicaLog = replicaLog, ctx = coroutineContext)
 
-        try {
+        withLeader(replicaLog = replicaLog) { lp ->
             val now = Instant.now()
 
             lp.processRecords(
@@ -190,8 +207,6 @@ class ExternalSourceTest {
             delay(500.milliseconds)
 
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through to the leader")
-        } finally {
-            lp.close()
         }
     }
 
@@ -199,9 +214,8 @@ class ExternalSourceTest {
     fun `indexTx threads resumeToken to watchers`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val extSource = InMemoryExternalSource()
-        val lp = leaderProc(watchers = watchers, extSource = extSource, ctx = coroutineContext)
 
-        try {
+        withLeader(watchers = watchers, extSource = extSource) { lp ->
             val token = "kafka-offset:42".toByteArray()
             extSource.channel.send(token)
 
@@ -210,8 +224,6 @@ class ExternalSourceTest {
             val watcherToken = watchers.externalSourceToken
             assertNotNull(watcherToken)
             assertArrayEquals(token, watcherToken)
-        } finally {
-            lp.close()
         }
     }
 
@@ -231,12 +243,9 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        val lp = leaderProc(watchers = watchers, extSource = failingSource, ctx = coroutineContext)
-        try {
+        withLeader(watchers = watchers, extSource = failingSource) { lp ->
             delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
-        } finally {
-            lp.close()
         }
     }
 
@@ -248,14 +257,11 @@ class ExternalSourceTest {
         }
 
         val extSource = InMemoryExternalSource()
-        val lp = leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = extSource, ctx = coroutineContext)
 
-        try {
+        withLeader(watchers = watchers, liveIndex = liveIndex, extSource = extSource) { lp ->
             extSource.channel.send(null)
             delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
-        } finally {
-            lp.close()
         }
     }
 

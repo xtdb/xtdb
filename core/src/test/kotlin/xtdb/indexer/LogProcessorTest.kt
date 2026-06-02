@@ -75,9 +75,14 @@ class LogProcessorTest {
                     partition = 0, afterReplicaMsgId = afterReplicaMsgId,
                     afterToken = null,
                 )
+                val leaderScope = CoroutineScope(SupervisorJob())
+                leaderProc.runOn(leaderScope)
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc
-                    override suspend fun close() = leaderProc.close()
+                    override suspend fun close() {
+                        leaderScope.coroutineContext.job.cancelAndJoin()
+                        leaderProc.close()
+                    }
                 }
             }
 

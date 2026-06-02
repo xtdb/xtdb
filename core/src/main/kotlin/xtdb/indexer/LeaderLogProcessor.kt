@@ -37,8 +37,6 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
-import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.seconds
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -56,12 +54,11 @@ class LeaderLogProcessor(
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    partition: Int,
+    private val partition: Int,
     afterReplicaMsgId: MessageId,
-    afterToken: ExternalSourceToken?,
+    private val afterToken: ExternalSourceToken?,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
-    ctx: CoroutineContext = Dispatchers.Default,
 ) : LogProcessor.LeaderProcessor, TxIndexer {
 
     init {
@@ -84,9 +81,8 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
-    private val scope = CoroutineScope(ctx)
-    private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
-
+    // Constructed inert; both GCs and the persister are launched by [runOn], and torn down by the
+    // owner cancelling the scope it supplies (see `LogProcessor.openLeaderSystem`).
     internal val blockGc =
         nodeBase.config.garbageCollector
             .let { cfg ->
@@ -98,7 +94,6 @@ class LeaderLogProcessor(
                     meterRegistry = nodeBase.meterRegistry
                 )
             }
-            .also { it.runOn(gcScope) }
 
     override var pendingBlock: PendingBlock? = null
         private set
@@ -246,7 +241,12 @@ class LeaderLogProcessor(
     // Unbiased select across the three sources so a slow producer on one channel can't starve
     // the others. The three sources are: source-log records, external-source resolved txs, and
     // GC trie deletions.
-    private val persisterJob: Job = scope.launch {
+    //
+    // Interruptible by cancellation: the only suspension point per task is the replica-log append;
+    // the synchronous in-memory effect that follows it can't be cleaved off by a cancel, and a
+    // cancelled append leaves `latestReplicaMsgId` behind the log (never ahead), so replay closes
+    // any gap. No graceful drain is needed — the owner just cancels the scope.
+    private suspend fun persisterLoop() {
         try {
             while (true) {
                 val task: PersisterTask = selectUnbiased {
@@ -321,19 +321,35 @@ class LeaderLogProcessor(
             commitTriesDeleted,
             nodeBase.meterRegistry
         )
-    }.also { it.runOn(gcScope) }
+    }
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    private val extJob = extSource?.let { source ->
+    /**
+     * Launches the leader's process tree into [scope]: both GCs (on a child [SupervisorJob] so one
+     * GC's failure doesn't take the other down — failure isolation is the owner's concern), the
+     * external-source pump, and the persister. The owner tears the leader down by cancelling
+     * [scope]; nothing here is closed via its own teardown.
+     */
+    fun runOn(scope: CoroutineScope) {
         scope.launch {
-            try {
-                source.onPartitionAssigned(partition, afterToken, this@LeaderLogProcessor)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                watchers.notifyError(e)
+            val gcScope = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext.job))
+            blockGc.runOn(gcScope)
+            trieGc.runOn(gcScope)
+
+            extSource?.let { source ->
+                launch(CoroutineName("$dbName ext-source")) {
+                    try {
+                        source.onPartitionAssigned(partition, afterToken, this@LeaderLogProcessor)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        watchers.notifyError(e)
+                    }
+                }
             }
+
+            launch(CoroutineName("$dbName persister")) { persisterLoop() }
         }
     }
 
@@ -574,15 +590,11 @@ class LeaderLogProcessor(
         }
     }
 
+    // State teardown only: the process tree is stopped by the owner cancelling its scope before
+    // this runs, so the loop has stopped and every buffer is freed. All that's left is to free the
+    // resources this processor holds — the external source and its child allocator.
     override suspend fun close() {
-        extJob?.cancelAndJoin()
         extSource?.close()
-        withTimeoutOrNull(5.seconds) { gcScope.coroutineContext.job.cancelAndJoin() }
-            ?: LOG.warn("GC coroutines did not stop within 5s")
-        sourceLogCh.close()
-        extSourceCh.close()
-        gcCh.close()
-        persisterJob.join()
         allocator.close()
     }
 }
