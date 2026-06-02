@@ -264,6 +264,48 @@ class AdbcTest {
     }
 
     @Test
+    fun `bulkIngest via bind(RR) with indirect selection-backed reader round-trips correctly`() {
+        // Gate test: verifies that an IndirectVector-backed RelationReader (select-filtered,
+        // NOT a contiguous Relation) survives the full tx-log serialisation path when bulk-ingest
+        // uses openSlice instead of openDirectSlice.  Rows 1 and 3 (0-indexed) of a 4-row source
+        // relation are selected, leaving rows 0 and 2 out — the expected round-trip is those two
+        // non-contiguous rows and only those two.
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                val allRows = listOf(
+                    mapOf("_id" to 10, "label" to "skip-me"),
+                    mapOf("_id" to 20, "label" to "keep-A"),
+                    mapOf("_id" to 30, "label" to "skip-me-too"),
+                    mapOf("_id" to 40, "label" to "keep-B"),
+                )
+
+                Relation.openFromRows(allocator, allRows).use { fullRel ->
+                    // Produce a selection-backed (indirect) reader over rows 1 and 3.
+                    // select() wraps each column in IndirectVector — NOT a plain Relation.
+                    // Do NOT close indirectRel separately: IndirectVectors share ownership with
+                    // fullRel and calling close() on them would double-free the backing buffers.
+                    val indirectRel = fullRel.select(intArrayOf(1, 3))
+                    conn.bulkIngest("indirect_test", BulkIngestMode.CREATE_APPEND).use { stmt ->
+                        // Explicitly call the RR overload — this is the path under test.
+                        (stmt as XtdbConnection.XtdbStatement).bind(indirectRel)
+                        stmt.executeUpdate().affectedRows shouldBe 2
+                    }
+                }
+
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT * FROM indirect_test ORDER BY _id")
+                    stmt.executeQuery().use { res ->
+                        res.consumeAsMaps() shouldBe listOf(
+                            mapOf("_id" to 20L, "label" to "keep-A"),
+                            mapOf("_id" to 40L, "label" to "keep-B"),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `executeSchema after prepare returns projected column names`() {
         AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
             db.connect().use { conn ->
