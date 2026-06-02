@@ -140,14 +140,11 @@ class OpenTx(
     private fun queryCatalog(): IQuerySource.QueryCatalog {
         val liveIndex = dbState.liveIndex
 
-        val snapSource = object : Snapshot.Source {
-            override fun openSnapshot() = liveIndex.openSnapshot(this@OpenTx)
-        }
-
         val queryDb = object : IQuerySource.QueryDatabase {
             override val storage get() = dbStorage
             override val queryState get() = dbState
-            override fun openSnapshot() = snapSource.openSnapshot()
+            override fun openSnapshot() =
+                DatabaseSnapshot(listOf(liveIndex.openSnapshot(this@OpenTx)))
         }
         return object : IQuerySource.QueryCatalog {
             override val databaseNames: Collection<DatabaseName> get() = setOf(dbState.name)

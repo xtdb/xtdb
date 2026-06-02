@@ -5,7 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.indexer.Snapshot
+import xtdb.indexer.DatabaseSnapshot
 import xtdb.table.TableRef
 import java.time.Instant
 
@@ -16,7 +16,7 @@ interface IQuerySource : AutoCloseable {
         fun databaseOrNull(dbName: DatabaseName): QueryDatabase?
     }
 
-    interface QueryDatabase : Snapshot.Source {
+    interface QueryDatabase : DatabaseSnapshot.Source {
         val storage: DatabaseStorage
         val queryState: DatabaseState
     }

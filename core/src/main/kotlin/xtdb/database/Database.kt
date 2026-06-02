@@ -80,14 +80,18 @@ class Database(
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
-    override fun openSnapshot(): Snapshot = partition0.openSnapshot()
+    override fun openSnapshot(): DatabaseSnapshot =
+        // List position = partition index, so basis-vector slot N matches `partitions[N]`.
+        DatabaseSnapshot(partitions.entries.sortedBy { it.key }.map { it.value.openSnapshot() })
 
     val blockCatalog: BlockCatalog get() = partition0.blockCatalog
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
-    fun getColumnTypes(table: TableRef, snap: Snapshot): Map<ColumnName, VectorType>? {
+    fun getColumnTypes(table: TableRef, snap: DatabaseSnapshot): Map<ColumnName, VectorType>? {
         val historical = tableCatalog.getTypes(table)
-        val live = snap.allColumnTypes[table]
+        // TODO (#5557 unit 7) iterate `snap.partitions` and merge per-partition live types;
+        // for now single-partition is the only allowed shape, so pick the only Snapshot.
+        val live = snap.partitions.first().allColumnTypes[table]
         return if (historical == null && live == null) null
         else (historical ?: emptyMap()) + (live ?: emptyMap())
     }

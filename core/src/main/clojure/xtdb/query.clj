@@ -49,7 +49,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
-           (xtdb.indexer Snapshot)
+           (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource IQuerySource$Factory PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery)
@@ -142,8 +142,11 @@
     expr))
 
 (defn- validate-basis-not-before [basis snaps]
-  (doseq [[db-name ^Snapshot snap] snaps]
-    (let [snap-tx (.getTxBasis snap)
+  (doseq [[db-name ^DatabaseSnapshot snap] snaps]
+    ;; TODO (#5557 unit 3) iterate `snap.partitions` and validate each partition's basis against
+    ;; the corresponding position. For now we're still single-partition, so the size-1 vector
+    ;; collapses to its first element.
+    (let [snap-tx (first (.getTxBasis snap))
           system-time (get-in basis [db-name 0])]
       (when (and system-time
                  (or (nil? snap-tx)
@@ -155,8 +158,10 @@
                                :system-time system-time}))))))
 
 (defn- default-basis [snaps]
-  (->> (for [[db-name ^Snapshot snap] snaps
-             :let [sys-time (some-> (.getTxBasis snap) (.getSystemTime))]
+  (->> (for [[db-name ^DatabaseSnapshot snap] snaps
+             ;; TODO (#5557 unit 3) the singleton wrap is left over from the pre-multi-partition
+             ;; world; once basis iteration is partition-aware we'll emit one entry per partition.
+             :let [sys-time (some-> (.getTxBasis snap) first (.getSystemTime))]
              :when sys-time]
          [db-name [sys-time]])
        (into {})
@@ -333,8 +338,8 @@
                 ;; TODO this, too, gets the schema for *every* db in the catalog
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
-                                        (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat db-name))]
-                                          (update-vals (.getTableInfo snap) set)))))))
+                                        (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat db-name))]
+                                          (update-vals (.tableInfo snap) set)))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
@@ -456,8 +461,8 @@
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (:default-db opts)
-          table-info (-> (util/with-open [snap (.openSnapshot (.databaseOrNull db-cat default-db))]
-                           (.getTableInfo snap))
+          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat default-db))]
+                           (.tableInfo snap))
                          (sql/xform-table-info [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}
                                    {:table table

@@ -25,7 +25,7 @@
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
            (xtdb ICursor Bytes)
-           (xtdb.indexer Snapshot Snapshot$Source TableSnapshot)
+           (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
@@ -205,7 +205,10 @@
                   (let [db-name (.getDbName table)
                         state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
-                        ^Snapshot snap (get snaps db-name)]
+                        ^DatabaseSnapshot db-snap (get snaps db-name)
+                        ;; TODO (#5557 unit 7) reduce types/merge-types over per-partition live
+                        ;; types here; for now we only allow single-partition databases.
+                        ^Snapshot snap (first (.getPartitions db-snap))]
                     (types/merge-types (.getType table-catalog table col-name)
                                        (.columnType snap table col-name))))))]
     (->> scan-cols
@@ -266,7 +269,10 @@
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
-                     (let [^Snapshot snapshot (get snaps db-name)
+                     (let [^DatabaseSnapshot db-snapshot (get snaps db-name)
+                           ;; TODO (#5557 unit 7) walk every partition's Snapshot and UNION at scan,
+                           ;; instead of picking the only partition.
+                           ^Snapshot snapshot (first (.getPartitions db-snapshot))
                            derived-table-schema (info-schema/derived-table table)]
                        (cond
                          (log-tables/log-table table)
