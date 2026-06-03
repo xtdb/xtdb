@@ -2689,6 +2689,21 @@ ORDER BY 1,2;")
 
                   (read))))))))
 
+(t/deftest test-explain-analyze-attributes-nested-5191
+  ;; the explain-analyze `attributes` column is a struct of nested data (scan_db, scan_source),
+  ;; not an opaque scalar, so it round-trips to the client as correctly-typed nested data.
+  ;; (this conn uses the XT driver's transit fallback; a plain pg client with the default :json
+  ;; fallback receives the same struct as JSON — that's the Metabase path, not asserted here.)
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo RECORDS {_id: 1}"])
+
+    (let [scan-row (->> (jdbc/execute! conn ["EXPLAIN ANALYZE SELECT _id FROM foo"])
+                        (filter #(= :scan (:op %)))
+                        first)]
+      (t/is (some? scan-row))
+      (t/is (= "public.foo" (get-in scan-row [:attributes "scan_source"])))
+      (t/is (= "xtdb" (get-in scan-row [:attributes "scan_db"]))))))
+
 (t/deftest test-ro-server-4043
   (with-open [node (xtn/start-node {:server {:read-only-port 0, :port 0}})]
     (binding [*port* (.getServerPort node)]

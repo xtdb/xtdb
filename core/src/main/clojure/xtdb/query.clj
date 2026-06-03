@@ -241,7 +241,8 @@
 (def ^:private explain-analyze-types
   (LinkedHashMap. ^Map (identity {"depth" #xt/type :utf8
                                   "op" #xt/type :keyword
-                                  "attributes" #xt/type :transit
+                                  ;; struct (not transit) so it renders as JSON over pgwire — readable in Metabase
+                                  "attributes" #xt/type [:struct {"scan_db" :utf8, "scan_source" :utf8}]
                                   "total_time" #xt/type [:duration :micro]
                                   "time_to_first_page" #xt/type [:duration :micro]
                                   "page_count" #xt/type :i64
