@@ -329,9 +329,8 @@
                                  (.add !segments (.getSegment live-table-snap)))
 
                                (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % filter-opts))
-                                     scan-attrs {"table.name" (.getTableName table)
-                                                 "schema.name" (.getSchemaName table)
-                                                 "db.name" (.getDbName table)}]
+                                     scan-attrs {"scan_db" (.getDbName table)
+                                                 "scan_source" (str (.getSchemaName table) "." (.getTableName table))}]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds (boolean (:clamp-valid-time? scan-opts))
                                                     !segments (.iterator ^Iterable merge-tasks)

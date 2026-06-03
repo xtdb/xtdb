@@ -139,8 +139,8 @@
                                          (mapcat collect-scan (:children span))))))
               scan-span (first scan-spans)] 
           (t/is (= "query.cursor.scan.foo" (:name scan-span)))
-          (t/is (= "foo" (get-in scan-span [:attributes "table.name"])))
-          (t/is (= "xtdb" (get-in scan-span [:attributes "db.name"]))))))))
+          (t/is (= "public.foo" (get-in scan-span [:attributes "scan_source"])))
+          (t/is (= "xtdb" (get-in scan-span [:attributes "scan_db"]))))))))
 
 (t/deftest test-transaction-tracing
   (t/testing "multiple SQL operations in one transaction create separate spans"
@@ -201,9 +201,8 @@
                             {"cursor.page_count" "0",
                              "cursor.row_count" "0",
                              "cursor.type" "scan",
-                             "db.name" "xtdb",
-                             "schema.name" "public",
-                             "table.name" "users"},
+                             "scan_db" "xtdb",
+                             "scan_source" "public.users"},
                             :children []}]}]}]}
                      update-tx))))))))
 

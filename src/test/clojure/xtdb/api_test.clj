@@ -490,7 +490,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}
               {:depth "  ->", :op :scan,
-               :attributes {:table.name "people", :schema.name "public", :db.name "xtdb"}
+               :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
@@ -506,7 +506,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}
               {:depth "    ->", :op :scan,
-               :attributes {:table.name "people", :schema.name "public", :db.name "xtdb"}
+               :attributes {:scan-db "xtdb", :scan-source "public.people"}
                :page-count 1, :row-count 1
                :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
@@ -530,7 +530,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
       (let [scans (scan-rows
                    (xt/q tu/*node*
                          "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f._id = b._id"))
-            bar-scan (first (filter #(= "bar" (get-in % [:attributes :table.name])) scans))]
+            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
         (t/is (some? bar-scan) "bar scan should be present")
 
         (let [[id-pd] (:pushdowns bar-scan)]
@@ -542,7 +542,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
       (let [scans (scan-rows
                    (xt/q tu/*node*
                          "EXPLAIN ANALYZE SELECT f.v, b.w FROM foo f JOIN bar b ON f.v = b.w"))
-            bar-scan (first (filter #(= "bar" (get-in % [:attributes :table.name])) scans))]
+            bar-scan (first (filter #(= "public.bar" (get-in % [:attributes :scan-source])) scans))]
         (t/is (some? bar-scan))
 
         (let [[pd] (:pushdowns bar-scan)]
