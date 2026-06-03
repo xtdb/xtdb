@@ -51,6 +51,10 @@ You MUST use the commit skill to create commit messages.
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
 
+For test comments specifically: the test name and assertion ARE the documentation.
+Don't add a comment restating intent or citing an issue number when the test name already encodes them — e.g. a test named `test-foo-bug-1234` doesn't need a comment citing #1234.
+Trust the test body to show the rest.
+
 For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, not raw Java exceptions.
 
 ## Running tests
