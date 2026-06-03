@@ -32,7 +32,7 @@ class ScanCursor(
 
     private val schema: Map<String, Any>, private val args: RelationReader,
 
-    private val attributes: Map<String, Any>
+    private val metrics: ScanMetrics
 ) : ICursor {
 
     private val vtLower = temporalBounds.validTime.lower
@@ -40,7 +40,7 @@ class ScanCursor(
 
     override val cursorType get() = "scan"
     override val childCursors get() = emptyList<ICursor>()
-    override val cursorAttributes get() = attributes
+    override val cursorAttributes get() = metrics.toMap()
 
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 
@@ -68,6 +68,10 @@ class ScanCursor(
 
             // we're not in coroutine land here, so it's a good boundary for runBlocking
             val loadedPages = runBlocking { task.pages.map { async { it.loadDataPage(al) } }.awaitAll() }
+
+            // rows physically read off the pages we loaded — the scan's throughput denominator,
+            // before iid-selection and bitemporal resolution whittle them down to the emitted rows
+            metrics.addRowsRead(loadedPages.sumOf { it.rowCount.toLong() })
 
             val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
 

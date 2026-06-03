@@ -242,7 +242,10 @@
   (LinkedHashMap. ^Map (identity {"depth" #xt/type :utf8
                                   "op" #xt/type :keyword
                                   ;; struct (not transit) so it renders as JSON over pgwire — readable in Metabase
-                                  "attributes" #xt/type [:struct {"scan_db" :utf8, "scan_source" :utf8}]
+                                  "attributes" #xt/type [:struct {"scan_db" :utf8, "scan_source" :utf8
+                                                                  "scan_files_pruned" :i64, "scan_files_used" :i64
+                                                                  "scan_pages_pruned" :i64, "scan_pages_used" :i64
+                                                                  "scan_rows_read" :i64}]
                                   "total_time" #xt/type [:duration :micro]
                                   "time_to_first_page" #xt/type [:duration :micro]
                                   "page_count" #xt/type :i64

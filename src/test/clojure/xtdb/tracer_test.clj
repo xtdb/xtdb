@@ -142,6 +142,16 @@
           (t/is (= "public.foo" (get-in scan-span [:attributes "scan_source"])))
           (t/is (= "xtdb" (get-in scan-span [:attributes "scan_db"]))))))))
 
+(defn- without-scan-metrics
+  "The scan's runtime metrics ride on its span as tags but vary with storage layout,
+   so strip them before asserting on an exact span tree."
+  [span]
+  (cond-> span
+    (:attributes span) (update :attributes #(apply dissoc % ["scan_files_pruned" "scan_files_used"
+                                                             "scan_pages_pruned" "scan_pages_used"
+                                                             "scan_rows_read"]))
+    (seq (:children span)) (update :children #(mapv without-scan-metrics %))))
+
 (t/deftest test-transaction-tracing
   (t/testing "multiple SQL operations in one transaction create separate spans"
     (let [!spans (atom [])
@@ -204,7 +214,7 @@
                              "scan_db" "xtdb",
                              "scan_source" "public.users"},
                             :children []}]}]}]}
-                     update-tx))))))))
+                     (without-scan-metrics update-tx)))))))))
 
 (t/deftest test-transaction-multiple-ops-tracing
   (t/testing "multiple SQL operations in one transaction create separate spans"

@@ -481,10 +481,13 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/submit-tx tu/*node* [[:put-docs :people {:xt/id 1 :name "Dave" :age 30}]
                            [:put-docs :people {:xt/id 2 :name "John" :age 40}]])
 
-  (letfn [(elide-durations [row]
+  (letfn [(elide [row]
             (-> row
                 (update :total-time class)
-                (update :time-to-first-page class)))]
+                (update :time-to-first-page class)
+                ;; the scan's runtime metrics vary with storage layout — asserted separately below
+                (cond-> (contains? row :attributes)
+                  (update :attributes select-keys [:scan-db :scan-source]))))]
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
@@ -497,7 +500,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                         [(format "EXPLAIN ANALYZE XTQL ($$ %s $$, ?)"
                                  (pr-str '#(from :people [{:xt/id %} name age xt/valid-from xt/valid-to])))
                          1])
-                  (mapv elide-durations))))
+                  (mapv elide))))
 
     (t/is (= [{:depth "->", :op :project,
                :page-count 1, :row-count 1
@@ -511,7 +514,20 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                :total-time Duration, :time-to-first-page Duration}]
              (->> (xt/q tu/*node*
                         ["EXPLAIN ANALYZE SELECT name, age, _valid_from, _valid_to FROM people WHERE _id = ?" 1])
-                  (mapv elide-durations))))))
+                  (mapv elide))))
+
+    (t/testing "scan attributes carry pruned/used/read metrics"
+      (let [scan-row (->> (xt/q tu/*node* ["EXPLAIN ANALYZE SELECT name FROM people WHERE _id = ?" 1])
+                          (filter #(= :scan (:op %)))
+                          first)
+            {:keys [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]
+             :as attrs} (:attributes scan-row)
+            metrics [scan-files-pruned scan-files-used scan-pages-pruned scan-pages-used scan-rows-read]]
+        (t/is (every? some? metrics) (str "all five metrics present: " attrs))
+        (t/is (every? #(and (int? %) (<= 0 %)) metrics) "metrics are non-negative integers")
+        ;; rows read off the pages is the throughput denominator — never fewer than the rows emitted
+        (t/is (>= scan-rows-read (:row-count scan-row)))
+        (t/is (pos? scan-rows-read) "read at least the row we emitted")))))
 
 (t/deftest test-explain-analyze-pushdowns
   (let [id1 #uuid "00000000-0000-0000-0000-000000000001"

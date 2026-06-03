@@ -27,7 +27,7 @@
            (xtdb ICursor Bytes)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.metadata MetadataPredicate PageMetadata)
-           (xtdb.operator.scan MultiIidSelector ScanCursor SingleIidSelector)
+           (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.table.TableRef
@@ -317,25 +317,35 @@
 
                              (let [filter-opts {:query-bounds temporal-bounds
                                                 :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
-                                                :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}]
+                                                :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
+                                   ^ScanMetrics metrics (ScanMetrics. (.getDbName table)
+                                                                      (str (.getSchemaName table) "." (.getTableName table)))
+                                   current-tries (cat/current-tries (.trieTableState snapshot table))
+                                   filtered-tries (cat/filter-tries current-tries filter-opts)]
 
-                               (doseq [{:keys [^String trie-key]} (-> (.trieTableState snapshot table)
-                                                                      (cat/current-tries)
-                                                                      (cat/filter-tries filter-opts))]
+                               (.addFiles metrics
+                                          (long (- (count current-tries) (count filtered-tries)))
+                                          (long (count filtered-tries)))
+
+                               (doseq [{:keys [^String trie-key]} filtered-tries]
                                  (.add !segments
                                        (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
                                (doseq [^TableSnapshot live-table-snap live-table-snaps]
                                  (.add !segments (.getSegment live-table-snap)))
 
-                               (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % filter-opts))
-                                     scan-attrs {"scan_db" (.getDbName table)
-                                                 "scan_source" (str (.getSchemaName table) "." (.getTableName table))}]
+                               (let [count-pages (fn [pages]
+                                                   (let [survivors (trie/filter-pages pages filter-opts)]
+                                                     (.addPages metrics
+                                                                (long (- (count pages) (count survivors)))
+                                                                (long (count survivors)))
+                                                     survivors))
+                                     merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds (boolean (:clamp-valid-time? scan-opts))
                                                     !segments (.iterator ^Iterable merge-tasks)
                                                     schema args
-                                                    scan-attrs)
+                                                    metrics)
                                  (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
                                                                                                     query-span
                                                                                                     (format "query.cursor.scan.%s" (.getTableName table))
