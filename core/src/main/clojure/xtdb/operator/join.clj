@@ -213,7 +213,7 @@
                                        join-type cmp-factory)
 
                     (MemoryHashJoin. build-side probe-cursor
-                                     (some-> probe-vec-types keys vec) (map str probe-key-cols)
+                                     (vec (keys probe-vec-types)) (map str probe-key-cols)
                                      join-type cmp-factory)))))))
 
     (.tryAdvance hash-join-cursor c))

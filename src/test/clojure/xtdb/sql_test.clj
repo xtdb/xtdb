@@ -2151,7 +2151,6 @@
   (t/is (= [] (xt/q tu/*node* "select users.first_name from users")))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM users"))))
 
-#_ ; FIXME #5669 - left-outer-join to a never-created table drops left rows after the block boundary
 (t/deftest left-join-to-non-existent-table-survives-block-boundary-5669
   (xt/execute-tx tu/*node* [[:sql "INSERT INTO a (_id) VALUES ('1')"]])
 
