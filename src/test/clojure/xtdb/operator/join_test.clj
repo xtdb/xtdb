@@ -531,6 +531,12 @@
                               {:preserve-pages? true, :with-types? true})
                  (update :res (partial mapv frequencies)))))))
 
+(t/deftest test-full-outer-join-empty-rhs-schema-5669
+  (t/is (= [{:a 1}]
+           (tu/query-ra [:full-outer-join '[{a b}]
+                         [::tu/pages [[{:a 1}]]]
+                         [::tu/pages '{} []]]))))
+
 (t/deftest test-full-outer-equi-join-multi-col
   (->> "multi column full outer"
        (t/is (= [{{:a 12 :b 42 :c 12 :d 42 :e 0} 2

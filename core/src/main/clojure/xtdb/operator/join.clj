@@ -207,7 +207,7 @@
                                      join-type cmp-factory)
 
                   (MemoryHashJoin. build-side probe-cursor
-                                   (vals probe-fields) (map str probe-key-cols)
+                                   (vec (vals probe-fields)) (map str probe-key-cols)
                                    join-type cmp-factory))))))
 
     (.tryAdvance hash-join-cursor c))
