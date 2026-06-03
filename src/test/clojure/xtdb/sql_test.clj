@@ -2151,6 +2151,27 @@
   (t/is (= [] (xt/q tu/*node* "select users.first_name from users")))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM users"))))
 
+#_ ; FIXME #5669 - left-outer-join to a never-created table drops left rows after the block boundary
+(t/deftest left-join-to-non-existent-table-survives-block-boundary-5669
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a (_id) VALUES ('1')"]])
+
+  (letfn [(plain [] (set (xt/q tu/*node* "SELECT a._id FROM a")))
+          (rows [] (set (xt/q tu/*node* "SELECT a._id FROM a LEFT JOIN b ON a._id = b._id")))
+          (cnt [] (-> (xt/q tu/*node* "SELECT count(*) c FROM a LEFT JOIN b ON a._id = b._id")
+                      first :c))]
+
+    (t/testing "left row preserved while a's data is live"
+      (t/is (= #{{:xt/id "1"}} (plain)))
+      (t/is (= #{{:xt/id "1"}} (rows)))
+      (t/is (= 1 (cnt))))
+
+    (tu/flush-block! tu/*node*)
+
+    (t/testing "left row still preserved once a's block is finished"
+      (t/is (= #{{:xt/id "1"}} (plain)) "the left input itself survives the block boundary")
+      (t/is (= #{{:xt/id "1"}} (rows)))
+      (t/is (= 1 (cnt))))))
+
 (t/deftest nested-parenthesized-joined-tables-3185
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :x 1}]
                             [:put-docs :bar {:xt/id 1 :y 1}]
