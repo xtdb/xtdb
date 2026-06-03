@@ -3,29 +3,18 @@ package xtdb.postgres
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.*
 import io.kotest.property.checkAll
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.api.Xtdb
-import xtdb.api.log.Log.Companion.localLog
-import xtdb.api.storage.Storage
-import xtdb.postgres.proto.PostgresSourceToken
 import java.math.BigDecimal
 import java.nio.file.Files
-import java.nio.file.Path
-import java.sql.Connection
-import java.sql.DriverManager
-import java.sql.PreparedStatement
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
-import java.util.UUID
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -37,24 +26,9 @@ import kotlin.time.Duration.Companion.seconds
  * column types/values.
  */
 @Tag("property")
-class PostgresSourceTypesPropertyTest {
+class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
 
     companion object {
-        private val postgres = PostgreSQLContainer("postgres:17-alpine")
-            .withDatabaseName("testdb")
-            .withUsername("testuser")
-            .withPassword("testpass")
-            // slots are dropped per iteration, but keep headroom for the property run
-            .withCommand("postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=50")
-
-        @JvmStatic
-        @BeforeAll
-        fun beforeAll() = postgres.start()
-
-        @JvmStatic
-        @AfterAll
-        fun afterAll() = postgres.stop()
-
         private const val ITERATIONS = 50
 
         // --- generator bounds ---
@@ -193,25 +167,7 @@ class PostgresSourceTypesPropertyTest {
     private fun normalizeRow(cols: List<Col>, vals: Map<String, Any?>) =
         cols.associate { it.name to normalize(vals[it.name]) }
 
-    // --- pg / node plumbing ---------------------------------------------------------------
-
-    private fun pgConn(): Connection =
-        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password)
-
-    private fun pgExecute(vararg statements: String) =
-        pgConn().use { c -> c.createStatement().use { s -> statements.forEach { s.execute(it) } } }
-
-    private fun unique(prefix: String) = "${prefix}_${UUID.randomUUID().toString().replace("-", "_")}"
-
-    /** Runs a single prepared write in its own connection wrapped in an explicit BEGIN/COMMIT, so
-     * it lands as its own transaction — and, since the source stamps valid-time from the PG commit
-     * time, its own valid-time version. */
-    private fun commitTx(sql: String, bindParams: (PreparedStatement) -> Unit) =
-        pgConn().use { c ->
-            c.createStatement().use { it.execute("BEGIN") }
-            c.prepareStatement(sql).use { ps -> bindParams(ps); ps.executeUpdate() }
-            c.createStatement().use { it.execute("COMMIT") }
-        }
+    // --- writes -----------------------------------------------------------------------------
 
     private fun insertRow(cols: List<Col>, table: String, row: Row) {
         val names = listOf("_id") + cols.map { it.name }
@@ -227,92 +183,6 @@ class PostgresSourceTypesPropertyTest {
         commitTx(sql) { ps ->
             cols.forEachIndexed { i, col -> ps.setObject(i + 1, vals[col.name]) }
             ps.setObject(cols.size + 1, id)
-        }
-    }
-
-    private fun dropSlot(slot: String) =
-        pgExecute("SELECT pg_drop_replication_slot('$slot') FROM pg_replication_slots WHERE slot_name = '$slot'")
-
-    private fun openNode(logDir: Path, storageDir: Path): Xtdb = Xtdb.openNode {
-        server { port = 0 }
-        log(localLog(logDir))
-        storage(Storage.local(storageDir))
-        remote("pg", PostgresRemote.Factory(
-            hostname = postgres.host, port = postgres.firstMappedPort,
-            database = "testdb", username = "testuser", password = "testpass",
-        ))
-    }
-
-    private fun attachCdc(node: Xtdb, cdcLog: Path, cdcStorage: Path, slot: String, pub: String) {
-        node.createConnectionBuilder().build().use { c ->
-            c.createStatement().use { s ->
-                s.execute(
-                    """
-                    ATTACH DATABASE cdc WITH $$
-                        storage: !Local
-                          path: $cdcStorage
-                        log: !Local
-                          path: $cdcLog
-                        externalSource: !Postgres
-                          remote: pg
-                          slotName: $slot
-                          publicationName: $pub
-                    $$""".trimIndent()
-                )
-            }
-        }
-    }
-
-    private fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
-        node.createConnectionBuilder().database("cdc").build().use { c ->
-            c.createStatement().use { s ->
-                s.executeQuery(sql).use { rs ->
-                    val cols = (1..rs.metaData.columnCount).map { rs.metaData.getColumnName(it) }
-                    buildList { while (rs.next()) add(cols.associateWith { rs.getObject(it) }) }
-                }
-            }
-        }
-
-    private suspend fun awaitCondition(description: String, timeout: Duration = 10.seconds, check: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        while (System.currentTimeMillis() < deadline) {
-            if (check()) return
-            runInterruptible { Thread.sleep(200) }
-        }
-        fail("Timed out waiting for: $description")
-    }
-
-    /** Polls `f` until `done` holds or the timeout elapses, returning the last value either way —
-     * so a caller can assert on it and surface what actually showed up rather than a bare timeout. */
-    private suspend fun <T> await(timeout: Duration = 30.seconds, done: (T) -> Boolean, f: () -> T): T {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        var v = f()
-        while (!done(v) && System.currentTimeMillis() < deadline) {
-            runInterruptible { Thread.sleep(200) }
-            v = f()
-        }
-        return v
-    }
-
-    private suspend fun flushBlock(node: Xtdb) {
-        val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
-        cdc.sendFlushBlockMessage()
-        awaitCondition("block persisted for cdc", timeout = 30.seconds) { cdc.blockCatalog.currentBlockIndex != null }
-    }
-
-    /** Waits until the source has finished its initial snapshot and switched to streaming, so a
-     *  write won't race the snapshot→stream handoff (a row committed ahead of the slot's consistent
-     *  point would only be seen as the snapshot's current-state read, not streamed as its own
-     *  valid-time version).
-     *
-     *  The source stamps each snapshot batch with a `snapshotCompleted = false` token and writes a
-     *  final `snapshotCompleted = true` marker before streaming begins; the cdc db's watchers track
-     *  the latest applied token, so `snapshotCompleted` going true means the whole snapshot is in
-     *  (indexTx awaits application) and streaming is live. */
-    private suspend fun awaitStreaming(node: Xtdb) {
-        val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
-        awaitCondition("cdc snapshot complete, streaming live", timeout = 30.seconds) {
-            cdc.watchers.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
         }
     }
 
