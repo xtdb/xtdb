@@ -5,6 +5,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
+import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.trie.TrieCatalog
 
@@ -13,6 +14,7 @@ class DatabasePartition(
     val state: DatabaseState,
     val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
+    val logProcessor: LogProcessor? = null,
 ) : AutoCloseable {
 
     val blockCatalog: BlockCatalog get() = state.blockCatalog

@@ -63,7 +63,6 @@ class Database(
     val partitions: Map<Int, DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
     private val job: Job? = null,
-    private val processor: LogProcessor? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
 ) : IQuerySource.QueryDatabase, AutoCloseable {
 
@@ -181,7 +180,7 @@ class Database(
      * Intended for tests and manual admin pokes; bypasses the `enabled` flag.
      */
     fun gcAll() {
-        processor?.gcAll()
+        partitions.values.forEach { it.logProcessor?.gcAll() }
     }
 
     companion object {
@@ -282,12 +281,11 @@ class Database(
                 if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
                 else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers)
 
-            var processor: LogProcessor? = null
             val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
                 watchers.notifyError(e)
             })
 
-            if (indexerConfig.enabled) {
+            val logProcessor = if (indexerConfig.enabled) {
                 val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog, base.meterRegistry)
                 val hasExternalSource = dbConfig.externalSource != null
 
@@ -334,13 +332,8 @@ class Database(
                     )
                 }
 
-                val lp = LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
-                processor = lp
-
-                if (!readOnly) {
-                    scope.launch { storage.sourceLog.openGroupSubscription(lp) }
-                }
-            }
+                LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
+            } else null
 
             val meterRegistry = base.meterRegistry
             val gauges = meterRegistry?.let { reg ->
@@ -370,9 +363,10 @@ class Database(
                 state = state,
                 watchers = watchers,
                 compactorOrNull = compactorForDb,
+                logProcessor = logProcessor,
             )
 
-            Database(
+            val db = Database(
                 allocator = allocator,
                 config = dbConfig,
                 storage = storage,
@@ -380,9 +374,23 @@ class Database(
                 partitions = mapOf(0 to partition),
                 meterRegistry = meterRegistry,
                 job = job,
-                processor = processor,
                 registeredGauges = gauges,
             )
+
+            if (indexerConfig.enabled && !readOnly) {
+                val listener = object : Log.SubscriptionListener<SourceMessage> {
+                    override suspend fun onPartitionsAssigned(partitions: Collection<Int>) =
+                        partitions.singleOrNull()
+                            ?.let { db.partitions[it]?.logProcessor?.onPartitionsAssigned(listOf(it)) }
+
+                    override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
+                        for (idx in partitions) db.partitions[idx]?.logProcessor?.onPartitionsRevoked(listOf(idx))
+                    }
+                }
+                scope.launch { storage.sourceLog.openGroupSubscription(listener) }
+            }
+
+            db
         }
     }
 

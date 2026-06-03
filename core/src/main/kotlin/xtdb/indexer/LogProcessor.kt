@@ -126,8 +126,6 @@ class LogProcessor(
     }
 
     override suspend fun onPartitionsAssigned(partitions: Collection<Int>): Log.TailSpec<SourceMessage>? {
-        if (partitions != listOf(0)) return null
-
         return when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("[$dbName] partitions assigned: $partitions — already leader, no transition needed")
@@ -188,8 +186,6 @@ class LogProcessor(
     }
 
     override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
-        if (partitions != listOf(0)) return
-
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
