@@ -30,7 +30,9 @@ class ScanCursor(
     private val segments: List<Segment<*>>,
     private val mergeTasks: Iterator<MergeTask>,
 
-    private val schema: Map<String, Any>, private val args: RelationReader
+    private val schema: Map<String, Any>, private val args: RelationReader,
+
+    private val attributes: Map<String, Any>
 ) : ICursor {
 
     private val vtLower = temporalBounds.validTime.lower
@@ -38,6 +40,7 @@ class ScanCursor(
 
     override val cursorType get() = "scan"
     override val childCursors get() = emptyList<ICursor>()
+    override val cursorAttributes get() = attributes
 
     private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
 

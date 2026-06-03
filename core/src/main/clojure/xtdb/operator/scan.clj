@@ -328,16 +328,17 @@
                                (doseq [^TableSnapshot live-table-snap live-table-snaps]
                                  (.add !segments (.getSegment live-table-snap)))
 
-                               (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % filter-opts))]
+                               (let [merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) #(trie/filter-pages % filter-opts))
+                                     scan-attrs {"table.name" (.getTableName table)
+                                                 "schema.name" (.getSchemaName table)
+                                                 "db.name" (.getDbName table)}]
                                (cond-> (ScanCursor. allocator (vec col-names) col-preds
                                                     temporal-bounds (boolean (:clamp-valid-time? scan-opts))
                                                     !segments (.iterator ^Iterable merge-tasks)
-                                                    schema args)
+                                                    schema args
+                                                    scan-attrs)
                                  (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
                                                                                                     query-span
-                                                                                                    {"table.name" (.getTableName table)
-                                                                                                     "schema.name" (.getSchemaName table)
-                                                                                                     "db.name" (.getDbName table)}
                                                                                                     (format "query.cursor.scan.%s" (.getTableName table))
                                                                                                     (not-empty
                                                                                                      (merge-with merge

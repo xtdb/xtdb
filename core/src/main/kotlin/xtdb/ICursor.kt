@@ -26,12 +26,15 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         val timeToFirstPage: Duration?
         val totalTime: Duration
         val pushdowns: Map<String, Any>?
-        val cursorAttributes: Map<String, String>?
+        val cursorAttributes: Map<String, Any>?
     }
 
     val cursorType: String
     val childCursors: List<ICursor>
     val explainAnalyze: ExplainAnalyze? get() = null
+
+    /** Operator-specific explain-analyze values, evaluated when read (after consumption), so they can include runtime counters. */
+    val cursorAttributes: Map<String, Any>? get() = null
 
     override fun tryAdvance(c: Consumer<in RelationReader>): Boolean
     override fun trySplit(): Spliterator<RelationReader>? = null
@@ -51,7 +54,6 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             private val inner: ICursor,
             private val tracer: Tracer?,
             private val parentSpan: Span?,
-            private val attributes: Map<String, String>? = null,
             private val spanName: String? = null,
             override val pushdowns: Map<String, Any>? = null,
             private val clock: InstantSource = InstantSource.system()
@@ -73,7 +75,6 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                         span = tracer.nextSpan(parentSpan)!!
                             .name(spanName ?: "query.cursor.${inner.cursorType}")
                             .tag("cursor.type", inner.cursorType)
-                            .apply { attributes?.forEach { (k, v) -> tag(k, v) } }
                             .start()
                     }
                 }
@@ -93,6 +94,8 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
             }
 
             override fun close() {
+                // read before closing the inner cursor — attributes may be derived from its (now-final) state
+                val attrs = inner.cursorAttributes
                 inner.close()
                 span?.let { s ->
                     s.tag("cursor.total_time_ms", totalTime.toMillis().toString())
@@ -101,11 +104,12 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     }
                     s.tag("cursor.page_count", pageCount.toString())
                     s.tag("cursor.row_count", rowCount.toString())
+                    attrs?.forEach { (k, v) -> s.tag(k, v.toString()) }
                     s.end(endTime.asMicros, java.util.concurrent.TimeUnit.MICROSECONDS)
                 }
             }
 
-            override val cursorAttributes get() = attributes
+            override val cursorAttributes get() = inner.cursorAttributes
             override val explainAnalyze get() = this
 
             @Suppress("RedundantOverride")
@@ -119,15 +123,11 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
         fun ICursor.wrapTracing(tracer: Tracer?, span: Span?): ICursor = TracingCursor(this, tracer, span)
 
         @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?): ICursor =
-            TracingCursor(this, tracer, span, attributes)
+        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, spanName: String?): ICursor =
+            TracingCursor(this, tracer, span, spanName)
 
         @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?, spanName: String?): ICursor =
-            TracingCursor(this, tracer, span, attributes, spanName)
-
-        @JvmStatic
-        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, attributes: Map<String, String>?, spanName: String?, pushdowns: Map<String, Any>?): ICursor =
-            TracingCursor(this, tracer, span, attributes, spanName, pushdowns)
+        fun ICursor.wrapTracing(tracer: Tracer?, span: Span?, spanName: String?, pushdowns: Map<String, Any>?): ICursor =
+            TracingCursor(this, tracer, span, spanName, pushdowns)
     }
 }
