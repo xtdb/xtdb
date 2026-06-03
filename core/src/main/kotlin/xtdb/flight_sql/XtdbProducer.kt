@@ -43,6 +43,7 @@ import xtdb.util.requiringResolve
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
 import java.util.*
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 
 private fun resultTypesToSchema(types: SequencedMap<String, VectorType>) =
@@ -139,45 +140,97 @@ internal fun FlightServer.Builder.withDatabaseMiddleware(): FlightServer.Builder
         DatabaseMiddleware(incomingHeaders.get("x-xtdb-database"))
     }
 
-private fun dbNameFromContext(ctx: CallContext?): DatabaseName =
-    ctx?.getMiddleware(DatabaseMiddleware.KEY)?.dbName ?: "xtdb"
+val SESSION_KEY: FlightServerMiddleware.Key<ServerSessionMiddleware> =
+    FlightServerMiddleware.Key.of("flight-sql-session")
+
+internal fun FlightServer.Builder.withSessionMiddleware(): FlightServer.Builder =
+    this.middleware(SESSION_KEY, ServerSessionMiddleware.Factory(Callable { UUID.randomUUID().toString() }))
+
+private fun SessionOptionValue.asStringOrNull(): String? =
+    acceptVisitor(object : NoOpSessionOptionValueVisitor<String?>() {
+        override fun visit(value: String) = value
+    })
 
 class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoCloseable {
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
-    private val txConnections = ConcurrentHashMap<TxHandle, XtdbConnection>()
-    private val defaultConnections = ConcurrentHashMap<DatabaseName, XtdbConnection>()
+    // key is (session id, db)
+    private val sessionConns = ConcurrentHashMap<Pair<String, DatabaseName>, XtdbConnection>()
+
+    // fallback for clients without a session cookie
+    private val defaultConns = ConcurrentHashMap<DatabaseName, XtdbConnection>()
+
+    // a tx owns a dedicated connection: autoCommit/pendingOps are connection-scoped, so flipping
+    // them on a pooled connection would buffer other clients' autocommit writes into this tx.
+    private data class TxConn(val sessionId: String?, val conn: XtdbConnection)
+    private val txConns = ConcurrentHashMap<TxHandle, TxConn>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
     private val tickets = ConcurrentHashMap<TicketHandle, ResultCursor>()
 
-    private fun defaultConnectionFor(dbName: DatabaseName): XtdbConnection =
-        defaultConnections.computeIfAbsent(dbName) {
-            (node.connect() as XtdbConnection).also { it.setCurrentCatalog(dbName) }
-        }
+    private fun newConnection(dbName: DatabaseName): XtdbConnection =
+        (node.connect() as XtdbConnection).also { it.setCurrentCatalog(dbName) }
+
+    private fun sessionMiddleware(ctx: CallContext?): ServerSessionMiddleware? =
+        ctx?.getMiddleware(SESSION_KEY)
+
+    /**
+     * The database for this call: the `x-xtdb-database` header takes precedence (the
+     * explicit per-call selector used by the Java/raw clients), falling back to the
+     * session's `catalog` option (how the Go-driver-based ADBC clients select a db),
+     * and finally the default `xtdb`.
+     */
+    private fun resolveDb(ctx: CallContext?): DatabaseName {
+        ctx?.getMiddleware(DatabaseMiddleware.KEY)?.dbName?.let { return it }
+
+        sessionMiddleware(ctx)
+            ?.takeIf { it.hasSession() }
+            ?.session?.getSessionOption("catalog")?.asStringOrNull()
+            ?.let { return it }
+
+        return "xtdb"
+    }
+
+    /**
+     * The connection for an autocommit call: per-session when the caller carries a
+     * session cookie, otherwise the shared anonymous connection for the database.
+     */
+    private fun connectionFor(ctx: CallContext?, dbName: DatabaseName): XtdbConnection {
+        val mw = sessionMiddleware(ctx)
+        return if (mw != null && mw.hasSession())
+            sessionConns.computeIfAbsent(mw.session.id to dbName) { newConnection(dbName) }
+        else
+            defaultConns.computeIfAbsent(dbName) { newConnection(dbName) }
+    }
+
+    // the session presenting the call, or null for a cookieless caller.
+    private fun currentSessionId(ctx: CallContext?): String? =
+        sessionMiddleware(ctx)?.takeIf { it.hasSession() }?.session?.id
+
+    // a transaction is owned by the session that opened it: a handle only resolves under
+    // its own session (cookieless == cookieless). A handle presented under any other session
+    // is NOT_FOUND - from that session's view the transaction doesn't exist.
+    private fun txConnFor(ctx: CallContext?, txHandle: TxHandle): TxConn =
+        txConns[txHandle]
+            ?.takeIf { it.sessionId == currentSessionId(ctx) }
+            ?: throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+
+    private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): XtdbConnection =
+        if (txHandle != null) txConnFor(ctx, txHandle).conn
+        else connectionFor(ctx, resolveDb(ctx))
 
     override fun close() {
         stmts.closeAll()
-        txConnections.values.forEach { it.close() }
-        txConnections.clear()
-        defaultConnections.values.forEach { it.close() }
-        defaultConnections.clear()
+        txConns.values.forEach { it.conn.close() }
+        txConns.clear()
+        sessionConns.values.forEach { it.close() }
+        sessionConns.clear()
+        defaultConns.values.forEach { it.close() }
+        defaultConns.clear()
         allocator.close()
     }
 
-    private fun connectionFor(txHandle: TxHandle?, dbName: DatabaseName): XtdbConnection =
-        if (txHandle != null) {
-            requireNotNull(txConnections[txHandle]) { "unknown tx" }
-        } else {
-            defaultConnectionFor(dbName)
-        }
-
-    private fun execDml(op: TxOp, txHandle: TxHandle?, dbName: DatabaseName) {
-        try {
-            connectionFor(txHandle, dbName).executeDml(op)
-        } catch (t: Throwable) {
-            LOGGER.warn(t, "bang")
-            throw t
-        }
+    private fun execDml(op: TxOp, ctx: CallContext?, txHandle: TxHandle?) {
+        txOrSessionConnection(ctx, txHandle).executeDml(op)
     }
 
     private fun handleGetStream(cursor: ResultCursor, listener: ServerStreamListener) {
@@ -212,8 +265,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         try {
             execDml(
                 TxOp.Sql(cmd.query),
-                if (cmd.hasTransactionId()) cmd.transactionId else null,
-                dbNameFromContext(ctx)
+                ctx,
+                if (cmd.hasTransactionId()) cmd.transactionId else null
             )
 
             ackStream.sendDoPutUpdateRes(allocator)
@@ -245,7 +298,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     .toRuntimeException()
             }
 
-            val dbName = dbNameFromContext(ctx)
+            val dbName = resolveDb(ctx)
 
             if (cmd.hasCatalog() && cmd.catalog.isNotEmpty() && cmd.catalog != dbName)
                 throw CallStatus.INVALID_ARGUMENT
@@ -260,7 +313,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             val dbSchemaName = if (cmd.hasSchema()) cmd.schema else "public"
             val txHandle = if (cmd.hasTransactionId()) cmd.transactionId else null
 
-            connectionFor(txHandle, dbName)
+            txOrSessionConnection(ctx, txHandle)
                 .bulkIngest("$dbSchemaName.$tableName", BulkIngestMode.CREATE_APPEND)
                 .use { stmt ->
                     while (flightStream.next()) {
@@ -318,7 +371,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo {
         try {
             val sql = cmd.queryBytes.toStringUtf8()
-            val dbName = dbNameFromContext(ctx)
+            val dbName = resolveDb(ctx)
 
             // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
             if (isDml(sql, dbName)) {
@@ -327,7 +380,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     .toRuntimeException()
             }
             val ticketHandle = newHandle()
-            val pq = defaultConnectionFor(dbName).prepareSql(sql)
+            val pq = connectionFor(ctx, dbName).prepareSql(sql)
             val cursor = pq.openQuery(null, QueryOpts())
             val ticket = Ticket(
                 ProtoAny.pack(
@@ -401,9 +454,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
-        val dbName = dbNameFromContext(ctx)
+        val dbName = resolveDb(ctx)
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
-        connectionFor(txHandle, dbName).createStatement().closeOnCatch { xtdbStmt ->
+        txOrSessionConnection(ctx, txHandle).createStatement().closeOnCatch { xtdbStmt ->
             xtdbStmt.setSqlQuery(sql)
             xtdbStmt.prepare()
 
@@ -436,13 +489,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         cmd: CommandStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
     ): SchemaResult {
         val sql = cmd.query
-        val dbName = dbNameFromContext(ctx)
+        val dbName = resolveDb(ctx)
         if (isDml(sql, dbName)) {
             throw CallStatus.INVALID_ARGUMENT
                 .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
                 .toRuntimeException()
         }
-        defaultConnectionFor(dbName).createStatement().use { stmt ->
+        connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
             stmt.prepare()
             return SchemaResult(stmt.executeSchema())
@@ -459,19 +512,113 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     }
 
     // -- Session options --
+    // `catalog` selects the db for Go-driver ADBC clients, which can't send the
+    // `x-xtdb-database` header. `schema` is not settable (resolved by qualification).
 
+    // must not mint a session: a cookieless client can't reclaim it, so it would leak per call.
     override fun getSessionOptions(
         request: GetSessionOptionsRequest,
         ctx: CallContext?,
         listener: StreamListener<GetSessionOptionsResult>
     ) {
-        val conn = defaultConnectionFor(dbNameFromContext(ctx))
-        val opts = mapOf(
-            "catalog" to SessionOptionValueFactory.makeSessionOptionValue(conn.currentCatalog),
-            "schema" to SessionOptionValueFactory.makeSessionOptionValue(conn.currentDbSchema),
-        )
-        listener.onNext(GetSessionOptionsResult(opts))
-        listener.onCompleted()
+        try {
+            val opts = mapOf(
+                "catalog" to SessionOptionValueFactory.makeSessionOptionValue(resolveDb(ctx)),
+                "schema" to SessionOptionValueFactory.makeSessionOptionValue("public"),
+            )
+            listener.onNext(GetSessionOptionsResult(opts))
+            listener.onCompleted()
+        } catch (t: Throwable) {
+            listener.onError(t)
+        }
+    }
+
+    override fun setSessionOptions(
+        request: SetSessionOptionsRequest,
+        ctx: CallContext?,
+        listener: StreamListener<SetSessionOptionsResult>
+    ) {
+        try {
+            // .session mints the session (emits Set-Cookie); a cookieless client can't persist it
+            val session = sessionMiddleware(ctx)?.session
+                ?: throw CallStatus.INTERNAL
+                    .withDescription("FlightSQL session middleware not configured")
+                    .toRuntimeException()
+
+            val knownDbs = (node as Xtdb.XtdbInternal).dbCatalog.databaseNames
+            val errors = mutableMapOf<String, SetSessionOptionsResult.Error>()
+
+            for ((name, value) in request.sessionOptions) {
+                when (name) {
+                    "catalog" -> {
+                        val catalog = value.asStringOrNull()
+                        when {
+                            catalog == null ->
+                                errors[name] = SetSessionOptionsResult.Error(SetSessionOptionsResult.ErrorValue.INVALID_VALUE)
+
+                            catalog.isEmpty() -> session.eraseSessionOption(name)
+
+                            catalog !in knownDbs ->
+                                errors[name] = SetSessionOptionsResult.Error(SetSessionOptionsResult.ErrorValue.INVALID_VALUE)
+
+                            else -> session.setSessionOption(name, SessionOptionValueFactory.makeSessionOptionValue(catalog))
+                        }
+                    }
+
+                    // not settable; tolerate a no-op confirming the fixed `public`
+                    "schema" -> {
+                        val schema = value.asStringOrNull()
+                        if (schema != "public")
+                            errors[name] = SetSessionOptionsResult.Error(SetSessionOptionsResult.ErrorValue.INVALID_VALUE)
+                    }
+
+                    else ->
+                        errors[name] = SetSessionOptionsResult.Error(SetSessionOptionsResult.ErrorValue.INVALID_NAME)
+                }
+            }
+
+            listener.onNext(SetSessionOptionsResult(errors))
+            listener.onCompleted()
+        } catch (t: Throwable) {
+            listener.onError(t)
+        }
+    }
+
+    override fun closeSession(
+        request: CloseSessionRequest,
+        ctx: CallContext?,
+        listener: StreamListener<CloseSessionResult>
+    ) {
+        try {
+            val mw = sessionMiddleware(ctx)
+            if (mw == null || !mw.hasSession()) {
+                listener.onError(
+                    CallStatus.NOT_FOUND
+                        .withDescription("No session to close")
+                        .toRuntimeException()
+                )
+                return
+            }
+
+            val sessionId = mw.session.id
+            // remove before close so an in-flight call can't resolve a connection being closed.
+            txConns.entries.removeIf { (_, txConn) ->
+                if (txConn.sessionId == sessionId) {
+                    txConn.conn.close()
+                    true
+                } else false
+            }
+            sessionConns.keys.filter { it.first == sessionId }.forEach { key ->
+                sessionConns.remove(key)?.close()
+            }
+
+            mw.closeSession()
+
+            listener.onNext(CloseSessionResult(CloseSessionResult.Status.CLOSED))
+            listener.onCompleted()
+        } catch (t: Throwable) {
+            listener.onError(t)
+        }
     }
 
     // -- Metadata endpoints --
@@ -504,7 +651,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_TABLE_TYPES_SCHEMA, descriptor)
 
     override fun getStreamTableTypes(ctx: CallContext?, listener: ServerStreamListener) {
-        streamArrowReader(defaultConnectionFor(dbNameFromContext(ctx)).getTableTypes(), listener)
+        streamArrowReader(connectionFor(ctx, resolveDb(ctx)).getTableTypes(), listener)
     }
 
     override fun getFlightInfoSqlInfo(
@@ -563,7 +710,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamSchemas(
         command: CommandGetDbSchemas, ctx: CallContext?, listener: ServerStreamListener
     ) {
-        val dbName = dbNameFromContext(ctx)
+        val dbName = resolveDb(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
 
@@ -580,7 +727,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             append(" ORDER BY table_schema")
         }
 
-        defaultConnectionFor(dbName).openSqlQuery(sql).use { cursor ->
+        connectionFor(ctx, dbName).openSqlQuery(sql).use { cursor ->
             singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
                 val catalogVec = root.getVector("catalog_name") as VarCharVector
                 val schemaVec = root.getVector("db_schema_name") as VarCharVector
@@ -608,7 +755,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamTables(
         command: CommandGetTables, ctx: CallContext?, listener: ServerStreamListener
     ) {
-        val dbName = dbNameFromContext(ctx)
+        val dbName = resolveDb(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
         val tableFilter = if (command.hasTableNameFilterPattern()) command.tableNameFilterPattern else null
@@ -636,7 +783,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
         val sql = "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
 
-        defaultConnectionFor(dbName).openSqlQuery(sql).use { cursor ->
+        val tablesConn = connectionFor(ctx, dbName)
+        tablesConn.openSqlQuery(sql).use { cursor ->
             val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
             else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
 
@@ -648,7 +796,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 val tableSchemaVec =
                     if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
 
-                val conn = defaultConnectionFor(dbName)
+                val conn = tablesConn
                 val snap = if (command.includeSchema) conn.openSnapshot() else null
 
                 try {
@@ -697,10 +845,9 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener: StreamListener<ActionBeginTransactionResult>
     ) {
         val txHandle = newHandle()
-        val conn = node.connect() as XtdbConnection
-        conn.setCurrentCatalog(dbNameFromContext(ctx))
+        val conn = (node.connect() as XtdbConnection).also { it.setCurrentCatalog(resolveDb(ctx)) }
         conn.setAutoCommit(false)
-        txConnections[txHandle] = conn
+        txConns[txHandle] = TxConn(currentSessionId(ctx), conn)
 
         listener.onNext(
             ActionBeginTransactionResult.newBuilder()
@@ -717,20 +864,22 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener: StreamListener<Result>
     ) {
         val txHandle = req.transactionId
-        val conn = requireNotNull(txConnections.remove(txHandle)) { "unknown tx" }
+        // resolve under the calling session only, then claim it atomically (remove(k,v) lets
+        // exactly one concurrent ender win) - a wrong-session caller never reaches the remove.
+        val tx = txConnFor(ctx, txHandle)
+        if (!txConns.remove(txHandle, tx))
+            return listener.onError(
+                CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
+            )
+        val conn = tx.conn
 
-        if (req.action == EndTransaction.END_TRANSACTION_COMMIT) {
-            try {
-                conn.commit()
-                listener.onCompleted()
-            } catch (t: Throwable) {
-                listener.onError(t)
-            } finally {
-                conn.close()
-            }
-        } else {
-            conn.close()
+        try {
+            if (req.action == EndTransaction.END_TRANSACTION_COMMIT) conn.commit() else conn.rollback()
             listener.onCompleted()
+        } catch (t: Throwable) {
+            listener.onError(t)
+        } finally {
+            conn.close()
         }
     }
 }
