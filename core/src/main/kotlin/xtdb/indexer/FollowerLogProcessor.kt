@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
@@ -244,6 +245,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
+                throw e
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 LOG.error(

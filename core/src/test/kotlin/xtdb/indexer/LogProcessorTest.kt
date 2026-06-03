@@ -75,14 +75,10 @@ class LogProcessorTest {
                     partition = 0, afterReplicaMsgId = afterReplicaMsgId,
                     afterToken = null,
                 )
-                val leaderScope = CoroutineScope(SupervisorJob())
-                leaderProc.runOn(leaderScope)
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc
-                    override suspend fun close() {
-                        leaderScope.coroutineContext.job.cancelAndJoin()
-                        leaderProc.close()
-                    }
+                    override fun runOn(scope: CoroutineScope) = leaderProc.runOn(scope)
+                    override fun close() = leaderProc.close()
                 }
             }
 
@@ -126,9 +122,9 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        job.cancelAndJoin()
+        scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -150,9 +146,9 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        job.cancelAndJoin()
+        scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -182,14 +178,14 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
         watchers.awaitTx(1)
 
         verify { liveIndex.importTx(any()) }
 
-        job.cancelAndJoin()
+        scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()
@@ -217,13 +213,13 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         watchers.awaitTx(1)
 
         verify { liveIndex.importTx(any()) }
 
-        job.cancelAndJoin()
+        scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
         replicaLog.close()

@@ -195,14 +195,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                 partition = 0, afterReplicaMsgId = afterReplicaMsgId,
                 afterToken = null,
             )
-            val leaderScope = CoroutineScope(dispatcher + Job())
-            proc.runOn(leaderScope)
             return object : LogProcessor.LeaderSystem {
                 override val proc get() = proc
-                override suspend fun close() {
-                    leaderScope.coroutineContext.job.cancelAndJoin()
-                    proc.close()
-                }
+                override fun runOn(scope: CoroutineScope) = proc.runOn(scope)
+                override fun close() = proc.close()
             }
         }
 
@@ -372,8 +368,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                             replicaLog.awaitAllDelivered()
                         }.join()
 
-                        groupJob.cancel()
-                        logProcScope.cancel()
+                        groupJob.cancelAndJoin()
+                        logProcScope.coroutineContext.job.cancelAndJoin()
 
                         assertReplicaTxInvariants()
                         assertEquals(
@@ -467,12 +463,12 @@ class LogProcessorSimTest : SimulationTestBase() {
                                             }
                                         }.join()
 
-                                        groupJobLeader.cancel()
-                                        groupJobA.cancel()
-                                        groupJobB.cancel()
-                                        leaderScope.cancel()
-                                        followerScopeA.cancel()
-                                        followerScopeB.cancel()
+                                        groupJobLeader.cancelAndJoin()
+                                        groupJobA.cancelAndJoin()
+                                        groupJobB.cancelAndJoin()
+                                        leaderScope.coroutineContext.job.cancelAndJoin()
+                                        followerScopeA.coroutineContext.job.cancelAndJoin()
+                                        followerScopeB.coroutineContext.job.cancelAndJoin()
 
                                         assertReplicaTxInvariants()
                                         assertEquals(
@@ -583,10 +579,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     }
                                 }.join()
 
-                                groupJobA.cancel()
-                                groupJobB.cancel()
-                                scopeA.cancel()
-                                scopeB.cancel()
+                                groupJobA.cancelAndJoin()
+                                groupJobB.cancelAndJoin()
+                                scopeA.coroutineContext.job.cancelAndJoin()
+                                scopeB.coroutineContext.job.cancelAndJoin()
 
                                 assertReplicaTxInvariants()
                                 assertEquals(
