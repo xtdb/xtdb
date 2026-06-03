@@ -1,4 +1,5 @@
-FROM node:24.14.0
+FROM node:24.16.0
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 
 WORKDIR /app
 
@@ -11,4 +12,3 @@ COPY yarn.lock yarn.lock
 RUN yarn install
 
 COPY . .
-
