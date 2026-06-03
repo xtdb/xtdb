@@ -62,10 +62,11 @@ class FollowerLogProcessorTest {
         allocator.close()
     }
 
-    private fun makeProcessor(
+    private suspend inline fun <R> withProcessor(
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
+        block: suspend (FollowerLogProcessor) -> R
     ) =
         FollowerLogProcessor(
             allocator, bufferPool, dbState,
@@ -73,42 +74,39 @@ class FollowerLogProcessorTest {
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
-        )
+        ).use { block(it) }
 
     private fun <M> record(offset: Long, message: M) =
         Log.Record(0, offset, Instant.now(), message)
 
     @Test
     fun `buffer overflow stops ingestion`() = runTest {
-        val proc = makeProcessor(maxBufferedRecords = 2)
+        withProcessor(maxBufferedRecords = 2) { proc ->
+            val records = listOf(
+                record(0, ReplicaMessage.BlockBoundary(0, 0)),
+                record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
+                record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
+                record(3, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap())),
+            )
 
-        val records = listOf(
-            record(0, ReplicaMessage.BlockBoundary(0, 0)),
-            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(3, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap())),
-        )
-
-        assertThrows<Fault> { proc.processRecords(records) }
-        proc.close()
+            assertThrows<Fault> { proc.processRecords(records) }
+        }
     }
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {
         watchers = Watchers(latestTxId = 42, latestSourceMsgId = 42)
-        val proc = makeProcessor()
+        withProcessor { proc ->
+            val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap(), srcMsgId = 40)
+            val tx42 = ReplicaMessage.ResolvedTx(42, Instant.now(), true, null, emptyMap(), srcMsgId = 42)
+            val tx43 = ReplicaMessage.ResolvedTx(43, Instant.now(), true, null, emptyMap(), srcMsgId = 43)
 
-        val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap(), srcMsgId = 40)
-        val tx42 = ReplicaMessage.ResolvedTx(42, Instant.now(), true, null, emptyMap(), srcMsgId = 42)
-        val tx43 = ReplicaMessage.ResolvedTx(43, Instant.now(), true, null, emptyMap(), srcMsgId = 43)
+            proc.processRecords(listOf(record(0, tx40), record(1, tx42), record(2, tx43)))
 
-        proc.processRecords(listOf(record(0, tx40), record(1, tx42), record(2, tx43)))
-
-        verify(exactly = 0) { liveIndex.importTx(tx40) }
-        verify(exactly = 0) { liveIndex.importTx(tx42) }
-        verify { liveIndex.importTx(tx43) }
-
-        proc.close()
+            verify(exactly = 0) { liveIndex.importTx(tx40) }
+            verify(exactly = 0) { liveIndex.importTx(tx42) }
+            verify { liveIndex.importTx(tx43) }
+        }
     }
 
     @Test
@@ -120,23 +118,21 @@ class FollowerLogProcessorTest {
         blockCatalog = BlockCatalog("test", startBlock)
         dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
-        val proc = makeProcessor()
+        withProcessor { proc ->
+            val staleRecords = listOf(
+                record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500)),
+                record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600)),
+                record(2, ReplicaMessage.BlockBoundary(1, 700)),
+                record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList())),
+                // at the boundary — should also be skipped
+                record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000)),
+            )
 
-        val staleRecords = listOf(
-            record(0, ReplicaMessage.ResolvedTx(500, Instant.now(), true, null, emptyMap(), srcMsgId = 500)),
-            record(1, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 600)),
-            record(2, ReplicaMessage.BlockBoundary(1, 700)),
-            record(3, ReplicaMessage.BlockUploaded(1, 1, 1, 800, emptyList())),
-            // at the boundary — should also be skipped
-            record(4, ReplicaMessage.ResolvedTx(1000, Instant.now(), true, null, emptyMap(), srcMsgId = 1000)),
-        )
+            proc.processRecords(staleRecords)
 
-        proc.processRecords(staleRecords)
-
-        verify(exactly = 0) { liveIndex.importTx(any()) }
-        assert(watchers.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
-
-        proc.close()
+            verify(exactly = 0) { liveIndex.importTx(any()) }
+            assert(watchers.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
+        }
     }
 
     @Test
@@ -144,44 +140,46 @@ class FollowerLogProcessorTest {
         // Simulates the replica log sequence when isFull() triggers on the leader:
         // the BlockBoundary's latestProcessedMsgId equals the preceding ResolvedTx's txId.
         // The follower must still process the block transition.
-        val proc = makeProcessor()
+        withProcessor { proc ->
+            val blockProto = block { blockIndex = 0 }.toByteArray()
+            every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
 
-        val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+            assertNull(blockCatalog.currentBlockIndex, "no block before processing")
 
-        assertNull(blockCatalog.currentBlockIndex, "no block before processing")
+            val txId = 100L
+            proc.processRecords(
+                listOf(
+                    record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap())),
+                    record(1, ReplicaMessage.BlockBoundary(0, txId)),
+                    record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList())),
+                )
+            )
 
-        val txId = 100L
-        proc.processRecords(listOf(
-            record(0, ReplicaMessage.ResolvedTx(txId, Instant.now(), true, null, emptyMap())),
-            record(1, ReplicaMessage.BlockBoundary(0, txId)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList())),
-        ))
-
-        assertEquals(0L, blockCatalog.currentBlockIndex,
-            "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
-
-        proc.close()
+            assertEquals(
+                0L, blockCatalog.currentBlockIndex,
+                "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId"
+            )
+        }
     }
 
     @Test
     fun `processes messages after skipping stale ones`() = runTest {
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
-        val proc = makeProcessor()
+        withProcessor { proc ->
+            val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001)
 
-        val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001)
+            proc.processRecords(
+                listOf(
+                    // stale
+                    record(0, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 500)),
+                    // current
+                    record(1, tx1001),
+                )
+            )
 
-        proc.processRecords(listOf(
-            // stale
-            record(0, ReplicaMessage.TriesAdded(1, 1, emptyList(), sourceMsgId = 500)),
-            // current
-            record(1, tx1001),
-        ))
-
-        verify { liveIndex.importTx(tx1001) }
-        assert(watchers.latestSourceMsgId == 1001L)
-
-        proc.close()
+            verify { liveIndex.importTx(tx1001) }
+            assert(watchers.latestSourceMsgId == 1001L)
+        }
     }
 
     @Test
@@ -189,102 +187,108 @@ class FollowerLogProcessorTest {
         // Reproduces #5580: an ext-source ResolvedTx (srcMsgId=null) followed by a BlockBoundary
         // whose latestProcessedMsgId reflects the leader's still-default source watermark would
         // previously violate `srcMsgId >= latestSourceMsgId` on the follower.
-        val proc = makeProcessor(hasExternalSource = true)
+        withProcessor(hasExternalSource = true) { proc ->
+            val blockProto = block { blockIndex = 0 }.toByteArray()
+            every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
 
-        val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+            val extTx = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+            proc.processRecords(
+                listOf(
+                    record(0, extTx),
+                    record(1, ReplicaMessage.BlockBoundary(0, -1)),
+                    record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList())),
+                )
+            )
 
-        val extTx = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
-        proc.processRecords(listOf(
-            record(0, extTx),
-            record(1, ReplicaMessage.BlockBoundary(0, -1)),
-            record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList())),
-        ))
-
-        verify { liveIndex.importTx(extTx) }
-        assertEquals(-1L, watchers.latestSourceMsgId,
-            "ext-source ResolvedTx must not bump latestSourceMsgId")
-        assertEquals(0L, blockCatalog.currentBlockIndex)
-
-        proc.close()
+            verify { liveIndex.importTx(extTx) }
+            assertEquals(
+                -1L, watchers.latestSourceMsgId,
+                "ext-source ResolvedTx must not bump latestSourceMsgId"
+            )
+            assertEquals(0L, blockCatalog.currentBlockIndex)
+        }
     }
 
     @Test
     fun `mixed ext-source and source-log ResolvedTxs advance the right watermarks`() = runTest {
-        val proc = makeProcessor(hasExternalSource = true)
+        withProcessor(hasExternalSource = true) { proc ->
+            val ext0 = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+            val src1 = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1)
+            val ext2 = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = null)
 
-        val ext0 = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
-        val src1 = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1)
-        val ext2 = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = null)
+            proc.processRecords(listOf(record(0, ext0), record(1, src1), record(2, ext2)))
 
-        proc.processRecords(listOf(record(0, ext0), record(1, src1), record(2, ext2)))
-
-        verify { liveIndex.importTx(ext0) }
-        verify { liveIndex.importTx(src1) }
-        verify { liveIndex.importTx(ext2) }
-        assertEquals(1L, watchers.latestSourceMsgId,
-            "latestSourceMsgId reflects only the source-log tx; ext-source txs leave it alone")
-
-        proc.close()
+            verify { liveIndex.importTx(ext0) }
+            verify { liveIndex.importTx(src1) }
+            verify { liveIndex.importTx(ext2) }
+            assertEquals(
+                1L, watchers.latestSourceMsgId,
+                "latestSourceMsgId reflects only the source-log tx; ext-source txs leave it alone"
+            )
+        }
     }
 
     @Test
     fun `records replica processing metrics`() = runTest {
         val registry = SimpleMeterRegistry()
-        val proc = makeProcessor(meterRegistry = registry)
+        withProcessor(meterRegistry = registry) { proc ->
+            val blockProto = block { blockIndex = 0 }.toByteArray()
+            every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
 
-        val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+            proc.processRecords(
+                listOf(
+                    record(0, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
+                    record(1, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
+                    record(2, ReplicaMessage.BlockBoundary(0, 2)),
+                    record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 2, emptyList())),
+                )
+            )
 
-        proc.processRecords(listOf(
-            record(0, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(1, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.BlockBoundary(0, 2)),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 2, emptyList())),
-        ))
+            fun timerCount(msgType: String) = registry.find("xtdb.replica.process.timer")
+                .tags("db", "test", "msg.type", msgType)
+                .timer()?.count() ?: 0L
 
-        fun timerCount(msgType: String) = registry.find("xtdb.replica.process.timer")
-            .tags("db", "test", "msg.type", msgType)
-            .timer()?.count() ?: 0L
+            assertEquals(2L, timerCount("ResolvedTx"))
+            assertEquals(1L, timerCount("BlockBoundary"))
+            assertEquals(1L, timerCount("BlockUploaded"))
 
-        assertEquals(2L, timerCount("ResolvedTx"))
-        assertEquals(1L, timerCount("BlockBoundary"))
-        assertEquals(1L, timerCount("BlockUploaded"))
+            val bufferTimer = registry.find("xtdb.replica.block.buffer.timer").tag("db", "test").timer()
+            assertNotNull(bufferTimer, "block buffer timer should be registered")
+            assertEquals(1L, bufferTimer!!.count(), "one block buffer window")
+            assertTrue(bufferTimer.totalTime(java.util.concurrent.TimeUnit.NANOSECONDS) >= 0)
 
-        val bufferTimer = registry.find("xtdb.replica.block.buffer.timer").tag("db", "test").timer()
-        assertNotNull(bufferTimer, "block buffer timer should be registered")
-        assertEquals(1L, bufferTimer!!.count(), "one block buffer window")
-        assertTrue(bufferTimer.totalTime(java.util.concurrent.TimeUnit.NANOSECONDS) >= 0)
-
-        val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
-        assertNotNull(bufferedRecords, "buffered records summary should be registered")
-        assertEquals(1L, bufferedRecords!!.count())
-        assertEquals(0.0, bufferedRecords.totalAmount(), "no records buffered when BlockUploaded follows BlockBoundary directly")
-
-        proc.close()
+            val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
+            assertNotNull(bufferedRecords, "buffered records summary should be registered")
+            assertEquals(1L, bufferedRecords!!.count())
+            assertEquals(
+                0.0,
+                bufferedRecords.totalAmount(),
+                "no records buffered when BlockUploaded follows BlockBoundary directly"
+            )
+        }
     }
 
     @Test
     fun `buffered records summary captures size when records arrive between boundary and uploaded`() = runTest {
         val registry = SimpleMeterRegistry()
-        val proc = makeProcessor(meterRegistry = registry)
+        withProcessor(meterRegistry = registry) { proc ->
+            val blockProto = block { blockIndex = 0 }.toByteArray()
+            every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
 
-        val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+            proc.processRecords(
+                listOf(
+                    record(0, ReplicaMessage.BlockBoundary(0, 0)),
+                    // these get buffered while we wait for BlockUploaded
+                    record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
+                    record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
+                    record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList())),
+                )
+            )
 
-        proc.processRecords(listOf(
-            record(0, ReplicaMessage.BlockBoundary(0, 0)),
-            // these get buffered while we wait for BlockUploaded
-            record(1, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
-            record(2, ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap())),
-            record(3, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, 0, emptyList())),
-        ))
-
-        val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
-        assertNotNull(bufferedRecords)
-        assertEquals(1L, bufferedRecords!!.count())
-        assertEquals(2.0, bufferedRecords.totalAmount(), "two records buffered between boundary and uploaded")
-
-        proc.close()
+            val bufferedRecords = registry.find("xtdb.replica.block.buffered.records").tag("db", "test").summary()
+            assertNotNull(bufferedRecords)
+            assertEquals(1L, bufferedRecords!!.count())
+            assertEquals(2.0, bufferedRecords.totalAmount(), "two records buffered between boundary and uploaded")
+        }
     }
 }

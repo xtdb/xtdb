@@ -593,7 +593,7 @@ class LeaderLogProcessor(
     // State teardown only: the process tree is stopped by the owner cancelling its scope before
     // this runs, so the loop has stopped and every buffer is freed. All that's left is to free the
     // resources this processor holds — the external source and its child allocator.
-    override suspend fun close() {
+    override fun close() {
         extSource?.close()
         allocator.close()
     }

@@ -5,7 +5,6 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
@@ -29,9 +28,8 @@ class LogProcessor(
     meterRegistry: MeterRegistry? = null,
 ) : Log.SubscriptionListener<SourceMessage> {
 
-    interface Processor<M> : Log.RecordProcessor<M> {
+    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
         val latestReplicaMsgId: MessageId
-        suspend fun close()
     }
 
     interface LeaderProcessor : Processor<SourceMessage> {
@@ -104,7 +102,7 @@ class LogProcessor(
                 }
             })
         } catch (t: Throwable) {
-            runBlocking { proc.close() }
+            proc.close()
             throw t
         }
     }
@@ -149,8 +147,7 @@ class LogProcessor(
 
                         val pendingBlock = followerProc.pendingBlock
 
-                        val transition = procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId)
-                        try {
+                        procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                                 blockUploader.uploadBlock(
@@ -168,8 +165,6 @@ class LogProcessor(
                             val resumeMsgId = watchers.latestSourceMsgId
                             LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
                             Log.TailSpec(resumeMsgId, sys.proc)
-                        } finally {
-                            transition.close()
                         }
                     }
                 } catch (e: InterruptedException) {

@@ -267,7 +267,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         replicaState.value = ReplicaState.Failed(latestReplicaMsgId, e)
     }
 
-    override suspend fun close() {
+    override fun close() {
         allocator.close()
     }
 }

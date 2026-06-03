@@ -147,7 +147,7 @@ class TransitionLogProcessor(
         }
     }
 
-    override suspend fun close() {
+    override fun close() {
         allocator.close()
     }
 }
