@@ -1,45 +1,64 @@
 package xtdb
 
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.api.extension.TestExecutionExceptionHandler
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.Arguments
-import org.junit.jupiter.params.provider.MethodSource
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.TestTemplate
+import org.junit.jupiter.api.extension.TestTemplateInvocationContext
+import org.junit.jupiter.api.extension.TestTemplateInvocationContextProvider
 import xtdb.util.logger
 import xtdb.util.warn
-import java.util.concurrent.TimeUnit
+import java.util.stream.Stream
 import kotlin.random.Random
 
-@ParameterizedTest(name = "[iteration {0}]")
-@MethodSource("xtdb.SimulationTestBase#iterationSource")
-annotation class RepeatableSimulationTest
+private val DEFAULT_ITERATIONS: Int = System.getProperty("xtdb.simulation-test-iterations", "100").toInt()
+
+private val ExtensionContext.explicitSeed get() = requiredTestMethod.getAnnotation(WithSeed::class.java)?.seed
+
+@TestTemplate
+@ExtendWith(RepeatableSimulationTest.InvocationContextProvider::class)
+annotation class RepeatableSimulationTest(val iterations: Int = -1) {
+
+    object InvocationContext : TestTemplateInvocationContext {
+        override fun getDisplayName(invocationIndex: Int) = "[iteration $invocationIndex]"
+    }
+
+    class InvocationContextProvider : TestTemplateInvocationContextProvider {
+        override fun supportsTestTemplate(ctx: ExtensionContext) =
+            ctx.requiredTestMethod.isAnnotationPresent(RepeatableSimulationTest::class.java)
+
+        private val ExtensionContext.explicitIterations
+            get() =
+                requiredTestMethod.getAnnotation(RepeatableSimulationTest::class.java)
+                    .iterations
+                    .takeIf { it >= 0 }
+
+        override fun provideTestTemplateInvocationContexts(ctx: ExtensionContext): Stream<TestTemplateInvocationContext> {
+            val iterations = ctx.explicitIterations ?: if (ctx.explicitSeed != null) 1 else DEFAULT_ITERATIONS
+            return List<TestTemplateInvocationContext>(iterations) { InvocationContext }.stream()
+        }
+    }
+}
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class WithSeed(val seed: Int)
 
-class SeedExtension : BeforeEachCallback {
-    override fun beforeEach(context: ExtensionContext) {
-        val annotation = context.requiredTestMethod
-            .getAnnotation(WithSeed::class.java)
+class SeedExtension : BeforeEachCallback, TestExecutionExceptionHandler {
+    override fun beforeEach(ctx: ExtensionContext) {
+        val explicitSeed = ctx.explicitSeed
 
-        annotation?.let { withSeed ->
-            context.requiredTestInstance.let { testInstance ->
-                if (testInstance is SimulationTestBase) {
-                    testInstance.explicitSeed = withSeed.seed
-                }
+        ctx.requiredTestInstance.let { it as SimulationTestBase }
+            .also {
+                val seed = explicitSeed ?: Random.nextInt()
+                it.currentSeed = seed
+                it.rand = Random(seed)
+                it.dispatcher = DeterministicDispatcher(seed)
             }
-        }
     }
-}
 
-class SeedExceptionWrapper : TestExecutionExceptionHandler {
     override fun handleTestExecutionException(context: ExtensionContext, throwable: Throwable) {
         val testInstance = context.testInstance.orElse(null)
         if (testInstance is SimulationTestBase) {
@@ -51,40 +70,16 @@ class SeedExceptionWrapper : TestExecutionExceptionHandler {
     }
 }
 
-@ExtendWith(SeedExceptionWrapper::class, SeedExtension::class)
+@ExtendWith(SeedExtension::class)
 abstract class SimulationTestBase {
     var currentSeed: Int = 0
-    var explicitSeed: Int? = null
-    protected lateinit var rand: Random
-    protected lateinit var dispatcher: DeterministicDispatcher
-
-    @BeforeEach
-    open fun setUpSimulation() {
-        currentSeed = explicitSeed ?: Random.nextInt()
-        rand = Random(currentSeed)
-        dispatcher = DeterministicDispatcher(currentSeed)
-    }
-
-    @AfterEach
-    open fun tearDownSimulation() {
-        explicitSeed = null
-    }
+    lateinit var rand: Random
+    lateinit var dispatcher: DeterministicDispatcher
 
     protected fun assertInterleaved() {
-        assertTrue(dispatcher.interleavedPicks > 0,
-            "Dispatcher never had multiple concurrent jobs — simulation did not interleave (seed=$currentSeed)")
-    }
-
-    companion object SimulationIterations {
-        /**
-         * Returns iteration numbers for simulation tests.
-         * Override using:
-         *   -Dxtdb.simulation-test-iterations=N
-         */
-        private val testIterations: Int =
-            System.getProperty("xtdb.simulation-test-iterations", "100").toInt()
-
-        @JvmStatic
-        fun iterationSource(): List<Arguments> = (1..testIterations).map { Arguments.of(it) }
+        assertTrue(
+            dispatcher.interleavedPicks > 0,
+            "Dispatcher never had multiple concurrent jobs — simulation did not interleave (seed=$currentSeed)"
+        )
     }
 }

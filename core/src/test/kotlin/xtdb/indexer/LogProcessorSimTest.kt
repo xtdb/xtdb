@@ -14,11 +14,13 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.TestTemplate
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
+import xtdb.WithSeed
 import xtdb.api.IndexerConfig
 import xtdb.api.log.*
 import xtdb.api.log.Log
@@ -334,7 +336,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     }
 
     @RepeatableSimulationTest
-    fun `single node processes txs and flush-blocks with rebalances`(@Suppress("unused") iteration: Int) =
+    fun `single node processes txs and flush-blocks with rebalances`() =
         runTest(timeout = 5.seconds) {
             srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
             replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)
@@ -410,7 +412,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         }
 
     @RepeatableSimulationTest
-    fun `stable leader with sustained throughput`(@Suppress("unused") iteration: Int) =
+    fun `stable leader with sustained throughput`() =
         runTest(timeout = 5.seconds) {
             srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
             replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)
@@ -530,7 +532,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         }
 
     @RepeatableSimulationTest
-    fun `multi-node leadership changes preserve block catalog consistency`(@Suppress("unused") iteration: Int) =
+    fun `multi-node leadership changes preserve block catalog consistency`() =
         runTest(timeout = 5.seconds) {
             srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
             replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)

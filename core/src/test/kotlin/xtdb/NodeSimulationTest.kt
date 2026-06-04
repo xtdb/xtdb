@@ -100,7 +100,6 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @BeforeEach
     fun setUp() {
-        super.setUpSimulation()
         setLogLevel.invoke("xtdb".symbol, logLevel)
 
         val jobCalculator = createJobCalculator()
@@ -135,7 +134,6 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @AfterEach
     fun tearDown() {
-        super.tearDownSimulation()
         dbs.forEach { it.close() }
         sharedBufferPool.close()
         allocator.close()
@@ -153,7 +151,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `l1 compaction followed by garbage collection`(iteration: Int) {
+    fun `l1 compaction followed by garbage collection`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(4).toList()
@@ -206,7 +204,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `gc during compaction preserves files`(iteration: Int)  {
+    fun `gc during compaction preserves files`()  {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(8).toList()
@@ -274,7 +272,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `gc collects old garbage while compaction runs`(iteration: Int) {
+    fun `gc collects old garbage while compaction runs`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
@@ -352,7 +350,7 @@ class NodeSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    fun `multi-system compaction and gc`(iteration: Int) {
+    fun `multi-system compaction and gc`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
@@ -433,7 +431,7 @@ class NodeSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    fun `staggered system startup during active compaction`(iteration: Int) {
+    fun `staggered system startup during active compaction`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
@@ -525,7 +523,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    fun `l0 to l3 compaction and gc`(iteration: Int) {
+    fun `l0 to l3 compaction and gc`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
@@ -579,7 +577,7 @@ class NodeSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    fun `l0 to 13 with concurrent compaction + gc`(iteration: Int) {
+    fun `l0 to 13 with concurrent compaction + gc`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 
@@ -666,7 +664,7 @@ class NodeSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    fun `multi system l3 to l4 compaction`(iteration: Int) {
+    fun `multi system l3 to l4 compaction`() {
         val table = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
 

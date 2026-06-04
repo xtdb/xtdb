@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.L0TrieKeys
@@ -22,8 +20,6 @@ import xtdb.SimulationTestUtils.Companion.createJobCalculator
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
-import xtdb.WithSeed
-import xtdb.api.log.Log
 import xtdb.api.log.SourceMessage.TriesAdded
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -43,10 +39,10 @@ import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
+import xtdb.util.debug
 import xtdb.util.logger
 import xtdb.util.safeMap
 import xtdb.util.useAll
-import xtdb.util.debug
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -288,7 +284,6 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @BeforeEach
     fun setUp() {
-        super.setUpSimulation()
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
         mockDriver = CompactorMockDriver(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator()
@@ -312,7 +307,6 @@ class CompactorSimulationTest : SimulationTestBase() {
         driverConfig = CompactorDriverConfig()
         sharedBufferPool.close()
         allocator.close()
-        super.tearDownSimulation()
     }
 
     private fun seedTries(tableRef: TableRef, tries: List<TrieDetails>) {
@@ -328,7 +322,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun singleL0Compaction(iteration: Int) {
+    fun singleL0Compaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
         val db = dbs[0]
@@ -352,12 +346,12 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @Test
     fun singleL0CompactionNotHanging() {
-        singleL0Compaction(0)
+        singleL0Compaction()
     }
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun multipleL0ToL1Compaction(iteration: Int) {
+    fun multipleL0ToL1Compaction() {
         val table = TableRef("xtdb", "public", "docs")
         val db = dbs[0]
 
@@ -413,7 +407,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
     @Test
     fun multipleL0ToL1CompactionIssue() {
-        multipleL0ToL1Compaction(0)
+        multipleL0ToL1Compaction()
     }
 
     @Test
@@ -440,7 +434,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
-    fun l1cToL2cCompaction(iteration: Int) {
+    fun l1cToL2cCompaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
@@ -466,7 +460,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
-    fun l1cToL2cWithPartialL2(iteration: Int) {
+    fun l1cToL2cWithPartialL2() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val rand = Random(currentSeed)
@@ -506,7 +500,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
-    fun l2cGapFillingAndL3cCompaction(iteration: Int) {
+    fun l2cGapFillingAndL3cCompaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
@@ -593,7 +587,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
-    fun concurrentTableCompaction(iteration: Int) {
+    fun concurrentTableCompaction() {
         runConcurrentTableCompaction()
     }
 
@@ -601,14 +595,14 @@ class CompactorSimulationTest : SimulationTestBase() {
     @WithNumberOfSystems(2)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
-    fun multiSystemConcurrentTableCompaction(iteration: Int) {
+    fun multiSystemConcurrentTableCompaction() {
         runConcurrentTableCompaction()
     }
 
     @RepeatableSimulationTest
     @WithNumberOfSystems(2)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun multiSystemSingleL0Compaction(iteration: Int) {
+    fun multiSystemSingleL0Compaction() {
         val docsTable = TableRef("xtdb", "public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 

@@ -8,14 +8,13 @@ import org.apache.arrow.memory.OutOfMemoryException
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
+import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.cache.MemoryCache.Slice
 import xtdb.symbol
 import xtdb.util.logger
-import xtdb.util.trace
 import xtdb.util.requiringResolve
+import xtdb.util.trace
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout.JAVA_BYTE
@@ -28,10 +27,6 @@ private val setLogLevel = requiringResolve("xtdb.logging/set-log-level!")
 private const val logLevel = "WARN"
 
 private val LOGGER = CacheSimulationTest::class.logger
-
-@ParameterizedTest(name = "[iteration {0}]")
-@MethodSource("xtdb.SimulationTestBase#iterationSource")
-annotation class RepeatableSimulationTest
 
 @Tag("property")
 class CacheSimulationTest : SimulationTestBase() {
@@ -50,21 +45,19 @@ class CacheSimulationTest : SimulationTestBase() {
     }
 
     @BeforeEach
-    override fun setUpSimulation() {
-        super.setUpSimulation()
+    fun setUpSimulation() {
         setLogLevel.invoke("xtdb.cache".symbol, logLevel)
         allocator = RootAllocator()
     }
 
     @AfterEach
-    override fun tearDownSimulation() {
+    fun tearDownSimulation() {
         allocator.close()
-        super.tearDownSimulation()
     }
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic single fetch and evict`(iteration: Int) = runTest {
+    fun `deterministic single fetch and evict`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
@@ -87,7 +80,7 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic reuse of same path-slice`(iteration: Int) = runTest {
+    fun `deterministic reuse of same path-slice`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
@@ -121,7 +114,7 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic oom handling`(iteration: Int) = runTest {
+    fun `deterministic oom handling`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 100, loader, dispatcher).use { cache ->
             val tooBigSlice = rand.nextLong(101L, 200L)
@@ -143,7 +136,7 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `deterministic concurrent fetch of same path-slice`(iteration: Int) = runTest {
+    fun `deterministic concurrent fetch of same path-slice`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val sliceSize = rand.nextLong(1L, 250L)
@@ -209,7 +202,7 @@ class CacheSimulationTest : SimulationTestBase() {
 
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
-    fun `cancelled fetch on cache hit does not leak`(iteration: Int) = runTest {
+    fun `cancelled fetch on cache hit does not leak`() = runTest {
         val loader = TestPathLoader()
         MemoryCache(allocator, 250, loader, dispatcher).use { cache ->
             val path = Path.of("test/100")
@@ -223,7 +216,7 @@ class CacheSimulationTest : SimulationTestBase() {
                 }
                 yield()
                 jobs.forEach { it.cancel() }
-                jobs.forEach { it.join() }
+                jobs.joinAll()
             }.await()
 
             assertEquals(MemoryCache.Stats(0L, 250L), cache.stats0)
