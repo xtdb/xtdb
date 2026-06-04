@@ -31,7 +31,7 @@ class LogProcessor(
 
     interface Processor<M> : Log.RecordProcessor<M> {
         val latestReplicaMsgId: MessageId
-        suspend fun close()
+        suspend fun cancelAndJoin()
     }
 
     interface LeaderProcessor : Processor<SourceMessage> {
@@ -67,7 +67,7 @@ class LogProcessor(
     }
 
     sealed interface SubSystem {
-        suspend fun close()
+        suspend fun cancelAndJoin()
     }
 
     interface LeaderSystem : SubSystem {
@@ -75,9 +75,9 @@ class LogProcessor(
     }
 
     private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
-        override suspend fun close() {
+        override suspend fun cancelAndJoin() {
             job.cancel()
-            proc.close()
+            proc.cancelAndJoin()
         }
     }
 
@@ -104,7 +104,7 @@ class LogProcessor(
                 }
             })
         } catch (t: Throwable) {
-            runBlocking { proc.close() }
+            runBlocking { proc.cancelAndJoin() }
             throw t
         }
     }
@@ -145,7 +145,7 @@ class LogProcessor(
 
                         followerProc.awaitReplicaMsgId(replayTarget)
                         LOG.debug("[$dbName] transition: closing follower system")
-                        oldSys.close()
+                        oldSys.cancelAndJoin()
 
                         val pendingBlock = followerProc.pendingBlock
 
@@ -169,7 +169,7 @@ class LogProcessor(
                             LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
                             Log.TailSpec(resumeMsgId, sys.proc)
                         } finally {
-                            transition.close()
+                            transition.cancelAndJoin()
                         }
                     }
                 } catch (e: InterruptedException) {
@@ -193,7 +193,7 @@ class LogProcessor(
                 LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
                 // Close first: Kafka guarantees no concurrent processing during rebalance,
                 // and close() only releases the allocator — watermark fields remain readable.
-                oldSys.close()
+                oldSys.cancelAndJoin()
                 val proc = oldSys.proc
                 this.sys = openFollowerSystem(proc.latestReplicaMsgId, proc.pendingBlock)
             }
@@ -204,8 +204,8 @@ class LogProcessor(
         }
     }
 
-    suspend fun close() {
-        sys.close()
+    suspend fun cancelAndJoin() {
+        sys.cancelAndJoin()
     }
 
     /**

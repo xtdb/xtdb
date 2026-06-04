@@ -568,7 +568,7 @@ class LeaderLogProcessor(
         }
     }
 
-    override suspend fun close() {
+    override suspend fun cancelAndJoin() {
         extJob?.cancelAndJoin()
         extSource?.close()
         blockGc.close()

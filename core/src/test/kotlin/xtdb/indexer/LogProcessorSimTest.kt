@@ -191,7 +191,7 @@ class LogProcessorSimTest : SimulationTestBase() {
             )
             return object : LogProcessor.LeaderSystem {
                 override val proc get() = proc
-                override suspend fun close() = proc.close()
+                override suspend fun cancelAndJoin() = proc.cancelAndJoin()
             }
         }
 
@@ -392,7 +392,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         assertBlockFilesExist(bp, "test-db", replicaMessages)
                         assertSnapshotHasNoAbortedRows(node)
                     } finally {
-                        logProc.close()
+                        logProc.cancelAndJoin()
                     }
                 }
             }
@@ -508,9 +508,9 @@ class LogProcessorSimTest : SimulationTestBase() {
                                         assertSnapshotHasNoAbortedRows(followerA)
                                         assertSnapshotHasNoAbortedRows(followerB)
                             } finally {
-                                leaderProc.close()
-                                followerProcA.close()
-                                followerProcB.close()
+                                leaderProc.cancelAndJoin()
+                                followerProcA.cancelAndJoin()
+                                followerProcB.cancelAndJoin()
                             }
                         }
                     }
@@ -618,8 +618,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                                 assertSnapshotHasNoAbortedRows(nodeA)
                                 assertSnapshotHasNoAbortedRows(nodeB)
                         } finally {
-                            logProcA.close()
-                            logProcB.close()
+                            logProcA.cancelAndJoin()
+                            logProcB.cancelAndJoin()
                         }
                     }
                 }

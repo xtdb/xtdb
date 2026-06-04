@@ -90,7 +90,7 @@ class FollowerLogProcessorTest {
         )
 
         assertThrows<Fault> { proc.processRecords(records) }
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -108,7 +108,7 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.importTx(tx42) }
         verify { liveIndex.importTx(tx43) }
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -136,7 +136,7 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.importTx(any()) }
         assert(watchers.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -161,7 +161,7 @@ class FollowerLogProcessorTest {
         assertEquals(0L, blockCatalog.currentBlockIndex,
             "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -181,7 +181,7 @@ class FollowerLogProcessorTest {
         verify { liveIndex.importTx(tx1001) }
         assert(watchers.latestSourceMsgId == 1001L)
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -206,7 +206,7 @@ class FollowerLogProcessorTest {
             "ext-source ResolvedTx must not bump latestSourceMsgId")
         assertEquals(0L, blockCatalog.currentBlockIndex)
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -225,7 +225,7 @@ class FollowerLogProcessorTest {
         assertEquals(1L, watchers.latestSourceMsgId,
             "latestSourceMsgId reflects only the source-log tx; ext-source txs leave it alone")
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -261,7 +261,7 @@ class FollowerLogProcessorTest {
         assertEquals(1L, bufferedRecords!!.count())
         assertEquals(0.0, bufferedRecords.totalAmount(), "no records buffered when BlockUploaded follows BlockBoundary directly")
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 
     @Test
@@ -285,6 +285,6 @@ class FollowerLogProcessorTest {
         assertEquals(1L, bufferedRecords!!.count())
         assertEquals(2.0, bufferedRecords.totalAmount(), "two records buffered between boundary and uploaded")
 
-        proc.close()
+        proc.cancelAndJoin()
     }
 }

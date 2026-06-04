@@ -141,7 +141,7 @@ class ExternalSourceTest {
             assertEquals(0L, resolved.txId)
             assertNull(resolved.srcMsgId, "ext-source ResolvedTx should not carry a source-log msgId")
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 
@@ -169,7 +169,7 @@ class ExternalSourceTest {
             assertEquals(listOf(0L, 1L), resolvedTxs.map { it.txId })
             assertTrue(resolvedTxs.all { it.committed }, "both txs should be committed")
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 
@@ -191,7 +191,7 @@ class ExternalSourceTest {
 
             assertTrue(replicaLog.latestSubmittedOffset >= 0, "source records should flow through to the leader")
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 
@@ -211,7 +211,7 @@ class ExternalSourceTest {
             assertNotNull(watcherToken)
             assertArrayEquals(token, watcherToken)
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 
@@ -236,7 +236,7 @@ class ExternalSourceTest {
             delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 
@@ -255,7 +255,7 @@ class ExternalSourceTest {
             delay(500.milliseconds)
             assertNotNull(watchers.exception, "watchers should be in failed state")
         } finally {
-            lp.close()
+            lp.cancelAndJoin()
         }
     }
 

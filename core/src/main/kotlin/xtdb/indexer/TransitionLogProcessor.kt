@@ -147,7 +147,7 @@ class TransitionLogProcessor(
         }
     }
 
-    override suspend fun close() {
+    override suspend fun cancelAndJoin() {
         allocator.close()
     }
 }

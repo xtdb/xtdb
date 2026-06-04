@@ -76,7 +76,7 @@ class LogProcessorTest {
                 )
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc
-                    override suspend fun close() = leaderProc.close()
+                    override suspend fun cancelAndJoin() = leaderProc.cancelAndJoin()
                 }
             }
 
@@ -123,7 +123,7 @@ class LogProcessorTest {
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         job.cancelAndJoin()
-        logProc.close()
+        logProc.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -147,7 +147,7 @@ class LogProcessorTest {
         val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         job.cancelAndJoin()
-        logProc.close()
+        logProc.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -184,7 +184,7 @@ class LogProcessorTest {
         verify { liveIndex.importTx(any()) }
 
         job.cancelAndJoin()
-        logProc.close()
+        logProc.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -218,7 +218,7 @@ class LogProcessorTest {
         verify { liveIndex.importTx(any()) }
 
         job.cancelAndJoin()
-        logProc.close()
+        logProc.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }

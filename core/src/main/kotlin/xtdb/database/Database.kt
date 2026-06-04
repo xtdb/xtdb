@@ -134,7 +134,7 @@ class Database(
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         runBlocking {
             job?.cancelAndJoin()
-            processor?.close()
+            processor?.cancelAndJoin()
         }
         (partitions.values + listOf(storage, allocator)).closeAll()
     }
@@ -308,7 +308,7 @@ class Database(
 
                         return object : LogProcessor.LeaderSystem {
                             override val proc get() = leaderProc
-                            override suspend fun close() { leaderProc.close(); replicaProducer.close() }
+                            override suspend fun cancelAndJoin() { leaderProc.cancelAndJoin(); replicaProducer.close() }
                         }
                     }
 
