@@ -4,6 +4,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -103,61 +105,52 @@ class LogProcessorSimTest : SimulationTestBase() {
      * propagates cancellation through `indexTx`'s inner catch, which closes the `OpenTx`
      * before the allocator does.
      */
-    private inner class SimExtSource(actions: List<SimAction>) : ExternalSource {
-        private val iterator = actions.iterator()
+    private inner class SimExtSource(private val actions: List<SimAction>) : ExternalSource {
         private val watchersList = mutableListOf<Watchers>()
 
         fun watch(watchers: Watchers) {
             watchersList += watchers
         }
 
-        var indexedCount = 0
-            private set
+        private val nextActionIdxState = MutableStateFlow(0)
 
-        var inFlight = 0
-            private set
-
-        val isQuiescent: Boolean
-            get() {
-                watchersList.forEach { it.exception?.let { ex -> throw ex } }
-                return !iterator.hasNext() && inFlight == 0
-            }
+        suspend fun awaitQuiescence() = nextActionIdxState.first { it == actions.size }
 
         override suspend fun onPartitionAssigned(
             partition: Int,
             afterToken: ExternalSourceToken?,
             txIndexer: TxIndexer,
         ) {
-            while (iterator.hasNext()) {
+            var actionIdx = afterToken?.let { ByteBuffer.wrap(it).getInt() + 1 } ?: 0
+            nextActionIdxState.value = actionIdx
+            while (actionIdx < actions.size) {
                 yield()
-                val action = iterator.next()
-                inFlight++
-                try {
-                    txIndexer.indexTx(externalSourceToken = null) { openTx ->
-                        when (action) {
-                            is SimAction.Commit -> {
-                                val table = openTx.table(docsTable)
-                                for (id in action.rows) {
-                                    table.logPut(
-                                        ByteBuffer.wrap(id.asIid),
-                                        openTx.systemFrom,
-                                        Long.MAX_VALUE,
-                                    ) {
-                                        table.docWriter.writeObject(
-                                            mapOf("_id" to id, "tx_id" to openTx.txKey.txId),
-                                        )
-                                    }
-                                }
-                                TxResult.Committed()
-                            }
+                val action = actions[actionIdx]
 
-                            SimAction.Abort -> TxResult.Aborted(Incorrect("aborted"))
+                val externalSourceToken = ByteArray(Integer.BYTES).also { ByteBuffer.wrap(it).putInt(actionIdx) }
+                txIndexer.indexTx(externalSourceToken = externalSourceToken) { openTx ->
+                    when (action) {
+                        is SimAction.Commit -> {
+                            val table = openTx.table(docsTable)
+                            for (id in action.rows) {
+                                table.logPut(
+                                    ByteBuffer.wrap(id.asIid),
+                                    openTx.systemFrom,
+                                    Long.MAX_VALUE,
+                                ) {
+                                    table.docWriter.writeObject(
+                                        mapOf("_id" to id, "tx_id" to openTx.txKey.txId),
+                                    )
+                                }
+                            }
+                            TxResult.Committed()
                         }
+
+                        SimAction.Abort -> TxResult.Aborted(Incorrect("aborted"))
                     }
-                    indexedCount++
-                } finally {
-                    inFlight--
                 }
+
+                nextActionIdxState.value = ++actionIdx
             }
         }
 
@@ -194,7 +187,6 @@ class LogProcessorSimTest : SimulationTestBase() {
                 extSource = simExtSource, replicaProducer = replicaProducer,
                 skipTxs = emptySet(), dbCatalog = null,
                 partition = 0, afterReplicaMsgId = afterReplicaMsgId,
-                afterToken = null,
                 ctx = dispatcher
             )
             return object : LogProcessor.LeaderSystem {
@@ -364,8 +356,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                 }
                             }
-                            while (!simExtSource.isQuiescent) yield()
-
+                            simExtSource.awaitQuiescence()
                             replicaLog.awaitAllDelivered()
                         }.join()
 
@@ -374,8 +365,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                         assertReplicaTxInvariants()
                         assertEquals(
-                            simExtSource.indexedCount, replicaTxIds().size,
-                            "every successfully-indexed action should appear on the replica"
+                            totalActions, replicaTxIds().size,
+                            "all actions should appear on the replica"
                         )
 
                         val replicaMessages = replicaLog.topic.map { it.message }
@@ -449,7 +440,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                                                 yield()
                                                 srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                             }
-                                            while (!simExtSource.isQuiescent) yield()
+                                            simExtSource.awaitQuiescence()
                                             replicaLog.awaitAllDelivered()
 
                                             // Anchor the per-node `latestTxId` to the latest replica tx so the
@@ -473,8 +464,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                         assertReplicaTxInvariants()
                                         assertEquals(
-                                            simExtSource.indexedCount, replicaTxIds().size,
-                                            "every successfully-indexed action should appear on the replica"
+                                            totalActions, replicaTxIds().size,
+                                            "all actions should appear on the replica"
                                         )
 
                                         val replicaMessages = replicaLog.topic.map { it.message }
@@ -566,7 +557,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                                             srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                         }
                                     }
-                                    while (!simExtSource.isQuiescent) yield()
+                                    simExtSource.awaitQuiescence()
                                     replicaLog.awaitAllDelivered()
 
                                     // Anchor the per-node `latestTxId` to the latest replica tx so the
@@ -587,8 +578,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                 assertReplicaTxInvariants()
                                 assertEquals(
-                                    simExtSource.indexedCount, replicaTxIds().size,
-                                    "every successfully-indexed action should appear on the replica"
+                                    totalActions, replicaTxIds().size,
+                                    "all actions should appear on the replica"
                                 )
 
                                 val replicaMessages = replicaLog.topic.map { it.message }

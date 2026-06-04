@@ -57,7 +57,6 @@ class LeaderLogProcessor(
     private val dbCatalog: Database.Catalog?,
     partition: Int,
     afterReplicaMsgId: MessageId,
-    afterToken: ExternalSourceToken?,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
@@ -323,7 +322,7 @@ class LeaderLogProcessor(
     private val extJob = extSource?.let { source ->
         scope.launch {
             try {
-                source.onPartitionAssigned(partition, afterToken, this@LeaderLogProcessor)
+                source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

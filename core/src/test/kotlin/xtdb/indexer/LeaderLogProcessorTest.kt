@@ -74,7 +74,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1, afterToken = null,
+            partition = 0, afterReplicaMsgId = -1,
         )
     }
 
@@ -129,7 +129,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1, afterToken = null,
+            partition = 0, afterReplicaMsgId = -1,
         )
 
         val now = Instant.now()
@@ -195,7 +195,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1, afterToken = null,
+            partition = 0, afterReplicaMsgId = -1,
         )
 
         val now = Instant.now()

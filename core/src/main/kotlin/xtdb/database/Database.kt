@@ -303,9 +303,6 @@ class Database(
                             dbCatalog = dbCatalog,
                             partition = 0,
                             afterReplicaMsgId = afterReplicaMsgId,
-                            // watchers has the latest token from replica log replay,
-                            // which may be ahead of blockCatalog if no block boundary was flushed.
-                            afterToken = watchers.externalSourceToken,
                             flushTimeout = indexerConfig.flushDuration,
                         )
 

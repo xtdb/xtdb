@@ -73,7 +73,6 @@ class LogProcessorTest {
                     extSource = null, replicaProducer = replicaProducer,
                     skipTxs = emptySet(), dbCatalog = null,
                     partition = 0, afterReplicaMsgId = afterReplicaMsgId,
-                    afterToken = null,
                 )
                 return object : LogProcessor.LeaderSystem {
                     override val proc get() = leaderProc
