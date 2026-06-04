@@ -36,6 +36,7 @@ import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Incorrect
+import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
@@ -62,12 +63,25 @@ class LogProcessorSimTest : SimulationTestBase() {
     fun setUp() {
         nodeBase = openBase(openMeterRegistry = false)
         allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
+        srcLog = SimLog("src", rand)
+        replicaLog = SimLog("replica", rand)
     }
 
     @AfterEach
     fun tearDown() {
+        replicaLog.close()
+        srcLog.close()
         allocator.close()
         nodeBase.close()
+    }
+
+    private inline fun <R> CoroutineScope.withLaunchedSimLogs(block: () -> R): R {
+        val job = launch(dispatcher) {
+            launchSimLog(srcLog)
+            launchSimLog(replicaLog)
+        }
+
+        return block().also { job.cancel() }
     }
 
     private val docsTable = TableRef("test-db", "public", "docs")
@@ -174,7 +188,8 @@ class LogProcessorSimTest : SimulationTestBase() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
+        val blockUploader =
+            BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
         override fun openLeaderSystem(
@@ -330,84 +345,78 @@ class LogProcessorSimTest : SimulationTestBase() {
     @RepeatableSimulationTest
     fun `single node processes txs and flush-blocks with rebalances`() =
         runTest(timeout = 5.seconds) {
-            srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
-            replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)
-            try {
-            val rowsPerBlock = rand.nextLong(15, 25)
-            val totalActions = rand.nextInt(50, 100)
-            val actions = buildActions(rand, totalActions)
-            val simExtSource = SimExtSource(actions)
-            val srcLogEventCount = rand.nextInt(20, 40)
-            LOG.debug("test: $totalActions actions, $srcLogEventCount srcLogEvents (rowsPerBlock=$rowsPerBlock)")
+            withLaunchedSimLogs {
+                val rowsPerBlock = rand.nextLong(15, 25)
+                val totalActions = rand.nextInt(50, 100)
+                val actions = buildActions(rand, totalActions)
+                val simExtSource = SimExtSource(actions)
+                val srcLogEventCount = rand.nextInt(20, 40)
+                LOG.debug("test: $totalActions actions, $srcLogEventCount srcLogEvents (rowsPerBlock=$rowsPerBlock)")
 
-            MemoryStorage(allocator, epoch = 0).use { bp ->
-                SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
-                    val logProcScope = CoroutineScope(dispatcher + Job(coroutineContext.job))
-                    val logProc = node.openLogProcessor(logProcScope)
-                    try {
-                        val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
+                MemoryStorage(allocator, epoch = 0).use { bp ->
+                    SimNode("test-db", bp, IndexerConfig(rowsPerBlock = rowsPerBlock), simExtSource).use { node ->
+                        val logProcScope = CoroutineScope(dispatcher + Job(coroutineContext.job))
+                        val logProc = node.openLogProcessor(logProcScope)
+                        try {
+                            val groupJob = launch(dispatcher) { srcLog.openGroupSubscription(logProc) }
 
-                        launch(dispatcher) {
-                            repeat(srcLogEventCount) {
-                                yield()
-                                if (rand.nextInt(100) < 50) {
-                                    srcLog.rebalanceTrigger.send(Unit)
-                                } else {
-                                    srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                            launch(dispatcher) {
+                                repeat(srcLogEventCount) {
+                                    yield()
+                                    if (rand.nextInt(100) < 50) {
+                                        srcLog.rebalanceTrigger.send(Unit)
+                                    } else {
+                                        srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    }
                                 }
-                            }
-                            simExtSource.awaitQuiescence()
-                            replicaLog.awaitAllDelivered()
-                        }.join()
+                                simExtSource.awaitQuiescence()
 
-                        groupJob.cancel()
-                        logProcScope.cancel()
+                                replicaLog.awaitAllDelivered()
+                            }.join()
 
-                        assertReplicaTxInvariants()
-                        assertEquals(
-                            totalActions, replicaTxIds().size,
-                            "all actions should appear on the replica"
-                        )
+                            groupJob.cancel()
+                            logProcScope.cancel()
 
-                        val replicaMessages = replicaLog.topic.map { it.message }
-                        assertBlockBoundariesMatchUploads(replicaMessages)
-
-                        val expectedBlockIndex =
-                            replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>().maxOfOrNull { it.blockIndex }
-                        assertEquals(
-                            expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                            "block catalog should match latest uploaded block"
-                        )
-
-                        val replicaTxIds = replicaTxIds()
-                        if (replicaTxIds.isNotEmpty()) {
-                            val lastReplicaTx = replicaMessages
-                                .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
+                            assertReplicaTxInvariants()
                             assertEquals(
-                                lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
-                                "live index latestCompletedTx should match last replica tx"
+                                totalActions, replicaTxIds().size,
+                                "all actions should appear on the replica"
                             )
-                        }
 
-                        assertBlockFilesExist(bp, "test-db", replicaMessages)
-                        assertSnapshotHasNoAbortedRows(node)
-                    } finally {
-                        logProc.cancelAndJoin()
+                            val replicaMessages = replicaLog.topic.map { it.message }
+                            assertBlockBoundariesMatchUploads(replicaMessages)
+
+                            val expectedBlockIndex =
+                                replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()
+                                    .maxOfOrNull { it.blockIndex }
+                            assertEquals(
+                                expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                                "block catalog should match latest uploaded block"
+                            )
+
+                            val replicaTxIds = replicaTxIds()
+                            if (replicaTxIds.isNotEmpty()) {
+                                val lastReplicaTx = replicaMessages
+                                    .filterIsInstance<ReplicaMessage.ResolvedTx>().last()
+                                assertEquals(
+                                    lastReplicaTx.txId, node.liveIndex.latestCompletedTx?.txId,
+                                    "live index latestCompletedTx should match last replica tx"
+                                )
+                            }
+
+                            assertBlockFilesExist(bp, "test-db", replicaMessages)
+                            assertSnapshotHasNoAbortedRows(node)
+                        } finally {
+                            logProc.cancelAndJoin()
+                        }
                     }
                 }
-            }
-            } finally {
-                replicaLog.close()
-                srcLog.close()
             }
         }
 
     @RepeatableSimulationTest
-    fun `stable leader with sustained throughput`() =
-        runTest(timeout = 5.seconds) {
-            srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
-            replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)
-            try {
+    fun `stable leader with sustained throughput`() = runTest(timeout = 5.seconds) {
+        withLaunchedSimLogs {
             val rowsPerBlock = rand.nextLong(15, 25)
             val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
             val totalActions = rand.nextInt(50, 100)
@@ -428,85 +437,85 @@ class LogProcessorSimTest : SimulationTestBase() {
                             val followerProcA = followerA.openLogProcessor(followerScopeA)
                             val followerProcB = followerB.openLogProcessor(followerScopeB)
                             try {
-                                        val groupJobLeader =
-                                            launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
-                                        val groupJobA =
-                                            launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
-                                        val groupJobB =
-                                            launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
+                                val groupJobLeader =
+                                    launch(dispatcher) { srcLog.openGroupSubscription(leaderProc) }
+                                val groupJobA =
+                                    launch(dispatcher) { srcLog.openGroupSubscription(followerProcA) }
+                                val groupJobB =
+                                    launch(dispatcher) { srcLog.openGroupSubscription(followerProcB) }
 
-                                        launch(dispatcher) {
-                                            repeat(srcLogEventCount) {
-                                                yield()
-                                                srcLog.appendMessage(SourceMessage.FlushBlock(null))
-                                            }
-                                            simExtSource.awaitQuiescence()
-                                            replicaLog.awaitAllDelivered()
+                                launch(dispatcher) {
+                                    repeat(srcLogEventCount) {
+                                        yield()
+                                        srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    }
+                                    simExtSource.awaitQuiescence()
+                                    replicaLog.awaitAllDelivered()
 
-                                            // Anchor the per-node `latestTxId` to the latest replica tx so the
-                                            // convergence assertions below see consistent state across nodes.
-                                            val lastReplicaTxId = replicaLog.topic.map { it.message }
-                                                .filterIsInstance<ReplicaMessage.ResolvedTx>()
-                                                .maxOfOrNull { it.txId }
-                                            if (lastReplicaTxId != null) {
-                                                leader.watchers.awaitTx(lastReplicaTxId)
-                                                followerA.watchers.awaitTx(lastReplicaTxId)
-                                                followerB.watchers.awaitTx(lastReplicaTxId)
-                                            }
-                                        }.join()
+                                    // Anchor the per-node `latestTxId` to the latest replica tx so the
+                                    // convergence assertions below see consistent state across nodes.
+                                    val lastReplicaTxId = replicaLog.topic.map { it.message }
+                                        .filterIsInstance<ReplicaMessage.ResolvedTx>()
+                                        .maxOfOrNull { it.txId }
+                                    if (lastReplicaTxId != null) {
+                                        leader.watchers.awaitTx(lastReplicaTxId)
+                                        followerA.watchers.awaitTx(lastReplicaTxId)
+                                        followerB.watchers.awaitTx(lastReplicaTxId)
+                                    }
+                                }.join()
 
-                                        groupJobLeader.cancel()
-                                        groupJobA.cancel()
-                                        groupJobB.cancel()
-                                        leaderScope.cancel()
-                                        followerScopeA.cancel()
-                                        followerScopeB.cancel()
+                                groupJobLeader.cancel()
+                                groupJobA.cancel()
+                                groupJobB.cancel()
+                                leaderScope.cancel()
+                                followerScopeA.cancel()
+                                followerScopeB.cancel()
 
-                                        assertReplicaTxInvariants()
-                                        assertEquals(
-                                            totalActions, replicaTxIds().size,
-                                            "all actions should appear on the replica"
-                                        )
+                                assertReplicaTxInvariants()
+                                assertEquals(
+                                    totalActions, replicaTxIds().size,
+                                    "all actions should appear on the replica"
+                                )
 
-                                        val replicaMessages = replicaLog.topic.map { it.message }
-                                        assertBlockBoundariesMatchUploads(replicaMessages)
+                                val replicaMessages = replicaLog.topic.map { it.message }
+                                assertBlockBoundariesMatchUploads(replicaMessages)
 
-                                        val nodes = listOf(leader, followerA, followerB)
+                                val nodes = listOf(leader, followerA, followerB)
 
-                                        val expectedBlockIndex =
-                                            replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()
-                                                .maxOfOrNull { it.blockIndex }
-                                        for (node in nodes) {
-                                            assertEquals(
-                                                expectedBlockIndex, node.blockCatalog.currentBlockIndex,
-                                                "block catalog should match latest uploaded block"
-                                            )
-                                        }
+                                val expectedBlockIndex =
+                                    replicaMessages.filterIsInstance<ReplicaMessage.BlockUploaded>()
+                                        .maxOfOrNull { it.blockIndex }
+                                for (node in nodes) {
+                                    assertEquals(
+                                        expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                                        "block catalog should match latest uploaded block"
+                                    )
+                                }
 
-                                        val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
-                                        val expectedBlockCatalogTx = leader.blockCatalog.latestCompletedTx
-                                        val expectedProcessedMsgId = leader.blockCatalog.latestProcessedMsgId
+                                val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
+                                val expectedBlockCatalogTx = leader.blockCatalog.latestCompletedTx
+                                val expectedProcessedMsgId = leader.blockCatalog.latestProcessedMsgId
 
-                                        for (node in nodes) {
-                                            assertEquals(
-                                                expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
-                                                "all nodes should agree on latestProcessedMsgId"
-                                            )
-                                            assertEquals(
-                                                expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
-                                                "all nodes should agree on block catalog's latestCompletedTx"
-                                            )
-                                            assertEquals(
-                                                expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
-                                                "all nodes should agree on live index's latestCompletedTx"
-                                            )
-                                        }
+                                for (node in nodes) {
+                                    assertEquals(
+                                        expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
+                                        "all nodes should agree on latestProcessedMsgId"
+                                    )
+                                    assertEquals(
+                                        expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
+                                        "all nodes should agree on block catalog's latestCompletedTx"
+                                    )
+                                    assertEquals(
+                                        expectedLatestCompletedTx, node.liveIndex.latestCompletedTx,
+                                        "all nodes should agree on live index's latestCompletedTx"
+                                    )
+                                }
 
-                                        assertBlockFilesExist(bp, "test-db", replicaMessages)
+                                assertBlockFilesExist(bp, "test-db", replicaMessages)
 
-                                        assertSnapshotHasNoAbortedRows(leader)
-                                        assertSnapshotHasNoAbortedRows(followerA)
-                                        assertSnapshotHasNoAbortedRows(followerB)
+                                assertSnapshotHasNoAbortedRows(leader)
+                                assertSnapshotHasNoAbortedRows(followerA)
+                                assertSnapshotHasNoAbortedRows(followerB)
                             } finally {
                                 leaderProc.cancelAndJoin()
                                 followerProcA.cancelAndJoin()
@@ -516,35 +525,30 @@ class LogProcessorSimTest : SimulationTestBase() {
                     }
                 }
             }
-            } finally {
-                replicaLog.close()
-                srcLog.close()
-            }
         }
+    }
 
     @RepeatableSimulationTest
     fun `multi-node leadership changes preserve block catalog consistency`() =
         runTest(timeout = 5.seconds) {
-            srcLog = SimLog("src", dispatcher + coroutineContext.job, rand)
-            replicaLog = SimLog("replica", dispatcher + coroutineContext.job, rand)
-            try {
-            val rowsPerBlock = rand.nextLong(15, 25)
-            val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
-            val totalActions = rand.nextInt(50, 100)
-            val actions = buildActions(rand, totalActions)
-            val simExtSource = SimExtSource(actions)
-            val srcLogEventCount = rand.nextInt(20, 40)
-            LOG.debug("test: multi-node $totalActions actions, $srcLogEventCount srcLogEvents (rowsPerBlock=$rowsPerBlock)")
+            withLaunchedSimLogs {
+                val rowsPerBlock = rand.nextLong(15, 25)
+                val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
+                val totalActions = rand.nextInt(50, 100)
+                val actions = buildActions(rand, totalActions)
+                val simExtSource = SimExtSource(actions)
+                val srcLogEventCount = rand.nextInt(20, 40)
+                LOG.debug("test: multi-node $totalActions actions, $srcLogEventCount srcLogEvents (rowsPerBlock=$rowsPerBlock)")
 
-            MemoryStorage(allocator, epoch = 0).use { bp ->
-                SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
-                    SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
-                        val scopeA = CoroutineScope(dispatcher + Job(coroutineContext.job))
-                        val scopeB = CoroutineScope(dispatcher + Job(coroutineContext.job))
+                MemoryStorage(allocator, epoch = 0).use { bp ->
+                    SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeA ->
+                        SimNode("test-db", bp, indexerConfig, simExtSource).use { nodeB ->
+                            val scopeA = CoroutineScope(dispatcher + Job(coroutineContext.job))
+                            val scopeB = CoroutineScope(dispatcher + Job(coroutineContext.job))
 
-                        val logProcA = nodeA.openLogProcessor(scopeA)
-                        val logProcB = nodeB.openLogProcessor(scopeB)
-                        try {
+                            val logProcA = nodeA.openLogProcessor(scopeA)
+                            val logProcB = nodeB.openLogProcessor(scopeB)
+                            try {
                                 val groupJobA = launch(dispatcher) { srcLog.openGroupSubscription(logProcA) }
                                 val groupJobB = launch(dispatcher) { srcLog.openGroupSubscription(logProcB) }
 
@@ -617,16 +621,13 @@ class LogProcessorSimTest : SimulationTestBase() {
 
                                 assertSnapshotHasNoAbortedRows(nodeA)
                                 assertSnapshotHasNoAbortedRows(nodeB)
-                        } finally {
-                            logProcA.cancelAndJoin()
-                            logProcB.cancelAndJoin()
+                            } finally {
+                                logProcA.cancelAndJoin()
+                                logProcB.cancelAndJoin()
+                            }
                         }
                     }
                 }
-            }
-            } finally {
-                replicaLog.close()
-                srcLog.close()
             }
         }
 }
