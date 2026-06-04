@@ -56,9 +56,12 @@ data class MockDatabase(
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
+    val gcScope: CoroutineScope,
 ) {
     fun close() {
-        garbageCollector.close()
+        // The owner stops the GC process (the leaf is purely a process now); cancelling the scope
+        // it runs under is the whole teardown. runBlocking only because this teardown is non-suspend.
+        runBlocking { gcScope.coroutineContext.job.cancelAndJoin() }
         compactorForDb.close()
         compactor.close()
     }
@@ -116,7 +119,9 @@ class NodeSimulationTest : SimulationTestBase() {
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
+                gcScope,
                 sharedBufferPool, dbState,
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
@@ -128,7 +133,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 enabled = false,
                 dispatcher = dispatcher,
             )
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
+            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope)
         }
     }
 

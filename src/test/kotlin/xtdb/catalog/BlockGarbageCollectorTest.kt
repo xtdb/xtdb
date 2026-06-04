@@ -66,6 +66,7 @@ class BlockGarbageCollectorTest {
                 val blockCat = BlockCatalog("xtdb", bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(
+                    backgroundScope,
                     bufferPool, blockCat,
                     blocksToKeep = 3,
                     enabled = false,

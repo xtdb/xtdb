@@ -21,7 +21,6 @@ import xtdb.util.logger
 import xtdb.util.warn
 import java.time.Duration
 import java.time.Instant
-import kotlin.time.Duration.Companion.seconds
 
 private val LOGGER = TrieGarbageCollector::class.logger
 
@@ -51,6 +50,8 @@ private const val TRIES_DELETED_CHUNK_SIZE = 1024
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrieGarbageCollector(
+    /** The owner's scope: supplies this collector's lifetime and the thread its loop runs on. Cancelling it stops the loop. */
+    scope: CoroutineScope,
     private val bufferPool: BufferPool,
     dbState: DatabaseState,
     /**
@@ -65,14 +66,12 @@ class TrieGarbageCollector(
     private val meterRegistry: MeterRegistry? = null,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
+    /** Base for the parallel delete fan-out pools; the loop itself runs on [scope]. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : AutoCloseable {
+) {
 
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
-
-    private val dbJob = Job()
-    private val scope = CoroutineScope(dispatcher + dbJob)
 
     // [signal] is fire-and-forget; bursts coalesce into one upcoming cycle.
     private val signalCh = Channel<Unit>(CONFLATED)
@@ -215,11 +214,4 @@ class TrieGarbageCollector(
     }
 
     fun awaitNoGarbageBlocking() = runBlocking { awaitNoGarbage() }
-
-    override fun close() {
-        runBlocking {
-            withTimeoutOrNull(5.seconds) { dbJob.cancelAndJoin() }
-                ?: LOGGER.warn("Trie GC coroutine did not stop within 5s")
-        }
-    }
 }

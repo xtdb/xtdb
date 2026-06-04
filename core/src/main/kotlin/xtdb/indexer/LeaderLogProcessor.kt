@@ -60,6 +60,8 @@ class LeaderLogProcessor(
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     ctx: CoroutineContext = Dispatchers.Default,
+    // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
+    gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : LogProcessor.LeaderProcessor, TxIndexer {
 
     init {
@@ -82,12 +84,21 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
+    private val scope = CoroutineScope(ctx)
+
+    // The GCs run under a SupervisorJob child of the leader scope, so one GC's failure doesn't
+    // cancel its sibling or the persister. The owner ([close]) cancels it; once the leader process
+    // tree is itself scope-managed this nests and the explicit cancel goes away.
+    private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
+
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
+            gcScope,
             bufferPool, blockCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
             meterRegistry = nodeBase.meterRegistry,
+            dispatcher = gcDispatcher,
             dbName = dbName
         )
     }
@@ -135,8 +146,6 @@ class LeaderLogProcessor(
         Channel<ExtSourceTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
-
-    private val scope = CoroutineScope(ctx)
 
     private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
         val record = task.record
@@ -317,10 +326,12 @@ class LeaderLogProcessor(
         }
 
         TrieGarbageCollector(
+            gcScope,
             bufferPool, dbState,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
-            nodeBase.meterRegistry
+            nodeBase.meterRegistry,
+            dispatcher = gcDispatcher,
         )
     }
 
@@ -578,8 +589,10 @@ class LeaderLogProcessor(
     override suspend fun cancelAndJoin() {
         extJob?.cancelAndJoin()
         extSource?.close()
-        blockGc.close()
-        trieGc.close()
+        // The GCs' lifecycle moved up here from their own `close()`: they're pure scope-launched
+        // processes now, so stopping them is just cancelling the scope they run under. Folds into
+        // the leader scope's cancel once the leader process tree is itself scope-managed.
+        gcScope.coroutineContext.job.cancelAndJoin()
         sourceLogCh.close()
         extSourceCh.close()
         gcCh.close()
