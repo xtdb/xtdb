@@ -133,6 +133,9 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         runBlocking {
+            // One cancel for the whole job tree. The compactor runs under `job`, so this also stops
+            // its loop and frees the driver's child allocator (via the compactor job's
+            // invokeOnCompletion) before `closeAll` frees the database allocator below.
             job?.cancelAndJoin()
             processor?.cancelAndJoin()
         }
@@ -262,13 +265,24 @@ class Database(
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
 
-            val compactorForDb = open {
-                if (readOnly) Compactor.NOOP.openForDatabase(allocator, storage, state, watchers)
-                else compactor.openForDatabase(allocator, storage, state, watchers)
+            val job = Job()
+
+            // A child of the database `job`, so `close()`'s single `job.cancelAndJoin()` stops the
+            // compactor and frees its driver (via the compactor job's invokeOnCompletion) before the
+            // database allocator closes. Also registered with safelyOpening so a failure later in
+            // `open` cancels the loop — it runs against the driver, which safelyOpening would
+            // otherwise free out from under it.
+            val compactorScope = CoroutineScope(Job(job))
+            open {
+                AutoCloseable {
+                    runBlocking { compactorScope.coroutineContext.job.cancelAndJoin() }
+                }
             }
+            val compactorForDb =
+                if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
+                else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers)
 
             var processor: LogProcessor? = null
-            val job = Job()
             val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
                 watchers.notifyError(e)
             })
