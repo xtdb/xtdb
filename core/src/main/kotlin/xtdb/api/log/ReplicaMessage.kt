@@ -112,8 +112,10 @@ sealed interface ReplicaMessage {
         val tableData: Map<String, ByteArray>,
         val dbOp: DbOp? = null,
         val externalSourceToken: ExternalSourceToken? = null,
-        // Set when this tx came from the source log (then equal to its source-log msgId);
-        // null for ext-source txs whose `txId` is an independent counter.
+        // The source-log watermark when this record was produced: for a source-log tx, its own
+        // msgId; for an ext-source tx, the leader's current source-log position (so followers keep
+        // their `latestSourceMsgId` in step between block boundaries). Null only on legacy records
+        // written before this field existed (see #5586).
         val srcMsgId: MessageId? = null,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {

@@ -139,7 +139,10 @@ class ExternalSourceTest {
             val resolved = replicaMessages[0] as ReplicaMessage.ResolvedTx
             assertEquals(true, resolved.committed)
             assertEquals(0L, resolved.txId)
-            assertNull(resolved.srcMsgId, "ext-source ResolvedTx should not carry a source-log msgId")
+            assertEquals(
+                -1L, resolved.srcMsgId,
+                "ext-source ResolvedTx carries the leader's source-log watermark (-1 — no source-log records yet)"
+            )
         } finally {
             lp.cancelAndJoin()
         }

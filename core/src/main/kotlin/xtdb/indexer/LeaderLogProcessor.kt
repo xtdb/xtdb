@@ -216,16 +216,20 @@ class LeaderLogProcessor(
         }
     }
 
-    // Ext-source (`srcMsgId == null`) tracks its progress via `externalSourceToken`, not
-    // `latestSourceMsgId` — so it doesn't bump.
+    // Ext-source txs carry no source-log position of their own (`srcMsgId == null` on the way in)
+    // and track progress via `externalSourceToken`, so they don't advance the leader's
+    // `latestSourceMsgId` (which is driven by the source log). We do stamp the current source-log
+    // watermark onto the replicated record, though: without it a follower's `latestSourceMsgId`
+    // lags between block boundaries, and on promotion it resumes the source log from a stale point
+    // and replays an already-covered block boundary.
     private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx, srcMsgId: MessageId?) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val txResult = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
 
-        appendToReplica(resolvedTx.copy(srcMsgId = srcMsgId))
+        val effectiveSrcMsgId = srcMsgId ?: watchers.latestSourceMsgId
+        appendToReplica(resolvedTx.copy(srcMsgId = effectiveSrcMsgId))
         liveIndex.importTx(resolvedTx)
 
-        val effectiveSrcMsgId = srcMsgId ?: watchers.latestSourceMsgId
         watchers.notifyTx(txResult, effectiveSrcMsgId, resolvedTx.externalSourceToken)
 
         if (liveIndex.isFull())
