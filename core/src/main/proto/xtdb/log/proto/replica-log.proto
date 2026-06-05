@@ -47,4 +47,6 @@ message BlockBoundary {
     bytes external_source_token = 3;
 }
 
-message NoOp {}
+message NoOp {
+    int64 src_msg_id = 1;
+}

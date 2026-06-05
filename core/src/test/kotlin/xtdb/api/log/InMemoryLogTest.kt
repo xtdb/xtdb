@@ -40,7 +40,7 @@ class InMemoryLogTest {
             runBlocking(dispatcher) {
                 withTimeout(5.seconds) {
                     log.openAtomicProducer("test").withTx { tx ->
-                        tx.appendMessage(ReplicaMessage.NoOp)
+                        tx.appendMessage(ReplicaMessage.NoOp())
                     }
                 }
             }

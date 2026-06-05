@@ -48,7 +48,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
             is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-            is ReplicaMessage.NoOp -> false
+            is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
             is ReplicaMessage.TriesDeleted -> false
         }
 
@@ -113,7 +113,7 @@ class TransitionLogProcessor(
                 watchers.notifyMsg(msg.latestProcessedMsgId)
             }
 
-            is ReplicaMessage.NoOp -> Unit
+            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> {
                 trieCatalog.deleteTries(TableRef.parse(dbState.name, msg.tableName), msg.trieKeys)

@@ -125,7 +125,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
             is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-            is ReplicaMessage.NoOp -> false
+            is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
             // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
             is ReplicaMessage.TriesDeleted -> false
         }
@@ -185,7 +185,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 "BlockUploaded should be handled by handleRecord, never reaching processRecord directly. msgId=${record.msgId}, blockIndex=${msg.blockIndex.asLexHex}, latestProcessedMsgId=${msg.latestProcessedMsgId}"
             )
 
-            is ReplicaMessage.NoOp -> Unit
+            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 trieCatalog.deleteTries(TableRef.parse(dbState.name, msg.tableName), msg.trieKeys)

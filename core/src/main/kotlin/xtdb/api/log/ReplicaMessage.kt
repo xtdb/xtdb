@@ -80,7 +80,9 @@ sealed interface ReplicaMessage {
                             )
                         }
 
-                        ReplicaLogMessage.MessageCase.NO_OP -> NoOp
+                        ReplicaLogMessage.MessageCase.NO_OP -> msg.noOp.let {
+                            NoOp(if (it.hasSrcMsgId()) it.srcMsgId else null)
+                        }
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
                             TriesDeleted(it.tableName, it.trieKeysList.toSet())
@@ -190,8 +192,13 @@ sealed interface ReplicaMessage {
         }
     }
 
-    data object NoOp : ProtobufMessage() {
-        override fun toLogMessage() = replicaLogMessage { noOp = noOp {} }
+    // `srcMsgId` carries the leader's source-log watermark when no other record propagates it
+    // (a FlushBlock that finishes no block); followers advance `latestSourceMsgId` on it. Null
+    // when used purely as a transition replay-target marker.
+    data class NoOp(val srcMsgId: MessageId? = null) : ProtobufMessage() {
+        override fun toLogMessage() = replicaLogMessage {
+            noOp = noOp { this@NoOp.srcMsgId?.let { srcMsgId = it } }
+        }
     }
 
     data class TriesDeleted(

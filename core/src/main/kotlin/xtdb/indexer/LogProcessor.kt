@@ -142,7 +142,7 @@ class LogProcessor(
                         // Send a NoOp to get a known msgId we can await —
                         // we can't use latestSubmittedMsgId because Kafka's endOffsets
                         // includes transaction marker offsets that consumers never deliver.
-                        val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp) }.await().msgId
+                        val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
 
                         followerProc.awaitReplicaMsgId(replayTarget)
                         LOG.debug("[$dbName] transition: closing follower system")

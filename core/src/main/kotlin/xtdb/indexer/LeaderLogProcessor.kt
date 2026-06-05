@@ -149,6 +149,9 @@ class LeaderLogProcessor(
                 val expectedBlockIdx = msg.expectedBlockIdx
                 if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
                     finishBlock(msgId, watchers.externalSourceToken)
+                } else {
+                    // see #5680
+                    appendToReplica(ReplicaMessage.NoOp(srcMsgId = msgId))
                 }
                 watchers.notifyMsg(msgId)
             }
