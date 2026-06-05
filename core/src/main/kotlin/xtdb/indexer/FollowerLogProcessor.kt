@@ -3,6 +3,9 @@ package xtdb.indexer
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
@@ -29,7 +32,9 @@ import xtdb.util.trace
 private val LOG = FollowerLogProcessor::class.logger
 
 class FollowerLogProcessor @JvmOverloads constructor(
+    scope: CoroutineScope,
     allocator: BufferAllocator,
+    replicaLog: Log<ReplicaMessage>,
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
@@ -241,6 +246,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             try {
                 handleRecord(record)
                 replicaState.value = ReplicaState.Active(record.msgId)
+            } catch (e: CancellationException) {
+                // The owner cancelled the term — not a processing failure, so don't poison the
+                // shared watchers via notifyError.
+                throw e
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {
@@ -267,7 +276,20 @@ class FollowerLogProcessor @JvmOverloads constructor(
         replicaState.value = ReplicaState.Failed(latestReplicaMsgId, e)
     }
 
-    override suspend fun cancelAndJoin() {
-        allocator.close()
+    // Launched last, so every field the tail touches is initialised before the loop's first record;
+    // `tailAll` suspends immediately on subscribe. A cancel (role transition / shutdown) stops the
+    // tail and, once it has joined, the completion handler frees this processor's child allocator.
+    // `allocator` is `this@…`-qualified: bare `allocator` in an init lambda binds the ctor param.
+    init {
+        val tailJob = scope.launch {
+            try {
+                replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                notifyError(e); throw e
+            }
+        }
+        tailJob.invokeOnCompletion { this@FollowerLogProcessor.allocator.close() }
     }
 }

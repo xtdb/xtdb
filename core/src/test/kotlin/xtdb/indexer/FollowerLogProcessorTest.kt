@@ -3,9 +3,11 @@ package xtdb.indexer
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
+import kotlinx.coroutines.awaitCancellation
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -41,6 +43,7 @@ class FollowerLogProcessorTest {
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var dbState: DatabaseState
+    private lateinit var replicaLog: Log<ReplicaMessage>
 
     @BeforeEach
     fun setUp() {
@@ -54,6 +57,11 @@ class FollowerLogProcessorTest {
         dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
+        // The processor self-launches its replica tail; park it so it idles while the test drives
+        // processRecords directly — a relaxed mock would return immediately and tear the proc down.
+        replicaLog = mockk(relaxed = true)
+        coEvery { replicaLog.tailAll(any(), any()) } coAnswers { awaitCancellation() }
+
         every { bufferPool.epoch } returns 1
     }
 
@@ -62,13 +70,13 @@ class FollowerLogProcessorTest {
         allocator.close()
     }
 
-    private fun makeProcessor(
+    private fun TestScope.makeProcessor(
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            allocator, bufferPool, dbState,
+            backgroundScope, allocator, replicaLog, bufferPool, dbState,
             compactor, watchers, null, null, afterReplicaMsgId = -1L,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
@@ -89,9 +97,7 @@ class FollowerLogProcessorTest {
             record(3, ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap())),
         )
 
-        assertThrows<Fault> { proc.processRecords(records) }
-        proc.cancelAndJoin()
-    }
+        assertThrows<Fault> { proc.processRecords(records) }    }
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {
@@ -107,8 +113,6 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.importTx(tx40) }
         verify(exactly = 0) { liveIndex.importTx(tx42) }
         verify { liveIndex.importTx(tx43) }
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -135,8 +139,6 @@ class FollowerLogProcessorTest {
 
         verify(exactly = 0) { liveIndex.importTx(any()) }
         assert(watchers.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -160,8 +162,6 @@ class FollowerLogProcessorTest {
 
         assertEquals(0L, blockCatalog.currentBlockIndex,
             "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -180,8 +180,6 @@ class FollowerLogProcessorTest {
 
         verify { liveIndex.importTx(tx1001) }
         assert(watchers.latestSourceMsgId == 1001L)
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -205,8 +203,6 @@ class FollowerLogProcessorTest {
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
         assertEquals(0L, blockCatalog.currentBlockIndex)
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -224,8 +220,6 @@ class FollowerLogProcessorTest {
         verify { liveIndex.importTx(ext2) }
         assertEquals(1L, watchers.latestSourceMsgId,
             "latestSourceMsgId reflects only the source-log tx; ext-source txs leave it alone")
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -260,8 +254,6 @@ class FollowerLogProcessorTest {
         assertNotNull(bufferedRecords, "buffered records summary should be registered")
         assertEquals(1L, bufferedRecords!!.count())
         assertEquals(0.0, bufferedRecords.totalAmount(), "no records buffered when BlockUploaded follows BlockBoundary directly")
-
-        proc.cancelAndJoin()
     }
 
     @Test
@@ -284,7 +276,5 @@ class FollowerLogProcessorTest {
         assertNotNull(bufferedRecords)
         assertEquals(1L, bufferedRecords!!.count())
         assertEquals(2.0, bufferedRecords.totalAmount(), "two records buffered between boundary and uploaded")
-
-        proc.cancelAndJoin()
     }
 }

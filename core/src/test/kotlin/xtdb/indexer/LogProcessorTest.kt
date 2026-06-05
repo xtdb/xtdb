@@ -61,23 +61,21 @@ class LogProcessorTest {
         watchers: Watchers,
     ) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeaderSystem(
+            override fun openLeader(
+                termScope: CoroutineScope,
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                 afterReplicaMsgId: MessageId,
-            ): LogProcessor.LeaderSystem {
+            ): LogProcessor.LeaderProcessor {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
-                val leaderProc = LeaderLogProcessor(
+                return LeaderLogProcessor(
                     allocator, nodeBase, dbStorage, mockk(relaxed = true),
                     dbState, blockUploader, watchers,
                     extSource = null, replicaProducer = replicaProducer,
                     skipTxs = emptySet(), dbCatalog = null,
                     partition = 0, afterReplicaMsgId = afterReplicaMsgId,
+                    scope = termScope,
                 )
-                return object : LogProcessor.LeaderSystem {
-                    override val proc get() = leaderProc
-                    override suspend fun cancelAndJoin() = leaderProc.cancelAndJoin()
-                }
             }
 
             override fun openTransition(
@@ -93,11 +91,12 @@ class LogProcessorTest {
                 )
 
             override fun openFollower(
+                termScope: CoroutineScope,
                 pendingBlock: PendingBlock?,
                 afterReplicaMsgId: MessageId,
             ): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
-                    allocator, bufferPool, dbState,
+                    termScope, allocator, dbStorage.replicaLog, bufferPool, dbState,
                     mockk(relaxed = true), watchers, null, pendingBlock,
                     afterReplicaMsgId,
                     hasExternalSource = false,
@@ -120,10 +119,10 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        job.cancelAndJoin()
-        logProc.cancelAndJoin()
+        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        scope.coroutineContext.job.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -144,10 +143,10 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        job.cancelAndJoin()
-        logProc.cancelAndJoin()
+        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        scope.coroutineContext.job.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -176,15 +175,15 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
         watchers.awaitTx(1)
 
         verify { liveIndex.importTx(any()) }
 
-        job.cancelAndJoin()
-        logProc.cancelAndJoin()
+        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        scope.coroutineContext.job.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }
@@ -211,14 +210,14 @@ class LogProcessorTest {
             dbStorage, dbState, watchers, blockUploader, scope
         )
 
-        val job = scope.launch { sourceLog.openGroupSubscription(logProc) }
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
 
         watchers.awaitTx(1)
 
         verify { liveIndex.importTx(any()) }
 
-        job.cancelAndJoin()
-        logProc.cancelAndJoin()
+        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        scope.coroutineContext.job.cancelAndJoin()
         sourceLog.close()
         replicaLog.close()
     }

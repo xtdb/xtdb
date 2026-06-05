@@ -26,7 +26,6 @@ import xtdb.trie.*
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException
 import java.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlin.use
 
 typealias JobKey = Pair<TableRef, TrieKey>
@@ -51,7 +50,7 @@ interface Compactor : AutoCloseable {
         fun create(meterRegistry: MeterRegistry?, threads: Int): Compactor
     }
 
-    interface ForDatabase : AutoCloseable {
+    interface ForDatabase {
         fun signalBlock()
         suspend fun compactAll()
 
@@ -63,7 +62,7 @@ interface Compactor : AutoCloseable {
         }
     }
 
-    fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
+    fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
 
     interface Driver : AutoCloseable {
         suspend fun executeJob(job: Job): TriesAdded
@@ -165,10 +164,14 @@ interface Compactor : AutoCloseable {
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
         private val jobsSemaphore = Semaphore(threadCount)
 
-        override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+        override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
-            private val dbJob = Job()
-            private val scope = CoroutineScope(dbJob + dispatcher)
+            // Child of the owner scope: cancelling that scope stops the loop and its per-job
+            // coroutines, and the driver's resources (child allocator + SegmentMerge temp dir) are
+            // freed when this job completes — leaf-first, after every in-flight compaction buffer's
+            // `.use` has released, so no buffer ever outlives its allocator.
+            private val dbJob = Job(scope.coroutineContext.job)
+            private val loopScope = CoroutineScope(dbJob + dispatcher)
 
             private val trieCatalog = dbState.trieCatalog
             private val liveIndex = dbState.liveIndexOrNull
@@ -198,9 +201,16 @@ interface Compactor : AutoCloseable {
             }
 
             init {
+                // Free the driver's resources when the compactor job completes — fires even if the
+                // job is cancelled before the loop is ever scheduled, so the driver never leaks.
+                dbJob.invokeOnCompletion {
+                    driver.close()
+                    LOGGER.debug("compactor closed")
+                }
+
                 val jobsScope = CoroutineScope(SupervisorJob(dbJob) + jobsDispatcher)
 
-                scope.launch(CoroutineName("outer loop")) {
+                loopScope.launch(CoroutineName("outer loop")) {
                     while (true) {
                         availableJobs =
                             jobCalculator.availableJobs(trieCatalog)
@@ -272,18 +282,6 @@ interface Compactor : AutoCloseable {
                 // catalog, so refresh the snap here rather than at every test/dev call-site.
                 liveIndex?.refreshSnap()
             }
-
-            override fun close() {
-
-                runBlocking {
-                    withTimeoutOrNull(10.seconds) { dbJob.cancelAndJoin() }
-                        ?: LOGGER.warn("failed to close compactor cleanly in 10s")
-                }
-
-                driver.close()
-
-                LOGGER.debug("compactor closed")
-            }
         }
     }
 
@@ -292,10 +290,9 @@ interface Compactor : AutoCloseable {
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun openForDatabase(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+            override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override suspend fun compactAll() = Unit
-                override fun close() = Unit
             }
 
             override fun close() = Unit

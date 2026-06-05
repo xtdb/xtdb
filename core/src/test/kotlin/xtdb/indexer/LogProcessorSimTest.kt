@@ -95,11 +95,11 @@ class LogProcessorSimTest : SimulationTestBase() {
      * Putting `indexTx` inside `onPartitionAssigned` (rather than calling it from the test
      * driver against a stale `TxIndexer` reference) is what keeps the leader's allocator
      * accounting clean across rebalances: `indexTx` allocates an `OpenTx` from the
-     * leader's allocator; if `LeaderLogProcessor.close()` runs while that `OpenTx` is still
-     * live, `allocator.close()` throws on the outstanding allocation. Holding the call
-     * inside `onPartitionAssigned` ties its lifetime to the leader's scope — `extJob.cancel()`
-     * propagates cancellation through `indexTx`'s inner catch, which closes the `OpenTx`
-     * before the allocator does.
+     * leader's allocator; if the leader term's scope were cancelled while that `OpenTx` is
+     * still live, the leader's `invokeOnCompletion` `allocator.close()` would throw on the
+     * outstanding allocation. Holding the call inside `onPartitionAssigned` ties its lifetime
+     * to the leader's scope — cancelling that scope propagates cancellation through `indexTx`'s
+     * inner catch, which closes the `OpenTx` before the allocator does.
      */
     private inner class SimExtSource(private val actions: List<SimAction>) : ExternalSource {
         private val watchersList = mutableListOf<Watchers>()
@@ -174,23 +174,19 @@ class LogProcessorSimTest : SimulationTestBase() {
             BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
-        override fun openLeaderSystem(
+        override fun openLeader(
+            termScope: CoroutineScope,
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterReplicaMsgId: MessageId,
-        ): LogProcessor.LeaderSystem {
-            val proc = LeaderLogProcessor(
-                allocator, nodeBase, dbStorage, crashLogger,
-                dbState, blockUploader, watchers,
-                extSource = simExtSource, replicaProducer = replicaProducer,
-                skipTxs = emptySet(), dbCatalog = null,
-                partition = 0, afterReplicaMsgId = afterReplicaMsgId,
-                ctx = dispatcher
-            )
-            return object : LogProcessor.LeaderSystem {
-                override val proc get() = proc
-                override suspend fun cancelAndJoin() = proc.cancelAndJoin()
-            }
-        }
+        ) = LeaderLogProcessor(
+            allocator, nodeBase, dbStorage, crashLogger,
+            dbState, blockUploader, watchers,
+            extSource = simExtSource, replicaProducer = replicaProducer,
+            skipTxs = emptySet(), dbCatalog = null,
+            partition = 0, afterReplicaMsgId = afterReplicaMsgId,
+            scope = termScope,
+            gcDispatcher = dispatcher,
+        )
 
         override fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -205,11 +201,12 @@ class LogProcessorSimTest : SimulationTestBase() {
             )
 
         override fun openFollower(
+            termScope: CoroutineScope,
             pendingBlock: PendingBlock?,
             afterReplicaMsgId: MessageId,
         ): LogProcessor.FollowerProcessor =
             FollowerLogProcessor(
-                allocator, bp, dbState,
+                termScope, allocator, replicaLog, bp, dbState,
                 mockk<Compactor.ForDatabase>(relaxed = true),
                 watchers, null, pendingBlock,
                 afterReplicaMsgId,

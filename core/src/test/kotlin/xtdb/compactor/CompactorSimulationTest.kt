@@ -41,8 +41,6 @@ import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.util.debug
 import xtdb.util.logger
-import xtdb.util.safeMap
-import xtdb.util.useAll
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -320,6 +318,28 @@ class CompactorSimulationTest : SimulationTestBase() {
     }
 
 
+    // Open the compactor on a scope and tear it down by cancelling that scope — the driver's
+    // resources are freed when the compactor job completes (the job tree), not via a close() call.
+    private fun MockDb.withCompactor(block: (Compactor.ForDatabase) -> Unit) {
+        val scope = CoroutineScope(dispatcher)
+        try {
+            block(compactor.openForDatabase(scope, allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)))
+        } finally {
+            runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        }
+    }
+
+    private fun withCompactors(dbs: List<MockDb>, block: (List<Compactor.ForDatabase>) -> Unit) {
+        val scopes = dbs.map { CoroutineScope(dispatcher) }
+        try {
+            block(dbs.zip(scopes).map { (db, scope) ->
+                db.compactor.openForDatabase(scope, allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            })
+        } finally {
+            runBlocking { scopes.forEach { it.coroutineContext.job.cancelAndJoin() } }
+        }
+    }
+
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun singleL0Compaction() {
@@ -327,7 +347,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
         val db = dbs[0]
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use {
+        db.withCompactor {
             seedTries(docsTable, listOf(l0Trie))
             it.compactAllSync(null)
         }
@@ -355,7 +375,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val table = TableRef("xtdb", "public", "docs")
         val db = dbs[0]
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use {
+        db.withCompactor {
             // Round 1: Add 3 L0 tries and compact
             seedTries(
                 table,
@@ -418,7 +438,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
         val db = dbs[0]
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use { c ->
+        db.withCompactor { c ->
             seedTries(docsTable, l0tries.toList())
             c.compactAllSync(null)
             val liveTries = db.trieCatalog.listLiveAndNascentTrieKeys(docsTable)
@@ -441,7 +461,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         val l1Tries = L1TrieKeys.take(4).map { buildTrieDetails(docsTable.tableName, it, defaultFileTarget) }
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use {
+        db.withCompactor {
             seedTries(docsTable, l1Tries.toList())
 
             it.compactAllSync(null)
@@ -479,7 +499,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         val missingPartitions = (0..3).filterNot { it in existingPartitions }
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use {
+        db.withCompactor {
             seedTries(docsTable, l1Tries.toList() + existingL2Tries)
 
             it.compactAllSync(null)
@@ -526,7 +546,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b03", defaultFileTarget))
         l2tries.add(buildTrieDetails(docsTable.tableName, "l02-rc-p3-b07", defaultFileTarget))
 
-        db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)).use {
+        db.withCompactor {
             seedTries(docsTable, l1Tries.toList() + l2tries)
 
             it.compactAllSync(null)
@@ -559,9 +579,7 @@ class CompactorSimulationTest : SimulationTestBase() {
         seedTries(usersTable, usersTries.toList())
         seedTries(ordersTable, ordersTries.toList())
 
-        dbs.safeMap { db ->
-            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
-        }.useAll { compactorsForDb ->
+        withCompactors(dbs) { compactorsForDb ->
             runBlocking {
                 compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
             }
@@ -608,9 +626,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         seedTries(docsTable, listOf(l0Trie))
 
-        dbs.safeMap { db ->
-            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
-        }.useAll { compactorsForDb ->
+        withCompactors(dbs) { compactorsForDb ->
             runBlocking {
                 compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
             }
@@ -642,9 +658,7 @@ class CompactorSimulationTest : SimulationTestBase() {
 
         seedTries(docsTable, l0tries.toList())
 
-        dbs.safeMap { db ->
-            db.compactor.openForDatabase(allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
-        }.useAll { compactorsForDb ->
+        withCompactors(dbs) { compactorsForDb ->
             runBlocking {
                 compactorsForDb.shuffled(rand).map { c -> async { c.compactAll() } }.awaitAll()
             }

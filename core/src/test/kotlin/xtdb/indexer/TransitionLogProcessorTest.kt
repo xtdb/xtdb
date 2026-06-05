@@ -74,7 +74,7 @@ class TransitionLogProcessorTest {
 
         coVerify { blockUploader.uploadBlock(replicaProducer, 1, any()) }
 
-        proc.cancelAndJoin()
+        proc.close()
     }
 
     @Test
@@ -94,6 +94,6 @@ class TransitionLogProcessorTest {
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
 
-        proc.cancelAndJoin()
+        proc.close()
     }
 }

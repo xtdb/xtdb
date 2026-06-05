@@ -56,10 +56,18 @@ data class MockDatabase(
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
+    val gcScope: CoroutineScope,
+    val compactorScope: CoroutineScope,
 ) {
     fun close() {
-        garbageCollector.close()
-        compactorForDb.close()
+        // The owner stops the GC and compaction processes (the leaves are pure scope-launched
+        // processes now); cancelling the scopes they run under is the whole teardown. The compactor
+        // frees its driver's resources via invokeOnCompletion as its job completes. runBlocking only
+        // because this teardown is non-suspend.
+        runBlocking {
+            gcScope.coroutineContext.job.cancelAndJoin()
+            compactorScope.coroutineContext.job.cancelAndJoin()
+        }
         compactor.close()
     }
 }
@@ -115,8 +123,11 @@ class NodeSimulationTest : SimulationTestBase() {
             val compactor = Compactor.Impl(compactorDriver, null, jobCalculator, false, 2, dispatcher)
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
-            val compactorForDb = compactor.openForDatabase(allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            val compactorScope = CoroutineScope(dispatcher)
+            val compactorForDb = compactor.openForDatabase(compactorScope, allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
+                gcScope,
                 sharedBufferPool, dbState,
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
@@ -128,7 +139,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 enabled = false,
                 dispatcher = dispatcher,
             )
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector)
+            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
         }
     }
 

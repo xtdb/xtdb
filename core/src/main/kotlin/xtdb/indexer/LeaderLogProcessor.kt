@@ -37,7 +37,6 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
-import kotlin.coroutines.CoroutineContext
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -59,7 +58,10 @@ class LeaderLogProcessor(
     afterReplicaMsgId: MessageId,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
-    ctx: CoroutineContext = Dispatchers.Default,
+    // The leader term's scope, owned by the LogProcessor wrapper; cancelling it tears the leader down.
+    scope: CoroutineScope,
+    // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
+    gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : LogProcessor.LeaderProcessor, TxIndexer {
 
     init {
@@ -82,12 +84,18 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
+    // The GCs run under a SupervisorJob child of the leader scope, so one GC's failure cancels
+    // neither its sibling nor the persister; cancelling the leader scope reaps them all.
+    private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
+
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
+            gcScope,
             bufferPool, blockCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
             meterRegistry = nodeBase.meterRegistry,
+            dispatcher = gcDispatcher,
             dbName = dbName
         )
     }
@@ -135,8 +143,6 @@ class LeaderLogProcessor(
         Channel<ExtSourceTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
-
-    private val scope = CoroutineScope(ctx)
 
     private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
         val record = task.record
@@ -317,10 +323,12 @@ class LeaderLogProcessor(
         }
 
         TrieGarbageCollector(
+            gcScope,
             bufferPool, dbState,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
-            nodeBase.meterRegistry
+            nodeBase.meterRegistry,
+            dispatcher = gcDispatcher,
         )
     }
 
@@ -335,6 +343,18 @@ class LeaderLogProcessor(
             } catch (e: Throwable) {
                 watchers.notifyError(e)
             }
+        }
+    }
+
+    init {
+        // Cleanup rides the job tree, not an explicit teardown call: once the leader term's scope is
+        // cancelled and its coroutines (persister, ext source, GCs) have joined, free what this term
+        // opened — leaf-first. `allocator` must be `this@…`-qualified: bare `allocator` in an init
+        // lambda binds the ctor param (the parent), not this child field.
+        scope.coroutineContext.job.invokeOnCompletion {
+            extSource?.close()
+            replicaProducer.close()
+            this@LeaderLogProcessor.allocator.close()
         }
     }
 
@@ -575,15 +595,4 @@ class LeaderLogProcessor(
         }
     }
 
-    override suspend fun cancelAndJoin() {
-        extJob?.cancelAndJoin()
-        extSource?.close()
-        blockGc.close()
-        trieGc.close()
-        sourceLogCh.close()
-        extSourceCh.close()
-        gcCh.close()
-        persisterJob.join()
-        allocator.close()
-    }
 }
