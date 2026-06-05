@@ -206,10 +206,6 @@ class LogProcessor(
         }
     }
 
-    suspend fun cancelAndJoin() {
-        sys.cancelAndJoin()
-    }
-
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
      * both. No-op on follower systems — GC only runs on the leader. Bypasses the collectors'

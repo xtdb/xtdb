@@ -133,11 +133,11 @@ class Database(
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
         runBlocking {
-            // One cancel for the whole job tree. The compactor runs under `job`, so this also stops
-            // its loop and frees the driver's child allocator (via the compactor job's
-            // invokeOnCompletion) before `closeAll` frees the database allocator below.
+            // One cancel for the whole job tree: the compactor, the source-log subscription and the
+            // live leader/follower term all run under `job`, so cancelling and joining it stops them
+            // and runs their `invokeOnCompletion` frees (driver, allocator, replica producer, ext
+            // source) before `closeAll` frees the database allocator below.
             job?.cancelAndJoin()
-            processor?.cancelAndJoin()
         }
         (partitions.values + listOf(storage, allocator)).closeAll()
     }
