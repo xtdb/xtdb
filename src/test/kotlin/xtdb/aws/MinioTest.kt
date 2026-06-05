@@ -26,6 +26,7 @@ import java.util.*
 import kotlin.io.path.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toJavaDuration
 
@@ -130,6 +131,45 @@ class MinioTest : S3Test() {
                     assertFalse(rs.next())
                 }
             }
+        }
+    }
+
+    @Test
+    fun `attach with credential-less S3 storage resolves via the default chain`(@TempDir nodeDir: Path) = runTest {
+        // the attach !S3 block omits credentials, so the object store must fall through to the
+        // default AWS provider chain (IRSA in production) - seed that chain via system properties
+        val prevAccessKey = System.setProperty("aws.accessKeyId", container.userName)
+        val prevSecretKey = System.setProperty("aws.secretAccessKey", container.password)
+        try {
+            Xtdb.openNode {
+                diskCache(DiskCache.factory(nodeDir.resolve("disk-cache")))
+                log(Log.localLog(nodeDir.resolve("xt-log")))
+                storage(Storage.local(nodeDir.resolve("xt-objs")))
+                compactor { threads(0) }
+            }.use { node ->
+                node.connection.use { conn ->
+                    conn.createStatement().use { stmt ->
+                        stmt.execute("""ATTACH DATABASE foo WITH $$
+                            log: !Local { path: "${nodeDir.resolve("foo-log")}" }
+                            storage: !Remote
+                              objectStore: !S3
+                                bucket: "$bucket"
+                                endpoint: "${container.s3URL}"
+                                region: "${AWS_ISO_GLOBAL.id()}"
+                                pathStyleAccessEnabled: true
+                                prefix: "${UUID.randomUUID()}"
+                            $$"""
+                        )
+                    }
+                }
+
+                val cat = (node as Xtdb.XtdbInternal).dbCatalog
+                assertEquals(setOf("xtdb", "foo"), cat.databaseNames.toSet())
+                assertNull(cat["foo"]?.ingestionError)
+            }
+        } finally {
+            prevAccessKey?.let { System.setProperty("aws.accessKeyId", it) } ?: System.clearProperty("aws.accessKeyId")
+            prevSecretKey?.let { System.setProperty("aws.secretAccessKey", it) } ?: System.clearProperty("aws.secretAccessKey")
         }
     }
 }

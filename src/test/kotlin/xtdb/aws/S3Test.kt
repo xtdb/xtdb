@@ -10,6 +10,7 @@ import java.lang.System.getProperty
 import java.nio.file.Path
 import kotlin.io.path.Path
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @Tag("s3")
 open class S3Test : ObjectStoreTest() {
@@ -37,5 +38,12 @@ open class S3Test : ObjectStoreTest() {
         val deserializedFactory = registration.fromProto(proto)
 
         assertEquals(originalFactory, deserializedFactory)
+    }
+
+    @Test
+    fun `proto round trip without credentials leaves the default chain to resolve them`() = runTest {
+        val deserializedFactory = S3.Registration().fromProto(s3("test-bucket").configProto) as S3.Factory
+
+        assertNull(deserializedFactory.credentials)
     }
 }
