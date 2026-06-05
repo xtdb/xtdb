@@ -370,7 +370,9 @@ class S3(
                     region = config.region.takeIf { it.isNotEmpty() },
                     bucket = config.bucket,
                     prefix = config.prefix.takeIf { it.isNotEmpty() }?.asPath,
-                    credentials = config.credentials?.let { BasicCredentials(it.accessKey, it.secretKey) },
+                    credentials = if (config.hasCredentials())
+                        BasicCredentials(config.credentials.accessKey, config.credentials.secretKey)
+                    else null,
                     endpoint = config.endpoint.takeIf { it.isNotEmpty() },
                     pathStyleAccessEnabled = config.pathStyleAccessEnabled
                 )
