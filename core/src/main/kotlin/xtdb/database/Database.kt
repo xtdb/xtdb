@@ -293,38 +293,34 @@ class Database(
 
                 val procFactory = object : LogProcessor.ProcessorFactory {
                     override fun openFollower(
+                        termScope: CoroutineScope,
                         pendingBlock: PendingBlock?,
                         afterReplicaMsgId: MessageId,
                     ) = FollowerLogProcessor(
-                        allocator, storage.bufferPool, state, compactorForDb,
+                        termScope, allocator, storage.replicaLog, storage.bufferPool, state, compactorForDb,
                         watchers, dbCatalog, pendingBlock, afterReplicaMsgId,
                         hasExternalSource = hasExternalSource,
                         meterRegistry = base.meterRegistry,
                     )
 
-                    override fun openLeaderSystem(
+                    // The leader term owns its replica producer and ext source; both are freed by
+                    // LeaderLogProcessor's `invokeOnCompletion` when `termScope` is cancelled.
+                    override fun openLeader(
+                        termScope: CoroutineScope,
                         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                         afterReplicaMsgId: MessageId,
-                    ): LogProcessor.LeaderSystem {
-                        val extSource = dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry)
-
-                        val leaderProc = LeaderLogProcessor(
-                            allocator, base, storage, crashLogger,
-                            state, blockUploader, watchers,
-                            extSource = extSource,
-                            replicaProducer = replicaProducer,
-                            skipTxs = indexerConfig.skipTxs.toSet(),
-                            dbCatalog = dbCatalog,
-                            partition = 0,
-                            afterReplicaMsgId = afterReplicaMsgId,
-                            flushTimeout = indexerConfig.flushDuration,
-                        )
-
-                        return object : LogProcessor.LeaderSystem {
-                            override val proc get() = leaderProc
-                            override suspend fun cancelAndJoin() { leaderProc.cancelAndJoin(); replicaProducer.close() }
-                        }
-                    }
+                    ) = LeaderLogProcessor(
+                        allocator, base, storage, crashLogger,
+                        state, blockUploader, watchers,
+                        extSource = dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry),
+                        replicaProducer = replicaProducer,
+                        skipTxs = indexerConfig.skipTxs.toSet(),
+                        dbCatalog = dbCatalog,
+                        partition = 0,
+                        afterReplicaMsgId = afterReplicaMsgId,
+                        flushTimeout = indexerConfig.flushDuration,
+                        scope = termScope,
+                    )
 
                     override fun openTransition(
                         replicaProducer: Log.AtomicProducer<ReplicaMessage>,

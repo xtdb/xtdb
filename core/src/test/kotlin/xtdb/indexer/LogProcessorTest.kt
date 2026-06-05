@@ -61,23 +61,21 @@ class LogProcessorTest {
         watchers: Watchers,
     ) =
         object : LogProcessor.ProcessorFactory {
-            override fun openLeaderSystem(
+            override fun openLeader(
+                termScope: CoroutineScope,
                 replicaProducer: Log.AtomicProducer<ReplicaMessage>,
                 afterReplicaMsgId: MessageId,
-            ): LogProcessor.LeaderSystem {
+            ): LogProcessor.LeaderProcessor {
                 val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
                 val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
-                val leaderProc = LeaderLogProcessor(
+                return LeaderLogProcessor(
                     allocator, nodeBase, dbStorage, mockk(relaxed = true),
                     dbState, blockUploader, watchers,
                     extSource = null, replicaProducer = replicaProducer,
                     skipTxs = emptySet(), dbCatalog = null,
                     partition = 0, afterReplicaMsgId = afterReplicaMsgId,
+                    scope = termScope,
                 )
-                return object : LogProcessor.LeaderSystem {
-                    override val proc get() = leaderProc
-                    override suspend fun cancelAndJoin() = leaderProc.cancelAndJoin()
-                }
             }
 
             override fun openTransition(
@@ -93,11 +91,12 @@ class LogProcessorTest {
                 )
 
             override fun openFollower(
+                termScope: CoroutineScope,
                 pendingBlock: PendingBlock?,
                 afterReplicaMsgId: MessageId,
             ): LogProcessor.FollowerProcessor =
                 FollowerLogProcessor(
-                    allocator, bufferPool, dbState,
+                    termScope, allocator, dbStorage.replicaLog, bufferPool, dbState,
                     mockk(relaxed = true), watchers, null, pendingBlock,
                     afterReplicaMsgId,
                     hasExternalSource = false,

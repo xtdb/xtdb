@@ -37,7 +37,6 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
-import kotlin.coroutines.CoroutineContext
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -59,7 +58,8 @@ class LeaderLogProcessor(
     afterReplicaMsgId: MessageId,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
-    ctx: CoroutineContext = Dispatchers.Default,
+    // The leader term's scope, owned by the LogProcessor wrapper; cancelling it tears the leader down.
+    scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : LogProcessor.LeaderProcessor, TxIndexer {
@@ -84,11 +84,8 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
-    private val scope = CoroutineScope(ctx)
-
-    // The GCs run under a SupervisorJob child of the leader scope, so one GC's failure doesn't
-    // cancel its sibling or the persister. The owner ([close]) cancels it; once the leader process
-    // tree is itself scope-managed this nests and the explicit cancel goes away.
+    // The GCs run under a SupervisorJob child of the leader scope, so one GC's failure cancels
+    // neither its sibling nor the persister; cancelling the leader scope reaps them all.
     private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
 
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
@@ -349,6 +346,18 @@ class LeaderLogProcessor(
         }
     }
 
+    init {
+        // Cleanup rides the job tree, not an explicit teardown call: once the leader term's scope is
+        // cancelled and its coroutines (persister, ext source, GCs) have joined, free what this term
+        // opened — leaf-first. `allocator` must be `this@…`-qualified: bare `allocator` in an init
+        // lambda binds the ctor param (the parent), not this child field.
+        scope.coroutineContext.job.invokeOnCompletion {
+            extSource?.close()
+            replicaProducer.close()
+            this@LeaderLogProcessor.allocator.close()
+        }
+    }
+
     private fun smoothSystemTime(systemTime: Instant): Instant {
         val lct = liveIndex.latestCompletedTx?.systemTime ?: return systemTime
         val floor = fromMicros(lct.asMicros + 1)
@@ -586,17 +595,4 @@ class LeaderLogProcessor(
         }
     }
 
-    override suspend fun cancelAndJoin() {
-        extJob?.cancelAndJoin()
-        extSource?.close()
-        // The GCs' lifecycle moved up here from their own `close()`: they're pure scope-launched
-        // processes now, so stopping them is just cancelling the scope they run under. Folds into
-        // the leader scope's cancel once the leader process tree is itself scope-managed.
-        gcScope.coroutineContext.job.cancelAndJoin()
-        sourceLogCh.close()
-        extSourceCh.close()
-        gcCh.close()
-        persisterJob.join()
-        allocator.close()
-    }
 }

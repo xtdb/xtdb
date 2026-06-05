@@ -4,10 +4,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
@@ -52,7 +52,7 @@ class LeaderLogProcessorTest {
         nodeBase.close()
     }
 
-    private fun leaderProc(
+    private fun TestScope.leaderProc(
         uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -75,6 +75,7 @@ class LeaderLogProcessorTest {
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
+            scope = backgroundScope,
         )
     }
 
@@ -130,6 +131,7 @@ class LeaderLogProcessorTest {
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
+            scope = backgroundScope,
         )
 
         val now = Instant.now()
@@ -196,6 +198,7 @@ class LeaderLogProcessorTest {
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
+            scope = backgroundScope,
         )
 
         val now = Instant.now()
@@ -204,12 +207,11 @@ class LeaderLogProcessorTest {
         ))
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        val job = launch { replicaLog.tailAll(-1) { records ->
+        backgroundScope.launch { replicaLog.tailAll(-1) { records ->
             replicaMessages.addAll(records.map { it.message })
         } }
 
         delay(200)
-        job.cancelAndJoin()
 
         assertEquals(2, replicaMessages.size, "expected 2 replica messages, got: $replicaMessages")
         assertTrue(replicaMessages[0] is ReplicaMessage.BlockBoundary)

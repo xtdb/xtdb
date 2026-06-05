@@ -4,9 +4,9 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.job
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.database.DatabaseState
@@ -32,14 +32,15 @@ class LogProcessor(
 
     interface Processor<M> : Log.RecordProcessor<M> {
         val latestReplicaMsgId: MessageId
-        suspend fun cancelAndJoin()
     }
 
     interface LeaderProcessor : Processor<SourceMessage> {
         val pendingBlock: PendingBlock?
     }
 
-    interface TransitionProcessor : Processor<ReplicaMessage>
+    // State, not a Service: driven synchronously through the transition, no loop of its own — so
+    // it's a plain AutoCloseable, torn down via `use` rather than a scope cancel.
+    interface TransitionProcessor : Processor<ReplicaMessage>, AutoCloseable
 
     interface FollowerProcessor : Processor<ReplicaMessage> {
         val pendingBlock: PendingBlock?
@@ -51,10 +52,11 @@ class LogProcessor(
     private val replicaLog = dbStorage.replicaLog
 
     interface ProcessorFactory {
-        fun openLeaderSystem(
+        fun openLeader(
+            termScope: CoroutineScope,
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
             afterReplicaMsgId: MessageId,
-        ): LeaderSystem
+        ): LeaderProcessor
 
         fun openTransition(
             replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -62,23 +64,33 @@ class LogProcessor(
         ): TransitionProcessor
 
         fun openFollower(
+            termScope: CoroutineScope,
             pendingBlock: PendingBlock?,
             afterReplicaMsgId: MessageId,
         ): FollowerProcessor
     }
 
-    sealed interface SubSystem {
-        suspend fun cancelAndJoin()
+    // The running term: the role-specific subsystem and the SupervisorJob its processor runs under (a
+    // child of the database scope). `sys` holds it as one atomically-swapped value — a job-less term
+    // is unrepresentable. Cancelling the job tears the term down; structured concurrency joins the
+    // term's coroutines and each processor frees what it opened via its own `invokeOnCompletion`.
+    private sealed class SubSystem(private val job: Job) {
+        suspend fun cancelAndJoin() = job.cancelAndJoin()
     }
 
-    interface LeaderSystem : SubSystem {
-        val proc: LeaderProcessor
-    }
+    private class LeaderSystem(val proc: LeaderProcessor, job: Job) : SubSystem(job)
+    private class FollowerSystem(val proc: FollowerProcessor, job: Job) : SubSystem(job)
 
-    private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
-        override suspend fun cancelAndJoin() {
-            job.cancelAndJoin()
-            proc.cancelAndJoin()
+    // Open a fresh term: a SupervisorJob child of the database scope — so one role's failure surfaces
+    // via `notifyError` rather than cancelling the source-log subscription (its sibling) — and the
+    // subsystem built (by `build`) on a scope over that job.
+    private fun <S : SubSystem> openTerm(build: (CoroutineScope, Job) -> S): S {
+        val job = SupervisorJob(scope.coroutineContext.job)
+        return try {
+            build(CoroutineScope(scope.coroutineContext + job), job)
+        } catch (t: Throwable) {
+            job.cancel()
+            throw t
         }
     }
 
@@ -86,27 +98,17 @@ class LogProcessor(
         latestReplicaMsgId: MessageId,
         pendingBlock: PendingBlock? = null,
     ): FollowerSystem {
-        val proc = procFactory.openFollower(pendingBlock, latestReplicaMsgId)
-        return try {
-            LOG.info {
-                buildString {
-                    append("[$dbName] starting follower: ")
-                    append("pending block: ${pendingBlock != null}, ")
-                    append("src: ${watchers.latestSourceMsgId}, ")
-                    append("replica: $latestReplicaMsgId")
-                }
+        LOG.info {
+            buildString {
+                append("[$dbName] starting follower: ")
+                append("pending block: ${pendingBlock != null}, ")
+                append("src: ${watchers.latestSourceMsgId}, ")
+                append("replica: $latestReplicaMsgId")
             }
+        }
 
-            FollowerSystem(proc, scope.launch {
-                try {
-                    replicaLog.tailAll(latestReplicaMsgId, proc)
-                } catch (e: Throwable) {
-                    proc.notifyError(e); throw e
-                }
-            })
-        } catch (t: Throwable) {
-            runBlocking { proc.cancelAndJoin() }
-            throw t
+        return openTerm { termScope, job ->
+            FollowerSystem(procFactory.openFollower(termScope, pendingBlock, latestReplicaMsgId), job)
         }
     }
 
@@ -150,8 +152,7 @@ class LogProcessor(
 
                         val pendingBlock = followerProc.pendingBlock
 
-                        val transition = procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId)
-                        try {
+                        procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                                 blockUploader.uploadBlock(
@@ -163,14 +164,14 @@ class LogProcessor(
 
                             LOG.debug("[$dbName] transition: opening leader processor")
 
-                            val sys = procFactory.openLeaderSystem(replicaProducer, replayTarget)
-                            this.sys = sys
+                            val leaderSys = openTerm { termScope, job ->
+                                LeaderSystem(procFactory.openLeader(termScope, replicaProducer, replayTarget), job)
+                            }
+                            this.sys = leaderSys
 
                             val resumeMsgId = watchers.latestSourceMsgId
                             LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
-                            Log.TailSpec(resumeMsgId, sys.proc)
-                        } finally {
-                            transition.cancelAndJoin()
+                            Log.TailSpec(resumeMsgId, leaderSys.proc)
                         }
                     }
                 } catch (e: InterruptedException) {
@@ -192,8 +193,8 @@ class LogProcessor(
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
-                // Close first: Kafka guarantees no concurrent processing during rebalance,
-                // and close() only releases the allocator — watermark fields remain readable.
+                // Cancel first: Kafka guarantees no concurrent processing during rebalance, and the
+                // leader's watermark fields stay readable after the cancel — they're not allocator-backed.
                 oldSys.cancelAndJoin()
                 val proc = oldSys.proc
                 this.sys = openFollowerSystem(proc.latestReplicaMsgId, proc.pendingBlock)
