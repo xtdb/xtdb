@@ -17,7 +17,7 @@ import kotlin.random.Random
 
 private val LOG = SimLog::class.logger
 
-internal class SimLog<M>(private val name: String, ctx: CoroutineContext, private val rand: Random) : Log<M> {
+internal class SimLog<M>(private val name: String, private val rand: Random) : Log<M> {
     override val epoch: Int get() = 0
 
     override var latestSubmittedOffset: LogOffset = -1
@@ -48,9 +48,6 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
 
     var leader: GroupConsumer<M>? = null
 
-    val job = Job(ctx[Job])
-    private val scope = CoroutineScope(ctx + job)
-
     /**
      * Unified group loop: delivers records and handles rebalances in a single coroutine.
      * Rebalances and record delivery are serialized via `select` — a rebalance can only
@@ -60,7 +57,7 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
     suspend fun groupLoop() {
         while (true) {
             // Rebalance branch first: Kafka processes pending rebalances before fetching records.
-            select<Unit> {
+            select {
                 rebalanceTrigger.onReceive { doRebalance() }
                 wakeLeader.onReceive { deliverGroupRecords() }
             }
@@ -156,10 +153,13 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
         }
     }
 
-    init {
-        LOG.debug("$name: starting loops")
-        scope.launch(CoroutineName("SimLog/group")) { groupLoop() }
-        scope.launch(CoroutineName("SimLog/plainConsumers")) { plainConsumerLoop() }
+    companion object {
+        fun CoroutineScope.launchSimLog(log: SimLog<*>) {
+            LOG.debug("${log.name}: starting loops")
+
+            launch(CoroutineName("SimLog/group")) { log.groupLoop() }
+            launch(CoroutineName("SimLog/plainConsumers")) { log.plainConsumerLoop() }
+        }
     }
 
     private fun appendSync(message: M): Log.MessageMetadata {
@@ -269,14 +269,5 @@ internal class SimLog<M>(private val name: String, ctx: CoroutineContext, privat
         }
     }
 
-    override fun close() {
-        LOG.debug("$name: closing")
-        job.cancel()
-        runBlocking {
-            LOG.debug("$name: waiting for loops to finish")
-            job.join()
-            LOG.debug("$name: loops finished")
-        }
-        LOG.debug("$name: closed")
-    }
+    override fun close() = Unit
 }
