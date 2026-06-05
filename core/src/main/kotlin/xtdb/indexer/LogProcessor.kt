@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import xtdb.api.log.*
@@ -76,7 +77,7 @@ class LogProcessor(
 
     private class FollowerSystem(val proc: FollowerProcessor, private val job: Job) : SubSystem {
         override suspend fun cancelAndJoin() {
-            job.cancel()
+            job.cancelAndJoin()
             proc.cancelAndJoin()
         }
     }
