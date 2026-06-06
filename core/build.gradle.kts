@@ -51,6 +51,7 @@ dependencies {
     api(libs.clj.yaml)
 
     api(libs.commons.codec)
+    api(libs.bouncycastle)
     api(libs.hppc)
 
     api(libs.caffeine)

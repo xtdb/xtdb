@@ -5,19 +5,13 @@
             [xtdb.error :as err])
   (:import [java.io Writer]
            (xtdb.api Authenticator Authenticator$DeviceAuthResponse Authenticator$Factory Authenticator$Factory$OpenIdConnect
-                     Authenticator$Factory$SingleRootUser
+                     Authenticator$Factory$SingleRootUser Authenticator$Factory$UserList
                      Authenticator$Method Authenticator$MethodRule Xtdb$Config
-                     OAuthPasswordResult OAuthClientCredentialsResult OAuthResult)
+                     OAuthPasswordResult OAuthClientCredentialsResult OAuthResult
+                     PasswordHash PasswordHash$Argon2id PasswordHash$BCrypt)
            xtdb.NodeBase
            [java.net URI]
            [java.time Duration Instant InstantSource]))
-
-(defn- method-for [rules {:keys [remote-addr user]}]
-  (some (fn [{rule-user :user, rule-address :address, :keys [method]}]
-          (when (and (or (nil? rule-user) (= user rule-user))
-                     (or (nil? rule-address) (= remote-addr rule-address)))
-            method))
-        rules))
 
 (defn read-authn-method [method]
   (case method
@@ -39,23 +33,35 @@
      (Authenticator$MethodRule. (read-authn-method method)
                                 user remote-addr))))
 
-(defn <-rules-cfg [rules-cfg]
-  (vec
-   (for [^Authenticator$MethodRule auth-rule rules-cfg]
-     {:method (.getMethod auth-rule)
-      :user (.getUser auth-rule)
-      :remote-addr (.getRemoteAddress auth-rule)})))
-
 (defmethod xtn/apply-config! :xtdb/authn [^Xtdb$Config config, _, [tag opts]]
   (xtn/apply-config! config
                      (case tag
                        :single-root-user ::single-root-user-authn
+                       :user-list ::user-list-authn
                        :openid-connect ::openid-connect-authn
                        tag)
                      opts))
 
 (defmethod xtn/apply-config! ::single-root-user-authn [^Xtdb$Config config, _, {:keys [password]}]
   (.authn config (Authenticator$Factory$SingleRootUser. password)))
+
+(defn- ->password-hash ^PasswordHash [hash-spec]
+  (if (instance? PasswordHash hash-spec)
+    hash-spec
+    (let [[algo encoded] hash-spec]
+      (case algo
+        :argon2id (PasswordHash$Argon2id. encoded)
+        :bcrypt (PasswordHash$BCrypt. encoded)
+        (throw (err/incorrect :xtdb/unknown-password-hash-algorithm
+                              (format "unknown password hash algorithm: %s" algo)
+                              {:algorithm algo}))))))
+
+(defmethod xtn/apply-config! ::user-list-authn [^Xtdb$Config config, _, {:keys [users rules]}]
+  (let [users-map (update-vals users ->password-hash)]
+    (.authn config
+            (if rules
+              (Authenticator$Factory$UserList. users-map (->rules-cfg rules))
+              (Authenticator$Factory$UserList. users-map)))))
 
 (defmethod ig/expand-key :xtdb/authn [k opts]
   {k (into {:base (ig/ref :xtdb/base)
@@ -216,7 +222,7 @@
 (defrecord OpenIdConnect [oidc-config client-id client-secret rules ^InstantSource instant-src]
   Authenticator
   (methodFor [_ user remote-addr]
-    (method-for rules {:user user, :remote-addr remote-addr}))
+    (Authenticator$MethodRule/methodFor rules user remote-addr))
 
   (verifyPassword [this user password]
     (let [{:keys [status body]} (oauth-token this {:grant_type "password", :scope "openid"
@@ -256,7 +262,7 @@
     (->OpenIdConnect oidc-config
                      (.getClientId cfg)
                      (.getClientSecret cfg)
-                     (<-rules-cfg (.getRules cfg))
+                     (.getRules cfg)
                      (.getInstantSource cfg))))
 
 (defmethod xtn/apply-config! ::openid-connect-authn [^Xtdb$Config config, _, {:keys [issuer-url client-id client-secret rules ^InstantSource instant-src]}]

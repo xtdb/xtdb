@@ -15,6 +15,7 @@
            [java.util Map]
            (org.apache.arrow.memory BufferAllocator)
            (xtdb ICursor)
+           xtdb.api.Authenticator$Factory
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader VectorType VectorReader)
            xtdb.pgwire.PgType
@@ -332,11 +333,12 @@
     {:name setting-name
      :setting setting}))
 
-(defn pg-user []
-  ;; Read-only view; always shows the single `xtdb` root user.
-  ;; `passwd` is NULL — Postgres redacts stored credentials from pg_user too, and
-  ;; the !SingleRootUser authenticator holds its password in config, not here.
-  [{:username "xtdb", :usesuper true, :passwd nil}])
+(defn pg-user [^Authenticator$Factory authn]
+  ;; Read-only view of the configured users.
+  ;; `passwd` is NULL — Postgres redacts stored credentials from pg_user too, and the
+  ;; authenticator holds the hashes in config, not here.
+  (for [username (.knownUsers authn)]
+    {:username username, :usesuper true, :passwd nil}))
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)
@@ -431,7 +433,7 @@
              table col-names col-preds
              schema params]))
 
-(defn ->info-schema [_allocator metrics-registry]
+(defn ->info-schema [_allocator metrics-registry ^Authenticator$Factory authn]
   (reify InfoSchema
     (->cursor [_ allocator db db-cat snap derived-table-schema
                table col-names col-preds
@@ -474,7 +476,7 @@
                                      pg_catalog/pg_settings (pg-settings)
                                      pg_catalog/pg_range (pg-range)
                                      pg_catalog/pg_am (pg-am)
-                                     pg_catalog/pg_user (pg-user)
+                                     pg_catalog/pg_user (pg-user authn)
                                      xt/trie_stats (trie-stats trie-catalog)
                                      xt/live_tables (live-tables snap)
                                      xt/live_columns (live-columns snap)

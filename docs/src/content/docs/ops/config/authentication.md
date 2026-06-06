@@ -11,7 +11,7 @@ XTDB supports three authentication providers:
 
 - **Single Root User** (`!SingleRootUser`, v2.2+): a single user (`xtdb`) whose password is configured at startup.
   This is the default.
-- **User Table** (`!UserTable`): uses an internal user table with password-based authentication.
+- **User List** (`!UserList`, v2.2+): a fixed set of users with pre-hashed passwords, configured at startup.
 - **OpenID Connect** (`!OpenIdConnect`): integrates with external identity providers like Keycloak, Auth0, AWS Cognito or Azure Entra.
 
 ## Single root user (v2.2+)
@@ -48,48 +48,56 @@ authn: !SingleRootUser
   password: hunter2
 ```
 
-## User table
+## User list (v2.2+)
 
-The `!UserTable` authentication method uses an internal user table with password-based authentication.
+The `!UserList` method authenticates against a fixed set of users configured at startup.
+It suits simple deployments that want password authentication for more than one user without running an external identity provider.
+
+The user set is static.
+It's read from the configuration when the node starts, and the only way to change it is to edit the configuration and restart — there is no SQL or runtime API to add, alter, or remove users.
 
 ### Configuration
 
+Each user maps to a pre-hashed password, tagged with the algorithm that produced it:
+
 ``` yaml
-authn: !UserTable
+authn: !UserList
+  users:
+    alice: !Argon2id "$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzYWx0$RdescudvJCsgt3ub+b+dWRWJTmaaJObG"
+    bob: !BCrypt "$2y$12$mc.G6e7uChPgZW2NfY0XQOQ0qN6Q0o3Yv0bFv6kKQXmnq7nqQk0K"
   rules:
-    # admin always requires a password
-    - user: admin
-      method: PASSWORD
-    # We trust local connections
+    # local connections are trusted
     - remoteAddress: 127.0.0.1
       method: TRUST
-    # Everything else requires a password
+    # everyone else must supply a password
     - method: PASSWORD
 ```
 
-### User management
+If `rules` is omitted, every connection requires a password.
 
-**Default User**
-: The `pg_user` table contains a default user `xtdb` with password
-    `xtdb`.
+The configured users appear in the read-only `pg_user` view (with `passwd` redacted to `NULL`), so Postgres tooling that lists users sees them.
 
-**Creating Users**
-:
+### Hash algorithms
 
-``` sql
-CREATE USER alan WITH PASSWORD 'TURING'
+Each password carries its own algorithm tag, so a node can hold a mix and you can move to a new algorithm without re-hashing the existing entries:
+
+- `!Argon2id` — argon2id, the recommended default.
+- `!BCrypt` — bcrypt, in standard modular-crypt (`$2…`) form.
+
+### Hashing a password
+
+Pre-hash passwords with the `hash-password` command and paste the output into the config:
+
+``` bash
+xtdb hash-password [--argon2id | --bcrypt] 'my-password'
 ```
 
-**Modifying Users**
-:
+`--argon2id` is the current default; pass `--bcrypt` to use bcrypt instead.
+Omit the password argument to read it from stdin, which keeps the plaintext out of your shell history:
 
-``` sql
-ALTER USER ada WITH PASSWORD 'LOVELACE'
+``` bash
+echo 'my-password' | xtdb hash-password
 ```
-
-**Password Validation**
-: When `PASSWORD` method is specified, credentials are validated
-    against the `pg_user` table entries.
 
 ## OpenID Connect (OIDC)
 
@@ -112,7 +120,7 @@ For complete OIDC configuration, setup guides, and troubleshooting, see [OpenID 
 
 ## Rule configuration
 
-`!UserTable` and `!OpenIdConnect` control database access through authentication rules that match users and IP addresses to determine the required authentication method.
+`!UserList` and `!OpenIdConnect` control database access through authentication rules that match users and IP addresses to determine the required authentication method.
 `!SingleRootUser` doesn't use rules — its method is determined by whether a password is configured.
 
 ### Authentication Rules
