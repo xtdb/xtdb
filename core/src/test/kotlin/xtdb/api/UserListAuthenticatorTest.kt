@@ -62,4 +62,12 @@ class UserListAuthenticatorTest {
     fun `knownUsers lists the configured users`() {
         assertEquals(setOf("alice", "bob"), UserList(users).knownUsers().toSet())
     }
+
+    @Test
+    fun `only the xtdb user is the superuser`() {
+        val factory = UserList(users + ("xtdb" to PasswordHash.argon2id("xtdb-pw")))
+
+        assertEquals(true, factory.isSuperuser("xtdb"))
+        assertEquals(false, factory.isSuperuser("alice"))
+    }
 }

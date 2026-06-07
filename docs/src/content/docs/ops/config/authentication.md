@@ -76,6 +76,7 @@ authn: !UserList
 If `rules` is omitted, every connection requires a password.
 
 The configured users appear in the read-only `pg_user` view (with `passwd` redacted to `NULL`), so Postgres tooling that lists users sees them.
+`usesuper` is `true` only for a user named `xtdb` — the same superuser convention as `!SingleRootUser` — and `false` for everyone else.
 
 ### Hash algorithms
 

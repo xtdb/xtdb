@@ -2255,8 +2255,9 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest pg-user-list-authentication
   (let [alice (PasswordHash/argon2id "alice-pw")
-        bob (PasswordHash/bcrypt "bob-pw")]
-    (with-open [node (xtn/start-node {:authn [:user-list {:users {"alice" alice, "bob" bob}
+        bob (PasswordHash/bcrypt "bob-pw")
+        xtdb (PasswordHash/argon2id "xtdb-pw")]
+    (with-open [node (xtn/start-node {:authn [:user-list {:users {"alice" alice, "bob" bob, "xtdb" xtdb}
                                                           :rules [{:method :password}]}]})]
       (binding [*port* (.getServerPort node)]
         (t/testing "each configured user authenticates with its own password, argon2id and bcrypt alike"
@@ -2271,10 +2272,11 @@ ORDER BY t.oid DESC LIMIT 1"
                                 (with-open [_ (jdbc-conn {"user" "carol", "password" "alice-pw"})]))
               "an unconfigured user is rejected")
 
-        (t/testing "pg_user lists the configured users"
+        (t/testing "pg_user lists the configured users; only the xtdb user is the superuser"
           (with-open [conn (jdbc-conn {"user" "alice", "password" "alice-pw"})]
-            (t/is (= [{:username "alice", :usesuper true}
-                      {:username "bob", :usesuper true}]
+            (t/is (= [{:username "alice", :usesuper false}
+                      {:username "bob", :usesuper false}
+                      {:username "xtdb", :usesuper true}]
                      (q conn ["SELECT username, usesuper FROM pg_user ORDER BY username"])))))))))
 
 (t/deftest test-keywordize-nested-values-3910

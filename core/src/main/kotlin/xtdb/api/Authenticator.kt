@@ -114,6 +114,11 @@ interface Authenticator : AutoCloseable {
         // Defaults to the single root user; authenticators with an explicit user set override it.
         fun knownUsers(): List<String> = listOf(SingleRootUserAuthenticator.ROOT_USER)
 
+        // Superuser-only operations gate on this; `pg_user`'s `usesuper` reflects it.
+        // On the factory (like `knownUsers`) so info-schema can read it without an init-ordering problem.
+        // Defaults to no one; authenticators with a notion of a privileged user override it.
+        fun isSuperuser(userId: String): Boolean = false
+
         // One root user (`xtdb`) whose password is resolved at config-construction time:
         // the explicit YAML/Kotlin value first, then `XTDB_PASSWORD` env var.
         // With no password, connections run TRUST; with a password, PASSWORD is required.
@@ -122,6 +127,8 @@ interface Authenticator : AutoCloseable {
         data class SingleRootUser @JvmOverloads constructor(
             val password: String? = System.getenv("XTDB_PASSWORD"),
         ) : Factory {
+            override fun isSuperuser(userId: String) = userId == SingleRootUserAuthenticator.ROOT_USER
+
             override fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
                 SingleRootUserAuthenticator(password)
         }
@@ -156,6 +163,9 @@ interface Authenticator : AutoCloseable {
             fun rules(rules: List<MethodRule>) = apply { this.rules = rules }
 
             override fun knownUsers() = users.keys.toList()
+
+            // Same superuser convention as !SingleRootUser: the `xtdb` user, if configured.
+            override fun isSuperuser(userId: String) = userId == SingleRootUserAuthenticator.ROOT_USER
 
             override fun open(allocator: BufferAllocator, querySource: IQuerySource, dbCatalog: Database.Catalog): Authenticator =
                 UserListAuthenticator(users, rules)

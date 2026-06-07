@@ -338,7 +338,7 @@
   ;; `passwd` is NULL — Postgres redacts stored credentials from pg_user too, and the
   ;; authenticator holds the hashes in config, not here.
   (for [username (.knownUsers authn)]
-    {:username username, :usesuper true, :passwd nil}))
+    {:username username, :usesuper (.isSuperuser authn username), :passwd nil}))
 
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)
