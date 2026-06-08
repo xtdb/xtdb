@@ -17,11 +17,12 @@
            (xtdb ICursor)
            xtdb.api.Authenticator$Factory
            xtdb.api.query.IKeyFn
+           xtdb.authz.RoleMembership
            (xtdb.arrow Relation RelationReader VectorType VectorReader)
            xtdb.pgwire.PgType
            (xtdb.indexer Snapshot TableSnapshot)
            xtdb.operator.SelectionSpec
-           (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
+           (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.table.TableRef
            xtdb.trie.TrieCatalog))
 
@@ -94,7 +95,10 @@
                                rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
           pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}
 
-          pg_catalog/pg_user {username :utf8, usesuper :bool, passwd [:? :utf8]}}
+          pg_catalog/pg_user {username :utf8, usesuper :bool, passwd [:? :utf8]}
+
+          pg_catalog/pg_roles {oid :i32, rolname :utf8, rolsuper :bool, rolcanlogin :bool}
+          pg_catalog/pg_auth_members {roleid :i32, member :i32, grantor [:? :i32], admin_option :bool}}
         (update-vals map->vec-types)))
 
   (def ^:private xt-derived-tables
@@ -340,6 +344,29 @@
   (for [username (.knownUsers authn)]
     {:username username, :usesuper (.isSuperuser authn username), :passwd nil}))
 
+(defn pg-roles [^Authenticator$Factory authn ^IQuerySource query-source ^IQuerySource$QueryCatalog db-cat]
+  ;; Users (which can log in) and granted roles (which can't) share pg_roles, as in Postgres. A
+  ;; membership user needn't be a configured user (e.g. an OIDC subject), but still gets a row so
+  ;; pg_auth_members joins resolve. One memberships snapshot feeds both halves, so a concurrent
+  ;; GRANT can't yield a role row whose member user is missing from the same scan.
+  (let [memberships (RoleMembership/scanMemberships query-source db-cat)
+        member-users (into #{} (map first) memberships)
+        login-users (into (set (.knownUsers authn)) member-users)
+        granted-roles (into #{} (map second) memberships)]
+    (concat (for [username (sort login-users)]
+              {:oid (name->oid username), :rolname username,
+               :rolsuper (.isSuperuser authn username), :rolcanlogin true})
+            ;; a granted role that is also a login user gets a single (login) row, as in Postgres'
+            ;; shared role/user namespace — otherwise the two rows share an oid and the
+            ;; pg_auth_members join resolves a membership to both.
+            (for [role (sort (remove login-users granted-roles))]
+              {:oid (name->oid role), :rolname role, :rolsuper false, :rolcanlogin false}))))
+
+(defn pg-auth-members [^IQuerySource query-source ^IQuerySource$QueryCatalog db-cat]
+  ;; Membership at the node watermark; for as-of-system-time history query xt.role_membership directly.
+  (for [[user role] (RoleMembership/scanMemberships query-source db-cat)]
+    {:roleid (name->oid role), :member (name->oid user), :grantor nil, :admin-option false}))
+
 (defn trie-stats [^TrieCatalog trie-catalog]
   (for [^TableRef table (.getTables trie-catalog)
         :let [trie-state (trie-cat/trie-state trie-catalog table)]
@@ -429,13 +456,13 @@
     (some-> out-rel util/close)))
 
 (defprotocol InfoSchema
-  (->cursor [info-schema allocator db db-cat snapshot derived-table-schema
+  (->cursor [info-schema allocator db db-cat query-source snapshot derived-table-schema
              table col-names col-preds
              schema params]))
 
 (defn ->info-schema [_allocator metrics-registry ^Authenticator$Factory authn]
   (reify InfoSchema
-    (->cursor [_ allocator db db-cat snap derived-table-schema
+    (->cursor [_ allocator db db-cat query-source snap derived-table-schema
                table col-names col-preds
                schema params]
       ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
@@ -477,6 +504,8 @@
                                      pg_catalog/pg_range (pg-range)
                                      pg_catalog/pg_am (pg-am)
                                      pg_catalog/pg_user (pg-user authn)
+                                     pg_catalog/pg_roles (pg-roles authn query-source db-cat)
+                                     pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
                                      xt/trie_stats (trie-stats trie-catalog)
                                      xt/live_tables (live-tables snap)
                                      xt/live_columns (live-columns snap)

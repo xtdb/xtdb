@@ -12,6 +12,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorWriter
+import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -23,7 +24,7 @@ import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.kw
 import xtdb.query.IQuerySource
-import xtdb.query.PreparedDmlQuery
+import xtdb.query.SqlStatement
 import xtdb.table.SchemaName
 import xtdb.table.TableName
 import xtdb.table.TableRef
@@ -179,16 +180,17 @@ class OpenTx(
     }
 
     /**
-     * Execute a SQL DML statement (INSERT / UPDATE / PATCH / DELETE / ERASE / ASSERT)
-     * against this tx, with visibility into writes made earlier in the same writer call.
-     * Positional `?` parameters come from [args], like [openQuery].
+     * Execute a SQL statement against this tx, with visibility into writes made earlier in the same
+     * writer call. Positional `?` parameters come from [args], like [openQuery].
      *
-     * Writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) throw.
+     * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) throw; GRANT/REVOKE
+     * write role membership below that guard, gated on [user] being a superuser.
      */
-    fun executeDml(
+    fun executeSql(
         sql: String,
         args: RelationReader? = null,
         opts: QueryOpts = QueryOpts(),
+        user: String? = null,
     ) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeµs = currentTime.asMicros
@@ -202,65 +204,104 @@ class OpenTx(
             "arg-fields".kw to args?.schema?.fields,
         ))
 
-        val prepared = nodeBase.querySource.prepareDmlQuery(sql, queryCatalog(), prepareOpts)
+        when (val stmt = nodeBase.querySource.prepareTxSql(sql, queryCatalog(), prepareOpts)) {
+            is SqlStatement.GrantRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = false)
+            is SqlStatement.RevokeRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = true)
 
-        checkArgCount(args, prepared.paramCount)
+            is SqlStatement.DmlQuery -> {
+                val query = stmt.query
+                checkArgCount(args, query.paramCount)
 
-        when (val kind = prepared.kind) {
-            is PreparedDmlQuery.Assert -> {
-                val msg = kind.message ?: "Assert failed"
-                fun fail(): Nothing = throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
-                prepared.openQuery(args, qOpts).use { cursor ->
-                    if (!cursor.tryAdvance { rel -> if (rel.rowCount == 0) fail() }) fail()
-                }
-            }
+                when (stmt) {
+                    is SqlStatement.Assert -> {
+                        val msg = stmt.message ?: "Assert failed"
+                        fun fail(): Nothing = throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
+                        query.openQuery(args, qOpts).use { cursor ->
+                            if (!cursor.tryAdvance { rel -> if (rel.rowCount == 0) fail() }) fail()
+                        }
+                    }
 
-            is PreparedDmlQuery.Put -> {
-                checkNotForbidden(kind.table)
-                val table = table(kind.table)
-                prepared.openQuery(args, qOpts).use { cursor ->
-                    cursor.forEachRemaining { rel ->
-                        // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
-                        // not the canonical `_iid` + `doc` shape `logPuts` expects.
-                        // Package content cols into a `doc` struct here.
-                        val tempColNames = setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
-                        val contentRel = RelationReader.from(
-                            rel.vectors.filter { it.name !in tempColNames },
-                            rel.rowCount,
-                        )
-                        val putCols = listOfNotNull(
-                            rel.vectorFor("_id"),
-                            RelationAsStructReader("doc", contentRel),
-                            rel.vectorForOrNull("_valid_from"),
-                            rel.vectorForOrNull("_valid_to"),
-                        )
-                        table.logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
+                    is SqlStatement.Put -> {
+                        checkNotForbidden(stmt.table)
+                        val table = table(stmt.table)
+                        query.openQuery(args, qOpts).use { cursor ->
+                            cursor.forEachRemaining { rel ->
+                                // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
+                                // not the canonical `_iid` + `doc` shape `logPuts` expects.
+                                // Package content cols into a `doc` struct here.
+                                val tempColNames = setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
+                                val contentRel = RelationReader.from(
+                                    rel.vectors.filter { it.name !in tempColNames },
+                                    rel.rowCount,
+                                )
+                                val putCols = listOfNotNull(
+                                    rel.vectorFor("_id"),
+                                    RelationAsStructReader("doc", contentRel),
+                                    rel.vectorForOrNull("_valid_from"),
+                                    rel.vectorForOrNull("_valid_to"),
+                                )
+                                table.logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
+                            }
+                        }
+                    }
+
+                    is SqlStatement.Patch -> {
+                        checkNotForbidden(stmt.table)
+                        val table = table(stmt.table)
+                        query.openQuery(args, qOpts).use { cursor ->
+                            cursor.forEachRemaining { rel -> table.logPuts(0, Long.MAX_VALUE, rel) }
+                        }
+                    }
+
+                    is SqlStatement.Delete -> {
+                        checkNotForbidden(stmt.table)
+                        val table = table(stmt.table)
+                        query.openQuery(args, qOpts).use { cursor ->
+                            cursor.forEachRemaining { rel -> table.logDeletes(0, Long.MAX_VALUE, rel) }
+                        }
+                    }
+
+                    is SqlStatement.Erase -> {
+                        checkNotForbidden(stmt.table)
+                        val table = table(stmt.table)
+                        query.openQuery(args, qOpts).use { cursor ->
+                            cursor.forEachRemaining { rel -> table.logErases(rel.vectorFor("_iid")) }
+                        }
                     }
                 }
             }
+        }
+    }
 
-            is PreparedDmlQuery.Patch -> {
-                checkNotForbidden(kind.table)
-                val table = table(kind.table)
-                prepared.openQuery(args, qOpts).use { cursor ->
-                    cursor.forEachRemaining { rel -> table.logPuts(0, Long.MAX_VALUE, rel) }
-                }
-            }
+    // GRANT/REVOKE arrive as ordinary SQL but are authority-gated and write below the FORBIDDEN_SCHEMAS
+    // guard (the `xt.txs` writeTxRow idiom), so the guard stays in force for user DML. The (user, role) is
+    // parsed statically — there's no query to run — and keyed by a deterministic `_iid` so a re-GRANT
+    // supersedes; REVOKE is a system-time soft-close.
+    private fun writeRoleMembership(user: String, role: String, currentTime: Instant, principal: String?, revoke: Boolean) {
+        if (dbState.name != "xtdb")
+            throw Incorrect(
+                "Role membership can only be managed on the primary 'xtdb' database.",
+                "xtdb/role-membership-non-primary", mapOf("db" to dbState.name),
+            )
 
-            is PreparedDmlQuery.Delete -> {
-                checkNotForbidden(kind.table)
-                val table = table(kind.table)
-                prepared.openQuery(args, qOpts).use { cursor ->
-                    cursor.forEachRemaining { rel -> table.logDeletes(0, Long.MAX_VALUE, rel) }
-                }
-            }
+        if (principal == null || !nodeBase.config.authn.isSuperuser(principal))
+            throw Incorrect(
+                "Only a superuser may GRANT/REVOKE role membership.",
+                "xtdb/not-authorized", mapOf("user" to principal),
+            )
 
-            is PreparedDmlQuery.Erase -> {
-                checkNotForbidden(kind.table)
-                val table = table(kind.table)
-                prepared.openQuery(args, qOpts).use { cursor ->
-                    cursor.forEachRemaining { rel -> table.logErases(rel.vectorFor("_iid")) }
-                }
+        val ts = currentTime.asMicros
+        val table = table(TableRef(dbState.name, "xt", "role_membership"))
+        val iid = ByteBuffer.wrap(RoleMembership.membershipIid(user, role))
+
+        if (revoke) {
+            table.logDelete(iid, ts, MAX_LONG)
+        } else {
+            val docWriter = table.docWriter
+            table.logPut(iid, ts, MAX_LONG) {
+                docWriter.vectorFor("user", VectorType.UTF8.arrowType, false).writeObject(user)
+                docWriter.vectorFor("role", VectorType.UTF8.arrowType, false).writeObject(role)
+                docWriter.endStruct()
             }
         }
     }

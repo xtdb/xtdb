@@ -189,6 +189,7 @@ export default defineConfig({
                                 { label: 'OpenID Connect', link: '/ops/config/authentication/oidc' },
                             ],
                         },
+                        { label: 'Authorization', link: '/ops/config/authorization' },
                         {
                             label: 'Backup and Restore',
                             collapsed: true,

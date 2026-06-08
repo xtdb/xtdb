@@ -65,6 +65,7 @@ internal class SourceLogTxIndexer(
         val currentTime: Instant,
         val systemTime: InstantMicros,
         val defaultTz: ZoneId?,
+        val user: String?,
     )
 
     internal inner class ForTx(private val txOpsRdr: VectorReader, private val opts: TxOpts) {
@@ -292,7 +293,7 @@ internal class SourceLogTxIndexer(
                         attributes = mapOf("query.text" to queryStr),
                     ) {
                         forEachArgRow(argsLoader) { args ->
-                            executeDml(queryStr, args, qOpts)
+                            executeSql(queryStr, args, qOpts, opts.user)
                         }
                     }
                 }

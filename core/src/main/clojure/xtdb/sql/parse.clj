@@ -43,7 +43,13 @@
     [:show-time-zone])
 
   (visitExecuteStatement [_ stmt]
-    [:execute {:stmt stmt}]))
+    [:execute {:stmt stmt}])
+
+  (visitGrantRoleStatement [_ stmt]
+    [:grant-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}])
+
+  (visitRevokeRoleStatement [_ stmt]
+    [:revoke-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}]))
 
 (defn parse-statement [stmt opts]
   (if (string? stmt)

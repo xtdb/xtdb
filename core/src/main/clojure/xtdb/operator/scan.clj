@@ -268,7 +268,7 @@
 
          :vec-types (->> vec-types (into {} (keep (fn [[k v]] (when v [k v])))))
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
+         :->cursor (fn [{:keys [allocator, query-source, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^DatabaseSnapshot db-snapshot (get snaps db-name)
                            ;; TODO (#5557 unit 7) walk every partition's Snapshot and UNION at scan,
                            ;; instead of picking the only partition.
@@ -282,7 +282,7 @@
                          (block-tables/->cursor db allocator table col-names col-preds selects schema args)
 
                          derived-table-schema
-                         (info-schema/->cursor info-schema allocator db db-cat snapshot derived-table-schema table col-names col-preds schema args)
+                         (info-schema/->cursor info-schema allocator db db-cat query-source snapshot derived-table-schema table col-names col-preds schema args)
 
                          :else
 

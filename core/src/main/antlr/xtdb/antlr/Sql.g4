@@ -54,6 +54,9 @@ directlyExecutableStatement
     | SHOW CLOCK_TIME # ShowClockTimeStatement
     | ATTACH DATABASE dbName=identifier (WITH configYaml=characterString)? # AttachDatabaseStatement
     | DETACH DATABASE dbName=identifier # DetachDatabaseStatement
+
+    | GRANT roleName=identifier TO userName=identifier # GrantRoleStatement
+    | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;

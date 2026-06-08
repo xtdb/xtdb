@@ -22,7 +22,7 @@ interface IQuerySource : AutoCloseable {
     }
 
     fun prepareQuery(query: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
-    fun prepareDmlQuery(sql: String, dbs: QueryCatalog, opts: Any?): PreparedDmlQuery
+    fun prepareTxSql(sql: String, dbs: QueryCatalog, opts: Any?): SqlStatement
     fun preparePatchDocsQuery(table: TableRef, validFrom: Instant?, validTo: Instant?, dbs: QueryCatalog, opts: Any?): PreparedQuery
 
     fun interface Factory {

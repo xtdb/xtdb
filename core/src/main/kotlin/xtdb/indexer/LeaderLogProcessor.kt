@@ -449,6 +449,7 @@ class LeaderLogProcessor(
         txOps: VectorReader?,
         systemTime: Instant?,
         defaultTz: ZoneId?,
+        user: String?,
         userMetadata: Any?,
     ): ReplicaMessage.ResolvedTx = tracer.withSpan(
         "xtdb.transaction",
@@ -497,6 +498,7 @@ class LeaderLogProcessor(
                 currentTime = effectiveSystemTime,
                 systemTime = effectiveSystemTime.asMicros,
                 defaultTz = defaultTz,
+                user = user,
             )
 
             when (val result = sourceLogTxIndexer.ForTx(txOps, opts).indexTx(openTx)) {
@@ -527,7 +529,7 @@ class LeaderLogProcessor(
             }
             bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
 
-            return indexSourceLogTx(msgId, record.logTimestamp, null, null, null, null)
+            return indexSourceLogTx(msgId, record.logTimestamp, null, null, null, null, null)
         }
 
         return when (msg) {
@@ -542,7 +544,7 @@ class LeaderLogProcessor(
                             indexSourceLogTx(
                                 msgId, record.logTimestamp,
                                 rel["tx-ops"],
-                                msg.systemTime, msg.defaultTz, userMetadata
+                                msg.systemTime, msg.defaultTz, msg.user, userMetadata
                             )
                         }
                     }
@@ -562,11 +564,12 @@ class LeaderLogProcessor(
                                 (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
 
                             val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
+                            val user = rel.vectorForOrNull("user")?.getObject(0) as String?
 
                             indexSourceLogTx(
                                 msgId, record.logTimestamp,
                                 rel["tx-ops"].listElements,
-                                systemTime, defaultTz, userMetadata
+                                systemTime, defaultTz, user, userMetadata
                             )
                         }
                     }

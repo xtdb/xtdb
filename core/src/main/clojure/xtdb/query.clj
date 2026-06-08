@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory PreparedDmlQuery PreparedDmlQuery$Assert PreparedDmlQuery$Delete PreparedDmlQuery$Erase PreparedDmlQuery$Patch PreparedDmlQuery$Put PreparedQuery)
+           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery SqlStatement$Assert SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            (xtdb.table TableRef)
            xtdb.util.RefCounter))
 
@@ -419,6 +419,7 @@
 
                         (let [result-types (->result-types (:ordered-outer-projection planned-query) vec-types)
                               cursor (-> (->cursor {:allocator allocator,
+                                                    :query-source this
                                                     :snaps snaps
                                                     :snapshot-token expr/*snapshot-token*
                                                     :current-time current-time
@@ -447,19 +448,24 @@
                       (util/close args)
                       (throw t))))))))))))
 
-  (prepareDmlQuery [this sql db-cat opts]
-    (let [[q-tag {:keys [stmt table message]}]
-          (parse-sql/parse-statement sql {:default-db (:default-db opts)})
-          pq (.prepareQuery this stmt db-cat opts)]
+  (prepareTxSql [this sql db-cat opts]
+    (let [[q-tag {:keys [stmt table message user role]}]
+          (parse-sql/parse-statement sql {:default-db (:default-db opts)})]
       (case q-tag
-        (:insert :update) (PreparedDmlQuery. pq (PreparedDmlQuery$Put. table))
-        :patch (PreparedDmlQuery. pq (PreparedDmlQuery$Patch. table))
-        :delete (PreparedDmlQuery. pq (PreparedDmlQuery$Delete. table))
-        :erase (PreparedDmlQuery. pq (PreparedDmlQuery$Erase. table))
-        :assert (PreparedDmlQuery. pq (PreparedDmlQuery$Assert. message))
-        (throw (err/incorrect ::invalid-sql-tx-op
-                              "Invalid SQL query sent as transaction operation"
-                              {:query sql})))))
+        ;; GRANT/REVOKE carry their (user, role) statically — no query to plan
+        :grant-role (SqlStatement$GrantRole. user role)
+        :revoke-role (SqlStatement$RevokeRole. user role)
+
+        (let [pq (.prepareQuery this stmt db-cat opts)]
+          (case q-tag
+            (:insert :update) (SqlStatement$Put. pq table)
+            :patch (SqlStatement$Patch. pq table)
+            :delete (SqlStatement$Delete. pq table)
+            :erase (SqlStatement$Erase. pq table)
+            :assert (SqlStatement$Assert. pq message)
+            (throw (err/incorrect ::invalid-sql-tx-op
+                                  "Invalid SQL query sent as transaction operation"
+                                  {:query sql})))))))
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (:default-db opts)

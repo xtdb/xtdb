@@ -883,6 +883,12 @@
                                         (visitAssertStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
 
+                                        (visitGrantRoleStatement [_ ctx]
+                                          {:statement-type :dml, :dml-type :grant-role, :query (subsql ctx)})
+
+                                        (visitRevokeRoleStatement [_ ctx]
+                                          {:statement-type :dml, :dml-type :revoke-role, :query (subsql ctx)})
+
                                         (visitQueryExpr [_ ctx]
                                           {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
 
@@ -1356,6 +1362,8 @@
                                   :patch "PATCH 0"
                                   :erase "ERASE 0"
                                   :assert "ASSERT"
+                                  :grant-role "GRANT"
+                                  :revoke-role "REVOKE"
                                   :create-role "CREATE ROLE")}))
 
 (defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
