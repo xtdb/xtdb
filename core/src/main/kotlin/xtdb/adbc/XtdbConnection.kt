@@ -19,9 +19,8 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.complex.writer.VarCharWriter
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.NodeConnection
 import xtdb.ResultCursor
-import xtdb.api.Xtdb
-import xtdb.api.log.MessageId
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
@@ -36,22 +35,13 @@ import xtdb.query.QueryOpts
 import xtdb.indexer.DatabaseSnapshot
 import xtdb.table.TableRef
 import xtdb.tx.TxOp
-import xtdb.tx.TxOpts
 import xtdb.util.useAll
 
-class XtdbConnection(private val node: Node) : AdbcConnection {
+class XtdbConnection(private val node: Node, private val connection: NodeConnection) : AdbcConnection {
 
-    private var dbName: DatabaseName = "xtdb"
+    private val dbName get() = connection.dbName
     private var autoCommit = true
     private val pendingOps = mutableListOf<TxOp>()
-
-    private var awaitToken: String? = null
-
-    private fun runTx(ops: List<TxOp>): Xtdb.ExecutedTx {
-        val tx = node.executeTx(dbName, ops)
-        awaitToken = node.mergeAwaitToken(awaitToken, dbName, tx.txId)
-        return tx
-    }
 
     interface XtdbStatement : AdbcStatement {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
@@ -82,7 +72,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         override fun prepare() {
             val sql = this.sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
-            prepared = node.prepareSql(sql, dbName, awaitToken)
+            prepared = connection.prepareSql(sql)
         }
 
         override fun getParameterSchema(): Schema {
@@ -124,7 +114,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
             val queryArgs = openQueryArgs()
             val cursor = try {
-                prepared?.openQuery(queryArgs, QueryOpts()) ?: node.openSqlQuery(sql, dbName, awaitToken)
+                prepared?.openQuery(queryArgs, QueryOpts()) ?: connection.openSqlQuery(sql)
             } catch (t: Throwable) {
                 queryArgs?.close()
                 throw t
@@ -148,7 +138,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
     internal fun executeDml(op: TxOp) {
         if (autoCommit) {
-            listOf(op).useAll { ops -> runTx(ops) }
+            listOf(op).useAll { ops -> connection.executeTx(ops) }
         } else {
             pendingOps.add(op)
         }
@@ -162,7 +152,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         val ops = pendingOps.toList()
         pendingOps.clear()
         if (ops.isNotEmpty()) {
-            ops.useAll { runTx(it) }
+            ops.useAll { connection.executeTx(it) }
         }
     }
 
@@ -214,8 +204,8 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         }
     }
 
-    fun prepareSql(sql: String): PreparedQuery = node.prepareSql(sql, dbName, awaitToken)
-    fun openSqlQuery(sql: String): ResultCursor = node.openSqlQuery(sql, dbName, awaitToken)
+    fun prepareSql(sql: String): PreparedQuery = connection.prepareSql(sql)
+    fun openSqlQuery(sql: String): ResultCursor = connection.openSqlQuery(sql)
 
     private fun cursorToArrowReader(cursor: ResultCursor, schema: Schema): ArrowReader =
         object : ArrowReader(node.allocator) {
@@ -306,7 +296,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
             getTableSchema(TableRef(catalog ?: dbName, dbSchema ?: "public", tableName), snap)
         }
 
-    fun openSnapshot(): DatabaseSnapshot = node.openSnapshot(dbName, awaitToken)
+    fun openSnapshot(): DatabaseSnapshot = connection.openSnapshot()
 
     fun getTableSchema(dbSchema: String, tableName: String, snap: DatabaseSnapshot): Schema =
         getTableSchema(TableRef(dbName, dbSchema, tableName), snap)
@@ -416,7 +406,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
         if (depth == GetObjectsDepth.DB_SCHEMAS) {
             val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
             val result = linkedMapOf<String, List<TableInfo>>()
-            node.openSqlQuery(sql, dbName, awaitToken).use { cursor ->
+            connection.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         result[rel.get("table_schema").getObject(i).toString()] = emptyList()
@@ -440,7 +430,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
 
         if (needColumns) {
             val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
-            node.openSqlQuery(sql, dbName, awaitToken).use { cursor ->
+            connection.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -457,7 +447,7 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
                     .add(TableInfo(key.second, cols))
             }
         } else {
-            node.openSqlQuery(sql, dbName, awaitToken).use { cursor ->
+            connection.openSqlQuery(sql).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     for (i in 0 until rel.rowCount) {
                         val schema = rel.get("table_schema").getObject(i).toString()
@@ -475,20 +465,14 @@ class XtdbConnection(private val node: Node) : AdbcConnection {
     override fun getCurrentCatalog(): String = dbName
 
     override fun setCurrentCatalog(catalog: String) {
-        dbName = catalog
+        connection.dbName = catalog
     }
     override fun getCurrentDbSchema(): String = "public"
 
     interface Node {
         val allocator: BufferAllocator
         val databaseNames: Collection<DatabaseName>
-        fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.SubmittedTx
-        fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts = TxOpts()): Xtdb.ExecutedTx
-        fun openSqlQuery(sql: String, dbName: DatabaseName, awaitToken: String?): ResultCursor
-        fun prepareSql(sql: String, dbName: DatabaseName, awaitToken: String?): PreparedQuery
-        fun mergeAwaitToken(awaitToken: String?, dbName: DatabaseName, txId: MessageId): String
         fun getColumnTypes(table: TableRef, snap: DatabaseSnapshot): Map<String, VectorType>?
-        fun openSnapshot(dbName: DatabaseName, awaitToken: String?): DatabaseSnapshot
     }
 
     override fun close() {

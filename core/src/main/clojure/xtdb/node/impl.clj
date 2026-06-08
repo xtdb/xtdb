@@ -22,6 +22,7 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
+           (xtdb NodeConnection NodeConnection$Node)
            (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
@@ -83,6 +84,29 @@
            :committed? committed?
            :error error}))))
 
+(defn- ->node-connection ^NodeConnection [this-node ^Database$Catalog db-cat db-name]
+  (NodeConnection.
+   (reify NodeConnection$Node
+     (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
+     (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
+
+     (openSqlQuery [_ sql db-name await-token]
+       (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
+         (-> (xtp/prepare-sql this-node sql query-opts)
+             (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
+
+     (prepareSql [_ sql db-name await-token]
+       (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
+         (xtp/prepare-sql this-node sql query-opts)))
+
+     (openSnapshot [_ db-name await-token]
+       (let [^Database db (or (.databaseOrNull db-cat db-name)
+                              (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                                                    {:db-name db-name})))]
+         (.awaitAll db-cat await-token nil)
+         (.openSnapshot db))))
+   db-name))
+
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src
                  ^CompositeMeterRegistry metrics-registry
@@ -116,31 +140,10 @@
      (reify XtdbConnection$Node
        (getAllocator [_] allocator)
        (getDatabaseNames [_] (.getDatabaseNames db-cat))
-       (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
-       (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
-
-       (openSqlQuery [_ sql db-name await-token]
-         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-           (-> (xtp/prepare-sql this-node sql query-opts)
-               (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
-
-       (prepareSql [_ sql db-name await-token]
-         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-           (xtp/prepare-sql this-node sql query-opts)))
-
-       (mergeAwaitToken [_ existing-token db-name tx-id]
-         (basis/merge-tx-tokens existing-token (basis/->tx-basis-str {db-name [tx-id]})))
-
        (getColumnTypes [_ table snap]
          (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
-           (.getColumnTypes db table snap)))
-
-       (openSnapshot [_ db-name await-token]
-         (let [^Database db (or (.databaseOrNull db-cat db-name)
-                                (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                                      {:db-name db-name})))]
-           (.awaitAll db-cat await-token nil)
-           (.openSnapshot db))))))
+           (.getColumnTypes db table snap))))
+     (xtp/open-connection this-node "xtdb")))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -223,6 +226,9 @@
     (let [primary-db (.getPrimary db-cat)
           msg-id (xt-log/send-detach-db! primary-db db-name)]
       (await-msg-result this primary-db msg-id)))
+
+  (open-connection [this-node db-name]
+    (->node-connection this-node db-cat db-name))
 
   xtp/PStatus
   (latest-completed-txs [_]
