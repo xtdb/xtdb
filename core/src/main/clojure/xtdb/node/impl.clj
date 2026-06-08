@@ -128,9 +128,6 @@
          (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
            (xtp/prepare-sql this-node sql query-opts)))
 
-       (mergeAwaitToken [_ existing-token db-name tx-id]
-         (basis/merge-tx-tokens existing-token (basis/->tx-basis-str {db-name [tx-id]})))
-
        (getColumnTypes [_ table snap]
          (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
            (.getColumnTypes db table snap)))
