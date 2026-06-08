@@ -16,6 +16,7 @@ import xtdb.error.Unsupported
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.table.TableRef
 import xtdb.trie.InstantMicros
+import xtdb.util.closeOnCatch
 import java.time.Instant
 import java.time.ZoneId
 
@@ -267,7 +268,8 @@ internal class SourceLogTxIndexer(
                     for (idx in 0 until paramRel.rowCount) {
                         wrapAnomaly(mapOf("arg-idx" to idx)) {
                             selection[0] = idx
-                            evalQuery(paramRel.select(selection).openSlice(allocator))
+                            paramRel.select(selection).openSlice(allocator)
+                                .closeOnCatch { evalQuery(it) }
                         }
                     }
                 }
