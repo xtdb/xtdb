@@ -17,6 +17,8 @@ data class MergeTypes(
         when (type) {
             Null -> nullable = true
 
+            Nothing -> {} // bottom: contributes nothing to the merge
+
             is Poly -> type.legs.forEach { merge(it) }
 
             is Maybe -> {

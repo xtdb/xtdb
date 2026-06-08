@@ -101,6 +101,24 @@ sealed class VectorType {
         override fun toString() = children.entries.joinToString(prefix = "{", postfix = "}") { (n, t) -> "$n: $t" }
     }
 
+    /**
+     * The lattice bottom: no values seen yet, no constraint. `Nothing ⊔ X = X`.
+     *
+     * Distinct from [Null]: merging in [Null] sets the nullable flag (`Null ⊔ I64 = Maybe(I64)`),
+     * whereas `Nothing` widens cleanly to the first type it meets. It is the schema-level counterpart
+     * of `NullVector(nullable = false)` ("undefined", no values), as opposed to `Null`'s `nullable = true`.
+     */
+    data object Nothing : VectorType() {
+        override val arrowType get() = NULL_TYPE
+        override val nullable get() = false
+
+        // the bottom is absorbed by any join, so it contributes no legs and must never be one
+        override val legs: Iterable<Mono> get() = emptyList()
+
+        override fun toField(name: FieldName) = Field(name, FieldType(false, NULL_TYPE, null), emptyList())
+        override val asLegField get() = error("Nothing is the lattice bottom; it cannot be a union leg")
+    }
+
     data class Maybe(val mono: Mono) : VectorType() {
         override val arrowType get() = mono.arrowType
         override val nullable = true
@@ -149,6 +167,7 @@ sealed class VectorType {
 
             return when (type) {
                 Null -> type
+                Nothing -> Null
                 is Mono -> Maybe(type)
                 is Maybe -> type
                 is Poly -> Poly(type.legs + Null)
