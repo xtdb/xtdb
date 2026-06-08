@@ -163,7 +163,7 @@
                          (fn []
                            (.endStruct doc-wtr))))
 
-              (.commitTx live-index open-tx)
+              (tu/commit-tx! live-index open-tx)
 
               (with-open [snap (.openSnapshot live-index)]
                 (let [live-table-before (live-table-snap->data (first (.table snap table)))]

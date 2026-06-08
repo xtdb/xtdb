@@ -36,7 +36,7 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveTable OpenTx OpenTx$Table)
+           (xtdb.indexer LiveIndex LiveTable OpenTx OpenTx$Table)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery QueryOpts)
            xtdb.storage.BufferPool
@@ -350,6 +350,9 @@
   (^OpenTx [^BufferAllocator allocator node ^TransactionKey tx-key]
    (let [db (db/primary-db node)]
      (OpenTx. allocator (util/node-base node) (.getStorage db) (.getQueryState db) tx-key nil nil))))
+
+(defn commit-tx! [^LiveIndex live-index ^OpenTx open-tx]
+  (.importTx live-index (.commitTx open-tx)))
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)]

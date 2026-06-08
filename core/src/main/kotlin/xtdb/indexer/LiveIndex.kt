@@ -101,26 +101,6 @@ class LiveIndex private constructor(
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
-    fun commitTx(openTx: OpenTx) {
-        val stamp = snapLock.writeLock()
-        try {
-            for ((tableRef, tableTx) in openTx.tables) {
-                if (tableTx.txRelation.rowCount > 0) {
-                    val liveTable =
-                        tables.getOrPut(tableRef) { LiveTable(allocator, tableRef, blockIdx, rowCounter, liveTrieFactory) }
-                    liveTable.importData(tableTx.txRelation)
-                }
-            }
-
-            latestCompletedTx = openTx.txKey
-
-            refreshSnap0()
-        } finally {
-            snapLock.unlock(stamp)
-        }
-    }
-
-
     fun importTx(resolvedTx: ReplicaMessage.ResolvedTx) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val stamp = snapLock.writeLock()

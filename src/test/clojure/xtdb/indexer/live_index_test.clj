@@ -49,7 +49,7 @@
             (.logPut open-tx-table (util/uuid->byte-buffer iid) 0 0
                      #(.writeObject put-doc-wrt {:some :doc})))
 
-          (.commitTx live-index open-tx)
+          (tu/commit-tx! live-index open-tx)
 
           (let [live-table (.table live-index #xt/table my-table)
                 live-rel (.getLiveRelation live-table)
@@ -149,7 +149,7 @@
         (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
                  (fn []
                    (.endStruct doc-wtr)))
-        (.commitTx live-index live-tx0)))
+        (tu/commit-tx! live-index live-tx0)))
 
     (t/testing "uncommitted tx data doesn't appear in live-index"
       (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
@@ -208,7 +208,7 @@
             (t/is (= 1 (.getRowCount (.getRelation (first table-snaps))))
                   "Transaction snapshot should see its own uncommitted row")))
 
-        (.commitTx live-index live-tx))
+        (tu/commit-tx! live-index live-tx))
 
       ;; After commit, external snapshot should now see the data
       (with-open [external-snap (.openSnapshot live-index)]
@@ -229,7 +229,7 @@
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
-        (.commitTx live-index live-tx1)))
+        (tu/commit-tx! live-index live-tx1)))
 
     ;; Take a snapshot BEFORE second transaction
     (with-open [snap-before (.openSnapshot live-index)]
@@ -241,7 +241,7 @@
           (let [table-tx (.table live-tx2 table)
                 doc-wtr (.getDocWriter table-tx)]
             (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
-            (.commitTx live-index live-tx2)))
+            (tu/commit-tx! live-index live-tx2)))
 
         ;; The snapshot taken before should still show only 1 row (immutability)
         (t/is (= row-count-before
@@ -293,7 +293,7 @@
         (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
         (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
 
-        (.commitTx live-index live-tx))
+        (tu/commit-tx! live-index live-tx))
 
       (with-open [snap (.openSnapshot live-index)]
         (let [table-snap (first (.table snap table))]
@@ -322,10 +322,10 @@
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getDocWriter table-tx)]
               (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
-              (.commitTx live-index live-tx)))
+              (tu/commit-tx! live-index live-tx)))
 
           ;; Use the openTx variant of openSnapshot to force a fresh capture each time —
-          ;; the cached sharedSnap was last refreshed on `commitTx`, which is before our manual
+          ;; the cached sharedSnap was last refreshed on commit, which is before our manual
           ;; `addTries` below, so it wouldn't see the L0.
           (with-open [observer-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})]
 
@@ -370,7 +370,7 @@
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getDocWriter table-tx)]
               (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
-              (.commitTx live-index live-tx)))
+              (tu/commit-tx! live-index live-tx)))
 
           (t/is (some? (.table live-index table))
                 "Table should exist after commit")
@@ -392,7 +392,7 @@
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getDocWriter table-tx)]
         (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
-        (.commitTx live-index live-tx1)))
+        (tu/commit-tx! live-index live-tx1)))
 
     ;; Start second transaction and write more data
     (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
