@@ -7,6 +7,7 @@ import xtdb.NodeBase
 import xtdb.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
+import xtdb.arrow.NULL_TYPE
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
@@ -206,7 +207,7 @@ class OpenTx(
             is SqlStatement.GrantRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = false)
             is SqlStatement.RevokeRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = true)
 
-            is SqlStatement.CreateTable -> createTable(stmt.table)
+            is SqlStatement.CreateTable -> createTable(stmt.table, stmt.colNames)
 
             is SqlStatement.DmlQuery -> {
                 val query = stmt.query
@@ -272,9 +273,9 @@ class OpenTx(
         }
     }
 
-    private fun createTable(ref: TableRef) {
+    private fun createTable(ref: TableRef, colNames: List<String>) {
         checkNotForbidden(ref)
-        table(ref)
+        table(ref).declareColumns(colNames)
     }
 
     // GRANT/REVOKE arrive as ordinary SQL but are authority-gated and write below the FORBIDDEN_SCHEMAS
@@ -438,6 +439,15 @@ class OpenTx(
         private val eraseVec = opVec["erase"]
 
         val docWriter: VectorWriter by lazy(LazyThreadSafetyMode.NONE) { putVec }
+
+        /**
+         * Seeds the put-struct with a `NULL_TYPE` child per declared column, so a `CREATE TABLE foo (a, b)`
+         * registers the columns ahead of any data. They surface through [RelationReader.logRelTypes] into the
+         * catalog/planner. (An empty `CREATE TABLE foo` passes no columns, leaving the put-struct unforced.)
+         */
+        fun declareColumns(colNames: List<String>) {
+            for (colName in colNames) docWriter.vectorFor(colName, NULL_TYPE, false)
+        }
 
         var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
             private set

@@ -21,6 +21,11 @@ class NullVector(
     override val arrowType: ArrowType = NULL_TYPE
     override val monoType = Null
 
+    // a non-nullable NULL vector holds only 'undefined' (no values seen) — the lattice bottom Nothing,
+    // distinct from the nullable Null marker. Keeps a declared-but-empty column (CREATE TABLE foo (a))
+    // from polluting to Maybe on its first insert: Nothing ⊔ I64 = I64, whereas Null ⊔ I64 = Maybe(I64).
+    override val type get() = if (nullable) Null else Nothing
+
     override fun isNull(idx: Int) = true
 
     override fun writeUndefined() {

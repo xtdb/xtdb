@@ -58,7 +58,7 @@ directlyExecutableStatement
     | GRANT roleName=identifier TO userName=identifier # GrantRoleStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
 
-    | CREATE (OR ALTER)? TABLE targetTable # CreateTableStatement
+    | CREATE (OR ALTER)? TABLE targetTable ('(' columnNameList ')')? # CreateTableStatement
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;

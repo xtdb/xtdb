@@ -12,6 +12,58 @@
                    FROM information_schema.tables
                    WHERE table_schema = 'public'")))
 
+(defn- public-columns [node]
+  (set (xt/q node "SELECT table_name, column_name, data_type, is_nullable
+                   FROM information_schema.columns
+                   WHERE table_schema = 'public'")))
+
+(t/deftest declares-bare-columns
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "CREATE TABLE foo (a, b)"]])
+
+    (let [col-names (->> (public-columns node) (map :column-name) set)]
+      (t/is (contains? col-names "a") "declared column a surfaces in information_schema.columns")
+      (t/is (contains? col-names "b") "declared column b surfaces in information_schema.columns"))
+
+    (t/is (= [] (xt/q node "SELECT a, b FROM foo"))
+          "querying declared-but-empty columns returns no rows, no error")))
+
+(defn- col-type [node table col]
+  (xt/q node ["SELECT data_type, is_nullable FROM information_schema.columns
+               WHERE table_name = ? AND column_name = ?" table col]))
+
+(t/deftest declared-column-widens-cleanly
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "CREATE TABLE foo (a)"]])
+
+    (t/is (= [{:data-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
+          "a declared-but-empty column is the lattice bottom: nothing type, not nullable")
+
+    (xt/execute-tx node [[:sql "INSERT INTO foo (_id, a) VALUES (1, 42)"]])
+
+    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "a"))
+          "first insert widens it cleanly to a non-nullable i64 - NOT Maybe(i64)")))
+
+(t/deftest declared-columns-survive-block-flush
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "CREATE TABLE foo (a, b)"]])
+    (tu/flush-block! node)
+
+    (t/is (= [{:data-type ":nothing", :is-nullable "NO"}] (col-type node "foo" "a"))
+          "a declared Nothing column round-trips through a block flush as Nothing, not Null")))
+
+(t/deftest declared-column-pgwire-type
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "CREATE TABLE foo (a)"]])
+
+    (with-open [conn (jdbc/get-connection node)
+                stmt (.prepareStatement conn "SELECT a FROM foo")
+                rs (.executeQuery stmt)]
+      ;; Nothing -> PgType.Null, which shares text's OID 25 on the wire ("delegates to Text for
+      ;; OID/serialization, but distinct for comparison"), so a JDBC client reports it as text.
+      (t/is (= "text" (.getColumnTypeName (.getMetaData rs) 1))
+            "a Nothing-typed declared column reports the pgwire null type (wire-compatible with text)"))))
+
 (t/deftest creates-an-empty-table
   (with-open [node (xtn/start-node)]
     (xt/execute-tx node [[:sql "CREATE TABLE foo"]])

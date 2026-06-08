@@ -306,7 +306,9 @@ sealed class VectorType {
         @get:JvmName("fromField")
         val Field.asType: VectorType
             get() = when (type) {
-                NULL_TYPE -> Null
+                // a non-nullable NULL field is the lattice bottom (Nothing), not the nullable Null marker -
+                // so a declared-but-empty column survives a block flush without polluting to Null/Maybe
+                NULL_TYPE -> if (isNullable) Null else Nothing
                 LIST_TYPE, SetType, TsTzRangeType, is ArrowType.FixedSizeList -> Listy(type, children.single().asType)
                 STRUCT_TYPE -> Struct(children.associate { it.name to it.asType })
                 is ArrowType.Union -> fromLegs(children.map { it.asType })

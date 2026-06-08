@@ -23,5 +23,5 @@ sealed interface SqlStatement {
     data class GrantRole(val user: String, val role: String) : SqlStatement
     data class RevokeRole(val user: String, val role: String) : SqlStatement
 
-    data class CreateTable(val table: TableRef) : SqlStatement
+    data class CreateTable(val table: TableRef, val colNames: List<String>) : SqlStatement
 }
