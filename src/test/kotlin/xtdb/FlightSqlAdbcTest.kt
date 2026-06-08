@@ -299,7 +299,7 @@ class FlightSqlAdbcTest {
                 client.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
             )
 
-            fsqlClient.executeUpdate("CREATE TABLE t", *emptyCallOpts)
+            fsqlClient.executeUpdate("CREATE TABLE t (_id, n)", *emptyCallOpts)
             assertEquals(
                 emptyList<Map<*, *>>(),
                 fsqlClient.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()
@@ -339,7 +339,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL closeSession aborts an open session-bound transaction`() {
-        fsqlClient.executeUpdate("CREATE TABLE users", *emptyCallOpts)
+        fsqlClient.executeUpdate("CREATE TABLE users (_id, n)", *emptyCallOpts)
 
         cookieAwareClient().use { client ->
             // session must exist before beginTransaction for the tx to be session-bound
@@ -504,7 +504,7 @@ class FlightSqlAdbcTest {
                 listOf(mapOf("_id" to 1L, "n" to "hdr")),
                 client.execute("SELECT _id, n FROM t", *dbCallOpts("xtdb")).readRows()
             )
-            client.executeUpdate("CREATE TABLE t", *emptyCallOpts)
+            client.executeUpdate("CREATE TABLE t (_id, n)", *emptyCallOpts)
             assertEquals(
                 emptyList<Map<*, *>>(),
                 client.execute("SELECT _id, n FROM t", *emptyCallOpts).readRows()

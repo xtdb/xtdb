@@ -159,7 +159,7 @@
                               "James" "Matt"])))))
 
 (t/deftest start-and-query-empty-node-re-231-test
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE a"]])
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE a (a)"]])
   (t/is (= [] (xt/q tu/*node* "select a.a from a a" {}))))
 
 (t/deftest test-duration-jdbc-roundtrip
@@ -357,7 +357,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (t/is (= []
            (xt/q *node* "SELECT posts.body FROM posts")))
 
-  (xt/submit-tx *node* [[:sql "CREATE TABLE t1"]])
+  (xt/submit-tx *node* [[:sql "CREATE TABLE t1 (_id, body)"]])
   (xt/submit-tx *node*
                 ["INSERT INTO t1 SELECT posts._id, posts.body FROM posts"])
 

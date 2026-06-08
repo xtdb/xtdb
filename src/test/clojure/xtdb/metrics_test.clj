@@ -32,10 +32,10 @@
     (t/is (thrown? Exception (jdbc/execute! conn ["SELECT 1/0"]))
           "runtime error via pgwire")
 
-    ;; producing some unknown-column warnings (the table must exist - an unknown table is now an error)
-    (xt/execute-tx node [[:sql "CREATE TABLE bar"]])
-    (xt/q node "SELECT foo FROM bar")
-    (jdbc/execute! conn ["SELECT foo FROM bar"])
+    ;; producing some warnings - a probe of an unimplemented system-schema table stays a warning
+    ;; (tools tolerate it), where unknown user tables/columns are now errors (#4467)
+    (xt/q node "SELECT * FROM information_schema.no_such_table")
+    (jdbc/execute! conn ["SELECT * FROM information_schema.no_such_table"])
 
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.error")))))
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.warning")))))))

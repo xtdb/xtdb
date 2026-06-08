@@ -524,7 +524,7 @@
                             (.resolve node-dir "objects"))))))))
 
 (t/deftest ingestion-stopped-query-as-tx-op-3265
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE docs"]])
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE docs (_id, foo)"]])
   (t/is (anomalous? [:incorrect :xtdb/queries-in-read-write-tx
                      "Queries are unsupported in a DML transaction"
                      {:query "SELECT _id, foo FROM docs"}]

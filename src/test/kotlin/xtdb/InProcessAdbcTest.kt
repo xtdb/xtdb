@@ -95,7 +95,7 @@ class InProcessAdbcTest {
 
     @Test
     fun `getParameterSchema reports columns in $ N convention`() {
-        insertData("CREATE TABLE foo")
+        insertData("CREATE TABLE foo (_id, name)")
 
         xtdb.connect().use { conn ->
             conn.createStatement().use { stmt ->

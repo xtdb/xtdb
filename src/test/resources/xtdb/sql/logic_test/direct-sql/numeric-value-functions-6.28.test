@@ -1,6 +1,9 @@
 hash-threshold 100
 
 statement ok
+CREATE TABLE t1 (_id, missing)
+
+statement ok
 INSERT INTO t1(_id) VALUES(1)
 
 query R nosort

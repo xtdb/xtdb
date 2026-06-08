@@ -242,11 +242,12 @@
 (deftest error-propagation
   (let [warns (atom [])]
     (with-open [conn (pg-conn {:fn-notice (fn [notice] (swap! warns conj (:message notice)))})]
-      (pg/execute conn "CREATE TABLE docs")
-      (pg/execute conn "SELECT missing_col FROM docs")
+      ;; a probe of an unimplemented system-schema table stays a warning (tools tolerate it), one of
+      ;; the few query warnings left now that table/column-not-found on user tables are errors (#4467)
+      (pg/execute conn "SELECT * FROM information_schema.no_such_table")
       ;; the fn-notice runs in a separate executor pool
       (Thread/sleep 100)
-      (t/is (= #{"Column not found: missing_col"}
+      (t/is (= #{"Table not found: information_schema.no_such_table"}
                (set @warns))))))
 
 (deftest test-time
