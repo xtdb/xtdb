@@ -37,6 +37,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
   CI will run integration tests regardless, but `./gradlew test` is the minimum.
   You can assume that all tests are passing on `main`.
 * There MUST NOT be any reflection or boxed math warnings.
+* For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
 * Verify: all changes committed AND pushed
   You MUST use the commit skill to create commit messages.
 * Hand off: provide context for next session

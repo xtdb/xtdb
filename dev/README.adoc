@@ -336,6 +336,11 @@ Use when the change is uncertain, experimental, or invites discussion — you're
 The key distinction between show and ask: show merges without waiting; ask waits.
 Default toward show over ask when you're confident — don't manufacture review gates for changes you'd stand behind anyway.
 
+For show and ask changes, run a code-review pass over the diff before raising the commit or PR — the `/code-review` skill, or a code-review agent (e.g. `feature-dev:code-reviewer`).
+Ship changes don't need it.
+Whether the findings block the commit/PR or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
+Since show and ask normally go through plan mode, this review MUST appear as an explicit step in the plan, ahead of the commit/PR step (alongside the chalk and chill steps).
+
 NOTE: AI agents working in this repo — if you're not sure which path applies, ask the human you're paired with rather than guessing.
 
 See link:GIT.adoc[] for further details on git practices in XTDB.
