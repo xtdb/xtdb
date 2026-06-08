@@ -1,0 +1,30 @@
+edition = "2023";
+
+package xtdb.kafkaconnectsource.proto;
+
+import "google/protobuf/any.proto";
+
+option java_multiple_files = true;
+
+message KafkaConnectSourceConfig {
+    string remote = 1;
+    string topic = 2;
+
+    // Flat KC-style config: key.converter / value.converter / value.converter.*
+    // / transforms / transforms.<alias>.* / consumer.override.* etc.
+    map<string, string> connect_config = 3;
+
+    // Carried as Any so the proto stays decoupled from specific indexer config shapes —
+    // mirrors how DatabaseConfig.external_source carries the outer ExternalSource factory.
+    google.protobuf.Any indexer = 4;
+}
+
+message KafkaConnectSourceToken {
+    int64 offset = 1;
+}
+
+message DocsIndexerConfig {
+    // Target table — qualified ('public.orders') or unqualified ('orders'),
+    // unqualified names default to the 'public' schema.
+    string table = 1;
+}

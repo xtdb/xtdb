@@ -158,7 +158,12 @@ guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 # Kafka
 kafka-clients = { group = "org.apache.kafka", name = "kafka-clients", version.ref = "kafka" }
 kafka-connect-api = { group = "org.apache.kafka", name = "connect-api", version.ref = "kafka" }
+kafka-connect-json = { group = "org.apache.kafka", name = "connect-json", version.ref = "kafka" }
+kafka-connect-transforms = { group = "org.apache.kafka", name = "connect-transforms", version.ref = "kafka" }
 kafka-avro-serializer = { group = "io.confluent", name = "kafka-avro-serializer", version.ref = "confluent" }
+kafka-connect-avro-converter = { group = "io.confluent", name = "kafka-connect-avro-converter", version.ref = "confluent" }
+kafka-json-schema-serializer = { group = "io.confluent", name = "kafka-json-schema-serializer", version.ref = "confluent" }
+kafka-connect-json-schema-converter = { group = "io.confluent", name = "kafka-connect-json-schema-converter", version.ref = "confluent" }
 
 # Dev/test dependencies
 jovial = { group = "dev.clojurephant", name = "jovial", version = "0.4.3" }
