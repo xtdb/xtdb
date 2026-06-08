@@ -85,7 +85,7 @@ class NodeBase(
 
                 val compactor = open { compactorFactory.create(meterReg, config.compactor.threads) }
 
-                val infoSchema = infoSchemaFactory.invoke(al, meterReg)
+                val infoSchema = infoSchemaFactory.invoke(al, meterReg, config.authn)
                 val scanEmitter = scanEmitterFactory.invoke(infoSchema)
                 val querySource = open { querySourceFactory.create(al, meterReg, scanEmitter) }
 

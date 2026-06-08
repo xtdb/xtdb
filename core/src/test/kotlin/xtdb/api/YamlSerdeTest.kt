@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import xtdb.api.Authenticator.Factory.OpenIdConnect
 import xtdb.api.Authenticator.Factory.SingleRootUser
+import xtdb.api.Authenticator.Factory.UserList
 import xtdb.api.Authenticator.Method.*
 import xtdb.api.Authenticator.MethodRule
 import xtdb.api.log.KafkaCluster
@@ -409,6 +410,52 @@ class YamlSerdeTest {
         )
 
         unmockkObject(EnvironmentVariableProvider)
+    }
+
+    @Test
+    fun testUserListDecoding() {
+        // each user's hash is a tagged scalar — the tag picks the algorithm
+        val alice = PasswordHash.argon2id("alice-pw")
+        val bob = PasswordHash.bcrypt("bob-pw")
+
+        val input = """
+        authn: !UserList
+          users:
+            alice: !Argon2id "${alice.encoded}"
+            bob: !BCrypt "${bob.encoded}"
+          rules:
+            - user: alice
+              method: PASSWORD
+            - remoteAddress: 127.0.0.1
+              method: TRUST
+        """.trimIndent()
+
+        assertEquals(
+            UserList(
+                users = mapOf("alice" to alice, "bob" to bob),
+                rules = listOf(
+                    MethodRule(PASSWORD, user = "alice"),
+                    MethodRule(TRUST, remoteAddress = "127.0.0.1"),
+                )
+            ),
+            nodeConfig(input).authn
+        )
+    }
+
+    @Test
+    fun testUserListDefaultRules() {
+        val alice = PasswordHash.argon2id("alice-pw")
+
+        val input = """
+        authn: !UserList
+          users:
+            alice: !Argon2id "${alice.encoded}"
+        """.trimIndent()
+
+        assertEquals(
+            UserList(users = mapOf("alice" to alice)),
+            nodeConfig(input).authn
+        )
     }
 
     @Test

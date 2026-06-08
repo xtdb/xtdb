@@ -26,8 +26,8 @@
         authn (authn/->OpenIdConnect oidc-config
                                      "xtdb"
                                      "xtdb-secret"
-                                     [{:user "test-user" :method #xt.authn/method :password :address "127.0.0.1"}
-                                      {:user "oid-client" :method #xt.authn/method :client-credentials}]
+                                     (authn/->rules-cfg [{:user "test-user" :method :password :remote-addr "127.0.0.1"}
+                                                         {:user "oid-client" :method :client-credentials}])
                                      (InstantSource/system))
         conn (pgwire/map->Connection {:server {:server-state (atom {:parameters {"server_encoding" "UTF8"
                                                                                  "client_encoding" "UTF8"

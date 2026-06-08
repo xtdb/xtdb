@@ -49,6 +49,7 @@ roaring-bitmap = { group = "org.roaringbitmap", name = "RoaringBitmap", version 
 hppc = { group = "com.carrotsearch", name = "hppc", version = "0.10.0" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version = "3.2.3" }
 commons-codec = { group = "commons-codec", name = "commons-codec", version = "1.21.0" }
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version = "1.84" }
 
 antlr = { group = "org.antlr", name = "antlr4", version.ref = "antlr" }
 antlr-runtime = { group = "org.antlr", name = "antlr4-runtime", version.ref = "antlr" }

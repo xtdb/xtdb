@@ -10,7 +10,8 @@
             [xtdb.error :as err]
             [xtdb.logging :as logging]
             [xtdb.util :as util])
-  (:import java.io.File))
+  (:import java.io.File
+           (xtdb.api PasswordHash)))
 
 (defn print-help []
   (println (str "--- " (util/xtdb-version-string) " ---"))
@@ -21,6 +22,7 @@
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
+  (println " * `hash-password [--bcrypt] <password>`: hashes a password for an `!UserList` authn config entry (reads stdin if no password given).")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -176,6 +178,30 @@
 
     ((requiring-resolve 'xtdb.export/export-snapshot!) (file->node-opts file) db-name {:dry-run? dry-run?})))
 
+(def hash-password-cli-spec
+  [[nil "--argon2id" "Hash with argon2id (the current default)" :id :argon2id?]
+   [nil "--bcrypt" "Hash with bcrypt" :id :bcrypt?]
+   ["-h" "--help"]])
+
+(defn- hash-password! [args]
+  (let [{{:keys [argon2id? bcrypt?]} :options, [password] :arguments} (-> (parse-args args hash-password-cli-spec)
+                                                                         (handling-arg-errors-or-help))]
+    (when (and argon2id? bcrypt?)
+      (binding [*out* *err*]
+        (println "Choose one of --argon2id or --bcrypt")
+        (System/exit 2)))
+
+    ;; positional arg first; otherwise read a line from stdin (so the plaintext can stay out of shell history)
+    (let [password (or password (some-> (read-line) not-empty))]
+      (when-not password
+        (binding [*out* *err*]
+          (println "Missing password: `hash-password [--argon2id|--bcrypt] <password>` (or pipe it on stdin)")
+          (System/exit 2)))
+
+      (println (.getEncoded (if bcrypt?
+                              (PasswordHash/bcrypt password)
+                              (PasswordHash/argon2id password)))))))
+
 (def read-arrow-file-cli-spec
   [["-h" "--help"]])
 
@@ -290,6 +316,10 @@
         "export-snapshot" (do
                             (export-snapshot! more-args)
                             (System/exit 0))
+
+        "hash-password" (do
+                          (hash-password! more-args)
+                          (System/exit 0))
 
         "read-arrow-file" (do
                             (read-arrow-file more-args)

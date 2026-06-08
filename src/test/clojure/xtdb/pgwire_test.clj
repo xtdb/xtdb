@@ -30,7 +30,7 @@
            (org.postgresql.util PGobject PSQLException)
            (xtdb.pgwire PgType)
            (xtdb JsonSerde JsonLdSerde)
-           (xtdb.api DataSource$ConnectionBuilder)
+           (xtdb.api DataSource$ConnectionBuilder PasswordHash)
            xtdb.api.log.SourceMessage$FlushBlock
            xtdb.pgwire.Server
            xtdb.tx.Sql))
@@ -2252,6 +2252,32 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: fin"
                                 (with-open [_ (jdbc-conn {"user" "fin", "password" "hunter2"})]))
               "non-root users are rejected even with the right password")))))
+
+(deftest pg-user-list-authentication
+  (let [alice (PasswordHash/argon2id "alice-pw")
+        bob (PasswordHash/bcrypt "bob-pw")
+        xtdb (PasswordHash/argon2id "xtdb-pw")]
+    (with-open [node (xtn/start-node {:authn [:user-list {:users {"alice" alice, "bob" bob, "xtdb" xtdb}
+                                                          :rules [{:method :password}]}]})]
+      (binding [*port* (.getServerPort node)]
+        (t/testing "each configured user authenticates with its own password, argon2id and bcrypt alike"
+          (with-open [_ (jdbc-conn {"user" "alice", "password" "alice-pw"})])
+          (with-open [_ (jdbc-conn {"user" "bob", "password" "bob-pw"})]))
+
+        (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: alice"
+                                (with-open [_ (jdbc-conn {"user" "alice", "password" "bob-pw"})]))
+              "a configured user is rejected with the wrong password")
+
+        (t/is (thrown-with-msg? PSQLException #"ERROR: password authentication failed for user: carol"
+                                (with-open [_ (jdbc-conn {"user" "carol", "password" "alice-pw"})]))
+              "an unconfigured user is rejected")
+
+        (t/testing "pg_user lists the configured users; only the xtdb user is the superuser"
+          (with-open [conn (jdbc-conn {"user" "alice", "password" "alice-pw"})]
+            (t/is (= [{:username "alice", :usesuper false}
+                      {:username "bob", :usesuper false}
+                      {:username "xtdb", :usesuper true}]
+                     (q conn ["SELECT username, usesuper FROM pg_user ORDER BY username"])))))))))
 
 (t/deftest test-keywordize-nested-values-3910
   (with-open [conn (jdbc-conn)]

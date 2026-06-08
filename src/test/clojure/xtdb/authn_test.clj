@@ -96,7 +96,7 @@
   (let [issuer-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/master")))
         oidc-config (authn/discover-oidc-config issuer-url)
         authn (authn/->OpenIdConnect oidc-config "xtdb" "xtdb-secret"
-                                     [{:method #xt.authn/method :password}]
+                                     (authn/->rules-cfg [{:method :password}])
                                      (InstantSource/system))]
 
     (t/is (anomalous? [:incorrect :xtdb/authn-failed "No valid token or refresh token available for refresh"]
@@ -109,7 +109,7 @@
         after-expiry (.plusSeconds base-time 7200)
         mock-instant-source (tu/->mock-clock [base-time base-time base-time after-expiry after-expiry]) 
         ^Authenticator authn (authn/->OpenIdConnect oidc-config "xtdb" "xtdb-secret"
-                                                    [{:method #xt.authn/method :client-credentials}]
+                                                    (authn/->rules-cfg [{:method :client-credentials}])
                                                     mock-instant-source)
         clients (:clients (seed! container {:access-token-lifespan (int 3600)})) 
         {:keys [client-id client-secret]} (:test clients)]
@@ -131,7 +131,7 @@
         issuer-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/master")))
         oidc-config (authn/discover-oidc-config issuer-url)
         ^Authenticator authn (authn/->OpenIdConnect oidc-config "xtdb" "xtdb-secret"
-                                                    [{:method #xt.authn/method :password}]
+                                                    (authn/->rules-cfg [{:method :password}])
                                                     (InstantSource/system))]
     
     (t/testing "method routing"
@@ -152,7 +152,7 @@
         issuer-url (.toURL (URI. (str (.getAuthServerUrl container) "/realms/master")))
         oidc-config (authn/discover-oidc-config issuer-url)
         ^Authenticator authn (authn/->OpenIdConnect oidc-config "xtdb" "xtdb-secret"
-                                                    [{:method #xt.authn/method :client-credentials}]
+                                                    (authn/->rules-cfg [{:method :client-credentials}])
                                                     (InstantSource/system))]
     
     (t/testing "method routing"
