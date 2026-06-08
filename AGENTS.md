@@ -47,7 +47,8 @@ For user-visible features:
 
 ## Style
 
-You MUST use sentence-per-line in documentation files and commit messages - this makes diffs cleaner and easier to review.
+You MUST use sentence-per-line in documentation files - this makes diffs cleaner and easier to review.
+For commit messages, defer to the chalk commit skill's line-break convention, if loaded.
 You MUST use the commit skill to create commit messages.
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
