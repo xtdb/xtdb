@@ -74,9 +74,7 @@ class OpenTx(
     val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
     fun serializeTableData(): Map<String, ByteArray> =
-        tableTxs.mapNotNull { (tableRef, tableTx) ->
-            tableTx.serializeTxData()?.let { tableRef.schemaAndTable to it }
-        }.toMap()
+        tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
 
     /**
      * Stamps the `xt/txs` row for this tx and assembles the [ReplicaMessage.ResolvedTx] describing
@@ -208,6 +206,8 @@ class OpenTx(
             is SqlStatement.GrantRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = false)
             is SqlStatement.RevokeRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = true)
 
+            is SqlStatement.CreateTable -> createTable(stmt.table)
+
             is SqlStatement.DmlQuery -> {
                 val query = stmt.query
                 checkArgCount(args, query.paramCount)
@@ -223,9 +223,11 @@ class OpenTx(
 
                     is SqlStatement.Put -> {
                         checkNotForbidden(stmt.table)
-                        val table = table(stmt.table)
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
+                                // defer table() until a row is actually written: a 0-row result (no-match
+                                // UPDATE/DELETE, INSERT ... WHERE false) must not register a table — only CREATE TABLE does
+                                if (rel.rowCount == 0) return@forEachRemaining
                                 // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
                                 // not the canonical `_iid` + `doc` shape `logPuts` expects.
                                 // Package content cols into a `doc` struct here.
@@ -240,37 +242,39 @@ class OpenTx(
                                     rel.vectorForOrNull("_valid_from"),
                                     rel.vectorForOrNull("_valid_to"),
                                 )
-                                table.logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
+                                table(stmt.table).logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
                             }
                         }
                     }
 
                     is SqlStatement.Patch -> {
                         checkNotForbidden(stmt.table)
-                        val table = table(stmt.table)
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> table.logPuts(0, Long.MAX_VALUE, rel) }
+                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logPuts(0, Long.MAX_VALUE, rel) }
                         }
                     }
 
                     is SqlStatement.Delete -> {
                         checkNotForbidden(stmt.table)
-                        val table = table(stmt.table)
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> table.logDeletes(0, Long.MAX_VALUE, rel) }
+                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logDeletes(0, Long.MAX_VALUE, rel) }
                         }
                     }
 
                     is SqlStatement.Erase -> {
                         checkNotForbidden(stmt.table)
-                        val table = table(stmt.table)
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> table.logErases(rel.vectorFor("_iid")) }
+                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logErases(rel.vectorFor("_iid")) }
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun createTable(ref: TableRef) {
+        checkNotForbidden(ref)
+        table(ref)
     }
 
     // GRANT/REVOKE arrive as ordinary SQL but are authority-gated and write below the FORBIDDEN_SCHEMAS
@@ -581,8 +585,7 @@ class OpenTx(
             trie = trie.addRange(startPos, rowCount)
         }
 
-        fun serializeTxData(): ByteArray? =
-            if (txRelation.rowCount > 0) txRelation.asArrowStream else null
+        fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
         override fun close() {
             txRelation.close()

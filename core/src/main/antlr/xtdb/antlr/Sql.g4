@@ -57,6 +57,8 @@ directlyExecutableStatement
 
     | GRANT roleName=identifier TO userName=identifier # GrantRoleStatement
     | REVOKE roleName=identifier FROM userName=identifier # RevokeRoleStatement
+
+    | CREATE (OR ALTER)? TABLE targetTable # CreateTableStatement
     ;
 
 targetTable : (schemaName=identifier '.')? tableName=identifier ;
@@ -149,6 +151,7 @@ identifier
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
+        | 'TABLE'
         | METADATA
         | setFunctionType )
         # RegularIdentifier

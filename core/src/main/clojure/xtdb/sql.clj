@@ -3518,7 +3518,8 @@
 
   ;; not statically expandable — fall through to the raw Sql op, which the indexer interprets
   (visitGrantRoleStatement [_ _])
-  (visitRevokeRoleStatement [_ _]))
+  (visitRevokeRoleStatement [_ _])
+  (visitCreateTableStatement [_ _]))
 
 (defn sql->static-ops
   ([sql arg-rows] (sql->static-ops sql arg-rows {}))

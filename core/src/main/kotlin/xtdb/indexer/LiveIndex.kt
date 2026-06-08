@@ -160,7 +160,7 @@ class LiveIndex private constructor(
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
 
     fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
-        this@LiveIndex.tables.mapNotNull { (table, lt) -> lt.blockMetadata()?.let { table to it } }.toMap()
+        this@LiveIndex.tables.mapValues { (_, lt) -> lt.blockMetadata() }
 
     fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) = this@LiveIndex.tables.finishBlock(bp, blockIdx)
 

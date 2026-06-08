@@ -57,9 +57,8 @@ class LiveTable @JvmOverloads constructor(
         val hllDeltas: Map<FieldName, HLL>
     )
 
-    fun blockMetadata(): BlockMetadata? {
+    fun blockMetadata(): BlockMetadata {
         val rowCount = liveRelation.rowCount
-        if (rowCount == 0) return null
         return BlockMetadata(
             vecTypes = liveRelation.logRelTypes.orEmpty(),
             rowCount = rowCount,
@@ -76,9 +75,8 @@ class LiveTable @JvmOverloads constructor(
         val hllDeltas: Map<FieldName, HLL>
     )
 
-    fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock? {
+    fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
         val rowCount = liveRelation.rowCount
-        if (rowCount == 0) return null
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
@@ -117,7 +115,6 @@ class LiveTable @JvmOverloads constructor(
                         }
                     }
                     .awaitAll()
-                    .mapNotNull { (name, block) -> block?.let { name to it } }
                     .toMap()
             }
     }

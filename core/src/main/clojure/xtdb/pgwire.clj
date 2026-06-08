@@ -889,6 +889,9 @@
                                         (visitRevokeRoleStatement [_ ctx]
                                           {:statement-type :dml, :dml-type :revoke-role, :query (subsql ctx)})
 
+                                        (visitCreateTableStatement [_ ctx]
+                                          {:statement-type :dml, :dml-type :create-table, :query (subsql ctx)})
+
                                         (visitQueryExpr [_ ctx]
                                           {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
 
@@ -1364,6 +1367,7 @@
                                   :assert "ASSERT"
                                   :grant-role "GRANT"
                                   :revoke-role "REVOKE"
+                                  :create-table "CREATE TABLE"
                                   :create-role "CREATE ROLE")}))
 
 (defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
