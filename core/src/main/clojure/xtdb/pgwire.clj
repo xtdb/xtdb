@@ -8,7 +8,6 @@
             [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
-            [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -42,6 +41,7 @@
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
+           xtdb.AwaitToken
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
@@ -122,6 +122,9 @@
                        ;; a positive integer that identifies the connection on this server
                        ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
                        cid
+
+                       ;; this connection's accumulated read-your-writes token (see xtdb.AwaitToken)
+                       ^AwaitToken await-token
 
                        !closing? conn-state]
 
@@ -534,12 +537,12 @@
 
     :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
 
-(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
+(defn cmd-begin [{:keys [node conn-state ^AwaitToken await-token]} tx-opts {:keys [args]}]
   (swap! conn-state
-         (fn [{:keys [session await-token] :as st}]
+         (fn [{:keys [session] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
                                (apply-args tok args)
-                               await-token)
+                               (.getValue await-token))
                  {:keys [^Clock clock]} session]
 
              (when-not (= :read-write (:access-mode tx-opts))
@@ -570,7 +573,7 @@
   (swap! conn-state dissoc :transaction)
   (close-all-portals conn))
 
-(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^BufferAllocator allocator, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer] :as conn}]
+(defn cmd-commit [{:keys [^Xtdb node conn-state default-db ^AwaitToken await-token ^BufferAllocator allocator, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer] :as conn}]
   (let [{:keys [transaction session]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
@@ -596,22 +599,18 @@
                                                         (metrics/record-callable! tx-submit-timer
                                                                                   (.submitTx node default-db tx-ops tx-opts)))
                                                 msg-id (.getTxId tx-id)]
-                                            (swap! conn-state (fn [cs]
-                                                                (-> cs
-                                                                    (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                                                    (assoc :latest-submitted-tx {:tx-id msg-id})))))
+                                            (.record await-token default-db msg-id)
+                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id}))
 
                                           (let [tx (with-auth-check conn
                                                      (metrics/record-callable! tx-execute-timer
                                                                                (.executeTx node default-db tx-ops tx-opts)))
                                                 msg-id (.getTxId tx)]
-                                            (swap! conn-state (fn [cs]
-                                                                (-> cs
-                                                                    (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {default-db [msg-id]}))
-                                                                    (assoc :latest-submitted-tx {:tx-id msg-id
-                                                                                                 :system-time (.getSystemTime tx)
-                                                                                                 :committed? (.getCommitted tx)
-                                                                                                 :error (.getError tx)}))))
+                                            (.record await-token default-db msg-id)
+                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id
+                                                                                          :system-time (.getSystemTime tx)
+                                                                                          :committed? (.getCommitted tx)
+                                                                                          :error (.getError tx)})
 
                                             (when-let [error (.getError tx)]
                                               (throw error))))))))
@@ -975,16 +974,16 @@
 
     [#xt/type :utf8]))
 
-(defn- prep-stmt [{:keys [node conn-state default-db] :as conn} {:keys [statement-type param-oids] :as stmt}]
+(defn- prep-stmt [{:keys [node conn-state default-db ^AwaitToken await-token] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
     (:query :execute :show-variable)
     (try
       (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
 
-            {:keys [session await-token]} @conn-state
+            {:keys [session]} @conn-state
             {:keys [^Clock clock]} session
 
-            query-opts {:await-token await-token
+            query-opts {:await-token (.getValue await-token)
                         :tx-timeout (Duration/ofMinutes 1)
                         :default-tz (.getZone clock)
                         :explain? explain?
@@ -1109,10 +1108,10 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction await-token]} @conn-state
+(defn bind-stmt [{:keys [node conn-state ^AwaitToken await-token ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
+  (let [{:keys [session transaction]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
-        await-token (:await-token transaction await-token)
+        await-token (:await-token transaction (.getValue await-token))
 
         query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
                                             (time/->instant))
@@ -1289,10 +1288,9 @@
     (set-time-zone conn tz))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [await-token args]}]
-  (let [await-token (-> await-token (apply-args args))]
-    (swap! conn-state assoc :await-token await-token)
-    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"})))
+(defn cmd-set-await-token [{:keys [^AwaitToken await-token] :as conn} {:keys [args], new-token :await-token}]
+  (.setValue await-token (-> new-token (apply-args args)))
+  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
@@ -1447,7 +1445,7 @@
       (metrics/inc-counter! query-error-counter)
       (throw e))))
 
-(defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
+(defn- attach-db [{:keys [node conn-state default-db ^AwaitToken await-token] :as conn} {:keys [db-name db-config]}]
   (when-not (= default-db "xtdb")
     (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
                           {:db default-db})))
@@ -1458,15 +1456,13 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
-      (swap! conn-state (fn [cs]
-                          (-> cs
-                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
-                              (assoc :latest-submitted-tx tx))))
+      (.record await-token "xtdb" tx-id)
+      (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error
         (throw error)))))
 
-(defn- detach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name]}]
+(defn- detach-db [{:keys [node conn-state default-db ^AwaitToken await-token] :as conn} {:keys [db-name]}]
   (when-not (= default-db "xtdb")
     (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
                           {:db default-db})))
@@ -1477,10 +1473,8 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/detach-db node db-name)]
-      (swap! conn-state (fn [cs]
-                          (-> cs
-                              (update :await-token basis/merge-tx-tokens (basis/->tx-basis-str {"xtdb" [tx-id]}))
-                              (assoc :latest-submitted-tx tx))))
+      (.record await-token "xtdb" tx-id)
+      (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error
         (throw error)))))
@@ -1824,6 +1818,7 @@
                                                (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
                                                                      :!closing? !closing?
+                                                                     :await-token (AwaitToken.)
                                                                      :allocator (util/->child-allocator allocator (str "pg-conn-" cid))
                                                                      :conn-state !conn-state})
                                                    (cmd-startup))

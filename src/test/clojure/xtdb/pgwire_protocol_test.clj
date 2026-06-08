@@ -75,6 +75,7 @@
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)
+                                       :await-token (xtdb.AwaitToken.)
                                        :conn-state (atom {:session {:clock (Clock/systemUTC)}})
                                        :default-db "xtdb"})]
      (try
