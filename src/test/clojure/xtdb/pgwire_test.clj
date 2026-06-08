@@ -823,6 +823,7 @@
 
 (deftest dml-test
   (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["CREATE TABLE foo"])
     (testing "mixing a read causes rollback"
       (is (thrown-with-msg? PSQLException #"Queries are unsupported in a DML transaction"
                             (jdbc/with-transaction [tx conn]
@@ -1196,6 +1197,9 @@
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
 (deftest implicit-transaction-stop-gap-test
+  (with-open [setup (jdbc-conn)]
+    (jdbc/execute! setup ["CREATE TABLE foo"]))
+
   (with-open [conn (jdbc-conn {"autocommit" "false"})]
     (let [sql #(q conn [%])]
 
@@ -2040,12 +2044,13 @@ ORDER BY t.oid DESC LIMIT 1"
       (recur (.getNextWarning warn) (conj res warn)))))
 
 (deftest error-propagation
-  (with-open [conn (jdbc-conn)
-              stmt (.prepareStatement conn "SELECT 2 AS b FROM docs GROUP BY b")]
-    (.execute stmt)
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["CREATE TABLE docs"])
+    (with-open [stmt (.prepareStatement conn "SELECT missing_col FROM docs")]
+      (.execute stmt)
 
-    (t/is (= #{"Table not found: docs"}
-             (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt)))))))
+      (t/is (= #{"Column not found: missing_col"}
+               (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt))))))))
 
 (deftest test-ignore-returning-keys-3668
   (with-open [conn (jdbc-conn)
@@ -2119,10 +2124,11 @@ ORDER BY t.oid DESC LIMIT 1"
         (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
 
 (deftest test-missing-id-pg-wire-3768
-  (with-open [conn (jdbc-conn)
-              stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
-    (t/is (is (thrown-with-msg? PSQLException #"missing '_id'" (.execute stmt))))
-    (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"])))))
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["CREATE TABLE foo"])
+    (with-open [stmt (.prepareStatement conn "INSERT INTO foo (notid) VALUES (1)")]
+      (t/is (is (thrown-with-msg? PSQLException #"missing '_id'" (.execute stmt))))
+      (t/is (= [] (jdbc/execute! conn ["SELECT * FROM foo"]))))))
 
 (deftest test-primitive-array
   (t/testing "array as subselect"
@@ -2978,6 +2984,8 @@ ORDER BY 1,2;")
              (reading-ex
                (jdbc/execute! conn ["SETTING SNAPSHOT_TOKEN = ? SELECT 1"
                                     (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z"]})]))))
+
+    (jdbc/execute! conn ["CREATE TABLE foo"])
 
     (t/is (= {:sql-state "08P01",
               :message "Queries are unsupported in a DML transaction",

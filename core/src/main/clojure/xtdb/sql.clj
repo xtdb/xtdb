@@ -111,6 +111,24 @@
   PlanError
   (error-string [_] (format "Table not found: %s" (str/join "." (filter some? table-chain)))))
 
+(defn- system-table-chain?
+  "An unknown table in an internal schema stays a warning rather than an error (#4467): a data-backed
+   `xt` table like `xt.txs` is empty - hence absent from the catalog - on a fresh node, and tools probe
+   optional `pg_catalog`/`information_schema` tables; both tolerate an empty result, whereas an unknown
+   user table is a typo. Covers a qualified internal-schema reference (schema is the second-to-last
+   chain element), and a `pg_*` table name: Postgres reserves the `pg_` prefix for system catalogs,
+   so an unresolved `pg_*` probe is tooling, not a user typo - whether it arrives unqualified
+   (`pg_class`) or schema-injected by the DML path (`public.pg_class`), hence we check the table name."
+  [table-chain]
+  (or (and (>= (count table-chain) 2)
+           (contains? #{"xt" "pg_catalog" "information_schema"}
+                      (str (nth table-chain (- (count table-chain) 2)))))
+      (str/starts-with? (str (peek table-chain)) "pg_")))
+
+(defn- table-not-found! [env table-chain]
+  ((if (system-table-chain? table-chain) add-warning! add-err!)
+   env (->BaseTableNotFound table-chain)))
+
 (defrecord AmbiguousTableReference [table-chain table-chains]
   PlanError
   (error-string [_]
@@ -683,7 +701,7 @@
                             (->insertion-ordered-set (or cols cte-cols))))
 
           (let [[table & more-matches] (or (get table-chains table-chain)
-                                           (add-warning! env (->BaseTableNotFound table-chain)))
+                                           (table-not-found! env table-chain))
                 _ (when more-matches
                     (add-err! env (->AmbiguousTableReference table-chain (cons table more-matches))))
 
@@ -699,7 +717,9 @@
 
               (let [{:keys [for-valid-time clamp-valid-time?]}
                     (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))]
-                ;; HACK we scan `xt.not_found` until a not-found table can be an error, #4467
+                ;; `table` is nil only on the warning path (an unresolved internal-schema / `pg_*`
+                ;; table - see `system-table-chain?`); user tables have already erred. We scan the
+                ;; empty `xt.not_found` sentinel so those probes return no rows rather than blowing up.
                 (->BaseTable env (or table (table/->ref default-db "xt" "not_found"))
                              for-valid-time clamp-valid-time?
                              (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
@@ -3122,7 +3142,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
+                         (table-not-found! env [(namespace table-name) (name table-name)])
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -3190,7 +3210,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
+                         (table-not-found! env [(namespace table-name) (name table-name)])
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -3228,7 +3248,7 @@
                                        (get table-info (table/ref->schema+table table)))]
                        cols
                        (do
-                         (add-warning! env (->BaseTableNotFound [(namespace table-name) (name table-name)]))
+                         (table-not-found! env [(namespace table-name) (name table-name)])
                          #{}))
 
           dml-scope (->EraseTableRef env table-name table-alias unique-table-alias table-cols

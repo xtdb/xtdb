@@ -32,7 +32,8 @@
     (t/is (thrown? Exception (jdbc/execute! conn ["SELECT 1/0"]))
           "runtime error via pgwire")
 
-    ;; producing some unknown column/table warnings
+    ;; producing some unknown-column warnings (the table must exist - an unknown table is now an error)
+    (xt/execute-tx node [[:sql "CREATE TABLE bar"]])
     (xt/q node "SELECT foo FROM bar")
     (jdbc/execute! conn ["SELECT foo FROM bar"])
 

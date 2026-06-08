@@ -2148,11 +2148,14 @@
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest select-star-on-non-existent-tables-3005
-  (t/is (= [] (xt/q tu/*node* "select users.first_name from users")))
-  (t/is (= [] (xt/q tu/*node* "SELECT * FROM users"))))
+  (t/is (anomalous? [:incorrect nil #"Table not found: users"]
+                    (xt/q tu/*node* "select users.first_name from users")))
+  (t/is (anomalous? [:incorrect nil #"Table not found: users"]
+                    (xt/q tu/*node* "SELECT * FROM users"))))
 
 (t/deftest left-join-to-non-existent-table-survives-block-boundary-5669
-  (xt/execute-tx tu/*node* [[:sql "INSERT INTO a (_id) VALUES ('1')"]])
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE b"]
+                            [:sql "INSERT INTO a (_id) VALUES ('1')"]])
 
   (letfn [(plain [] (set (xt/q tu/*node* "SELECT a._id FROM a")))
           (rows [] (set (xt/q tu/*node* "SELECT a._id FROM a LEFT JOIN b ON a._id = b._id")))
@@ -2245,6 +2248,8 @@
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
 
 (t/deftest test-assert-exists-3686-3689
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE users"]])
+
   (t/is (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
                                   [:sql "INSERT INTO users RECORDS {_id: 'james', name: 'James', email: 'james@example.com'}"]]))
 
@@ -2606,6 +2611,7 @@ UNION ALL
                                      (comp read-string :data-type))))))))
 
 (t/deftest missing-values-in-insert-shouldnt-stop-ingestion-3721
+  (xt/submit-tx tu/*node* [[:sql "CREATE TABLE docs"]])
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO docs (_id, foo) SELECT 3 AS _id"]])
 
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
@@ -2621,7 +2627,10 @@ UNION ALL
                               {:table-info {#xt/table foo/bar #{"_id" "x"}}})))
 
   (t/is (= [{:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
-  (t/is (= [] (xt/q tu/*node* "SELECT * FROM bar")))
+
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE bar"]])
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM bar"))
+        "public.bar is a distinct, empty table from foo.bar")
 
   (xt/execute-tx tu/*node* [[:sql "UPDATE foo.bar SET x = 3 WHERE _id = 1"]])
   (xt/execute-tx tu/*node* [[:sql "UPDATE bar SET x = x + 1 WHERE _id = 1"]])
@@ -2646,6 +2655,7 @@ UNION ALL
            (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest test-no-column-name-list-insert-with-values-3752
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE docs"]])
   (let [ex (t/is (anomalous? [:incorrect nil]
                              (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs VALUES(1, 'bar')"]])))
         ex-msg (ex-message ex)]
@@ -2680,8 +2690,9 @@ UNION ALL
              (xt/q tu/*node* "SELECT *, _valid_from FROM docs2 FOR ALL VALID_TIME")))))
 
 (t/deftest insert-with-bad-select-shouldnt-stop-ingestion-3797
+  (xt/submit-tx tu/*node* [[:sql "CREATE TABLE docs"]])
   (xt/submit-tx tu/*node* ["INSERT INTO docs (_id, foo) SELECT 1"])
-  (t/is (= 1 (count (xt/q tu/*node* '(from :xt/txs [error])))))
+  (t/is (= 1 (count (xt/q tu/*node* "SELECT _id FROM xt.txs WHERE error IS NOT NULL"))))
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM docs"))))
 
 (t/deftest test-boolean-cast

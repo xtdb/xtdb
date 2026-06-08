@@ -16,6 +16,9 @@ fish
 dog
 2000
 
+statement ok
+CREATE TABLE t2
+
 query TII rowsort
 SELECT t2._id, t2.col1, t2.col2 FROM t2
 ----

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import xtdb.api.Xtdb
 import java.math.BigDecimal
 import java.nio.file.Files
+import java.sql.SQLException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -218,6 +219,15 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
         }
     }
 
+    // until CDC has replicated the first write, the target table doesn't exist in XTDB and the query
+    // errors table-not-found; the awaits want that to read as "no rows yet" so they poll on
+    private fun xtQueryAwaiting(node: Xtdb, sql: String): List<Map<String, Any?>> =
+        try {
+            xtQuery(node, sql)
+        } catch (e: SQLException) {
+            if (e.message?.contains("Table not found") == true) emptyList() else throw e
+        }
+
     /** Awaits all `rows` appearing in `table` (by `_id`) over pgwire, then asserts every column
      *  value round-trips unchanged. Shared by the streaming and snapshot round-trip tests. */
     private suspend fun assertRowsPresent(
@@ -225,7 +235,7 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
     ) {
         val cols = (listOf("_id") + columns.map { it.name }).joinToString()
         val ids = rows.map { it.id }.toSet()
-        fun fetch() = xtQuery(node, "SELECT $cols FROM public.$table")
+        fun fetch() = xtQueryAwaiting(node, "SELECT $cols FROM public.$table")
             .associateBy { (it["_id"] as Number).toLong() }
 
         awaitCondition("rows appear in $table ($stage)", timeout = 30.seconds) {
@@ -252,7 +262,7 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
         val expected = states.map { normalizeRow(columns, it) }
         // assert on the awaited value (not a bare awaitCondition) so a shortfall reports exactly which
         // versions showed up vs the expected list, rather than just timing out
-        val actual = await(done = { it.size == expected.size }) { xtQuery(node, q).map { normalizeRow(columns, it) } }
+        val actual = await(done = { it.size == expected.size }) { xtQueryAwaiting(node, q).map { normalizeRow(columns, it) } }
         assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
     }
 

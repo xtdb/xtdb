@@ -377,8 +377,18 @@
        :end-date end-date
        :status status})))
 
+(def ^:private tables
+  [:region :category :user :user-attribute :item :gag :gav
+   :item-bid :item-comment :item-feedback :item-max-bid :user-item])
+
+(defn create-tables! [node]
+  (xt/execute-tx node
+                 (for [table tables]
+                   [:sql (str "CREATE TABLE " (str/replace (name table) \- \_))])))
+
 (defn load-phase-submit-tasks [sf]
-  [{:t :call, :f [b/generate :region generate-region 75]}
+  [{:t :call, :f (fn [{:keys [node]}] (create-tables! node))}
+   {:t :call, :f [b/generate :region generate-region 75]}
    {:t :call, :f [b/generate :category generate-category 16908]}
    {:t :call, :f [b/generate :user generate-user (* sf 1e6)]}
    {:t :call, :f [b/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}

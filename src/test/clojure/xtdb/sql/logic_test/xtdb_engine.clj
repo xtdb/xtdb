@@ -135,10 +135,13 @@
     (cond
       (skip-statement? statement) node
 
+      ;; direct-sql runs the statement verbatim against XTDB - including CREATE TABLE,
+      ;; which XTDB now supports - rather than the in-memory table bookkeeping the
+      ;; non-direct path uses to emulate sqlite-style schemas.
+      (:direct-sql slt/*opts*) (execute-sql-statement node statement variables (select-keys slt/*opts* [:decorrelate? :direct-sql]))
+
       (str/starts-with? statement "CREATE TABLE") (execute-record node (parse-create-table statement))
       (str/starts-with? statement "CREATE VIEW") (execute-record node (parse-create-view statement))
-
-      (:direct-sql slt/*opts*) (execute-sql-statement node statement variables (select-keys slt/*opts* [:decorrelate? :direct-sql]))
 
       :else (-> (antlr/parse-statement statement)
                 (.accept (->SltStmtVisitor node statement)))))
