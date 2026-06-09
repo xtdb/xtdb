@@ -17,6 +17,7 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.common.header.Headers
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.kafka.connect.connector.ConnectRecord
 import org.apache.kafka.connect.data.SchemaAndValue
 import org.apache.kafka.connect.header.ConnectHeaders
 import org.apache.kafka.connect.sink.SinkRecord
@@ -366,7 +367,7 @@ private fun openPredicate(
     return if (negate) NegatedPredicate(base) else base
 }
 
-private class NegatedPredicate<R : org.apache.kafka.connect.connector.ConnectRecord<R>>(
+private class NegatedPredicate<R : ConnectRecord<R>>(
     private val inner: Predicate<R>,
 ) : Predicate<R> {
     override fun config() = inner.config()
