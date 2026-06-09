@@ -14,6 +14,14 @@ import java.time.Year
 
 evaluationDependsOnChildren()
 
+// Falls back to "unknown" outside a git checkout (e.g. source-tarball builds) so the build still succeeds.
+val gitCommitProvider: Provider<String> =
+    if (!rootDir.resolve(".git").exists()) providers.provider { "unknown" }
+    else providers.exec {
+        commandLine("git", "rev-parse", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+
 buildscript {
     dependencies {
         classpath("org.jetbrains.dokka:dokka-base:1.9.10")
@@ -140,6 +148,7 @@ allprojects {
             manifest {
                 attributes(
                     "Implementation-Version" to project.version,
+                    "Scm-Revision" to gitCommitProvider,
                 )
             }
         }
