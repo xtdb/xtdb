@@ -26,7 +26,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
-import org.apache.kafka.clients.consumer.OffsetOutOfRangeException
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -312,18 +311,13 @@ class KafkaCluster(
                         if (subscriptions.isNotEmpty()) {
                             @OptIn(ExperimentalCoroutinesApi::class)
                             onTimeout(0.milliseconds) {
-                                try {
-                                    consumer.pollRecords()?.let { consumerRecords ->
-                                        for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
-                                            val sub = subscriptions[topic]
-                                                ?: error("Received records for unsubscribed topic $topic")
+                                consumer.pollRecords()?.let { consumerRecords ->
+                                    for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
+                                        val sub = subscriptions[topic]
+                                            ?: error("Received records for unsubscribed topic $topic")
 
-                                            sub.processRecords(recs)
-                                        }
+                                        sub.processRecords(recs)
                                     }
-                                } catch (e: OffsetOutOfRangeException) {
-                                    LOG.error(e) { "evicting subscriptions for OffsetOutOfRange partitions: ${e.partitions()}" }
-                                    evictSubscriptions(e.partitions().map { it.topic() }.toSet(), e)
                                 }
                             }
                         }
