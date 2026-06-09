@@ -8,18 +8,6 @@ import xtdb.indexer.TxIndexer
 import java.util.ServiceLoader
 import com.google.protobuf.Any as ProtoAny
 
-/**
- * Indexes a batch of [SinkRecord]s into XT transactions.
- *
- * [SinkRecord]s have already been through the configured key/value [org.apache.kafka.connect.storage.Converter]s
- * and any configured [org.apache.kafka.connect.transforms.Transformation] chain by the time they reach an indexer —
- * `value()` is a Connect [org.apache.kafka.connect.data.Struct] (or primitive / `Map` for schemaless converters),
- * with `valueSchema()` describing its shape.
- *
- * The same SPI shape is what Kafka Connect's `SinkTask.put(records)` delivers — by design, so the indexer
- * works identically under [KafkaConnectSource] (XTDB owns the consumer) and under a future KC sink connector
- * (KC's runtime owns the consumer).
- */
 interface RecordIndexer : AutoCloseable {
 
     suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer)

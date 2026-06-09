@@ -50,16 +50,12 @@ private val LOG = KafkaConnectSource::class.logger
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 private val POLL_DURATION: Duration = Duration.ofSeconds(1)
 
-// Resume token is our offset; Kafka must not commit its own.
 private val HARDCODED_CONSUMER_CONFIG: Map<String, String> = mapOf(
     "enable.auto.commit" to "false",
     "key.deserializer" to ByteArrayDeserializer::class.java.name,
     "value.deserializer" to ByteArrayDeserializer::class.java.name,
 )
 
-// We always seek explicitly (seekToBeginning when no token; seek(offset+1) otherwise).
-// `auto.offset.reset=none` makes it a hard failure if the explicit seek ever fails to happen,
-// rather than silently sliding to earliest/latest.
 private val DEFAULT_CONSUMER_CONFIG: Map<String, String> = mapOf(
     "auto.offset.reset" to "none",
 )
@@ -239,8 +235,6 @@ class KafkaConnectSource(
     }
 }
 
-// -- Converter / Transform loaders -----------------------------------------------------------------------
-
 private enum class ConverterRole(val configKey: String, val isKey: Boolean) {
     KEY("key.converter", true),
     VALUE("value.converter", false),
@@ -272,8 +266,6 @@ private fun openConverter(connectConfig: Map<String, String>, role: ConverterRol
     return cls.getDeclaredConstructor().newInstance().apply { configure(nested, role.isKey) }
 }
 
-// Strip converter/transforms keys before handing the consumer its own config — Kafka logs
-// noisy warnings otherwise.
 private fun filteredConsumerConfig(connectConfig: Map<String, String>): Map<String, String> =
     connectConfig.filterKeys {
         !it.startsWith("key.converter") &&

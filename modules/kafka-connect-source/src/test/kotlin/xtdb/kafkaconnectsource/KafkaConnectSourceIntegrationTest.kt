@@ -273,8 +273,6 @@ class KafkaConnectSourceIntegrationTest {
         val sourceTopic = "events-${UUID.randomUUID()}"
         createTopic(sourceTopic)
 
-        // Prime the topic with a good record so we can confirm the source is healthy
-        // before we feed it a bad one.
         produceBytes(sourceTopic, "first", """{"name":"First"}""".toByteArray())
 
         openNode("xt-log-${UUID.randomUUID()}").use { node ->
@@ -297,20 +295,15 @@ class KafkaConnectSourceIntegrationTest {
                 xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty()
             }
 
-            // Now a bad record followed by a good one. Under halt-on-decode-failure, the
-            // source dies on the bad record; the trailing good record is never indexed.
             produceBytes(sourceTopic, "bad", "{not-json".toByteArray())
             produceBytes(sourceTopic, "second", """{"name":"Second"}""".toByteArray())
 
-            // Give the source time to crash on the bad record. Brittle, but no API for
-            // observing "source died".
+            // Brittle — no API for observing "source died", so wait long enough for it to crash.
             runInterruptible { Thread.sleep(5_000) }
 
             val second = xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'second'")
             assertTrue(second.isEmpty(), "second shouldn't appear — source halts at the bad record under halt-on-decode-failure")
 
-            // No DLQ-style aborted tx — halt-on-failure means decode errors propagate
-            // rather than getting recorded as aborted txs.
             val aborted = xtQueryDb(node, "events", "SELECT _id FROM xt.txs WHERE committed = false")
             assertTrue(aborted.isEmpty(), "no aborted txs under halt-on-decode-failure, got: $aborted")
         }
@@ -351,8 +344,7 @@ class KafkaConnectSourceIntegrationTest {
 
             val rows = xtQueryDb(node, "events", "SELECT _id, name, age FROM public.events WHERE _id = 'alice'")
             assertEquals("Alice", rows[0]["name"])
-            // the envelope's `op` field should not be on the unwrapped doc - assert via the catalog,
-            // since referencing a column that doesn't exist is now an error rather than an empty result
+            // Asserted via the catalog rather than `SELECT op` — unknown columns are errors, not empty results.
             assertTrue(
                 xtQueryDb(node, "events",
                           "SELECT column_name FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'op'").isEmpty(),
@@ -473,7 +465,6 @@ class KafkaConnectSourceIntegrationTest {
         val sourceTopic = "events-${UUID.randomUUID()}"
         createTopic(sourceTopic)
 
-        // JSON's native types: string, integer, number (double), boolean, null, array, object.
         produceBytes(
             sourceTopic, "all-types",
             """
@@ -668,10 +659,6 @@ class KafkaConnectSourceIntegrationTest {
             assertEquals(dateStr, row["date_str"])
             assertEquals(timeStr, row["time_str"])
 
-            // `*_val` fields — typed temporals via `title` + integer. The field is `type: integer`
-            // with `title` pointing at the Connect logical-type name, and the producer emits Connect's
-            // integer wire encoding. JsonSchemaConverter promotes to a Connect logical type and the
-            // values come back as typed temporals.
             assertEquals(expectedTs.atZone(ZoneId.of("UTC")), row["timestamp_val"])
             assertEquals(expectedDate, row["date_val"])
             assertEquals(expectedTime, row["time_val"])
@@ -898,8 +885,6 @@ class KafkaConnectSourceIntegrationTest {
                 "SELECT _id, header, delivery_attempts, lines_by_sku FROM public.events WHERE _id = 'nested'",
             )[0]
 
-            // header.placed_at: Timestamp two structs deep.
-            // header.totals.subtotal: Decimal three structs deep.
             @Suppress("UNCHECKED_CAST")
             val header = row["header"] as Map<String, Any?>
             assertEquals(placedAt.atZone(ZoneId.of("UTC")), header["placed_at"])
@@ -908,13 +893,12 @@ class KafkaConnectSourceIntegrationTest {
             val totals = header["totals"] as Map<String, Any?>
             assertEquals(subtotal, totals["subtotal"])
 
-            // delivery_attempts: Array<Timestamp> — every element should be an Instant, not a Long.
+            // Array elements should be Instants, not raw Longs — the recursion has to propagate the logical type.
             val attempts = toList(row["delivery_attempts"])
             assertEquals(2, attempts.size)
             assertEquals(attempt1.atZone(ZoneId.of("UTC")), attempts[0])
             assertEquals(attempt2.atZone(ZoneId.of("UTC")), attempts[1])
 
-            // lines_by_sku: Map<String, Struct<Decimal>> — Decimal at array-of-struct depth.
             @Suppress("UNCHECKED_CAST")
             val lines = row["lines_by_sku"] as Map<String, Any?>
             @Suppress("UNCHECKED_CAST")
@@ -1063,7 +1047,6 @@ class KafkaConnectSourceIntegrationTest {
             val nested = row["nested_val"] as Map<String, Any?>
             assertEquals("deep", nested["inner"])
 
-            // Logical types
             assertEquals(decimal, row["decimal_val"])
             assertEquals(expectedDate, row["date_val"])
             assertEquals(expectedTime, row["time_val"])

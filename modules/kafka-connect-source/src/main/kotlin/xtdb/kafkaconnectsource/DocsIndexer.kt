@@ -25,23 +25,11 @@ import xtdb.util.asIid
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneOffset
 import com.google.protobuf.Any as ProtoAny
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
-/**
- * One [SinkRecord] = one XT transaction. The value [Struct] (or [Map]/primitive for schemaless converters)
- * is walked against its [Schema] and written as a doc. Tombstones (null value) become deletes.
- *
- * Connect's logical types map through to native XT types:
- *   Decimal      → BigDecimal
- *   Timestamp    → Instant
- *   Date         → LocalDate (UTC)
- *   Time         → LocalTime (UTC)
- */
 class DocsIndexer(
     private val table: TableRef,
 ) : RecordIndexer {
@@ -150,27 +138,11 @@ class DocsIndexer(
     }
 }
 
-// Connect's StringConverter produces String keys; AvroConverter et al may yield a Struct
-// with one field — in that case unwrap. ByteArrayConverter passes bytes through and asIid
-// handles those directly.
+// AvroConverter et al may yield a single-field Struct as the key — unwrap to the inner value.
 private fun unwrapKeyForId(key: Any): Any =
     if (key is Struct && key.schema()?.fields()?.size == 1)
         key.get(key.schema().fields()[0])
     else key
-
-
-// -- Value walk ------------------------------------------------------------------------------------
-//
-// Schema-first dispatch, matching Kafka Connect's own pattern (cf. JsonConverter.convertToJson):
-//   1. null
-//   2. logical-type check via schema.name() (overrides the primitive interpretation)
-//   3. schema.type() switch
-//   4. schemaless fallback dispatching on the JVM class
-//
-// Connect's Date/Time logical types are a `java.util.Date` pinned to 1970-01-01 UTC (see
-// Time.toLogical / Date.toLogical in connect-api). The explicit `ZoneOffset.UTC` below is
-// load-bearing — without it `toLocalDate()` / `toLocalTime()` use the JVM default zone and can
-// shift the answer across a date or hour boundary.
 
 @Suppress("UNCHECKED_CAST")
 internal fun convertValue(v: Any?, schema: Schema?): Any? {
@@ -197,7 +169,6 @@ internal fun convertValue(v: Any?, schema: Schema?): Any? {
         }
     }
 
-    // Schemaless: dispatch on JVM class as a fallback.
     return when (v) {
         is Struct -> structToMap(v)
         is List<*> -> v.map { convertValue(it, null) }
