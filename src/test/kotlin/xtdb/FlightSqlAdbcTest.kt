@@ -689,10 +689,6 @@ class FlightSqlAdbcTest {
         }
     }
 
-    // #5609 (per-connection await-token) composes with #5666 (per-session connections):
-    // each FSQL session has its own connection, so #5609's per-connection await-token
-    // is genuinely per-session. A session reads its own writes back immediately, and one
-    // session's write does not drag another session's await target (no cross-client coupling).
     @Test
     fun `test FlightSQL session reads its own writes and stays isolated from another session`() {
         cookieAwareClient().use { sessionA ->
@@ -700,18 +696,13 @@ class FlightSqlAdbcTest {
                 sessionA.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
                 sessionB.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
 
-                // read-your-writes within session A: INSERT then immediately SELECT on the
-                // same session must see the row — this is the race #5609 closes (the planner
-                // snapshot would otherwise outrun the indexer and miss the just-written row).
                 sessionA.executeUpdate("INSERT INTO ryw (_id, n) VALUES (1, 'a')", *emptyCallOpts)
                 assertEquals(
                     listOf(mapOf("_id" to 1L, "n" to "a")),
                     sessionA.execute("SELECT _id, n FROM ryw", *emptyCallOpts).readRows(sessionA),
-                    "session A must read its own write back (per-connection await-token)"
+                    "session A must read its own write back"
                 )
 
-                // session B writes its own row and reads it back — B's await target tracks
-                // only B's own write, independent of A's connection/token.
                 sessionB.executeUpdate("INSERT INTO ryw (_id, n) VALUES (2, 'b')", *emptyCallOpts)
                 assertEquals(
                     listOf(mapOf("_id" to 2L, "n" to "b")),
@@ -721,7 +712,6 @@ class FlightSqlAdbcTest {
             }
         }
 
-        // both committed writes are globally visible once the sessions close.
         assertEquals(
             listOf(mapOf("_id" to 1L, "n" to "a"), mapOf("_id" to 2L, "n" to "b")),
             fsqlClient.execute("SELECT _id, n FROM ryw ORDER BY _id", *emptyCallOpts).readRows()
