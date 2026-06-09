@@ -10,7 +10,7 @@
   (:import org.apache.kafka.common.KafkaException
            org.testcontainers.kafka.ConfluentKafkaContainer
            org.testcontainers.utility.DockerImageName 
-           [xtdb.api.log Log]))
+           [xtdb.api.log IngestionStoppedException Log]))
 
 (def ^:private ^:dynamic *bootstrap-servers* nil)
 
@@ -139,19 +139,19 @@
                        {:xt/id :lost}])
                  (set (xt/q node "SELECT _id FROM xt_docs")))))
 
-      ;; Node with intact storage and (now) empty topic
-      (t/is
-       (thrown-with-msg?
-        IllegalStateException
-        #"Database 'xtdb' failed to start due to an invalid transaction log state \(the log is empty\)"
-        (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                           :poll-duration "PT2S"
-                                                           :properties-map {}
-                                                           :properties-file nil}]}
-                         :log [:kafka {:cluster :my-kafka
-                                       :topic empty-topic
-                                       :create-topic? true}]
-                         :storage [:local {:path local-disk-path}]})))
+      ;; Node with intact storage and (now) empty topic: starts but poisoned, not a node failure
+      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                         :poll-duration "PT2S"
+                                                                         :properties-map {}
+                                                                         :properties-file nil}]}
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic empty-topic
+                                                      :create-topic? true}]
+                                        :storage [:local {:path local-disk-path}]})]
+        (let [err (.getIngestionError (db/primary-db node))]
+          (t/is (instance? IngestionStoppedException err))
+          (t/is (re-find #"Database 'xtdb' has an invalid transaction log state \(the log is empty\)"
+                         (.getMessage err)))))
 
       ;; Node with intact storage and topic 2 (ie, empty topic) along with setting log offset
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
@@ -241,17 +241,18 @@
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :foo}]])
         (xt/execute-tx node [[:put-docs :xt_docs {:xt/id :bar}]]))
 
-      ;; Attempt to restart the node with intact storage and the stale topic + original epoch
-      (t/is
-       (thrown-with-msg?
-        IllegalStateException
-        #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest processed message \(epoch=0 and offset=\d+\)"
-        (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
-                                                           :poll-duration "PT2S"}]}
-                         :log [:kafka {:cluster :my-kafka
-                                       :topic stale-topic
-                                       :create-topic? false}]
-                         :storage [:local {:path local-disk-path}]})))
+      ;; Attempt to restart the node with intact storage and the stale topic + original epoch:
+      ;; starts but poisoned, not a node failure
+      (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
+                                                                         :poll-duration "PT2S"}]}
+                                        :log [:kafka {:cluster :my-kafka
+                                                      :topic stale-topic
+                                                      :create-topic? false}]
+                                        :storage [:local {:path local-disk-path}]})]
+        (let [err (.getIngestionError (db/primary-db node))]
+          (t/is (instance? IngestionStoppedException err))
+          (t/is (re-find #"invalid transaction log state \(epoch=0, offset=1\) that does not correspond with the latest processed message \(epoch=0 and offset=\d+\)"
+                         (.getMessage err)))))
 
       ;; Attempt to restart the node with intact storage, a new topic + new epoch
       (with-open [node (xtn/start-node {:log-clusters {:my-kafka [:kafka {:bootstrap-servers *bootstrap-servers*
