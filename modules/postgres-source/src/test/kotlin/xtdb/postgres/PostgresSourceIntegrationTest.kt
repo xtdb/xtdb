@@ -671,8 +671,10 @@ class PostgresSourceIntegrationTest {
             )
 
             awaitCondition("Bob with new column appears", timeout = 30.seconds) {
-                val rows = xtQueryDb(node, "cdc", "SELECT _id, email FROM public.pg_evolve WHERE _id = 2")
-                rows.isNotEmpty() && rows[0]["email"] == "bob@example.com"
+                runCatching {
+                    val rows = xtQueryDb(node, "cdc", "SELECT _id, email FROM public.pg_evolve WHERE _id = 2")
+                    rows.isNotEmpty() && rows[0]["email"] == "bob@example.com"
+                }.getOrDefault(false)
             }
 
             // Alice (pre-evolution row) should have null for the new column
