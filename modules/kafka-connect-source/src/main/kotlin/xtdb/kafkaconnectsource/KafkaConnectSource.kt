@@ -142,8 +142,8 @@ class KafkaConnectSource(
     ) {
         LOG.info("[$dbName] Partition $partition assigned (topic=$topic)")
 
-        val keyConverter = openConverter(connectConfig, isKey = true)
-        val valueConverter = openConverter(connectConfig, isKey = false)
+        val keyConverter = openConverter(connectConfig, ConverterRole.KEY)
+        val valueConverter = openConverter(connectConfig, ConverterRole.VALUE)
         val headerConverter = SimpleHeaderConverter().also { it.configure(emptyMap<String, Any>()) }
         val transformChain = openTransforms(connectConfig)
 
@@ -248,17 +248,21 @@ class KafkaConnectSource(
 
 // -- Converter / Transform loaders -----------------------------------------------------------------------
 
-private fun openConverter(connectConfig: Map<String, String>, isKey: Boolean): Converter {
-    val role = if (isKey) "key.converter" else "value.converter"
-    val className = connectConfig[role]
+private enum class ConverterRole(val configKey: String, val isKey: Boolean) {
+    KEY("key.converter", true),
+    VALUE("value.converter", false),
+}
+
+private fun openConverter(connectConfig: Map<String, String>, role: ConverterRole): Converter {
+    val className = connectConfig[role.configKey]
         ?: throw Incorrect(
-            "missing '$role' in connectConfig",
+            "missing '${role.configKey}' in connectConfig",
             "xtdb.kafka-connect-source/missing-converter",
-            mapOf("role" to role),
+            mapOf("role" to role.configKey),
         )
     val nested = connectConfig
-        .filterKeys { it.startsWith("$role.") }
-        .mapKeys { (k, _) -> k.removePrefix("$role.") }
+        .filterKeys { it.startsWith("${role.configKey}.") }
+        .mapKeys { (k, _) -> k.removePrefix("${role.configKey}.") }
 
     // NOTE: different from KC. KC's `Plugins.newConverter` uses an isolated classpath for
     // dependency isolation between plugins.
@@ -266,13 +270,13 @@ private fun openConverter(connectConfig: Map<String, String>, isKey: Boolean): C
         Class.forName(className).asSubclass(Converter::class.java)
     } catch (e: Exception) {
         throw Incorrect(
-            "couldn't load $role class '$className': ${e.message}",
+            "couldn't load ${role.configKey} class '$className': ${e.message}",
             "xtdb.kafka-connect-source/converter-class-not-found",
-            mapOf("role" to role, "className" to className),
+            mapOf("role" to role.configKey, "className" to className),
             cause = e,
         )
     }
-    return cls.getDeclaredConstructor().newInstance().apply { configure(nested, isKey) }
+    return cls.getDeclaredConstructor().newInstance().apply { configure(nested, role.isKey) }
 }
 
 // Strip converter/transforms keys before handing the consumer its own config — Kafka logs
