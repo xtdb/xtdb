@@ -50,7 +50,7 @@ XTDB is a 'Hybrid Transactional/Analytic Processing' (HTAP) system which postula
 XTDB is designed for making non-destructive updates to your data simple and achieves this by modeling row-level temporal versions of data.
 This works by representing each update as a new row that sits alongside the previous versions of that row in the same table.
 
-However given that XTDB does not account for schema ahead of time, the only means of correlating updates to a row is to impose a single ubiquitous schema requirement: each row asserted must contain an explicit `id` column.
+However given that XTDB does not account for schema ahead of time, the only means of correlating updates to a row is to impose a single ubiquitous schema requirement: each row asserted must contain an explicit `_id` column.
 
 The value provided for the `id` column can be any of the supported ID types, but must be determined by the user.
 XTDB does not offer a means of generating new IDs automatically although use of surrogate keys (e.g. UUIDs) is encouraged.
@@ -114,5 +114,5 @@ Referential integrity can still be achieved atomically, with ACID guarantees, ei
 XTDB has no concept of uniqueness beyond the ID.
 If you want something to be unique then you can and probably should model it with an ID.
 
-Similarly, any other features of a SQL database that intuitively require a schema are not available within XTDB currently.
-It is however intended that XTDB will introduce "gradual schema" capabilities in the future to enable new usage patterns that includes using XTDB like a traditional SQL database (e.g. "just treat XTDB as if it were Postgres, and model your data the same way").
+Similarly, any other features of a SQL database that intuitively require a full schema are not available within XTDB currently.
+XTDB is currently introducing "gradual schema" capabilities to enable new usage patterns that includes using XTDB like a traditional SQL database (e.g. "just treat XTDB as if it were Postgres, and model your data the same way").

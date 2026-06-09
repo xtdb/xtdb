@@ -18,7 +18,6 @@ import TabCssFix from '@components/tabcssfix.astro';
   <div slot="1">
     <Aside title="'XT Play' allows you to try out XTDB live in your browser!">Feel free to edit the SQL in any of these boxes, just be aware that changes you make in one box don't carry over to the next.
     <details style="display: contents"><summary>Details...</summary><ul>
-<li>columns are ordered alphanumerically (this restriction will be lifted [soon](https://github.com/xtdb/xt-fiddle/issues/42))</li>
 <li>you can click on the 'Open in xt-play' link beneath a given instance to see the full context and to experiment more freely</li>
 <li>all XT Play instances execute statelessly - a new ephemeral cloud database instance is summoned into being every time you press 'Run' (using AWS Lambda)</li></ul></details></Aside>
     <Xtplay magicContext="my-context">
@@ -42,7 +41,17 @@ Note that XTDB doesn't currently return information about the number of rows ins
 </TabbedExample>
 
 Things to note:
-<ul><li>Tables in XTDB may be created dynamically during `INSERT`, where all columns and types are inferred automatically.</li><li>The only schema requirement is that every table in XTDB requires a user-provided `_id` primary key column, but all other columns are optional and dynamically typed by default. This means each row in XTDB can offer the flexibility of a document in a document database.</li><li>The `_` prefix convention (e.g. `_id`) is used for reserved columns and tables that XTDB handles automatically. For full details see [How XTDB works](/intro/data-model).</li></ul>
+<ul>
+  <li>Tables in XTDB may be created dynamically during `INSERT`, where all columns and types are inferred automatically.</li>
+  <li>
+    The only schema requirement is that every table in XTDB requires a user-provided `_id` primary key column, but all other columns are optional and dynamically typed by default.  
+    This means each row in XTDB can offer the flexibility of a document in a document database.
+  </li>
+  <li>
+    The `_` prefix convention (e.g. `_id`) is used for reserved columns and tables that XTDB handles automatically.
+    For full details see [How XTDB works](/intro/data-model).
+  </li>
+</ul>
 
 ### Query for that same row
 
@@ -574,7 +583,7 @@ SELECT name, favorite_color , _valid_from, _system_from FROM people;
 
 XTDB implements a SQL API that closely follows the ISO standard specifications and draws inspiration from Postgres where needed, however unlike most SQL systems XTDB:
 
-* does not require an explicit schema to be declared before inserting data (i.e. there's no explicit `CREATE TABLE` [DDL](https://en.wikipedia.org/wiki/Data_definition_language) statement) - tables may be created dynamically via an initial INSERT statement, along with any supplied columns and inferrable type information - schema automatically evolves over time as data changes
+* does not require an explicit schema to be declared before inserting data (i.e. the [`CREATE TABLE` statement](/reference/main/sql/schema) is optional) - tables may be created dynamically via an initial INSERT statement, along with any supplied columns and inferrable type information - schema automatically evolves over time as data changes
 * handles semi-structured 'document' data natively, with deeply nested union types ('objects') and arrays
 * operates on top of a durable log to help underpin scalable and reliable information systems
 * maintains various 'bitemporal' columns globally across all tables to preserve history

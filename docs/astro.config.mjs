@@ -114,6 +114,7 @@ export default defineConfig({
                         { label: 'Overview', link: '/reference/main' },
                         { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
                         { label: 'SQL Queries', link: '/reference/main/sql/queries' },
+                        { label: 'SQL Schema', link: '/reference/main/sql/schema' },
                         { label: 'Data Types', link: '/reference/main/data-types' },
                         {
                             label: 'Standard Library',
