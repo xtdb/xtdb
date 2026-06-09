@@ -142,51 +142,54 @@ class KafkaConnectSource(
     ) {
         LOG.info("[$dbName] Partition $partition assigned (topic=$topic)")
 
-        val keyConverter = openConverter(connectConfig, ConverterRole.KEY)
-        val valueConverter = openConverter(connectConfig, ConverterRole.VALUE)
-        val headerConverter = SimpleHeaderConverter().also { it.configure(emptyMap<String, Any>()) }
-        val transformChain = openTransforms(connectConfig)
-
         val mergedConsumerConfig: Map<String, Any> =
             DEFAULT_CONSUMER_CONFIG + cluster.kafkaConfigMap + filteredConsumerConfig(connectConfig) + HARDCODED_CONSUMER_CONFIG
 
-        val consumer = KafkaConsumer<ByteArray?, ByteArray?>(mergedConsumerConfig)
-
         try {
-            val tp = TopicPartition(topic, partition)
-            consumer.assign(listOf(tp))
+            openConverter(connectConfig, ConverterRole.KEY).use { keyConverter ->
+                openConverter(connectConfig, ConverterRole.VALUE).use { valueConverter ->
+                    SimpleHeaderConverter().also { it.configure(emptyMap<String, Any>()) }.use { headerConverter ->
+                        openTransforms(connectConfig).use { transformChain ->
+                            KafkaConsumer<ByteArray?, ByteArray?>(mergedConsumerConfig).use { consumer ->
+                                val tp = TopicPartition(topic, partition)
+                                consumer.assign(listOf(tp))
 
-            if (afterToken != null) {
-                val offset = KafkaConnectSourceToken.parseFrom(afterToken).offset + 1
-                LOG.info("[$dbName] Resuming from offset $offset on $topic-$partition")
-                consumer.seek(tp, offset)
-            } else {
-                LOG.info("[$dbName] No token — seeking to beginning of $topic-$partition")
-                consumer.seekToBeginning(listOf(tp))
-            }
+                                if (afterToken != null) {
+                                    val offset = KafkaConnectSourceToken.parseFrom(afterToken).offset + 1
+                                    LOG.info("[$dbName] Resuming from offset $offset on $topic-$partition")
+                                    consumer.seek(tp, offset)
+                                } else {
+                                    LOG.info("[$dbName] No token — seeking to beginning of $topic-$partition")
+                                    consumer.seekToBeginning(listOf(tp))
+                                }
 
-            while (currentCoroutineContext().isActive) {
-                val records = try {
-                    runInterruptible(Dispatchers.IO) { consumer.poll(POLL_DURATION) }
-                } catch (_: WakeupException) {
-                    break
-                } catch (_: InterruptException) {
-                    break
-                }
+                                while (currentCoroutineContext().isActive) {
+                                    val records = try {
+                                        runInterruptible(Dispatchers.IO) { consumer.poll(POLL_DURATION) }
+                                    } catch (_: WakeupException) {
+                                        break
+                                    } catch (_: InterruptException) {
+                                        break
+                                    }
 
-                if (records.isEmpty) continue
+                                    if (records.isEmpty) continue
 
-                // Halt-on-failure: converter / transform exceptions propagate up. Mirrors
-                // Kafka Connect's `errors.tolerance=none` default. If we wanted DLQ-style
-                // skip-and-continue (`errors.tolerance=all`), we'd need to interleave aborted
-                // txs with indexer commits in offset order to keep the resume token correct.
-                val sinkRecords = records.records(tp).mapNotNull { rec ->
-                    val sinkRec = buildSinkRecord(rec, keyConverter, valueConverter, headerConverter)
-                    transformChain.apply(sinkRec)
-                }
+                                    // Halt-on-failure: converter / transform exceptions propagate up. Mirrors
+                                    // Kafka Connect's `errors.tolerance=none` default. If we wanted DLQ-style
+                                    // skip-and-continue (`errors.tolerance=all`), we'd need to interleave aborted
+                                    // txs with indexer commits in offset order to keep the resume token correct.
+                                    val sinkRecords = records.records(tp).mapNotNull { rec ->
+                                        val sinkRec = buildSinkRecord(rec, keyConverter, valueConverter, headerConverter)
+                                        transformChain.apply(sinkRec)
+                                    }
 
-                if (sinkRecords.isNotEmpty()) {
-                    indexer.indexRecords(sinkRecords, txIndexer)
+                                    if (sinkRecords.isNotEmpty()) {
+                                        indexer.indexRecords(sinkRecords, txIndexer)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -194,17 +197,6 @@ class KafkaConnectSource(
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
-        } finally {
-            runCatching { transformChain.close() }
-                .onFailure { LOG.warn(it, "[$dbName] Transform-chain close failed") }
-            runCatching { keyConverter.close() }
-                .onFailure { LOG.warn(it, "[$dbName] Key-converter close failed") }
-            runCatching { valueConverter.close() }
-                .onFailure { LOG.warn(it, "[$dbName] Value-converter close failed") }
-            runCatching { headerConverter.close() }
-                .onFailure { LOG.warn(it, "[$dbName] Header-converter close failed") }
-            runCatching { consumer.close() }
-                .onFailure { LOG.error(it, "[$dbName] Consumer close failed") }
         }
     }
 
