@@ -114,9 +114,9 @@ class FlightSqlAdbcTest {
         xtdb.close()
     }
 
-    private fun FlightInfo.readRows(): List<Map<*, *>> {
+    private fun FlightInfo.readRows(client: FlightSqlClient = fsqlClient): List<Map<*, *>> {
         val ticket = endpoints.first().ticket
-        fsqlClient.getStream(ticket, *emptyCallOpts).use { stream ->
+        client.getStream(ticket, *emptyCallOpts).use { stream ->
             val root = stream.root
             Relation.fromRoot(al, root).use { rel ->
                 val rows = mutableListOf<Map<*, *>>()
@@ -678,6 +678,48 @@ class FlightSqlAdbcTest {
         fsqlClient.prepare("SELECT _id, n FROM foo", *emptyCallOpts).use { prepared ->
             assertEquals(listOf("_id", "n"), prepared.fetchSchema(*emptyCallOpts).schema.fields.map { it.name })
         }
+    }
+
+    @Test
+    fun `test same-connection INSERT then executeSchema sees real column names`() {
+        conn.createStatement().use { ins ->
+            ins.setSqlQuery("INSERT INTO same_conn_repro (_id, n) VALUES (1, 100)")
+            ins.executeUpdate()
+        }
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT n FROM same_conn_repro")
+            stmt.prepare()
+            assertEquals(listOf("n"), stmt.executeSchema().fields.map { it.name })
+        }
+    }
+
+    @Test
+    fun `test FlightSQL session reads its own writes and stays isolated from another session`() {
+        cookieAwareClient().use { sessionA ->
+            cookieAwareClient().use { sessionB ->
+                sessionA.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+                sessionB.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts)
+
+                sessionA.executeUpdate("INSERT INTO ryw (_id, n) VALUES (1, 'a')", *emptyCallOpts)
+                assertEquals(
+                    listOf(mapOf("_id" to 1L, "n" to "a")),
+                    sessionA.execute("SELECT _id, n FROM ryw", *emptyCallOpts).readRows(sessionA),
+                    "session A must read its own write back"
+                )
+
+                sessionB.executeUpdate("INSERT INTO ryw (_id, n) VALUES (2, 'b')", *emptyCallOpts)
+                assertEquals(
+                    listOf(mapOf("_id" to 2L, "n" to "b")),
+                    sessionB.execute("SELECT _id, n FROM ryw WHERE _id = 2", *emptyCallOpts).readRows(sessionB),
+                    "session B must read its own write back without coupling to session A"
+                )
+            }
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L, "n" to "a"), mapOf("_id" to 2L, "n" to "b")),
+            fsqlClient.execute("SELECT _id, n FROM ryw ORDER BY _id", *emptyCallOpts).readRows()
+        )
     }
 
     // -- ADBC metadata (through FlightSQL ADBC client) --

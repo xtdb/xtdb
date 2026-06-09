@@ -119,24 +119,28 @@
        (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
        (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
 
-       (openSqlQuery [_ sql db-name]
-         (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
+       (openSqlQuery [_ sql db-name await-token]
+         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
            (-> (xtp/prepare-sql this-node sql query-opts)
                (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
 
-       (prepareSql [_ sql db-name]
-         (let [query-opts (-> {} (with-query-opts-defaults this-node db-name))]
+       (prepareSql [_ sql db-name await-token]
+         (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
            (xtp/prepare-sql this-node sql query-opts)))
+
+       (mergeAwaitToken [_ existing-token db-name tx-id]
+         (basis/merge-tx-tokens existing-token (basis/->tx-basis-str {db-name [tx-id]})))
 
        (getColumnTypes [_ table snap]
          (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
            (.getColumnTypes db table snap)))
 
-       (openSnapshot [_ db-name]
-         (-> (or (.databaseOrNull db-cat db-name)
-                 (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                       {:db-name db-name})))
-             (.openSnapshot))))))
+       (openSnapshot [_ db-name await-token]
+         (let [^Database db (or (.databaseOrNull db-cat db-name)
+                                (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
+                                                      {:db-name db-name})))]
+           (.awaitAll db-cat await-token nil)
+           (.openSnapshot db))))))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
