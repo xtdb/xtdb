@@ -28,14 +28,10 @@ import xtdb.api.log.KafkaCluster
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.sql.Array as SqlArray
-import java.sql.Date as SqlDate
-import java.sql.Time as SqlTime
-import java.sql.Timestamp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.OffsetDateTime
-import java.time.ZonedDateTime
+import java.time.ZoneId
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -460,30 +456,12 @@ class KafkaConnectSourceIntegrationTest {
         }
     }
 
-    // Helpers that paper over JDBC's "could be any of these" behaviour for date / time / timestamp.
-    private fun toInstant(v: Any?): Instant = when (v) {
-        is Instant -> v
-        is ZonedDateTime -> v.toInstant()
-        is OffsetDateTime -> v.toInstant()
-        is Timestamp -> v.toInstant()
-        else -> error("unexpected timestamp type: ${v?.javaClass}")
-    }
-
-    private fun toLocalDate(v: Any?): LocalDate = when (v) {
-        is LocalDate -> v
-        is SqlDate -> v.toLocalDate()
-        is String -> LocalDate.parse(v)
-        else -> error("unexpected date type: ${v?.javaClass}")
-    }
-
-    private fun toLocalTime(v: Any?): LocalTime = when (v) {
-        is LocalTime -> v
-        is SqlTime -> v.toLocalTime()
-        is String -> LocalTime.parse(v)
-        else -> error("unexpected time type: ${v?.javaClass}")
-    }
-
-    /** JDBC returns arrays as `java.sql.Array` (PostgreSQL's `PgArray`); unwrap to a plain List. */
+    /**
+     * Pgwire surfaces array columns inconsistently:
+     *   - scalar arrays (`_int4`, `_int8`, `_text`) come back as `java.sql.Array` (`PgArray`);
+     *   - everything else falls through to the json/jsonb path and XT's driver decodes it to a `List`.
+     * Normalise both shapes here.
+     */
     private fun toList(v: Any?): List<Any?> = when (v) {
         is List<*> -> v
         is SqlArray -> (v.array as Array<*>).toList()
@@ -694,9 +672,9 @@ class KafkaConnectSourceIntegrationTest {
             // with `title` pointing at the Connect logical-type name, and the producer emits Connect's
             // integer wire encoding. JsonSchemaConverter promotes to a Connect logical type and the
             // values come back as typed temporals.
-            assertEquals(expectedTs, toInstant(row["timestamp_val"]))
-            assertEquals(expectedDate, toLocalDate(row["date_val"]))
-            assertEquals(expectedTime, toLocalTime(row["time_val"]))
+            assertEquals(expectedTs.atZone(ZoneId.of("UTC")), row["timestamp_val"])
+            assertEquals(expectedDate, row["date_val"])
+            assertEquals(expectedTime, row["time_val"])
         }
     }
 
@@ -924,7 +902,7 @@ class KafkaConnectSourceIntegrationTest {
             // header.totals.subtotal: Decimal three structs deep.
             @Suppress("UNCHECKED_CAST")
             val header = row["header"] as Map<String, Any?>
-            assertEquals(placedAt, toInstant(header["placed_at"]))
+            assertEquals(placedAt.atZone(ZoneId.of("UTC")), header["placed_at"])
 
             @Suppress("UNCHECKED_CAST")
             val totals = header["totals"] as Map<String, Any?>
@@ -933,8 +911,8 @@ class KafkaConnectSourceIntegrationTest {
             // delivery_attempts: Array<Timestamp> — every element should be an Instant, not a Long.
             val attempts = toList(row["delivery_attempts"])
             assertEquals(2, attempts.size)
-            assertEquals(attempt1, toInstant(attempts[0]))
-            assertEquals(attempt2, toInstant(attempts[1]))
+            assertEquals(attempt1.atZone(ZoneId.of("UTC")), attempts[0])
+            assertEquals(attempt2.atZone(ZoneId.of("UTC")), attempts[1])
 
             // lines_by_sku: Map<String, Struct<Decimal>> — Decimal at array-of-struct depth.
             @Suppress("UNCHECKED_CAST")
@@ -1087,9 +1065,9 @@ class KafkaConnectSourceIntegrationTest {
 
             // Logical types
             assertEquals(decimal, row["decimal_val"])
-            assertEquals(expectedDate, toLocalDate(row["date_val"]))
-            assertEquals(expectedTime, toLocalTime(row["time_val"]))
-            assertEquals(expectedTs, toInstant(row["timestamp_val"]))
+            assertEquals(expectedDate, row["date_val"])
+            assertEquals(expectedTime, row["time_val"])
+            assertEquals(expectedTs.atZone(ZoneId.of("UTC")), row["timestamp_val"])
         }
     }
 }
