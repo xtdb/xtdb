@@ -31,8 +31,9 @@
                                           {:database :ro_db}))
           "read-only database rejects writes via log")
 
-    (t/is (= [] (xt/q node "SELECT * FROM ro_db.foo"))
-          "read-only database allows reads")))
+    (t/is (thrown-with-msg? Exception #"Table not found: ro_db\.foo"
+                            (xt/q node "SELECT * FROM ro_db.foo"))
+          "read-only database is readable - the read reaches the planner, the table just doesn't exist")))
 
 (t/deftest read-only-secondary-follows-primary
   (let [node-dir (util/->path "target/read-only-secondary/follows-primary")]

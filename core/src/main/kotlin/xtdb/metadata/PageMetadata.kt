@@ -115,6 +115,11 @@ class PageMetadata private constructor(private val rel: Relation, private val pa
         val validFromIdx = pageIdxs[PageIndexKey("_valid_from", pageIdx)]
         val validToIdx = pageIdxs[PageIndexKey("_valid_to", pageIdx)]
 
+        // a 0-row page (e.g. an empty table) writes its temporal columns' metadata but no min/max,
+        // so the bounds are absent. Report the empty-set (proto defaults, min > max): the page then
+        // matches no temporal predicate and is skipped, rather than dereferencing the missing value.
+        if (minReader.isNull(validFromIdx)) return TemporalMetadata.newBuilder().build()
+
         return TemporalMetadata.newBuilder()
             .setMinValidFrom(floor(minReader.getDouble(validFromIdx) * MICRO_HZ).toLong())
             .setMaxValidFrom(ceil(maxReader.getDouble(validFromIdx) * MICRO_HZ).toLong())

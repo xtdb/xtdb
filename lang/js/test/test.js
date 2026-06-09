@@ -176,6 +176,9 @@ describe("Postgres.js handles cached-query-must-not-change-result-type errors", 
     const conn = await sql.reserve();
 
     try {
+      // an unknown table is now an error, so declare it before querying the empty table
+      await conn`CREATE TABLE foo`;
+
       // prepare query by running it
       const query = async () => [...await conn`SELECT * FROM foo ORDER BY _id`];
       assert.deepStrictEqual([], await query());

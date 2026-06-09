@@ -242,10 +242,11 @@
 (deftest error-propagation
   (let [warns (atom [])]
     (with-open [conn (pg-conn {:fn-notice (fn [notice] (swap! warns conj (:message notice)))})]
-      (pg/execute conn "SELECT 2 AS b FROM docs GROUP BY b")
+      (pg/execute conn "CREATE TABLE docs")
+      (pg/execute conn "SELECT missing_col FROM docs")
       ;; the fn-notice runs in a separate executor pool
       (Thread/sleep 100)
-      (t/is (= #{"Table not found: docs"}
+      (t/is (= #{"Column not found: missing_col"}
                (set @warns))))))
 
 (deftest test-time

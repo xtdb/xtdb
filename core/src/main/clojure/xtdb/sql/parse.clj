@@ -49,7 +49,10 @@
     [:grant-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}])
 
   (visitRevokeRoleStatement [_ stmt]
-    [:revoke-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}]))
+    [:revoke-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}])
+
+  (visitCreateTableStatement [_ stmt]
+    [:create-table {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt)))}]))
 
 (defn parse-statement [stmt opts]
   (if (string? stmt)

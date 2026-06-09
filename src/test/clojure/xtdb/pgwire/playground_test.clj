@@ -24,7 +24,9 @@
                (show-latest-completed-txs xt-db-conn)))
 
       (with-open [new-db-conn (pgw-test/jdbc-conn {:dbname "new-db"})]
-        (t/is (empty? (jdbc/execute! new-db-conn ["SELECT * FROM foo"])))
+        (t/is (re-find #"Table not found: foo"
+                       (:message (pgw-test/reading-ex (jdbc/execute! new-db-conn ["SELECT * FROM foo"]))))
+              "a fresh database doesn't see another db's table")
 
         (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'new-db'}"])
 
@@ -44,6 +46,7 @@
 
 (t/deftest ingestion-stopped-assert-4837
   (util/with-open [conn (pgw-test/jdbc-conn {:dbname "osm"})]
+    (jdbc/execute! conn ["CREATE TABLE system"])
     (jdbc/execute! conn ["BEGIN READ WRITE"])
     (jdbc/execute! conn ["ASSERT EXISTS (SELECT 1 FROM system WHERE _id=?), 'not_found'" "id"])
     (t/is (anomalous? [:conflict :xtdb/assert-failed "not_found"]

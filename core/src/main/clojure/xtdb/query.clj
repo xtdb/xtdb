@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery SqlStatement$Assert SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            (xtdb.table TableRef)
            xtdb.util.RefCounter))
 
@@ -452,9 +452,9 @@
     (let [[q-tag {:keys [stmt table message user role]}]
           (parse-sql/parse-statement sql {:default-db (:default-db opts)})]
       (case q-tag
-        ;; GRANT/REVOKE carry their (user, role) statically — no query to plan
         :grant-role (SqlStatement$GrantRole. user role)
         :revoke-role (SqlStatement$RevokeRole. user role)
+        :create-table (SqlStatement$CreateTable. table)
 
         (let [pq (.prepareQuery this stmt db-cat opts)]
           (case q-tag
