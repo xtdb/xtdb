@@ -343,8 +343,11 @@ class KafkaConnectSourceIntegrationTest {
 
             val rows = xtQueryDb(node, "events", "SELECT _id, name, age FROM public.events WHERE _id = 'alice'")
             assertEquals("Alice", rows[0]["name"])
+            // the envelope's `op` field should not be on the unwrapped doc - assert via the catalog,
+            // since referencing a column that doesn't exist is now an error rather than an empty result
             assertTrue(
-                xtQueryDb(node, "events", "SELECT op FROM public.events WHERE _id = 'alice' AND op IS NOT NULL").isEmpty(),
+                xtQueryDb(node, "events",
+                          "SELECT column_name FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'op'").isEmpty(),
                 "envelope's op field should not be on the unwrapped doc",
             )
         }

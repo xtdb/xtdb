@@ -361,8 +361,11 @@
            (xt/q tu/*node* "SELECT name, film, ord FROM actors, UNNEST(films) WITH ORDINALITY AS films(film, ord)"))))
 
 (t/deftest test-unnest-null-or-missing-4075
+  (xt/execute-tx tu/*node* ["CREATE TABLE foo (b)"])
   (xt/execute-tx tu/*node* ["INSERT INTO foo RECORDS {_id: 1, a: 2}"])
-  (t/is (= [] (xt/q tu/*node* "SELECT b FROM foo, UNNEST(foo.b) AS bs(b)"))))
+  ;; b is declared but unset on this row - UNNEST of a null/absent value yields no rows.
+  ;; project bs.b explicitly: foo.b now exists too, so unqualified b would be ambiguous
+  (t/is (= [] (xt/q tu/*node* "SELECT bs.b FROM foo, UNNEST(foo.b) AS bs(b)"))))
 
 (t/deftest test-cross-join
   (t/is (=plan-file
@@ -1205,31 +1208,16 @@
         "LAG with default offset of 1"))
 
 (t/deftest test-operators-with-unresolved-column-references-3640
-  (t/is (=plan-file
-         "test-group-by-with-unresolved-column-reference"
-         (sql/plan "SELECT SUM(_id + 1) FROM docs GROUP BY x"
-                   {:table-info {#xt/table docs #{"_id"}}})))
-
   (xt/submit-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
 
-  (t/is (= [{:s 1}]
-           (xt/q tu/*node* "SELECT SUM(_id) AS s FROM docs GROUP BY x")))
-
-  (t/is (=plan-file
-         "test-having-with-unresolved-column-reference"
-         (sql/plan "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1"
-                   {:table-info {#xt/table docs #{"_id"}}})))
-
-  (t/is (= []
-           (xt/q tu/*node* "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1")))
-
-  (t/is (=plan-file
-         "test-where-with-unresolved-column-reference"
-         (sql/plan "SELECT _id AS s FROM docs WHERE x > 1"
-                   {:table-info {#xt/table docs #{"_id"}}})))
-
-  (t/is (= []
-           (xt/q tu/*node* "SELECT _id AS s FROM docs WHERE x > 1"))))
+  ;; an unresolved column reference is now an error (#4467) - in GROUP BY, HAVING and WHERE alike -
+  ;; rather than the warn-and-treat-as-null it used to be
+  (doseq [q ["SELECT SUM(_id) AS s FROM docs GROUP BY x"
+             "SELECT SUM(_id) AS s FROM docs HAVING SUM(x) > 1"
+             "SELECT _id AS s FROM docs WHERE x > 1"]]
+    (t/is (anomalous? [:incorrect nil #"Column not found: x"]
+                      (xt/q tu/*node* q))
+          q)))
 
 (t/deftest test-array-subqueries
   (t/are [file q]
@@ -2038,10 +2026,10 @@
            (xt/q tu/*node*
                  "SELECT \"T1\"._id, \"T1\".\"CoL1\", \"T1\".COL2 FROM \"T1\"")))
 
-  (t/is (= [{:xt/id 3, :col2 3000}]
-           (xt/q tu/*node*
-                 "SELECT \"T1\"._id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
-        "can't refer to it as `col1`, have to quote")
+  (t/is (anomalous? [:incorrect nil #"Column not found: T1\.col1"]
+                    (xt/q tu/*node*
+                          "SELECT \"T1\"._id, \"T1\".col1, \"T1\".COL2 FROM \"T1\""))
+        "can't refer to the delimited `CoL1` as unquoted `col1` - now an error, not a silent null")
 
   (t/is (xt/execute-tx tu/*node* [[:sql "UPDATE T1 SET Col1 = 'cat' WHERE t1.COL2 IN (313, 2000)"]]))
 
@@ -2154,7 +2142,7 @@
                     (xt/q tu/*node* "SELECT * FROM users"))))
 
 (t/deftest left-join-to-non-existent-table-survives-block-boundary-5669
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE b"]
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE b (_id)"]
                             [:sql "INSERT INTO a (_id) VALUES ('1')"]])
 
   (letfn [(plain [] (set (xt/q tu/*node* "SELECT a._id FROM a")))
@@ -2248,7 +2236,7 @@
   (t/is (= [{:doc-count 2}] (xt/q tu/*node* "SELECT COUNT(*) doc_count FROM docs"))))
 
 (t/deftest test-assert-exists-3686-3689
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE users"]])
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE users (_id, name, email)"]])
 
   (t/is (xt/execute-tx tu/*node* [[:sql "ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@example.com')"]
                                   [:sql "INSERT INTO users RECORDS {_id: 'james', name: 'James', email: 'james@example.com'}"]]))
@@ -2628,7 +2616,7 @@ UNION ALL
 
   (t/is (= [{:x 2, :xt/id 1}] (xt/q tu/*node* "SELECT * FROM foo.bar")))
 
-  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE bar"]])
+  (xt/execute-tx tu/*node* [[:sql "CREATE TABLE bar (_id, x)"]])
   (t/is (= [] (xt/q tu/*node* "SELECT * FROM bar"))
         "public.bar is a distinct, empty table from foo.bar")
 

@@ -378,13 +378,23 @@
        :status status})))
 
 (def ^:private tables
-  [:region :category :user :user-attribute :item :gag :gav
-   :item-bid :item-comment :item-feedback :item-max-bid :user-item])
+  "Auctionmark tables. The vector value lists the columns a proc reads via SQL *before* the workload
+   has written them - declaring them (untyped, as the lattice bottom) lets the read resolve on an
+   empty table, where #4467 would otherwise error. Tables always populated before they're read (the
+   generated ones) are created bare; their columns come from the inserted data."
+  {:region nil, :category nil, :user nil, :user-attribute nil, :item nil, :gag nil, :gav nil,
+   :item-feedback nil, :user-item nil
+   :item-bid [:_id :max_bid :bidder_id]
+   :item-comment [:_id :item_id :response]
+   :item-max-bid [:_id :max_bid_id :curr_bid]})
 
 (defn create-tables! [node]
   (xt/execute-tx node
-                 (for [table tables]
-                   [:sql (str "CREATE TABLE " (str/replace (name table) \- \_))])))
+                 (for [[table cols] tables
+                       :let [t (str/replace (name table) \- \_)]]
+                   [:sql (if (seq cols)
+                           (format "CREATE TABLE %s (%s)" t (str/join ", " (map name cols)))
+                           (str "CREATE TABLE " t))])))
 
 (defn load-phase-submit-tasks [sf]
   [{:t :call, :f (fn [{:keys [node]}] (create-tables! node))}

@@ -571,8 +571,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (t/deftest non-existant-column-no-nil-rows-2898
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(_id, bar) VALUES (1, 2)"]])
-  (t/is (= [{}]
-           (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))))
+  (t/is (anomalous? [:incorrect nil #"Column not found: foo\.not_a_column"]
+                    (xt/q tu/*node* "SELECT foo.not_a_column FROM foo"))
+        "an undeclared column on an existing table is now an error, not a silent empty row (#4467)"))
 
 (t/deftest test-nested-field-normalisation
   (jdbc/execute! tu/*node* ["INSERT INTO t1(_id, data)
@@ -585,16 +586,22 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
         "testing insert worked")
 
   (t/is (= [{:field-name2 true}]
-           (xt/q tu/*node* "SELECT (t2.field_name1).field_name2, t2.field$name4.baz
-                            FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"))
-        "testing insert worked")
+           (xt/q tu/*node* "SELECT (t2.field_name1).field_name2
+                            FROM (SELECT (t1.data).field_name1 FROM t1) AS t2"))
+        "a nested field name normalises and resolves through a subquery")
 
   (t/is (= [{:field-name2 true}]
            (jdbc/execute! tu/*node*
-                          ["SELECT (t2.field_name1).field_name2, t2.field$name4.baz
-                            FROM (SELECT (t1.data).field_name1, (t1.data).field$name4 FROM t1) AS t2"]
+                          ["SELECT (t2.field_name1).field_name2
+                            FROM (SELECT (t1.data).field_name1 FROM t1) AS t2"]
                           {:builder-fn xt-jdbc/builder-fn}))
-        "testing insert worked (JDBC)"))
+        "... and likewise over JDBC")
+
+  ;; field$name4 isn't a field of `data`, so the inner projection doesn't surface it - referencing it
+  ;; through the subquery is now an error rather than a silent null (#4467)
+  (t/is (anomalous? [:incorrect nil #"Column not found"]
+                    (xt/q tu/*node* "SELECT t2.field$name4.baz
+                                     FROM (SELECT (t1.data).field$name4 FROM t1) AS t2"))))
 
 (t/deftest test-get-field-on-duv-with-struct-2425
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(_id, data) VALUES(1, 'bar')"]
@@ -950,8 +957,10 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                (xt/q node "SELECT * FROM docs"))))))
 
 (t/deftest ingestion-stopped-on-null-col-ref-4259
+  ;; "1" is a delimited column reference, not a string - it resolves to nothing, which is now a
+  ;; hard error rather than a null _id (#4467)
   (t/is (anomalous? [:incorrect nil
-                     #"Invalid ID type"]
+                     #"Column not found: 1"]
                     (xt/execute-tx tu/*node* ["INSERT INTO docs RECORDS {_id: \"1\"}"]))))
 
 (t/deftest test-field-mismatch-4271

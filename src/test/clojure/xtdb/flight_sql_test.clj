@@ -63,7 +63,7 @@
                     (flight-info->rows))))))
 
 (t/deftest test-transaction
-  (.executeUpdate *client* "CREATE TABLE users" empty-call-opts)
+  (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)
   (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
     (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" fsql-tx empty-call-opts)))
     (t/is (= []
@@ -119,7 +119,7 @@
   (letfn [(q []
             (set (-> (.execute *client* "SELECT users.name FROM users" empty-call-opts)
                      (flight-info->rows))))]
-    (.executeUpdate *client* "CREATE TABLE users" empty-call-opts)
+    (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)
     (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
       (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
                   param-root (VectorSchemaRoot/create (Schema. [#xt/field {"_id" :utf8} #xt/field {"name" :utf8}]) tu/*allocator*)]
@@ -225,7 +225,7 @@
         ;; switch back to xtdb — should not see the row
         (.setCurrentCatalog conn "xtdb")
         (with-open [stmt (.createStatement conn)]
-          (.setSqlQuery stmt "CREATE TABLE users")
+          (.setSqlQuery stmt "CREATE TABLE users (_id, name)")
           (.executeUpdate stmt))
         (with-open [stmt (.createStatement conn)]
           (.setSqlQuery stmt "SELECT _id, name FROM users")
@@ -237,7 +237,7 @@
   (let [db-cat (.getDbCatalog ^Xtdb$XtdbInternal tu/*node*)
         other-db-opts (db-call-opts "other-db")]
     (.attach db-cat "other-db" nil)
-    (.executeUpdate *client* "CREATE TABLE users" empty-call-opts)
+    (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)
 
     (t/testing "insert and query on non-default database via header"
       (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', 'James')" other-db-opts)))

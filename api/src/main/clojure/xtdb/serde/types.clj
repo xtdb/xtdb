@@ -3,7 +3,7 @@
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
-           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
+           (xtdb.arrow ArrowTypes VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Nothing VectorType$Poly VectorType$Scalar VectorType$Struct VectorType$Mono)
            (xtdb.vector.extensions IntervalMDMType KeywordType OidType RegClassType RegProcType SetType TransitType TsTzRangeType UriType UuidType)))
 
 (defprotocol FromArrowType
@@ -246,8 +246,11 @@
   (render-type [vec-type]))
 
 (extend-protocol RenderType
-  VectorType$Null 
+  VectorType$Null
   (render-type [_] :null)
+
+  VectorType$Nothing
+  (render-type [_] :nothing)
 
   VectorType$Scalar
   (render-type [scalar]

@@ -87,6 +87,7 @@ sealed interface MetadataFlavour {
         @JvmStatic
         val VectorType.metadataFlavour: Class<out MetadataFlavour>?
             get() = when(this) {
+                VectorType.Nothing -> null // bottom: no values, hence no flavour
                 is VectorType.Mono -> arrowType.metadataFlavour
                 is VectorType.Maybe -> mono.metadataFlavour
                 is VectorType.Poly -> UNION_TYPE.unsupported()

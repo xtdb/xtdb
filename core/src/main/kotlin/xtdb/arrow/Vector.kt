@@ -119,7 +119,7 @@ sealed class Vector : VectorReader, VectorWriter {
             val al = this
 
             return arrowType.accept(object : ArrowTypeVisitor<Vector> {
-                override fun visit(type: Null) = NullVector(name)
+                override fun visit(type: Null) = NullVector(name, nullable)
 
                 override fun visit(type: Struct) =
                     StructVector(al, name, nullable, children.associateByTo(linkedMapOf()) { it.name })

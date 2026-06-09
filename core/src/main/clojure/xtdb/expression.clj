@@ -19,7 +19,7 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
            (xtdb.operator ProjectionSpec SelectionSpec)
            xtdb.time.Interval
@@ -515,6 +515,10 @@
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (or (get var-types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
+        ;; `Nothing` is the catalog's lattice bottom for a declared-but-valueless column; when such a
+        ;; column is read in a query its rows are simply null, so the EE treats it as `:null` and never
+        ;; needs `:nothing` call definitions (Nothing's empty legs would otherwise collapse codegen).
+        return-type (if (= return-type VectorType$Nothing/INSTANCE) #xt/type :null return-type)
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist

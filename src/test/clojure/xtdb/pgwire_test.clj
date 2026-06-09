@@ -241,17 +241,20 @@
 
 (t/deftest prepared-stmt-sees-new-cols-4570
   (with-open [conn (jdbc-conn {"prepareThreshold" 1})]
+    ;; my_col is declared (untyped) up front - #4467 means a query can't reference an undeclared
+    ;; column - and a re-planned prepared statement picks up its values as they're inserted
+    (jdbc/execute! conn ["CREATE TABLE docs (_id, my_col)"])
     (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 1}"])
 
-    (t/is (= [{:_id 1, :_column_2 nil}]
+    (t/is (= [{:_id 1, :my_col nil}]
              (jdbc/execute! conn ["SELECT _id, my_col FROM docs"])))
 
     (with-open [stmt (.prepareStatement conn "FROM docs SELECT my_col ORDER BY _id")
                 star-stmt (.prepareStatement conn "FROM docs ORDER BY _id")]
       (with-open [rs (.executeQuery stmt)
                   rs-star (.executeQuery star-stmt)]
-        (t/is (= [{:_column_1 nil}] (resultset-seq rs)))
-        (t/is (= [{:_id 1}] (resultset-seq rs-star))))
+        (t/is (= [{:my_col nil}] (resultset-seq rs)))
+        (t/is (= [{:_id 1, :my_col nil}] (resultset-seq rs-star))))
 
       (jdbc/execute! conn ["INSERT INTO docs RECORDS {_id: 2, my_col: 'foo'}"])
 
@@ -823,7 +826,7 @@
 
 (deftest dml-test
   (with-open [conn (jdbc-conn)]
-    (jdbc/execute! conn ["CREATE TABLE foo"])
+    (jdbc/execute! conn ["CREATE TABLE foo (_id, a)"])
     (testing "mixing a read causes rollback"
       (is (thrown-with-msg? PSQLException #"Queries are unsupported in a DML transaction"
                             (jdbc/with-transaction [tx conn]
@@ -2045,11 +2048,12 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest error-propagation
   (with-open [conn (jdbc-conn)]
-    (jdbc/execute! conn ["CREATE TABLE docs"])
-    (with-open [stmt (.prepareStatement conn "SELECT missing_col FROM docs")]
+    ;; a probe of an unimplemented system-schema table stays a warning (tools tolerate it) - one of the
+    ;; few remaining query warnings now that table/column-not-found on user tables are errors (#4467)
+    (with-open [stmt (.prepareStatement conn "SELECT * FROM information_schema.no_such_table")]
       (.execute stmt)
 
-      (t/is (= #{"Column not found: missing_col"}
+      (t/is (= #{"Table not found: information_schema.no_such_table"}
                (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt))))))))
 
 (deftest test-ignore-returning-keys-3668
@@ -2985,7 +2989,7 @@ ORDER BY 1,2;")
                (jdbc/execute! conn ["SETTING SNAPSHOT_TOKEN = ? SELECT 1"
                                     (basis/->time-basis-str {"xtdb" [#xt/zdt "2020-01-02Z"]})]))))
 
-    (jdbc/execute! conn ["CREATE TABLE foo"])
+    (jdbc/execute! conn ["CREATE TABLE foo (_id, a)"])
 
     (t/is (= {:sql-state "08P01",
               :message "Queries are unsupported in a DML transaction",
@@ -3114,14 +3118,13 @@ ORDER BY 1,2;")
                                                  {"_id" 2, "_system_from" #inst "2024-01-01T00:00:00Z"}])))))
 
 (t/deftest test-column-not-found-warning-in-dml-4531
-  (t/testing "INSERT with double-quoted column refs should warn - #4531"
+  (t/testing "double-quoted column refs in an INSERT RECORD now error rather than silently warn - #4531/#4467"
+    ;; the double-quoted values ("FI", "Street 7", …) parse as column references, not strings;
+    ;; they resolve against nothing, so an unresolved column is now a hard error
     (with-open [conn (jdbc-conn)
                 stmt (.createStatement conn)]
-      (.execute stmt "INSERT INTO customer RECORDS {_id: 3, address: {country: \"FI\", street: \"Street 7\", postal: \"123456\"}, name: \"Some Name\"}")
-      (let [warnings (stmt->warnings stmt)]
-        (t/is (seq warnings) "Expected warnings for column references (double-quoted strings) not found")
-        (t/is (some #(re-find #"Column not found" (.getMessage ^SQLWarning %)) warnings)
-              "Should have column-not-found warnings for FI, Street 7, 123456, and Some Name")))))
+      (t/is (thrown-with-msg? PSQLException #"Column not found"
+                              (.execute stmt "INSERT INTO customer RECORDS {_id: 3, address: {country: \"FI\", street: \"Street 7\", postal: \"123456\"}, name: \"Some Name\"}"))))))
 
 (t/deftest test-failed-transaction-blocks-dml-4071
   (t/testing "DML in failed transaction should error, not show success - #4071"

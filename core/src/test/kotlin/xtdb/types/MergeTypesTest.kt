@@ -1,8 +1,10 @@
 package xtdb.types
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.NULL_TYPE
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.F64
@@ -15,6 +17,7 @@ import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.setTypeOf
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorType.Companion.fromLegs
+import xtdb.arrow.VectorType.Nothing
 import xtdb.arrow.VectorType.Null
 
 class MergeTypesTest {
@@ -176,6 +179,26 @@ class MergeTypesTest {
             expected, mergeTypes(struct0, struct1),
             "Nested struct merging with simple field creates union"
         )
+    }
+
+    @Test
+    fun `test Nothing is the lattice bottom`() {
+        assertEquals(I64, mergeTypes(Nothing, I64), "Nothing widens to the first type it meets - I64, not Maybe(I64)")
+        assertEquals(Null, mergeTypes(Nothing, Null), "Nothing merged with Null is Null")
+        assertEquals(Null, mergeTypes(Nothing), "Nothing alone collapses like an empty merge")
+        assertEquals(I64, mergeTypes(Nothing, I64, Nothing), "Nothing is absorbed regardless of position")
+
+        assertEquals(Null, maybe(Nothing), "making the bottom nullable yields Null")
+        assertEquals(Nothing, maybe(Nothing, false), "non-nullable bottom stays Nothing")
+
+        assertEquals(I64, fromLegs(listOf(Nothing, I64)), "Nothing contributes no legs to a union")
+    }
+
+    @Test
+    fun `test Nothing serializes as a non-nullable null field`() {
+        val field = Nothing.toField("x")
+        assertEquals(NULL_TYPE, field.type)
+        assertFalse(field.isNullable, "Nothing is a non-nullable NULL field, distinct from Null")
     }
 
     @Test

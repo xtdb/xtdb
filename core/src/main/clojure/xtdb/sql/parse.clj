@@ -52,7 +52,8 @@
     [:revoke-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}])
 
   (visitCreateTableStatement [_ stmt]
-    [:create-table {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt)))}]))
+    [:create-table {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt)))
+                    :col-names (some->> (.columnNameList stmt) (.columnName) (mapv (comp str sql/identifier-sym)))}]))
 
 (defn parse-statement [stmt opts]
   (if (string? stmt)

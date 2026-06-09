@@ -348,7 +348,7 @@
                                     1 20)]
        (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                          :compactor {:threads 0}})]
-         (xt/execute-tx node [[:sql "CREATE TABLE docs"]])
+         (xt/execute-tx node [[:sql "CREATE TABLE docs (_id)"]])
          (doseq [[op value] ops]
            (case op
              :put     (xt/execute-tx node [[:put-docs :docs value]])

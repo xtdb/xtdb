@@ -449,12 +449,12 @@
                       (throw t))))))))))))
 
   (prepareTxSql [this sql db-cat opts]
-    (let [[q-tag {:keys [stmt table message user role]}]
+    (let [[q-tag {:keys [stmt table message user role col-names]}]
           (parse-sql/parse-statement sql {:default-db (:default-db opts)})]
       (case q-tag
         :grant-role (SqlStatement$GrantRole. user role)
         :revoke-role (SqlStatement$RevokeRole. user role)
-        :create-table (SqlStatement$CreateTable. table)
+        :create-table (SqlStatement$CreateTable. table (or col-names []))
 
         (let [pq (.prepareQuery this stmt db-cat opts)]
           (case q-tag

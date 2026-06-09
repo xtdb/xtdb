@@ -46,7 +46,7 @@
 
 (t/deftest ingestion-stopped-assert-4837
   (util/with-open [conn (pgw-test/jdbc-conn {:dbname "osm"})]
-    (jdbc/execute! conn ["CREATE TABLE system"])
+    (jdbc/execute! conn ["CREATE TABLE system (_id)"])
     (jdbc/execute! conn ["BEGIN READ WRITE"])
     (jdbc/execute! conn ["ASSERT EXISTS (SELECT 1 FROM system WHERE _id=?), 'not_found'" "id"])
     (t/is (anomalous? [:conflict :xtdb/assert-failed "not_found"]
@@ -55,6 +55,9 @@
 
 (t/deftest update-filter-repro-4894
   (with-open [conn (pgw-test/jdbc-conn {:dbname "foo"})]
+    ;; foo is declared up front so the conditional UPDATE can reference it - #4467 means an UPDATE
+    ;; can't reference an undeclared column
+    (xt/execute-tx conn [["CREATE TABLE docs (_id, foo)"]])
     (xt/execute-tx conn [["INSERT INTO docs RECORDS ?" {:xt/id "doc-1"}]])
     (t/is (= [{:xt/id "doc-1"}] (xt/q conn ["FROM docs SELECT *"])))
 

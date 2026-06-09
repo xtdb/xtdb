@@ -111,6 +111,8 @@
   PlanError
   (error-string [_] (format "Table not found: %s" (str/join "." (filter some? table-chain)))))
 
+(def ^:private internal-schemas #{"xt" "pg_catalog" "information_schema"})
+
 (defn- system-table-chain?
   "An unknown table in an internal schema stays a warning rather than an error (#4467): a data-backed
    `xt` table like `xt.txs` is empty - hence absent from the catalog - on a fresh node, and tools probe
@@ -121,7 +123,7 @@
    (`pg_class`) or schema-injected by the DML path (`public.pg_class`), hence we check the table name."
   [table-chain]
   (or (and (>= (count table-chain) 2)
-           (contains? #{"xt" "pg_catalog" "information_schema"}
+           (contains? internal-schemas
                       (str (nth table-chain (- (count table-chain) 2)))))
       (str/starts-with? (str (peek table-chain)) "pg_")))
 
@@ -346,7 +348,12 @@
                (or (nil? db-name) (= db-name (symbol (.getDbName table-ref)))))
       (for [col (if col-name
                   (when (or (contains? cols col-name) (types/temporal-col-name? col-name)
-                            (temporal-period-column? col-name))
+                            (temporal-period-column? col-name)
+                            ;; tolerate any column on an internal-schema table: tools probe optional
+                            ;; pg_catalog/information_schema columns, and unimplemented system tables
+                            ;; resolve to the `xt.not_found` sentinel (schema `xt`). Only user tables
+                            ;; error on a typo'd / undeclared column (#4467).
+                            (contains? internal-schemas (.getSchemaName table-ref)))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]
@@ -1345,7 +1352,7 @@
       (when-let [sym (case (count matches)
                        0 (if (= chain '(user))
                            '(current-user)
-                           (do (add-warning! env (->ColumnNotFound chain))
+                           (do (add-err! env (->ColumnNotFound chain))
                                (when !unresolved-cr
                                  (let [sym (->col-sym (str "xt$missing_column" (swap! !id-count inc)))]
                                    (.add !unresolved-cr sym)
