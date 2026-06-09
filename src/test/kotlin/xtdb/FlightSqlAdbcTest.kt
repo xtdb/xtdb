@@ -29,14 +29,18 @@ import org.apache.arrow.flight.client.ClientCookieMiddleware
 import org.apache.arrow.flight.sql.FlightSqlClient
 import org.apache.arrow.flight.sql.FlightSqlClient.ExecuteIngestOptions
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest
+import org.apache.arrow.flight.sql.impl.FlightSql.SqlInfo
+import org.apache.arrow.flight.sql.impl.FlightSql.SqlSupportedTransaction
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableExistsOption
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VarBinaryVector
 import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
@@ -210,6 +214,46 @@ class FlightSqlAdbcTest {
     fun `test FlightSQL getSqlInfo`() {
         val rows = fsqlClient.getSqlInfo(intArrayOf(), *emptyCallOpts).readRows()
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")
+    }
+
+    @Test
+    fun `test FlightSQL getSqlInfo advertises transaction support`() {
+        // The ADBC Go driver (underlying the Python adbc_driver_flightsql package) requests
+        // FLIGHT_SQL_SERVER_TRANSACTION at connect; if it's absent set_autocommit(False) raises
+        // NOT_IMPLEMENTED.
+        // Value 1 = SqlSupportedTransaction.TRANSACTION (begin/commit/rollback supported).
+        //
+        // We read the `value` DenseUnionVector with *standard* Arrow accessors off the post-IPC stream
+        // root — the way the Go/Python consumer reads it — rather than through XTDB's lenient Relation
+        // reader, and we request it in a mixed batch alongside the string-valued codes so a botched
+        // dense-union offset for the int32 leg would surface as a null here.
+        val code = SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_VALUE
+        val info = fsqlClient.getSqlInfo(
+            intArrayOf(SqlInfo.FLIGHT_SQL_SERVER_NAME_VALUE, SqlInfo.FLIGHT_SQL_SERVER_VERSION_VALUE, code),
+            *emptyCallOpts
+        )
+        fsqlClient.getStream(info.endpoints.first().ticket, *emptyCallOpts).use { stream ->
+            assertTrue(stream.next(), "expected a GET_SQL_INFO batch")
+            val root = stream.root
+
+            val infoNameVec = root.getVector("info_name") as UInt4Vector
+            val valueVec = root.getVector("value") as DenseUnionVector
+
+            val rowIdx = (0 until root.rowCount).singleOrNull { infoNameVec.get(it) == code }
+                ?: fail("GET_SQL_INFO must advertise FLIGHT_SQL_SERVER_TRANSACTION (code $code)")
+
+            // type id 3 = int32_bitmask leg of the GET_SQL_INFO value union
+            assertEquals(3, valueVec.getTypeId(rowIdx), "code $code must be tagged with the int32 leg")
+
+            val int32Vec = valueVec.getIntVector(3)
+            val legOffset = valueVec.getOffset(rowIdx)
+            assertFalse(int32Vec.isNull(legOffset), "code $code's int32 value must be non-null on the wire")
+            assertEquals(
+                SqlSupportedTransaction.SQL_SUPPORTED_TRANSACTION_TRANSACTION_VALUE,
+                int32Vec.get(legOffset),
+                "code $code must carry SqlSupportedTransaction.TRANSACTION"
+            )
+        }
     }
 
     private val asString = object : NoOpSessionOptionValueVisitor<String?>() {

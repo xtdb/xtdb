@@ -25,6 +25,8 @@ import org.apache.arrow.vector.VectorLoader
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.holders.NullableIntHolder
+import org.apache.arrow.vector.holders.NullableVarCharHolder
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
@@ -666,25 +668,56 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         singleBatchStream(FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA, listener) { root ->
             val infoNameVec = root.getVector("info_name") as UInt4Vector
             val valueVec = root.getVector("value") as DenseUnionVector
-            val stringVec = valueVec.getVarCharVector(0)
 
             var idx = 0
+
             fun addString(code: Int, value: String) {
                 if (requestedCodes.isNotEmpty() && code !in requestedCodes) return
                 infoNameVec.setSafe(idx, code)
-                valueVec.setTypeId(idx, 0)
-                valueVec.offsetBuffer.setInt(idx.toLong() * DenseUnionVector.OFFSET_WIDTH, idx)
-                stringVec.setSafe(idx, value.toByteArray())
+                // setTypeId selects the union leg for this row; setSafe(holder) then appends to that
+                // leg's child vector and writes the row's child-local offset. This is the Arrow-blessed
+                // way to build a DenseUnionVector — it keeps each child's valueCount and the offset
+                // buffer consistent, which a strict (C++/Go) consumer requires.
+                valueVec.setTypeId(idx, STRING_LEG)
+                NullableVarCharHolder().also { h ->
+                    val bytes = value.toByteArray()
+                    h.isSet = 1
+                    h.buffer = allocator.buffer(bytes.size.toLong()).also { it.setBytes(0, bytes) }
+                    h.start = 0
+                    h.end = bytes.size
+                    valueVec.setSafe(idx, h)
+                    h.buffer.close()
+                }
                 idx++
             }
 
-            // FlightSQL SqlInfo codes
-            addString(0, "XTDB")     // FLIGHT_SQL_SERVER_NAME
-            addString(1, "dev")      // FLIGHT_SQL_SERVER_VERSION
+            fun addInt32(code: Int, value: Int) {
+                if (requestedCodes.isNotEmpty() && code !in requestedCodes) return
+                infoNameVec.setSafe(idx, code)
+                valueVec.setTypeId(idx, INT32_BITMASK_LEG)
+                NullableIntHolder().also { h -> h.isSet = 1; h.value = value; valueVec.setSafe(idx, h) }
+                idx++
+            }
+
+            addString(SqlInfo.FLIGHT_SQL_SERVER_NAME_VALUE, "XTDB")
+            addString(SqlInfo.FLIGHT_SQL_SERVER_VERSION_VALUE, "dev")
+            // The ADBC Go driver (underlying the Python adbc_driver_flightsql package) reads this code
+            // at connect; without it set_autocommit(False) raises NOT_IMPLEMENTED. The value is the
+            // SqlSupportedTransaction enum — TRANSACTION means begin/commit/rollback are supported.
+            addInt32(
+                SqlInfo.FLIGHT_SQL_SERVER_TRANSACTION_VALUE,
+                SqlSupportedTransaction.SQL_SUPPORTED_TRANSACTION_TRANSACTION_VALUE
+            )
 
             valueVec.valueCount = idx
             root.rowCount = idx
         }
+    }
+
+    private companion object {
+        // GET_SQL_INFO `value` dense-union leg type ids (FlightSqlProducer.Schemas.GET_SQL_INFO_SCHEMA).
+        const val STRING_LEG: Byte = 0
+        const val INT32_BITMASK_LEG: Byte = 3
     }
 
     override fun getFlightInfoCatalogs(
