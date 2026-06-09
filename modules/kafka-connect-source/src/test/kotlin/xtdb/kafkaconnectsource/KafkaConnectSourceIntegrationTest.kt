@@ -2,6 +2,7 @@ package xtdb.kafkaconnectsource
 
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
+import org.apache.avro.Conversions
 import org.apache.avro.Schema as AvroSchema
 import org.apache.avro.generic.GenericData
 import org.apache.kafka.clients.admin.AdminClient
@@ -24,6 +25,17 @@ import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
+import java.math.BigDecimal
+import java.nio.ByteBuffer
+import java.sql.Array as SqlArray
+import java.sql.Date as SqlDate
+import java.sql.Time as SqlTime
+import java.sql.Timestamp
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.OffsetDateTime
+import java.time.ZonedDateTime
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -449,32 +461,32 @@ class KafkaConnectSourceIntegrationTest {
     }
 
     // Helpers that paper over JDBC's "could be any of these" behaviour for date / time / timestamp.
-    private fun toInstant(v: Any?): java.time.Instant = when (v) {
-        is java.time.Instant -> v
-        is java.time.ZonedDateTime -> v.toInstant()
-        is java.time.OffsetDateTime -> v.toInstant()
-        is java.sql.Timestamp -> v.toInstant()
+    private fun toInstant(v: Any?): Instant = when (v) {
+        is Instant -> v
+        is ZonedDateTime -> v.toInstant()
+        is OffsetDateTime -> v.toInstant()
+        is Timestamp -> v.toInstant()
         else -> error("unexpected timestamp type: ${v?.javaClass}")
     }
 
-    private fun toLocalDate(v: Any?): java.time.LocalDate = when (v) {
-        is java.time.LocalDate -> v
-        is java.sql.Date -> v.toLocalDate()
-        is String -> java.time.LocalDate.parse(v)
+    private fun toLocalDate(v: Any?): LocalDate = when (v) {
+        is LocalDate -> v
+        is SqlDate -> v.toLocalDate()
+        is String -> LocalDate.parse(v)
         else -> error("unexpected date type: ${v?.javaClass}")
     }
 
-    private fun toLocalTime(v: Any?): java.time.LocalTime = when (v) {
-        is java.time.LocalTime -> v
-        is java.sql.Time -> v.toLocalTime()
-        is String -> java.time.LocalTime.parse(v)
+    private fun toLocalTime(v: Any?): LocalTime = when (v) {
+        is LocalTime -> v
+        is SqlTime -> v.toLocalTime()
+        is String -> LocalTime.parse(v)
         else -> error("unexpected time type: ${v?.javaClass}")
     }
 
     /** JDBC returns arrays as `java.sql.Array` (PostgreSQL's `PgArray`); unwrap to a plain List. */
     private fun toList(v: Any?): List<Any?> = when (v) {
         is List<*> -> v
-        is java.sql.Array -> (v.array as Array<*>).toList()
+        is SqlArray -> (v.array as Array<*>).toList()
         else -> error("unexpected array type: ${v?.javaClass}")
     }
 
@@ -592,9 +604,9 @@ class KafkaConnectSourceIntegrationTest {
         // `*_val` fields: typed temporals via `title` + integer. Producer emits Connect's wire
         // encoding for each logical type: Timestamp → millis since epoch, Date → days since epoch,
         // Time → millis since midnight.
-        val expectedTs = java.time.Instant.parse("2024-06-08T12:34:56.789Z")
-        val expectedDate = java.time.LocalDate.of(2024, 6, 8)
-        val expectedTime = java.time.LocalTime.of(12, 34, 56)
+        val expectedTs = Instant.parse("2024-06-08T12:34:56.789Z")
+        val expectedDate = LocalDate.of(2024, 6, 8)
+        val expectedTime = LocalTime.of(12, 34, 56)
         val tsMillis = expectedTs.toEpochMilli()
         val daysSinceEpoch = expectedDate.toEpochDay()
         val millisOfDay = expectedTime.toNanoOfDay() / 1_000_000L
@@ -845,15 +857,15 @@ class KafkaConnectSourceIntegrationTest {
         """.trimIndent()
         val avroSchema = AvroSchema.Parser().parse(schemaJson)
 
-        val placedAt = java.time.Instant.parse("2024-06-08T12:34:56.789Z")
-        val attempt1 = java.time.Instant.parse("2024-06-08T14:00:00Z")
-        val attempt2 = java.time.Instant.parse("2024-06-09T10:00:00Z")
-        val subtotal = java.math.BigDecimal("999.99")
-        val lineA = java.math.BigDecimal("100.00")
-        val lineB = java.math.BigDecimal("250.50")
+        val placedAt = Instant.parse("2024-06-08T12:34:56.789Z")
+        val attempt1 = Instant.parse("2024-06-08T14:00:00Z")
+        val attempt2 = Instant.parse("2024-06-09T10:00:00Z")
+        val subtotal = BigDecimal("999.99")
+        val lineA = BigDecimal("100.00")
+        val lineB = BigDecimal("250.50")
 
-        val decimalConv = org.apache.avro.Conversions.DecimalConversion()
-        fun decimalBytes(value: java.math.BigDecimal, fieldName: String, parent: AvroSchema): java.nio.ByteBuffer {
+        val decimalConv = Conversions.DecimalConversion()
+        fun decimalBytes(value: BigDecimal, fieldName: String, parent: AvroSchema): ByteBuffer {
             val fieldSchema = parent.getField(fieldName).schema()
             return decimalConv.toBytes(value, fieldSchema, fieldSchema.logicalType)
         }
@@ -870,7 +882,7 @@ class KafkaConnectSourceIntegrationTest {
         }
 
         val lineSchema = avroSchema.getField("lines_by_sku").schema().valueType
-        fun lineRec(amt: java.math.BigDecimal) = GenericData.Record(lineSchema).apply {
+        fun lineRec(amt: BigDecimal) = GenericData.Record(lineSchema).apply {
             put("amount", decimalBytes(amt, "amount", lineSchema))
         }
 
@@ -976,16 +988,16 @@ class KafkaConnectSourceIntegrationTest {
         """.trimIndent()
         val avroSchema = AvroSchema.Parser().parse(schemaJson)
 
-        val decimal = java.math.BigDecimal("123.45")
-        val decimalBytes = org.apache.avro.Conversions.DecimalConversion().toBytes(
+        val decimal = BigDecimal("123.45")
+        val decimalBytes = Conversions.DecimalConversion().toBytes(
             decimal,
             avroSchema.getField("decimal_val").schema(),
             avroSchema.getField("decimal_val").schema().logicalType,
         )
 
-        val expectedDate = java.time.LocalDate.of(2024, 6, 8)
-        val expectedTime = java.time.LocalTime.of(12, 34, 56)
-        val expectedTs = java.time.Instant.parse("2024-06-08T12:34:56.789Z")
+        val expectedDate = LocalDate.of(2024, 6, 8)
+        val expectedTime = LocalTime.of(12, 34, 56)
+        val expectedTs = Instant.parse("2024-06-08T12:34:56.789Z")
 
         val daysSinceEpoch = expectedDate.toEpochDay().toInt()
         val millisOfDay = ((expectedTime.toNanoOfDay() / 1_000_000L).toInt())
@@ -1002,7 +1014,7 @@ class KafkaConnectSourceIntegrationTest {
             put("float_val", 3.14f)
             put("double_val", 2.71828)
             put("string_val", "hello")
-            put("bytes_val", java.nio.ByteBuffer.wrap(byteArrayOf(0x01, 0x02, 0x03)))
+            put("bytes_val", ByteBuffer.wrap(byteArrayOf(0x01, 0x02, 0x03)))
             put("nullable_val", "maybe")
             put("enum_val", GenericData.EnumSymbol(enumSchema, "GREEN"))
             put("array_val", listOf(1, 2, 3))
@@ -1055,7 +1067,7 @@ class KafkaConnectSourceIntegrationTest {
             assertNotNull(bytes)
             val byteArr: ByteArray = when (bytes) {
                 is ByteArray -> bytes
-                is java.nio.ByteBuffer -> ByteArray(bytes.remaining()).also { bytes.duplicate().get(it) }
+                is ByteBuffer -> ByteArray(bytes.remaining()).also { bytes.duplicate().get(it) }
                 else -> error("unexpected bytes type: ${bytes!!::class}")
             }
             assertEquals(listOf<Byte>(0x01, 0x02, 0x03), byteArr.toList())
