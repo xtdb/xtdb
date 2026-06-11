@@ -4,7 +4,6 @@ import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.RENDEZVOUS
-import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.Metrics.withSpan
 import xtdb.NodeBase
@@ -137,12 +136,13 @@ class LeaderLogProcessor(
         }
     }
 
-    private val sourceLogCh =
-        Channel<SourceLogTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
-    private val extSourceCh =
-        Channel<ExtSourceTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
-    private val gcCh =
-        Channel<GcTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
+    // One channel for all task sources, received with plain `receive` — NOT per-source channels
+    // under `selectUnbiased`: `onUndeliveredElement` is only reliable for plain send/receive, and
+    // a task lost in a select/cancellation race leaves its submitter awaiting `onComplete`
+    // forever — from the shared log-consumer loop, that deadlocks `Database.close` (#5711).
+    // FIFO across sources also keeps one producer from starving the others.
+    private val taskCh =
+        Channel<PersisterTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
 
     private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
         val record = task.record
@@ -251,11 +251,7 @@ class LeaderLogProcessor(
     }
 
     private suspend fun submit(task: PersisterTask) {
-        when (task) {
-            is SourceLogTask -> sourceLogCh.send(task)
-            is ExtSourceTask -> extSourceCh.send(task)
-            is GcTask -> gcCh.send(task)
-        }
+        taskCh.send(task)
         task.onComplete.await()
     }
 
@@ -303,17 +299,12 @@ class LeaderLogProcessor(
     ) {
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
-            // Persister: unbiased select across source-log records, external-source resolved
-            // txs, and GC trie deletions — so a slow producer on one channel can't starve the
-            // others.
+            // Persister: source-log records, external-source resolved txs, and GC trie
+            // deletions, one queue — see the `taskCh` declaration for why it's a single channel.
             launch {
                 try {
                     while (true) {
-                        val task: PersisterTask = selectUnbiased {
-                            sourceLogCh.onReceive { it }
-                            extSourceCh.onReceive { it }
-                            gcCh.onReceive { it }
-                        }
+                        val task: PersisterTask = taskCh.receive()
                         try {
                             when (task) {
                                 is SourceLogTask.Record -> handleSourceLogRecord(task)
@@ -339,9 +330,7 @@ class LeaderLogProcessor(
                     }
                 } catch (_: Throwable) {
                 } finally {
-                    sourceLogCh.close()
-                    extSourceCh.close()
-                    gcCh.close()
+                    taskCh.close()
                 }
             }
 
