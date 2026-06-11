@@ -128,6 +128,8 @@ interface Compactor : AutoCloseable {
 
                                     TriesAdded(Storage.VERSION, bp.epoch, addedTries)
                                 }
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: ClosedByInterruptException) {
                                 throw InterruptedException(e.message)
                             } catch (e: InterruptedException) {
