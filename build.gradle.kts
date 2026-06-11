@@ -220,6 +220,23 @@ allprojects {
             }
         }
 
+        // The hang watchdog's coroutine probes install statically via -javaagent (premain needs
+        // only java.instrument, already in the custom JRE) rather than dynamic self-attach,
+        // which would force jdk.attach into the jlink module list that production Docker images
+        // share. Test tasks only — no production artifact carries any of this.
+        val hangWatchdogAgent = configurations.create("hangWatchdogAgent") {
+            isCanBeConsumed = false
+            isCanBeResolved = true
+            isTransitive = false // so .singleFile below resolves to exactly the agent jar
+        }
+        dependencies.addProvider("hangWatchdogAgent", libs.kotlinx.coroutines.debug)
+
+        tasks.withType<Test> {
+            jvmArgumentProviders.add(CommandLineArgumentProvider {
+                listOf("-javaagent:${hangWatchdogAgent.singleFile}")
+            })
+        }
+
         // Use custom JRE for all Test and JavaExec tasks (skip with -PfullJdk)
         if (useCustomJre) {
             val customLauncher = proj.customJreLauncher()
@@ -255,6 +272,9 @@ allprojects {
             testImplementation(libs.junit.jupiter.params)
             testRuntimeOnly(libs.junit.jupiter.engine)
             testRuntimeOnly(libs.junit.platform.launcher)
+
+            // dumps coroutines + threads when the test plan goes quiet too long — see #5711
+            testRuntimeOnly(project(":modules:test-watchdog"))
 
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)

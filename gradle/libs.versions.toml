@@ -82,6 +82,7 @@ exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time", versio
 
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlin-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines" }
+kotlinx-coroutines-debug = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-debug", version.ref = "kotlin-coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.10.0" }
 mockk = { group = "io.mockk", name = "mockk", version = "1.14.9" }
 kaml = { group = "com.charleskorn.kaml", name = "kaml", version = "0.104.0" }
