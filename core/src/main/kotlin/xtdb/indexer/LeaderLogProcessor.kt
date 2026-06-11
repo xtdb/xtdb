@@ -250,48 +250,6 @@ class LeaderLogProcessor(
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
-    // Unbiased select across the three sources so a slow producer on one channel can't starve
-    // the others. The three sources are: source-log records, external-source resolved txs, and
-    // GC trie deletions.
-    private val persisterJob: Job = scope.launch {
-        try {
-            while (true) {
-                val task: PersisterTask = selectUnbiased {
-                    sourceLogCh.onReceive { it }
-                    extSourceCh.onReceive { it }
-                    gcCh.onReceive { it }
-                }
-                try {
-                    when (task) {
-                        is SourceLogTask.Record -> handleSourceLogRecord(task)
-                        is SourceLogTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, task.srcMsgId)
-                        is ExtSourceTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, srcMsgId = null)
-                        is GcTask.TriesDeleted -> handleTriesDeleted(task)
-                    }
-                    task.onComplete.complete(Unit)
-                } catch (e: CancellationException) {
-                    task.onComplete.cancel(e)
-                    throw e
-                } catch (e: InterruptedException) {
-                    task.onComplete.completeExceptionally(e)
-                    throw e
-                } catch (e: Interrupted) {
-                    task.onComplete.completeExceptionally(e)
-                    throw e
-                } catch (e: Throwable) {
-                    watchers.notifyError(e)
-                    task.onComplete.completeExceptionally(e)
-                    throw e
-                }
-            }
-        } catch (_: Throwable) {
-        } finally {
-            sourceLogCh.close()
-            extSourceCh.close()
-            gcCh.close()
-        }
-    }
-
     private suspend fun submit(task: PersisterTask) {
         when (task) {
             is SourceLogTask -> sourceLogCh.send(task)
@@ -334,27 +292,70 @@ class LeaderLogProcessor(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    private val extJob = extSource?.let { source ->
-        scope.launch {
-            try {
-                source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                watchers.notifyError(e)
-            }
-        }
-    }
-
-    init {
-        // Cleanup rides the job tree, not an explicit teardown call: once the leader term's scope is
-        // cancelled and its coroutines (persister, ext source, GCs) have joined, free what this term
-        // opened — leaf-first. `allocator` must be `this@…`-qualified: bare `allocator` in an init
-        // lambda binds the ctor param (the parent), not this child field.
-        scope.coroutineContext.job.invokeOnCompletion {
+    // Hosts persister + the optional ext-source loop + cleanup. See dev/doc/coroutines.adoc /
+    // #5703 for why this uses launchWithCleanup rather than invokeOnCompletion.
+    private val termJob: Job = scope.launchWithCleanup(
+        cleanup = {
             extSource?.close()
             replicaProducer.close()
             this@LeaderLogProcessor.allocator.close()
+        }
+    ) {
+        // supervisorScope so an ext-source crash doesn't kill the persister.
+        supervisorScope {
+            // Persister: unbiased select across source-log records, external-source resolved
+            // txs, and GC trie deletions — so a slow producer on one channel can't starve the
+            // others.
+            launch {
+                try {
+                    while (true) {
+                        val task: PersisterTask = selectUnbiased {
+                            sourceLogCh.onReceive { it }
+                            extSourceCh.onReceive { it }
+                            gcCh.onReceive { it }
+                        }
+                        try {
+                            when (task) {
+                                is SourceLogTask.Record -> handleSourceLogRecord(task)
+                                is SourceLogTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, task.srcMsgId)
+                                is ExtSourceTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, srcMsgId = null)
+                                is GcTask.TriesDeleted -> handleTriesDeleted(task)
+                            }
+                            task.onComplete.complete(Unit)
+                        } catch (e: CancellationException) {
+                            task.onComplete.cancel(e)
+                            throw e
+                        } catch (e: InterruptedException) {
+                            task.onComplete.completeExceptionally(e)
+                            throw e
+                        } catch (e: Interrupted) {
+                            task.onComplete.completeExceptionally(e)
+                            throw e
+                        } catch (e: Throwable) {
+                            watchers.notifyError(e)
+                            task.onComplete.completeExceptionally(e)
+                            throw e
+                        }
+                    }
+                } catch (_: Throwable) {
+                } finally {
+                    sourceLogCh.close()
+                    extSourceCh.close()
+                    gcCh.close()
+                }
+            }
+
+            extSource?.let { source ->
+                launch {
+                    try {
+                        source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        watchers.notifyError(e)
+                    }
+                }
+            }
         }
     }
 

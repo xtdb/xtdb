@@ -1,0 +1,70 @@
+= Coroutines in XTDB
+
+:written: 2026-06-11
+
+Notes on coroutine patterns and gotchas specific to this codebase, supplementing the link:https://kotlinlang.org/docs/coroutines-overview.html[official Kotlin docs].
+We are on kotlinx-coroutines `1.10.2`; source links point there.
+
+== Patterns
+
+=== `launchWithCleanup` for cleanup that gates parent close
+
+For "do work, then close some things, and make sure a parent's `cancelAndJoin` waits for the close," use `xtdb.util.launchWithCleanup`.
+
+[source,kotlin]
+----
+scope.launchWithCleanup(
+    cleanup = {
+        extSource?.close()
+        replicaProducer.close()
+        allocator.close()
+    }
+) {
+    supervisorScope {
+        launch { runPersister() }
+        launch { runExt() }
+    }
+}
+----
+
+The helper's kdoc states the lifecycle property it gives you.
+In-tree users: `LeaderLogProcessor`, `FollowerLogProcessor`.
+
+Most reaches for `Job.invokeOnCompletion` to close resources should be this helper instead — see the gotcha below.
+
+== Gotchas
+
+=== `invokeOnCompletion` is not a fence over `cancelAndJoin`
+
+A `Job`'s state CASes to its final state *before* its `invokeOnCompletion` handlers iterate.
+Observers of the job's state — `join`, `isCompleted`, `invokeOnCompletion(invokeImmediately=false)` — see the job as "done" the moment the CAS lands, while handlers are still running on whatever thread triggered finalisation.
+
+In particular, a parent waiting on a child via `tryWaitForChild` short-circuits on a child whose state is already final:
+
+[source,kotlin]
+----
+private tailrec fun tryWaitForChild(state: Finishing, child: ChildHandleNode, ...): Boolean {
+    val handle = child.childJob.invokeOnCompletion(
+        invokeImmediately = false,
+        handler = ChildCompletion(this, state, child, ...)
+    )
+    if (handle !== NonDisposableHandle) return true   // <1>
+    val nextChild = child.nextChild() ?: return false  // <2>
+    return tryWaitForChild(state, nextChild, ...)
+}
+----
+<1> Child still incomplete — register the wait handler, return.
+<2> Child already final — the parent skips it without registering a wait.
+
+So if your `invokeOnCompletion` handler does any non-trivial work — slow I/O, multiple `.close()` calls — that work can race the parent's `cancelAndJoin` returning and whatever happens next.
+For cleanup that needs to gate a parent's close, put it in the coroutine body's `try/finally` instead (or use `launchWithCleanup`).
+
+Background: this was the root cause of link:https://github.com/xtdb/xtdb/issues/5703[#5703].
+
+== Source pointers
+
+* link:https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/kotlinx-coroutines-core/common/src/JobSupport.kt[`JobSupport.kt`] — `Job` state machine.
+  Functions worth knowing: `finalizeFinishingState`, `completeStateFinalization`, `tryWaitForChild`, `continueCompleting`, `notifyCompletion`, `cancelImpl`.
+* link:https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/kotlinx-coroutines-core/common/src/CompletionHandler.common.kt[`CompletionHandler.common.kt`] — `JobNode` hierarchy (`ChildHandleNode`, `ChildCompletion`, `ResumeOnCompletion`).
+* link:https://kotlinlang.org/docs/cancellation-and-timeouts.html[Kotlin: Cancellation and timeouts] — official guide.
+* link:https://elizarov.medium.com/structured-concurrency-722d765aa952[Structured concurrency] (Elizarov) — design intent behind parent/child Job relationships.
