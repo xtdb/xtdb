@@ -73,7 +73,7 @@ class LogProcessor(
     // The running term: the role-specific subsystem and the SupervisorJob its processor runs under (a
     // child of the database scope). `sys` holds it as one atomically-swapped value — a job-less term
     // is unrepresentable. Cancelling the job tears the term down; structured concurrency joins the
-    // term's coroutines and each processor frees what it opened via its own `invokeOnCompletion`.
+    // term's coroutines and each processor frees what it opened via its own `launchWithCleanup`.
     private sealed class SubSystem(private val job: Job) {
         suspend fun cancelAndJoin() = job.cancelAndJoin()
     }

@@ -302,7 +302,7 @@ class Database(
                     )
 
                     // The leader term owns its replica producer and ext source; both are freed by
-                    // LeaderLogProcessor's `invokeOnCompletion` when `termScope` is cancelled.
+                    // LeaderLogProcessor's `launchWithCleanup` cleanup when `termScope` is cancelled.
                     override fun openLeader(
                         termScope: CoroutineScope,
                         replicaProducer: Log.AtomicProducer<ReplicaMessage>,

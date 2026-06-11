@@ -87,7 +87,7 @@ class ExternalSourceTest {
 
     // The leader is launched into `backgroundScope`, which runTest cancels at the end of the test —
     // that cancel is the teardown: it stops the persister and ext-source loop and, once they've
-    // joined, the leader's `invokeOnCompletion` frees its allocator and replica producer.
+    // joined, the leader's `launchWithCleanup` cleanup frees its allocator and replica producer.
     private fun TestScope.leaderProc(
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
