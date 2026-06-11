@@ -310,6 +310,49 @@ class KafkaConnectSourceIntegrationTest {
     }
 
     @Test
+    fun `indexer failure halts the source`() = runTest(timeout = 120.seconds) {
+        val sourceTopic = "events-${UUID.randomUUID()}"
+        createTopic(sourceTopic)
+
+        produceBytes(sourceTopic, "first", """{"name":"First"}""".toByteArray())
+
+        openNode("xt-log-${UUID.randomUUID()}").use { node ->
+            attach(node, "events", """
+                log: !Kafka
+                  cluster: kafka
+                  topic: test-replica-${UUID.randomUUID()}
+                externalSource: !KafkaConnect
+                  remote: kafka
+                  topic: $sourceTopic
+                  connectConfig:
+                    key.converter: org.apache.kafka.connect.storage.StringConverter
+                    value.converter: org.apache.kafka.connect.json.JsonConverter
+                    value.converter.schemas.enable: "false"
+                  indexer: !Docs
+                    table: events
+            """.trimIndent())
+
+            awaitCondition("first record ingested — source is healthy") {
+                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty()
+            }
+
+            produceBytes(sourceTopic, null, """{"name":"no-id"}""".toByteArray())
+            produceBytes(sourceTopic, "second", """{"name":"Second"}""".toByteArray())
+
+            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            awaitCondition("source halts with an ingestion error") {
+                cat["events"]?.ingestionError != null
+            }
+
+            val second = xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'second'")
+            assertTrue(second.isEmpty(), "second shouldn't appear — source halts at the un-indexable record under halt-on-failure")
+
+            val aborted = xtQueryDb(node, "events", "SELECT _id FROM xt.txs WHERE committed = false")
+            assertTrue(aborted.isEmpty(), "no aborted txs under halt-on-failure, got: $aborted")
+        }
+    }
+
+    @Test
     fun `SMT chain applies ExtractField to unwrap envelope`() = runTest(timeout = 120.seconds) {
         val sourceTopic = "events-${UUID.randomUUID()}"
         createTopic(sourceTopic)

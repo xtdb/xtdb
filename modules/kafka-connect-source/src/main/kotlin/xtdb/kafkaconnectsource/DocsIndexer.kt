@@ -12,7 +12,7 @@ import org.apache.kafka.connect.data.Struct
 import org.apache.kafka.connect.data.Time as ConnectTime
 import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
-import xtdb.error.Fault
+import xtdb.error.Anomaly.Companion.toAnomaly
 import xtdb.error.Incorrect
 import xtdb.indexer.OpenTx
 import xtdb.indexer.TxIndexer
@@ -73,8 +73,7 @@ class DocsIndexer(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    val coords = coordsFor(rec)
-                    TxResult.Aborted(wrapWithCoords(e, rec, coords), userMetadata = coords)
+                    throw e.toAnomaly(coordsFor(rec))
                 }
             }
         }
@@ -82,14 +81,6 @@ class DocsIndexer(
 
     private fun coordsFor(rec: SinkRecord): Map<String, Any?> =
         mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset())
-
-    private fun wrapWithCoords(cause: Throwable, rec: SinkRecord, coords: Map<String, Any?>): Throwable =
-        Fault(
-            "!Docs indexer failed at ${rec.topic()}-${rec.kafkaPartition()} offset ${rec.kafkaOffset()}: ${cause.message}",
-            "xtdb.kafka-connect-source/docs-indexer-failed",
-            coords,
-            cause = cause,
-        )
 
     private fun writeRecord(openTx: OpenTx, rec: SinkRecord) {
         val openTxTable = openTx.table(table)
