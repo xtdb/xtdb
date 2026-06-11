@@ -26,6 +26,9 @@ project(":modules:google-cloud").name = "xtdb-google-cloud"
 include("modules:bench", "modules:datasets")
 project(":modules:datasets").name = "xtdb-datasets"
 
+// test infra, not published
+include("modules:test-watchdog")
+
 include("monitoring")
 if (file("monitoring/docker-image").isDirectory) {
     include("monitoring:docker-image")

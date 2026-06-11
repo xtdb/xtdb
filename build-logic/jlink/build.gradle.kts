@@ -26,6 +26,8 @@ val jlinkModules = listOf(
     // clojureRepl
     "jdk.compiler",
     "jdk.javadoc",
+    // DebugProbes dynamic self-attach (test hang watchdog, #5711)
+    "jdk.attach",
 )
 
 val customJreDir = layout.buildDirectory.dir("custom-jre")

@@ -256,6 +256,10 @@ allprojects {
             testRuntimeOnly(libs.junit.jupiter.engine)
             testRuntimeOnly(libs.junit.platform.launcher)
 
+            // dumps coroutines + threads when a test exceeds the hang threshold — see #5711
+            if (proj.path != ":modules:test-watchdog")
+                testRuntimeOnly(project(":modules:test-watchdog"))
+
             testImplementation(libs.testcontainers)
             testImplementation(libs.testcontainers.kafka)
             testImplementation(libs.testcontainers.keycloak)
