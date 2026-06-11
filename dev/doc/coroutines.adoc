@@ -27,12 +27,42 @@ scope.launchWithCleanup(
 }
 ----
 
-The helper's kdoc states the lifecycle property it gives you.
+The helper's kdoc states the lifecycle contract it gives you, and when *not* to use it (resources the coroutine acquires itself belong in the body, under `.use`/`try/finally`, with a plain `launch`).
 In-tree users: `LeaderLogProcessor`, `FollowerLogProcessor`.
 
-Most reaches for `Job.invokeOnCompletion` to close resources should be this helper instead — see the gotcha below.
+Most reaches for `Job.invokeOnCompletion` to close resources should be this helper instead — see the gotchas below.
+
+When the body hosts further workers (its own `launch`es), wrap them in `supervisorScope`/`coroutineScope` rather than launching them as plain siblings: the scope builder doesn't return until every child has completed, so the `finally` — and with it the cleanup — runs strictly after the workers have released what they hold.
+Unfenced workers would be children of the hosting Job, not of the body statement — the cleanup would race them.
+
+.Considered, deferred — wrapping the body in `coroutineScope`
+[NOTE]
+====
+The fencing obligation above could be made structural instead of documented, by the helper wrapping the body itself:
+
+[source,kotlin]
+----
+try {
+    ensureActive()
+    coroutineScope(body)   // body's launches attach to the block's own Job
+} finally {
+    withContext(NonCancellable) { cleanup() }
+}
+----
+
+`coroutineScope` doesn't return until every child completes, so "cleanup runs after all body-launched workers" holds by construction — the unfenced state stops being representable.
+A body wanting failure isolation between its workers writes `supervisorScope` inside, as `LeaderLogProcessor` already does; the extra Job per scope builder is not a factor (one allocation, started undispatched, no thread hop).
+
+Deferred until more worker-hosting callers exist, to confirm the fencing default from observed usage rather than one caller's shape.
+====
 
 == Gotchas
+
+=== A cancel before first dispatch skips the coroutine body entirely
+
+With `CoroutineStart.DEFAULT`, a coroutine cancelled before its first dispatch never executes its block — including any `try/finally` inside it.
+Cleanup hung on a `finally` therefore silently doesn't run if the scope is cancelled in the window between `launch` returning and the dispatcher first running the coroutine — leaking anything acquired before the launch (allocators, drivers) that the cleanup was meant to free.
+`launchWithCleanup` starts its coroutine with `CoroutineStart.ATOMIC` (stable since kotlinx-coroutines 1.9) to close this window, but only so the `try/finally` is entered: an `ensureActive()` ahead of the body keeps default-start semantics for the body itself, so user code still doesn't run when cancellation has already landed.
 
 === `invokeOnCompletion` is not a fence over `cancelAndJoin`
 

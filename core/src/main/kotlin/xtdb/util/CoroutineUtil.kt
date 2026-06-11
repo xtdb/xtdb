@@ -1,35 +1,43 @@
 package xtdb.util
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * Launches a child coroutine that runs [body], then runs [cleanup] under [NonCancellable].
  *
- * The cleanup is part of the launched Job's lifecycle: the Job doesn't reach a final state
- * until cleanup has returned, so a parent's `cancelAndJoin` waits for it. That's the
- * property [kotlinx.coroutines.Job.invokeOnCompletion] doesn't give you — see
- * `dev/doc/coroutines.adoc` / xtdb#5703.
+ * Guarantees:
+ * - [cleanup] runs exactly once, after the body — whether the body returned, threw, was
+ *   cancelled mid-flight, or was cancelled before it started (the coroutine starts
+ *   [CoroutineStart.ATOMIC]; the [ensureActive] keeps default-start semantics for the body).
+ * - The Job doesn't reach a final state until cleanup has returned, so a parent's
+ *   `cancelAndJoin` waits for it — the property [Job.invokeOnCompletion] doesn't give you.
  *
- * Cleanup runs after the body whether the body returned normally, threw, or was cancelled.
- * [NonCancellable] keeps cleanup running through cancellation requests that arrive while it
- * is in flight.
+ * Intended for cleanup of resources that exist before the launch. If the body acquires its
+ * own resources, use `.use`/`try/finally` inside a plain [launch] instead.
  *
- * If [cleanup] throws, the Job ends `CompletedExceptionally` and the exception surfaces via
- * the scope's [kotlinx.coroutines.CoroutineExceptionHandler].
+ * Workers the body launches are children of the hosting Job, not of the body statement —
+ * fence them with `supervisorScope`/`coroutineScope`, or they race the cleanup.
  *
- * [body] defaults to [awaitCancellation] for the "exists only to run cleanup on cancel"
- * shape; pass a body for "do work, then clean up after."
+ * If [cleanup] throws, the Job completes exceptionally and the exception surfaces via the
+ * scope's [kotlinx.coroutines.CoroutineExceptionHandler].
+ *
+ * [body] defaults to [awaitCancellation] for the "exists only to run cleanup on cancel" shape.
+ *
+ * Rationale and the underlying kotlinx semantics: `dev/doc/coroutines.adoc` / xtdb#5703.
  */
 fun CoroutineScope.launchWithCleanup(
     cleanup: suspend () -> Unit,
     body: suspend CoroutineScope.() -> Unit = { awaitCancellation() }
-): Job = launch {
+): Job = launch(start = CoroutineStart.ATOMIC) {
     try {
+        ensureActive()
         body()
     } finally {
         withContext(NonCancellable) { cleanup() }
