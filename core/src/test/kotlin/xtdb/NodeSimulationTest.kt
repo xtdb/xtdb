@@ -62,8 +62,8 @@ data class MockDatabase(
     fun close() {
         // The owner stops the GC and compaction processes (the leaves are pure scope-launched
         // processes now); cancelling the scopes they run under is the whole teardown. The compactor
-        // frees its driver's resources via invokeOnCompletion as its job completes. runBlocking only
-        // because this teardown is non-suspend.
+        // frees its driver's resources via launchWithCleanup before the join returns. runBlocking
+        // only because this teardown is non-suspend.
         runBlocking {
             gcScope.coroutineContext.job.cancelAndJoin()
             compactorScope.coroutineContext.job.cancelAndJoin()

@@ -8,6 +8,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Launches a child coroutine that runs [body], then runs [cleanup] under [NonCancellable].
@@ -33,9 +35,10 @@ import kotlinx.coroutines.withContext
  * Rationale and the underlying kotlinx semantics: `dev/doc/coroutines.adoc` / xtdb#5703.
  */
 fun CoroutineScope.launchWithCleanup(
+    context: CoroutineContext = EmptyCoroutineContext,
     cleanup: suspend () -> Unit,
     body: suspend CoroutineScope.() -> Unit = { awaitCancellation() }
-): Job = launch(start = CoroutineStart.ATOMIC) {
+): Job = launch(context, start = CoroutineStart.ATOMIC) {
     try {
         ensureActive()
         body()

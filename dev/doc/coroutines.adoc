@@ -28,7 +28,7 @@ scope.launchWithCleanup(
 ----
 
 The helper's kdoc states the lifecycle contract it gives you, and when *not* to use it (resources the coroutine acquires itself belong in the body, under `.use`/`try/finally`, with a plain `launch`).
-In-tree users: `LeaderLogProcessor`, `FollowerLogProcessor`.
+In-tree users: `LeaderLogProcessor`, `FollowerLogProcessor`, `Compactor`.
 
 Most reaches for `Job.invokeOnCompletion` to close resources should be this helper instead — see the gotchas below.
 

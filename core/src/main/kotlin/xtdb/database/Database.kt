@@ -134,7 +134,7 @@ class Database(
         runBlocking {
             // One cancel for the whole job tree: the compactor, the source-log subscription and the
             // live leader/follower term all run under `job`, so cancelling and joining it stops them
-            // and runs their `invokeOnCompletion` frees (driver, allocator, replica producer, ext
+            // and waits for their `launchWithCleanup` frees (driver, allocator, replica producer, ext
             // source) before `closeAll` frees the database allocator below.
             job?.cancelAndJoin()
         }
@@ -267,7 +267,7 @@ class Database(
             val job = Job()
 
             // A child of the database `job`, so `close()`'s single `job.cancelAndJoin()` stops the
-            // compactor and frees its driver (via the compactor job's invokeOnCompletion) before the
+            // compactor and frees its driver (via the compactor's `launchWithCleanup`) before the
             // database allocator closes. Also registered with safelyOpening so a failure later in
             // `open` cancels the loop — it runs against the driver, which safelyOpening would
             // otherwise free out from under it.

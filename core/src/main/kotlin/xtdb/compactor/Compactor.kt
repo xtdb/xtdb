@@ -166,13 +166,6 @@ interface Compactor : AutoCloseable {
 
         override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
-            // Child of the owner scope: cancelling that scope stops the loop and its per-job
-            // coroutines, and the driver's resources (child allocator + SegmentMerge temp dir) are
-            // freed when this job completes — leaf-first, after every in-flight compaction buffer's
-            // `.use` has released, so no buffer ever outlives its allocator.
-            private val dbJob = Job(scope.coroutineContext.job)
-            private val loopScope = CoroutineScope(dbJob + dispatcher)
-
             private val trieCatalog = dbState.trieCatalog
             private val liveIndex = dbState.liveIndexOrNull
 
@@ -201,64 +194,70 @@ interface Compactor : AutoCloseable {
             }
 
             init {
-                // Free the driver's resources when the compactor job completes — fires even if the
-                // job is cancelled before the loop is ever scheduled, so the driver never leaks.
-                dbJob.invokeOnCompletion {
-                    driver.close()
-                    LOGGER.debug("compactor closed")
-                }
+                // Cancelling the owner scope stops the loop and its per-job coroutines, then frees
+                // the driver's resources (child allocator + SegmentMerge temp dir) — leaf-first:
+                // `supervisorScope` doesn't return until every in-flight job's `.use` has released
+                // its buffers, so no buffer outlives its allocator, and the cleanup gates the
+                // owner's `cancelAndJoin` (see dev/doc/coroutines.adoc / #5703 for why this is
+                // launchWithCleanup rather than invokeOnCompletion).
+                scope.launchWithCleanup(
+                    dispatcher + CoroutineName("outer loop"),
+                    cleanup = {
+                        driver.close()
+                        LOGGER.debug("compactor closed")
+                    }
+                ) {
+                    // supervisorScope so a failed job doesn't cancel the loop or its sibling jobs.
+                    supervisorScope {
+                        while (true) {
+                            availableJobs =
+                                jobCalculator.availableJobs(trieCatalog)
+                                    .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
-                val jobsScope = CoroutineScope(SupervisorJob(dbJob) + jobsDispatcher)
+                            if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
+                                LOGGER.trace("sending idle")
+                                compactAllPromise?.complete(Unit)
+                            }
 
-                loopScope.launch(CoroutineName("outer loop")) {
-                    while (true) {
-                        availableJobs =
-                            jobCalculator.availableJobs(trieCatalog)
-                                .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
+                            availableJobs.keys.forEach { jobKey ->
+                                if (queuedJobs.add(jobKey)) {
+                                    launch(jobsDispatcher + CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
+                                        jobsSemaphore.withPermit {
+                                            // check it's still required
+                                            val job = availableJobs[jobKey]
+                                            if (job != null) {
+                                                LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
 
-                        if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
-                            LOGGER.trace("sending idle")
-                            compactAllPromise?.complete(Unit)
-                        }
+                                                val timer = meterRegistry?.let { Timer.start(it) }
+                                                val triesAdded = driver.executeJob(job)
+                                                jobTimer?.let { timer?.stop(it) }
+                                                driver.publishTries(triesAdded)
 
-                        availableJobs.keys.forEach { jobKey ->
-                            if (queuedJobs.add(jobKey)) {
-                                jobsScope.launch(CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
-                                    jobsSemaphore.withPermit {
-                                        // check it's still required
-                                        val job = availableJobs[jobKey]
-                                        if (job != null) {
-                                            LOGGER.debug("compacting '${job.table.sym}' ${job.trieKeys} -> ${job.outputTrieKey}")
-
-                                            val timer = meterRegistry?.let { Timer.start(it) }
-                                            val triesAdded = driver.executeJob(job)
-                                            jobTimer?.let { timer?.stop(it) }
-                                            driver.publishTries(triesAdded)
-
-                                            LOGGER.debug {
-                                                buildString {
-                                                    append("compacted '${job.table.sym}'")
-                                                    append(" -> ")
-                                                    append(
-                                                        triesAdded.tries
-                                                            .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                                LOGGER.debug {
+                                                    buildString {
+                                                        append("compacted '${job.table.sym}'")
+                                                        append(" -> ")
+                                                        append(
+                                                            triesAdded.tries
+                                                                .joinToString(prefix = "(", postfix = ")") { it.trieKey })
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
-                                    // so this node doesn't attempt it again
-                                    doneCh.send(jobKey)
+                                        // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
+                                        // so this node doesn't attempt it again
+                                        doneCh.send(jobKey)
+                                    }
                                 }
                             }
-                        }
 
-                        select {
-                            doneCh.onReceive { queuedJobs.remove(it) }
+                            select {
+                                doneCh.onReceive { queuedJobs.remove(it) }
 
-                            wakeupCh.onReceive {
-                                LOGGER.trace("wakey wakey")
+                                wakeupCh.onReceive {
+                                    LOGGER.trace("wakey wakey")
+                                }
                             }
                         }
                     }
