@@ -19,7 +19,6 @@ import xtdb.database.ExternalSource
 import xtdb.indexer.OpenTx
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
-import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.postgres.proto.PostgresSourceConfig
@@ -153,13 +152,12 @@ class PostgresSource(
             return PostgresSource(dbName, driver, slotName, meterRegistry)
         }
 
-        override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.externalSource = ProtoAny.pack(postgresSourceConfig {
+        override fun toProto(): ProtoAny =
+            ProtoAny.pack(postgresSourceConfig {
                 remote = this@Factory.remote
                 slotName = this@Factory.slotName
                 publicationName = this@Factory.publicationName
             }, PROTO_TAG_PREFIX)
-        }
 
         class Registration : ExternalSource.Registration {
             override val protoTag: String get() = "$PROTO_TAG_PREFIX/xtdb.postgres.proto.PostgresSourceConfig"

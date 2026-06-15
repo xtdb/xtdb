@@ -32,7 +32,6 @@ import xtdb.api.RemoteAlias
 import xtdb.api.log.KafkaCluster
 import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
-import xtdb.database.proto.DatabaseConfig
 import xtdb.error.Incorrect
 import xtdb.indexer.TxIndexer
 import xtdb.kafkaconnectsource.proto.KafkaConnectSourceConfig
@@ -101,14 +100,13 @@ class KafkaConnectSource(
             return KafkaConnectSource(dbName, cluster, topic, connectConfig, indexer.open(dbName))
         }
 
-        override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.externalSource = ProtoAny.pack(kafkaConnectSourceConfig {
+        override fun toProto(): ProtoAny =
+            ProtoAny.pack(kafkaConnectSourceConfig {
                 remote = this@Factory.remote
                 topic = this@Factory.topic
                 connectConfig.putAll(this@Factory.connectConfig)
                 indexer = this@Factory.indexer.toProto()
             }, PROTO_TAG_PREFIX)
-        }
 
         class Registration : ExternalSource.Registration {
             override val protoTag: String

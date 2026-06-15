@@ -18,7 +18,7 @@ interface ExternalSource : AutoCloseable {
     suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer)
 
     interface Factory {
-        fun writeTo(dbConfig: DatabaseConfig.Builder)
+        fun toProto(): ProtoAny
         fun open(
             dbName: String,
             remotes: Map<RemoteAlias, Remote>,

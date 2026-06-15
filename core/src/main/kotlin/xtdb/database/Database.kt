@@ -438,7 +438,7 @@ class Database(
                     log.writeTo(dbConfig)
                     dbConfig.applyStorage(storage)
                     dbConfig.mode = mode.toProto()
-                    externalSource?.writeTo(dbConfig)
+                    externalSource?.let { dbConfig.externalSource = it.toProto() }
                     dbConfig.critical = critical
                 }.build()
 
