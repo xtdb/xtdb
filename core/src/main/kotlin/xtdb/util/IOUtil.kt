@@ -90,6 +90,15 @@ inline fun <C, L : Iterable<C>, R : AutoCloseable?> L.safeMapIndexed(block: (Int
         els
     }
 
+inline fun <K, V, R : AutoCloseable?> Map<K, V>.safeMapValues(block: (K, V) -> R): Map<K, R> =
+    LinkedHashMap<K, R>().closeAllOnCatch { acc ->
+        for ((k, v) in this) {
+            acc[k] = block(k, v)
+        }
+
+        acc
+    }
+
 class SafelyOpeningScope : AutoCloseable {
     val openedResources = mutableListOf<AutoCloseable>()
 
