@@ -1,4 +1,4 @@
-package xtdb.kafkaconnectsource
+package xtdb.kafka.connectsrc
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
@@ -17,9 +17,9 @@ import xtdb.error.Incorrect
 import xtdb.indexer.OpenTx
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
-import xtdb.kafkaconnectsource.proto.DocsIndexerConfig
-import xtdb.kafkaconnectsource.proto.docsIndexerConfig
-import xtdb.kafkaconnectsource.proto.kafkaConnectSourceToken
+import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
+import xtdb.kafka.connectsrc.proto.docsIndexerConfig
+import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
 import xtdb.table.TableRef
 import xtdb.util.asIid
 import java.math.BigDecimal
@@ -45,7 +45,7 @@ class DocsIndexer(
 
         class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String
-                get() = "$PROTO_TAG_PREFIX/xtdb.kafkaconnectsource.proto.DocsIndexerConfig"
+                get() = "$PROTO_TAG_PREFIX/xtdb.kafka.connectsrc.proto.DocsIndexerConfig"
 
             override val factoryClass get() = Factory::class.java
 

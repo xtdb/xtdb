@@ -1,4 +1,4 @@
-package xtdb.kafkaconnectsource
+package xtdb.kafka.connectsrc
 
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest

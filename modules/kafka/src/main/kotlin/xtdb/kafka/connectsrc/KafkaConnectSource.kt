@@ -1,4 +1,4 @@
-package xtdb.kafkaconnectsource
+package xtdb.kafka.connectsrc
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -34,9 +34,9 @@ import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Incorrect
 import xtdb.indexer.TxIndexer
-import xtdb.kafkaconnectsource.proto.KafkaConnectSourceConfig
-import xtdb.kafkaconnectsource.proto.KafkaConnectSourceToken
-import xtdb.kafkaconnectsource.proto.kafkaConnectSourceConfig
+import xtdb.kafka.connectsrc.proto.KafkaConnectSourceConfig
+import xtdb.kafka.connectsrc.proto.KafkaConnectSourceToken
+import xtdb.kafka.connectsrc.proto.kafkaConnectSourceConfig
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
@@ -102,7 +102,7 @@ class KafkaConnectSource(
 
         class Registration : ExternalSource.Registration<Factory> {
             override val protoTag: String
-                get() = "$PROTO_TAG_PREFIX/xtdb.kafkaconnectsource.proto.KafkaConnectSourceConfig"
+                get() = "$PROTO_TAG_PREFIX/xtdb.kafka.connectsrc.proto.KafkaConnectSourceConfig"
 
             override val factoryClass get() = Factory::class.java
 

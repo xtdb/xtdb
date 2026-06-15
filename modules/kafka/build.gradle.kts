@@ -32,11 +32,28 @@ dependencies {
     api(kotlin("stdlib"))
 
     api(libs.protobuf.kotlin)
+    api(libs.kotlinx.serialization.json)
 
-    testImplementation(libs.mockk)
+    // Kafka Connect external source
+    api(libs.kafka.connect.api)
+    api(libs.kafka.connect.transforms)
+
+    // Converters are loaded reflectively from user config, never referenced in source.
+    // Bundle the two common ones so they work out of the box; operators wanting others
+    // (e.g. JsonSchema) add the converter jar to their own classpath.
+    runtimeOnly(libs.kafka.connect.json)
+    runtimeOnly(libs.kafka.connect.avro.converter)
 
     implementation(libs.kotlinx.coroutines)
+
+    testImplementation(libs.mockk)
+    testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.testcontainers)
+    testImplementation(libs.testcontainers.kafka)
+    testImplementation(libs.kafka.avro.serializer)
+    testImplementation(libs.kafka.json.schema.serializer)
+    testImplementation(libs.kafka.connect.json.schema.converter)
 }
 
 protobuf {

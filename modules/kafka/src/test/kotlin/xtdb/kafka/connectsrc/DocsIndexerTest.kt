@@ -1,4 +1,4 @@
-package xtdb.kafkaconnectsource
+package xtdb.kafka.connectsrc
 
 import org.apache.kafka.connect.data.SchemaBuilder
 import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp

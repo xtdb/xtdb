@@ -1,4 +1,4 @@
-package xtdb.kafkaconnectsource
+package xtdb.kafka.connectsrc
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue

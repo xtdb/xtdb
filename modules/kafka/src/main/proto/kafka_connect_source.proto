@@ -1,6 +1,6 @@
 edition = "2023";
 
-package xtdb.kafkaconnectsource.proto;
+package xtdb.kafka.connectsrc.proto;
 
 import "google/protobuf/any.proto";
 
