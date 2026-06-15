@@ -2,12 +2,22 @@ edition = "2023";
 
 package xtdb.postgres.proto;
 
+import "google/protobuf/any.proto";
+
 option java_multiple_files = true;
 
 message PostgresSourceConfig {
     string remote = 1;
     string slot_name = 2;
     string publication_name = 3;
+
+    // Carried as Any so the proto stays decoupled from specific indexer config shapes —
+    // mirrors KafkaConnectSourceConfig.indexer and DatabaseConfig.external_source.
+    // Absent on configs persisted before pluggable indexers landed — decoded as !DirectMirror.
+    google.protobuf.Any indexer = 4;
+}
+
+message DirectMirrorConfig {
 }
 
 message PostgresSourceToken {

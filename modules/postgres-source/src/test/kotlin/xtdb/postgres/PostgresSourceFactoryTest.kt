@@ -29,6 +29,27 @@ class PostgresSourceFactoryTest {
     }
 
     @Test
+    fun `indexer defaults to DirectMirror`() {
+        val factory = PostgresSource.Factory(remote = "pg", slotName = "s", publicationName = "p")
+        assertTrue(factory.indexer is DirectMirror.Factory)
+
+        assertTrue(protoRoundTrip(factory).indexer is DirectMirror.Factory, "survives proto round-trip")
+    }
+
+    @Test
+    fun `config persisted before pluggable indexers decodes to DirectMirror`() {
+        // an older PostgresSourceConfig carries no `indexer` field; the absent Any must decode as the default
+        val legacy = xtdb.postgres.proto.postgresSourceConfig {
+            remote = "pg"; slotName = "s"; publicationName = "p"
+        }
+        val any = com.google.protobuf.Any.pack(legacy, "proto.xtdb.com")
+
+        val factory = PostgresSource.Factory.Registration().fromProto(any)
+
+        assertTrue(factory.indexer is DirectMirror.Factory)
+    }
+
+    @Test
     fun `YAML round-trips factory as external source`() {
         val yaml = """
             externalSource: !Postgres

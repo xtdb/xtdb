@@ -9,6 +9,7 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
+import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
@@ -16,7 +17,6 @@ import xtdb.indexer.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.database.ExternalSource
-import xtdb.indexer.OpenTx
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Fault
@@ -25,12 +25,8 @@ import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig
 import xtdb.postgres.proto.postgresSourceToken
-import xtdb.table.TableRef
-import xtdb.time.InstantUtil.asMicros
 import xtdb.util.*
-import java.nio.ByteBuffer
 import java.time.Instant
-import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import com.google.protobuf.Any as ProtoAny
@@ -43,6 +39,7 @@ class PostgresSource(
     private val dbName: String,
     private val driver: PostgresDriver,
     private val slotName: String,
+    private val indexer: PgIndexer,
     meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
 
@@ -121,6 +118,7 @@ class PostgresSource(
         val remote: RemoteAlias,
         val slotName: String,
         val publicationName: String,
+        val indexer: PgIndexer.Factory = DirectMirror.Factory(),
     ) : ExternalSource.Factory {
 
         override fun open(
@@ -149,7 +147,7 @@ class PostgresSource(
                 slotName, publicationName,
             )
 
-            return PostgresSource(dbName, driver, slotName, meterRegistry)
+            return PostgresSource(dbName, driver, slotName, indexer.open(dbName), meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -162,6 +160,7 @@ class PostgresSource(
                     remote = factory.remote
                     slotName = factory.slotName
                     publicationName = factory.publicationName
+                    indexer = PgIndexer.Factory.toProto(factory.indexer)
                 }, PROTO_TAG_PREFIX)
 
             override fun fromProto(msg: ProtoAny): Factory {
@@ -170,12 +169,17 @@ class PostgresSource(
                     remote = config.remote,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
+                    // absent on configs persisted before pluggable indexers landed
+                    indexer = if (config.hasIndexer()) PgIndexer.Factory.fromProto(config.indexer)
+                              else DirectMirror.Factory(),
                 )
             }
 
             override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
                 builder.subclass(Factory::class)
             }
+
+            override val serializersModule: SerializersModule = PgIndexer.Factory.serializersModule
         }
     }
 
@@ -258,9 +262,9 @@ class PostgresSource(
                     }.toByteArray()
 
                     txIndexer.indexTx(token) { openTx ->
-                        for (op in batch) {
-                            writeOp(openTx, dbName, op)
-                        }
+                        // snapshot has no upstream commit time — use the tx's system-time
+                        val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.txKey.systemTime, batch)
+                        indexer.indexTx(snapshotTx, openTx)
                         TxResult.Committed()
                     }
                 }
@@ -292,9 +296,7 @@ class PostgresSource(
                         }.toByteArray()
 
                         txIndexer.indexTx(token, systemTime = tx.commitTime) { openTx ->
-                            for (op in tx.ops) {
-                                writeOp(openTx, dbName, op)
-                            }
+                            indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
 
@@ -315,56 +317,7 @@ class PostgresSource(
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
+        runCatching { indexer.close() }
         driver.close()
-    }
-}
-
-private fun explicitValidTimeMicros(name: String, value: Any?): Long? = when (value) {
-    null -> null
-    is ZonedDateTime -> value.toInstant().asMicros
-    else -> throw Incorrect(
-        "'$name' must be a TIMESTAMPTZ column",
-        errorCode = "xtdb.postgres/invalid-explicit-valid-time",
-        data = mapOf("column" to name, "type" to (value::class.qualifiedName ?: value::class.simpleName)),
-    )
-}
-
-private fun writeOp(
-    openTx: OpenTx,
-    dbName: String,
-    op: RowOp,
-) {
-    val openTxTable = openTx.table(TableRef(dbName, op.schema, op.table))
-
-    when (op) {
-        is RowOp.Put -> {
-            val docMap = op.row.toMutableMap()
-
-            val id = docMap["_id"]
-                ?: throw Incorrect("Missing '_id' in row from ${op.schema}.${op.table}")
-
-            val explicitValidFrom = explicitValidTimeMicros("_valid_from", docMap.remove("_valid_from"))
-            val explicitValidTo = explicitValidTimeMicros("_valid_to", docMap.remove("_valid_to"))
-
-            if (explicitValidTo != null && explicitValidFrom == null)
-                throw Incorrect("'_valid_to' requires '_valid_from'")
-
-            openTxTable.logPut(
-                ByteBuffer.wrap(id.asIid),
-                explicitValidFrom ?: openTx.systemFrom,
-                explicitValidTo ?: Long.MAX_VALUE,
-            ) { openTxTable.docWriter.writeObject(docMap) }
-        }
-
-        is RowOp.Delete -> {
-            val id = op.row["_id"]
-                ?: throw Incorrect("Missing '_id' in delete on ${op.schema}.${op.table}")
-
-            openTxTable.logDelete(
-                ByteBuffer.wrap(id.asIid),
-                openTx.systemFrom,
-                Long.MAX_VALUE,
-            )
-        }
     }
 }
