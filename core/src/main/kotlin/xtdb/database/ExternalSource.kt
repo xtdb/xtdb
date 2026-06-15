@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import xtdb.error.Unsupported
 import xtdb.indexer.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -18,7 +19,6 @@ interface ExternalSource : AutoCloseable {
     suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer)
 
     interface Factory {
-        fun toProto(): ProtoAny
         fun open(
             dbName: String,
             remotes: Map<RemoteAlias, Remote>,
@@ -28,6 +28,7 @@ interface ExternalSource : AutoCloseable {
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()
             private val registrationsByTag = registrations.associateBy { it.protoTag }
+            private val registrationsByClass = registrations.associateBy { it.factoryClass }
 
             val serializersModule = SerializersModule {
                 for (reg in registrations)
@@ -39,18 +40,32 @@ interface ExternalSource : AutoCloseable {
                 }
             }
 
-            fun fromProto(dbConfig: DatabaseConfig): Factory? {
-                if (!dbConfig.hasExternalSource()) return null
-                val any = dbConfig.externalSource
+            fun fromProto(any: ProtoAny): Factory {
                 val reg = registrationsByTag[any.typeUrl] ?: error("unknown external source: ${any.typeUrl}")
                 return reg.fromProto(any)
+            }
+
+            // A factory is persistable iff a Registration claims its class. A programmatically-supplied
+            // source with no Registration is a legal Factory, but can't travel as a serialised secondary.
+            @Suppress("UNCHECKED_CAST")
+            fun toProto(factory: Factory): ProtoAny {
+                val reg = registrationsByClass[factory.javaClass] as Registration<Factory>?
+                    ?: throw Unsupported(
+                        "external source ${factory.javaClass.name} can't be persisted as a secondary database — " +
+                            "it has no Registration",
+                        "xtdb/external-source-not-serializable",
+                        mapOf("external-source" to factory.javaClass.name),
+                    )
+                return reg.toProto(factory)
             }
         }
     }
 
-    interface Registration {
+    interface Registration<F : Factory> {
         val protoTag: String
-        fun fromProto(msg: ProtoAny): Factory
+        val factoryClass: Class<F>
+        fun toProto(factory: F): ProtoAny
+        fun fromProto(msg: ProtoAny): F
         fun registerSerde(builder: PolymorphicModuleBuilder<Factory>)
         val serializersModule: SerializersModule get() = SerializersModule {}
     }

@@ -152,17 +152,19 @@ class PostgresSource(
             return PostgresSource(dbName, driver, slotName, meterRegistry)
         }
 
-        override fun toProto(): ProtoAny =
-            ProtoAny.pack(postgresSourceConfig {
-                remote = this@Factory.remote
-                slotName = this@Factory.slotName
-                publicationName = this@Factory.publicationName
-            }, PROTO_TAG_PREFIX)
-
-        class Registration : ExternalSource.Registration {
+        class Registration : ExternalSource.Registration<Factory> {
             override val protoTag: String get() = "$PROTO_TAG_PREFIX/xtdb.postgres.proto.PostgresSourceConfig"
 
-            override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
+            override val factoryClass get() = Factory::class.java
+
+            override fun toProto(factory: Factory): ProtoAny =
+                ProtoAny.pack(postgresSourceConfig {
+                    remote = factory.remote
+                    slotName = factory.slotName
+                    publicationName = factory.publicationName
+                }, PROTO_TAG_PREFIX)
+
+            override fun fromProto(msg: ProtoAny): Factory {
                 val config = msg.unpack(PostgresSourceConfig::class.java)
                 return Factory(
                     remote = config.remote,

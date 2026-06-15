@@ -100,19 +100,21 @@ class KafkaConnectSource(
             return KafkaConnectSource(dbName, cluster, topic, connectConfig, indexer.open(dbName))
         }
 
-        override fun toProto(): ProtoAny =
-            ProtoAny.pack(kafkaConnectSourceConfig {
-                remote = this@Factory.remote
-                topic = this@Factory.topic
-                connectConfig.putAll(this@Factory.connectConfig)
-                indexer = this@Factory.indexer.toProto()
-            }, PROTO_TAG_PREFIX)
-
-        class Registration : ExternalSource.Registration {
+        class Registration : ExternalSource.Registration<Factory> {
             override val protoTag: String
                 get() = "$PROTO_TAG_PREFIX/xtdb.kafkaconnectsource.proto.KafkaConnectSourceConfig"
 
-            override fun fromProto(msg: ProtoAny): ExternalSource.Factory {
+            override val factoryClass get() = Factory::class.java
+
+            override fun toProto(factory: Factory): ProtoAny =
+                ProtoAny.pack(kafkaConnectSourceConfig {
+                    remote = factory.remote
+                    topic = factory.topic
+                    connectConfig.putAll(factory.connectConfig)
+                    indexer = RecordIndexer.Factory.toProto(factory.indexer)
+                }, PROTO_TAG_PREFIX)
+
+            override fun fromProto(msg: ProtoAny): Factory {
                 val config = msg.unpack(KafkaConnectSourceConfig::class.java)
                 return Factory(
                     remote = config.remote,

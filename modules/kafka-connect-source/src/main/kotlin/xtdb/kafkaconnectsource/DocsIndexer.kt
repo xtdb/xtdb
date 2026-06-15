@@ -43,14 +43,16 @@ class DocsIndexer(
         override fun open(dbName: String): RecordIndexer =
             DocsIndexer(TableRef.parse(dbName, table))
 
-        override fun toProto(): ProtoAny =
-            ProtoAny.pack(docsIndexerConfig { table = this@Factory.table }, PROTO_TAG_PREFIX)
-
-        class Registration : RecordIndexer.Registration {
+        class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String
                 get() = "$PROTO_TAG_PREFIX/xtdb.kafkaconnectsource.proto.DocsIndexerConfig"
 
-            override fun fromProto(msg: ProtoAny): RecordIndexer.Factory {
+            override val factoryClass get() = Factory::class.java
+
+            override fun toProto(factory: Factory): ProtoAny =
+                ProtoAny.pack(docsIndexerConfig { table = factory.table }, PROTO_TAG_PREFIX)
+
+            override fun fromProto(msg: ProtoAny): Factory {
                 val config = msg.unpack(DocsIndexerConfig::class.java)
                 return Factory(table = config.table)
             }
