@@ -18,7 +18,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT="src/dev/resources/data/edgar/tsv"   # gitignored (see src/dev/resources/.gitignore)
-UA="${EDGAR_UA:-XTDB datasets demo (contact: dev@xtdb.com)}"
+UA="${EDGAR_UA:-XTDB datasets hello@xtdb.com}"
 BASE="https://www.sec.gov/files/dera/data/financial-statement-data-sets"
 
 # Default: 2025Q2–2026Q1 (the last ~year as of mid-2026). Override with --quarter.

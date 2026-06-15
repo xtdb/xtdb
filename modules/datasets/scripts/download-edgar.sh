@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT="src/dev/resources/data/edgar"   # gitignored (see src/dev/resources/.gitignore)
-UA="${EDGAR_UA:-XTDB datasets demo (contact: dev@xtdb.com)}"
+UA="${EDGAR_UA:-XTDB datasets hello@xtdb.com}"
 
 # The demo allow-set — keep in sync with xtdb.datasets.edgar.parse/demo-cik-allow-set.
 CIKS=(
