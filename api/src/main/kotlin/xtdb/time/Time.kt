@@ -46,7 +46,13 @@ val TimeUnit.hz get() = when (this) {
 
 private val OFFSET_AND_ZONE_FORMATTER = DateTimeFormatterBuilder()
     .optionalStart()
-    .appendOffset("+HH:mm", "Z")
+    // +HH:mm:ss — minutes and seconds each optional, appended only when non-zero.
+    // Postgres renders pre-standard-time instants through a named zone's Local
+    // Mean Time, whose offset carries seconds (e.g. Europe/London before 1847 is
+    // -00:01:15, straight from tzdata); "+HH:mm" rejected that. Bare-hour (+03)
+    // and minute (+03:44) offsets still parse, and normal offsets still format
+    // without a spurious :ss.
+    .appendOffset("+HH:mm:ss", "Z")
     .optionalEnd()
     .optionalStart()
     .appendLiteral('[')

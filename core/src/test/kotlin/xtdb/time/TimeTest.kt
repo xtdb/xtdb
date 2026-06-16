@@ -19,6 +19,7 @@ class TimeTest {
     private val LocalDateTime.z get() = atZone(ZoneId.of("Z"))
     private val LocalDateTime.inLondon get() = atZone(ZoneId.of("Europe/London"))
     private fun LocalDateTime.offset(hours: Int, minutes: Int = 0) = atZone(ZoneOffset.ofHoursMinutes(hours, minutes))
+    private fun LocalDateTime.offsetSeconds(totalSeconds: Int) = atZone(ZoneOffset.ofTotalSeconds(totalSeconds))
 
     @Test
     fun `test parsing SQL timestamps`() {
@@ -89,5 +90,17 @@ class TimeTest {
 
 
         "2024-01-01T00:00Z".check(ldt(2024, 1, 1).z, "missing seconds")
+
+        assertAll(
+            // Postgres renders pre-standard-time instants through a named zone's
+            // Local Mean Time, whose offset carries seconds — e.g. Europe/London
+            // before 1847 is -00:01:15 (from tzdata). GLEIF carries such ancient
+            // dates, so the Postgres source feeds these to the parser.
+            "sub-minute zone offsets",
+            {
+                "1121-12-31T23:58:45-00:01:15".check(ldt(1121, 12, 31, 23, 58, 45).offsetSeconds(-75))
+                "3000-03-15T20:40:31+05:30:20".check(ldt(3000, 3, 15, 20, 40, 31).offsetSeconds(5 * 3600 + 30 * 60 + 20))
+            }
+        )
     }
 }
