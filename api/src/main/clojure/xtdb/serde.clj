@@ -253,6 +253,14 @@
         (transit/write wtr doc)))
      (.toByteArray baos)))
 
+(defn read-transit-seq
+  "A lazy seq of the values in a transit stream (the read counterpart to
+   write-transit-seq), reading from an InputStream with XTDB's transit handlers.
+   The caller owns `in` and must keep it open while the seq is realised."
+  ([in] (read-transit-seq in nil))
+  ([^java.io.InputStream in fmt]
+   (transit-seq (transit/reader in (or fmt :msgpack) {:handlers transit-read-handler-map}))))
+
 ;; here to prevent a cyclic dep on xtdb.error
 (extend-protocol err/ToAnomaly
   PSQLException
