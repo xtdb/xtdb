@@ -228,13 +228,14 @@
               (pivot-statement cik statement (:period (first obs-group)) obs-group)))))
 
 (defn ->issuer-doc
-  "The static issuer reference doc, derived from the issuer's earliest filing —
-   that's when this identity first becomes known (valid-from), and the doc rides
-   in that filing's transaction (it carries the same :accession + :filed, so the
-   sink's group-by-accession keeps it atomic with that filing). A later filing
-   reporting a different entity-name versions it in system-time."
-  [cik entity-name earliest-observation]
-  (let [{:keys [accession ^LocalDate filed]} earliest-observation]
+  "The static issuer reference doc, derived from the issuer's earliest filing
+   observation — that's when this identity first becomes known (valid-from), and
+   the doc rides in that filing's transaction (it carries the same :accession +
+   :filed, so the sink's group-by-accession keeps it atomic with that filing). A
+   later filing reporting a different entity-name versions it in system-time.
+   entity-name comes off the observation itself."
+  [cik earliest-observation]
+  (let [{:keys [entity-name accession ^LocalDate filed]} earliest-observation]
     (with-meta
       {:xt/id cik
        :cik cik
@@ -244,16 +245,34 @@
        :valid-from (->instant filed)}
       {:table :issuer})))
 
+(defn observations->docs
+  "A seq of observation maps (any cik mix) → issuer + statement docs.
+
+   We group-by cik (not partition-by): num.txt has a documented unique key but no
+   row ordering, and a given accession's rows aren't contiguous in practice, so
+   partition-by would fragment a filer's facts. The registry filter upstream
+   keeps the grouped set modest. The issuer name + valid-from come from the
+   earliest filing deterministically, keeping them from the same filing."
+  [observations]
+  (into []
+        (mapcat (fn [[cik cik-obs]]
+                  (let [earliest (->> cik-obs (sort-by :filed) first)]
+                    (cons (->issuer-doc cik earliest)
+                          (observations->statements cik cik-obs)))))
+        (group-by :cik observations)))
+
 (defn record->docs
   "A parsed companyfacts map → a seq of docs (each tagged with its :table), or
    nil if curated out by allow-set. Yields the issuer then the statement docs."
   [allow-set parsed]
-  (let [cik (cik->padded (get parsed "cik"))]
+  (let [cik (cik->padded (get parsed "cik"))
+        entity-name (get parsed "entityName")]
     (when (or (nil? allow-set) (contains? allow-set cik))
-      (let [observations (registered-observations (get parsed "facts"))
-            earliest (->> observations (sort-by :filed) first)]
-        (cons (->issuer-doc cik (get parsed "entityName") earliest)
-              (observations->statements cik observations))))))
+      ;; companyfacts is single-issuer: cik + name live once at the top, so stamp
+      ;; them onto each observation for the shared (multi-cik) observations->docs.
+      (let [observations (map #(assoc % :cik cik :entity-name entity-name)
+                              (registered-observations (get parsed "facts")))]
+        (observations->docs observations)))))
 
 (defn read-docs
   "Docs from a companyfacts JSON reader, applying record->docs + curation.
