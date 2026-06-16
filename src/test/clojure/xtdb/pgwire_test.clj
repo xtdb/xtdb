@@ -50,6 +50,15 @@
     (is (= loopback (host loopback)) "InetAddress passed through")
     (is (nil? (host "*")) "\"*\" → all interfaces (nil)")))
 
+(deftest connection-builder-targets-bound-host
+  ;; a node's own DataSource (xt/q, xt/execute-tx) must connect back to the
+  ;; interface it bound, not a hardcoded "localhost" — else a node bound to a
+  ;; specific address routes its own queries to the wrong place.
+  (with-open [node (xtn/start-node {:server {:port 0 :host "127.0.0.1"}})]
+    (with-open [conn (.build (.createConnectionBuilder node))]
+      (is (str/includes? (.getURL (.getMetaData conn)) "127.0.0.1")
+          "builder targets the bound 127.0.0.1, not localhost"))))
+
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))
 

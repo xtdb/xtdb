@@ -61,6 +61,7 @@
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
 (defrecord Server [^BufferAllocator allocator
+                   ^InetAddress host
                    port read-only? playground?
 
                    ^ServerSocket accept-socket
@@ -75,7 +76,14 @@
                    ^Authenticator authn]
   DataSource
   (createConnectionBuilder [_]
-    (DataSource$ConnectionBuilder. "localhost" port))
+    ;; connect back to the interface we actually bound, not a hardcoded
+    ;; "localhost" — a node bound to a specific address (e.g. a docker bridge)
+    ;; isn't reachable on loopback. A wildcard bind is reachable on loopback, so
+    ;; "localhost" is right there.
+    (let [client-host (if (and host (not (.isAnyLocalAddress host)))
+                        (.getHostAddress host)
+                        "localhost")]
+      (DataSource$ConnectionBuilder. client-host port)))
 
   XtdbModule
   (close [_]
