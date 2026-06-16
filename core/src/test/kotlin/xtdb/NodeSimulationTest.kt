@@ -22,7 +22,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
-import xtdb.compactor.CompactorMockDriver
+import xtdb.compactor.CompactorMockDriverFactory
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -103,7 +103,7 @@ class NodeSimulationTest : SimulationTestBase() {
     val garbageLifetime = Duration.ofSeconds(60)
     private lateinit var allocator: BufferAllocator
     private lateinit var sharedBufferPool: MemoryStorage
-    private lateinit var compactorDriver: CompactorMockDriver
+    private lateinit var compactorDriverFactory: CompactorMockDriverFactory
     private lateinit var dbs: List<MockDatabase>
 
     @BeforeEach
@@ -111,7 +111,7 @@ class NodeSimulationTest : SimulationTestBase() {
         setLogLevel.invoke("xtdb".symbol, logLevel)
 
         val jobCalculator = createJobCalculator()
-        compactorDriver = CompactorMockDriver(dispatcher, currentSeed, CompactorDriverConfig())
+        compactorDriverFactory = CompactorMockDriverFactory(dispatcher, currentSeed, CompactorDriverConfig())
         allocator = RootAllocator()
 
         // Create a single shared buffer pool for all systems
@@ -120,7 +120,7 @@ class NodeSimulationTest : SimulationTestBase() {
         dbs = List(numberOfSystems) {
             val trieCatalog = createTrieCatalog()
             val blockCatalog = BlockCatalog("xtdb", sharedBufferPool.latestBlock)
-            val compactor = Compactor.Impl(compactorDriver, null, jobCalculator, false, 2, dispatcher)
+            val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
             val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
@@ -146,13 +146,15 @@ class NodeSimulationTest : SimulationTestBase() {
     @AfterEach
     fun tearDown() {
         dbs.forEach { it.close() }
+        // Stop the drivers' broadcast listeners before freeing the shared pool they write into.
+        runBlocking { compactorDriverFactory.scope.coroutineContext.job.cancelAndJoin() }
         sharedBufferPool.close()
         allocator.close()
     }
 
     private fun addTries(tableRef: TableRef, tries: List<TrieDetails>, timestamp: Instant) {
         tries.forEach {
-            compactorDriver.trieKeyToFileSize[compactorDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
+            compactorDriverFactory.trieKeyToFileSize[compactorDriverFactory.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
             db.trieCatalog.addTries(tableRef, tries, timestamp)

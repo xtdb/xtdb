@@ -58,7 +58,7 @@ class MockDb(
     val dbState: DatabaseState get() = DatabaseState(name, null, null, trieCatalog, null)
 }
 
-private val LOGGER = CompactorMockDriver::class.logger
+private val LOGGER = CompactorMockDriverFactory::class.logger
 
 enum class TemporalSplitting {
     CURRENT,
@@ -72,7 +72,7 @@ data class CompactorDriverConfig(
     val blocksPerWeek: Long = 140
 )
 
-class CompactorMockDriver(
+class CompactorMockDriverFactory(
     val dispatcher: CoroutineDispatcher,
     val baseSeed: Int,
     config: CompactorDriverConfig
@@ -89,27 +89,36 @@ class CompactorMockDriver(
     val sharedFlow = MutableSharedFlow<AppendMessage>(extraBufferCapacity = Int.MAX_VALUE)
     var nextSystemId = 0
 
+    // Every driver's broadcast-listener coroutine is a child of this scope. The test cancels it
+    // once at teardown (a single top-level bridge), rather than each driver's close() blocking on
+    // its own listener — a runBlocking-in-leaf-close that deadlocks the single-threaded sim
+    // dispatcher when it runs inside the compactor's cleanup fence (#5711). SupervisorJob so one
+    // system's listener failing doesn't cancel the others.
+    val scope = CoroutineScope(dispatcher + SupervisorJob())
+
     override fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers): Driver {
         val systemId = nextSystemId++
-        return ForDatabase(dbStorage, dbState, systemId)
+        return CompactorMockDriver(dbStorage, dbState, systemId)
     }
 
-    inner class ForDatabase(val dbStorage: DatabaseStorage, val dbState: DatabaseState, val systemId: Int) : Driver {
+    private inner class CompactorMockDriver(val dbStorage: DatabaseStorage, val dbState: DatabaseState, val systemId: Int) : Driver {
         val trieCatalog = dbState.trieCatalog
         val bufferPool = dbStorage.bufferPool
 
-        val job = CoroutineScope(dispatcher).launch {
-            sharedFlow.collect { msg ->
-                val trieKeys = msg.triesAdded.tries.map { it.trieKey }
-                LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
-                yield() // force suspension mid-message processing
-                msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                    val tableRef = TableRef.parse(dbState.name, tableName)
-                    addTriesToBufferPool(bufferPool, tableRef, tries)
-                    trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
-                }
+        init {
+            scope.launch {
+                sharedFlow.collect { msg ->
+                    val trieKeys = msg.triesAdded.tries.map { it.trieKey }
+                    LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
+                    yield() // force suspension mid-message processing
+                    msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                        val tableRef = TableRef.parse(dbState.name, tableName)
+                        addTriesToBufferPool(bufferPool, tableRef, tries)
+                        trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
+                    }
 
-                LOGGER.debug("[channel msg processed] systemId=$systemId added ${trieKeys.size} tries to catalog: $trieKeys")
+                    LOGGER.debug("[channel msg processed] systemId=$systemId added ${trieKeys.size} tries to catalog: $trieKeys")
+                }
             }
         }
 
@@ -216,11 +225,8 @@ class CompactorMockDriver(
             LOGGER.debug("[publishTries completed] systemId=$systemId")
         }
 
-        override fun close() {
-            runBlocking {
-                job.cancelAndJoin()
-            }
-        }
+        // No-op: the mock owns no resources — the real driver closes its allocator + SegmentMerge here.
+        override fun close() = Unit
     }
 }
 
@@ -276,14 +282,14 @@ class CompactorSimulationTest : SimulationTestBase() {
     var numberOfSystems: Int = 1
     private lateinit var allocator: BufferAllocator
     private lateinit var sharedBufferPool: BufferPool
-    private lateinit var mockDriver: CompactorMockDriver
+    private lateinit var mockDriverFactory: CompactorMockDriverFactory
     private lateinit var jobCalculator: Compactor.JobCalculator
     private lateinit var dbs: List<MockDb>
 
     @BeforeEach
     fun setUp() {
         setLogLevel.invoke("xtdb.compactor".symbol, logLevel)
-        mockDriver = CompactorMockDriver(dispatcher, currentSeed, driverConfig)
+        mockDriverFactory = CompactorMockDriverFactory(dispatcher, currentSeed, driverConfig)
         jobCalculator = createJobCalculator()
         allocator = RootAllocator()
 
@@ -295,7 +301,7 @@ class CompactorSimulationTest : SimulationTestBase() {
                 name = "xtdb",
                 trieCatalog = createTrieCatalog(),
                 bufferPool = sharedBufferPool,
-                compactor = Compactor.Impl(mockDriver, null, jobCalculator, false, 2, dispatcher),
+                compactor = Compactor.Impl(mockDriverFactory, null, jobCalculator, false, 2, dispatcher),
             )
         }
     }
@@ -303,13 +309,15 @@ class CompactorSimulationTest : SimulationTestBase() {
     @AfterEach
     fun tearDown() {
         driverConfig = CompactorDriverConfig()
+        // Stop the drivers' broadcast listeners before freeing the pool they write into.
+        runBlocking { mockDriverFactory.scope.coroutineContext.job.cancelAndJoin() }
         sharedBufferPool.close()
         allocator.close()
     }
 
     private fun seedTries(tableRef: TableRef, tries: List<TrieDetails>) {
         tries.forEach {
-            mockDriver.trieKeyToFileSize[mockDriver.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
+            mockDriverFactory.trieKeyToFileSize[mockDriverFactory.fileSizeKey(tableRef.tableName, it.trieKey.toString())] = it.dataFileSize
         }
         dbs.forEach { db ->
             addTriesToBufferPool(sharedBufferPool, tableRef, tries)
