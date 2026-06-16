@@ -21,7 +21,7 @@
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           (java.net Socket)
+           (java.net InetAddress Socket)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal Temporal)
@@ -40,6 +40,15 @@
 
 (def ^:dynamic *port* nil)
 (def ^:dynamic ^xtdb.api.DataSource *server* nil)
+
+(deftest server-host-resolves-to-inet-address
+  ;; Clojure config accepts a host string (coerced via getByName, as the YAML +
+  ;; healthz paths do) or an already-constructed InetAddress; "*" → all interfaces.
+  (let [host #(.getHost (.getServer (xtn/->config {:server {:port 0 :host %}})))
+        loopback (InetAddress/getByName "127.0.0.1")]
+    (is (= loopback (host "127.0.0.1")) "string coerced")
+    (is (= loopback (host loopback)) "InetAddress passed through")
+    (is (nil? (host "*")) "\"*\" → all interfaces (nil)")))
 
 (defn- in-system-tz ^java.time.ZonedDateTime [^ZonedDateTime zdt]
   (.withZoneSameInstant zdt (ZoneId/systemDefault)))

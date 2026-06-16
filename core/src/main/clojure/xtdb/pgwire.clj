@@ -1998,8 +1998,13 @@
   (if server
     (let [host (:host server ::absent)]
       (cond-> (.getServer config)
-        (not= host ::absent) (.host (when (and host (not= "*" host))
-                                      host))
+        ;; .host wants an InetAddress; "*" means "all interfaces" (nil). Accept
+        ;; either a host string (coerced via getByName, as the YAML + healthz
+        ;; paths do) or an already-constructed InetAddress.
+        (not= host ::absent) (.host (cond
+                                      (or (nil? host) (= "*" host)) nil
+                                      (instance? InetAddress host) host
+                                      :else (InetAddress/getByName host)))
         (some? port) (.port port)
         (some? read-only-port) (.readOnlyPort read-only-port)
         (some? num-threads) (.numThreads num-threads)
