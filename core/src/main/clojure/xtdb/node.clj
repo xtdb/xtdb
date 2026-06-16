@@ -33,6 +33,9 @@
 (defmethod apply-config! :log-clusters [config _ opts]
   (apply-config! config :xtdb.log/clusters opts))
 
+(defmethod apply-config! :remotes [config _ opts]
+  (apply-config! config :xtdb.remote/remotes opts))
+
 (defmethod apply-config! :log [config _ opts]
   (apply-config! config :xtdb/log opts))
 
