@@ -1,0 +1,31 @@
+[package]
+name = "xtdb-adbc-hello-world"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# There is no pure-Rust FlightSQL ADBC driver. The Rust ADBC story is:
+# `adbc_driver_manager` dlopens the *native* libadbc_driver_flightsql, and
+# `adbc-driver-flightsql` is a thin shim whose own build script downloads that
+# native library from the official PyPI wheel and exposes its path as
+# DRIVER_PATH (no build.rs needed in this crate).
+#
+# The shim defaults to native-driver v1.9.0 — too old for the
+# `adbc.ingest.target_table` option used below (needs v1.10.0+). Set
+# ADBC_FLIGHTSQL_VERSION=1.11.0 in the environment for the first `cargo build`:
+#
+#     ADBC_FLIGHTSQL_VERSION=1.11.0 cargo run
+#
+# ~5 MB download, cached after that. The full native-driver-download mechanism
+# is unavoidable for a runnable Rust ADBC example — see rust-arrow-pipeline/ for
+# the same machinery in a larger end-to-end pipeline.
+#
+# Versions pinned to the matrix that resolves cleanly today (adbc_core 0.23.0
+# accepts arrow 53..<59; arrow 58.3.0 is the current stable line).
+[dependencies]
+adbc_core = "=0.23.0"
+adbc_driver_manager = "=0.23.0"
+adbc-driver-flightsql = "=0.1.2"
+arrow = { version = "=58.3.0", features = ["prettyprint"] }
+arrow-array = "=58.3.0"
+arrow-schema = "=58.3.0"
