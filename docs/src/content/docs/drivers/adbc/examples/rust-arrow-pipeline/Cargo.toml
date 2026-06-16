@@ -1,0 +1,28 @@
+[package]
+name = "xtdb-adbc-rust-arrow-pipeline"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Pinned to the matrix that resolves cleanly today:
+#   * adbc_core / adbc_driver_manager 0.23.0 accept arrow 53..<59
+#   * datafusion 53.1.0 pulls arrow 58
+#   * arrow / parquet 58.3.0 is the current stable line
+# Bumping one without bumping the rest re-opens the cargo-resolver can of
+# worms (two arrow majors in one binary → RecordBatch types stop unifying).
+[dependencies]
+adbc_core = "=0.23.0"
+adbc_driver_manager = "=0.23.0"
+# Thin shim: build.rs downloads the native libadbc_driver_flightsql.{so,dylib,dll}
+# from the official PyPI wheel and exposes its on-disk path as DRIVER_PATH.
+# The crate defaults to native-driver v1.9.0 — too old for the
+# `adbc.ingest.target_table` / `adbc.ingest.mode` option keys (added in v1.10.0).
+# Set ADBC_FLIGHTSQL_VERSION=1.11.0 in the environment for the first
+# `cargo build`, or export it once globally. ~5 MB download, cached after that.
+adbc-driver-flightsql = "=0.1.2"
+arrow = "=58.3.0"
+arrow-array = "=58.3.0"
+arrow-schema = "=58.3.0"
+parquet = "=58.3.0"
+datafusion = "=53.1.0"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
