@@ -1,0 +1,114 @@
+# GLEIF federation demo — supporting cast only.
+#
+# XTDB itself runs from a REPL on the host (it's the only way to drive the
+# GleifPgIndexer in an IngestNode), so it isn't a service here. This stack
+# brings up everything XTDB talks to: a Kafka log, a Postgres sec-master, and
+# the Metabase/Prometheus/Grafana surfaces the demo queries against.
+#
+# Host reachability (REPL ↔ containers):
+#   REPL → Kafka       localhost:9092
+#   REPL → Postgres    localhost:5432
+#   Prometheus → XTDB  172.30.0.1:8081   (host XTDB /metrics)
+#   Metabase → XTDB    172.30.0.1:5432   (host XTDB pgwire)
+#   Grafana → XTDB     172.30.0.1:5432   (host XTDB pgwire, for querying the data)
+#
+# The containers reach the host XTDB node at 172.30.0.1 — the gateway of this
+# stack's pinned network (see `networks` at the bottom), i.e. the host's address on
+# that bridge. The node binds there. (Its own docker0 gateway, 172.17.0.1, is a
+# separate bridge the containers can't route to — hence the pin.)
+#
+# Network hygiene: every published port binds 127.0.0.1, and 172.30.0.1 is
+# docker-internal, so nothing here is reachable from an untrusted LAN — only from
+# the host. The node binds 172.30.0.1, NOT '*'.
+#
+# The full run-through lives in this directory's README.md, with the REPL steps in
+# the `(comment ...)` at the bottom of the xtdb.datasets.gleif namespace.
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    ports:
+      - '127.0.0.1:9092:9092'
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_LISTENERS=EXTERNAL://:9092,INTERNAL://:19092,CONTROLLER://:9093
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      - KAFKA_ADVERTISED_LISTENERS=EXTERNAL://localhost:9092,INTERNAL://kafka:19092
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@127.0.0.1:9093
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - CLUSTER_ID=q1Sh-9_ISia_zwGINzRvyQ
+
+  # The GLEIF securities-master system-of-record. wal_level=logical so XTDB's
+  # Postgres source can consume CDC; the GLEIF tables + publication are created
+  # by init/ on first boot (the loader UPSERTs into them from the REPL).
+  postgres:
+    image: postgres:16
+    ports:
+      - '127.0.0.1:5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gleif
+    command: ['postgres', '-c', 'wal_level=logical']
+    volumes:
+      - ./init/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d gleif']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  metabase:
+    image: metabase/metabase:v0.57.7
+    ports:
+      - '127.0.0.1:3001:3000'
+    environment:
+      MB_DB_TYPE: h2
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - metabase-data:/metabase-data
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    ports:
+      - '127.0.0.1:9090:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana:12.2
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      # the canonical XTDB metrics dashboards (repo-root monitoring/), reused rather than copied.
+      # dev-dashboards, not public-dashboards: the dev set references the Prometheus datasource by
+      # its concrete uid (DS_PROMETHEUS), which file-provisioning resolves; the public set uses a
+      # ${DS_PROMETHEUS} import placeholder that only resolves via the UI import wizard.
+      - ../../../monitoring/dev-dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  metabase-data:
+  grafana-storage:
+
+# Pin the subnet so the gateway is a stable, known address (172.30.0.1). That
+# gateway is the host as seen from these containers, so it's where the host XTDB
+# node binds its pgwire + healthz — see the reachability note at the top.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+          gateway: 172.30.0.1

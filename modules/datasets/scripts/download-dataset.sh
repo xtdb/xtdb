@@ -3,7 +3,7 @@
 (
     cd $(dirname $0)/..
 
-    INCLUDES='--include ts-devices/small/* --include ts-weather/small/*'
+    INCLUDES=''
 
     while [[ "$#" -gt 0 ]]; do
         case $1 in
@@ -25,13 +25,19 @@
             --auctionmark)
                 INCLUDES+=' --include auctionmark/*'
                 shift;;
+            --gleif)
+                INCLUDES+=' --include gleif/*'
+                shift;;
             --help)
-                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big"
+                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big, --gleif"
                 exit 0;;
             *) echo "Unknown parameter passed: $1"; exit 1;;
         esac
     done
 
-    set -xe
+    # -f (noglob): the include patterns are S3 key globs, passed to aws via an
+    # unquoted $INCLUDES. Without noglob the shell would expand e.g. `gleif/*`
+    # against the local `gleif/` demo dir (cwd is modules/datasets) before aws saw it.
+    set -xef
     aws s3 sync --exclude '*' $INCLUDES s3://xtdb-datasets ../../src/test/resources/data/
 )

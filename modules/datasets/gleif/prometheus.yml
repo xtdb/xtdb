@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # XTDB runs on the host (REPL), exposing /metrics on :8081. 172.30.0.1 is this
+  # compose network's pinned gateway — the host as seen from the containers — and
+  # the address the node binds to (see docker-compose.yml).
+  - job_name: 'xtdb'
+    static_configs:
+      - targets: ['172.30.0.1:8081']
