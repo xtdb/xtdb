@@ -1,16 +1,16 @@
 (ns xtdb.datasets.edgar.mirror
   "Produces the EDGAR dataset for S3: SEC EDGAR 'Financial Statement Data Sets' —
-   the quarterly TSV bulk dumps — read, joined, curated and written to transit in
-   one Clojure pass.
+   the quarterly TSV bulk dumps — fetched, joined, curated and written to transit
+   in one Clojure pass.
 
    Run occasionally, from the REPL (see the comment at the foot of this ns): for
-   each quarter `mirror!` reads its sub.txt + num.txt, keeps only the
-   consolidated rows whose (taxonomy, tag) is registered, and writes the curated
-   observation records as <quarter>.transit.json.gz into an out-dir;
-   scripts/upload-edgar.sh then syncs that dir to s3://xtdb-datasets/edgar/.
+   each quarter `mirror!` downloads the quarter ZIP from SEC, reads its sub.txt +
+   num.txt, keeps only the consolidated rows whose (taxonomy, tag) is registered,
+   and writes the curated observation records as <quarter>.transit.json.gz into an
+   out-dir; scripts/upload-edgar.sh then syncs that dir to s3://xtdb-datasets/edgar/.
    Consumers sync it *down* via download-dataset.sh --edgar and load with
-   xtdb.datasets.edgar — no raw-TSV reading or registry filtering on the load
-   path, just transit + the standard serde handlers.
+   xtdb.datasets.edgar — no SEC fetch, raw-TSV reading or registry filtering on
+   the load path, just transit + the standard serde handlers.
 
    A quarter ZIP holds, among others:
    - sub.txt — one row per filing: adsh, cik, name, form, period, fy, fp, filed,
@@ -27,11 +27,23 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [hato.client :as http]
             [xtdb.datasets.edgar.parse :as parse]
             [xtdb.serde :as serde])
-  (:import [java.time LocalDate]
+  (:import [java.io File]
+           [java.time LocalDate]
            [java.time.format DateTimeFormatter DateTimeParseException]
-           [java.util.zip GZIPOutputStream]))
+           [java.util.zip GZIPOutputStream ZipFile]))
+
+;; SEC requires a descriptive User-Agent with a contact (a blank one 403s).
+(def ^:private user-agent "XTDB datasets hello@xtdb.com")
+
+(def ^:private base-url
+  "https://www.sec.gov/files/dera/data/financial-statement-data-sets")
+
+;; The standard demo window — the last ~year of published quarters. Override by
+;; passing :quarters to mirror!.
+(def default-quarters ["2025q2" "2025q3" "2025q4" "2026q1"])
 
 (defn cik->padded
   "EDGAR's canonical CIK is 10-digit zero-padded; sub.txt gives a bare integer.
@@ -122,49 +134,70 @@
   (let [subs (submissions sub-reader)]
     (into [] (keep #(num-row->observation subs %)) (read-tsv num-reader))))
 
-(defn- mirror-quarter!
-  "Parse a raw quarter (sub/num gz files) and write its curated observations to
-   `out-file` as gzipped transit-json. Returns the observation count."
-  [sub-file num-file out-file]
+(defn- fetch-quarter-zip!
+  "Download a quarter's Financial Statement Data Set ZIP from SEC to a temp file,
+   streamed (they're 40–100MB). The caller owns + deletes it."
+  ^File [quarter]
+  (let [url (str base-url "/" quarter ".zip")
+        tmp (File/createTempFile (str "edgar-" quarter "-") ".zip")]
+    (log/info "fetching" url)
+    (with-open [in (:body (http/get url {:as :stream :headers {"User-Agent" user-agent}}))]
+      (io/copy in tmp))
+    tmp))
+
+(defn- zip-entry-reader
+  "A reader over one named entry in a ZipFile (e.g. \"num.txt\"). The caller owns
+   the ZipFile and keeps it open while reading."
+  ^java.io.Reader [^ZipFile zf entry-name]
+  (io/reader (.getInputStream zf (.getEntry zf entry-name))))
+
+(defn write-quarter-transit!
+  "Read one quarter's sub.txt + num.txt (readers), curate to observations, and
+   write them to `out-file` as gzipped transit-json. The local-file seam the
+   fetch path and the tests share. Returns the observation count."
+  [sub-reader num-reader out-file]
   (io/make-parents out-file)
-  (with-open [sub-rdr (parse/gz-reader sub-file)
-              num-rdr (parse/gz-reader num-file)
-              os (GZIPOutputStream. (io/output-stream out-file))]
-    (let [obs (quarter->observations sub-rdr num-rdr)]
+  (with-open [os (GZIPOutputStream. (io/output-stream out-file))]
+    (let [obs (quarter->observations sub-reader num-reader)]
       (.write os (serde/write-transit-seq obs :json))
       (log/infof "  mirrored %d observations → %s" (count obs) (.getName (io/file out-file)))
       (count obs))))
 
-(defn mirror!
-  "Mirror a raw-quarters dir to curated transit under out-dir: each quarter's
-   raw sub.txt.gz + num.txt.gz (under `<raw-dir>/<quarter>/`) is read, filtered
-   to the registered consolidated observations, and written as
-   `<quarter>.transit.json.gz`. Run from the REPL (see the comment below);
-   upload-edgar.sh then syncs out-dir → s3://xtdb-datasets/edgar/.
+(defn- mirror-quarter!
+  "Fetch a quarter ZIP from SEC, read its sub.txt + num.txt, and write the curated
+   observations to `out-file`. A ZipFile gives random access, so we read the whole
+   sub.txt into the filing map before streaming num.txt against it."
+  [quarter out-file]
+  (let [zip (fetch-quarter-zip! quarter)]
+    (try
+      (with-open [zf (ZipFile. zip)
+                  sub-rdr (zip-entry-reader zf "sub.txt")
+                  num-rdr (zip-entry-reader zf "num.txt")]
+        (write-quarter-transit! sub-rdr num-rdr out-file))
+      (finally (.delete zip)))))
 
-   `quarters` defaults to every immediate sub-dir of raw-dir that carries both
-   sub.txt.gz and num.txt.gz."
-  ([raw-dir out-dir] (mirror! raw-dir out-dir nil))
-  ([raw-dir out-dir {:keys [quarters]}]
-   (let [raw (io/file raw-dir)
-         quarters (or quarters
-                      (->> (.listFiles raw)
-                           (filter (fn [^java.io.File d]
-                                     (and (.isDirectory d)
-                                          (.exists (io/file d "sub.txt.gz"))
-                                          (.exists (io/file d "num.txt.gz")))))
-                           (map #(.getName ^java.io.File %))
-                           sort))]
-     (log/info "Mirroring EDGAR quarters" (vec quarters) "→" (str out-dir))
-     (doseq [q quarters]
-       (mirror-quarter! (io/file raw q "sub.txt.gz")
-                        (io/file raw q "num.txt.gz")
-                        (io/file out-dir (str q ".transit.json.gz"))))
-     (log/info "EDGAR mirror complete →" (str out-dir)))))
+(defn mirror!
+  "Fetch + curate EDGAR straight to transit under out-dir: for each quarter,
+   download its Financial Statement Data Set ZIP from SEC, filter to the
+   registered consolidated observations, and write `<quarter>.transit.json.gz`.
+   Run from the REPL (see the comment below); upload-edgar.sh then syncs out-dir →
+   s3://xtdb-datasets/edgar/.
+
+   `quarters` defaults to `default-quarters` (the last ~year). Each is a
+   yyyy'q'N tag, e.g. \"2025q4\"."
+  ([out-dir] (mirror! out-dir nil))
+  ([out-dir {:keys [quarters] :or {quarters default-quarters}}]
+   (log/info "Mirroring EDGAR quarters" (vec quarters) "→" (str out-dir))
+   (doseq [q quarters]
+     (when (Thread/interrupted)
+       (throw (InterruptedException. "interrupted mirroring EDGAR")))
+     (mirror-quarter! q (io/file out-dir (str q ".transit.json.gz"))))
+   (log/info "EDGAR mirror complete →" (str out-dir))))
 
 (comment
-  ;; produce the demo dataset from the downloaded raw quarters
-  ;; (scripts/download-edgar-tsv.sh leaves them under .../edgar/tsv/<quarter>/):
-  (mirror! "src/dev/resources/data/edgar/tsv" "src/dev/resources/data/edgar")
+  ;; produce the demo dataset (the default ~year of quarters), then sync to S3:
+  (mirror! "src/dev/resources/data/edgar")
   ;; → scripts/upload-edgar.sh   (aws s3 sync that dir → s3://xtdb-datasets/edgar/)
-  )
+
+  ;; a specific window:
+  (mirror! "src/dev/resources/data/edgar" {:quarters ["2024q1" "2024q2"]}))

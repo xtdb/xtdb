@@ -12,8 +12,7 @@
             [xtdb.log :as xt-log]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import [java.time Duration Instant LocalDate]
-           [java.util.zip GZIPOutputStream]))
+  (:import [java.time Duration Instant LocalDate]))
 
 (def ^:private cik "0000999999")
 (def ^:private fy2023-end (LocalDate/parse "2023-12-31"))
@@ -38,32 +37,31 @@
   ;; NetIncomeLoss for FY2023 (qtrs=4 → start 2023-01-01), consolidated.
   [adsh "NetIncomeLoss" "us-gaap/2023" "20231231" "4" "USD" "" "" value ""])
 
-(defn- write-tsv-gz! [file header rows]
-  (io/make-parents file)
-  (with-open [w (io/writer (GZIPOutputStream. (io/output-stream file)))]
-    (doseq [row (cons header rows)]
-      (.write w (str (str/join "\t" row) "\n")))))
+(defn- tsv-reader [header rows]
+  (io/reader (.getBytes (str (str/join "\t" header) "\n"
+                             (str/join "\n" (map #(str/join "\t" %) rows)) "\n")
+                        "UTF-8")))
 
-(defn- write-quarter! [raw-dir q adsh form filed value]
-  (let [d (io/file raw-dir q)]
-    (write-tsv-gz! (io/file d "sub.txt.gz") sub-header [(sub-row adsh form filed)])
-    (write-tsv-gz! (io/file d "num.txt.gz") num-header [(num-row adsh value)])))
+(defn- write-quarter! [transit-dir q adsh form filed value]
+  ;; mirror! fetches from SEC; here we craft sub/num readers and use mirror's
+  ;; local seam to write the same per-quarter transit the loader reads.
+  (with-open [sub (tsv-reader sub-header [(sub-row adsh form filed)])
+              num (tsv-reader num-header [(num-row adsh value)])]
+    (mirror/write-quarter-transit! sub num (io/file transit-dir (str q ".transit.json.gz")))))
 
 (def ^:private ^:dynamic *node* nil)
 
 (t/use-fixtures :once
   (fn [f]
     (let [base (io/file "target/edgar-restatement-test")
-          raw (io/file base "raw")
           transit (io/file base "transit")
           node-dir (util/->path "target/edgar-restatement-node")]
       (util/delete-dir (util/->path (.getPath base)))
       (util/delete-dir node-dir)
       ;; q1 reports FY2023 net income = 1000 (filed 2024-02-02);
       ;; q2 re-states it to 1200 via a 10-K/A (filed 2024-08-01).
-      (write-quarter! raw "2024q1" "0000999999-24-000001" "10-K" "20240202" "1000")
-      (write-quarter! raw "2024q3" "0000999999-24-000009" "10-K/A" "20240801" "1200")
-      (mirror/mirror! raw transit)
+      (write-quarter! transit "2024q1" "0000999999-24-000001" "10-K" "20240202" "1000")
+      (write-quarter! transit "2024q3" "0000999999-24-000009" "10-K/A" "20240801" "1200")
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (binding [*node* node]
           (edgar/submit-edgar! node (edgar/dataset transit))

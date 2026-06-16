@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # XTDB runs on the host (REPL), exposing /metrics on :8081. 172.17.0.1 is the
+  # default docker bridge gateway; host.docker.internal is wired as a fallback
+  # in docker-compose.yml for non-default bridges.
+  - job_name: 'xtdb'
+    static_configs:
+      - targets: ['172.17.0.1:8081']

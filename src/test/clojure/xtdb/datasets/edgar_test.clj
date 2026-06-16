@@ -22,15 +22,15 @@
 (defn- sample [path] (io/resource (str "edgar/sample/tsv/" path)))
 
 (defn- mirror-fixture!
-  "Mirror the TSV fixture to a one-quarter transit dataset, the shape the loader
-   reads off S3."
+  "Curate the TSV fixture to a one-quarter transit dataset, the shape the loader
+   reads off S3. (mirror! itself fetches from SEC; here we use its local seam to
+   write the same transit from the committed fixture readers.)"
   [out-dir]
-  (let [raw (io/file out-dir "raw" "2025q4")]
-    (io/make-parents (io/file raw "x"))
-    (io/copy (io/file (sample "sub.txt.gz")) (io/file raw "sub.txt.gz"))
-    (io/copy (io/file (sample "num.txt.gz")) (io/file raw "num.txt.gz"))
-    (mirror/mirror! (io/file out-dir "raw") (io/file out-dir "transit"))
-    (edgar/dataset (io/file out-dir "transit"))))
+  (let [transit (io/file out-dir "transit")]
+    (with-open [sub (parse/gz-reader (io/file (sample "sub.txt.gz")))
+                num (parse/gz-reader (io/file (sample "num.txt.gz")))]
+      (mirror/write-quarter-transit! sub num (io/file transit "2025q4.transit.json.gz")))
+    (edgar/dataset transit)))
 
 (t/use-fixtures :once
   (fn [f]

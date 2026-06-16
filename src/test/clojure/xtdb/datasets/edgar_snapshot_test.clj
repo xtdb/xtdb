@@ -21,14 +21,14 @@
   (->> docs (map (fn [d] [(:table (meta d)) (into (sorted-map) d)])) set))
 
 (t/deftest test-mirror-round-trip
-  (let [raw-dir (io/file "target/edgar-mirror-test/raw/2025q4")
-        out-dir (io/file "target/edgar-mirror-test/transit")]
-    (io/make-parents (io/file raw-dir "x"))
-    (io/copy (io/file (sample "sub.txt.gz")) (io/file raw-dir "sub.txt.gz"))
-    (io/copy (io/file (sample "num.txt.gz")) (io/file raw-dir "num.txt.gz"))
-    (mirror/mirror! (io/file "target/edgar-mirror-test/raw") out-dir)
-    (let [read-back (with-open [in (-> (io/input-stream (io/file out-dir "2025q4.transit.json.gz"))
-                                       GZIPInputStream.)]
+  (let [out-dir (io/file "target/edgar-mirror-test/transit")
+        out-file (io/file out-dir "2025q4.transit.json.gz")]
+    ;; mirror! fetches from SEC; use its local seam to write transit from the
+    ;; committed fixture readers, then read it back.
+    (with-open [sub (parse/gz-reader (io/file (sample "sub.txt.gz")))
+                num (parse/gz-reader (io/file (sample "num.txt.gz")))]
+      (mirror/write-quarter-transit! sub num out-file))
+    (let [read-back (with-open [in (-> (io/input-stream out-file) GZIPInputStream.)]
                       (edgar/read-records in))
           live (live-observations)]
       (t/is (= (set live) (set read-back))

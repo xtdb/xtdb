@@ -26,23 +26,31 @@
 ;; pgjdbc maps java.time.LocalDate ↔ date and BigDecimal ↔ numeric directly, and
 ;; the parse layer already yields those — so columns bind without coercion.
 
+(defn- col-name
+  "The Postgres column name for a doc key. Line-item keys are already snake
+   (:net_income_loss); the fixed keys are kebab (:period-start) and must be
+   munged to snake for the SQL — the doc lookup still uses the kebab key."
+  [k]
+  (str/replace (name k) "-" "_"))
+
 (defn- upsert-sql
   "Build an UPSERT keeping the latest vintage: overwrite only when the incoming
    filing is at least as recent (files arrive in arbitrary order, so guard on
-   `filed` rather than trusting load order). `key-cols` are the conflict target."
+   `filed` rather than trusting load order). `key-cols` are the conflict target.
+   Column keys (kebab or snake) are munged to snake PG column names."
   [table key-cols value-cols]
   (let [all-cols (concat key-cols value-cols)
         placeholders (str/join "," (repeat (count all-cols) "?"))
         updates (->> value-cols
-                     (map #(str (name %) " = EXCLUDED." (name %)))
+                     (map #(str (col-name %) " = EXCLUDED." (col-name %)))
                      (str/join ", "))]
     (format "INSERT INTO %s (%s) VALUES (%s)
              ON CONFLICT (%s) DO UPDATE SET %s
              WHERE EXCLUDED.filed >= %s.filed"
             (name table)
-            (str/join "," (map name all-cols))
+            (str/join "," (map col-name all-cols))
             placeholders
-            (str/join "," (map name key-cols))
+            (str/join "," (map col-name key-cols))
             updates
             (name table))))
 
