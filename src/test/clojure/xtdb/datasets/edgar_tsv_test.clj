@@ -1,8 +1,8 @@
 (ns xtdb.datasets.edgar-tsv-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [xtdb.datasets.edgar.parse :as parse]
-            [xtdb.datasets.edgar.tsv :as tsv])
+            [xtdb.datasets.edgar.mirror :as mirror]
+            [xtdb.datasets.edgar.parse :as parse])
   (:import [java.time LocalDate]))
 
 ;; Fixtures are real rows for Apple's FY2024 Q1 10-Q (accn 0000320193-24-000006),
@@ -13,7 +13,7 @@
 (defn- docs []
   (with-open [sub (parse/gz-reader (io/file (sample "sub.txt.gz")))
               num (parse/gz-reader (io/file (sample "num.txt.gz")))]
-    (vec (tsv/quarter->docs sub num))))
+    (parse/observations->docs (mirror/quarter->observations sub num))))
 
 (defn- by-table [docs] (group-by #(:table (meta %)) docs))
 

@@ -25,8 +25,13 @@
             --auctionmark)
                 INCLUDES+=' --include auctionmark/*'
                 shift;;
+            --edgar)
+                # EDGAR (mirrored transit) loads from the dev dir, not test/resources;
+                # synced separately below.
+                EDGAR=1
+                shift;;
             --help)
-                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big"
+                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big, --edgar"
                 exit 0;;
             *) echo "Unknown parameter passed: $1"; exit 1;;
         esac
@@ -34,4 +39,8 @@
 
     set -xe
     aws s3 sync --exclude '*' $INCLUDES s3://xtdb-datasets ../../src/test/resources/data/
+
+    if [[ -n "${EDGAR:-}" ]]; then
+        aws s3 sync s3://xtdb-datasets/edgar/ ../../src/dev/resources/data/edgar/
+    fi
 )

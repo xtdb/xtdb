@@ -1,12 +1,14 @@
 (ns xtdb.datasets.edgar.parse
-  "Pure parsing of SEC EDGAR companyfacts JSON into XTDB doc maps.
+  "Pure shaping of normalised EDGAR observations into XTDB doc maps.
 
-   Deliberately free of any xtdb.api dependency: the same record->docs transform
-   feeds the bitemporal XTDB sink and the current-state Postgres sink.
+   Deliberately free of any xtdb.api dependency: the same observations->docs
+   transform feeds the bitemporal XTDB sink and the current-state Postgres sink.
 
-   The companyfacts document (data.sec.gov/api/xbrl/companyfacts/CIK{n}.json)
-   nests facts/<taxonomy>/<concept>/units/<unit>/[observation]. We project that
-   into three shapes by the *temporality* of the data, not by how it was filed:
+   An *observation* is one curated fact — its (taxonomy, concept) registered,
+   tagged with its target statement, period type, dates, accession and value.
+   The mirror (xtdb.datasets.edgar.mirror) produces these from the quarterly
+   TSVs; here we pivot them into three shapes by the *temporality* of the data,
+   not by how it was filed:
 
    - issuer            — static reference (cik, entity name). No period.
    - income_statement  — duration facts (flows: revenue, net income). A figure
@@ -22,30 +24,12 @@
    pivoted so columns are the line items. A restatement re-files the same
    (cik, period) under a new accession with corrected line items."
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [jsonista.core :as json])
+            [clojure.string :as str])
   (:import [java.time LocalDate ZoneOffset]
-           [java.time.format DateTimeParseException]
            [java.util.zip GZIPInputStream]))
 
 (defn gz-reader ^java.io.Reader [file]
   (-> (io/input-stream file) GZIPInputStream. io/reader))
-
-(def demo-cik-allow-set
-  "Recognisable issuers whose companyfacts carry real restatements, keyed by the
-   10-digit zero-padded CIK the JSON download uses. Apple is the anchor — its
-   FY2008/2009 net income was retrospectively restated (10-K/A, 2010-01-25), so
-   the same period appears under multiple `filed` vintages with divergent values:
-   the bitemporal correction, in real data.
-
-   When expanding, prefer issuers with known restatement history — the demo is
-   weaker for a company that has never refiled."
-  #{"0000320193"    ; Apple Inc. (FY08/09 net-income restatement)
-    "0000040545"    ; General Electric Co
-    "0001657853"    ; Hertz Global Holdings, Inc
-    "0001336917"    ; Under Armour, Inc.
-    "0000072971"}); Wells Fargo & Company
 
 (defn snake-case
   "XBRL concepts are PascalCase (NetIncomeLoss); columns are snake_case. We don't
@@ -102,32 +86,6 @@
   [statement]
   (->> (get statement-columns statement) sort (mapv keyword)))
 
-(defn cik->padded
-  "EDGAR's companyfacts path uses a 10-digit zero-padded CIK; the tickers file
-   gives a bare integer. Normalise to the padded form the allow-set keys on."
-  [cik]
-  (format "%010d" (long (if (string? cik) (Long/parseLong (str/trim cik)) cik))))
-
-;; jsonista, keys left as strings: facts/<tax>/<concept>/units/<unit> are dynamic
-;; (concept and unit names vary per filer), so string keys throughout.
-(def ^:private mapper
-  (json/object-mapper {:decode-key-fn false}))
-
-(defn read-companyfacts
-  "Parse a companyfacts JSON reader/stream into the raw nested map."
-  [in]
-  (json/read-value in mapper))
-
-(defn- parse-date ^LocalDate [s]
-  ;; EDGAR dates are ISO LocalDate ("2008-09-27"). A genuinely unparseable value
-  ;; warns and yields nil rather than aborting the load on one bad row.
-  (when-not (str/blank? s)
-    (try
-      (LocalDate/parse s)
-      (catch DateTimeParseException _
-        (log/warn "unparseable EDGAR date, skipping value:" (pr-str s))
-        nil))))
-
 (defn- ->instant
   "Dates in the source; XTDB wants an instant. Start of day in UTC — the
    resolution we have, made explicit."
@@ -145,38 +103,6 @@
     (and (string? v) (not (str/blank? v))) (try (bigdec (str/trim v))
                                                 (catch NumberFormatException _ nil))
     :else nil))
-
-(defn- registered-observations
-  "Flatten the companyfacts tree to the observations whose (taxonomy, concept) is
-   in the registry, tagging each with its target statement, period type, and
-   column. Drops anything unregistered or missing the dates it needs."
-  [facts]
-  (for [[taxonomy concepts] facts
-        [concept concept-body] concepts
-        :let [reg (get statement-registry [taxonomy concept])]
-        :when reg
-        [_unit observations] (get concept-body "units")
-        obs observations
-        :let [{:keys [statement period]} reg
-              period-start (parse-date (get obs "start"))
-              period-end (parse-date (get obs "end"))
-              filed (parse-date (get obs "filed"))
-              accn (get obs "accn")]
-        ;; every fact needs its period end, an accession, and a filing date (the
-        ;; system-time anchor); duration facts additionally need a start.
-        :when (and period-end accn filed
-                   (or (= period :instant) period-start))]
-    {:statement statement
-     :period period
-     :column (keyword (snake-case concept))
-     :period-start period-start
-     :period-end period-end
-     :filed filed
-     :accession accn
-     :form (get obs "form")
-     :fiscal-year (get obs "fy")
-     :fiscal-period (get obs "fp")
-     :value (->decimal (get obs "val"))}))
 
 (defn- pivot-statement
   "Pivot the observations of one statement-vintage — same (cik, statement,
@@ -216,11 +142,10 @@
       {:table statement})))
 
 (defn observations->statements
-  "A seq of normalised observation maps (the shape `registered-observations` and
-   the TSV reader both yield: :statement/:period/:column/:period-start/
-   :period-end/:filed/:accession/:form/:fiscal-year/:fiscal-period/:value) for a
-   single cik → wide statement docs, one per (statement, period, accession)
-   vintage. Shared by the companyfacts and TSV front-ends."
+  "A seq of normalised observation maps (the shape the mirror yields:
+   :statement/:period/:column/:period-start/:period-end/:filed/:accession/:form/
+   :fiscal-year/:fiscal-period/:value) for a single cik → wide statement docs,
+   one per (statement, period, accession) vintage."
   [cik observations]
   (->> observations
        (group-by (juxt :statement :period-start :period-end :accession))
@@ -260,23 +185,3 @@
                     (cons (->issuer-doc cik earliest)
                           (observations->statements cik cik-obs)))))
         (group-by :cik observations)))
-
-(defn record->docs
-  "A parsed companyfacts map → a seq of docs (each tagged with its :table), or
-   nil if curated out by allow-set. Yields the issuer then the statement docs."
-  [allow-set parsed]
-  (let [cik (cik->padded (get parsed "cik"))
-        entity-name (get parsed "entityName")]
-    (when (or (nil? allow-set) (contains? allow-set cik))
-      ;; companyfacts is single-issuer: cik + name live once at the top, so stamp
-      ;; them onto each observation for the shared (multi-cik) observations->docs.
-      (let [observations (map #(assoc % :cik cik :entity-name entity-name)
-                              (registered-observations (get parsed "facts")))]
-        (observations->docs observations)))))
-
-(defn read-docs
-  "Docs from a companyfacts JSON reader, applying record->docs + curation.
-   Realised eagerly: callers read inside a with-open, so no lazy seq may outlive
-   the reader."
-  [reader allow-set]
-  (vec (record->docs allow-set (read-companyfacts reader))))

@@ -1,5 +1,5 @@
 (ns xtdb.datasets.edgar.pg
-  "Loads the EDGAR companyfacts dataset into a plain Postgres database — the
+  "Loads the EDGAR fundamentals dataset into a plain Postgres database — the
    fundamentals system-of-record half of the demo, distinct from the bitemporal
    XTDB sink.
 
@@ -9,60 +9,22 @@
    XTDB, not here — a real fundamentals SOR carries the latest figure, which is
    the point the federation demo makes.
 
-   Schema is derived from the same statement-registry the parse layer uses, so
-   the tables' line-item columns stay in lockstep with the concepts loaded."
-  (:require [clojure.string :as str]
+   Reads the same mirrored transit the XTDB sink does (xtdb.datasets.edgar
+   read-records + parse/observations->docs) and UPSERTs the current-state rows.
+
+   The schema (tables, publication) is owned by the demo's
+   init/postgres/01-edgar.sql — this loader only UPSERTs into it. The line-item
+   columns there must stay in lockstep with parse/statement-column-names."
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [xtdb.datasets.edgar :as edgar]
-            [xtdb.datasets.edgar.parse :as parse]
-            [xtdb.datasets.edgar.tsv :as tsv]))
+            [xtdb.datasets.edgar.parse :as parse])
+  (:import [java.util.zip GZIPInputStream]))
 
 ;; pgjdbc maps java.time.LocalDate ↔ date and BigDecimal ↔ numeric directly, and
 ;; the parse layer already yields those — so columns bind without coercion.
-
-(defn- col-ddl [statement]
-  (->> (parse/statement-column-names statement)
-       (map #(str "      " (name %) " numeric"))
-       (str/join ",\n")))
-
-(def ^:private issuer-ddl
-  "CREATE TABLE IF NOT EXISTS issuer (
-      cik text PRIMARY KEY,
-      entity_name text,
-      filed date)")
-
-;; income_statement is keyed by the full period (start, end) — a duration figure
-;; is fixed for the window it reports. balance_sheet is keyed by the as-of date
-;; (end) — an instant balance supersedes the prior as-of value.
-(defn- income-statement-ddl []
-  (format "CREATE TABLE IF NOT EXISTS income_statement (
-      cik text,
-      period_start date,
-      period_end date,
-%s,
-      accession text,
-      form text,
-      filed date,
-      PRIMARY KEY (cik, period_start, period_end))"
-          (col-ddl :income_statement)))
-
-(defn- balance-sheet-ddl []
-  (format "CREATE TABLE IF NOT EXISTS balance_sheet (
-      cik text,
-      period_end date,
-%s,
-      accession text,
-      form text,
-      filed date,
-      PRIMARY KEY (cik, period_end))"
-          (col-ddl :balance_sheet)))
-
-(defn create-tables!
-  "Creates the EDGAR tables if absent. Idempotent."
-  [conn]
-  (doseq [stmt [issuer-ddl (income-statement-ddl) (balance-sheet-ddl)]]
-    (jdbc/execute! conn [stmt])))
 
 (defn- upsert-sql
   "Build an UPSERT keeping the latest vintage: overwrite only when the incoming
@@ -136,36 +98,37 @@
         (upsert! tx @balance-upsert (partial statement-params :balance_sheet)
                  balance_sheet)))))
 
-(defn submit-companyfacts-pg!
-  "Loads one companyfacts file into Postgres via `conn`, UPSERTing current state."
-  [conn {:keys [reader allow-set] :or {allow-set parse/demo-cik-allow-set}}]
-  (with-open [rdr reader]
-    (submit-docs! conn (parse/read-docs rdr allow-set))))
+(defn- submit-quarter-pg!
+  "UPSERT one quarter's mirrored transit file into Postgres via `conn`. Only this
+   quarter is held in memory."
+  [conn file]
+  (with-open [in (-> (io/input-stream file) GZIPInputStream.)]
+    (let [docs (parse/observations->docs (edgar/read-records in))]
+      (log/infof "  %s — %d docs" (.getName (io/file file)) (count docs))
+      (submit-docs! conn docs))))
 
 (defn submit-edgar-pg!
-  "Loads EDGAR companyfacts files into Postgres via `conn` (a next.jdbc
-   connectable), creating tables and UPSERTing current state. system-time is
-   irrelevant here since Postgres keeps latest only."
-  [conn {:keys [files allow-set] :or {allow-set parse/demo-cik-allow-set}}]
-  (create-tables! conn)
-  (log/info "Loading" (count files) "EDGAR companyfacts file(s) into Postgres...")
-  (doseq [f files]
-    (submit-companyfacts-pg! conn {:reader (edgar/->reader f) :allow-set allow-set})))
+  "Loads the mirrored EDGAR dataset into Postgres via `conn` (a next.jdbc
+   connectable), UPSERTing current state, one quarter at a time. system-time is
+   irrelevant here since Postgres keeps latest only — ordering only matters for
+   the latest-vintage-wins guard on `filed`.
 
-(defn submit-quarters-pg!
-  "Loads EDGAR quarterly TSV dumps into Postgres, one quarter at a time (only one
-   quarter held in memory). Each quarter is a [sub-file num-file] pair."
-  [conn quarters]
-  (create-tables! conn)
-  (doseq [[sub-f num-f] quarters]
-    (with-open [sub-rdr (edgar/->reader sub-f)
-                num-rdr (edgar/->reader num-f)]
-      (submit-docs! conn (tsv/quarter->docs sub-rdr num-rdr)))))
+   The schema (tables, publication) is owned by the demo's
+   init/postgres/01-edgar.sql — this loader only UPSERTs into it."
+  [conn {:keys [quarters]}]
+  (log/info "Loading" (count quarters) "EDGAR quarter(s) into Postgres...")
+  (doseq [file quarters]
+    (when (Thread/interrupted)
+      (throw (InterruptedException. "interrupted loading EDGAR into Postgres")))
+    (submit-quarter-pg! conn file))
+  (log/info "EDGAR Postgres load complete."))
 
 (comment
-  ;; Run against a local Postgres (companyfacts files as produced by
-  ;; scripts/download-edgar.sh):
+  ;; End-to-end against the demo Postgres (xt26-demo/docker-compose.yml — db
+  ;; `edgar`, schema owned by init/postgres/01-edgar.sql). Get the dataset first:
+  ;; sync it down (scripts/download-dataset.sh --edgar) or produce it locally
+  ;; (xtdb.datasets.edgar.mirror/mirror!) — both leave transit under the dir below.
   (with-open [conn (jdbc/get-connection {:dbtype "postgresql" :dbname "edgar"
                                          :host "localhost" :port 5432
-                                         :user "postgres"})]
-    (submit-edgar-pg! conn {:files [(clojure.java.io/file "data/edgar/CIK0000320193.json.gz")]})))
+                                         :user "postgres" :password "postgres"})]
+    (submit-edgar-pg! conn (edgar/dataset "src/dev/resources/data/edgar"))))

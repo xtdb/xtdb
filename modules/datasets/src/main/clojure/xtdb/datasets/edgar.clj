@@ -1,11 +1,12 @@
 (ns xtdb.datasets.edgar
-  "Loads SEC EDGAR fundamentals into XTDB with a real bitemporal history.
+  "Loads a curated slice of SEC EDGAR fundamentals into XTDB with a real
+   bitemporal history.
 
-   Two front-ends produce the same docs (xtdb.datasets.edgar.parse / .tsv):
-   - tsv: the quarterly 'Financial Statement Data Sets' — every filer, cut by
-     time. This is the demo's breadth/streaming source (`submit-quarters!`).
-   - parse: companyfacts JSON — one company, full history. The per-company
-     alternative (`submit-edgar!`), curated by `demo-cik-allow-set`.
+   The dataset on S3 is the curated observation transit produced by
+   xtdb.datasets.edgar.mirror (one <quarter>.transit.json.gz per quarter, the
+   registry filter already applied) — but reading it needs nothing from the
+   mirror: it's plain transit + the standard serde handlers, pivoted into docs by
+   xtdb.datasets.edgar.parse. pg.clj reuses that same read + pivot.
 
    Facts are projected into wide statement tables by temporality:
    `income_statement` (duration flows), `balance_sheet` (instant balances), plus
@@ -18,25 +19,27 @@
    order. System-time is monotonic non-decreasing in XTDB, so forward replay
    reproduces the calendar-accurate vintage history a node would have built had
    it consumed each filing as it landed — prior, since-restated values included,
-   recoverable via FOR SYSTEM_TIME AS OF.
+   recoverable via FOR SYSTEM_TIME AS OF. Quarters are replayed oldest-first so
+   system-time stays non-decreasing across the boundary.
 
    valid-time differs by statement: duration figures are fixed for their period
    (valid-from = filed, corrections live on the system axis); instant balances
    are as-of a date (valid-from = period end, a real valid-time timeline)."
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.datasets.edgar.parse :as parse]
-            [xtdb.datasets.edgar.tsv :as tsv])
-  (:import [java.io Reader]
-           [java.time LocalDate ZoneOffset]))
+            [xtdb.serde :as serde])
+  (:import [java.time LocalDate ZoneOffset]
+           [java.util.zip GZIPInputStream]))
 
-(def demo-cik-allow-set parse/demo-cik-allow-set)
-
-(defn ->reader
-  "A Reader is returned as-is; anything else is opened via parse/gz-reader. Lets
-   the sink entry points accept either a ready reader or a (gzipped) file."
-  ^Reader [f]
-  (if (instance? Reader f) f (parse/gz-reader f)))
+(defn read-records
+  "Curated observation maps from a mirrored transit.json.gz — plain transit + the
+   standard serde handlers, no EDGAR-specific code. Eager: the caller reads inside
+   a with-open, so no lazy seq may outlive the stream."
+  [^java.io.InputStream in]
+  (vec (serde/read-transit-seq in :json)))
 
 (defn- doc->row
   "A doc → the row map for put-docs, carrying its own valid-time as :xt/valid-from
@@ -87,42 +90,45 @@
           nil
           (filing-batches docs)))
 
-(defn submit-companyfacts!
-  "Submits one companyfacts document as a bitemporal basis."
-  [node {:keys [reader allow-set]
-         :or {allow-set demo-cik-allow-set}}]
-  (with-open [rdr reader]
-    ;; read-docs realises eagerly — the JSON seq is backed by `rdr`, which closes
-    ;; when this scope exits, so no lazy seq may outlive it.
-    (submit-docs! node (parse/read-docs rdr allow-set))))
+(defn- transit-files
+  "The mirrored per-quarter transit files under `dir`, chronological. Quarters
+   sort lexically (2025q2 < 2025q3 < … < 2026q1), so a name sort is publish order."
+  [^java.io.File dir]
+  (for [^java.io.File f (sort (.listFiles dir))
+        :when (str/ends-with? (.getName f) ".transit.json.gz")]
+    f))
+
+(defn dataset
+  "The mirrored EDGAR dataset under `data-dir`: a {:quarters [file ...]} map, the
+   per-quarter transit files in chronological (oldest-first) order."
+  [data-dir]
+  {:quarters (vec (transit-files (io/file data-dir)))})
+
+(defn submit-quarter!
+  "Replays one quarter's mirrored transit file into `node`: read the curated
+   observations, pivot to docs, submit per-filing-date (see `submit-docs!`).
+   Only this quarter is held in memory."
+  [node file]
+  (with-open [in (-> (io/input-stream file) GZIPInputStream.)]
+    ;; read-records realises eagerly — the transit seq is backed by `in`, which
+    ;; closes when this scope exits, so no lazy seq may outlive it.
+    (let [docs (parse/observations->docs (read-records in))]
+      (log/infof "  %s — %d docs" (.getName (io/file file)) (count docs))
+      (submit-docs! node docs))))
 
 (defn submit-edgar!
-  "Replays a collection of companyfacts files into `node`. Each file is one
-   issuer's full fact history; the per-filing system-time grouping inside
-   `submit-companyfacts!` does the temporal ordering, so file order between
-   issuers doesn't matter.
-
-   files: seq of readers or anything `parse/gz-reader`-able."
-  [node {:keys [files allow-set] :or {allow-set demo-cik-allow-set}}]
-  (log/info "Loading" (count files) "EDGAR companyfacts file(s)...")
-  (reduce (fn [_ f]
-            (submit-companyfacts! node {:reader (->reader f) :allow-set allow-set}))
+  "Replays the mirrored EDGAR dataset into `node`, one quarter at a time so only a
+   single quarter is held in memory. Quarters replay oldest-first (the `dataset`
+   order) so system-time stays non-decreasing across the boundary."
+  [node {:keys [quarters]}]
+  (log/info "Loading" (count quarters) "EDGAR quarter(s)...")
+  (reduce (fn [_ file]
+            (when (Thread/interrupted)
+              (throw (InterruptedException. "interrupted loading EDGAR quarters")))
+            (submit-quarter! node file))
           nil
-          files))
-
-(defn submit-quarters!
-  "Replays EDGAR quarterly TSV dumps into `node`, one quarter at a time so only a
-   single quarter is held in memory. Each quarter is a [sub-file num-file] pair
-   (readers or gz-reader-able). Within a quarter, filings replay in filing-date
-   order; quarters should be supplied oldest-first so system-time stays
-   non-decreasing across the boundary."
-  [node quarters]
-  (reduce (fn [_ [sub-f num-f]]
-            (with-open [sub-rdr (->reader sub-f)
-                        num-rdr (->reader num-f)]
-              (submit-docs! node (tsv/quarter->docs sub-rdr num-rdr))))
-          nil
-          quarters))
+          quarters)
+  (log/info "EDGAR load complete."))
 
 ;;; Demo queries — run via (xt/q node [<query> & params]).
 
@@ -168,3 +174,19 @@
   "The issuer reference for a cik, as XTDB knows it now."
   ;; params: [cik]
   "SELECT i.cik, i.entity_name FROM issuer AS i WHERE i.cik = ?")
+
+(comment
+  ;; End-to-end against an in-memory node. Get the dataset first: sync it down
+  ;; (scripts/download-dataset.sh --edgar) or produce it locally
+  ;; (xtdb.datasets.edgar.mirror/mirror!) — both leave transit under the dir below.
+  (require '[xtdb.node :as xtn] :reload)
+
+  (def ds (dataset "src/dev/resources/data/edgar"))
+
+  (def node (xtn/start-node {}))
+
+  (submit-edgar! node ds)
+
+  (xt/q node ["SELECT COUNT(*) AS c FROM income_statement"])
+
+  (.close node))
