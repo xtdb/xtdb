@@ -28,8 +28,11 @@
             --gleif)
                 INCLUDES+=' --include gleif/*'
                 shift;;
+            --edgar)
+                INCLUDES+=' --include edgar/*'
+                shift;;
             --help)
-                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big, --gleif"
+                echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big, --gleif, --edgar"
                 exit 0;;
             *) echo "Unknown parameter passed: $1"; exit 1;;
         esac

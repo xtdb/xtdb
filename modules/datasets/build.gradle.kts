@@ -18,18 +18,22 @@ dependencies {
     api(project(":xtdb-core"))
 
     api(libs.tpch)
+    api(libs.clojure.data.csv)   // EDGAR mirror parses the quarterly TSVs
     api(libs.jsonista)
     api(libs.next.jdbc)
 
-    // the GLEIF mirror fetches the API (hato) and writes idiomatic records as transit
+    api(libs.aws.s3)
+
+    // the GLEIF / EDGAR mirrors fetch over HTTP (hato) and write idiomatic
+    // records as transit (transit.clj for GLEIF's direct cognitect.transit use).
     api(libs.hato)
     api(libs.transit.clj)
 
-    // the GLEIF PgIndexer (Kotlin) writes Postgres-source rows into XT; brings
-    // PgIndexer / RowOp / the Postgres ExternalSource.
+    // the GLEIF / EDGAR PgIndexers (Kotlin) write Postgres-source rows into XT;
+    // brings PgIndexer / RowOp / the Postgres ExternalSource.
     implementation(project(":modules:xtdb-postgres-source"))
     implementation(kotlin("stdlib"))
-    // the Postgres sink references PGobject directly (enum/jsonb binding).
+    // the Postgres sinks bind enum/jsonb (GLEIF) and dates/numerics (EDGAR) via pgjdbc.
     implementation(libs.pgjdbc)
 }
 

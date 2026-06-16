@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# File provider for the XTDB metrics dashboards mounted at the path below (the
+# canonical set from the repo's monitoring/dev-dashboards). They bind to the
+# Prometheus datasource by its uid (DS_PROMETHEUS), declared in datasource.yml.
+providers:
+  - name: 'xtdb'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards

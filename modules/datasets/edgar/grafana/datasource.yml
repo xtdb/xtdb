@@ -1,0 +1,23 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: DS_PROMETHEUS
+
+  # The live XTDB node's pgwire — the demo node runs on the host, bound to this
+  # compose network's gateway (172.30.0.1, the same endpoint Metabase uses).
+  # `edgar` is the attached database; the node has no pgwire auth, so user `xtdb`
+  # with no password.
+  - name: XTDB
+    type: postgres
+    access: proxy
+    url: 172.30.0.1:5432
+    user: xtdb
+    uid: DS_XTDB
+    jsonData:
+      database: edgar
+      sslmode: disable
