@@ -164,6 +164,9 @@ class KafkaCluster(
             val epoch: Int,
             val listener: Log.SubscriptionListener<M>,
             var processor: Log.RecordProcessor<M>?,
+            // Delivery runs under this job — a child of the poll loop: cluster shutdown reaps it, a
+            // delivery error still tanks the loop, and teardown cancels just this subscription. #5711
+            val deliveryJob: Job,
             val completion: CompletableDeferred<Unit> = CompletableDeferred(),
         ) {
             // expecting a load of change here for multi-part.
@@ -298,6 +301,7 @@ class KafkaCluster(
             }
 
         private val pollingJob: Job = scope.launch {
+            val loopScope = this
             try {
                 var closed = false
                 while (!closed) {
@@ -316,7 +320,7 @@ class KafkaCluster(
                                         val sub = subscriptions[topic]
                                             ?: error("Received records for unsubscribed topic $topic")
 
-                                        sub.processRecords(recs)
+                                        loopScope.launch(sub.deliveryJob) { sub.processRecords(recs) }.join()
                                     }
                                 }
                             }
@@ -339,7 +343,7 @@ class KafkaCluster(
             epoch: Int,
             listener: Log.SubscriptionListener<M>,
         ): TopicSubscription<M> {
-            val sub = TopicSubscription(codec, epoch, listener, null)
+            val sub = TopicSubscription(codec, epoch, listener, null, deliveryJob = Job(pollingJob))
             commandCh.send(GroupCommand.Register(topic, sub))
             consumer.wakeup()
             return sub
@@ -640,6 +644,9 @@ class KafkaCluster(
             try {
                 sub.completion.await()
             } finally {
+                // Cancel any in-flight delivery first, so a loop stuck in processRecords is freed to
+                // handle the unregister below rather than deadlocking on it. #5711
+                sub.deliveryJob.cancel()
                 withContext(NonCancellable) { sharedGroupConsumer.unregister(topic) }
             }
         }
