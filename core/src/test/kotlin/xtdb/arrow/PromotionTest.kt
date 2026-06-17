@@ -136,4 +136,27 @@ class PromotionTest {
             }
         }
     }
+
+    @Test
+    fun `promotes a mono whose name collides with the target type-leg 5714`(al: BufferAllocator) {
+        al.openVector("utf8", I64).closeOnCatch { v ->
+            v.writeAll(listOf(1L, 2L))
+            v.maybePromote(al, UTF8_TYPE, false)
+        }.use { promoted ->
+            promoted.writeAll(listOf("x"))
+            assertEquals("utf8" ofType fromLegs(I64, UTF8), promoted.field)
+            assertEquals(listOf(1L, 2L, "x"), promoted.asList)
+        }
+    }
+
+    @Test
+    fun `promotes a struct field keyed like a type-leg 5714`(al: BufferAllocator) {
+        al.openVector("v", structOf("utf8" to I64)).use { v ->
+            v.writeObject(mapOf("utf8" to 1L))
+            v.writeObject(mapOf("utf8" to "x"))
+
+            assertEquals("v" ofType structOf("utf8" to fromLegs(I64, UTF8)), v.field)
+            assertEquals(listOf(mapOf("utf8" to 1L), mapOf("utf8" to "x")), v.asList)
+        }
+    }
 }

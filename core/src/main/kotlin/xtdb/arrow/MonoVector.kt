@@ -54,8 +54,14 @@ sealed class MonoVector : Vector(), VectorReader, VectorWriter {
     override fun maybePromote(al: BufferAllocator, targetType: ArrowType, targetNullable: Boolean): Vector =
         // if it's a NullVector coming in, don't promote - we can just set ourselves to nullable. #4675
         when {
-            targetType != arrowType && targetType != NULL_TYPE ->
-                DenseUnionVector(al, name, listOf(this), valueCount)
+            targetType != arrowType && targetType != NULL_TYPE -> {
+                // the DUV inherits this field's name; this mono becomes a leg, so it must take its
+                // type-derived leg name *before* the union resolves legs by name - otherwise a field
+                // keyed like a type-leg (e.g. "utf8") collides with the leg being added. #5714
+                val fieldName = name
+                this@MonoVector.name = arrowType.toLeg()
+
+                DenseUnionVector(al, fieldName, listOf(this), valueCount)
                     .apply {
                         repeat(this.valueCount) { idx ->
                             typeBuffer.writeByte(0)
@@ -64,9 +70,7 @@ sealed class MonoVector : Vector(), VectorReader, VectorWriter {
 
                         maybePromote(al, targetType, targetNullable)
                     }
-                    .also {
-                        this@MonoVector.name = arrowType.toLeg()
-                    }
+            }
 
             else -> {
                 nullable = nullable || targetNullable
