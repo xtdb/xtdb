@@ -72,7 +72,7 @@ class OpenTx(
     private val tableTxs = HashMap<TableRef, Table>()
 
     fun table(table: TableRef): Table =
-        tableTxs.getOrPut(table) { Table(table, allocator, systemTimeMicros) }
+        tableTxs.getOrPut(table) { Table(table) }
 
     fun table(schemaName: SchemaName, tableName: TableName) =
         table(TableRef(dbState.name, schemaName, tableName))
@@ -337,56 +337,6 @@ class OpenTx(
         }
     }
 
-    /**
-     * Bulk-patch docs into [table], keyed by `_iid`, preserving existing columns where
-     * the patched doc doesn't supply a new value.
-     *
-     * [docs] carries one row per doc, columns `_iid` (fixed-size binary) and `doc` (struct).
-     * [validFromMicros] / [validToMicros] default to [MIN_LONG] / [MAX_LONG] — the start/end of
-     * valid time — on the Instant overload, a null on either side means the same thing.
-     */
-    fun patchDocs(table: Table, validFromMicros: Long, validToMicros: Long, docs: RelationReader) {
-        checkNotForbidden(table.ref)
-
-        val prepareOpts = PersistentArrayMap.create(
-            mapOf(
-                "current-time".kw to txKey.systemTime,
-                "default-db".kw to dbState.name,
-                "arg-fields".kw to docs.schema.fields,
-            )
-        )
-
-        // The planner (plan-patch in sql.clj) requires concrete Instant bounds — no nil support.
-        // The MIN/MAX µs bounds become start-of-time / end-of-time Instants; the planner treats
-        // them as literals and doesn't round-trip them through `asMicros`, so the lossiness of
-        // those sentinel Instants doesn't bite here.
-        val pq = nodeBase.querySource.preparePatchDocsQuery(
-            table.ref, validFromMicros.microsAsInstant, validToMicros.microsAsInstant,
-            queryCatalog, prepareOpts,
-        )
-
-        val patchArgs = RelationReader.from(
-            listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
-        )
-
-        val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
-
-        // openQuery takes ownership of the sliced args and closes them when the cursor closes —
-        // no separate `.use` on the slice here or it'd double-free.
-        pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
-            cursor.forEachRemaining { rel -> table.writePuts(rel, validFromMicros, validToMicros) }
-        }
-    }
-
-    /**
-     * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`
-     * (external-source writers typically do). Null on either bound means the same as passing
-     * [MIN_LONG] / [MAX_LONG] to the µs overload.
-     */
-    @JvmOverloads
-    fun patchDocs(table: Table, validFrom: Instant? = null, validTo: Instant? = null, docs: RelationReader) =
-        patchDocs(table, validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG, docs)
-
     override fun close() = tableTxs.closeAll()
 
     companion object {
@@ -425,7 +375,10 @@ class OpenTx(
         }
     }
 
-    class Table(val ref: TableRef, allocator: BufferAllocator, private val systemFrom: Long) : AutoCloseable {
+    // `inner` so the table reaches the tx's query machinery (querySource, the read-your-writes
+    // [queryCatalog], tracer, allocator, systemTimeMicros) for [patchDocs] — and so a table can only
+    // exist as part of an OpenTx, obtained via [table].
+    inner class Table internal constructor(val ref: TableRef) : AutoCloseable {
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
             if (validFrom >= validTo) {
@@ -471,7 +424,7 @@ class OpenTx(
             validToVec.writeLong(validTo)
         }
 
-        fun writeDefaultValidTime() = writeValidTimeMicros(systemFrom, MAX_LONG)
+        fun writeDefaultValidTime() = writeValidTimeMicros(systemTimeMicros, MAX_LONG)
 
         @Suppress("IfThenToElvis") // because I wasn't sure that Elvis doesn't box primitives
         fun writeValidTimes(validFrom: Instant? = null, validTo: Instant? = null) =
@@ -483,7 +436,7 @@ class OpenTx(
         private fun endOps(count: Int) {
             val pos = txRelation.rowCount
 
-            repeat(count) { systemFromVec.writeLong(systemFrom) }
+            repeat(count) { systemFromVec.writeLong(systemTimeMicros) }
 
             txRelation.endRows(count)
 
@@ -622,6 +575,58 @@ class OpenTx(
             repeat(rowCount) { writeValidTimeMicros(MIN_LONG, MAX_LONG) }
             endErases(rowCount)
         }
+
+        /**
+         * Bulk-patch docs into this table, keyed by `_iid`, preserving existing columns where
+         * the patched doc doesn't supply a new value.
+         *
+         * [docs] carries one row per doc, columns `_iid` (fixed-size binary) and `doc` (struct).
+         * [validFromMicros] / [validToMicros] default to [MIN_LONG] / [MAX_LONG] — the start/end of
+         * valid time — on the Instant overload, a null on either side means the same thing.
+         *
+         * Reads existing docs through the tx's read-your-writes [queryCatalog].
+         */
+        fun patchDocs(validFromMicros: Long, validToMicros: Long, docs: RelationReader) {
+            checkNotForbidden(ref)
+
+            val prepareOpts = PersistentArrayMap.create(
+                mapOf(
+                    "current-time".kw to txKey.systemTime,
+                    "default-db".kw to dbState.name,
+                    "arg-fields".kw to docs.schema.fields,
+                )
+            )
+
+            // The planner (plan-patch in sql.clj) requires concrete Instant bounds — no nil support.
+            // The MIN/MAX µs bounds become start-of-time / end-of-time Instants; the planner treats
+            // them as literals and doesn't round-trip them through `asMicros`, so the lossiness of
+            // those sentinel Instants doesn't bite here.
+            val pq = nodeBase.querySource.preparePatchDocsQuery(
+                ref, validFromMicros.microsAsInstant, validToMicros.microsAsInstant,
+                queryCatalog, prepareOpts,
+            )
+
+            val patchArgs = RelationReader.from(
+                listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
+            )
+
+            val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
+
+            // openQuery takes ownership of the sliced args and closes them when the cursor closes —
+            // no separate `.use` on the slice here or it'd double-free.
+            pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
+                cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
+            }
+        }
+
+        /**
+         * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`
+         * (external-source writers typically do). Null on either bound means the same as passing
+         * [MIN_LONG] / [MAX_LONG] to the µs overload.
+         */
+        @JvmOverloads
+        fun patchDocs(validFrom: Instant? = null, validTo: Instant? = null, docs: RelationReader) =
+            patchDocs(validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG, docs)
 
         internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 

@@ -8,7 +8,7 @@
            (xtdb.compactor SegmentMerge SegmentMerge$RecencyPartitioning$Partition SegmentMerge$RecencyPartitioning$Preserve SegmentMerge$Result)
            [xtdb.segment MemorySegment]))
 
-(t/use-fixtures :each tu/with-allocator)
+(t/use-fixtures :each tu/with-allocator tu/with-node)
 
 (t/deftest test-merges-segments
   (with-open [seg-merge (SegmentMerge. tu/*allocator*)]

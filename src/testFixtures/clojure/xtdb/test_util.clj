@@ -356,17 +356,18 @@
 
 (defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
   (let [system-time (.getSystemTime tx-key)]
-    (with-open [open-tx-table (OpenTx$Table. (.getTable live-table) *allocator* (time/instant->micros system-time))]
-      (let [doc-wtr (.getPutDocWriter open-tx-table)]
+    (with-open [open-tx (->open-tx *allocator* *node* tx-key)]
+      (let [^OpenTx$Table open-tx-table (.table open-tx (.getTable live-table))
+            doc-wtr (.getPutDocWriter open-tx-table)]
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
           (.writeIid open-tx-table (ByteBuffer/wrap (util/->iid eid)))
           (.writeValidTimeMicros open-tx-table (time/instant->micros valid-from) (time/instant->micros valid-to))
           (.writeObject doc-wtr doc)
-          (.endPut open-tx-table)))
+          (.endPut open-tx-table))
 
-      (.importData live-table (.getTxRelation open-tx-table)))))
+        (.importData live-table (.getTxRelation open-tx-table))))))
 
 (defn bytes->path [^bytes bs]
   (mapcat (fn [b]

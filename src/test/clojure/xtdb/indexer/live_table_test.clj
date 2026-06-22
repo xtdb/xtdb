@@ -40,8 +40,9 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
 
-          (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
-            (let [doc-wtr (.getPutDocWriter open-tx-table)]
+          (with-open [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})]
+            (let [^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
+                  doc-wtr (.getPutDocWriter open-tx-table)]
               (dotimes [_n n]
                 (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
                 (.writeValidTimeMicros open-tx-table 0 0)
@@ -72,8 +73,9 @@
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.))]
-          (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
-            (let [doc-wtr (.getPutDocWriter open-tx-table)]
+          (with-open [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})]
+            (let [^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
+                  doc-wtr (.getPutDocWriter open-tx-table)]
 
               (dotimes [_n n]
                 (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
@@ -118,7 +120,8 @@
                      bp (.getBufferPool (db/primary-db node))
                      allocator (RootAllocator.)
                      live-table (LiveTable. allocator #xt/table foo 0 rc)]
-      (let [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)
+      (let [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})
+            ^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
             doc-wtr (.getPutDocWriter open-tx-table)]
 
         (doseq [uuid uuids]
@@ -133,7 +136,7 @@
           (let [live-table-before (live-table-snap->data live-table-snap)]
 
             (.finishBlock live-table bp 0)
-            (.close open-tx-table)
+            (.close open-tx)
 
             (let [live-table-after (live-table-snap->data live-table-snap)]
 

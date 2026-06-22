@@ -252,7 +252,7 @@ internal class SourceLogTxIndexer(
                         "db" to tableRef.dbName, "schema" to tableRef.schemaName, "table" to tableRef.tableName,
                     ),
                 ) {
-                    patchDocs(table(tableRef), validFrom, validTo, docs)
+                    table(tableRef).patchDocs(validFrom, validTo, docs)
                 }
             }
         }
