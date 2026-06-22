@@ -1,26 +1,33 @@
 package xtdb
 
 import io.mockk.mockk
+import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
 import xtdb.api.log.MessageId
+import xtdb.arrow.VectorType
 import xtdb.database.DatabaseName
 import xtdb.database.decodeTxBasisToken
 import xtdb.database.encodeTxBasisToken
 import xtdb.indexer.DatabaseSnapshot
 import xtdb.query.PreparedQuery
+import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import java.time.Instant
 
-class NodeConnectionTest {
+class ConnectionTest {
 
-    private class FakeNode : NodeConnection.Node {
+    private class FakeNode : Xtdb.Connection.Node {
         var nextTxId: MessageId = 0
         val submittedDbs = mutableListOf<DatabaseName>()
         val queryTokens = mutableListOf<Pair<DatabaseName, String?>>()
         val snapshotTokens = mutableListOf<Pair<DatabaseName, String?>>()
+
+        override val allocator: BufferAllocator get() = mockk()
+        override val databaseNames: Collection<DatabaseName> get() = emptyList()
+        override fun getColumnTypes(table: TableRef, snap: DatabaseSnapshot): Map<String, VectorType>? = null
 
         override fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts) =
             Xtdb.SubmittedTx(nextTxId).also { submittedDbs += dbName }
@@ -46,7 +53,7 @@ class NodeConnectionTest {
     @Test
     fun `a write is awaited by the next read on the same connection`() {
         val node = FakeNode().apply { nextTxId = 7 }
-        val conn = NodeConnection(node, "mydb")
+        val conn = Xtdb.Connection(node, "mydb")
 
         conn.submitTx(emptyList())
         conn.openSqlQuery("SELECT 1")
@@ -60,7 +67,7 @@ class NodeConnectionTest {
     @Test
     fun `executeTx records its tx like submitTx`() {
         val node = FakeNode().apply { nextTxId = 11 }
-        val conn = NodeConnection(node, "mydb")
+        val conn = Xtdb.Connection(node, "mydb")
 
         conn.executeTx(emptyList())
 
@@ -70,7 +77,7 @@ class NodeConnectionTest {
     @Test
     fun `successive writes accumulate monotonically`() {
         val node = FakeNode()
-        val conn = NodeConnection(node, "mydb")
+        val conn = Xtdb.Connection(node, "mydb")
 
         node.nextTxId = 4; conn.submitTx(emptyList())
         node.nextTxId = 9; conn.submitTx(emptyList())
@@ -81,7 +88,7 @@ class NodeConnectionTest {
     @Test
     fun `retargeting dbName moves both writes and token onto the new db`() {
         val node = FakeNode().apply { nextTxId = 3 }
-        val conn = NodeConnection(node, "xtdb")
+        val conn = Xtdb.Connection(node, "xtdb")
 
         conn.dbName = "other"
         conn.submitTx(emptyList())
@@ -95,7 +102,7 @@ class NodeConnectionTest {
     @Test
     fun `recordTx merges a foreign db without disturbing the connection db - the attach-detach case`() {
         val node = FakeNode().apply { nextTxId = 2 }
-        val conn = NodeConnection(node, "secondary")
+        val conn = Xtdb.Connection(node, "secondary")
 
         conn.submitTx(emptyList())
         conn.recordTx("xtdb", 5)
@@ -106,7 +113,7 @@ class NodeConnectionTest {
     @Test
     fun `the await token can be replaced directly - for SET AWAIT_TOKEN`() {
         val node = FakeNode().apply { nextTxId = 8 }
-        val conn = NodeConnection(node, "mydb")
+        val conn = Xtdb.Connection(node, "mydb")
 
         conn.submitTx(emptyList())
         conn.awaitToken = mapOf("mydb" to listOf(42L)).encodeTxBasisToken()

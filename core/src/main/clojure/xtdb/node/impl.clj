@@ -22,10 +22,8 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
-           (xtdb NodeConnection NodeConnection$Node)
-           (xtdb.adbc XtdbConnection XtdbConnection$Node)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
+           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$Connection$Node Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
@@ -84,9 +82,12 @@
            :committed? committed?
            :error error}))))
 
-(defn- ->node-connection ^NodeConnection [this-node ^Database$Catalog db-cat db-name]
-  (NodeConnection.
-   (reify NodeConnection$Node
+(defn- ->node-connection ^Xtdb$Connection [this-node ^Database$Catalog db-cat ^BufferAllocator allocator db-name]
+  (Xtdb$Connection.
+   (reify Xtdb$Connection$Node
+     (getAllocator [_] allocator)
+     (getDatabaseNames [_] (.getDatabaseNames db-cat))
+
      (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
      (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
 
@@ -104,7 +105,11 @@
                               (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
                                                     {:db-name db-name})))]
          (.awaitAll db-cat await-token nil)
-         (.openSnapshot db))))
+         (.openSnapshot db)))
+
+     (getColumnTypes [_ table snap]
+       (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
+         (.getColumnTypes db table snap))))
    db-name))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
@@ -136,14 +141,7 @@
       (.createConnectionBuilder data-source)))
 
   (connect [this-node]
-    (XtdbConnection.
-     (reify XtdbConnection$Node
-       (getAllocator [_] allocator)
-       (getDatabaseNames [_] (.getDatabaseNames db-cat))
-       (getColumnTypes [_ table snap]
-         (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
-           (.getColumnTypes db table snap))))
-     (xtp/open-connection this-node "xtdb")))
+    (->node-connection this-node db-cat allocator "xtdb"))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -228,7 +226,7 @@
       (await-msg-result this primary-db msg-id)))
 
   (open-connection [this-node db-name]
-    (->node-connection this-node db-cat db-name))
+    (->node-connection this-node db-cat allocator db-name))
 
   xtp/PStatus
   (latest-completed-txs [_]

@@ -12,7 +12,7 @@
            org.apache.arrow.memory.BufferAllocator
            xtdb.api.Xtdb
            (xtdb.arrow Relation VectorType VectorWriter)
-           xtdb.adbc.XtdbConnection))
+           xtdb.api.Xtdb$Connection))
 
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 
@@ -141,7 +141,7 @@
 
 (defn submit-rels! [^Xtdb node scale-factor]
   (log/info "Transacting TPC-H tables...")
-  (with-open [^XtdbConnection conn (.connect node)]
+  (with-open [^Xtdb$Connection conn (.connect node)]
     (doseq [^TpchTable table (TpchTable/getTables)
             :let [table-name (.getTableName table)]]
       (let [doc-count (->> (.createGenerator table scale-factor 1 1)
