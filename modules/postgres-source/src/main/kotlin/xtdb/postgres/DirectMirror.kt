@@ -51,9 +51,9 @@ class DirectMirror(private val dbName: String) : PgIndexer {
 
                 openTxTable.logPut(
                     ByteBuffer.wrap(id.asIid),
-                    explicitValidFrom ?: openTx.systemFrom,
+                    explicitValidFrom ?: openTx.systemTimeMicros,
                     explicitValidTo ?: Long.MAX_VALUE,
-                ) { openTxTable.docWriter.writeObject(docMap) }
+                ) { openTxTable.putDocWriter.writeObject(docMap) }
             }
 
             is RowOp.Delete -> {
@@ -62,7 +62,7 @@ class DirectMirror(private val dbName: String) : PgIndexer {
 
                 openTxTable.logDelete(
                     ByteBuffer.wrap(id.asIid),
-                    openTx.systemFrom,
+                    openTx.systemTimeMicros,
                     Long.MAX_VALUE,
                 )
             }

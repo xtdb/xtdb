@@ -20,6 +20,9 @@ import xtdb.database.DatabaseStorage
 import clojure.lang.PersistentArrayMap
 import xtdb.arrow.RelationAsStructReader
 import xtdb.arrow.SingletonListReader
+import xtdb.arrow.VectorType.Companion.BOOL
+import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
@@ -37,6 +40,7 @@ import xtdb.trie.Trie
 import xtdb.types.ClojureForm
 import xtdb.util.asIid
 import xtdb.util.closeAll
+import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
@@ -62,19 +66,20 @@ class OpenTx(
         val defaultTz: ZoneId? = null,
     )
 
-    val systemFrom = txKey.systemTime.asMicros
+    val systemTime get() = txKey.systemTime
+    val systemTimeMicros = systemTime.asMicros
 
     private val tableTxs = HashMap<TableRef, Table>()
 
     fun table(table: TableRef): Table =
-        tableTxs.getOrPut(table) { Table(table, allocator, systemFrom) }
+        tableTxs.getOrPut(table) { Table(table, allocator, systemTimeMicros) }
 
     fun table(schemaName: SchemaName, tableName: TableName) =
         table(TableRef(dbState.name, schemaName, tableName))
 
-    val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
+    internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
-    fun serializeTableData(): Map<String, ByteArray> =
+    private fun serializeTableData(): Map<String, ByteArray> =
         tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
 
     /**
@@ -85,11 +90,9 @@ class OpenTx(
      * `committed` is derived from [error]: a non-null error means the tx aborted.
      */
     @JvmOverloads
-    fun commitTx(
-        error: Throwable? = null,
-        userMetadata: Map<*, *>? = null,
-    ): ReplicaMessage.ResolvedTx {
+    fun commitTx(error: Throwable? = null, userMetadata: Map<*, *>? = null): ReplicaMessage.ResolvedTx {
         writeTxRow(error, userMetadata)
+
         return ReplicaMessage.ResolvedTx(
             txKey.txId, txKey.systemTime,
             committed = error == null,
@@ -105,22 +108,16 @@ class OpenTx(
         val systemTimeMicros = txKey.systemTime.asMicros
 
         val liveTable = table(TableRef(dbState.name, "xt", "txs"))
-        val docWriter = liveTable.docWriter
+        val docWriter = liveTable.putDocWriter
 
-        liveTable.logPut(ByteBuffer.wrap(txId.asIid), systemTimeMicros, Long.MAX_VALUE) {
-            docWriter.vectorFor("_id", VectorType.I64.arrowType, false)
-                .writeLong(txId)
-
-            docWriter.vectorFor("system_time", VectorType.INSTANT.arrowType, false)
-                .writeLong(systemTimeMicros)
-
-            docWriter.vectorFor("committed", VectorType.BOOL.arrowType, false)
-                .writeBoolean(error == null)
-
-            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true)
-                .writeObject(userMetadata)
+        liveTable.logPut(ByteBuffer.wrap(txId.asIid), systemTimeMicros, MAX_LONG) {
+            docWriter.vectorFor("_id", I64.arrowType, false).writeLong(txId)
+            docWriter.vectorFor("system_time", INSTANT.arrowType, false).writeLong(systemTimeMicros)
+            docWriter.vectorFor("committed", BOOL.arrowType, false).writeBoolean(error == null)
+            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
 
             val errorWriter = docWriter.vectorFor("error", VectorType.TRANSIT.arrowType, true)
+
             if (error == null) {
                 errorWriter.writeNull()
             } else {
@@ -137,20 +134,22 @@ class OpenTx(
         }
     }
 
-    private fun queryCatalog(): IQuerySource.QueryCatalog {
-        val liveIndex = dbState.liveIndex
+    private val queryCatalog: IQuerySource.QueryCatalog
+        get() {
+            val liveIndex = dbState.liveIndex
 
-        val queryDb = object : IQuerySource.QueryDatabase {
-            override val storage get() = dbStorage
-            override val queryState get() = dbState
-            override fun openSnapshot() =
-                DatabaseSnapshot(listOf(liveIndex.openSnapshot(this@OpenTx)))
+            val queryDb = object : IQuerySource.QueryDatabase {
+                override val storage get() = dbStorage
+                override val queryState get() = dbState
+                override fun openSnapshot() =
+                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(this@OpenTx)))
+            }
+
+            return object : IQuerySource.QueryCatalog {
+                override val databaseNames: Collection<DatabaseName> get() = setOf(dbState.name)
+                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == dbState.name }
+            }
         }
-        return object : IQuerySource.QueryCatalog {
-            override val databaseNames: Collection<DatabaseName> get() = setOf(dbState.name)
-            override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == dbState.name }
-        }
-    }
 
     /**
      * Run SQL against the database's live index, with visibility into writes made earlier
@@ -159,11 +158,7 @@ class OpenTx(
      * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader].
      * Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
      */
-    fun openQuery(
-        sql: String,
-        args: RelationReader? = null,
-        opts: QueryOpts = QueryOpts(),
-    ): ResultCursor {
+    fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
 
         val prepareOpts = mapOf(
@@ -174,7 +169,7 @@ class OpenTx(
         )
 
         return nodeBase.querySource
-            .prepareQuery(sql, queryCatalog(), prepareOpts)
+            .prepareQuery(sql, queryCatalog, prepareOpts)
             .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
     }
 
@@ -185,25 +180,22 @@ class OpenTx(
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) throw; GRANT/REVOKE
      * write role membership below that guard, gated on [user] being a superuser.
      */
-    fun executeSql(
-        sql: String,
-        args: RelationReader? = null,
-        opts: QueryOpts = QueryOpts(),
-        user: String? = null,
-    ) {
+    fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
-        val currentTimeµs = currentTime.asMicros
+        val currentTimeMicros = currentTime.asMicros
         val qOpts = xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
 
-        val prepareOpts = PersistentArrayMap.create(mapOf(
-            "current-time".kw to currentTime,
-            "default-tz".kw to opts.defaultTz,
-            "default-db".kw to dbState.name,
-            "query-text".kw to sql,
-            "arg-fields".kw to args?.schema?.fields,
-        ))
+        val prepareOpts = PersistentArrayMap.create(
+            mapOf(
+                "current-time".kw to currentTime,
+                "default-tz".kw to opts.defaultTz,
+                "default-db".kw to dbState.name,
+                "query-text".kw to sql,
+                "arg-fields".kw to args?.schema?.fields,
+            )
+        )
 
-        when (val stmt = nodeBase.querySource.prepareTxSql(sql, queryCatalog(), prepareOpts)) {
+        when (val stmt = nodeBase.querySource.prepareTxSql(sql, queryCatalog, prepareOpts)) {
             is SqlStatement.GrantRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = false)
             is SqlStatement.RevokeRole -> writeRoleMembership(stmt.user, stmt.role, currentTime, user, revoke = true)
 
@@ -216,7 +208,10 @@ class OpenTx(
                 when (stmt) {
                     is SqlStatement.Assert -> {
                         val msg = stmt.message ?: "Assert failed"
-                        fun fail(): Nothing = throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
+
+                        fun fail(): Nothing =
+                            throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
+
                         query.openQuery(args, qOpts).use { cursor ->
                             if (!cursor.tryAdvance { rel -> if (rel.rowCount == 0) fail() }) fail()
                         }
@@ -224,48 +219,67 @@ class OpenTx(
 
                     is SqlStatement.Put -> {
                         checkNotForbidden(stmt.table)
+
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 // defer table() until a row is actually written: a 0-row result (no-match
                                 // UPDATE/DELETE, INSERT ... WHERE false) must not register a table — only CREATE TABLE does
                                 if (rel.rowCount == 0) return@forEachRemaining
+
                                 // INSERT/UPDATE plans emit `_id` + flat content cols + optional temporal,
                                 // not the canonical `_iid` + `doc` shape `logPuts` expects.
                                 // Package content cols into a `doc` struct here.
-                                val tempColNames = setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
+                                val tempColNames =
+                                    setOf("_iid", "_system_from", "_system_to", "_valid_from", "_valid_to")
+
                                 val contentRel = RelationReader.from(
                                     rel.vectors.filter { it.name !in tempColNames },
                                     rel.rowCount,
                                 )
+
                                 val putCols = listOfNotNull(
                                     rel.vectorFor("_id"),
                                     RelationAsStructReader("doc", contentRel),
                                     rel.vectorForOrNull("_valid_from"),
                                     rel.vectorForOrNull("_valid_to"),
                                 )
-                                table(stmt.table).logPuts(currentTimeµs, Long.MAX_VALUE, RelationReader.from(putCols, rel.rowCount))
+
+                                table(stmt.table)
+                                    .logPuts(currentTimeMicros, MAX_LONG, RelationReader.from(putCols, rel.rowCount))
                             }
                         }
                     }
 
                     is SqlStatement.Patch -> {
                         checkNotForbidden(stmt.table)
+
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logPuts(0, Long.MAX_VALUE, rel) }
+                            cursor.forEachRemaining { rel ->
+                                if (rel.rowCount > 0)
+                                    table(stmt.table).logPuts(0, MAX_LONG, rel)
+                            }
                         }
                     }
 
                     is SqlStatement.Delete -> {
                         checkNotForbidden(stmt.table)
+
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logDeletes(0, Long.MAX_VALUE, rel) }
+                            cursor.forEachRemaining { rel ->
+                                if (rel.rowCount > 0)
+                                    table(stmt.table).logDeletes(0, MAX_LONG, rel)
+                            }
                         }
                     }
 
                     is SqlStatement.Erase -> {
                         checkNotForbidden(stmt.table)
+
                         query.openQuery(args, qOpts).use { cursor ->
-                            cursor.forEachRemaining { rel -> if (rel.rowCount > 0) table(stmt.table).logErases(rel.vectorFor("_iid")) }
+                            cursor.forEachRemaining { rel ->
+                                if (rel.rowCount > 0)
+                                    table(stmt.table).logErases(rel.vectorFor("_iid"))
+                            }
                         }
                     }
                 }
@@ -282,7 +296,13 @@ class OpenTx(
     // guard (the `xt.txs` writeTxRow idiom), so the guard stays in force for user DML. The (user, role) is
     // parsed statically — there's no query to run — and keyed by a deterministic `_iid` so a re-GRANT
     // supersedes; REVOKE is a system-time soft-close.
-    private fun writeRoleMembership(user: String, role: String, currentTime: Instant, principal: String?, revoke: Boolean) {
+    private fun writeRoleMembership(
+        user: String,
+        role: String,
+        currentTime: Instant,
+        principal: String?,
+        revoke: Boolean
+    ) {
         if (dbState.name != "xtdb")
             throw Incorrect(
                 "Role membership can only be managed on the primary 'xtdb' database.",
@@ -302,7 +322,7 @@ class OpenTx(
         if (revoke) {
             table.logDelete(iid, ts, MAX_LONG)
         } else {
-            val docWriter = table.docWriter
+            val docWriter = table.putDocWriter
             table.logPut(iid, ts, MAX_LONG) {
                 docWriter.vectorFor("user", VectorType.UTF8.arrowType, false).writeObject(user)
                 docWriter.vectorFor("role", VectorType.UTF8.arrowType, false).writeObject(role)
@@ -316,64 +336,52 @@ class OpenTx(
      * the patched doc doesn't supply a new value.
      *
      * [docs] carries one row per doc, columns `_iid` (fixed-size binary) and `doc` (struct).
-     * [validFromµs] / [validToµs] default to [Long.MIN_VALUE] / [Long.MAX_VALUE] — the start/end of
+     * [validFromMicros] / [validToMicros] default to [MIN_LONG] / [MAX_LONG] — the start/end of
      * valid time — on the Instant overload, a null on either side means the same thing.
      */
-    fun patchDocs(
-        table: Table,
-        validFromµs: Long,
-        validToµs: Long,
-        docs: RelationReader,
-    ) {
+    fun patchDocs(table: Table, validFromMicros: Long, validToMicros: Long, docs: RelationReader) {
         checkNotForbidden(table.ref)
 
-        val prepareOpts = PersistentArrayMap.create(mapOf(
-            "current-time".kw to txKey.systemTime,
-            "default-db".kw to dbState.name,
-            "arg-fields".kw to docs.schema.fields,
-        ))
+        val prepareOpts = PersistentArrayMap.create(
+            mapOf(
+                "current-time".kw to txKey.systemTime,
+                "default-db".kw to dbState.name,
+                "arg-fields".kw to docs.schema.fields,
+            )
+        )
 
         // The planner (plan-patch in sql.clj) requires concrete Instant bounds — no nil support.
         // The MIN/MAX µs bounds become start-of-time / end-of-time Instants; the planner treats
         // them as literals and doesn't round-trip them through `asMicros`, so the lossiness of
         // those sentinel Instants doesn't bite here.
         val pq = nodeBase.querySource.preparePatchDocsQuery(
-            table.ref, validFromµs.microsAsInstant, validToµs.microsAsInstant,
-            queryCatalog(), prepareOpts,
+            table.ref, validFromMicros.microsAsInstant, validToMicros.microsAsInstant,
+            queryCatalog, prepareOpts,
         )
 
-        val patchArgs = RelationReader.from(listOf(
-            SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs))
-        ))
+        val patchArgs = RelationReader.from(
+            listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
+        )
 
         val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
 
         // openQuery takes ownership of the sliced args and closes them when the cursor closes —
         // no separate `.use` on the slice here or it'd double-free.
         pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
-            cursor.forEachRemaining { rel -> table.logPuts(validFromµs, validToµs, rel) }
+            cursor.forEachRemaining { rel -> table.logPuts(validFromMicros, validToMicros, rel) }
         }
     }
 
     /**
      * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`
      * (external-source writers typically do). Null on either bound means the same as passing
-     * [Long.MIN_VALUE] / [Long.MAX_VALUE] to the µs overload.
+     * [MIN_LONG] / [MAX_LONG] to the µs overload.
      */
     @JvmOverloads
-    fun patchDocs(
-        table: Table,
-        validFrom: Instant? = null,
-        validTo: Instant? = null,
-        docs: RelationReader,
-    ) = patchDocs(
-        table,
-        validFrom?.asMicros ?: Long.MIN_VALUE,
-        validTo?.asMicros ?: Long.MAX_VALUE,
-        docs,
-    )
+    fun patchDocs(table: Table, validFrom: Instant? = null, validTo: Instant? = null, docs: RelationReader) =
+        patchDocs(table, validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG, docs)
 
-    override fun close() = tableTxs.values.closeAll()
+    override fun close() = tableTxs.closeAll()
 
     companion object {
         // Must stay in sync with xtdb.log/forbidden-schemas and xtdb.tx.TxWriter's FORBIDDEN_SCHEMAS.
@@ -411,11 +419,7 @@ class OpenTx(
         }
     }
 
-    class Table(
-        val ref: TableRef,
-        allocator: BufferAllocator,
-        private val systemFrom: Long,
-    ) : AutoCloseable {
+    class Table(val ref: TableRef, allocator: BufferAllocator, private val systemFrom: Long) : AutoCloseable {
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
             if (validFrom >= validTo) {
@@ -438,18 +442,18 @@ class OpenTx(
         private val deleteVec = opVec["delete"]
         private val eraseVec = opVec["erase"]
 
-        val docWriter: VectorWriter by lazy(LazyThreadSafetyMode.NONE) { putVec }
+        val putDocWriter: VectorWriter by lazy(LazyThreadSafetyMode.NONE) { putVec }
 
         /**
          * Seeds the put-struct with a `NULL_TYPE` child per declared column, so a `CREATE TABLE foo (a, b)`
          * registers the columns ahead of any data. They surface through [RelationReader.logRelTypes] into the
          * catalog/planner. (An empty `CREATE TABLE foo` passes no columns, leaving the put-struct unforced.)
          */
-        fun declareColumns(colNames: List<String>) {
-            for (colName in colNames) docWriter.vectorFor(colName, NULL_TYPE, false)
+        internal fun declareColumns(colNames: List<String>) {
+            for (colName in colNames) putDocWriter.vectorFor(colName, NULL_TYPE, false)
         }
 
-        var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
+        internal var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
             private set
 
         fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
@@ -518,9 +522,10 @@ class OpenTx(
             if (!perRowCheck) checkValidTimes(validFrom, validTo)
 
             val iidCopier = iidRdr?.rowCopier(iidVec)
-            val docCopier = docRdr.rowCopier(docWriter)
+            val docCopier = docRdr.rowCopier(putDocWriter)
 
             val startPos = txRelation.rowCount
+
             repeat(rowCount) { idx ->
                 val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFrom
                 val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validTo
@@ -528,12 +533,14 @@ class OpenTx(
 
                 if (iidCopier != null) iidCopier.copyRow(idx)
                 else iidVec.writeBytes(ByteBuffer.wrap(idRdr!!.getObject(idx).asIid))
+
                 systemFromVec.writeLong(systemFrom)
                 validFromVec.writeLong(rowValidFrom)
                 validToVec.writeLong(rowValidTo)
                 docCopier.copyRow(idx)
                 txRelation.endRow()
             }
+
             trie = trie.addRange(startPos, rowCount)
         }
 
@@ -541,11 +548,11 @@ class OpenTx(
          * Batch delete: deletes every row in [rel] (keyed by `_iid`).
          *
          * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
-         * otherwise the [validFrom] / [validTo] defaults apply.
+         * otherwise the [validFromMicros] / [validToMicros] defaults apply.
          * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
          * temporal columns; otherwise per-row.
          */
-        fun logDeletes(validFrom: Long, validTo: Long, rel: RelationReader) {
+        fun logDeletes(validFromMicros: Long, validToMicros: Long, rel: RelationReader) {
             val rowCount = rel.rowCount
             if (rowCount == 0) return
 
@@ -554,14 +561,15 @@ class OpenTx(
             val vtRdr = rel.vectorForOrNull("_valid_to")
 
             val perRowCheck = vfRdr != null || vtRdr != null
-            if (!perRowCheck) checkValidTimes(validFrom, validTo)
+            if (!perRowCheck) checkValidTimes(validFromMicros, validToMicros)
 
             val iidCopier = iidRdr.rowCopier(iidVec)
 
             val startPos = txRelation.rowCount
+
             repeat(rowCount) { idx ->
-                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFrom
-                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validTo
+                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFromMicros
+                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validToMicros
                 if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
 
                 iidCopier.copyRow(idx)
@@ -571,6 +579,7 @@ class OpenTx(
                 deleteVec.writeNull()
                 txRelation.endRow()
             }
+
             trie = trie.addRange(startPos, rowCount)
         }
 
@@ -584,6 +593,7 @@ class OpenTx(
             val iidCopier = iids.rowCopier(iidVec)
 
             val startPos = txRelation.rowCount
+
             repeat(rowCount) { idx ->
                 iidCopier.copyRow(idx)
                 systemFromVec.writeLong(systemFrom)
@@ -592,10 +602,11 @@ class OpenTx(
                 eraseVec.writeNull()
                 txRelation.endRow()
             }
+
             trie = trie.addRange(startPos, rowCount)
         }
 
-        fun serializeTxData(): ByteArray = txRelation.asArrowStream
+        internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
         override fun close() {
             txRelation.close()

@@ -41,7 +41,7 @@
                          live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
 
           (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
-            (let [doc-wtr (.getDocWriter open-tx-table)]
+            (let [doc-wtr (.getPutDocWriter open-tx-table)]
               (dotimes [_n n]
                 (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid))
                          0 0
@@ -73,7 +73,7 @@
                          allocator (RootAllocator.)
                          live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.))]
           (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
-            (let [doc-wtr (.getDocWriter open-tx-table)]
+            (let [doc-wtr (.getPutDocWriter open-tx-table)]
 
               (dotimes [_n n]
                 (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
@@ -118,7 +118,7 @@
                      allocator (RootAllocator.)
                      live-table (LiveTable. allocator #xt/table foo 0 rc)]
       (let [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)
-            doc-wtr (.getDocWriter open-tx-table)]
+            doc-wtr (.getPutDocWriter open-tx-table)]
 
         (doseq [uuid uuids]
           (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
@@ -156,7 +156,7 @@
                                                                         "xtdb")]
           (with-open [open-tx (tu/->open-tx allocator tu/*node* (serde/->TxKey 0 (.toInstant #inst "2000")))]
             (let [open-tx-table (.table open-tx table)
-                  doc-wtr (.getDocWriter open-tx-table)]
+                  doc-wtr (.getPutDocWriter open-tx-table)]
 
               (doseq [uuid uuids]
                 (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0

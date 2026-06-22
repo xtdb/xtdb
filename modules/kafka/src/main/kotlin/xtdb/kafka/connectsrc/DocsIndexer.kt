@@ -96,7 +96,7 @@ class DocsIndexer(
             )
             openTxTable.logDelete(
                 ByteBuffer.wrap(unwrapKeyForId(id).asIid),
-                openTx.systemFrom,
+                openTx.systemTimeMicros,
                 Long.MAX_VALUE,
             )
             return
@@ -125,9 +125,9 @@ class DocsIndexer(
 
         openTxTable.logPut(
             ByteBuffer.wrap(id.asIid),
-            openTx.systemFrom,
+            openTx.systemTimeMicros,
             Long.MAX_VALUE,
-        ) { openTxTable.docWriter.writeObject(docMap) }
+        ) { openTxTable.putDocWriter.writeObject(docMap) }
     }
 }
 

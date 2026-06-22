@@ -16,7 +16,6 @@ import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
-import xtdb.WithSeed
 import xtdb.api.IndexerConfig
 import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
@@ -131,10 +130,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                             for (id in action.rows) {
                                 table.logPut(
                                     ByteBuffer.wrap(id.asIid),
-                                    openTx.systemFrom,
+                                    openTx.systemTimeMicros,
                                     Long.MAX_VALUE,
                                 ) {
-                                    table.docWriter.writeObject(
+                                    table.putDocWriter.writeObject(
                                         mapOf("_id" to id, "tx_id" to openTx.txKey.txId),
                                     )
                                 }

@@ -43,7 +43,7 @@
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
             (.logPut open-tx-table (ByteBuffer/allocate 16) 0 0
                      (fn []
-                       (.writeObject (.getDocWriter open-tx-table) {:xt/id 3, :version 0})))
+                       (.writeObject (.getPutDocWriter open-tx-table) {:xt/id 3, :version 0})))
             (.writeCrashLog crash-logger
                             (pr-str {:table #xt/table foo, :foo "bar", :ex "test crash log"})
                             #xt/table foo live-idx open-tx-table
