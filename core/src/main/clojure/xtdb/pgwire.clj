@@ -42,7 +42,7 @@
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            xtdb.NodeConnection
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -602,15 +602,15 @@
                                                                                  [op])))
                                                                    (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
                                         (if async?
-                                          (let [tx-id (with-auth-check conn
-                                                        (metrics/record-callable! tx-submit-timer
-                                                                                  (.submitTx node-conn tx-ops tx-opts)))
+                                          (let [^Xtdb$SubmittedTx tx-id (with-auth-check conn
+                                                                          (metrics/record-callable! tx-submit-timer
+                                                                                                    (.submitTx node-conn tx-ops tx-opts)))
                                                 msg-id (.getTxId tx-id)]
                                             (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id}))
 
-                                          (let [tx (with-auth-check conn
-                                                     (metrics/record-callable! tx-execute-timer
-                                                                               (.executeTx node-conn tx-ops tx-opts)))
+                                          (let [^Xtdb$ExecutedTx tx (with-auth-check conn
+                                                                      (metrics/record-callable! tx-execute-timer
+                                                                                                (.executeTx node-conn tx-ops tx-opts)))
                                                 msg-id (.getTxId tx)]
                                             (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id
                                                                                           :system-time (.getSystemTime tx)
