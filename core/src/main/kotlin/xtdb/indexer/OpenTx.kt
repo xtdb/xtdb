@@ -29,6 +29,7 @@ import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.kw
 import xtdb.query.IQuerySource
+import xtdb.query.PrepareOpts
 import xtdb.query.SqlStatement
 import xtdb.table.SchemaName
 import xtdb.table.TableName
@@ -164,11 +165,8 @@ class OpenTx(
     fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
 
-        val prepareOpts = mapOf(
-            "current-time".kw to currentTime,
-            "default-tz".kw to opts.defaultTz,
-            "default-db".kw to dbState.name,
-            "query-text".kw to sql,
+        val prepareOpts = PrepareOpts(
+            defaultTz = opts.defaultTz, defaultDb = dbState.name, queryText = sql, currentTime = currentTime,
         )
 
         return nodeBase.querySource

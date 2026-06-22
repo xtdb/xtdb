@@ -23,11 +23,10 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$Connection$Node Xtdb$ExecutedTx Xtdb$SubmittedTx Xtdb$XtdbInternal)
+           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
-           xtdb.table.TableRef
            (xtdb.query IQuerySource PreparedQuery QueryOpts)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -82,35 +81,9 @@
            :committed? committed?
            :error error}))))
 
-(defn- ->node-connection ^Xtdb$Connection [this-node ^Database$Catalog db-cat ^BufferAllocator allocator db-name]
-  (Xtdb$Connection.
-   (reify Xtdb$Connection$Node
-     (getAllocator [_] allocator)
-     (getDatabaseNames [_] (.getDatabaseNames db-cat))
-
-     (submitTx [_ db-name ops opts] (.submitTx this-node db-name ops opts))
-     (executeTx [_ db-name ops opts] (.executeTx this-node db-name ops opts))
-
-     (openSqlQuery [_ sql db-name await-token]
-       (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-         (-> (xtp/prepare-sql this-node sql query-opts)
-             (.openQuery nil (QueryOpts. nil (:default-tz query-opts))))))
-
-     (prepareSql [_ sql db-name await-token]
-       (let [query-opts (-> {:await-token await-token} (with-query-opts-defaults this-node db-name))]
-         (xtp/prepare-sql this-node sql query-opts)))
-
-     (openSnapshot [_ db-name await-token]
-       (let [^Database db (or (.databaseOrNull db-cat db-name)
-                              (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                                    {:db-name db-name})))]
-         (.awaitAll db-cat await-token nil)
-         (.openSnapshot db)))
-
-     (getColumnTypes [_ table snap]
-       (when-let [^Database db (.databaseOrNull db-cat (.getDbName table))]
-         (.getColumnTypes db table snap))))
-   db-name))
+(defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
+                                           ^IQuerySource q-src default-tz ^Counter tx-error-counter tx-await-timer db-name]
+  (Xtdb$Connection. allocator db-cat q-src default-tz tx-error-counter tx-await-timer db-name))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src
@@ -140,8 +113,8 @@
         (throw (err/incorrect ::pgwire-not-enabled "Cannot create JDBC connection: pgwire server is not enabled")))
       (.createConnectionBuilder data-source)))
 
-  (connect [this-node]
-    (->node-connection this-node db-cat allocator "xtdb"))
+  (connect [_]
+    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer "xtdb"))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -167,24 +140,11 @@
       (.awaitAll db-cat await-token tx-timeout)
       (.prepareQuery q-src ast db-cat query-opts)))
 
-  (submitTx [_ db-name tx-ops tx-opts]
-    (try
-      (let [^Database db (or (.databaseOrNull db-cat db-name)
-                             (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" db-name)
-                                                   {:db-name db-name})))]
-        (util/rethrowing-cause
-         (.submitTxBlocking db tx-ops (.withFallbackTz tx-opts default-tz))))
-      (catch Anomaly e
-        (when tx-error-counter
-          (.increment tx-error-counter))
-        (throw e))))
+  (submitTx [this db-name tx-ops tx-opts]
+    (.submitTx (xtp/open-connection this db-name) tx-ops tx-opts))
 
   (executeTx [this db-name tx-ops tx-opts]
-    (let [tx-id (.getTxId (.submitTx this db-name tx-ops tx-opts))
-          db (.databaseOrNull db-cat db-name)
-          {:keys [tx-id system-time committed? error]} (metrics/record-callable! tx-await-timer
-                                                                                 (await-msg-result this db tx-id))]
-      (Xtdb$ExecutedTx. tx-id system-time committed? error)))
+    (.executeTx (xtp/open-connection this db-name) tx-ops tx-opts))
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)
@@ -225,8 +185,8 @@
           msg-id (xt-log/send-detach-db! primary-db db-name)]
       (await-msg-result this primary-db msg-id)))
 
-  (open-connection [this-node db-name]
-    (->node-connection this-node db-cat allocator db-name))
+  (open-connection [_ db-name]
+    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer db-name))
 
   xtp/PStatus
   (latest-completed-txs [_]

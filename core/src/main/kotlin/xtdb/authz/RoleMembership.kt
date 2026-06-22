@@ -1,8 +1,7 @@
 package xtdb.authz
 
-import clojure.lang.PersistentArrayMap
-import xtdb.kw
 import xtdb.query.IQuerySource
+import xtdb.query.PrepareOpts
 import xtdb.query.QueryOpts
 import xtdb.table.TableRef
 import java.nio.ByteBuffer
@@ -50,13 +49,7 @@ object RoleMembership {
         if (!exists) return emptyList()
 
         val now = Instant.now()
-        val prepareOpts = PersistentArrayMap.create(
-            mapOf(
-                "current-time".kw to now,
-                "default-db".kw to PRIMARY_DB,
-                "query-text".kw to SCAN_SQL,
-            )
-        )
+        val prepareOpts = PrepareOpts(defaultDb = PRIMARY_DB, queryText = SCAN_SQL, currentTime = now)
 
         val out = ArrayList<List<String>>()
         querySource.prepareQuery(SCAN_SQL, dbCat, prepareOpts)

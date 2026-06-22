@@ -1,73 +1,58 @@
 package xtdb
 
+import io.mockk.every
 import io.mockk.mockk
-import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import xtdb.api.TransactionKey
+import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.log.MessageId
-import xtdb.arrow.VectorType
+import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.database.decodeTxBasisToken
 import xtdb.database.encodeTxBasisToken
-import xtdb.indexer.DatabaseSnapshot
-import xtdb.query.PreparedQuery
-import xtdb.table.TableRef
-import xtdb.tx.TxOp
-import xtdb.tx.TxOpts
 import java.time.Instant
+import java.time.ZoneOffset
 
 class ConnectionTest {
 
-    private class FakeNode : Xtdb.Connection.Node {
-        var nextTxId: MessageId = 0
-        val submittedDbs = mutableListOf<DatabaseName>()
-        val queryTokens = mutableListOf<Pair<DatabaseName, String?>>()
-        val snapshotTokens = mutableListOf<Pair<DatabaseName, String?>>()
+    private var nextTxId: MessageId = 0
 
-        override val allocator: BufferAllocator get() = mockk()
-        override val databaseNames: Collection<DatabaseName> get() = emptyList()
-        override fun getColumnTypes(table: TableRef, snap: DatabaseSnapshot): Map<String, VectorType>? = null
-
-        override fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts) =
-            Xtdb.SubmittedTx(nextTxId).also { submittedDbs += dbName }
-
-        override fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts) =
-            Xtdb.ExecutedTx(nextTxId, Instant.EPOCH, true, null).also { submittedDbs += dbName }
-
-        override fun openSqlQuery(sql: String, dbName: DatabaseName, awaitToken: String?): ResultCursor {
-            queryTokens += (dbName to awaitToken); return mockk()
+    // components mocked only to feed return values — submitTxBlocking yields the next tx id and
+    // awaitTxBlocking returns it committed; the assertions observe the connection's real await-token.
+    private fun connection(dbName: DatabaseName): Xtdb.Connection {
+        val db = mockk<Database>()
+        every { db.submitTxBlocking(any(), any()) } answers { Xtdb.SubmittedTx(nextTxId) }
+        every { db.awaitTxBlocking(any(), any()) } answers {
+            TransactionResult.Committed(mockk<TransactionKey> {
+                every { txId } returns nextTxId
+                every { systemTime } returns Instant.EPOCH
+            })
         }
 
-        override fun prepareSql(sql: String, dbName: DatabaseName, awaitToken: String?): PreparedQuery {
-            queryTokens += (dbName to awaitToken); return mockk()
-        }
+        val dbCat = mockk<Database.Catalog>(relaxed = true)
+        every { dbCat.databaseOrNull(any()) } returns db
 
-        override fun openSnapshot(dbName: DatabaseName, awaitToken: String?): DatabaseSnapshot {
-            snapshotTokens += (dbName to awaitToken); return mockk()
-        }
+        return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), ZoneOffset.UTC, null, null, dbName)
     }
 
     private fun tokenOf(awaitToken: String?) = awaitToken?.decodeTxBasisToken()
 
     @Test
-    fun `a write is awaited by the next read on the same connection`() {
-        val node = FakeNode().apply { nextTxId = 7 }
-        val conn = Xtdb.Connection(node, "mydb")
+    fun `a write advances the connection's await-token`() {
+        nextTxId = 7
+        val conn = connection("mydb")
 
         conn.submitTx(emptyList())
-        conn.openSqlQuery("SELECT 1")
-        conn.openSnapshot()
 
-        val expected = mapOf("mydb" to listOf(7L))
-        assertEquals(expected, tokenOf(node.queryTokens.single().second))
-        assertEquals(expected, tokenOf(node.snapshotTokens.single().second))
+        assertEquals(mapOf("mydb" to listOf(7L)), tokenOf(conn.awaitToken))
     }
 
     @Test
     fun `executeTx records its tx like submitTx`() {
-        val node = FakeNode().apply { nextTxId = 11 }
-        val conn = Xtdb.Connection(node, "mydb")
+        nextTxId = 11
+        val conn = connection("mydb")
 
         conn.executeTx(emptyList())
 
@@ -76,33 +61,29 @@ class ConnectionTest {
 
     @Test
     fun `successive writes accumulate monotonically`() {
-        val node = FakeNode()
-        val conn = Xtdb.Connection(node, "mydb")
+        val conn = connection("mydb")
 
-        node.nextTxId = 4; conn.submitTx(emptyList())
-        node.nextTxId = 9; conn.submitTx(emptyList())
+        nextTxId = 4; conn.submitTx(emptyList())
+        nextTxId = 9; conn.submitTx(emptyList())
 
         assertEquals(mapOf("mydb" to listOf(9L)), tokenOf(conn.awaitToken))
     }
 
     @Test
-    fun `retargeting dbName moves both writes and token onto the new db`() {
-        val node = FakeNode().apply { nextTxId = 3 }
-        val conn = Xtdb.Connection(node, "xtdb")
+    fun `retargeting dbName moves writes and token onto the new db`() {
+        nextTxId = 3
+        val conn = connection("xtdb")
 
         conn.dbName = "other"
         conn.submitTx(emptyList())
-        conn.openSqlQuery("SELECT 1")
 
-        assertEquals(listOf("other"), node.submittedDbs)
-        assertEquals("other", node.queryTokens.single().first)
         assertEquals(mapOf("other" to listOf(3L)), tokenOf(conn.awaitToken))
     }
 
     @Test
     fun `recordTx merges a foreign db without disturbing the connection db - the attach-detach case`() {
-        val node = FakeNode().apply { nextTxId = 2 }
-        val conn = Xtdb.Connection(node, "secondary")
+        nextTxId = 2
+        val conn = connection("secondary")
 
         conn.submitTx(emptyList())
         conn.recordTx("xtdb", 5)
@@ -112,8 +93,8 @@ class ConnectionTest {
 
     @Test
     fun `the await token can be replaced directly - for SET AWAIT_TOKEN`() {
-        val node = FakeNode().apply { nextTxId = 8 }
-        val conn = Xtdb.Connection(node, "mydb")
+        nextTxId = 8
+        val conn = connection("mydb")
 
         conn.submitTx(emptyList())
         conn.awaitToken = mapOf("mydb" to listOf(42L)).encodeTxBasisToken()

@@ -52,7 +52,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            (xtdb.table TableRef)
            xtdb.util.RefCounter))
 
@@ -287,6 +287,20 @@
 
     (vec (->results cursor 0))))
 
+(defn- ->prepare-opts-map
+  "Prepare-time opts reach the planner as a Clojure map. Kotlin callers pass a typed [PrepareOpts];
+  translate it here, at the planner's edge. Real maps (the Clojure node's path) pass straight through,
+  so callers can migrate to the typed form one at a time."
+  [opts]
+  (if (instance? PrepareOpts opts)
+    (let [^PrepareOpts opts opts]
+      (cond-> {}
+        (.getDefaultTz opts) (assoc :default-tz (.getDefaultTz opts))
+        (.getDefaultDb opts) (assoc :default-db (.getDefaultDb opts))
+        (.getQueryText opts) (assoc :query-text (.getQueryText opts))
+        (.getCurrentTime opts) (assoc :current-time (.getCurrentTime opts))))
+    opts))
+
 (defprotocol PQuerySource
   (-plan-query [q-src parsed-query query-opts table-info]))
 
@@ -324,7 +338,7 @@
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
     (let [parsed-query (parse-query query)
-          {:keys [default-tz query-text] :as query-opts} (-> query-opts
+          {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
                                                               (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
       (letfn [(open-snaps []
