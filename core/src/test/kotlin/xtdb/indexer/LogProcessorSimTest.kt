@@ -128,15 +128,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                         is SimAction.Commit -> {
                             val table = openTx.table(docsTable)
                             for (id in action.rows) {
-                                table.logPut(
-                                    ByteBuffer.wrap(id.asIid),
-                                    openTx.systemTimeMicros,
-                                    Long.MAX_VALUE,
-                                ) {
-                                    table.putDocWriter.writeObject(
-                                        mapOf("_id" to id, "tx_id" to openTx.txKey.txId),
-                                    )
-                                }
+                                table.writePut(mapOf("_id" to id, "tx_id" to openTx.txKey.txId))
                             }
                             TxResult.Committed()
                         }

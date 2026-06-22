@@ -60,8 +60,8 @@ class Relation(
                     .also { vec -> repeat(rowCount) { vec.writeNull() } }
         }!!
 
-    override fun endRow() {
-        rowCount++
+    override fun endRows(rows: Int) {
+        rowCount += rows
         vectors.forEach { vec -> repeat(rowCount - vec.valueCount) { vec.writeNull() } }
     }
 

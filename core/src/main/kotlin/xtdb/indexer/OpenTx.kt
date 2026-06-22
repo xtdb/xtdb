@@ -23,6 +23,7 @@ import xtdb.arrow.SingletonListReader
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
+import xtdb.arrow.VectorType.Companion.TRANSIT
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
@@ -40,7 +41,6 @@ import xtdb.trie.Trie
 import xtdb.types.ClojureForm
 import xtdb.util.asIid
 import xtdb.util.closeAll
-import xtdb.util.closeOnCatch
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
@@ -79,6 +79,40 @@ class OpenTx(
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
+    private fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
+        val txId = txKey.txId
+        val systemTimeMicros = txKey.systemTime.asMicros
+
+        val liveTable = table(TableRef(dbState.name, "xt", "txs"))
+        val docWriter = liveTable.putDocWriter
+
+        liveTable.writeId(txId)
+        liveTable.writeDefaultValidTime()
+
+        docWriter.vectorFor("_id", I64.arrowType, false).writeLong(txId)
+        docWriter.vectorFor("system_time", INSTANT.arrowType, false).writeLong(systemTimeMicros)
+        docWriter.vectorFor("committed", BOOL.arrowType, false).writeBoolean(error == null)
+        docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
+
+        val errorWriter = docWriter.vectorFor("error", TRANSIT.arrowType, true)
+
+        if (error == null) {
+            errorWriter.writeNull()
+        } else {
+            try {
+                errorWriter.writeObject(error)
+            } catch (e: Exception) {
+                error.addSuppressed(e)
+                LOG.warn(error, "Error serializing error, tx $txId")
+                errorWriter.writeObject(ClojureForm("error serializing error - see server logs"))
+            }
+        }
+
+        docWriter.endStruct()
+
+        liveTable.endPut()
+    }
+
     private fun serializeTableData(): Map<String, ByteArray> =
         tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
 
@@ -101,37 +135,6 @@ class OpenTx(
             dbOp = null,
             externalSourceToken = externalSourceToken,
         )
-    }
-
-    private fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
-        val txId = txKey.txId
-        val systemTimeMicros = txKey.systemTime.asMicros
-
-        val liveTable = table(TableRef(dbState.name, "xt", "txs"))
-        val docWriter = liveTable.putDocWriter
-
-        liveTable.logPut(ByteBuffer.wrap(txId.asIid), systemTimeMicros, MAX_LONG) {
-            docWriter.vectorFor("_id", I64.arrowType, false).writeLong(txId)
-            docWriter.vectorFor("system_time", INSTANT.arrowType, false).writeLong(systemTimeMicros)
-            docWriter.vectorFor("committed", BOOL.arrowType, false).writeBoolean(error == null)
-            docWriter.vectorFor("user_metadata", VectorType.structOf().arrowType, true).writeObject(userMetadata)
-
-            val errorWriter = docWriter.vectorFor("error", VectorType.TRANSIT.arrowType, true)
-
-            if (error == null) {
-                errorWriter.writeNull()
-            } else {
-                try {
-                    errorWriter.writeObject(error)
-                } catch (e: Exception) {
-                    error.addSuppressed(e)
-                    LOG.warn(error, "Error serializing error, tx $txId")
-                    errorWriter.writeObject(ClojureForm("error serializing error - see server logs"))
-                }
-            }
-
-            docWriter.endStruct()
-        }
     }
 
     private val queryCatalog: IQuerySource.QueryCatalog
@@ -245,7 +248,7 @@ class OpenTx(
                                 )
 
                                 table(stmt.table)
-                                    .logPuts(currentTimeMicros, MAX_LONG, RelationReader.from(putCols, rel.rowCount))
+                                    .writePuts(RelationReader.from(putCols, rel.rowCount), currentTimeMicros, MAX_LONG)
                             }
                         }
                     }
@@ -256,7 +259,7 @@ class OpenTx(
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
-                                    table(stmt.table).logPuts(0, MAX_LONG, rel)
+                                    table(stmt.table).writePuts(rel, 0, MAX_LONG)
                             }
                         }
                     }
@@ -267,7 +270,7 @@ class OpenTx(
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
-                                    table(stmt.table).logDeletes(0, MAX_LONG, rel)
+                                    table(stmt.table).writeDeletes(rel, 0, MAX_LONG)
                             }
                         }
                     }
@@ -278,7 +281,7 @@ class OpenTx(
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
-                                    table(stmt.table).logErases(rel.vectorFor("_iid"))
+                                    table(stmt.table).writeErases(rel.vectorFor("_iid"))
                             }
                         }
                     }
@@ -317,17 +320,20 @@ class OpenTx(
 
         val ts = currentTime.asMicros
         val table = table(TableRef(dbState.name, "xt", "role_membership"))
-        val iid = ByteBuffer.wrap(RoleMembership.membershipIid(user, role))
+
+        table.writeIid(RoleMembership.membershipIid(user, role))
+        table.writeValidTimeMicros(ts, MAX_LONG)
 
         if (revoke) {
-            table.logDelete(iid, ts, MAX_LONG)
+            table.endDelete()
         } else {
-            val docWriter = table.putDocWriter
-            table.logPut(iid, ts, MAX_LONG) {
-                docWriter.vectorFor("user", VectorType.UTF8.arrowType, false).writeObject(user)
-                docWriter.vectorFor("role", VectorType.UTF8.arrowType, false).writeObject(role)
-                docWriter.endStruct()
+            table.putDocWriter.apply {
+                vectorFor("user", VectorType.UTF8.arrowType, false).writeObject(user)
+                vectorFor("role", VectorType.UTF8.arrowType, false).writeObject(role)
+                endStruct()
             }
+
+            table.endPut()
         }
     }
 
@@ -368,7 +374,7 @@ class OpenTx(
         // openQuery takes ownership of the sliced args and closes them when the cursor closes —
         // no separate `.use` on the slice here or it'd double-free.
         pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
-            cursor.forEachRemaining { rel -> table.logPuts(validFromMicros, validToMicros, rel) }
+            cursor.forEachRemaining { rel -> table.writePuts(rel, validFromMicros, validToMicros) }
         }
     }
 
@@ -456,45 +462,42 @@ class OpenTx(
         internal var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
             private set
 
-        fun logPut(iid: ByteBuffer, validFrom: Long, validTo: Long, writeDocFun: Runnable) {
-            val pos = txRelation.rowCount
+        fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
+        fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
+        fun writeId(id: Any) = iidVec.writeBytes(id.asIid)
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
+        fun writeValidTimeMicros(validFrom: Long, validTo: Long) {
             validFromVec.writeLong(validFrom)
             validToVec.writeLong(validTo)
-
-            writeDocFun.run()
-
-            txRelation.endRow()
-
-            trie += pos
         }
 
-        fun logDelete(iid: ByteBuffer, validFrom: Long, validTo: Long) {
+        fun writeDefaultValidTime() = writeValidTimeMicros(systemFrom, MAX_LONG)
+
+        @Suppress("IfThenToElvis") // because I wasn't sure that Elvis doesn't box primitives
+        fun writeValidTimes(validFrom: Instant? = null, validTo: Instant? = null) =
+            writeValidTimeMicros(
+                if (validFrom != null) validFrom.asMicros else MIN_LONG,
+                if (validTo != null) validTo.asMicros else MAX_LONG
+            )
+
+        private fun endOps(count: Int) {
             val pos = txRelation.rowCount
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
-            validFromVec.writeLong(validFrom)
-            validToVec.writeLong(validTo)
-            deleteVec.writeNull()
-            txRelation.endRow()
+            repeat(count) { systemFromVec.writeLong(systemFrom) }
 
-            trie += pos
+            txRelation.endRows(count)
+
+            trie = trie.addRange(pos, count)
         }
 
-        fun logErase(iid: ByteBuffer) {
-            val pos = txRelation.rowCount
+        fun endPuts(count: Int) = endOps(count)
+        fun endPut() = endPuts(1)
 
-            iidVec.writeBytes(iid)
-            systemFromVec.writeLong(systemFrom)
-            validFromVec.writeLong(MIN_LONG)
-            validToVec.writeLong(MAX_LONG)
-            eraseVec.writeNull()
-            txRelation.endRow()
-
-            trie += pos
+        fun writePut(doc: Map<String, *>, validFrom: Instant? = null, validTo: Instant? = null) {
+            writeId(doc["_id"] ?: throw Incorrect("missing _id", "xtdb.tx/missing-id", mapOf("doc" to doc)))
+            writeValidTimes(validFrom, validTo)
+            putDocWriter.writeObject(doc)
+            endPut()
         }
 
         /**
@@ -504,106 +507,120 @@ class OpenTx(
          * (user-facing id — iid computed per row via [xtdb.util.asIid]).
          *
          * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
-         * otherwise the [validFrom] / [validTo] defaults apply.
+         * otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
          * temporal columns; otherwise per-row.
          */
-        fun logPuts(validFrom: Long, validTo: Long, rel: RelationReader) {
+        fun writePuts(rel: RelationReader, defaultValidFromMicros: Long, defaultValidToMicros: Long) {
             val rowCount = rel.rowCount
             if (rowCount == 0) return
 
             val iidRdr = rel.vectorForOrNull("_iid")
-            val idRdr = if (iidRdr == null) rel.vectorFor("_id") else null
-            val docRdr = rel.vectorFor("doc")
+
+            if (iidRdr != null) {
+                iidVec.append(iidRdr)
+            } else {
+                val idRdr = rel.vectorFor("_id")
+
+                repeat(rowCount) { idx -> iidVec.writeBytes(ByteBuffer.wrap(idRdr.getObject(idx).asIid)) }
+            }
+
             val vfRdr = rel.vectorForOrNull("_valid_from")
             val vtRdr = rel.vectorForOrNull("_valid_to")
 
             val perRowCheck = vfRdr != null || vtRdr != null
-            if (!perRowCheck) checkValidTimes(validFrom, validTo)
-
-            val iidCopier = iidRdr?.rowCopier(iidVec)
-            val docCopier = docRdr.rowCopier(putDocWriter)
-
-            val startPos = txRelation.rowCount
+            if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
 
             repeat(rowCount) { idx ->
-                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFrom
-                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validTo
+                val rowValidFrom =
+                    if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else defaultValidFromMicros
+
+                val rowValidTo =
+                    if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else defaultValidToMicros
+
                 if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
 
-                if (iidCopier != null) iidCopier.copyRow(idx)
-                else iidVec.writeBytes(ByteBuffer.wrap(idRdr!!.getObject(idx).asIid))
-
-                systemFromVec.writeLong(systemFrom)
                 validFromVec.writeLong(rowValidFrom)
                 validToVec.writeLong(rowValidTo)
-                docCopier.copyRow(idx)
-                txRelation.endRow()
             }
 
-            trie = trie.addRange(startPos, rowCount)
+            putDocWriter.append(rel.vectorFor("doc"))
+
+            endPuts(rowCount)
+        }
+
+        fun endDeletes(count: Int) {
+            repeat(count) { deleteVec.writeNull() }
+            endOps(count)
+        }
+
+        fun endDelete() = endDeletes(1)
+
+        fun writeDelete(id: Any, validFrom: Instant? = null, validTo: Instant? = null) {
+            writeId(id)
+            writeValidTimes(validFrom, validTo)
+            endDelete()
         }
 
         /**
          * Batch delete: deletes every row in [rel] (keyed by `_iid`).
          *
          * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
-         * otherwise the [validFromMicros] / [validToMicros] defaults apply.
+         * otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
          * temporal columns; otherwise per-row.
          */
-        fun logDeletes(validFromMicros: Long, validToMicros: Long, rel: RelationReader) {
+        fun writeDeletes(rel: RelationReader, defaultValidFromMicros: Long, defaultValidToMicros: Long) {
             val rowCount = rel.rowCount
             if (rowCount == 0) return
 
-            val iidRdr = rel.vectorFor("_iid")
+            iidVec.append(rel.vectorFor("_iid"))
+
             val vfRdr = rel.vectorForOrNull("_valid_from")
             val vtRdr = rel.vectorForOrNull("_valid_to")
 
             val perRowCheck = vfRdr != null || vtRdr != null
-            if (!perRowCheck) checkValidTimes(validFromMicros, validToMicros)
-
-            val iidCopier = iidRdr.rowCopier(iidVec)
-
-            val startPos = txRelation.rowCount
+            if (!perRowCheck) checkValidTimes(defaultValidFromMicros, defaultValidToMicros)
 
             repeat(rowCount) { idx ->
-                val rowValidFrom = if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else validFromMicros
-                val rowValidTo = if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else validToMicros
+                val rowValidFrom =
+                    if (vfRdr != null && !vfRdr.isNull(idx)) vfRdr.getLong(idx) else defaultValidFromMicros
+
+                val rowValidTo =
+                    if (vtRdr != null && !vtRdr.isNull(idx)) vtRdr.getLong(idx) else defaultValidToMicros
+
                 if (perRowCheck) checkValidTimes(rowValidFrom, rowValidTo)
 
-                iidCopier.copyRow(idx)
-                systemFromVec.writeLong(systemFrom)
                 validFromVec.writeLong(rowValidFrom)
                 validToVec.writeLong(rowValidTo)
-                deleteVec.writeNull()
-                txRelation.endRow()
             }
 
-            trie = trie.addRange(startPos, rowCount)
+            endDeletes(rowCount)
+        }
+
+        fun endErases(count: Int) {
+            repeat(count) { eraseVec.writeNull() }
+            endOps(count)
+        }
+
+        fun endErase() = endErases(1)
+
+        fun writeErase(id: Any) {
+            writeId(id)
+            writeValidTimeMicros(MIN_LONG, MAX_LONG)
+            endErase()
         }
 
         /**
          * Batch erase: erases every iid in [iids] across all valid time.
          */
-        fun logErases(iids: VectorReader) {
+        fun writeErases(iids: VectorReader) {
             val rowCount = iids.valueCount
             if (rowCount == 0) return
 
-            val iidCopier = iids.rowCopier(iidVec)
-
-            val startPos = txRelation.rowCount
-
-            repeat(rowCount) { idx ->
-                iidCopier.copyRow(idx)
-                systemFromVec.writeLong(systemFrom)
-                validFromVec.writeLong(MIN_LONG)
-                validToVec.writeLong(MAX_LONG)
-                eraseVec.writeNull()
-                txRelation.endRow()
-            }
-
-            trie = trie.addRange(startPos, rowCount)
+            iidVec.append(iids)
+            repeat(rowCount) { writeValidTimeMicros(MIN_LONG, MAX_LONG) }
+            endErases(rowCount)
         }
 
         internal fun serializeTxData(): ByteArray = txRelation.asArrowStream

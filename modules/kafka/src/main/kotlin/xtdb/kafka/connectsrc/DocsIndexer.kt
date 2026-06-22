@@ -94,15 +94,18 @@ class DocsIndexer(
                 "xtdb.kafka-connect-source/docs-no-id-on-tombstone",
                 mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset()),
             )
-            openTxTable.logDelete(
-                ByteBuffer.wrap(unwrapKeyForId(id).asIid),
-                openTx.systemTimeMicros,
-                Long.MAX_VALUE,
-            )
+
+            openTxTable.apply {
+                writeId(unwrapKeyForId(id))
+                writeDefaultValidTime()
+                endDelete()
+            }
+
             return
         }
 
         val converted = convertValue(value, rec.valueSchema())
+
         @Suppress("UNCHECKED_CAST")
         val docMap = (converted as? Map<String, Any?>)?.toMutableMap()
             ?: throw Incorrect(
@@ -116,18 +119,20 @@ class DocsIndexer(
                 ),
             )
 
-        val id = docMap["_id"] ?: rec.key()?.let { unwrapKeyForId(it) }?.also { docMap["_id"] = it }
+        val id = docMap["_id"]
+            ?: rec.key()?.let { unwrapKeyForId(it) }?.also { docMap["_id"] = it }
             ?: throw Incorrect(
                 "no _id on doc and no record key — can't resolve _id",
                 "xtdb.kafka-connect-source/docs-no-id",
                 mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset()),
             )
 
-        openTxTable.logPut(
-            ByteBuffer.wrap(id.asIid),
-            openTx.systemTimeMicros,
-            Long.MAX_VALUE,
-        ) { openTxTable.putDocWriter.writeObject(docMap) }
+        openTxTable.apply {
+            writeId(id)
+            writeDefaultValidTime()
+            putDocWriter.writeObject(docMap)
+            endPut()
+        }
     }
 }
 
@@ -152,12 +157,19 @@ internal fun convertValue(v: Any?, schema: Schema?): Any? {
             Schema.Type.STRUCT -> structToMap(v as Struct)
             Schema.Type.ARRAY -> (v as List<Any?>).map { convertValue(it, schema.valueSchema()) }
             Schema.Type.MAP -> (v as Map<Any?, Any?>).entries
-                .associateTo(mutableMapOf<String, Any?>()) { (k, vv) -> k.toString() to convertValue(vv, schema.valueSchema()) }
+                .associateTo(mutableMapOf<String, Any?>()) { (k, vv) ->
+                    k.toString() to convertValue(
+                        vv,
+                        schema.valueSchema()
+                    )
+                }
+
             Schema.Type.BYTES -> when (v) {
                 is ByteBuffer -> ByteArray(v.remaining()).also { v.duplicate().get(it) }
                 is ByteArray -> v
                 else -> v
             }
+
             else -> v
         }
     }
@@ -165,7 +177,13 @@ internal fun convertValue(v: Any?, schema: Schema?): Any? {
     return when (v) {
         is Struct -> structToMap(v)
         is List<*> -> v.map { convertValue(it, null) }
-        is Map<*, *> -> v.entries.associateTo(mutableMapOf<String, Any?>()) { (k, vv) -> k.toString() to convertValue(vv, null) }
+        is Map<*, *> -> v.entries.associateTo(mutableMapOf<String, Any?>()) { (k, vv) ->
+            k.toString() to convertValue(
+                vv,
+                null
+            )
+        }
+
         is ByteBuffer -> ByteArray(v.remaining()).also { v.duplicate().get(it) }
         else -> v
     }

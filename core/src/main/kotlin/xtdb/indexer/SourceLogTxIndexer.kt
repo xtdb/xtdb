@@ -140,7 +140,7 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                liveTable.logPuts(validFrom, validTo, putRel)
+                liveTable.writePuts(putRel, validFrom, validTo)
             }
         }
 
@@ -167,14 +167,15 @@ internal class SourceLogTxIndexer(
             ) {
                 val validFrom = if (validFromRdr.isNull(opIdx)) opts.systemTime else validFromRdr.getLong(opIdx)
                 val validTo = if (validToRdr.isNull(opIdx)) Long.MAX_VALUE else validToRdr.getLong(opIdx)
-                openTxTable.logDeletes(
-                    validFrom, validTo,
+                openTxTable.writeDeletes(
                     RelationReader.from(
                         listOf(
                             iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx))
                                 .withName("_iid"),
                         )
                     ),
+                    validFrom,
+                    validTo,
                 )
             }
         }
@@ -197,7 +198,7 @@ internal class SourceLogTxIndexer(
                 txOpsRdr = txOpsRdr,
                 data = mapOf("table" to table, "tx-key" to opts.txKey, "tx-op-idx" to opIdx),
             ) {
-                liveTable.logErases(
+                liveTable.writeErases(
                     iidRdr.select(iidsRdr.getListStartIndex(opIdx), iidsRdr.getListCount(opIdx))
                 )
             }

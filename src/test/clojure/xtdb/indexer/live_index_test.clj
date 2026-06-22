@@ -46,8 +46,10 @@
         (let [open-tx-table (.table open-tx #xt/table my-table)
               put-doc-wrt (.getPutDocWriter open-tx-table)]
           (doseq [^UUID iid iids]
-            (.logPut open-tx-table (util/uuid->byte-buffer iid) 0 0
-                     #(.writeObject put-doc-wrt {:some :doc})))
+            (.writeIid open-tx-table (util/uuid->byte-buffer iid))
+            (.writeValidTimeMicros open-tx-table 0 0)
+            (.writeObject put-doc-wrt {:some :doc})
+            (.endPut open-tx-table))
 
           (tu/commit-tx! live-index open-tx)
 
@@ -146,18 +148,20 @@
     (with-open [live-tx0 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [foo-table-tx (.table live-tx0 #xt/table foo)
             doc-wtr (.getPutDocWriter foo-table-tx)]
-        (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0
-                 (fn []
-                   (.endStruct doc-wtr)))
+        (.writeIid foo-table-tx (ByteBuffer/allocate 16))
+        (.writeValidTimeMicros foo-table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut foo-table-tx)
         (tu/commit-tx! live-index live-tx0)))
 
     (t/testing "uncommitted tx data doesn't appear in live-index"
       (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
         (let [bar-table-tx (.table live-tx1 #xt/table bar)
               doc-wtr (.getPutDocWriter bar-table-tx)]
-          (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0
-                   (fn []
-                     (.endStruct doc-wtr)))
+          (.writeIid bar-table-tx (ByteBuffer/allocate 16))
+          (.writeValidTimeMicros bar-table-tx 0 0)
+          (.endStruct doc-wtr)
+          (.endPut bar-table-tx)
 
           ;; not committing — bar should not appear
           (t/is (some? (.table live-index #xt/table foo)))
@@ -193,7 +197,10 @@
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+        (.writeIid table-tx iid)
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
 
         ;; External snapshot (from live-index, not from tx) should NOT see the uncommitted row
         (with-open [external-snap (.openSnapshot live-index)]
@@ -228,7 +235,10 @@
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
+        (.writeIid table-tx iid1)
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
         (tu/commit-tx! live-index live-tx1)))
 
     ;; Take a snapshot BEFORE second transaction
@@ -240,7 +250,10 @@
         (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
           (let [table-tx (.table live-tx2 table)
                 doc-wtr (.getPutDocWriter table-tx)]
-            (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
+            (.writeIid table-tx iid2)
+            (.writeValidTimeMicros table-tx 0 0)
+            (.endStruct doc-wtr)
+            (.endPut table-tx)
             (tu/commit-tx! live-index live-tx2)))
 
         ;; The snapshot taken before should still show only 1 row (immutability)
@@ -272,7 +285,10 @@
               "Multiple calls to liveTable should return same tx context")
 
         (let [doc-wtr (.getPutDocWriter table-tx-1)]
-          (.logPut table-tx-1 iid 0 0 #(.endStruct doc-wtr)))
+          (.writeIid table-tx-1 iid)
+          (.writeValidTimeMicros table-tx-1 0 0)
+          (.endStruct doc-wtr)
+          (.endPut table-tx-1))
 
         (with-open [tx-snap (.openSnapshot live-index live-tx)]
           (let [table-snaps (.table tx-snap table)]
@@ -289,9 +305,18 @@
       (let [table-tx (.table live-tx table)
             doc-wtr (.getPutDocWriter table-tx)]
 
-        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
-        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
-        (.logPut table-tx (.duplicate iid) 0 0 #(.endStruct doc-wtr))
+        (.writeIid table-tx (.duplicate iid))
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
+        (.writeIid table-tx (.duplicate iid))
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
+        (.writeIid table-tx (.duplicate iid))
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
 
         (tu/commit-tx! live-index live-tx))
 
@@ -321,7 +346,10 @@
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getPutDocWriter table-tx)]
-              (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+              (.writeIid table-tx iid)
+              (.writeValidTimeMicros table-tx 0 0)
+              (.endStruct doc-wtr)
+              (.endPut table-tx)
               (tu/commit-tx! live-index live-tx)))
 
           ;; Use the openTx variant of openSnapshot to force a fresh capture each time —
@@ -369,7 +397,10 @@
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getPutDocWriter table-tx)]
-              (.logPut table-tx iid 0 0 #(.endStruct doc-wtr))
+              (.writeIid table-tx iid)
+              (.writeValidTimeMicros table-tx 0 0)
+              (.endStruct doc-wtr)
+              (.endPut table-tx)
               (tu/commit-tx! live-index live-tx)))
 
           (t/is (some? (.table live-index table))
@@ -391,14 +422,20 @@
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.logPut table-tx iid1 0 0 #(.endStruct doc-wtr))
+        (.writeIid table-tx iid1)
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
         (tu/commit-tx! live-index live-tx1)))
 
     ;; Start second transaction and write more data
     (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
       (let [table-tx (.table live-tx2 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.logPut table-tx iid2 0 0 #(.endStruct doc-wtr))
+        (.writeIid table-tx iid2)
+        (.writeValidTimeMicros table-tx 0 0)
+        (.endStruct doc-wtr)
+        (.endPut table-tx)
 
         ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2),
         ;; now as two separate TableSnapshot entries: live (committed) + tx (uncommitted).

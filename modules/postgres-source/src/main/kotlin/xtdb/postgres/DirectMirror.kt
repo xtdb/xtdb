@@ -41,30 +41,34 @@ class DirectMirror(private val dbName: String) : PgIndexer {
                 val docMap = op.row.toMutableMap()
 
                 val id = docMap["_id"]
-                ?: throw Incorrect("Missing '_id' in row from ${op.schema}.${op.table}")
+                    ?: throw Incorrect("Missing '_id' in row from ${op.schema}.${op.table}")
 
                 val explicitValidFrom = explicitValidTimeMicros("_valid_from", docMap.remove("_valid_from"))
                 val explicitValidTo = explicitValidTimeMicros("_valid_to", docMap.remove("_valid_to"))
 
                 if (explicitValidTo != null && explicitValidFrom == null)
-                throw Incorrect("'_valid_to' requires '_valid_from'")
+                    throw Incorrect("'_valid_to' requires '_valid_from'")
 
-                openTxTable.logPut(
-                    ByteBuffer.wrap(id.asIid),
-                    explicitValidFrom ?: openTx.systemTimeMicros,
-                    explicitValidTo ?: Long.MAX_VALUE,
-                ) { openTxTable.putDocWriter.writeObject(docMap) }
+                openTxTable.apply {
+                    writeId(id)
+                    writeValidTimeMicros(
+                        explicitValidFrom ?: openTx.systemTimeMicros,
+                        explicitValidTo ?: Long.MAX_VALUE,
+                    )
+                    putDocWriter.writeObject(docMap)
+                    endPut()
+                }
             }
 
             is RowOp.Delete -> {
                 val id = op.row["_id"]
-                ?: throw Incorrect("Missing '_id' in delete on ${op.schema}.${op.table}")
+                    ?: throw Incorrect("Missing '_id' in delete on ${op.schema}.${op.table}")
 
-                openTxTable.logDelete(
-                    ByteBuffer.wrap(id.asIid),
-                    openTx.systemTimeMicros,
-                    Long.MAX_VALUE,
-                )
+                openTxTable.apply {
+                    writeId(id)
+                    writeDefaultValidTime()
+                    endDelete()
+                }
             }
         }
     }

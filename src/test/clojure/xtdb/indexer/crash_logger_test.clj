@@ -41,9 +41,10 @@
                                                                                       :default-tz (ZoneId/of "Europe/London")}))]
           (let [open-tx-table (.table open-tx #xt/table foo)
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
-            (.logPut open-tx-table (ByteBuffer/allocate 16) 0 0
-                     (fn []
-                       (.writeObject (.getPutDocWriter open-tx-table) {:xt/id 3, :version 0})))
+            (.writeIid open-tx-table (ByteBuffer/allocate 16))
+            (.writeValidTimeMicros open-tx-table 0 0)
+            (.writeObject (.getPutDocWriter open-tx-table) {:xt/id 3, :version 0})
+            (.endPut open-tx-table)
             (.writeCrashLog crash-logger
                             (pr-str {:table #xt/table foo, :foo "bar", :ex "test crash log"})
                             #xt/table foo live-idx open-tx-table

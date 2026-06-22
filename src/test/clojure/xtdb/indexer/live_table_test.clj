@@ -43,10 +43,10 @@
           (with-open [open-tx-table (OpenTx$Table. #xt/table foo allocator 0)]
             (let [doc-wtr (.getPutDocWriter open-tx-table)]
               (dotimes [_n n]
-                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid))
-                         0 0
-                         (fn []
-                           (.endStruct doc-wtr))))
+                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
+                (.writeValidTimeMicros open-tx-table 0 0)
+                (.endStruct doc-wtr)
+                (.endPut open-tx-table))
 
               (.importData live-table (.getTxRelation open-tx-table))
 
@@ -76,9 +76,10 @@
             (let [doc-wtr (.getPutDocWriter open-tx-table)]
 
               (dotimes [_n n]
-                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
-                         (fn []
-                           (.endStruct doc-wtr))))
+                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
+                (.writeValidTimeMicros open-tx-table 0 0)
+                (.endStruct doc-wtr)
+                (.endPut open-tx-table))
 
               (.importData live-table (.getTxRelation open-tx-table))
 
@@ -121,9 +122,10 @@
             doc-wtr (.getPutDocWriter open-tx-table)]
 
         (doseq [uuid uuids]
-          (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
-                   (fn []
-                     (.endStruct doc-wtr))))
+          (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
+          (.writeValidTimeMicros open-tx-table 0 0)
+          (.endStruct doc-wtr)
+          (.endPut open-tx-table))
 
         (.importData live-table (.getTxRelation open-tx-table))
 
@@ -159,9 +161,10 @@
                   doc-wtr (.getPutDocWriter open-tx-table)]
 
               (doseq [uuid uuids]
-                (.logPut open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)) 0 0
-                         (fn []
-                           (.endStruct doc-wtr))))
+                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
+                (.writeValidTimeMicros open-tx-table 0 0)
+                (.endStruct doc-wtr)
+                (.endPut open-tx-table))
 
               (tu/commit-tx! live-index open-tx)
 

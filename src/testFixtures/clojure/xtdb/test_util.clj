@@ -361,9 +361,10 @@
         (doseq [{eid :xt/id, :as doc} docs
                 :let [{:keys [:xt/valid-from :xt/valid-to],
                        :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-          (.logPut open-tx-table (ByteBuffer/wrap (util/->iid eid))
-                   (time/instant->micros valid-from) (time/instant->micros valid-to)
-                   (fn [] (.writeObject doc-wtr doc)))))
+          (.writeIid open-tx-table (ByteBuffer/wrap (util/->iid eid)))
+          (.writeValidTimeMicros open-tx-table (time/instant->micros valid-from) (time/instant->micros valid-to))
+          (.writeObject doc-wtr doc)
+          (.endPut open-tx-table)))
 
       (.importData live-table (.getTxRelation open-tx-table)))))
 
