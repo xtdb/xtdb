@@ -1,9 +1,21 @@
 plugins {
     `java-library`
     alias(libs.plugins.clojurephant)
+    `maven-publish`
+    signing
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.dokka)
     alias(libs.plugins.protobuf)
+}
+
+publishing {
+    publications.create("maven", MavenPublication::class) {
+        pom {
+            name.set("XTDB Postgres Source")
+            description.set("XTDB Postgres Source")
+        }
+    }
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
