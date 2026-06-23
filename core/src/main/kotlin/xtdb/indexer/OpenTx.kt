@@ -388,7 +388,7 @@ class OpenTx(
             }
         }
 
-        val txRelation: Relation = Trie.openLogDataWriter(allocator)
+        internal val txRelation: Relation = Trie.openLogDataWriter(allocator)
 
         private val iidVec = txRelation["_iid"]
         private val systemFromVec = txRelation["_system_from"]

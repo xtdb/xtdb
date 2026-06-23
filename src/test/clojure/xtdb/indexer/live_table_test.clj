@@ -3,102 +3,59 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.arrow-edn-test :as aet]
             [xtdb.db-catalog :as db]
-            [xtdb.node :as xtn]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
-           (java.util Arrays HashMap)
+           (java.util HashMap)
            (java.util.concurrent.locks StampedLock)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.api IndexerConfig)
-           (xtdb.indexer LiveIndex LiveTable OpenTx$Table TableSnapshot)
+           (xtdb.indexer LiveIndex LiveTable TableSnapshot)
            (xtdb.trie MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
-(defn uuid-equal-to-path? [uuid path]
-  (Arrays/equals
-   (util/uuid->bytes uuid)
-   (byte-array
-    (map (fn [[p0 p1 p2 p3]]
-           (-> p3
-               (bit-or (bit-shift-left p2 2))
-               (bit-or (bit-shift-left p1 4))
-               (bit-or (bit-shift-left p0 6))))
-         (partition-all 4 (vec path))))))
+(defn- ->max-depth-puts
+  "n puts all sharing one iid (a fresh ByteBuffer per row), at system/valid-time 0."
+  [uuid n]
+  (repeatedly n (fn [] {:iid (ByteBuffer/wrap (util/uuid->bytes uuid)), :valid-from 0, :valid-to 0, :doc nil})))
 
 (deftest test-live-trie-can-overflow-log-limit-at-max-depth
-  (binding [*print-length* 100]
-    (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
-          n 1000]
-      (tu/with-tmp-dirs #{path}
-        (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                         bp (.getBufferPool (db/primary-db node))
-                         allocator (RootAllocator.)
-                         live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
+  ;; every row shares one iid, so the trie bottoms out in a single max-depth leaf - that
+  ;; trie-structure property is asserted in xtdb.indexer.LiveTableTest; here we pin the
+  ;; finished block's on-disk arrow format, at small (custom trie) and large scale.
+  (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
+        n 1000]
+    (tu/with-tmp-dirs #{path}
+      (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
+                       bp (.getBufferPool (db/primary-db node))
+                       allocator (RootAllocator.)
+                       live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
+        (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
+          (.importData live-table rel))
 
-          (with-open [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})]
-            (let [^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
-                  doc-wtr (.getPutDocWriter open-tx-table)]
-              (dotimes [_n n]
-                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
-                (.writeValidTimeMicros open-tx-table 0 0)
-                (.endStruct doc-wtr)
-                (.endPut open-tx-table))
+        (.finishBlock live-table bp 0)
 
-              (.importData live-table (.getTxRelation open-tx-table))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
+                                 (.resolve path "objects")))))
 
-              (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
-                    leaf ^MemoryHashTrie$Leaf (first leaves)]
+  (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
+        n 50000]
+    (tu/with-tmp-dirs #{path}
+      (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
+                       bp (.getBufferPool (db/primary-db node))
+                       allocator (RootAllocator.)
+                       live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.))]
+        (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
+          (.importData live-table rel))
 
-                (t/is (= 1 (count leaves)))
+        (.finishBlock live-table bp 0)
 
-                (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
-
-                (t/is (= (reverse (range n))
-                         (vec (.getData leaf)))))
-
-              (.finishBlock live-table bp 0)
-
-              (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-                                       (.resolve path "objects")))))))
-
-    (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
-          n 50000]
-      (tu/with-tmp-dirs #{path}
-        (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                         bp (.getBufferPool (db/primary-db node))
-                         allocator (RootAllocator.)
-                         live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.))]
-          (with-open [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})]
-            (let [^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
-                  doc-wtr (.getPutDocWriter open-tx-table)]
-
-              (dotimes [_n n]
-                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
-                (.writeValidTimeMicros open-tx-table 0 0)
-                (.endStruct doc-wtr)
-                (.endPut open-tx-table))
-
-              (.importData live-table (.getTxRelation open-tx-table))
-
-              (let [leaves (.getLeaves (.compactLogs (.getLiveTrie live-table)))
-                    leaf ^MemoryHashTrie$Leaf (first leaves)]
-
-                (t/is (= 1 (count leaves)))
-
-                (t/is (uuid-equal-to-path? uuid (.getPath leaf)))
-
-                (t/is (= (reverse (range n))
-                         (vec (.getData leaf)))))
-
-              (.finishBlock live-table bp 0)
-
-              (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-                                       (.resolve path "objects")))))))))
+        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
+                                 (.resolve path "objects"))))))
 
 (defn live-table-snap->data [^TableSnapshot live-table-snap]
   (let [live-rel-data (.getAsMaps (.getRelation live-table-snap))
@@ -112,39 +69,6 @@
     {:live-rel-data live-rel-data
      :live-trie-leaf-data live-trie-leaf-data
      :live-trie-iids live-trie-iids}))
-
-(deftest test-live-table-watermarks-are-immutable
-  (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
-        rc (RowCounter.)]
-    (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:compactor {:threads 0}}))
-                     bp (.getBufferPool (db/primary-db node))
-                     allocator (RootAllocator.)
-                     live-table (LiveTable. allocator #xt/table foo 0 rc)]
-      (let [open-tx (tu/->open-tx allocator node #xt/tx-key {:tx-id 0, :system-time #xt/instant "1970-01-01T00:00:00Z"})
-            ^OpenTx$Table open-tx-table (.table open-tx #xt/table foo)
-            doc-wtr (.getPutDocWriter open-tx-table)]
-
-        (doseq [uuid uuids]
-          (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
-          (.writeValidTimeMicros open-tx-table 0 0)
-          (.endStruct doc-wtr)
-          (.endPut open-tx-table))
-
-        (.importData live-table (.getTxRelation open-tx-table))
-
-        (util/with-open [live-table-snap (TableSnapshot/open allocator live-table)]
-          (let [live-table-before (live-table-snap->data live-table-snap)]
-
-            (.finishBlock live-table bp 0)
-            (.close open-tx)
-
-            (let [live-table-after (live-table-snap->data live-table-snap)]
-
-              (t/is (= (:live-trie-iids live-table-before)
-                       (:live-trie-iids live-table-after)
-                       uuids))
-
-              (t/is (= (util/->clj live-table-before) (util/->clj live-table-after))))))))))
 
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]

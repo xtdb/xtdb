@@ -27,7 +27,7 @@
            (java.time.temporal ChronoUnit)
            (java.util List)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (org.apache.arrow.vector.types.pojo Field Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
            (xtdb ICursor PagesCursor)
            (xtdb.api TransactionKey)
@@ -36,7 +36,8 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveIndex LiveTable OpenTx OpenTx$Table)
+           (xtdb.indexer LiveIndex LiveTable OpenTx)
+           (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PreparedQuery QueryOpts)
            xtdb.storage.BufferPool
@@ -354,20 +355,42 @@
 (defn commit-tx! [^LiveIndex live-index ^OpenTx open-tx]
   (.importTx live-index (.commitTx open-tx)))
 
-(defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
-  (let [system-time (.getSystemTime tx-key)]
-    (with-open [open-tx (->open-tx *allocator* *node* tx-key)]
-      (let [^OpenTx$Table open-tx-table (.table open-tx (.getTable live-table))
-            doc-wtr (.getPutDocWriter open-tx-table)]
-        (doseq [{eid :xt/id, :as doc} docs
-                :let [{:keys [:xt/valid-from :xt/valid-to],
-                       :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
-          (.writeIid open-tx-table (ByteBuffer/wrap (util/->iid eid)))
-          (.writeValidTimeMicros open-tx-table (time/instant->micros valid-from) (time/instant->micros valid-to))
-          (.writeObject doc-wtr doc)
-          (.endPut open-tx-table))
+(defn open-put-log-rel
+  "Builds a log-data relation of put ops via the public log-data writer - the same relation
+   OpenTx.Table assembles internally - so tests can feed LiveTable.importData without reaching
+   for the tx's internal txRelation.
 
-        (.importData live-table (.getTxRelation open-tx-table))))))
+   `puts` is a seq of {:iid ByteBuffer, :valid-from <micros>, :valid-to <micros>, :doc <map or nil>};
+   `system-from` (micros) is stamped on every row. A nil :doc writes an empty put struct."
+  ^Relation [^BufferAllocator allocator ^long system-from puts]
+  (util/with-close-on-catch [^Relation rel (Trie/openLogDataWriter allocator (Trie/dataRelSchema nil))]
+    (let [^Vector put-wtr (.vectorFor ^Vector (.vectorFor rel "op") "put" ArrowType$Struct/INSTANCE false)
+          ^Vector iid-wtr (.vectorFor rel "_iid")
+          ^Vector sys-from-wtr (.vectorFor rel "_system_from")
+          ^Vector valid-from-wtr (.vectorFor rel "_valid_from")
+          ^Vector valid-to-wtr (.vectorFor rel "_valid_to")]
+      (doseq [{:keys [^ByteBuffer iid valid-from valid-to doc]} puts]
+        (.writeBytes iid-wtr iid)
+        (.writeLong sys-from-wtr system-from)
+        (.writeLong valid-from-wtr (long valid-from))
+        (.writeLong valid-to-wtr (long valid-to))
+        (if (some? doc)
+          (.writeObject put-wtr doc)
+          (.endStruct put-wtr))
+        (.endRow rel))
+      rel)))
+
+(defn index-tx! [^LiveTable live-table, ^TransactionKey tx-key, docs]
+  (let [system-time (.getSystemTime tx-key)
+        puts (for [{eid :xt/id, :as doc} docs
+                   :let [{:keys [:xt/valid-from :xt/valid-to],
+                          :or {valid-from system-time, valid-to (time/micros->instant Long/MAX_VALUE)}} (meta doc)]]
+               {:iid (ByteBuffer/wrap (util/->iid eid))
+                :valid-from (time/instant->micros valid-from)
+                :valid-to (time/instant->micros valid-to)
+                :doc doc})]
+    (util/with-open [rel (open-put-log-rel *allocator* (time/instant->micros system-time) puts)]
+      (.importData live-table rel))))
 
 (defn bytes->path [^bytes bs]
   (mapcat (fn [b]
