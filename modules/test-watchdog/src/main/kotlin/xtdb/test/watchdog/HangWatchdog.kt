@@ -107,10 +107,28 @@ class HangWatchdog : TestExecutionListener {
             }
         }
 
-        @OptIn(ExperimentalCoroutinesApi::class)
         private fun dump(o: HangTracker.Overdue) {
             out.println("=== [hang-watchdog] no test activity for ${TimeUnit.NANOSECONDS.toSeconds(o.quietNanos)}s (report ${o.report}; last event: ${o.lastEvent}) ===")
+            dumpDiagnostics()
+            out.println("=== [hang-watchdog] end of dump (report ${o.report}) ===")
+            out.flush()
+        }
 
+        /**
+         * On-demand dump for a stall the test-plan scanner can't see — e.g. a bounded teardown
+         * escape (`DatabaseCatalog.close`, xtdb#5711) that returns instead of hanging, so the test
+         * never goes quiet for the scanner to catch. Routed here via the `TeardownStallProbe` SPI.
+         */
+        @JvmStatic
+        fun dumpNow(reason: String) {
+            out.println("=== [hang-watchdog] on-demand dump: $reason ===")
+            dumpDiagnostics()
+            out.println("=== [hang-watchdog] end of dump ===")
+            out.flush()
+        }
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private fun dumpDiagnostics() {
             if (probesInstalled) {
                 try {
                     DebugProbes.dumpCoroutines(out)
@@ -130,8 +148,6 @@ class HangWatchdog : TestExecutionListener {
                 ti.stackTrace.forEach { out.println("\tat $it") }
                 out.println()
             }
-            out.println("=== [hang-watchdog] end of dump (report ${o.report}) ===")
-            out.flush()
         }
     }
 }

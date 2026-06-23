@@ -5,14 +5,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.time.withTimeout
 import xtdb.NodeBase
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
+import xtdb.diagnostics.TeardownStall
 import xtdb.error.Conflict
+import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.error.NotFound
 import xtdb.table.DatabaseName
@@ -22,9 +26,14 @@ import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import xtdb.util.warn
+import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 private val LOG = DatabaseCatalog::class.logger
+
+// A cancellation-immune wait in some database's tree (xtdb#5711) would otherwise hang teardown
+// forever. Generous vs a real teardown (seconds).
+private val CLOSE_TIMEOUT: Duration = Duration.ofSeconds(60)
 
 class DatabaseCatalog @JvmOverloads constructor(
     private val base: NodeBase,
@@ -132,12 +141,31 @@ class DatabaseCatalog @JvmOverloads constructor(
     }
 
     override fun close() {
-        runBlocking {
-            // In-flight detaches own their database's teardown — let them finish before we cancel.
-            closerJob.children.toList().forEach { it.join() }
-            // One cancel stops every remaining database's job tree (Phase 1); free synchronously below.
-            dbJob.cancelAndJoin()
+        val stalled = runBlocking {
+            try {
+                withTimeout(CLOSE_TIMEOUT) {
+                    // Let in-flight detaches finish their own teardown before we cancel the tree.
+                    closerJob.children.toList().forEach { it.join() }
+                    dbJob.cancelAndJoin()
+                }
+                false
+            } catch (_: TimeoutCancellationException) {
+                true
+            }
         }
+
+        if (stalled) {
+            // Can't free a wedged tree — closing its allocator under a live coroutine is a
+            // use-after-free — so leak it and fail loud. Dump first; the fast return leaves the
+            // watchdog nothing to catch.
+            TeardownStall.onStall("DatabaseCatalog.close exceeded ${CLOSE_TIMEOUT.toSeconds()}s")
+            throw Fault(
+                "database catalog did not shut down within ${CLOSE_TIMEOUT.toSeconds()}s",
+                "xtdb/db-close-timeout"
+            )
+        }
+
+        // Phase 1 joined — no coroutine is still using this state.
         databases.values.closeAll()
     }
 

@@ -8,6 +8,10 @@ plugins {
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 
 dependencies {
+    // for the TeardownStallProbe SPI (xtdb#5711) — WatchdogStallProbe implements the interface,
+    // which lives in :xtdb-core.
+    implementation(project(":xtdb-core"))
+
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.coroutines.debug)
     implementation(libs.junit.platform.launcher)
