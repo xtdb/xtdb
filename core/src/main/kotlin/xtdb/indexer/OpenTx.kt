@@ -584,7 +584,7 @@ class OpenTx(
          *
          * Reads existing docs through the tx's read-your-writes [queryCatalog].
          */
-        fun patchDocs(validFromMicros: Long, validToMicros: Long, docs: RelationReader) {
+        fun patchDocs(docs: RelationReader, validFromMicros: Long, validToMicros: Long) {
             checkNotForbidden(ref)
 
             val prepareOpts = PersistentArrayMap.create(
@@ -623,8 +623,8 @@ class OpenTx(
          * [MIN_LONG] / [MAX_LONG] to the µs overload.
          */
         @JvmOverloads
-        fun patchDocs(validFrom: Instant? = null, validTo: Instant? = null, docs: RelationReader) =
-            patchDocs(validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG, docs)
+        fun patchDocs(docs: RelationReader, validFrom: Instant? = null, validTo: Instant? = null) =
+            patchDocs(docs, validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG)
 
         internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
