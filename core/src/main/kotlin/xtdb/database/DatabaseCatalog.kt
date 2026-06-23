@@ -7,12 +7,13 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import xtdb.NodeBase
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
+import xtdb.diagnostics.TeardownStall
 import xtdb.error.Conflict
+import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.error.NotFound
 import xtdb.table.DatabaseName
@@ -132,12 +133,18 @@ class DatabaseCatalog @JvmOverloads constructor(
     }
 
     override fun close() {
-        runBlocking {
-            // In-flight detaches own their database's teardown — let them finish before we cancel.
+        val stalled = TeardownStall.runBounded("DatabaseCatalog.close") {
+            // Let in-flight detaches finish their own teardown before we cancel the tree.
             closerJob.children.toList().forEach { it.join() }
-            // One cancel stops every remaining database's job tree (Phase 1); free synchronously below.
             dbJob.cancelAndJoin()
         }
+
+        if (stalled) {
+            // Skip Phase 2: freeing an allocator while the wedged tree is still live is a
+            // use-after-free. Leak it and fail loud (runBounded already dumped).
+            throw Fault("database catalog did not shut down in time", "xtdb/db-close-timeout")
+        }
+
         databases.values.closeAll()
     }
 

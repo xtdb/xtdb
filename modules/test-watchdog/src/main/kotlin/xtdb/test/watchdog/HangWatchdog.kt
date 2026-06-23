@@ -10,6 +10,7 @@ import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.PrintStream
 import java.lang.management.ManagementFactory
+import java.time.Duration
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -65,6 +66,11 @@ class HangWatchdog : TestExecutionListener {
         private val enabled = System.getProperty("xtdb.test.hang-watchdog.enabled", "true").toBoolean()
         private val timeoutSeconds = System.getProperty("xtdb.test.hang-watchdog.timeout-seconds", "240").toLong()
 
+        // Teardown-stall bound (xtdb#5711): how long DatabaseCatalog.close waits before it's stalled.
+        @JvmStatic
+        val teardownTimeout: Duration =
+            Duration.ofSeconds(System.getProperty("xtdb.test.teardown-timeout-seconds", "60").toLong())
+
         private val tracker = HangTracker(TimeUnit.SECONDS.toNanos(timeoutSeconds))
 
         // NOT System.out/err: Gradle's test workers replace those to capture per-test output, and
@@ -107,10 +113,27 @@ class HangWatchdog : TestExecutionListener {
             }
         }
 
-        @OptIn(ExperimentalCoroutinesApi::class)
         private fun dump(o: HangTracker.Overdue) {
             out.println("=== [hang-watchdog] no test activity for ${TimeUnit.NANOSECONDS.toSeconds(o.quietNanos)}s (report ${o.report}; last event: ${o.lastEvent}) ===")
+            dumpDiagnostics()
+            out.println("=== [hang-watchdog] end of dump (report ${o.report}) ===")
+            out.flush()
+        }
 
+        /**
+         * On-demand dump for a stall the scanner can't catch: a bounded teardown (xtdb#5711) returns
+         * instead of hanging, so the test never goes quiet. Routed via the `TeardownStallProbe` SPI.
+         */
+        @JvmStatic
+        fun dumpNow(reason: String) {
+            out.println("=== [hang-watchdog] on-demand dump: $reason ===")
+            dumpDiagnostics()
+            out.println("=== [hang-watchdog] end of dump ===")
+            out.flush()
+        }
+
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private fun dumpDiagnostics() {
             if (probesInstalled) {
                 try {
                     DebugProbes.dumpCoroutines(out)
@@ -130,8 +153,6 @@ class HangWatchdog : TestExecutionListener {
                 ti.stackTrace.forEach { out.println("\tat $it") }
                 out.println()
             }
-            out.println("=== [hang-watchdog] end of dump (report ${o.report}) ===")
-            out.flush()
         }
     }
 }
