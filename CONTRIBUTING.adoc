@@ -1,0 +1,33 @@
+= Contributing to XTDB
+
+Welcome - and first of all, thanks!
+
+XTDB would not exist without the community of vibrant open source projects on which it depends, and we hope that the XTDB community will serve to extend and reflect our gratitude.
+
+== How to contribute
+
+We use https://github.com/xtdb/xtdb/issues[GitHub Issues] to work on near-term changes to the XTDB codebase and documentation.
+Our work-in-progress is shown on our https://github.com/orgs/xtdb/projects/13[GitHub Project Board].
+
+PRs with fixes and improvements to our documentation are also very welcome.
+
+A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy XTDB ecosystem over the indefinite future.
+Please complete the very short
+https://raw.githubusercontent.com/xtdb/xtdb/main/docs/xtdb-individual-contributor-license-agreement.pdf[.pdf template]
+(https://raw.githubusercontent.com/xtdb/xtdb/main/docs/xtdb-individual-contributor-license-agreement.rtf[.rtf source])
+and email it to us, hello@xtdb.com, along with a reference to your current PR on GitHub.
+
+Particularly, *please do not open an issue to ask a question* - you'll get quicker support using our support channels below. Thanks!
+
+== Releases
+
+Our releases are published using https://github.com/xtdb/xtdb/releases[GitHub releases] - feel free to 'watch' the XTDB repo to receive notifications.
+
+== Get in touch!
+
+Beyond GitHub, community support can be found on https://github.com/orgs/xtdb/discussions/4385[Discord], where we'll be more than happy to answer questions and guide you through contributing to XTDB.
+We also frequent the #xtdb channel on http://clojurians.net/[Clojurians Slack]
+
+Cheers!
+
+XTDB Team
