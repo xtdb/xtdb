@@ -41,8 +41,7 @@
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
-           xtdb.NodeConnection
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -546,7 +545,7 @@
 
 (defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
   (swap! conn-state
-         (fn [{:keys [session ^NodeConnection node-conn] :as st}]
+         (fn [{:keys [session ^Xtdb$Connection node-conn] :as st}]
            (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
                                (apply-args tok args)
                                (.getAwaitToken node-conn))
@@ -581,7 +580,7 @@
   (close-all-portals conn))
 
 (defn cmd-commit [{:keys [conn-state ^BufferAllocator allocator, tx-error-counter, tx-latency-timer, tx-submit-timer, tx-execute-timer] :as conn}]
-  (let [{:keys [transaction session ^NodeConnection node-conn]} @conn-state
+  (let [{:keys [transaction session ^Xtdb$Connection node-conn]} @conn-state
         {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
         {:keys [parameters]} session]
     (if failed
@@ -994,7 +993,7 @@
     (try
       (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
 
-            {:keys [session ^NodeConnection node-conn]} @conn-state
+            {:keys [session ^Xtdb$Connection node-conn]} @conn-state
             {:keys [^Clock clock]} session
 
             query-opts {:await-token (.getAwaitToken node-conn)
@@ -1123,7 +1122,7 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction ^NodeConnection node-conn]} @conn-state
+  (let [{:keys [session transaction ^Xtdb$Connection node-conn]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction (.getAwaitToken node-conn))
 
@@ -1303,7 +1302,7 @@
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
 (defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [args], new-token :await-token}]
-  (.setAwaitToken ^NodeConnection (:node-conn @conn-state) (-> new-token (apply-args args)))
+  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (-> new-token (apply-args args)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
@@ -1473,7 +1472,7 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
-      (.recordTx ^NodeConnection (:node-conn @conn-state) "xtdb" tx-id)
+      (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
       (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error
@@ -1490,7 +1489,7 @@
 
   (with-auth-check conn
     (let [{:keys [tx-id error] :as tx} (xtp/detach-db node db-name)]
-      (.recordTx ^NodeConnection (:node-conn @conn-state) "xtdb" tx-id)
+      (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
       (swap! conn-state assoc :latest-submitted-tx tx)
 
       (when error

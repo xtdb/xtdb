@@ -5,8 +5,26 @@ package xtdb.api
 import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.Timer
+import org.apache.arrow.adbc.core.AdbcConnection
+import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcDatabase
+import org.apache.arrow.adbc.core.AdbcInfoCode
+import org.apache.arrow.adbc.core.AdbcStatement
+import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
+import org.apache.arrow.adbc.core.AdbcStatement.UpdateResult
+import org.apache.arrow.adbc.core.BulkIngestMode
+import org.apache.arrow.adbc.core.StandardSchemas
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.vector.UInt4Vector
+import org.apache.arrow.vector.VectorLoader
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.VectorUnloader
+import org.apache.arrow.vector.complex.DenseUnionVector
+import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
 import xtdb.antlr.Sql
 import xtdb.api.Authenticator.Factory.SingleRootUser
@@ -16,18 +34,37 @@ import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
+import xtdb.arrow.Relation
+import xtdb.arrow.RelationReader
+import xtdb.arrow.VectorType
+import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.unsupported
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
 import xtdb.database.DatabaseName
+import xtdb.database.encodeTxBasisToken
+import xtdb.database.mergeTxBasisTokens
+import xtdb.error.Anomaly
+import xtdb.error.Fault
+import xtdb.error.Incorrect
+import xtdb.indexer.DatabaseSnapshot
+import xtdb.query.IQuerySource
+import xtdb.query.PrepareOpts
 import xtdb.query.PreparedQuery
+import xtdb.query.QueryOpts
+import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
+import xtdb.util.closeOnCatch
+import xtdb.util.useAll
+import java.util.concurrent.ExecutionException
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.ZoneOffset
 import java.util.UUID.randomUUID
 import kotlin.io.path.extension
@@ -53,6 +90,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     fun addMeterRegistry(meterRegistry: MeterRegistry)
 
+    override fun connect(): Connection
+
     fun prepareSql(sql: String, opts: Any?): PreparedQuery
     fun prepareSql(sql: Sql.DirectlyExecutableStatementContext, opts: Any?): PreparedQuery
 
@@ -63,6 +102,539 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
 
     fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: Any?): ExecutedTx
+
+    interface Statement : AdbcStatement {
+        fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
+    }
+
+    /**
+     * A connection-scoped handle onto the node, implementing ADBC's [AdbcConnection] with XTDB's native
+     * surface (await-token-threaded reads/writes) alongside the standard one. Shared by the protocol
+     * frontends — pgwire uses the native methods; ADBC and Flight SQL use the [AdbcConnection] surface.
+     *
+     * Each write advances [awaitToken]; each read threads it through, so the planning snapshot can see this
+     * connection's own writes. Because writes and reads go through here, no callsite can forget to do either.
+     *
+     * [awaitToken] is exposed only for the pgwire `SET`/`SHOW AWAIT_TOKEN` SQL feature.
+     */
+    class Connection(
+        private val allocator: BufferAllocator,
+        private val dbCat: Database.Catalog,
+        private val qSrc: IQuerySource,
+        private val defaultTz: ZoneId,
+        private val txErrorCounter: Counter?,
+        private val txAwaitTimer: Timer?,
+        var dbName: DatabaseName,
+    ) : AdbcConnection {
+
+        var awaitToken: String? = null
+        private var autoCommit = true
+        private val pendingOps = mutableListOf<TxOp>()
+
+        private fun db(dbName: DatabaseName): Database =
+            dbCat.databaseOrNull(dbName)
+                ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
+
+        fun recordTx(dbName: DatabaseName, txId: MessageId) {
+            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+        }
+
+        // unwrap ExecutionException → cause (mirrors util/rethrowing-cause), counting Anomalies on the way out
+        private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx =
+            try {
+                try {
+                    db(dbName).submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
+                } catch (e: ExecutionException) {
+                    throw e.cause ?: e
+                }
+            } catch (e: Anomaly) {
+                txErrorCounter?.increment()
+                throw e
+            }
+
+        fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
+            doSubmit(ops, opts).also { recordTx(dbName, it.txId) }
+
+        fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx {
+            val txId = doSubmit(ops, opts).txId
+            val tx = if (txAwaitTimer != null) txAwaitTimer.recordCallable { awaitTx(txId) } else awaitTx(txId)
+            return tx.also { recordTx(dbName, it.txId) }
+        }
+
+        private fun TransactionResult.toExecutedTx() =
+            ExecutedTx(
+                txKey.txId, txKey.systemTime,
+                this is TransactionResult.Committed,
+                (this as? TransactionResult.Aborted)?.error
+            )
+
+        private fun awaitTx(txId: MessageId): ExecutedTx {
+            db(dbName).awaitTxBlocking(txId, null)?.let { txRes ->
+                if (txRes.txKey.txId == txId) return txRes.toExecutedTx()
+            }
+
+            return Relation.openFromRows(allocator, listOf(mapOf("?_0" to txId)))
+                .closeOnCatch { args ->
+                    prepareSql("SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?")
+                        .openQuery(args, QueryOpts(null, defaultTz))
+                }
+                .use { c ->
+                    var result: ExecutedTx? = null
+                    c.tryAdvance { rel ->
+                        if (rel.rowCount > 0)
+                            result = ExecutedTx(
+                                txId,
+                                (rel["system_time"].getObject(0) as ZonedDateTime).toInstant(),
+                                rel["committed"].getObject(0) as Boolean,
+                                rel["error"].getObject(0) as? Throwable,
+                            )
+                    }
+                    result ?: throw Fault("tx $txId not found after await", "xtdb/tx-await-missing")
+                }
+        }
+
+        fun prepareSql(sql: String): PreparedQuery {
+            dbCat.awaitAll(awaitToken, null)
+            return qSrc.prepareQuery(
+                sql,
+                dbCat,
+                PrepareOpts(defaultTz = defaultTz, defaultDb = dbName, queryText = sql)
+            )
+        }
+
+        fun openSqlQuery(sql: String): ResultCursor =
+            prepareSql(sql).openQuery(null, QueryOpts(null, defaultTz))
+
+        fun openSnapshot(): DatabaseSnapshot {
+            val db = db(dbName)
+            dbCat.awaitAll(awaitToken, null)
+            return db.openSnapshot()
+        }
+
+        override fun createStatement() = object : Statement {
+            private var sql: String? = null
+            private var prepared: PreparedQuery? = null
+            private var args: RelationReader? = null
+
+            private fun clearArgs() {
+                args.also { args = null }?.close()
+            }
+
+            private fun openQueryArgs(): RelationReader? =
+                args?.openSlice(allocator)?.closeOnCatch { sliced ->
+                    RelationReader.from(
+                        sliced.vectors.mapIndexed { idx, v -> v.withName("?_$idx") },
+                        sliced.rowCount
+                    )
+                }
+
+            override fun setSqlQuery(sql: String) {
+                this.sql = sql
+                this.prepared = null
+                clearArgs()
+            }
+
+            override fun prepare() {
+                val sql = this.sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                prepared = prepareSql(sql)
+            }
+
+            override fun getParameterSchema(): Schema {
+                val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+                return Schema(
+                    (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
+                )
+            }
+
+            override fun executeSchema(): Schema {
+                val pq = prepared ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+
+                val paramFields = (0 until pq.paramCount).map { idx -> "?_$idx" ofType VectorType.fromLegs() }
+
+                return Schema(pq.getColumnFields(paramFields))
+            }
+
+            override fun bind(root: VectorSchemaRoot) {
+                clearArgs()
+                args = Relation(allocator, root.schema).closeOnCatch { copy ->
+                    Relation.fromRoot(allocator, root).use { src ->
+                        src.rowCopier(copy).copyRange(0, src.rowCount)
+                    }
+                    copy
+                }
+            }
+
+            override fun bind(rel: RelationReader) {
+                clearArgs()
+                args = rel.openSlice(allocator)
+            }
+
+            override fun executeQuery(): QueryResult {
+                val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                if (prepared == null && args != null)
+                    throw Incorrect(
+                        "call prepare() before executeQuery() when parameters are bound",
+                        "xtdb.adbc/bind-without-prepare",
+                    )
+
+                val queryArgs = openQueryArgs()
+                val cursor = try {
+                    prepared?.openQuery(queryArgs, QueryOpts()) ?: openSqlQuery(sql)
+                } catch (t: Throwable) {
+                    queryArgs?.close()
+                    throw t
+                }
+                val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
+                return QueryResult(-1, cursorToArrowReader(cursor, schema))
+            }
+
+            override fun executeUpdate(): UpdateResult {
+                val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                val op = TxOp.Sql(sql, openQueryArgs())
+                executeDml(op)
+                return UpdateResult(-1)
+            }
+
+            override fun close() {
+                clearArgs()
+                prepared = null
+            }
+        }
+
+        internal fun executeDml(op: TxOp) {
+            if (autoCommit) {
+                listOf(op).useAll { ops -> executeTx(ops) }
+            } else {
+                pendingOps.add(op)
+            }
+        }
+
+        override fun setAutoCommit(autoCommit: Boolean) {
+            this.autoCommit = autoCommit
+        }
+
+        override fun commit() {
+            val ops = pendingOps.toList()
+            pendingOps.clear()
+            if (ops.isNotEmpty()) {
+                ops.useAll { executeTx(it) }
+            }
+        }
+
+        override fun rollback() {
+            pendingOps.forEach { it.close() }
+            pendingOps.clear()
+        }
+
+        override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): Statement {
+            require(mode == BulkIngestMode.CREATE_APPEND) { "Only CREATE_APPEND mode is supported" }
+
+            val splitTable = targetTableName.split('.').reversed()
+            val tableName = splitTable.first()
+            val schemaName = splitTable.getOrNull(1) ?: "public"
+
+            return object : Statement {
+                override fun executeQuery(): QueryResult =
+                    throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
+
+                override fun prepare(): Unit =
+                    throw Incorrect("Bulk ingest does not support prepare", "xtdb.adbc/bulk-ingest-no-prepare")
+
+                private var docs: RelationReader? = null
+
+                override fun close() {
+                    docs.also { docs = null }?.close()
+                }
+
+                override fun bind(root: VectorSchemaRoot) {
+                    this.docs?.close()
+                    docs = Relation(allocator, root.schema).closeOnCatch { copy ->
+                        Relation.fromRoot(allocator, root).use { src ->
+                            src.rowCopier(copy).copyRange(0, src.rowCount)
+                        }
+                        copy
+                    }
+                }
+
+                override fun bind(rel: RelationReader) {
+                    this.docs = rel.openSlice(allocator)
+                }
+
+                override fun executeUpdate(): UpdateResult {
+                    val docs = docs.also { this.docs = null } ?: return UpdateResult(0)
+                    val rowCount = docs.rowCount.toLong()
+                    // TODO valid-from/valid-to for the batch
+                    executeDml(TxOp.PutDocs(schemaName, tableName, docs = docs))
+                    return UpdateResult(rowCount)
+                }
+            }
+        }
+
+        private fun cursorToArrowReader(cursor: ResultCursor, schema: Schema): ArrowReader =
+            object : ArrowReader(allocator) {
+                override fun readSchema() = schema
+
+                override fun loadNextBatch(): Boolean =
+                    cursor.tryAdvance { inRel ->
+                        inRel.openDirectSlice(allocator).use { rel ->
+                            val loader = VectorLoader(vectorSchemaRoot)
+                            rel.openArrowRecordBatch().use { rb ->
+                                loader.load(rb)
+                            }
+                        }
+                    }
+
+                override fun bytesRead() = -1L
+
+                override fun closeReadSource() = cursor.close()
+            }
+
+        /**
+         * Returns an ArrowReader that yields a single batch, built from a pre-populated VectorSchemaRoot.
+         */
+        private fun singleBatchReader(
+            schema: Schema,
+            populate: (BufferAllocator, VectorSchemaRoot) -> Unit
+        ): ArrowReader =
+            object : ArrowReader(allocator) {
+                private var consumed = false
+
+                override fun readSchema() = schema
+
+                override fun loadNextBatch(): Boolean {
+                    if (consumed) return false
+                    consumed = true
+
+                    VectorSchemaRoot.create(schema, allocator).use { tmpRoot ->
+                        tmpRoot.allocateNew()
+                        populate(allocator, tmpRoot)
+
+                        val loader = VectorLoader(vectorSchemaRoot)
+                        VectorUnloader(tmpRoot).recordBatch.use { rb -> loader.load(rb) }
+                    }
+
+                    return true
+                }
+
+                override fun bytesRead() = -1L
+                override fun closeReadSource() = Unit
+            }
+
+        /** Returns an ArrowReader yielding a single batch, built inline via the xtdb.arrow [Relation] API. */
+        private fun relationBatchReader(schema: Schema, populate: (Relation) -> Unit): ArrowReader =
+            object : ArrowReader(allocator) {
+                private var consumed = false
+
+                override fun readSchema() = schema
+
+                override fun loadNextBatch(): Boolean {
+                    if (consumed) return false
+                    consumed = true
+
+                    Relation(allocator, schema).use { rel ->
+                        populate(rel)
+                        rel.openArrowRecordBatch().use { rb -> VectorLoader(vectorSchemaRoot).load(rb) }
+                    }
+
+                    return true
+                }
+
+                override fun bytesRead() = -1L
+                override fun closeReadSource() = Unit
+            }
+
+        override fun getTableTypes(): ArrowReader =
+            relationBatchReader(StandardSchemas.TABLE_TYPES_SCHEMA) { rel ->
+                rel.vectorFor("table_type").writeObject("TABLE")
+                rel.endRow()
+            }
+
+        // stays on VectorSchemaRoot: the ADBC GET_INFO schema uses uint32 (no unsigned vector in xtdb.arrow)
+        // and a dense union whose member type-ids are part of the wire contract — building it via the typed
+        // API would risk diverging from the standard schema.
+        override fun getInfo(infoCodes: IntArray?): ArrowReader {
+            val codes = infoCodes?.toSet() ?: AdbcInfoCode.entries.map { it.value }.toSet()
+
+            return singleBatchReader(StandardSchemas.GET_INFO_SCHEMA) { _, root ->
+                val infoNameVec = root.getVector("info_name") as UInt4Vector
+                val infoValueVec = root.getVector("info_value") as DenseUnionVector
+                val stringVec = infoValueVec.getVarCharVector(0)
+
+                var idx = 0
+
+                fun addStringInfo(code: AdbcInfoCode, value: String) {
+                    if (code.value !in codes) return
+                    infoNameVec.setSafe(idx, code.value)
+                    infoValueVec.setTypeId(idx, 0)
+                    infoValueVec.offsetBuffer.setInt(idx.toLong() * DenseUnionVector.OFFSET_WIDTH, idx)
+                    stringVec.setSafe(idx, value.toByteArray())
+                    idx++
+                }
+
+                addStringInfo(AdbcInfoCode.VENDOR_NAME, "XTDB")
+                addStringInfo(AdbcInfoCode.VENDOR_VERSION, "dev")
+                addStringInfo(AdbcInfoCode.DRIVER_NAME, "XTDB ADBC Driver")
+                addStringInfo(AdbcInfoCode.DRIVER_VERSION, "dev")
+
+                infoValueVec.valueCount = idx
+                root.rowCount = idx
+            }
+        }
+
+        override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema =
+            openSnapshot().use { snap ->
+                getTableSchema(TableRef(catalog ?: dbName, dbSchema ?: "public", tableName), snap)
+            }
+
+        fun getTableSchema(dbSchema: String, tableName: String, snap: DatabaseSnapshot): Schema =
+            getTableSchema(TableRef(dbName, dbSchema, tableName), snap)
+
+        private fun getTableSchema(table: TableRef, snap: DatabaseSnapshot): Schema {
+            val types = dbCat.databaseOrNull(table.dbName)?.getColumnTypes(table, snap) ?: return Schema(emptyList())
+            return Schema(types.entries.map { (name, type) -> type.toField(name) })
+        }
+
+        override fun getObjects(
+            depth: GetObjectsDepth,
+            catalogPattern: String?,
+            dbSchemaPattern: String?,
+            tableNamePattern: String?,
+            tableTypes: Array<out String>?,
+            columnNamePattern: String?
+        ): ArrowReader {
+            val catalogs = dbCat.databaseNames
+                .filter { catalogPattern == null || catalogPattern == "%" || it == catalogPattern }
+
+            // build the payload as nested maps/lists matching GET_OBJECTS_SCHEMA; the typed vector tree comes
+            // from the schema and writeObject fills present keys (omitted keys pad null). only the connection's
+            // current database gets schema detail.
+            fun tableObj(table: TableInfo): Map<String, Any?> = buildMap {
+                put("table_name", table.name)
+                put("table_type", "TABLE")
+                if (depth != GetObjectsDepth.TABLES && table.columns.isNotEmpty())
+                    put("table_columns", table.columns.mapIndexed { idx, col ->
+                        mapOf("column_name" to col.name, "ordinal_position" to idx + 1)
+                    })
+                // table_constraints omitted -> null
+            }
+
+            fun schemaObj(schemaName: String, tables: List<TableInfo>): Map<String, Any?> = buildMap {
+                put("db_schema_name", schemaName)
+                if (depth != GetObjectsDepth.DB_SCHEMAS)
+                    put("db_schema_tables", tables.map(::tableObj))
+            }
+
+            return relationBatchReader(StandardSchemas.GET_OBJECTS_SCHEMA) { rel ->
+                val catalogNameVec = rel.vectorFor("catalog_name")
+                val dbSchemasVec = rel.vectorFor("catalog_db_schemas")
+
+                for (catalog in catalogs) {
+                    catalogNameVec.writeObject(catalog)
+
+                    if (depth == GetObjectsDepth.CATALOGS || catalog != dbName) {
+                        // at CATALOGS depth, or for databases other than the current one, omit schema detail
+                        dbSchemasVec.writeNull()
+                    } else {
+                        val schemas =
+                            querySchemas(dbSchemaPattern, tableNamePattern, tableTypes, columnNamePattern, depth)
+                        dbSchemasVec.writeObject(schemas.map { (name, tables) -> schemaObj(name, tables) })
+                    }
+
+                    rel.endRow()
+                }
+            }
+        }
+
+        private data class ColumnInfo(val name: String, val dataType: String)
+        private data class TableInfo(val name: String, val columns: List<ColumnInfo>)
+
+        private fun querySchemas(
+            dbSchemaPattern: String?,
+            tableNamePattern: String?,
+            tableTypes: Array<out String>?,
+            columnNamePattern: String?,
+            depth: GetObjectsDepth
+        ): Map<String, List<TableInfo>> {
+            // XTDB only has table_type='TABLE' currently
+            if (tableTypes != null && "TABLE" !in tableTypes) return emptyMap()
+
+            val conditions = mutableListOf<String>()
+            dbSchemaPattern?.let { conditions.add("table_schema LIKE '${it.replace("'", "''")}'") }
+            tableNamePattern?.let { conditions.add("table_name LIKE '${it.replace("'", "''")}'") }
+
+            val where = if (conditions.isNotEmpty()) "WHERE ${conditions.joinToString(" AND ")}" else ""
+
+            if (depth == GetObjectsDepth.DB_SCHEMAS) {
+                val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
+                val result = linkedMapOf<String, List<TableInfo>>()
+                openSqlQuery(sql).use { cursor ->
+                    cursor.forEachRemaining { rel ->
+                        for (i in 0 until rel.rowCount) {
+                            result[rel["table_schema"].getObject(i).toString()] = emptyList()
+                        }
+                    }
+                }
+                return result
+            }
+
+            val needColumns = depth == GetObjectsDepth.ALL
+            val sql = if (needColumns) {
+                val colConditions = conditions.toMutableList()
+                columnNamePattern?.let { colConditions.add("column_name LIKE '${it.replace("'", "''")}'") }
+                val colWhere = if (colConditions.isNotEmpty()) "WHERE ${colConditions.joinToString(" AND ")}" else ""
+                "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns $colWhere ORDER BY table_schema, table_name, ordinal_position"
+            } else {
+                "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
+            }
+
+            val result = linkedMapOf<String, MutableList<TableInfo>>()
+
+            if (needColumns) {
+                val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
+                openSqlQuery(sql).use { cursor ->
+                    cursor.forEachRemaining { rel ->
+                        for (i in 0 until rel.rowCount) {
+                            val schema = rel["table_schema"].getObject(i).toString()
+                            val table = rel["table_name"].getObject(i).toString()
+                            val column = rel["column_name"].getObject(i).toString()
+                            val dataType = rel["data_type"].getObject(i).toString()
+                            tableColumns.getOrPut(schema to table) { mutableListOf() }
+                                .add(ColumnInfo(column, dataType))
+                        }
+                    }
+                }
+                for ((key, cols) in tableColumns) {
+                    result.getOrPut(key.first) { mutableListOf() }
+                        .add(TableInfo(key.second, cols))
+                }
+            } else {
+                openSqlQuery(sql).use { cursor ->
+                    cursor.forEachRemaining { rel ->
+                        for (i in 0 until rel.rowCount) {
+                            val schema = rel["table_schema"].getObject(i).toString()
+                            val table = rel["table_name"].getObject(i).toString()
+                            result.getOrPut(schema) { mutableListOf() }
+                                .add(TableInfo(table, emptyList()))
+                        }
+                    }
+                }
+            }
+
+            return result
+        }
+
+        override fun getCurrentCatalog(): String = dbName
+
+        override fun setCurrentCatalog(catalog: String) {
+            dbName = catalog
+        }
+
+        override fun getCurrentDbSchema(): String = "public"
+
+        override fun close() {
+            rollback()
+        }
+    }
 
     @Serializable
     data class Config(

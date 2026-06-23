@@ -30,7 +30,6 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
-import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType
@@ -106,7 +105,7 @@ private val AdbcStatement.QueryResult.schema: Schema
     get() = reader.vectorSchemaRoot.schema
 
 private class PreparedStatement(
-    val xtdbStmt: XtdbConnection.XtdbStatement,
+    val xtdbStmt: Xtdb.Statement,
     var queryResult: AdbcStatement.QueryResult? = null
 ) : AutoCloseable {
     override fun close() {
@@ -157,20 +156,20 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     private val allocator = node.allocator.newChildAllocator("flight-sql", 0, Long.MAX_VALUE)
 
     // key is (session id, db)
-    private val sessionConns = ConcurrentHashMap<Pair<String, DatabaseName>, XtdbConnection>()
+    private val sessionConns = ConcurrentHashMap<Pair<String, DatabaseName>, Xtdb.Connection>()
 
     // fallback for clients without a session cookie
-    private val defaultConns = ConcurrentHashMap<DatabaseName, XtdbConnection>()
+    private val defaultConns = ConcurrentHashMap<DatabaseName, Xtdb.Connection>()
 
     // a tx owns a dedicated connection: autoCommit/pendingOps are connection-scoped, so flipping
     // them on a pooled connection would buffer other clients' autocommit writes into this tx.
-    private data class TxConn(val sessionId: String?, val conn: XtdbConnection)
+    private data class TxConn(val sessionId: String?, val conn: Xtdb.Connection)
     private val txConns = ConcurrentHashMap<TxHandle, TxConn>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
     private val tickets = ConcurrentHashMap<TicketHandle, ResultCursor>()
 
-    private fun newConnection(dbName: DatabaseName): XtdbConnection =
-        (node.connect() as XtdbConnection).also { it.setCurrentCatalog(dbName) }
+    private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
+        (node.connect()).also { it.setCurrentCatalog(dbName) }
 
     private fun sessionMiddleware(ctx: CallContext?): ServerSessionMiddleware? =
         ctx?.getMiddleware(SESSION_KEY)
@@ -196,7 +195,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
      * The connection for an autocommit call: per-session when the caller carries a
      * session cookie, otherwise the shared anonymous connection for the database.
      */
-    private fun connectionFor(ctx: CallContext?, dbName: DatabaseName): XtdbConnection {
+    private fun connectionFor(ctx: CallContext?, dbName: DatabaseName): Xtdb.Connection {
         val mw = sessionMiddleware(ctx)
         return if (mw != null && mw.hasSession())
             sessionConns.computeIfAbsent(mw.session.id to dbName) { newConnection(dbName) }
@@ -216,7 +215,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             ?.takeIf { it.sessionId == currentSessionId(ctx) }
             ?: throw CallStatus.NOT_FOUND.withDescription("unknown transaction").toRuntimeException()
 
-    private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): XtdbConnection =
+    private fun txOrSessionConnection(ctx: CallContext?, txHandle: TxHandle?): Xtdb.Connection =
         if (txHandle != null) txConnFor(ctx, txHandle).conn
         else connectionFor(ctx, resolveDb(ctx))
 
@@ -878,7 +877,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         listener: StreamListener<ActionBeginTransactionResult>
     ) {
         val txHandle = newHandle()
-        val conn = (node.connect() as XtdbConnection).also { it.setCurrentCatalog(resolveDb(ctx)) }
+        val conn = (node.connect()).also { it.setCurrentCatalog(resolveDb(ctx)) }
         conn.setAutoCommit(false)
         txConns[txHandle] = TxConn(currentSessionId(ctx), conn)
 

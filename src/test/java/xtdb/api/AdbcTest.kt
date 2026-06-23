@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import xtdb.error.Incorrect
-import xtdb.adbc.XtdbConnection
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType.Companion.UUID
@@ -73,7 +72,7 @@ class AdbcTest {
 
                 Relation.openFromRows(allocator, rows).use { rel ->
                     conn.bulkIngest("users", BulkIngestMode.CREATE_APPEND).use { stmt ->
-                        (stmt as XtdbConnection.XtdbStatement).bind(rel)
+                        (stmt as Xtdb.Statement).bind(rel)
                         val result = stmt.executeUpdate()
                         result.affectedRows shouldBe 3
                     }
@@ -173,7 +172,7 @@ class AdbcTest {
 
                 Relation.openFromRows(allocator, rows).use { rel ->
                     conn.bulkIngest("custom_schema.statuses", BulkIngestMode.CREATE_APPEND).use { stmt ->
-                        (stmt as XtdbConnection.XtdbStatement).bind(rel)
+                        (stmt as Xtdb.Statement).bind(rel)
                         val result = stmt.executeUpdate()
                         result.affectedRows shouldBe 2
                     }
@@ -199,7 +198,7 @@ class AdbcTest {
             db.connect().use { conn ->
                 Relation(allocator, "_id" ofType UUID).use { rel ->
                     conn.bulkIngest("empty_table", BulkIngestMode.CREATE_APPEND).use { stmt ->
-                        (stmt as XtdbConnection.XtdbStatement).bind(rel)
+                        (stmt as Xtdb.Statement).bind(rel)
                         val result = stmt.executeUpdate()
                         result.affectedRows shouldBe 0
                     }
@@ -231,7 +230,7 @@ class AdbcTest {
 
                 Relation.openFromRows(allocator, rows).use { rel ->
                     conn.bulkIngest("mixed_types", BulkIngestMode.CREATE_APPEND).use { stmt ->
-                        (stmt as XtdbConnection.XtdbStatement).bind(rel)
+                        (stmt as Xtdb.Statement).bind(rel)
                         val result = stmt.executeUpdate()
                         result.affectedRows shouldBe 2
                     }

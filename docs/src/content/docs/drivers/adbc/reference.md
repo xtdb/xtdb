@@ -5,11 +5,11 @@ description: Reference for connecting to XTDB via ADBC, in-process and over Flig
 
 XTDB exposes [ADBC](https://arrow.apache.org/adbc/), the Arrow Database Connectivity standard, through two surfaces:
 
-- **In-process**, via `xtdb.adbc.XtdbConnection` on the JVM. Zero copies, direct access to the in-memory Arrow buffers.
+- **In-process**, via `Xtdb.Connection` on the JVM. Zero copies, direct access to the in-memory Arrow buffers.
 - **Over the wire**, via the [Apache Arrow Flight SQL](https://arrow.apache.org/docs/format/FlightSql.html) server bundled into XTDB.
   Any ADBC FlightSQL driver (Python, Rust, Go, C, R, Java) connects to it.
 
-The two paths share the same code below the ADBC surface: the FlightSQL producer is a thin shim that delegates to the same `XtdbStatement` lifecycle the in-process client uses.
+The two paths share the same code below the ADBC surface: the FlightSQL producer is a thin shim that delegates to the same `Xtdb.Statement` lifecycle the in-process client uses.
 If something works in-process, it works over the wire, and vice versa, modulo the per-client caveats called out below.
 
 ## When to reach for ADBC
@@ -31,15 +31,14 @@ For interactive SQL, `psql`-style tooling, or anything Postgres-ecosystem-shaped
 
 ### In-process (Kotlin / JVM)
 
-`XtdbConnection` is the entry point.
+`Xtdb.Connection` is the entry point.
 Obtain one from a running `Xtdb` node:
 
 ```kotlin
-import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
 
 val node = Xtdb.openNode()
-val conn: XtdbConnection = node.openAdbcConnection()
+val conn: Xtdb.Connection = node.connect()
 
 conn.use {
     val stmt = it.createStatement()
@@ -49,7 +48,7 @@ conn.use {
 }
 ```
 
-`XtdbConnection` implements `org.apache.arrow.adbc.core.AdbcConnection`: anything written against the ADBC Java API works against it directly.
+`Xtdb.Connection` implements `org.apache.arrow.adbc.core.AdbcConnection`: anything written against the ADBC Java API works against it directly.
 
 ### Over the wire (FlightSQL)
 
@@ -249,7 +248,7 @@ Both work from any Go-driver-based ADBC client (Python, C, R, Go itself).
 **Java caveat.**
 The Apache ADBC Java client (`adbc-driver-flight-sql` 0.23 and earlier) doesn't query `getSessionOptions`; it inherits `AdbcConnection`'s default which raises `notImplemented`.
 This is an upstream gap, not an XTDB one: Java's `getCurrentCatalog` / `getCurrentDbSchema` on the wire client will stay unsupported until Apache ADBC wires it up.
-The **in-process** Kotlin/JVM `XtdbConnection` is unaffected: `getCurrentCatalog()` / `getCurrentDbSchema()` work directly.
+The **in-process** Kotlin/JVM `Xtdb.Connection` is unaffected: `getCurrentCatalog()` / `getCurrentDbSchema()` work directly.
 
 **Setting** the catalog, via `setSessionOptions("catalog", db)`, selects the database for the session.
 This is how Go-driver-based clients (Python, C, R, Go) pick a database: the catalog session option selects it for the session.
@@ -322,7 +321,7 @@ direction: down
 
 client: "Your client\nPython / Rust / Go / C / R / Java …"
 producer: "XtdbProducer\nFlightSQL → ADBC shim"
-impl: "XtdbConnection / XtdbStatement\nimplements org.apache.arrow.adbc.core.*"
+impl: "Xtdb.Connection / Xtdb.Statement\nimplements org.apache.arrow.adbc.core.*"
 node: XTDB node
 
 client -> producer: "FlightSQL (gRPC)"
@@ -333,7 +332,7 @@ client -> impl: "in-process (JVM)" {
 }
 ```
 
-The wire path (FlightSQL) and the in-process JVM path resolve to the same `XtdbConnection` / `XtdbStatement` implementation.
+The wire path (FlightSQL) and the in-process JVM path resolve to the same `Xtdb.Connection` / `Xtdb.Statement` implementation.
 Anything you can do via the in-process `AdbcConnection` you can do over the wire, and vice versa, barring the wire-client caveats above.
 
 ## Examples
