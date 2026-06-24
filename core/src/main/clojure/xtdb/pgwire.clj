@@ -990,21 +990,21 @@
   (case statement-type
     (:query :execute :show-variable)
     (try
-      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
+      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
 
             {:keys [^Xtdb$Connection node-conn]} @conn-state
 
-            query-opts {:await-token (.getAwaitToken node-conn)
-                        :tx-timeout (Duration/ofMinutes 1)
-                        :default-tz (.getDefaultTz node-conn)
-                        :explain? explain?
-                        :explain-analyze? explain-analyze?
-                        :default-db default-db
-                        :query-text (:query stmt)}
-
             ^PreparedQuery pq (case statement-type
-                                (:query :execute) (with-auth-check conn (xtp/prepare-sql node parsed-query query-opts))
-                                :show-variable (with-auth-check conn (xtp/prepare-ra node (show-var-query (:variable stmt)) query-opts)))]
+                                (:query :execute)
+                                (with-auth-check conn
+                                  (.prepareSql node-conn parsed-query (:query stmt)))
+
+                                :show-variable
+                                (with-auth-check conn
+                                  (xtp/prepare-ra node (show-var-query (:variable stmt))
+                                                  {:await-token (.getAwaitToken node-conn)
+                                                   :default-tz (.getDefaultTz node-conn)
+                                                   :default-db default-db})))]
 
         (when-let [warnings (.getWarnings pq)]
           (doseq [warning warnings]

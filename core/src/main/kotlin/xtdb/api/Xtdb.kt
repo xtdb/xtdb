@@ -62,6 +62,7 @@ import java.util.concurrent.ExecutionException
 import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -131,6 +132,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     ) : AdbcConnection {
 
         var awaitToken: String? = null
+
+        // how long to wait for this connection's writes to become visible before giving up, shared by every
+        // read this connection prepares or snapshots
+        private val awaitTimeout: Duration = Duration.ofMinutes(1)
+
         private var autoCommit = true
         private val pendingOps = mutableListOf<TxOp>()
 
@@ -197,11 +203,22 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         fun prepareSql(sql: String): PreparedQuery {
-            dbCat.awaitAll(awaitToken, null)
+            dbCat.awaitAll(awaitToken, awaitTimeout)
             return qSrc.prepareQuery(
                 sql,
                 dbCat,
                 PrepareOpts(defaultTz = defaultTz, defaultDb = dbName, queryText = sql)
+            )
+        }
+
+        // pgwire parses once for dispatch, so it prepares from the AST and supplies the original text; tz, db,
+        // await-token and await bound all come from the connection. EXPLAIN is read off the AST, not passed in.
+        fun prepareSql(ast: Sql.DirectlyExecutableStatementContext, queryText: String): PreparedQuery {
+            dbCat.awaitAll(awaitToken, awaitTimeout)
+            return qSrc.prepareQuery(
+                ast,
+                dbCat,
+                PrepareOpts(defaultTz = defaultTz, defaultDb = dbName, queryText = queryText)
             )
         }
 
@@ -210,7 +227,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun openSnapshot(): DatabaseSnapshot {
             val db = db(dbName)
-            dbCat.awaitAll(awaitToken, null)
+            dbCat.awaitAll(awaitToken, awaitTimeout)
             return db.openSnapshot()
         }
 
