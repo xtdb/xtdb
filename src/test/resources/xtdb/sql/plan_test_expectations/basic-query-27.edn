@@ -6,4 +6,4 @@
    {:projections [{_ob2 si.1/year}]}
    [:rename
     {:prefix si.1}
-    [:scan {:table #xt/table stars_in, :columns [year movie_title]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [year movie_title]}]]]]]

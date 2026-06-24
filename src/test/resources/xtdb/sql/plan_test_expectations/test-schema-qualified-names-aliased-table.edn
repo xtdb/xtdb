@@ -3,5 +3,5 @@
  [:rename
   {:prefix f.1}
   [:scan
-   {:table #xt/table information_schema/columns,
+   {:db-name "xtdb", :table #xt/table information_schema/columns,
     :columns [column_name]}]]]

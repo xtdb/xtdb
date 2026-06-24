@@ -16,7 +16,7 @@
        _valid_to
        {_valid_time (period _valid_from _valid_to)}]}
      [:scan
-      {:table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
+      {:db-name "xtdb", :table #xt/table foo, :columns [name _valid_from _valid_to]}]]]
    [:rename
     {:prefix bar.2}
     [:project
@@ -25,4 +25,4 @@
        _valid_to
        {_valid_time (period _valid_from _valid_to)}]}
      [:scan
-      {:table #xt/table bar, :columns [_valid_from _valid_to]}]]]]]]
+      {:db-name "xtdb", :table #xt/table bar, :columns [_valid_from _valid_to]}]]]]]]

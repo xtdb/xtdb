@@ -112,7 +112,7 @@ class CompactorMockDriverFactory(
                     LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
                     yield() // force suspension mid-message processing
                     msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        val tableRef = TableRef.parse(dbState.name, tableName)
+                        val tableRef = TableRef.parse(tableName)
                         addTriesToBufferPool(bufferPool, tableRef, tries)
                         trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
                     }
@@ -218,7 +218,7 @@ class CompactorMockDriverFactory(
             sharedFlow.emit(AppendMessage(triesAdded, logTimestamp, systemId))
             yield()
             triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                val tableRef = TableRef.parse(dbState.name, tableName)
+                val tableRef = TableRef.parse(tableName)
                 addTriesToBufferPool(bufferPool, tableRef, tries)
                 trieCatalog.addTries(tableRef, tries, logTimestamp)
             }
@@ -355,7 +355,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun singleL0Compaction() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
         val db = dbs[0]
 
@@ -384,7 +384,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @RepeatableSimulationTest
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun multipleL0ToL1Compaction() {
-        val table = TableRef("xtdb", "public", "docs")
+        val table = TableRef("public", "docs")
         val db = dbs[0]
 
         db.withCompactor {
@@ -446,7 +446,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun biggerCompactorRun() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val l0tries = L0TrieKeys.take(100).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
         val db = dbs[0]
 
@@ -467,7 +467,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l1cToL2cCompaction() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
 
@@ -493,7 +493,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l1cToL2cWithPartialL2() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val rand = Random(currentSeed)
         val db = dbs[0]
@@ -533,7 +533,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = CURRENT)
     fun l2cGapFillingAndL3cCompaction() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
 
@@ -577,9 +577,9 @@ class CompactorSimulationTest : SimulationTestBase() {
     }
 
     private fun runConcurrentTableCompaction() {
-        val docsTable = TableRef("xtdb", "public", "docs")
-        val usersTable = TableRef("xtdb", "public", "users")
-        val ordersTable = TableRef("xtdb", "public", "orders")
+        val docsTable = TableRef("public", "docs")
+        val usersTable = TableRef("public", "users")
+        val ordersTable = TableRef("public", "orders")
         val l0FileSize = 100L * 1024L * 1024L
 
         // Start from L0 files to test the full compaction pipeline with multiple tables
@@ -633,7 +633,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @WithNumberOfSystems(2)
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     fun multiSystemSingleL0Compaction() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val l0Trie = buildTrieDetails(docsTable.tableName, L0TrieKeys.first())
 
         seedTries(docsTable, listOf(l0Trie))
@@ -665,7 +665,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     @WithCompactorDriverConfig(temporalSplitting = BOTH)
     fun biggerMultiSystemCompactorRun() {
-        val docsTable = TableRef("xtdb", "public", "docs")
+        val docsTable = TableRef("public", "docs")
         val l0tries = L0TrieKeys.take(1000).map { buildTrieDetails(docsTable.tableName, it, 10L * 1024L * 1024L) }
 
         seedTries(docsTable, l0tries.toList())

@@ -4,4 +4,4 @@
   {:columns [foo.1/a]}
   [:rename
    {:prefix foo.1}
-   [:scan {:table #xt/table foo, :columns [a]}]]]]
+   [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]]]

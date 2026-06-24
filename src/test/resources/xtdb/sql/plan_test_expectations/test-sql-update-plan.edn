@@ -9,7 +9,7 @@
  [:rename
   {:prefix u.1}
   [:scan
-   {:table #xt/table users,
+   {:db-name "xtdb", :table #xt/table users,
     :columns
     [_valid_to
      last_name

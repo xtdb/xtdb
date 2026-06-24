@@ -10,7 +10,7 @@
      {:projections [{_row_number_0 (row-number)}]}
      [:rename
       {:prefix tab0.1}
-      [:scan {:table #xt/table tab0, :columns [z]}]]]
+      [:scan {:db-name "xtdb", :table #xt/table tab0, :columns [z]}]]]
     [:rename
      {:prefix x.5}
      [:project

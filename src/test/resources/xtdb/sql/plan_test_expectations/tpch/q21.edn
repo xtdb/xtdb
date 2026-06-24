@@ -22,17 +22,17 @@
         [[:rename
           {:prefix n.4}
           [:scan
-           {:table #xt/table nation,
+           {:db-name "xtdb", :table #xt/table nation,
             :columns [_id {n_name (== n_name "SAUDI ARABIA")}]}]]
          [:rename
           {:prefix o.3}
           [:scan
-           {:table #xt/table orders,
+           {:db-name "xtdb", :table #xt/table orders,
             :columns [{o_orderstatus (== o_orderstatus "F")} _id]}]]
          [:rename
           {:prefix s.1}
           [:scan
-           {:table #xt/table supplier,
+           {:db-name "xtdb", :table #xt/table supplier,
             :columns [s_name _id s_nationkey]}]]
          [:semi-join
           {:conditions
@@ -47,7 +47,7 @@
             [:select
              {:predicate (> l_receiptdate l_commitdate)}
              [:scan
-              {:table #xt/table lineitem,
+              {:db-name "xtdb", :table #xt/table lineitem,
                :columns
                [l_receiptdate l_commitdate l_orderkey l_suppkey]}]]]
            [:project
@@ -74,7 +74,7 @@
              [:select
               {:predicate (> l_receiptdate l_commitdate)}
               [:scan
-               {:table #xt/table lineitem,
+               {:db-name "xtdb", :table #xt/table lineitem,
                 :columns
                 [l_linestatus
                  l_receiptdate
@@ -115,7 +115,7 @@
            [:rename
             {:prefix l2.6}
             [:scan
-             {:table #xt/table lineitem,
+             {:db-name "xtdb", :table #xt/table lineitem,
               :columns
               [l_linestatus
                l_receiptdate

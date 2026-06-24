@@ -7,12 +7,12 @@
    {:conditions []}
    [[:rename
      {:prefix foo.1}
-     [:scan {:table #xt/table foo, :columns [lastname name]}]]
+     [:scan {:db-name "xtdb", :table #xt/table foo, :columns [lastname name]}]]
     [:rename
      {:prefix bar.2}
-     [:scan {:table #xt/table bar, :columns []}]]]]
+     [:scan {:db-name "xtdb", :table #xt/table bar, :columns []}]]]]
   [:project
    {:projections [{_sq_3 baz.4/frame}]}
    [:rename
     {:prefix baz.4}
-    [:scan {:table #xt/table baz, :columns [frame]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table baz, :columns [frame]}]]]]]

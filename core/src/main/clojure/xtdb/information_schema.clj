@@ -138,7 +138,7 @@
           (fn [db-names]
             (->> (for [db-name db-names
                        [table fields] derived-tables]
-                   [(table/->ref db-name table) (set (keys fields))])
+                   [[db-name (table/->ref table)] (set (keys fields))])
                  (into {})))))
 
   (def ^:private ^Cache table-chains-cache
@@ -150,15 +150,16 @@
     (.get table-chains-cache [(into (sorted-set) db-names) default-db]
           (fn [[db-names default-db]]
             (->> (for [db-name db-names
-                       [table fields] derived-tables
-                       :let [^TableRef table-ref (table/->ref db-name table)
+                       [table _fields] derived-tables
+                       :let [^TableRef table-ref (table/->ref table)
+                             qualified [db-name table-ref]
                              db-sym (symbol db-name)
                              schema-name (symbol (.getSchemaName table-ref))
                              table-name (symbol (.getTableName table-ref))
                              default? (= db-name default-db)]]
-                   (cond-> [[[db-sym schema-name table-name] table-ref]]
-                     default? (conj [[schema-name table-name] table-ref])
-                     (and default? (= 'pg_catalog schema-name)) (conj [[table-name] table-ref])))
+                   (cond-> [[[db-sym schema-name table-name] qualified]]
+                     default? (conj [[schema-name table-name] qualified])
+                     (and default? (= 'pg_catalog schema-name)) (conj [[table-name] qualified])))
                  (into [] cat)))))
   (def meta-table-schemas
     (merge info-tables pg-catalog-tables))
@@ -185,9 +186,9 @@
                   :schema-name schema-name
                   :schema-owner "xtdb"})))))
 
-(defn tables [schema-info]
+(defn tables [db-name schema-info]
   (for [^TableRef table (keys schema-info)]
-    {:table-catalog (.getDbName table)
+    {:table-catalog db-name
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :table-type (if (views (table/ref->schema+table table)) "VIEW" "BASE TABLE")}))
@@ -259,10 +260,10 @@
      :rngcanonical rngcanonical
      :rngsubdiff rngsubdiff}))
 
-(defn columns [col-rows]
+(defn columns [db-name col-rows]
   (for [{:keys [^TableRef table, ^VectorType vec-type, idx], col-name :name} col-rows
         :let [typname (.getTypname (PgType/fromVectorType vec-type))]]
-    {:table-catalog (.getDbName table)
+    {:table-catalog db-name
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :column-name (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str col-name))
@@ -480,14 +481,14 @@
                             (update-keys (fn [k]
                                            (cond
                                              (instance? TableRef k) k
-                                             (symbol? k) (table/->ref db-name k)))))]
+                                             (symbol? k) (table/->ref k)))))]
 
         (util/with-close-on-catch [out-rel (Relation. ^BufferAllocator allocator
                                                       ^Map (update-keys derived-table-schema str))]
 
           (.writeRows out-rel (->> (case (table/ref->schema+table table)
-                                     information_schema/tables (tables schema-info)
-                                     information_schema/columns (columns (schema-info->col-rows schema-info))
+                                     information_schema/tables (tables db-name schema-info)
+                                     information_schema/columns (columns db-name (schema-info->col-rows schema-info))
                                      information_schema/schemata (schemas db-name)
                                      pg_catalog/pg_tables (pg-tables schema-info)
                                      pg_catalog/pg_type (pg-type)

@@ -4,7 +4,7 @@
   {:conditions []}
   [[:rename
     {:prefix foo.1}
-    [:scan {:table #xt/table foo, :columns [a]}]]
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
    [:select
     {:predicate _sq_3}
     [:apply
@@ -13,10 +13,10 @@
       :mark-join-projection {_sq_3 (== ?_needle b)}}
      [:rename
       {:prefix bar.2}
-      [:scan {:table #xt/table bar, :columns [c b]}]]
+      [:scan {:db-name "xtdb", :table #xt/table bar, :columns [c b]}]]
      [:project
       {:projections [{b foo.4/b}]}
       [:rename
        {:prefix foo.4}
        [:scan
-        {:table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]
+        {:db-name "xtdb", :table #xt/table foo, :columns [{a (== a ?_sq_b_4)} b]}]]]]]]]]

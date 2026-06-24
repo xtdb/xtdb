@@ -13,4 +13,4 @@
    {:projections [{_ob4 docs.1/z}]}
    [:rename
     {:prefix docs.1}
-    [:scan {:table #xt/table docs, :columns [y z]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table docs, :columns [y z]}]]]]]

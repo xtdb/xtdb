@@ -6,4 +6,4 @@
    {:projections [{cat (upper products.1/category)}]}
    [:rename
     {:prefix products.1}
-    [:scan {:table #xt/table products, :columns [category]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table products, :columns [category]}]]]]]

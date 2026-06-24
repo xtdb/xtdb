@@ -41,7 +41,7 @@ class DocsIndexer(
     ) : RecordIndexer.Factory {
 
         override fun open(dbName: String): RecordIndexer =
-            DocsIndexer(TableRef.parse(dbName, table))
+            DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String

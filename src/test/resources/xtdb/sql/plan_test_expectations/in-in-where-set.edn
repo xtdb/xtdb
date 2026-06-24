@@ -4,7 +4,7 @@
   {:projections [{_sq_2 true}]}
   [:semi-join
    {:conditions [{x.1/z xt.values.3/_column_1}]}
-   [:rename {:prefix x.1} [:scan {:table #xt/table x, :columns [y z]}]]
+   [:rename {:prefix x.1} [:scan {:db-name "xtdb", :table #xt/table x, :columns [y z]}]]
    [:rename
     {:prefix xt.values.3}
     [:table

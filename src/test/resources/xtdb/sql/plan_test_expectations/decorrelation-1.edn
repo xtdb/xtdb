@@ -13,8 +13,8 @@
       {:projections [{_row_number_0 (row-number)}]}
       [:rename
        {:prefix c.1}
-       [:scan {:table #xt/table customer, :columns [custkey]}]]]
+       [:scan {:db-name "xtdb", :table #xt/table customer, :columns [custkey]}]]]
      [:rename
       {:prefix o.3}
       [:scan
-       {:table #xt/table orders, :columns [custkey totalprice]}]]]]]]]
+       {:db-name "xtdb", :table #xt/table orders, :columns [custkey totalprice]}]]]]]]]

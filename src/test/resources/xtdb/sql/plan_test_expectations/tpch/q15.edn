@@ -11,7 +11,7 @@
     [:rename
      {:prefix l.1}
      [:scan
-      {:table #xt/table lineitem,
+      {:db-name "xtdb", :table #xt/table lineitem,
        :columns
        [{l_shipdate
          (and
@@ -45,7 +45,7 @@
        [[:rename
          {:prefix s.5}
          [:scan
-          {:table #xt/table supplier,
+          {:db-name "xtdb", :table #xt/table supplier,
            :columns [s_name s_address s_phone _id]}]]
         [:rename
          {:prefix revenue.6}

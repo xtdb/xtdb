@@ -87,7 +87,7 @@
   '[:top {:limit 10}
     [:order-by {:order-specs [[time {:direction :desc}]]}
      [:project {:projections [time device-id battery-temperature]}
-      [:scan {:table device-readings
+      [:scan {:db-name "xtdb", :table device-readings
               :columns [time device-id battery-temperature
                         {battery-status (= battery-status "discharging")}]}]]]])
 
@@ -105,11 +105,11 @@
     [:order-by {:order-specs [[cpu-avg-1min {:direction :desc}]
                 [time {:direction :desc}]]}
      [:join {:conditions [{device-id device-id}]}
-      [:scan {:table device-readings
+      [:scan {:db-name "xtdb", :table device-readings
               :columns [device-id time cpu-avg-1min
                         {battery-level (< battery-level 30)}
                         {battery-status (= battery-status "discharging")}]}]
-      [:scan {:table device-info
+      [:scan {:db-name "xtdb", :table device-info
               :columns [device-id model]}]]]])
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -132,9 +132,9 @@
       [:project {:projections [{hour (date-trunc "HOUR" time)}
                                 battery-level]}
        [:semi-join {device-id device-id}
-        [:scan {:table device-readings
+        [:scan {:db-name "xtdb", :table device-readings
                 :columns [device-id time battery-level]}]
-        [:scan {:table device-info
+        [:scan {:db-name "xtdb", :table device-info
                 :columns [device-id {model (or (= model "pinto")
                                                (= model "focus"))}]}]]]]]])
 

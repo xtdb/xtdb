@@ -1,6 +1,5 @@
 (ns xtdb.expression.pg
-  (:require [clojure.set :as set]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.information-schema :as info]
@@ -15,10 +14,13 @@
       (for [schema expr/search-path]
         (symbol schema needle)))))
 
+(defn- schema-key->table [k]
+  ;; table-info / schema keys are `[db-name table-ref]` qualified pairs; tolerate a bare ref/symbol too
+  (table/ref->schema+table (if (vector? k) (second k) k)))
+
 (defn tables [schema]
-  (->> (set/union (set (keys (info/table-info "xtdb")))
-                  (set (keys schema)))
-       (into #{} (map table/ref->schema+table))))
+  (into #{} (map schema-key->table)
+        (concat (keys (info/table-info "xtdb")) (keys schema))))
 
 (defn find-table [schema table-name]
   ;; TODO multi-db

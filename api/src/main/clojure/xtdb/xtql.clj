@@ -310,7 +310,7 @@
     (throw (err/incorrect :xtql/malformed-unify "Unify must contain at least one sub clause" {:unify this})))
   (->Unify (mapv #(parse-unify-clause % env) clauses)))
 
-(defrecord From [^TableRef table for-valid-time for-system-time bindings project-all-cols?]
+(defrecord From [db-name ^TableRef table for-valid-time for-system-time bindings project-all-cols?]
   XtqlQuery
   XtqlQuery$UnifyClause
 
@@ -342,17 +342,17 @@
    bindings))
 
 (defn parse-from [[_ table-or-opts opts :as this] {:keys [default-db] :as env}]
-  (let [table-ref (cond
-                    (instance? TableRef table-or-opts) table-or-opts
-                    (map? table-or-opts) (let [{:keys [db table]} table-or-opts]
-                                           (when-not table
-                                             (throw (err/incorrect :xtql/malformed-from "`table` key must be present in `table` map"
-                                                                   {:from this})))
+  (let [[db-name table-ref] (cond
+                              (instance? TableRef table-or-opts) [default-db table-or-opts]
+                              (map? table-or-opts) (let [{:keys [db table]} table-or-opts]
+                                                     (when-not table
+                                                       (throw (err/incorrect :xtql/malformed-from "`table` key must be present in `table` map"
+                                                                             {:from this})))
 
-                                           (table/->ref (or db default-db) table))
-                    (keyword? table-or-opts) (table/->ref default-db table-or-opts)
-                    :else (throw (err/incorrect :xtql/malformed-from "`table` must be a keyword or map"
-                                                {:from this})))]
+                                                     [(or (table/normal-db-name db) default-db) (table/->ref table)])
+                              (keyword? table-or-opts) [default-db (table/->ref table-or-opts)]
+                              :else (throw (err/incorrect :xtql/malformed-from "`table` must be a keyword or map"
+                                                          {:from this})))]
 
     (cond
       (or (nil? opts) (map? opts))
@@ -370,7 +370,7 @@
 
             :else
             (let [{:keys [bind project-all-cols?]} (find-star-projection '* bind)]
-              (->From table-ref
+              (->From db-name table-ref
                       (some-> for-valid-time (parse-temporal-filter :for-valid-time this env))
                       (some-> for-system-time (parse-temporal-filter :for-system-time this env))
                       (parse-out-specs bind this env)
@@ -378,7 +378,8 @@
 
       (vector? opts)
       (let [{:keys [bind project-all-cols?]} (find-star-projection '* opts)]
-        (map->From {:table table-ref
+        (map->From {:db-name db-name
+                    :table table-ref
                     :bindings (parse-out-specs bind this env)
                     :project-all-cols? project-all-cols?}))
 

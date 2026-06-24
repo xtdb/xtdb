@@ -37,23 +37,23 @@
         [[:rename
           {:prefix r.8}
           [:scan
-           {:table #xt/table region,
+           {:db-name "xtdb", :table #xt/table region,
             :columns [_id {r_name (== r_name "AMERICA")}]}]]
          [:rename
           {:prefix n2.7}
-          [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+          [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
          [:rename
           {:prefix n1.6}
           [:scan
-           {:table #xt/table nation, :columns [_id n_regionkey]}]]
+           {:db-name "xtdb", :table #xt/table nation, :columns [_id n_regionkey]}]]
          [:rename
           {:prefix c.5}
           [:scan
-           {:table #xt/table customer, :columns [c_nationkey _id]}]]
+           {:db-name "xtdb", :table #xt/table customer, :columns [c_nationkey _id]}]]
          [:rename
           {:prefix o.4}
           [:scan
-           {:table #xt/table orders,
+           {:db-name "xtdb", :table #xt/table orders,
             :columns
             [_id
              {o_orderdate
@@ -65,7 +65,7 @@
          [:rename
           {:prefix l.3}
           [:scan
-           {:table #xt/table lineitem,
+           {:db-name "xtdb", :table #xt/table lineitem,
             :columns
             [l_orderkey
              l_extendedprice
@@ -75,11 +75,11 @@
          [:rename
           {:prefix p.1}
           [:scan
-           {:table #xt/table part,
+           {:db-name "xtdb", :table #xt/table part,
             :columns
             [_id {p_type (== p_type "ECONOMY ANODIZED STEEL")}]}]]
          [:rename
           {:prefix s.2}
           [:scan
-           {:table #xt/table supplier,
+           {:db-name "xtdb", :table #xt/table supplier,
             :columns [_id s_nationkey]}]]]]]]]]]]]

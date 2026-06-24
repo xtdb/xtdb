@@ -2,7 +2,7 @@
  {:binding-sym foo.2}
  [:project
   {:projections [{_id bar.1/_id}]}
-  [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]
+  [:rename {:prefix bar.1} [:scan {:db-name "xtdb", :table #xt/table bar, :columns [{_id (== _id 5)}]}]]]
  [:project
   {:projections [{foo_id foo.3/_id} {baz_id baz.4/_id}]}
   [:mega-join

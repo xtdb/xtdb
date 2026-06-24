@@ -27,7 +27,7 @@
        [[:rename
          {:prefix s.1}
          [:scan
-          {:table #xt/table students,
+          {:db-name "xtdb", :table #xt/table students,
            :columns
            [name
             year
@@ -36,9 +36,9 @@
         [:rename
          {:prefix e.2}
          [:scan
-          {:table #xt/table exams, :columns [sid grade course]}]]]]]
+          {:db-name "xtdb", :table #xt/table exams, :columns [sid grade course]}]]]]]
      [:rename
       {:prefix e2.4}
       [:scan
-       {:table #xt/table exams,
+       {:db-name "xtdb", :table #xt/table exams,
         :columns [sid date curriculum grade]}]]]]]]]

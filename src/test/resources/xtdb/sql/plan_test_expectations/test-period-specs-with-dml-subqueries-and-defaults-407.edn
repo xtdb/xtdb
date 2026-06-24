@@ -28,6 +28,6 @@
       [:rename
        {:prefix prop_owner.1}
        [:scan
-        {:table #xt/table prop_owner,
+        {:db-name "xtdb", :table #xt/table prop_owner,
          :columns [_system_from {id (== id 1)}],
          :for-system-time :all-time}]]]]]]]]

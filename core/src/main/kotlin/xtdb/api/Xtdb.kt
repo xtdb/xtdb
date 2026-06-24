@@ -503,14 +503,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema =
             openSnapshot().use { snap ->
-                getTableSchema(TableRef(catalog ?: dbName, dbSchema ?: "public", tableName), snap)
+                getTableSchema(catalog ?: dbName, TableRef(dbSchema ?: "public", tableName), snap)
             }
 
         fun getTableSchema(dbSchema: String, tableName: String, snap: DatabaseSnapshot): Schema =
-            getTableSchema(TableRef(dbName, dbSchema, tableName), snap)
+            getTableSchema(dbName, TableRef(dbSchema, tableName), snap)
 
-        private fun getTableSchema(table: TableRef, snap: DatabaseSnapshot): Schema {
-            val types = dbCat.databaseOrNull(table.dbName)?.getColumnTypes(table, snap) ?: return Schema(emptyList())
+        private fun getTableSchema(catalog: DatabaseName, table: TableRef, snap: DatabaseSnapshot): Schema {
+            val types = dbCat.databaseOrNull(catalog)?.getColumnTypes(table, snap) ?: return Schema(emptyList())
             return Schema(types.entries.map { (name, type) -> type.toField(name) })
         }
 

@@ -131,7 +131,7 @@
                 {:columns {x1 unnest}, :ordinality-column o1}
                 [:map
                  {:projections [{unnest xs}]}
-                 [:scan {:table #xt/table r1, :columns [xs]}]]]]]
+                 [:scan {:db-name "xtdb", :table #xt/table r1, :columns [xs]}]]]]]
             {:node tu/*node*}))))
 
 (t/deftest unnest-issue-4441
@@ -146,7 +146,7 @@
            (tu/query-ra
             '[:unnest
               {:columns {x1 xs}}
-              [:scan {:table #xt/table r1, :columns [xs]}]]
+              [:scan {:db-name "xtdb", :table #xt/table r1, :columns [xs]}]]
             {:node tu/*node*}))))
 
 (t/deftest unnest-ordinality-join-issue-4131

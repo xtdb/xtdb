@@ -3,4 +3,4 @@
  [:rename
   {:prefix foo.1}
   [:scan
-   {:table #xt/table foo, :columns [a {c (== c ?_1)} {b (== b ?_0)}]}]]]
+   {:db-name "xtdb", :table #xt/table foo, :columns [a {c (== c ?_1)} {b (== b ?_0)}]}]]]

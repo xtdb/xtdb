@@ -4,16 +4,16 @@
   {:conditions []}
   [[:rename
     {:prefix foo.1}
-    [:scan {:table #xt/table foo, :columns [a]}]]
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
    [:select
     {:predicate (== bar.2/c _sq_3)}
     [:single-join
      {:conditions []}
      [:rename
       {:prefix bar.2}
-      [:scan {:table #xt/table bar, :columns [c]}]]
+      [:scan {:db-name "xtdb", :table #xt/table bar, :columns [c]}]]
      [:project
       {:projections [{_sq_3 foo.4/b}]}
       [:rename
        {:prefix foo.4}
-       [:scan {:table #xt/table foo, :columns [b]}]]]]]]]]
+       [:scan {:db-name "xtdb", :table #xt/table foo, :columns [b]}]]]]]]]]

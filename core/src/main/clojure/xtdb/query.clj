@@ -53,7 +53,6 @@
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
            (xtdb.query IQuerySource IQuerySource$Factory PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
-           (xtdb.table TableRef)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -355,7 +354,8 @@
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
                                         (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat db-name))]
-                                          (update-vals (.tableInfo snap) set)))))))
+                                          (->> (.tableInfo snap)
+                                               (map (fn [[table-ref cols]] [[db-name table-ref] (set cols)])))))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
@@ -487,7 +487,8 @@
                            (.tableInfo snap))
                          (sql/xform-table-info [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}
-                                   {:table table
+                                   {:db-name default-db
+                                    :table table
                                     :valid-from valid-from
                                     :valid-to valid-to
                                     :patch-rel (sql/->QueryExpr '[:table {:output-cols [_iid doc]

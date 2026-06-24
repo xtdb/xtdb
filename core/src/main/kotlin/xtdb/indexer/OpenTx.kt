@@ -87,7 +87,7 @@ class OpenTx(
     // TODO add table(schemaAndTable), make table(TableRef) internal
     fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }
 
-    fun table(schemaName: SchemaName, tableName: TableName) = table(TableRef(dbState.name, schemaName, tableName))
+    fun table(schemaName: SchemaName, tableName: TableName) = table(TableRef(schemaName, tableName))
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
@@ -95,7 +95,7 @@ class OpenTx(
         val txId = txKey.txId
         val systemTimeMicros = txKey.systemTime.asMicros
 
-        val liveTable = table(TableRef(dbState.name, "xt", "txs"))
+        val liveTable = table(TableRef("xt", "txs"))
         val docWriter = liveTable.putDocWriter
 
         liveTable.writeId(txId)
@@ -320,7 +320,7 @@ class OpenTx(
             )
 
         val ts = currentTime.asMicros
-        val table = table(TableRef(dbState.name, "xt", "role_membership"))
+        val table = table(TableRef("xt", "role_membership"))
 
         table.writeIid(RoleMembership.membershipIid(user, role))
         table.writeValidTimeMicros(ts, MAX_LONG)

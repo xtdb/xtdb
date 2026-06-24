@@ -126,7 +126,6 @@ object AnyJsonLdSerde : KSerializer<Any> {
                     "xt:table" -> {
                         val obj = value as? JsonObject ?: throw jsonIAEwithMessage("@value must be object!", this)
                         TableRef(
-                            obj["db"]?.asStringOrThrow() ?: throw jsonIAEwithMessage("db is required!", this),
                             obj["schema"]?.asString() ?: "public",
                             obj["table"]?.asStringOrThrow() ?: throw jsonIAEwithMessage("table is required!", this)
                         )
@@ -218,7 +217,7 @@ object AnyJsonLdSerde : KSerializer<Any> {
         is Interval -> toJsonLdElement("xt:interval")
         is TableRef -> mapOf(
             "@type" to "xt:table",
-            "@value" to mapOf("db" to dbName, "schema" to schemaName, "table" to tableName)
+            "@value" to mapOf("schema" to schemaName, "table" to tableName)
         ).toJsonLdElement()
 
         is VectorType -> mapOf("@type" to "xt:type", "@value" to RENDER_TYPE.invoke(this)).toJsonLdElement()

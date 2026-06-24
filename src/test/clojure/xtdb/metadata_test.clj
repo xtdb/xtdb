@@ -41,22 +41,22 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:num 1} {:num 1.0}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{num (== num 1)}]}]
                         {:node tu/*node*})))
 
   (t/is (= [{:num 2.0}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{num (== num 2)}]}]
                         {:node tu/*node*})))
 
   (t/is (= [{:num 4}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{num (== num ?x)}]}]
                         {:node tu/*node*, :args {:x (byte 4)}})))
 
   (t/is (= [{:num 3}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{num (== num ?x)}]}]
                         {:node tu/*node*, :args {:x (float 3)}}))))
 
@@ -73,21 +73,21 @@
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{timestamp (== timestamp #xt/zoned-date-time "2010-01-01T00:00:00Z")}]}]
                         {:node tu/*node*, :default-tz #xt/zone "Z"})))
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{timestamp (== timestamp ?x)}]}]
                         {:node tu/*node*, :default-tz #xt/zone "Z", :args {:x #xt/date "2010-01-01"}})))
 
   (t/is (= [{:timestamp #xt/date "2010-01-01"}
             {:timestamp #xt/zoned-date-time "2010-01-01T00:00Z"}
             {:timestamp #xt/date-time "2010-01-01T00:00:00"}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{timestamp (== timestamp #xt/date-time "2010-01-01T00:00:00")}]}]
                         {:node tu/*node*, :default-tz #xt/zone "Z"}))))
 
@@ -100,7 +100,7 @@
   (c/compact-all! tu/*node* #xt/duration "PT1S")
 
   (t/is (= [{:time #xt/time "04:05:06"}]
-           (tu/query-ra '[:scan {:table #xt/table xt_docs
+           (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                  :columns [{time (== time #xt/time "04:05:06")}]}]
                         {:node tu/*node*, :default-tz #xt/zone "Z"}))))
 
@@ -281,6 +281,6 @@
 
           (t/testing "Query returns correct results"
             (t/is (= [user3 user4]
-                     (sort-by :xt/id (tu/query-ra '[:scan {:table #xt/table xt_docs
+                     (sort-by :xt/id (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs
                                                             :columns [_id {status (not (nil? status))}]}]
                                                    {:node node}))))))))))

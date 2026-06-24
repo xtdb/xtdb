@@ -106,7 +106,7 @@ class BlockCatalog(
     val externalSourceToken: ExternalSourceToken?
         get() = latestBlock?.takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray()
 
-    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(dbName, it) }
+    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.parse(it) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = latestBlock?.secondaryDatabasesMap.orEmpty()
 }

@@ -5,7 +5,7 @@
   {:conditions [{m.1/title si.2/title}]}
   [[:rename
     {:prefix m.1}
-    [:scan {:table #xt/table movie, :columns [title length]}]]
+    [:scan {:db-name "xtdb", :table #xt/table movie, :columns [title length]}]]
    [:rename
     {:prefix si.2}
-    [:scan {:table #xt/table stars_in, :columns [title films]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [title films]}]]]]]

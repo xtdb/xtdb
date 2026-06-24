@@ -42,7 +42,7 @@ object RoleMembership {
     @JvmStatic
     fun scanMemberships(querySource: IQuerySource, dbCat: IQuerySource.QueryCatalog): List<List<String>> {
         val primary = dbCat.databaseOrNull(PRIMARY_DB) ?: return emptyList()
-        val tableRef = TableRef(PRIMARY_DB, "xt", "role_membership")
+        val tableRef = TableRef("xt", "role_membership")
 
         val exists = primary.queryState.tableCatalog.getTypes(tableRef) != null ||
                 primary.openSnapshot().use { it.tableInfo().containsKey(tableRef) }

@@ -18,9 +18,9 @@
          (not (like o.2/o_comment "%special%requests%"))]}
        [:rename
         {:prefix c.1}
-        [:scan {:table #xt/table customer, :columns [_id]}]]
+        [:scan {:db-name "xtdb", :table #xt/table customer, :columns [_id]}]]
        [:rename
         {:prefix o.2}
         [:scan
-         {:table #xt/table orders,
+         {:db-name "xtdb", :table #xt/table orders,
           :columns [_id o_comment o_custkey]}]]]]]]]]]

@@ -17,7 +17,7 @@
        _system_to
        {_system_time (period _system_from _system_to)}]}
      [:scan
-      {:table #xt/table foo,
+      {:db-name "xtdb", :table #xt/table foo,
        :columns [name _system_from _system_to]}]]]
    [:rename
     {:prefix bar.2}
@@ -28,5 +28,5 @@
        _system_to
        {_system_time (period _system_from _system_to)}]}
      [:scan
-      {:table #xt/table bar,
+      {:db-name "xtdb", :table #xt/table bar,
        :columns [name _system_from _system_to]}]]]]]]

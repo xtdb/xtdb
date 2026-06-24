@@ -7,7 +7,7 @@
    [:rename
     {:prefix l.1}
     [:scan
-     {:table #xt/table lineitem,
+     {:db-name "xtdb", :table #xt/table lineitem,
       :columns
       [{l_shipdate
         (and

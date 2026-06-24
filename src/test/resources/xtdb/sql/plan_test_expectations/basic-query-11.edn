@@ -2,4 +2,4 @@
  {:projections [{name si.1/name}]}
  [:rename
   {:prefix si.1}
-  [:scan {:table #xt/table stars_in, :columns [name]}]]]
+  [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [name]}]]]

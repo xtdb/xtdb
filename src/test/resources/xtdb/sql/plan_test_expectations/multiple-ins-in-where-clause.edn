@@ -10,7 +10,7 @@
      {:conditions [{f.1/a xt.values.3/_column_1}]}
      [:rename
       {:prefix f.1}
-      [:scan {:table #xt/table foo, :columns [{a (== a 42)} b]}]]
+      [:scan {:db-name "xtdb", :table #xt/table foo, :columns [{a (== a 42)} b]}]]
      [:rename
       {:prefix xt.values.3}
       [:table

@@ -2,7 +2,7 @@
  {:projections [{a a.1/a}]}
  [:mega-join
   {:conditions [{(+ a.1/a 1) (+ b.2/b 1)}]}
-  [[:rename {:prefix a.1} [:scan {:table #xt/table a, :columns [a]}]]
+  [[:rename {:prefix a.1} [:scan {:db-name "xtdb", :table #xt/table a, :columns [a]}]]
    [:rename
     {:prefix b.2}
-    [:scan {:table #xt/table bar, :columns [b]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table bar, :columns [b]}]]]]]

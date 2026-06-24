@@ -3,4 +3,4 @@
  [:rename
   {:prefix foo.1}
   [:scan
-   {:table #xt/table foo, :columns [bar], :for-system-time :all-time}]]]
+   {:db-name "xtdb", :table #xt/table foo, :columns [bar], :for-system-time :all-time}]]]

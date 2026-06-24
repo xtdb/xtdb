@@ -175,7 +175,7 @@ class LeaderLogProcessorTest {
             trieMetadata = trieMetadata {},
             hllDeltas = emptyMap()
         )
-        val tableRef = TableRef.parse("test", "public/foo")
+        val tableRef = TableRef.parse("public/foo")
 
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)

@@ -106,7 +106,7 @@ class LiveIndex private constructor(
         val stamp = snapLock.writeLock()
         try {
             for ((schemaAndTable, ipcBytes) in resolvedTx.tableData) {
-                val tableRef = TableRef.parse(dbName, schemaAndTable)
+                val tableRef = TableRef.parse(schemaAndTable)
                 val liveTable =
                     this@LiveIndex.tables.getOrPut(tableRef) {
                         LiveTable(

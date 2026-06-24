@@ -5,7 +5,7 @@
   {:conditions []}
   [[:rename
     {:prefix foo.1}
-    [:scan {:table #xt/table foo, :columns [lastname name]}]]
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [lastname name]}]]
    [:rename
     {:prefix bar.2}
-    [:scan {:table #xt/table bar, :columns [jame]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table bar, :columns [jame]}]]]]]

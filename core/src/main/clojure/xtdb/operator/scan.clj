@@ -34,6 +34,7 @@
            (xtdb.trie Bucketer)
            (xtdb.util TemporalBounds TemporalDimension)))
 
+(s/def ::db-name string?)
 (s/def ::table ::table/ref)
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
@@ -43,16 +44,16 @@
 
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
-         :opts (s/keys :req-un [::table ::columns]
+         :opts (s/keys :req-un [::db-name ::table ::columns]
                        :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/clamp-valid-time?])))
 
 (definterface IScanEmitter
   (emitScan [^xtdb.query.IQuerySource$QueryCatalog db-cat scan-expr scan-vec-types param-types]))
 
 (defn ->scan-cols [{:keys [opts]}]
-  (let [{:keys [table columns]} opts]
+  (let [{:keys [db-name table columns]} opts]
     (for [[col-tag col-arg] columns]
-      [table
+      [db-name table
        (case col-tag
          :column col-arg
          :select (key (first col-arg)))])))
@@ -197,13 +198,12 @@
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
 (defn scan-vec-types [^IQuerySource$QueryCatalog db-catalog, snaps, scan-cols]
-  (letfn [(->vec-type [[^TableRef table col-name]]
+  (letfn [(->vec-type [[db-name ^TableRef table col-name]]
             (let [col-name (str col-name)]
               (or (types/temporal-vec-types col-name)
                   (-> (info-schema/derived-table table)
                       (get (symbol col-name)))
-                  (let [db-name (.getDbName table)
-                        state (.getQueryState (.databaseOrNull db-catalog db-name))
+                  (let [state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
                         ^DatabaseSnapshot db-snap (get snaps db-name)
                         ;; TODO (#5557 unit 7) reduce types/merge-types over per-partition live
@@ -217,8 +217,7 @@
 (defn ->scan-emitter [info-schema]
   (reify IScanEmitter
     (emitScan [_ db-cat {:keys [opts]} scan-vec-types param-types]
-      (let [{:keys [^TableRef table columns] :as scan-opts} opts
-            db-name (.getDbName table)
+      (let [{:keys [db-name ^TableRef table columns] :as scan-opts} opts
             db (.databaseOrNull db-cat db-name)
             storage (.getStorage db)
             state (.getQueryState db)
@@ -233,7 +232,7 @@
             vec-types (->> col-names
                            (into {} (map (juxt identity
                                                (fn [col-name]
-                                                 (get scan-vec-types [table col-name]))))))
+                                                 (get scan-vec-types [db-name table col-name]))))))
 
             col-names (into #{} (map str) col-names)
 
@@ -260,7 +259,7 @@
 
         {:op :scan
          :children []
-         :explain {:table (->> [(.getDbName table) (.getSchemaName table) (.getTableName table)]
+         :explain {:table (->> [db-name (.getSchemaName table) (.getTableName table)]
                                (remove nil?)
                                (str/join "."))
                    :columns (vec col-names)
@@ -318,7 +317,7 @@
                              (let [filter-opts {:query-bounds temporal-bounds
                                                 :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
                                                 :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
-                                   ^ScanMetrics metrics (ScanMetrics. (.getDbName table)
+                                   ^ScanMetrics metrics (ScanMetrics. db-name
                                                                       (str (.getSchemaName table) "." (.getTableName table)))
                                    current-tries (cat/current-tries (.trieTableState snapshot table))
                                    filtered-tries (cat/filter-tries current-tries filter-opts)]

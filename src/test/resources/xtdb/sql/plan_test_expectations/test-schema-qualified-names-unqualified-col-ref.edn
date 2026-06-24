@@ -3,4 +3,4 @@
  [:rename
   {:prefix pg_attribute.1}
   [:scan
-   {:table #xt/table pg_catalog/pg_attribute, :columns [attname]}]]]
+   {:db-name "xtdb", :table #xt/table pg_catalog/pg_attribute, :columns [attname]}]]]

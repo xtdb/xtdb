@@ -49,7 +49,7 @@
         {:projections [{~(sql/->col-sym '_valid_time)
                         (period ~(sql/->col-sym '_valid_from)
                                 ~(sql/->col-sym '_valid_to))}]}
-        [:scan {:table public/docs
+        [:scan {:db-name "xtdb", :table public/docs
                 :columns [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]}]]]))))
 
   (t/testing "only pushes past period constructors"
@@ -76,7 +76,7 @@
                           xtdb/end-of-time)))}
            [:project
             {:projections [{~(sql/->col-sym '_valid_time) (+ 1 ~(sql/->col-sym '_valid_from))}]}
-            [:scan {:table public/docs
+            [:scan {:db-name "xtdb", :table public/docs
                     :columns [~(sql/->col-sym '_valid_from) ~(sql/->col-sym '_valid_to)]}]]])))))
 
   (t/testing "scalar extends expressions are handled"
@@ -93,7 +93,7 @@
                          {~(sql/->col-sym '_valid_time)
                           (period ~(sql/->col-sym '_valid_from)
                                   ~(sql/->col-sym '_valid_to))}]}
-          [:scan {:table public/docs, :columns [~(sql/->col-sym '_bar)]}]]])))))
+          [:scan {:db-name "xtdb", :table public/docs, :columns [~(sql/->col-sym '_bar)]}]]])))))
 
   (t/testing "only push predicate if all columns referenced (aside from the new period) present in inner rel"
     (t/is
@@ -108,7 +108,7 @@
                          {~(sql/->col-sym '_valid_time)
                           (period ~(sql/->col-sym '_valid_from)
                                   ~(sql/->col-sym '_valid_to))}]}
-          [:scan {:table public/docs, :columns [~(sql/->col-sym '_bar)]}]]]))))))
+          [:scan {:db-name "xtdb", :table public/docs, :columns [~(sql/->col-sym '_bar)]}]]]))))))
 
 (t/deftest test-remove-redundant-period-constructors
   (t/is
@@ -179,34 +179,34 @@
           {:mode :cross-join, :columns {}}
           [:select
            {:predicate (== ~(sql/->col-sym 'x) 10)}
-           [:scan {:table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]]
-          [:scan {:table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]])
+           [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]]
+          [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]])
         (lp/push-selection-down-past-apply
          (xt/template
           [:select
            {:predicate (== ~(sql/->col-sym 'x) 10)}
            [:apply
             {:mode :cross-join, :columns {}}
-            [:scan {:table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
-            [:scan {:table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])))))
+            [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
+            [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])))))
 
   (t/testing "pushes selection down to dependent relation for cross-join"
     (t/is
      (= (xt/template
          [:apply
           {:mode :cross-join, :columns {}}
-          [:scan {:table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
+          [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
           [:select
            {:predicate (== ~(sql/->col-sym 'y) 20)}
-           [:scan {:table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])
+           [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])
         (lp/push-selection-down-past-apply
          (xt/template
           [:select
            {:predicate (== ~(sql/->col-sym 'y) 20)}
            [:apply
             {:mode :cross-join, :columns {}}
-            [:scan {:table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
-            [:scan {:table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])))))
+            [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
+            [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]])))))
 
   (t/testing "does not push down to dependent relation for non-cross-join modes"
     (t/is
@@ -217,5 +217,5 @@
          {:predicate (== ~(sql/->col-sym 'bar/y) 20)}
          [:apply
           {:mode :semi-join, :columns {}}
-          [:scan {:table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
-          [:scan {:table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]]))))))
+          [:scan {:db-name "xtdb", :table #xt/table foo, :columns [~(sql/->col-sym 'x)]}]
+          [:scan {:db-name "xtdb", :table #xt/table bar, :columns [~(sql/->col-sym 'y)]}]]]))))))

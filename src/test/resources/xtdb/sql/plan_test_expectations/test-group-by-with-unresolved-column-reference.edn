@@ -8,4 +8,4 @@
     {:projections [{xt$missing_column4 nil}]}
     [:rename
      {:prefix docs.1}
-     [:scan {:table #xt/table docs, :columns [_id]}]]]]]]
+     [:scan {:db-name "xtdb", :table #xt/table docs, :columns [_id]}]]]]]]

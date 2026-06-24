@@ -6,7 +6,7 @@
  [:rename
   {:prefix u.1}
   [:scan
-   {:table #xt/table users,
+   {:db-name "xtdb", :table #xt/table users,
     :columns [_valid_to {id (== id ?_0)} _valid_from _iid],
     :clamp-valid-time? true,
     :for-valid-time [:in #xt/date "2020-05-01" nil]}]]]

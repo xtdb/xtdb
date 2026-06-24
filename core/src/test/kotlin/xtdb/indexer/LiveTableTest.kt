@@ -18,7 +18,7 @@ class LiveTableTest {
     @Test
     fun `importData appends rows to liveRelation and updates trie`() {
         RootAllocator().use { allocator ->
-            val table = TableRef("test", "public", "docs")
+            val table = TableRef("public", "docs")
             val rowCounter = RowCounter()
 
             LiveTable(allocator, table, 0L, rowCounter).use { liveTable ->
@@ -58,7 +58,7 @@ class LiveTableTest {
     @Test
     fun `importData accumulates with existing data`() {
         RootAllocator().use { allocator ->
-            val table = TableRef("test", "public", "docs")
+            val table = TableRef("public", "docs")
             val rowCounter = RowCounter()
 
             LiveTable(allocator, table, 0L, rowCounter).use { liveTable ->
@@ -120,7 +120,7 @@ class LiveTableTest {
         val n = 1000
 
         RootAllocator().use { allocator ->
-            LiveTable(allocator, TableRef("xtdb", "public", "docs"), 0L, RowCounter()) { iidVec ->
+            LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter()) { iidVec ->
                 MemoryHashTrie.builder(iidVec).setLogLimit(2).setPageLimit(4).build()
             }.use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
@@ -159,7 +159,7 @@ class LiveTableTest {
 
         RootAllocator().use { allocator ->
             MemoryStorage(allocator, epoch = 0).use { bp ->
-                LiveTable(allocator, TableRef("xtdb", "public", "docs"), 0L, RowCounter()).use { liveTable ->
+                LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter()).use { liveTable ->
 
                     Trie.openLogDataWriter(allocator).use { sourceRel ->
                         writePut(sourceRel, uuid.toIidBytes(), 0, 0, 0)

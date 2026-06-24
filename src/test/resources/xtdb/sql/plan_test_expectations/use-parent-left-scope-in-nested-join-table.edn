@@ -6,10 +6,10 @@
    {:conditions []}
    [[:rename
      {:prefix r1.1}
-     [:scan {:table #xt/table r1, :columns [xs]}]]
+     [:scan {:db-name "xtdb", :table #xt/table r1, :columns [xs]}]]
     [:rename
      {:prefix r2.2}
-     [:scan {:table #xt/table r2, :columns [xs]}]]]]
+     [:scan {:db-name "xtdb", :table #xt/table r2, :columns [xs]}]]]]
   [:mega-join
    {:conditions [{u1.4/i1 u2.6/i2}]}
    [[:map

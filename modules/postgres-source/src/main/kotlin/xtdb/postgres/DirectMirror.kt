@@ -34,7 +34,7 @@ class DirectMirror(private val dbName: String) : PgIndexer {
     }
 
     private fun writeOp(openTx: OpenTx, dbName: String, op: RowOp) {
-        val openTxTable = openTx.table(TableRef(dbName, op.schema, op.table))
+        val openTxTable = openTx.table(TableRef(op.schema, op.table))
 
         when (op) {
             is RowOp.Put -> {

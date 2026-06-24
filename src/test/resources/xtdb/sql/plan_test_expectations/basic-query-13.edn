@@ -4,4 +4,4 @@
   {:prefix si.1}
   [:select
    {:predicate (== name lastname)}
-   [:scan {:table #xt/table stars_in, :columns [lastname name]}]]]]
+   [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [lastname name]}]]]]

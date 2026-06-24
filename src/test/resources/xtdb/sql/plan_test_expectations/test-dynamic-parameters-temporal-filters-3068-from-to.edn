@@ -3,6 +3,6 @@
  [:rename
   {:prefix foo.1}
   [:scan
-   {:table #xt/table foo,
+   {:db-name "xtdb", :table #xt/table foo,
     :columns [bar],
     :for-valid-time [:in ?_0 ?_1]}]]]

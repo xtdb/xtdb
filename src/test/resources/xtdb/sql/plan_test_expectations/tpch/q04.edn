@@ -16,7 +16,7 @@
       [:rename
        {:prefix o.1}
        [:scan
-        {:table #xt/table orders,
+        {:db-name "xtdb", :table #xt/table orders,
          :columns
          [o_orderpriority
           _id
@@ -52,7 +52,7 @@
         [:select
          {:predicate (< l_commitdate l_receiptdate)}
          [:scan
-          {:table #xt/table lineitem,
+          {:db-name "xtdb", :table #xt/table lineitem,
            :columns
            [l_linestatus
             l_receiptdate

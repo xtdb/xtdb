@@ -58,22 +58,22 @@
           [[:rename
             {:prefix r.5}
             [:scan
-             {:table #xt/table region,
+             {:db-name "xtdb", :table #xt/table region,
               :columns [_id {r_name (== r_name "EUROPE")}]}]]
            [:rename
             {:prefix n.4}
             [:scan
-             {:table #xt/table nation,
+             {:db-name "xtdb", :table #xt/table nation,
               :columns [_id n_name n_regionkey]}]]
            [:rename
             {:prefix ps.3}
             [:scan
-             {:table #xt/table partsupp,
+             {:db-name "xtdb", :table #xt/table partsupp,
               :columns [ps_partkey ps_supplycost ps_suppkey]}]]
            [:rename
             {:prefix p.1}
             [:scan
-             {:table #xt/table part,
+             {:db-name "xtdb", :table #xt/table part,
               :columns
               [_id
                {p_size (== p_size 15)}
@@ -82,7 +82,7 @@
            [:rename
             {:prefix s.2}
             [:scan
-             {:table #xt/table supplier,
+             {:db-name "xtdb", :table #xt/table supplier,
               :columns
               [s_comment
                s_name
@@ -99,19 +99,19 @@
          [[:rename
            {:prefix r.10}
            [:scan
-            {:table #xt/table region,
+            {:db-name "xtdb", :table #xt/table region,
              :columns [_id {r_name (== r_name "EUROPE")}]}]]
           [:rename
            {:prefix n.9}
            [:scan
-            {:table #xt/table nation, :columns [_id n_regionkey]}]]
+            {:db-name "xtdb", :table #xt/table nation, :columns [_id n_regionkey]}]]
           [:rename
            {:prefix ps.7}
            [:scan
-            {:table #xt/table partsupp,
+            {:db-name "xtdb", :table #xt/table partsupp,
              :columns [ps_partkey ps_supplycost ps_suppkey]}]]
           [:rename
            {:prefix s.8}
            [:scan
-            {:table #xt/table supplier,
+            {:db-name "xtdb", :table #xt/table supplier,
              :columns [_id s_nationkey]}]]]]]]]]]]]]

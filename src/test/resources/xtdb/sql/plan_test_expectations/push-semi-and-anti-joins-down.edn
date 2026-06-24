@@ -10,15 +10,15 @@
     {:conditions []}
     [[:rename
       {:prefix x.1}
-      [:scan {:table #xt/table x, :columns [foo]}]]
+      [:scan {:db-name "xtdb", :table #xt/table x, :columns [foo]}]]
      [:rename
       {:prefix y.2}
-      [:scan {:table #xt/table y, :columns [biz]}]]]]
+      [:scan {:db-name "xtdb", :table #xt/table y, :columns [biz]}]]]]
    [:project
     {:projections [{bar z.4/bar}]}
     [:rename
      {:prefix z.4}
      [:scan
-      {:table #xt/table z,
+      {:db-name "xtdb", :table #xt/table z,
        :columns
        [{baz (== baz ?_sq_biz_5)} {bar (== bar ?_sq_foo_4)}]}]]]]]]

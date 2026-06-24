@@ -11,8 +11,8 @@
     {:conditions [{me.1/cert m.2/producer}]}
     [[:rename
       {:prefix me.1}
-      [:scan {:table #xt/table movie_exec, :columns [name cert]}]]
+      [:scan {:db-name "xtdb", :table #xt/table movie_exec, :columns [name cert]}]]
      [:rename
       {:prefix m.2}
       [:scan
-       {:table #xt/table movie, :columns [producer year length]}]]]]]]]
+       {:db-name "xtdb", :table #xt/table movie, :columns [producer year length]}]]]]]]]

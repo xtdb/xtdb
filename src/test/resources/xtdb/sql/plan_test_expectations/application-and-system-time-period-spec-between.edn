@@ -3,7 +3,7 @@
   [:rename
    {}
    [:scan
-    {:table t1,
+    {:db-name "xtdb", :table t1,
      :columns [],
      :for-valid-time
      [:between

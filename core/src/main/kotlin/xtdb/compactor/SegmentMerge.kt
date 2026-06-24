@@ -279,7 +279,7 @@ private class LocalSegment(
 
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
-    val table = TableRef.parse("xtdb", "foo")
+    val table = TableRef.parse("foo")
     val trieKeys = listOf("l01-rc-b2c74", "l00-rc-b2c75")
 
     try {

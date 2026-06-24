@@ -5,10 +5,10 @@
   [[:rename
     {:prefix si.1}
     [:scan
-     {:table #xt/table stars_in, :columns [star_name movie_title]}]]
+     {:db-name "xtdb", :table #xt/table stars_in, :columns [star_name movie_title]}]]
    [:rename
     {:prefix ms.2}
     [:scan
-     {:table #xt/table movie_star,
+     {:db-name "xtdb", :table #xt/table movie_star,
       :columns
       [{birthdate (< birthdate 1960)} {name (== name "Foo")}]}]]]]]

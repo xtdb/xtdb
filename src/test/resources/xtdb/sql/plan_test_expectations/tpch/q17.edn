@@ -25,12 +25,12 @@
         [[:rename
           {:prefix l.1}
           [:scan
-           {:table #xt/table lineitem,
+           {:db-name "xtdb", :table #xt/table lineitem,
             :columns [l_extendedprice l_quantity l_partkey]}]]
          [:rename
           {:prefix p.2}
           [:scan
-           {:table #xt/table part,
+           {:db-name "xtdb", :table #xt/table part,
             :columns
             [_id
              {p_brand (== p_brand "Brand#23")}
@@ -38,5 +38,5 @@
       [:rename
        {:prefix l.4}
        [:scan
-        {:table #xt/table lineitem,
+        {:db-name "xtdb", :table #xt/table lineitem,
          :columns [l_quantity l_partkey]}]]]]]]]]

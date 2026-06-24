@@ -6,4 +6,4 @@
    {:projections [{ub (upper t.1/b)}]}
    [:rename
     {:prefix t.1}
-    [:scan {:table #xt/table t, :columns [a b]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table t, :columns [a b]}]]]]]

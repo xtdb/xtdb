@@ -12,7 +12,7 @@
       [:rename
        {:prefix s.1}
        [:scan
-        {:table #xt/table supplier,
+        {:db-name "xtdb", :table #xt/table supplier,
          :columns [s_name s_address _id s_nationkey]}]]
       [:project
        {:projections [{ps_suppkey ps.4/ps_suppkey}]}
@@ -40,12 +40,12 @@
               [:rename
                {:prefix ps.4}
                [:scan
-                {:table #xt/table partsupp,
+                {:db-name "xtdb", :table #xt/table partsupp,
                  :columns [ps_partkey ps_availqty ps_suppkey]}]]]
              [:rename
               {:prefix l.8}
               [:scan
-               {:table #xt/table lineitem,
+               {:db-name "xtdb", :table #xt/table lineitem,
                 :columns
                 [{l_shipdate
                   (and
@@ -63,10 +63,10 @@
           [:rename
            {:prefix p.6}
            [:scan
-            {:table #xt/table part,
+            {:db-name "xtdb", :table #xt/table part,
              :columns [_id {p_name (like p_name "forest%")}]}]]]]]]]
      [:rename
       {:prefix n.2}
       [:scan
-       {:table #xt/table nation,
+       {:db-name "xtdb", :table #xt/table nation,
         :columns [_id {n_name (== n_name "CANADA")}]}]]]]]]]

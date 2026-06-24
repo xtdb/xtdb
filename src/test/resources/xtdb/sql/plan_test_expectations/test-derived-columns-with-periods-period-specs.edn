@@ -3,7 +3,7 @@
  [:rename
   {:prefix f.1}
   [:scan
-   {:table #xt/table foo,
+   {:db-name "xtdb", :table #xt/table foo,
     :columns [bar],
     :for-valid-time [:at (current-timestamp)],
     :for-system-time [:at (current-timestamp)]}]]]

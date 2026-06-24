@@ -6,4 +6,4 @@
    {:projections [{_column_1 (== si.1/year "foo")}]}
    [:rename
     {:prefix si.1}
-    [:scan {:table #xt/table stars_in, :columns [year]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [year]}]]]]]

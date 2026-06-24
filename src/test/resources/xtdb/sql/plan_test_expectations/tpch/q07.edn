@@ -39,25 +39,25 @@
          {s.1/_id l.2/l_suppkey}]}
        [[:rename
          {:prefix n2.6}
-         [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+         [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
         [:rename
          {:prefix n1.5}
-         [:scan {:table #xt/table nation, :columns [_id n_name]}]]
+         [:scan {:db-name "xtdb", :table #xt/table nation, :columns [_id n_name]}]]
         [:rename
          {:prefix c.4}
          [:scan
-          {:table #xt/table customer, :columns [c_nationkey _id]}]]
+          {:db-name "xtdb", :table #xt/table customer, :columns [c_nationkey _id]}]]
         [:rename
          {:prefix o.3}
-         [:scan {:table #xt/table orders, :columns [_id o_custkey]}]]
+         [:scan {:db-name "xtdb", :table #xt/table orders, :columns [_id o_custkey]}]]
         [:rename
          {:prefix s.1}
          [:scan
-          {:table #xt/table supplier, :columns [_id s_nationkey]}]]
+          {:db-name "xtdb", :table #xt/table supplier, :columns [_id s_nationkey]}]]
         [:rename
          {:prefix l.2}
          [:scan
-          {:table #xt/table lineitem,
+          {:db-name "xtdb", :table #xt/table lineitem,
            :columns
            [l_orderkey
             {l_shipdate

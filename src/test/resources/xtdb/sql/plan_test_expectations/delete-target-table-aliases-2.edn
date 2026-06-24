@@ -6,7 +6,7 @@
  [:rename
   {:prefix t1.1}
   [:scan
-   {:table #xt/table t1,
+   {:db-name "xtdb", :table #xt/table t1,
     :columns [{col1 (== col1 30)} _valid_to _valid_from _iid],
     :clamp-valid-time? true,
     :for-valid-time [:in (current-timestamp) xtdb/end-of-time]}]]]

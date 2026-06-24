@@ -7,4 +7,4 @@
     [[si.1/movie_title {:direction :asc, :null-ordering :nulls-last}]]}
    [:rename
     {:prefix si.1}
-    [:scan {:table #xt/table stars_in, :columns [movie_title]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table stars_in, :columns [movie_title]}]]]]]

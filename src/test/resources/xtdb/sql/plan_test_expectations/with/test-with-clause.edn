@@ -4,7 +4,7 @@
   {:conditions []}
   [[:rename {:prefix foo.3} [:project
      {:projections [{_id bar.1/_id}]}
-     [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
+     [:rename {:prefix bar.1} [:scan {:db-name "xtdb", :table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]
    [:rename {:prefix baz.4} [:project
      {:projections [{_id bar.1/_id}]}
-     [:rename {:prefix bar.1} [:scan {:table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]
+     [:rename {:prefix bar.1} [:scan {:db-name "xtdb", :table #xt/table bar, :columns [{_id (== _id 5)}]}]]]]]]]

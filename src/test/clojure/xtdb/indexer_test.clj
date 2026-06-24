@@ -108,7 +108,7 @@
     (t/is (= [{:xt/id :foo, :version 0,
                :xt/valid-from (time/->zdt tt)
                :xt/system-from (time/->zdt tt)}]
-             (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id version
+             (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [_id version
                              _valid_from, _valid_to
                              _system_from, _system_to]}]
                           {:node tu/*node*})))
@@ -126,7 +126,7 @@
                  {:xt/id :foo, :version 1,
                   :xt/valid-from (time/->zdt tt2)
                   :xt/system-from (time/->zdt tt2)}}
-               (set (tu/query-ra '[:scan {:table #xt/table xt_docs,
+               (set (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs,
                                           :for-system-time :all-time,
                                           :for-valid-time :all-time, :columns [_id version
                                     _valid_from, _valid_to
@@ -136,7 +136,7 @@
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (time/->zdt tt)
                  :xt/system-from (time/->zdt tt)}]
-               (tu/query-ra '[:scan {:table #xt/table xt_docs, :columns [_id version
+               (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [_id version
                                _valid_from, _valid_to
                                _system_from, _system_to]}]
                             {:node tu/*node*,

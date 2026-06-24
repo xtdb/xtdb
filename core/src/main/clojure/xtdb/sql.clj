@@ -137,8 +137,8 @@
     (format "Ambiguous table reference: %s -> %s"
             (str/join "." table-chain)
             (->> table-chains
-                 (into #{} (map (fn [^TableRef table]
-                                  (symbol (format "%s.%s.%s" (.getDbName table) (.getSchemaName table) (.getTableName table))))))))))
+                 (into #{} (map (fn [[db-name ^TableRef table]]
+                                  (symbol (format "%s.%s.%s" db-name (.getSchemaName table) (.getTableName table))))))))))
 
 (defrecord ColumnNotFound [chain]
   PlanError
@@ -335,17 +335,17 @@
                    sys-time-col? (conj {(->col-sym '_system_time) (list 'period (->col-sym '_system_from) (->col-sym '_system_to))}))}
    plan])
 
-(defrecord BaseTable [env, ^TableRef table-ref
+(defrecord BaseTable [env, db-name, ^TableRef table-ref
                       for-valid-time clamp-valid-time? for-system-time
                       table-alias unique-table-alias cols
                       ^Map !reqd-cols]
   Scope
   (available-cols [_] cols)
 
-  (-find-cols [this [col-name table-name schema-name db-name] excl-cols]
+  (-find-cols [this [col-name table-name schema-name chain-db] excl-cols]
     (when (and (or (nil? table-name) (= table-name table-alias))
                (or (nil? schema-name) (= schema-name (symbol (.getSchemaName table-ref))))
-               (or (nil? db-name) (= db-name (symbol (.getDbName table-ref)))))
+               (or (nil? chain-db) (= chain-db (symbol db-name))))
       (for [col (if col-name
                   (when (or (contains? cols col-name) (types/temporal-col-name? col-name)
                             (temporal-period-column? col-name)
@@ -373,7 +373,8 @@
           for-st (or for-system-time sys-time-default)]
 
       [:rename {:prefix unique-table-alias}
-       (cond-> [:scan (cond-> {:table table-ref
+       (cond-> [:scan (cond-> {:db-name db-name
+                               :table table-ref
                                :columns scan-cols}
                         for-vt (assoc :for-valid-time for-vt)
                         clamp-valid-time? (assoc :clamp-valid-time? true)
@@ -712,6 +713,8 @@
                 _ (when more-matches
                     (add-err! env (->AmbiguousTableReference table-chain (cons table more-matches))))
 
+                [resolved-db resolved-ref] (or table [default-db (table/->ref "xt" "not_found")])
+
                 table-cols (get table-info table)
 
                 expr-visitor (->ExprPlanVisitor env (->NoColumnReferenceAllowed "No column reference allowed in table period specification: "))]
@@ -727,7 +730,7 @@
                 ;; `table` is nil only on the warning path (an unresolved internal-schema / `pg_*`
                 ;; table - see `system-table-chain?`); user tables have already erred. We scan the
                 ;; empty `xt.not_found` sentinel so those probes return no rows rather than blowing up.
-                (->BaseTable env (or table (table/->ref default-db "xt" "not_found"))
+                (->BaseTable env resolved-db resolved-ref
                              for-valid-time clamp-valid-time?
                              (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
                              table-alias unique-table-alias
@@ -2949,7 +2952,8 @@
   PlanRelation
   (plan-rel [{{:keys [default-db]} :env}]
     [:rename {:prefix unique-table-alias}
-     [:scan (cond-> {:table (table/->ref default-db (symbol table-name))
+     [:scan (cond-> {:db-name default-db
+                     :table (table/->ref (symbol table-name))
                      :columns (vec (.keySet !reqd-cols))
                      :clamp-valid-time? true}
               for-valid-time (assoc :for-valid-time for-valid-time))]]))
@@ -3002,7 +3006,8 @@
   PlanRelation
   (plan-rel [{{:keys [default-db]} :env}]
     [:rename {:prefix unique-table-alias}
-     [:scan {:table (table/->ref default-db (symbol table-name))
+     [:scan {:db-name default-db
+             :table (table/->ref (symbol table-name))
              :for-system-time :all-time
              :for-valid-time :all-time
              :columns (vec (.keySet !reqd-cols))}]]))
@@ -3030,8 +3035,8 @@
   PlanError
   (error-string [_] (format "Cannot PATCH %s column" col)))
 
-(defn plan-patch [{:keys [table-info]} {:keys [table valid-from valid-to patch-rel]}]
-  (let [known-cols (mapv symbol (get table-info table))]
+(defn plan-patch [{:keys [table-info]} {:keys [db-name table valid-from valid-to patch-rel]}]
+  (let [known-cols (mapv symbol (get table-info [db-name table]))]
     (xt/template
      [:project {:projections [{_iid new/_iid}
                               {_valid_from (cast (coalesce old/_valid_from ~valid-from (current-timestamp))
@@ -3047,7 +3052,8 @@
          [:project {:projections [_iid _valid_from _valid_to
                                   {doc ~(into {} (map (juxt keyword identity)) known-cols)}]}
           [:order-by {:order-specs [[_iid] [_valid_from]]}
-           [:scan {:table ~table
+           [:scan {:db-name ~db-name
+                   :table ~table
                    :for-valid-time [:in ~valid-from ~valid-to]
                    :clamp-valid-time? true
                    :columns [_iid _valid_from _valid_to
@@ -3111,11 +3117,12 @@
       insert-plan))
 
   (visitPatchStatement [{{:keys [default-db]} :env, :as this} ctx]
-    (let [table (table/->ref default-db (identifier-sym (.targetTable ctx)))
+    (let [table (table/->ref (identifier-sym (.targetTable ctx)))
           [vf-expr vt-expr] (or (some-> (.patchStatementValidTimeExtents ctx)
                                         (.accept (->PatchValidTimeExtentsVisitor env scope)))
                                 ['(current-timestamp) time/end-of-time])]
-      (->QueryExpr (plan-patch env {:table table
+      (->QueryExpr (plan-patch env {:db-name default-db
+                                    :table table
                                     :valid-from vf-expr
                                     :valid-to vt-expr
                                     :patch-rel (.accept (.patchSource ctx) this)})
@@ -3137,7 +3144,7 @@
           table-name (identifier-sym (.targetTable ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
-          table (table/->ref default-db table-name)
+          table (table/->ref table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -3145,8 +3152,7 @@
                                                                           (.accept (->DmlValidTimeExtentsVisitor env scope)))
                                                                   default-vt-extents)
 
-          table-cols (if-let [cols (or (get table-info table)
-                                       (get table-info (table/ref->schema+table table)))]
+          table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
                          (table-not-found! env [(namespace table-name) (name table-name)])
@@ -3205,7 +3211,7 @@
           table-name (identifier-sym (.targetTable ctx))
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           table-name (util/with-default-schema table-name)
-          table (table/->ref default-db table-name)
+          table (table/->ref table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
@@ -3213,8 +3219,7 @@
                                                                           (.accept (->DmlValidTimeExtentsVisitor env scope)))
                                                                   default-vt-extents)
 
-          table-cols (if-let [cols (or (get table-info table)
-                                       (get table-info (table/ref->schema+table table)))]
+          table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
                          (table-not-found! env [(namespace table-name) (name table-name)])
@@ -3248,11 +3253,10 @@
           table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           table-name (util/with-default-schema table-name)
-          table (table/->ref default-db table-name)
+          table (table/->ref table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
-          table-cols (if-let [cols (or (get table-info table)
-                                       (get table-info (table/ref->schema+table table)))]
+          table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
                          (table-not-found! env [(namespace table-name) (name table-name)])
@@ -3310,39 +3314,49 @@
 (defn xform-table-info [table-info db-names default-db]
   ;; this fn turned up in a profiler the last time I checked, particularly for low-latency queries.
   ;; plenty happening here that can be cached.
-  (into {}
-        (for [[table cns] (concat (info-schema/table-info db-names) table-info)]
-          [table (->> cns
-                      (map ->col-sym)
-                      (sort-by identity (fn [s1 s2]
-                                          (cond
-                                            (= '_id s1) -1
-                                            (= '_id s2) 1
-                                            :else (compare s1 s2))))
-                      ->insertion-ordered-set)])))
+  (letfn [(xform-cols [cns]
+            (->> cns
+                 (map ->col-sym)
+                 (sort-by identity (fn [s1 s2]
+                                     (cond
+                                       (= '_id s1) -1
+                                       (= '_id s2) 1
+                                       :else (compare s1 s2))))
+                 ->insertion-ordered-set))
+          ;; the caller's `table-info` is keyed by a bare ref/symbol, scoped to the default db -
+          ;; canonicalise to the `[db-name table-ref]` qualified key that `info-schema/table-info` uses.
+          (qualify [k]
+            (cond
+              (vector? k) k
+              (instance? TableRef k) [default-db k]
+              :else [default-db (table/->ref k)]))]
+    (into {}
+          (concat (for [[qualified cns] (info-schema/table-info db-names)]
+                    [qualified (xform-cols cns)])
+                  (for [[k cns] table-info]
+                    [(qualify k) (xform-cols cns)])))))
 
 (def ^:private ^Cache table-chains-cache
   (-> (Caffeine/newBuilder)
       (.maximumSize 4096)
       (.build)))
 
-(defn- ->table-chains [table-refs db-names default-db]
+(defn- ->table-chains [qualified-tables db-names default-db]
   ;; I suspect this'll light up a profiler too?
   (-> (into (info-schema/table-chains db-names default-db)
-            (mapcat (fn [table]
-                      (.get table-chains-cache [table default-db]
-                            (fn [[^TableRef table default-db]]
-                              (let [db-name (.getDbName table)
-                                    default-db? (= default-db db-name)
-                                    db-name (symbol db-name)
-                                    schema-name (symbol (.getSchemaName table))
+            (mapcat (fn [qualified]
+                      (.get table-chains-cache [qualified default-db]
+                            (fn [[[db-name ^TableRef table-ref :as qualified] default-db]]
+                              (let [default-db? (= default-db db-name)
+                                    db-sym (symbol db-name)
+                                    schema-name (symbol (.getSchemaName table-ref))
                                     search-path-schema? (= 'public schema-name)
-                                    table-name (symbol (.getTableName table))]
-                                (cond-> [[[db-name schema-name table-name] table]]
-                                  default-db? (conj [[schema-name table-name] table])
-                                  search-path-schema? (conj [[db-name table-name] table])
-                                  (and default-db? search-path-schema?) (conj [[table-name] table])))))))
-            table-refs)
+                                    table-name (symbol (.getTableName table-ref))]
+                                (cond-> [[[db-sym schema-name table-name] qualified]]
+                                  default-db? (conj [[schema-name table-name] qualified])
+                                  search-path-schema? (conj [[db-sym table-name] qualified])
+                                  (and default-db? search-path-schema?) (conj [[table-name] qualified])))))))
+            qualified-tables)
       (->> (group-by first))
       (update-vals #(into #{} (map second) %))))
 
@@ -3353,13 +3367,14 @@
 (defn ->env
   ([] (->env {}))
   ([{:keys [table-info default-db db-names], :or {default-db "xtdb"}}]
-   (let [db-names (or db-names [default-db])]
+   (let [db-names (or db-names [default-db])
+         table-info (xform-table-info table-info db-names default-db)]
      {:!errors (atom [])
       :!warnings (atom [])
       :!id-count (atom 0)
       :!param-count (atom 0)
       :default-db default-db
-      :table-info (xform-table-info table-info db-names default-db)
+      :table-info table-info
       :table-chains (->table-chains (keys table-info) db-names default-db)})))
 
 (defprotocol PlanExpr
@@ -3407,6 +3422,7 @@
   (-plan-query [ctx {:keys [default-db scope table-info db-names arg-fields]
                      :or {default-db "xtdb"}}]
     (let [db-names (or db-names [default-db])
+          table-info (xform-table-info table-info db-names default-db)
           !errors (atom [])
           !warnings (atom [])
           !param-count (atom 0)
@@ -3415,7 +3431,7 @@
                :!warnings !warnings
                :!id-count (atom 0)
                :!param-count !param-count
-               :table-info (xform-table-info table-info db-names default-db)
+               :table-info table-info
                :table-chains (->table-chains (keys table-info) db-names default-db)
                ;; NOTE this may not necessarily be provided
                ;; we get it through SQL DML, which is the main case we need it for #3656

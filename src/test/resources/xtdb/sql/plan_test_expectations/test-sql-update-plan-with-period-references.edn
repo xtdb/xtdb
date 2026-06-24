@@ -29,7 +29,7 @@
           (lower _valid_time)))
         bar))))}
    [:scan
-    {:table #xt/table foo,
+    {:db-name "xtdb", :table #xt/table foo,
      :columns
      [_valid_to bar baz _system_time _valid_from _valid_time _iid],
      :clamp-valid-time? true,

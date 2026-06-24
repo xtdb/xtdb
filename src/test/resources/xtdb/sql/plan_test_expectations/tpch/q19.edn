@@ -60,7 +60,7 @@
            [[:rename
              {:prefix l.1}
              [:scan
-              {:table #xt/table lineitem,
+              {:db-name "xtdb", :table #xt/table lineitem,
                :columns
                [l_extendedprice
                 l_quantity
@@ -71,7 +71,7 @@
             [:rename
              {:prefix p.2}
              [:scan
-              {:table #xt/table part,
+              {:db-name "xtdb", :table #xt/table part,
                :columns [_id p_brand p_size p_container]}]]]]
           [:rename
            {:prefix xt.values.10}

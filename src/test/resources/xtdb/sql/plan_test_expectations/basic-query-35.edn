@@ -2,4 +2,4 @@
  {:projections [{a t1.1/a}]}
  [:rename
   {:prefix t1.1}
-  [:scan {:table #xt/table t1, :columns [{a (nil? a)}]}]]]
+  [:scan {:db-name "xtdb", :table #xt/table t1, :columns [{a (nil? a)}]}]]]

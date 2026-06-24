@@ -35,4 +35,4 @@
      555)}]}
  [:rename
   {:prefix t1.1}
-  [:scan {:table #xt/table t1, :columns [a e c b d]}]]]
+  [:scan {:db-name "xtdb", :table #xt/table t1, :columns [a e c b d]}]]]

@@ -21,11 +21,11 @@
        {:conditions [{s.1/id e.2/sid}]}
        [[:rename
          {:prefix s.1}
-         [:scan {:table #xt/table students, :columns [name id]}]]
+         [:scan {:db-name "xtdb", :table #xt/table students, :columns [name id]}]]
         [:rename
          {:prefix e.2}
          [:scan
-          {:table #xt/table exams, :columns [sid grade course]}]]]]]
+          {:db-name "xtdb", :table #xt/table exams, :columns [sid grade course]}]]]]]
      [:rename
       {:prefix e2.4}
-      [:scan {:table #xt/table exams, :columns [sid grade]}]]]]]]]
+      [:scan {:db-name "xtdb", :table #xt/table exams, :columns [sid grade]}]]]]]]]

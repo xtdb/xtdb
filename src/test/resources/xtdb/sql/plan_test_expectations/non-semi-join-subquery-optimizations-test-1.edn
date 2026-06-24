@@ -6,7 +6,7 @@
    {:mark-spec {_sq_2 [{f.1/a xt.values.3/_column_1}]}}
    [:rename
     {:prefix f.1}
-    [:scan {:table #xt/table foo, :columns [a b]}]]
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a b]}]]
    [:rename
     {:prefix xt.values.3}
     [:table

@@ -11,7 +11,7 @@
   [:select
    {:predicate (or (not (boolean (=== baz bar))))}
    [:scan
-    {:table #xt/table foo,
+    {:db-name "xtdb", :table #xt/table foo,
      :columns [_valid_to bar baz quux _valid_from _iid],
      :clamp-valid-time? true,
      :for-valid-time :all-time}]]]]

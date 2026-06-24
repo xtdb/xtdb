@@ -5,7 +5,7 @@
   [[:rename
     {:prefix foo.1}
     [:scan
-     {:table #xt/table foo,
+     {:db-name "xtdb", :table #xt/table foo,
       :columns [a {c (== c ?_2)} {b (== b ?_1)}]}]]
    [:rename
     {:prefix bar.3}
@@ -16,4 +16,4 @@
       [:rename
        {:prefix bar.2}
        [:scan
-        {:table #xt/table bar, :columns [{c (== c ?_0)} b]}]]]]]]]]
+        {:db-name "xtdb", :table #xt/table bar, :columns [{c (== c ?_0)} b]}]]]]]]]]

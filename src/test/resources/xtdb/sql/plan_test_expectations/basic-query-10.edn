@@ -4,4 +4,4 @@
   {:columns [{_sum_out_2 (sum m.1/length)}]}
   [:rename
    {:prefix m.1}
-   [:scan {:table #xt/table movie, :columns [length]}]]]]
+   [:scan {:db-name "xtdb", :table #xt/table movie, :columns [length]}]]]]

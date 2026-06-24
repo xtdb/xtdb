@@ -6,4 +6,4 @@
    {:projections [{unnest f.1/vs}]}
    [:rename
     {:prefix f.1}
-    [:scan {:table #xt/table foo, :columns [vs {_id (< _id 2)}]}]]]]]
+    [:scan {:db-name "xtdb", :table #xt/table foo, :columns [vs {_id (< _id 2)}]}]]]]]

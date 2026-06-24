@@ -37,7 +37,7 @@
              [:rename
               {:prefix c.1}
               [:scan
-               {:table #xt/table customer,
+               {:db-name "xtdb", :table #xt/table customer,
                 :columns [c_phone c_acctbal _id]}]]
              [:project
               {:projections
@@ -53,7 +53,7 @@
               [:rename
                {:prefix o.10}
                [:scan
-                {:table #xt/table orders,
+                {:db-name "xtdb", :table #xt/table orders,
                  :columns
                  [o_orderpriority
                   o_clerk
@@ -89,7 +89,7 @@
              [:rename
               {:prefix c.5}
               [:scan
-               {:table #xt/table customer,
+               {:db-name "xtdb", :table #xt/table customer,
                 :columns [c_phone {c_acctbal (> c_acctbal 0.0)}]}]]]
             [:rename
              {:prefix xt.values.7}

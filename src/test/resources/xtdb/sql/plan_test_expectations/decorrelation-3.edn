@@ -21,14 +21,14 @@
        [:rename
         {:prefix customers.1}
         [:scan
-         {:table #xt/table customers, :columns [country custno name]}]]
+         {:db-name "xtdb", :table #xt/table customers, :columns [country custno name]}]]
        [:project
         {:projections [{country salesp.3/country}]}
         [:rename
          {:prefix salesp.3}
-         [:scan {:table #xt/table salesp, :columns [country]}]]]]]]
+         [:scan {:db-name "xtdb", :table #xt/table salesp, :columns [country]}]]]]]]
     [:map
      {:projections [{_dep_countable_1 1}]}
      [:rename
       {:prefix orders.5}
-      [:scan {:table #xt/table orders, :columns [custno]}]]]]]]]
+      [:scan {:db-name "xtdb", :table #xt/table orders, :columns [custno]}]]]]]]]

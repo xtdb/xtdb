@@ -65,7 +65,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         nodeBase.close()
     }
 
-    private val docsTable = TableRef("test-db", "public", "docs")
+    private val docsTable = TableRef("public", "docs")
 
     private sealed interface SimAction {
         data class Commit(val rows: List<UUID>) : SimAction
@@ -227,10 +227,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                 "block file missing for b$blockIdx"
             )
 
-            val tables = upload.tries.map { TableRef.parse(dbName, it.tableName) }.toSet()
+            val tables = upload.tries.map { TableRef.parse(it.tableName) }.toSet()
 
             for (trie in upload.tries) {
-                val table = TableRef.parse(dbName, trie.tableName)
+                val table = TableRef.parse(trie.tableName)
                 assertTrue(
                     table.dataFilePath(trie.trieKey) in storedPaths,
                     "data file missing for ${trie.tableName}/${trie.trieKey}"

@@ -4,7 +4,7 @@
             [xtdb.table :as table])
   (:import (xtdb.antlr SqlVisitor)))
 
-(defrecord StatementVisitor [default-db]
+(defrecord StatementVisitor []
   SqlVisitor
   (visitQueryExpr [_ stmt]
     [:query {:stmt stmt}])
@@ -16,19 +16,19 @@
     [:show-clock-time])
 
   (visitInsertStatement [_ stmt]
-    [:insert {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt))) :stmt stmt}])
+    [:insert {:table (table/->ref (sql/identifier-sym (.targetTable stmt))) :stmt stmt}])
 
   (visitPatchStatement [_ stmt]
-    [:patch {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
+    [:patch {:table (table/->ref (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
 
   (visitUpdateStatement [_ stmt]
-    [:update {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
+    [:update {:table (table/->ref (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
 
   (visitDeleteStatement [_ stmt]
-    [:delete {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
+    [:delete {:table (table/->ref (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
 
   (visitEraseStatement [_ stmt]
-    [:erase {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
+    [:erase {:table (table/->ref (sql/identifier-sym (.targetTable stmt))), :stmt stmt}])
 
   (visitAssertStatement [_ stmt]
     [:assert {:stmt stmt, :message (some->> (.message stmt) (sql/accept-visitor sql/string-literal-visitor))}])
@@ -52,7 +52,7 @@
     [:revoke-role {:role (str (sql/identifier-sym (.roleName stmt))), :user (str (sql/identifier-sym (.userName stmt)))}])
 
   (visitCreateTableStatement [_ stmt]
-    [:create-table {:table (table/->ref default-db (sql/identifier-sym (.targetTable stmt)))
+    [:create-table {:table (table/->ref (sql/identifier-sym (.targetTable stmt)))
                     :col-names (some->> (.columnNameList stmt) (.columnName) (mapv (comp str sql/identifier-sym)))}]))
 
 (defn parse-statement [stmt opts]
