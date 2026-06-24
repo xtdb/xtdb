@@ -52,6 +52,13 @@ import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
 private val LOG = OpenTx::class.logger
 
+/**
+ * The per-transaction write/read handle passed to an external-source [writer][TxIndexer.indexTx].
+ *
+ * Stage writes per table via [table]; [openQuery] / [executeSql] run SQL against the live index with
+ * read-your-writes visibility into those staged writes. [TxIndexer] owns opening, committing and closing the
+ * OpenTx — a writer is handed one, it never constructs its own.
+ */
 class OpenTx(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
@@ -72,11 +79,15 @@ class OpenTx(
 
     private val tableTxs = HashMap<TableRef, Table>()
 
-    fun table(table: TableRef): Table =
-        tableTxs.getOrPut(table) { Table(table) }
+    /**
+     * The staging area for writes to [table] in this tx, created on first access.
+     *
+     * See [Table] for the write protocol.
+     */
+    // TODO add table(schemaAndTable), make table(TableRef) internal
+    fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }
 
-    fun table(schemaName: SchemaName, tableName: TableName) =
-        table(TableRef(dbState.name, schemaName, tableName))
+    fun table(schemaName: SchemaName, tableName: TableName) = table(TableRef(dbState.name, schemaName, tableName))
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
@@ -117,13 +128,7 @@ class OpenTx(
     private fun serializeTableData(): Map<String, ByteArray> =
         tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
 
-    /**
-     * Stamps the `xt/txs` row for this tx and assembles the [ReplicaMessage.ResolvedTx] describing
-     * the outcome. The result still has to be appended to the replica log and imported by the
-     * caller — `commitTx` doesn't publish anything itself.
-     *
-     * `committed` is derived from [error]: a non-null error means the tx aborted.
-     */
+    // TODO make internal
     @JvmOverloads
     fun commitTx(error: Throwable? = null, userMetadata: Map<*, *>? = null): ReplicaMessage.ResolvedTx {
         writeTxRow(error, userMetadata)
@@ -156,8 +161,7 @@ class OpenTx(
         }
 
     /**
-     * Run SQL against the database's live index, with visibility into writes made earlier
-     * in this transaction.
+     * Run SQL against the database's live index, with visibility into writes made earlier in this transaction.
      *
      * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader].
      * Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
@@ -175,11 +179,10 @@ class OpenTx(
     }
 
     /**
-     * Execute a SQL statement against this tx, with visibility into writes made earlier in the same
+     * Execute a DML/DDL SQL statement against this tx, with visibility into writes made earlier in the same
      * writer call. Positional `?` parameters come from [args], like [openQuery].
      *
-     * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) throw; GRANT/REVOKE
-     * write role membership below that guard, gated on [user] being a superuser.
+     * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
@@ -373,9 +376,28 @@ class OpenTx(
         }
     }
 
-    // `inner` so the table reaches the tx's query machinery (querySource, the read-your-writes
-    // [queryCatalog], tracer, allocator, systemTimeMicros) for [patchDocs] — and so a table can only
-    // exist as part of an OpenTx, obtained via [table].
+    /**
+     * Per-table staging area for a tx's writes.
+     *
+     * Rows are written column-by-column into a shared relation.
+     *
+     * [writePut] / [writeDelete] / [writeErase] — and the batch [writePuts] / [writeDeletes] / [writeErases] /
+     * [patchDocs] — wrap this protocol for callers that don't need the column-level (zero-alloc) control.
+     *
+     * If you elect to write the values directly, each op must have exactly one value written to each of the columns:
+     *
+     * * the entity id — [writeId] / (internal only) [writeIid];
+     * * the valid-time range — [writeValidTimes] / [writeValidTimeMicros] / [writeDefaultValidTime];
+     * * **put only**: the document columns, via [putDocWriter];
+     *
+     * Then, a terminal [endPut] / [endDelete] / [endErase] — this is what records the row.
+     *
+     * In columnar style, you may choose to write all your IDs first, then all the valid-times, then all the documents,
+     * then the batch [endPuts] / [endDeletes] / [endErases] - it is your responsibility to ensure a consistent number
+     * of values in each column.
+     *
+     * In any event, you must write all the batch's row data before calling the corresponding `end` methods.
+     */
     inner class Table internal constructor(val ref: TableRef) : AutoCloseable {
 
         private fun checkValidTimes(validFrom: Long, validTo: Long) {
@@ -399,13 +421,9 @@ class OpenTx(
         private val deleteVec = opVec["delete"]
         private val eraseVec = opVec["erase"]
 
+        /** The document-column sink for a put: write the doc's columns here, between the id/valid-time writes and [endPut]. */
         val putDocWriter: VectorWriter by lazy(LazyThreadSafetyMode.NONE) { putVec }
 
-        /**
-         * Seeds the put-struct with a `NULL_TYPE` child per declared column, so a `CREATE TABLE foo (a, b)`
-         * registers the columns ahead of any data. They surface through [RelationReader.logRelTypes] into the
-         * catalog/planner. (An empty `CREATE TABLE foo` passes no columns, leaving the put-struct unforced.)
-         */
         internal fun declareColumns(colNames: List<String>) {
             for (colName in colNames) putDocWriter.vectorFor(colName, NULL_TYPE, false)
         }
@@ -413,8 +431,11 @@ class OpenTx(
         internal var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
             private set
 
+        // TODO set internal
         fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
         fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
+
+        /** Writes the row's entity id. */
         fun writeId(id: Any) = iidVec.writeBytes(id.asIid)
 
         fun writeValidTimeMicros(validFrom: Long, validTo: Long) {
@@ -444,6 +465,12 @@ class OpenTx(
         fun endPuts(count: Int) = endOps(count)
         fun endPut() = endPuts(1)
 
+        /**
+         * Single document put:
+         *
+         * - the document must contain an `_id` key
+         *
+         * */
         fun writePut(doc: Map<String, *>, validFrom: Instant? = null, validTo: Instant? = null) {
             writeId(doc["_id"] ?: throw Incorrect("missing _id", "xtdb.tx/missing-id", mapOf("doc" to doc)))
             writeValidTimes(validFrom, validTo)
@@ -454,13 +481,12 @@ class OpenTx(
         /**
          * Batch put: writes every row in [rel], content from `doc`.
          *
-         * iid source: `_iid` column (raw bytes, copied directly) if present; otherwise `_id` column
-         * (user-facing id — iid computed per row via [xtdb.util.asIid]).
+         * - The relation MUST contain either an `_iid` or an `_id` column.
+         * - Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
+         *   otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
          *
-         * Per-row valid times come from the rel's `_valid_from` / `_valid_to` columns when present and non-null;
-         * otherwise the [defaultValidFromMicros] / [defaultValidToMicros] defaults apply.
-         * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
-         * temporal columns; otherwise per-row.
+         *   Zero-width or inverted ranges will be rejected.
+         * - The relation MUST contain a `doc` column - a struct vector containing the documents.
          */
         fun writePuts(
             rel: RelationReader, defaultValidFromMicros: Long = systemTimeMicros, defaultValidToMicros: Long = MAX_LONG
@@ -473,9 +499,9 @@ class OpenTx(
             if (iidRdr != null) {
                 iidVec.append(iidRdr)
             } else {
-                val idRdr = rel.vectorFor("_id")
+                val idRdr = rel["_id"]
 
-                repeat(rowCount) { idx -> iidVec.writeBytes(ByteBuffer.wrap(idRdr.getObject(idx).asIid)) }
+                repeat(rowCount) { idx -> iidVec.writeBytes(idRdr.getObject(idx).asIid) }
             }
 
             val vfRdr = rel.vectorForOrNull("_valid_from")
@@ -497,18 +523,32 @@ class OpenTx(
                 validToVec.writeLong(rowValidTo)
             }
 
-            putDocWriter.append(rel.vectorFor("doc"))
+            putDocWriter.append(rel["doc"])
 
             endPuts(rowCount)
         }
 
+        /**
+         * Ends [count] DELETE operations.
+         *
+         * By the time you call this, you MUST have written:
+         *
+         * - [count] ids, via either [writeId] / [writeIid]
+         * - [count] valid times, via [writeValidTimes] / [writeValidTimeMicros] / [writeDefaultValidTime]
+         */
         fun endDeletes(count: Int) {
             repeat(count) { deleteVec.writeNull() }
             endOps(count)
         }
 
+        /**
+         * Ends a DELETE operation.
+         *
+         * @see [endDeletes]
+         */
         fun endDelete() = endDeletes(1)
 
+        /** Single delete of [id] over the given valid-time range. */
         fun writeDelete(id: Any, validFrom: Instant? = null, validTo: Instant? = null) {
             writeId(id)
             writeValidTimes(validFrom, validTo)
@@ -553,13 +593,26 @@ class OpenTx(
             endDeletes(rowCount)
         }
 
+        /**
+         * Ends [count] ERASE operations.
+         *
+         * By the time you call this, you MUST have written:
+         *
+         * - [count] ids, via either [writeId] / [writeIid]
+         */
         fun endErases(count: Int) {
             repeat(count) { eraseVec.writeNull() }
             endOps(count)
         }
 
+        /**
+         * Ends an ERASE operation.
+         *
+         * @see [endErases]
+         */
         fun endErase() = endErases(1)
 
+        /** Single erase of [id] across all valid time, in one call. */
         fun writeErase(id: Any) {
             writeId(id)
             writeValidTimeMicros(MIN_LONG, MAX_LONG)
@@ -615,16 +668,15 @@ class OpenTx(
             val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
 
             // openQuery takes ownership of the sliced args and closes them when the cursor closes —
-            // no separate `.use` on the slice here or it'd double-free.
+            // no separate `.use` on the slice here, or it'd double-free.
             pq.openQuery(patchArgs.openSlice(allocator), qOpts).use { cursor ->
                 cursor.forEachRemaining { rel -> writePuts(rel, validFromMicros, validToMicros) }
             }
         }
 
         /**
-         * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`
-         * (external-source writers typically do). Null on either bound means the same as passing
-         * [MIN_LONG] / [MAX_LONG] to the µs overload.
+         * Instant-based overload of [patchDocs] for end-user callers working with `java.time.Instant`.
+         * Null on either bound means the same as passing [systemTimeMicros] / [MAX_LONG] to the µs overload.
          */
         @JvmOverloads
         fun patchDocs(docs: RelationReader, validFrom: Instant? = null, validTo: Instant? = null) =

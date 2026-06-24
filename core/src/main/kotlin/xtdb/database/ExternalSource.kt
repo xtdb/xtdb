@@ -12,12 +12,37 @@ import xtdb.database.proto.DatabaseConfig
 import java.util.*
 import com.google.protobuf.Any as ProtoAny
 
+/** Opaque resume marker (e.g. a serialised log offset) that XTDB persists per tx and hands back on resume. */
 typealias ExternalSourceToken = ByteArray
 
+/**
+ * SPI for streaming transactions into a database from an upstream feed (a CDC source, message log, etc.)
+ * instead of XTDB's own DML.
+ *
+ * The source owns the read side of its upstream: it receives events (via polling or other methods),
+ * maps each to a transaction, and submits it * through [TxIndexer.indexTx].
+ *
+ * XTDB drives the source via [onPartitionAssigned] and persists the per-tx [ExternalSourceToken]
+ * so the source can resume after the last indexed event.
+ */
 interface ExternalSource : AutoCloseable {
 
+    /**
+     * Called when [partition] is assigned to this node, to run the source's poll loop.
+     *
+     * Resume from just after [afterToken] - the token of the last tx already indexed for this partition, or
+     * null to start from the beginning - submitting each upstream event via [txIndexer].
+     *
+     * Implementors must follow Kotlin's prompt cancellation guarantees - when the coroutine executing this method
+     * is cancelled, the implementor must clean up and cede control as soon as possible.
+     */
     suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer)
 
+    /**
+     * Opens an [ExternalSource] for a database, from the source config.
+     *
+     * See [Registration] to make an external source implementation available through `ATTACH DATABASE`.
+     */
     interface Factory {
         fun open(
             dbName: String,
@@ -61,6 +86,11 @@ interface ExternalSource : AutoCloseable {
         }
     }
 
+    /**
+     * Makes a [Factory] persistable. A factory whose class is claimed by a `ServiceLoader`-discovered
+     * registration serialises (via [protoTag] / [toProto]) and so can travel as a stored secondary-database
+     * config; a programmatic factory with no registration still runs in-process, but [Factory.toProto] rejects it.
+     */
     interface Registration<F : Factory> {
         val protoTag: String
         val factoryClass: Class<F>
