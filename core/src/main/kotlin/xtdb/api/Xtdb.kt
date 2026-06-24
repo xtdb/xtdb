@@ -116,12 +116,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
      * connection's own writes. Because writes and reads go through here, no callsite can forget to do either.
      *
      * [awaitToken] is exposed only for the pgwire `SET`/`SHOW AWAIT_TOKEN` SQL feature.
+     *
+     * [defaultTz] is the connection's timezone, mutable for the pgwire `SET TIME ZONE` SQL feature. It carries
+     * only the zone; the current-time source stays with the frontend (pgwire's session clock).
      */
     class Connection(
         private val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
-        private val defaultTz: ZoneId,
+        var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
         var dbName: DatabaseName,

@@ -229,12 +229,11 @@
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
   (let [^ZoneId zone-id (if (instance? ZoneId tz) tz (ZoneId/of tz))]
+    (.setDefaultTz ^Xtdb$Connection (:node-conn @conn-state) zone-id)
     (swap! conn-state
-           (fn [{:keys [transaction] :as conn-state}]
-             (-> conn-state
-                 (update-in [:session :clock] (fn [^Clock clock]
-                                                (.withZone clock zone-id)))
-                 (cond-> transaction (assoc-in [:transaction :default-tz] zone-id))))))
+           (fn [conn-state]
+             (cond-> conn-state
+               (:transaction conn-state) (assoc-in [:transaction :default-tz] zone-id)))))
 
   (set-session-parameter conn time-zone-nf-param-name tz))
 
@@ -562,13 +561,13 @@
 
                              (-> {:current-time (.instant clock)
                                   :snapshot-token (xtp/snapshot-token node)
-                                  :default-tz (.getZone clock)
+                                  :default-tz (.getDefaultTz node-conn)
                                   :implicit? false}
                                  (into (:characteristics session))
                                  (into (-> tx-opts
                                            (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
-                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
-                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getZone clock)})))
+                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getDefaultTz node-conn)})))
+                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getDefaultTz node-conn)})))
                                            (update :snapshot-token #(some-> % (apply-args args)))
                                            (update :snapshot-time #(some-> % (apply-args args)))
                                            (update :user-metadata #(some-> % (apply-args args)))
@@ -993,12 +992,11 @@
     (try
       (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query explain? explain-analyze?]} stmt
 
-            {:keys [session ^Xtdb$Connection node-conn]} @conn-state
-            {:keys [^Clock clock]} session
+            {:keys [^Xtdb$Connection node-conn]} @conn-state
 
             query-opts {:await-token (.getAwaitToken node-conn)
                         :tx-timeout (Duration/ofMinutes 1)
-                        :default-tz (.getZone clock)
+                        :default-tz (.getDefaultTz node-conn)
                         :explain? explain?
                         :explain-analyze? explain-analyze?
                         :default-db default-db
@@ -1129,7 +1127,7 @@
         query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
                                             (time/->instant))
                                    (.instant clock))
-                              (or (:default-tz transaction) (.getZone clock))
+                              (or (:default-tz transaction) (.getDefaultTz node-conn))
                               (:snapshot-token stmt (:snapshot-token transaction))
                               (some-> (or (:snapshot-time stmt) (:snapshot-time transaction))
                                       (time/->instant))

@@ -915,25 +915,27 @@
     (with-open [conn (jdbc-conn)]
 
       (letfn [(current-time [conn]
-                (:ct (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ct"])))]
+                (:ct (jdbc/execute-one! conn ["SELECT CURRENT_TIMESTAMP ct"])))
+              (current-instant [conn]
+                (.toInstant ^ZonedDateTime (current-time conn)))]
 
         (t/is (= (-> #xt/zdt "2000-08-16T12:08:03+01:00" in-system-tz) (current-time conn)))
 
-        (testing "current ts instant is pinned during a tx, regardless of what happens to the session clock"
+        (testing "current ts instant is pinned at BEGIN, regardless of what happens to the session clock"
 
           (let [{:keys [conn-state]} (get-last-conn)]
             (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
 
           (jdbc/with-transaction [tx conn]
-            (let [epoch #xt/zdt "1970-01-01Z"]
-              (t/is (= epoch (current-time tx)))
+            (let [epoch Instant/EPOCH]
+              (t/is (= epoch (current-instant tx)))
               (Thread/sleep 10)
-              (t/is (= epoch (current-time tx)))
+              (t/is (= epoch (current-instant tx)))
 
               (testing "inside a transaction the instant is fixed, regardless of the session clock"
                 (let [{:keys [conn-state]} (get-last-conn)]
                   (swap! conn-state assoc-in [:session :clock] custom-clock))
-                (t/is (= epoch (current-time tx)))))))))))
+                (t/is (= epoch (current-instant tx)))))))))))
 
 (deftest test-timezone
   (with-open [conn (jdbc-conn)]
