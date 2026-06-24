@@ -31,7 +31,6 @@ interface TxIndexer {
      */
     suspend fun indexTx(
         externalSourceToken: ExternalSourceToken?,
-        txId: Long? = null,
         systemTime: Instant? = null,
         writer: suspend (OpenTx) -> TxResult,
     ): TxResult

@@ -3,7 +3,6 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.RENDEZVOUS
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.Metrics.withSpan
@@ -58,7 +57,6 @@ class LeaderLogProcessor(
     afterReplicaMsgId: MessageId,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
-    // The leader term's scope, owned by the LogProcessor wrapper; cancelling it tears the leader down.
     scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -126,7 +124,13 @@ class LeaderLogProcessor(
     }
 
     private sealed interface ExtSourceTask : PersisterTask {
-        data class ResolvedTx(val resolvedTx: ReplicaMessage.ResolvedTx) : ExtSourceTask {
+        class IndexTx(
+            val externalSourceToken: ExternalSourceToken?,
+            val systemTime: Instant?,
+            val writer: suspend (OpenTx) -> TxResult,
+        ) : ExtSourceTask {
+            val result = CompletableDeferred<TxResult>()
+
             override val onComplete = CompletableDeferred<Unit>()
         }
     }
@@ -138,11 +142,11 @@ class LeaderLogProcessor(
     }
 
     private val sourceLogCh =
-        Channel<SourceLogTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<SourceLogTask>(onUndeliveredElement = { it.onComplete.cancel() })
     private val extSourceCh =
-        Channel<ExtSourceTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<ExtSourceTask>(onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
-        Channel<GcTask>(RENDEZVOUS, onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
     private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
         val record = task.record
@@ -225,17 +229,18 @@ class LeaderLogProcessor(
         }
     }
 
-    // Ext-source txs carry no source-log position of their own (`srcMsgId == null` on the way in)
-    // and track progress via `externalSourceToken`, so they don't advance the leader's
-    // `latestSourceMsgId` (which is driven by the source log). We do stamp the current source-log
-    // watermark onto the replicated record, though: without it a follower's `latestSourceMsgId`
-    // lags between block boundaries, and on promotion it resumes the source log from a stale point
-    // and replays an already-covered block boundary.
     private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx, srcMsgId: MessageId?) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val txResult = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
 
+        // Ext-source txs carry no source-log position of their own (`srcMsgId == null` on the way in)
+        // and track progress via `externalSourceToken`, so they don't advance the leader's
+        // `latestSourceMsgId` (which is driven by the source log). We do stamp the current source-log
+        // watermark onto the replicated record, though: without it a follower's `latestSourceMsgId`
+        // lags between block boundaries, and on promotion it resumes the source log from a stale point
+        // and replays an already-covered block boundary.
         val effectiveSrcMsgId = srcMsgId ?: watchers.latestSourceMsgId
+
         appendToReplica(resolvedTx.copy(srcMsgId = effectiveSrcMsgId))
         liveIndex.importTx(resolvedTx)
 
@@ -243,6 +248,37 @@ class LeaderLogProcessor(
 
         if (liveIndex.isFull())
             finishBlock(effectiveSrcMsgId, resolvedTx.externalSourceToken)
+    }
+
+    private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
+        val txKey = TransactionKey(
+            (liveIndex.latestCompletedTx?.txId ?: -1) + 1,
+            smoothSystemTime(task.systemTime ?: instantSource.instant())
+        )
+
+        var openTx = openTx(txKey, task.externalSourceToken)
+
+        @Suppress("ConvertTryFinallyToUseCall") // because openTx is a var
+        try {
+            val writerResult = task.writer(openTx)
+            val resolvedTx = when (writerResult) {
+                is TxResult.Committed ->
+                    openTx.commitTx(error = null, writerResult.userMetadata)
+
+                is TxResult.Aborted -> {
+                    txErrorCounter?.increment()
+                    openTx.close()
+                    // fresh tx for the abort row — the original openTx may hold partial writes
+                    openTx = openTx(txKey, task.externalSourceToken)
+                    openTx.commitTx(writerResult.error, writerResult.userMetadata)
+                }
+            }
+
+            handleResolvedTx(resolvedTx, srcMsgId = null)
+            task.result.complete(writerResult)
+        } finally {
+            openTx.close()
+        }
     }
 
     private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
@@ -292,13 +328,9 @@ class LeaderLogProcessor(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    // Hosts the persister + the optional ext-source loop.
     private val termJob: Job = scope.launch {
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
-            // Persister: unbiased select across source-log records, external-source resolved
-            // txs, and GC trie deletions — so a slow producer on one channel can't starve the
-            // others.
             launch {
                 try {
                     while (true) {
@@ -311,7 +343,7 @@ class LeaderLogProcessor(
                             when (task) {
                                 is SourceLogTask.Record -> handleSourceLogRecord(task)
                                 is SourceLogTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, task.srcMsgId)
-                                is ExtSourceTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, srcMsgId = null)
+                                is ExtSourceTask.IndexTx -> handleIndexTx(task)
                                 is GcTask.TriesDeleted -> handleTriesDeleted(task)
                             }
                             task.onComplete.complete(Unit)
@@ -361,51 +393,13 @@ class LeaderLogProcessor(
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
 
-    private suspend fun commit(openTx: OpenTx, error: Throwable?, userMetadata: Map<*, *>?) {
-        submit(ExtSourceTask.ResolvedTx(openTx.commitTx(error, userMetadata)))
-    }
-
     override suspend fun indexTx(
-        externalSourceToken: ExternalSourceToken?,
-        txId: Long?,
-        systemTime: Instant?,
+        externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ): TxResult {
-        val resolvedTxId = txId ?: ((liveIndex.latestCompletedTx?.txId ?: -1) + 1)
-        val resolvedSystemTime = systemTime ?: instantSource.instant()
-        val txKey = TransactionKey(resolvedTxId, smoothSystemTime(resolvedSystemTime))
-
-        try {
-            val openTx = openTx(txKey, externalSourceToken)
-            val result = try {
-                writer(openTx)
-            } catch (e: Throwable) {
-                openTx.close()
-                throw e
-            }
-
-            when (result) {
-                is TxResult.Committed -> openTx.use {
-                    commit(it, error = null, result.userMetadata)
-                }
-
-                is TxResult.Aborted -> {
-                    txErrorCounter?.increment()
-                    openTx.close()
-                    openTx(txKey, externalSourceToken).use { abortTx ->
-                        commit(abortTx, result.error, result.userMetadata)
-                    }
-                }
-            }
-
-            return result
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            watchers.notifyError(e)
-            throw e
-        }
-    }
+    ): TxResult =
+        ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
+            .also { submit(it) }
+            .result.await()
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
