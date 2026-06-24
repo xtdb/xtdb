@@ -12,8 +12,7 @@
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
             [xtdb.util :as util])
-  (:import [java.nio ByteBuffer]
-           [java.time Instant]
+  (:import [java.time Instant]
            [java.util HashMap Random UUID]
            [java.util.concurrent.locks StampedLock]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
@@ -46,7 +45,7 @@
         (let [open-tx-table (.table open-tx #xt/table my-table)
               put-doc-wrt (.getPutDocWriter open-tx-table)]
           (doseq [^UUID iid iids]
-            (.writeIid open-tx-table (util/uuid->byte-buffer iid))
+            (.writeId open-tx-table iid)
             (.writeValidTimeMicros open-tx-table 0 0)
             (.writeObject put-doc-wrt {:some :doc})
             (.endPut open-tx-table))
@@ -148,7 +147,7 @@
     (with-open [live-tx0 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [foo-table-tx (.table live-tx0 #xt/table foo)
             doc-wtr (.getPutDocWriter foo-table-tx)]
-        (.writeIid foo-table-tx (ByteBuffer/allocate 16))
+        (.writeId foo-table-tx (UUID. 0 0))
         (.writeValidTimeMicros foo-table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut foo-table-tx)
@@ -158,7 +157,7 @@
       (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
         (let [bar-table-tx (.table live-tx1 #xt/table bar)
               doc-wtr (.getPutDocWriter bar-table-tx)]
-          (.writeIid bar-table-tx (ByteBuffer/allocate 16))
+          (.writeId bar-table-tx (UUID. 0 0))
           (.writeValidTimeMicros bar-table-tx 0 0)
           (.endStruct doc-wtr)
           (.endPut bar-table-tx)
@@ -192,12 +191,12 @@
 (t/deftest external-snapshot-does-not-see-uncommitted-data
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table test-table
-        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+        iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.writeIid table-tx iid)
+        (.writeId table-tx iid)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
@@ -228,14 +227,14 @@
 (t/deftest concurrent-external-snapshot-unaffected-by-later-commit
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table test-table
-        iid1 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
-        iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+        iid1 (UUID/randomUUID)
+        iid2 (UUID/randomUUID)]
 
     ;; Commit first transaction
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.writeIid table-tx iid1)
+        (.writeId table-tx iid1)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
@@ -250,7 +249,7 @@
         (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
           (let [table-tx (.table live-tx2 table)
                 doc-wtr (.getPutDocWriter table-tx)]
-            (.writeIid table-tx iid2)
+            (.writeId table-tx iid2)
             (.writeValidTimeMicros table-tx 0 0)
             (.endStruct doc-wtr)
             (.endPut table-tx)
@@ -275,7 +274,7 @@
 (t/deftest get-table-tx-multiple-times-returns-same-tx
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table test-table
-        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+        iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx-1 (.table live-tx table)
@@ -285,7 +284,7 @@
               "Multiple calls to liveTable should return same tx context")
 
         (let [doc-wtr (.getPutDocWriter table-tx-1)]
-          (.writeIid table-tx-1 iid)
+          (.writeId table-tx-1 iid)
           (.writeValidTimeMicros table-tx-1 0 0)
           (.endStruct doc-wtr)
           (.endPut table-tx-1))
@@ -299,21 +298,21 @@
 (t/deftest multiple-puts-same-iid-records-all
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table test-table
-        iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+        iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx table)
             doc-wtr (.getPutDocWriter table-tx)]
 
-        (.writeIid table-tx (.duplicate iid))
+        (.writeId table-tx iid)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
-        (.writeIid table-tx (.duplicate iid))
+        (.writeId table-tx iid)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
-        (.writeIid table-tx (.duplicate iid))
+        (.writeId table-tx iid)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
@@ -341,12 +340,12 @@
                                                   block-cat table-catalog trie-catalog
                                                   "xtdb")]
         (let [table #xt/table dedup-table
-              iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+              iid (UUID/randomUUID)]
 
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getPutDocWriter table-tx)]
-              (.writeIid table-tx iid)
+              (.writeId table-tx iid)
               (.writeValidTimeMicros table-tx 0 0)
               (.endStruct doc-wtr)
               (.endPut table-tx)
@@ -392,12 +391,12 @@
                                                                       block-cat table-catalog trie-catalog
                                                                       "xtdb")]
         (let [table #xt/table test-table
-              iid (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+              iid (UUID/randomUUID)]
 
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
             (let [table-tx (.table live-tx table)
                   doc-wtr (.getPutDocWriter table-tx)]
-              (.writeIid table-tx iid)
+              (.writeId table-tx iid)
               (.writeValidTimeMicros table-tx 0 0)
               (.endStruct doc-wtr)
               (.endPut table-tx)
@@ -415,14 +414,14 @@
 (t/deftest transaction-snapshot-shows-read-your-writes
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table test-table
-        iid1 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))
-        iid2 (ByteBuffer/wrap (util/uuid->bytes (UUID/randomUUID)))]
+        iid1 (UUID/randomUUID)
+        iid2 (UUID/randomUUID)]
 
     ;; First commit some data
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
       (let [table-tx (.table live-tx1 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.writeIid table-tx iid1)
+        (.writeId table-tx iid1)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)
@@ -432,7 +431,7 @@
     (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
       (let [table-tx (.table live-tx2 table)
             doc-wtr (.getPutDocWriter table-tx)]
-        (.writeIid table-tx iid2)
+        (.writeId table-tx iid2)
         (.writeValidTimeMicros table-tx 0 0)
         (.endStruct doc-wtr)
         (.endPut table-tx)

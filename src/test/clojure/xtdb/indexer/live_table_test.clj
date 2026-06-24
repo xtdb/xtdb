@@ -88,7 +88,7 @@
                   doc-wtr (.getPutDocWriter open-tx-table)]
 
               (doseq [uuid uuids]
-                (.writeIid open-tx-table (ByteBuffer/wrap (util/uuid->bytes uuid)))
+                (.writeId open-tx-table uuid)
                 (.writeValidTimeMicros open-tx-table 0 0)
                 (.endStruct doc-wtr)
                 (.endPut open-tx-table))

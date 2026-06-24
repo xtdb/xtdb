@@ -431,9 +431,8 @@ class OpenTx(
         internal var trie: MemoryHashTrie = MemoryHashTrie.emptyTrie(iidVec)
             private set
 
-        // TODO set internal
-        fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
-        fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
+        internal fun writeIid(iid: ByteBuffer) = iidVec.writeBytes(iid)
+        internal fun writeIid(iid: ByteArray) = iidVec.writeBytes(iid)
 
         /** Writes the row's entity id. */
         fun writeId(id: Any) = iidVec.writeBytes(id.asIid)

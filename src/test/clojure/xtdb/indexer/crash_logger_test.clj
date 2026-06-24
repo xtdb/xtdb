@@ -9,8 +9,8 @@
             [xtdb.trie :as trie]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
-  (:import (java.nio ByteBuffer)
-           (java.time Instant InstantSource ZoneId)
+  (:import (java.time Instant InstantSource ZoneId)
+           (java.util UUID)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.arrow NullVector Relation)
            (xtdb.indexer CrashLogger)
@@ -41,7 +41,7 @@
                                                                                       :default-tz (ZoneId/of "Europe/London")}))]
           (let [open-tx-table (.table open-tx #xt/table foo)
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
-            (.writeIid open-tx-table (ByteBuffer/allocate 16))
+            (.writeId open-tx-table (UUID. 0 0))
             (.writeValidTimeMicros open-tx-table 0 0)
             (.writeObject (.getPutDocWriter open-tx-table) {:xt/id 3, :version 0})
             (.endPut open-tx-table)
