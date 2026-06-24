@@ -376,7 +376,7 @@
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
         node-conn (xtp/open-connection node db-name)
-        conn (assoc conn :node node, :authn authn, :default-db db-name, :db db)
+        conn (assoc conn :node node, :authn authn, :db db)
         _ (swap! (:conn-state conn) assoc :node-conn node-conn)]
     (if authn
       (condp = (.methodFor authn user (pgio/host-address frontend))
@@ -986,7 +986,10 @@
 
     [#xt/type :utf8]))
 
-(defn- prep-stmt [{:keys [node conn-state default-db] :as conn} {:keys [statement-type param-oids] :as stmt}]
+(defn- conn-db-name ^String [{:keys [conn-state]}]
+  (.getDbName ^Xtdb$Connection (:node-conn @conn-state)))
+
+(defn- prep-stmt [{:keys [node conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
   (case statement-type
     (:query :execute :show-variable)
     (try
@@ -1004,7 +1007,7 @@
                                   (xtp/prepare-ra node (show-var-query (:variable stmt))
                                                   {:await-token (.getAwaitToken node-conn)
                                                    :default-tz (.getDefaultTz node-conn)
-                                                   :default-db default-db})))]
+                                                   :default-db (.getDbName node-conn)})))]
 
         (when-let [warnings (.getWarnings pq)]
           (doseq [warning warnings]
@@ -1307,7 +1310,7 @@
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter default-db] :as conn} {:keys [dml-type query args param-oids]}]
+(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
   (when (get-in @conn-state [:transaction :failed])
     (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
@@ -1326,7 +1329,7 @@
       (let [^PreparedQuery pq (with-auth-check conn
                                 (xtp/prepare-sql node
                                                  (antlr/parse-statement query)
-                                                 {:default-db default-db}))]
+                                                 {:default-db (conn-db-name conn)}))]
 
         ;; Send any warnings to the client
         (when-let [warnings (.getWarnings pq)]
@@ -1459,10 +1462,11 @@
       (metrics/inc-counter! query-error-counter)
       (throw e))))
 
-(defn- attach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name db-config]}]
-  (when-not (= default-db "xtdb")
-    (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
-                          {:db default-db})))
+(defn- attach-db [{:keys [node conn-state] :as conn} {:keys [db-name db-config]}]
+  (let [default-db (conn-db-name conn)]
+    (when-not (= default-db "xtdb")
+      (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
+                            {:db default-db}))))
 
   (when (false? (get-in @conn-state [:transaction :implicit?]))
     (throw (err/incorrect ::attach-db-in-tx "Cannot attach a database in a transaction."
@@ -1476,10 +1480,11 @@
       (when error
         (throw error)))))
 
-(defn- detach-db [{:keys [node conn-state default-db] :as conn} {:keys [db-name]}]
-  (when-not (= default-db "xtdb")
-    (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
-                          {:db default-db})))
+(defn- detach-db [{:keys [node conn-state] :as conn} {:keys [db-name]}]
+  (let [default-db (conn-db-name conn)]
+    (when-not (= default-db "xtdb")
+      (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
+                            {:db default-db}))))
 
   (when (false? (get-in @conn-state [:transaction :implicit?]))
     (throw (err/incorrect ::detach-db-in-tx "Cannot detach a database in a transaction."
