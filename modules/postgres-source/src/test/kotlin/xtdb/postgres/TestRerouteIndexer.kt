@@ -20,7 +20,6 @@ import com.google.protobuf.Any as ProtoAny
  * all the registry round-trip needs.
  */
 class TestRerouteIndexer(
-    private val dbName: String,
     private val target: String,
     private val dropColumn: String,
 ) : PgIndexer {
@@ -32,14 +31,14 @@ class TestRerouteIndexer(
                 is RowOp.Delete -> RowOp.Delete("public", target, op.row)
             }
         }
-        DirectMirror(dbName).indexTx(PostgresDriver.Transaction(tx.lsn, tx.commitTime, rerouted), openTx)
+        DirectMirror().indexTx(PostgresDriver.Transaction(tx.lsn, tx.commitTime, rerouted), openTx)
     }
 
     @Serializable
     @SerialName("!TestReroute")
     data class Factory(val target: String, val dropColumn: String) : PgIndexer.Factory {
 
-        override fun open(dbName: String): PgIndexer = TestRerouteIndexer(dbName, target, dropColumn)
+        override fun open(): PgIndexer = TestRerouteIndexer(target, dropColumn)
 
         class Registration : PgIndexer.Registration<Factory> {
             override val protoTag: String get() = "$PROTO_TAG_PREFIX/google.protobuf.Struct"

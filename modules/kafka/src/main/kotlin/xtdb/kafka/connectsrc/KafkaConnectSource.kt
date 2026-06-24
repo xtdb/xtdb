@@ -40,7 +40,6 @@ import xtdb.kafka.connectsrc.proto.kafkaConnectSourceConfig
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
-import xtdb.util.warn
 import java.time.Duration
 import com.google.protobuf.Any as ProtoAny
 
@@ -97,7 +96,7 @@ class KafkaConnectSource(
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
 
-            return KafkaConnectSource(dbName, cluster, topic, connectConfig, indexer.open(dbName))
+            return KafkaConnectSource(dbName, cluster, topic, connectConfig, indexer.open())
         }
 
         class Registration : ExternalSource.Registration<Factory> {

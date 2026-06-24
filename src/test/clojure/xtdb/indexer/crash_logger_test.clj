@@ -39,7 +39,7 @@
                                                                                      {:default-db "xtdb"
                                                                                       :system-time #xt/zdt "1970-01-01T00:00Z[UTC]"
                                                                                       :default-tz (ZoneId/of "Europe/London")}))]
-          (let [open-tx-table (.table open-tx #xt/table foo)
+          (let [open-tx-table (.table open-tx "foo")
                 tx-ops-rdr (.getListElements (.vectorFor tx-ops-rel "tx-ops"))]
             (.writeId open-tx-table (UUID. 0 0))
             (.writeValidTimeMicros open-tx-table 0 0)

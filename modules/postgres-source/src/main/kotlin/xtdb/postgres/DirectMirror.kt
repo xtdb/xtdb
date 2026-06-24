@@ -8,7 +8,6 @@ import xtdb.error.Incorrect
 import xtdb.indexer.OpenTx
 import xtdb.postgres.proto.DirectMirrorConfig
 import xtdb.postgres.proto.directMirrorConfig
-import xtdb.table.TableRef
 import xtdb.time.InstantUtil.asMicros
 import xtdb.util.asIid
 import java.nio.ByteBuffer
@@ -22,7 +21,7 @@ private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
  * the `users` table; `_id` is taken from the row, with explicit `_valid_from`/`_valid_to` columns
  * honoured when present.
  */
-class DirectMirror(private val dbName: String) : PgIndexer {
+class DirectMirror : PgIndexer {
     private fun explicitValidTimeMicros(name: String, value: Any?): Long? = when (value) {
         null -> null
         is ZonedDateTime -> value.toInstant().asMicros
@@ -33,8 +32,8 @@ class DirectMirror(private val dbName: String) : PgIndexer {
         )
     }
 
-    private fun writeOp(openTx: OpenTx, dbName: String, op: RowOp) {
-        val openTxTable = openTx.table(TableRef(op.schema, op.table))
+    private fun writeOp(openTx: OpenTx, op: RowOp) {
+        val openTxTable = openTx.table(op.schema, op.table)
 
         when (op) {
             is RowOp.Put -> {
@@ -74,14 +73,14 @@ class DirectMirror(private val dbName: String) : PgIndexer {
     }
 
     override fun indexTx(tx: PostgresDriver.Transaction, openTx: OpenTx) {
-        for (op in tx.ops) writeOp(openTx, dbName, op)
+        for (op in tx.ops) writeOp(openTx, op)
     }
 
     @Serializable
     @SerialName("!DirectMirror")
     class Factory : PgIndexer.Factory {
 
-        override fun open(dbName: String): PgIndexer = DirectMirror(dbName)
+        override fun open(): PgIndexer = DirectMirror()
 
         override fun equals(other: Any?) = other is Factory
         override fun hashCode() = javaClass.hashCode()

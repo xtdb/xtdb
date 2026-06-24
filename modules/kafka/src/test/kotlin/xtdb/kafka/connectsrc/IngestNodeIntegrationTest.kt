@@ -85,7 +85,7 @@ class IngestNodeIntegrationTest {
     /** A user-supplied indexer that records the keys it sees rather than writing them anywhere. */
     private class CapturingIndexer(val seenKeys: ConcurrentLinkedQueue<String>) : RecordIndexer {
         class Factory(val seenKeys: ConcurrentLinkedQueue<String>) : RecordIndexer.Factory {
-            override fun open(dbName: String): RecordIndexer = CapturingIndexer(seenKeys)
+            override fun open(): RecordIndexer = CapturingIndexer(seenKeys)
         }
 
         override suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer) {

@@ -42,7 +42,7 @@
 
     (t/testing "commit"
       (with-open [open-tx (tu/->open-tx allocator tu/*node* (serde/->TxKey 0 (.toInstant #inst "2000")))]
-        (let [open-tx-table (.table open-tx #xt/table my-table)
+        (let [open-tx-table (.table open-tx "my-table")
               put-doc-wrt (.getPutDocWriter open-tx-table)]
           (doseq [^UUID iid iids]
             (.writeId open-tx-table iid)
@@ -145,7 +145,7 @@
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))]
 
     (with-open [live-tx0 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [foo-table-tx (.table live-tx0 #xt/table foo)
+      (let [foo-table-tx (.table live-tx0 "foo")
             doc-wtr (.getPutDocWriter foo-table-tx)]
         (.writeId foo-table-tx (UUID. 0 0))
         (.writeValidTimeMicros foo-table-tx 0 0)
@@ -155,7 +155,7 @@
 
     (t/testing "uncommitted tx data doesn't appear in live-index"
       (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
-        (let [bar-table-tx (.table live-tx1 #xt/table bar)
+        (let [bar-table-tx (.table live-tx1 "bar")
               doc-wtr (.getPutDocWriter bar-table-tx)]
           (.writeId bar-table-tx (UUID. 0 0))
           (.writeValidTimeMicros bar-table-tx 0 0)
@@ -194,7 +194,7 @@
         iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [table-tx (.table live-tx table)
+      (let [table-tx (.table live-tx (.getTableName table))
             doc-wtr (.getPutDocWriter table-tx)]
         (.writeId table-tx iid)
         (.writeValidTimeMicros table-tx 0 0)
@@ -232,7 +232,7 @@
 
     ;; Commit first transaction
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [table-tx (.table live-tx1 table)
+      (let [table-tx (.table live-tx1 (.getTableName table))
             doc-wtr (.getPutDocWriter table-tx)]
         (.writeId table-tx iid1)
         (.writeValidTimeMicros table-tx 0 0)
@@ -247,7 +247,7 @@
 
         ;; Commit second transaction
         (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
-          (let [table-tx (.table live-tx2 table)
+          (let [table-tx (.table live-tx2 (.getTableName table))
                 doc-wtr (.getPutDocWriter table-tx)]
             (.writeId table-tx iid2)
             (.writeValidTimeMicros table-tx 0 0)
@@ -277,8 +277,8 @@
         iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [table-tx-1 (.table live-tx table)
-            table-tx-2 (.table live-tx table)]
+      (let [table-tx-1 (.table live-tx (.getTableName table))
+            table-tx-2 (.table live-tx (.getTableName table))]
 
         (t/is (identical? table-tx-1 table-tx-2)
               "Multiple calls to liveTable should return same tx context")
@@ -301,7 +301,7 @@
         iid (UUID/randomUUID)]
 
     (with-open [live-tx (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [table-tx (.table live-tx table)
+      (let [table-tx (.table live-tx (.getTableName table))
             doc-wtr (.getPutDocWriter table-tx)]
 
         (.writeId table-tx iid)
@@ -343,7 +343,7 @@
               iid (UUID/randomUUID)]
 
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-            (let [table-tx (.table live-tx table)
+            (let [table-tx (.table live-tx (.getTableName table))
                   doc-wtr (.getPutDocWriter table-tx)]
               (.writeId table-tx iid)
               (.writeValidTimeMicros table-tx 0 0)
@@ -394,7 +394,7 @@
               iid (UUID/randomUUID)]
 
           (with-open [live-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-            (let [table-tx (.table live-tx table)
+            (let [table-tx (.table live-tx (.getTableName table))
                   doc-wtr (.getPutDocWriter table-tx)]
               (.writeId table-tx iid)
               (.writeValidTimeMicros table-tx 0 0)
@@ -419,7 +419,7 @@
 
     ;; First commit some data
     (with-open [live-tx1 (tu/->open-tx #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"})]
-      (let [table-tx (.table live-tx1 table)
+      (let [table-tx (.table live-tx1 (.getTableName table))
             doc-wtr (.getPutDocWriter table-tx)]
         (.writeId table-tx iid1)
         (.writeValidTimeMicros table-tx 0 0)
@@ -429,7 +429,7 @@
 
     ;; Start second transaction and write more data
     (with-open [live-tx2 (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"})]
-      (let [table-tx (.table live-tx2 table)
+      (let [table-tx (.table live-tx2 (.getTableName table))
             doc-wtr (.getPutDocWriter table-tx)]
         (.writeId table-tx iid2)
         (.writeValidTimeMicros table-tx 0 0)

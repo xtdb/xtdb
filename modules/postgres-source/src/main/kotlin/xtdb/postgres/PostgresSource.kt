@@ -147,7 +147,7 @@ class PostgresSource(
                 slotName, publicationName,
             )
 
-            return PostgresSource(dbName, driver, slotName, indexer.open(dbName), meterRegistry)
+            return PostgresSource(dbName, driver, slotName, indexer.open(), meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {

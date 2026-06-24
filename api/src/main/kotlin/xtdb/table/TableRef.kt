@@ -6,7 +6,9 @@ typealias DatabaseName = String
 typealias SchemaName = String
 typealias TableName = String
 
-data class TableRef(val schemaName: SchemaName = "public", val tableName: TableName) {
+const val DEFAULT_SCHEMA: SchemaName = "public"
+
+data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: TableName) {
 
     val sym: Symbol get() = Symbol.intern(schemaName, tableName)
 
@@ -17,7 +19,7 @@ data class TableRef(val schemaName: SchemaName = "public", val tableName: TableN
         fun parse(str: String): TableRef {
             val sym = Symbol.intern(str)
 
-            return TableRef(sym.namespace ?: "public", sym.name)
+            return TableRef(sym.namespace ?: DEFAULT_SCHEMA, sym.name)
         }
     }
 }

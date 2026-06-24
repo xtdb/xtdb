@@ -16,7 +16,7 @@ interface RecordIndexer : AutoCloseable {
     override fun close() = Unit
 
     interface Factory {
-        fun open(dbName: String): RecordIndexer
+        fun open(): RecordIndexer
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()

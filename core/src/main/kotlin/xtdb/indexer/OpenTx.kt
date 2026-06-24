@@ -1,29 +1,21 @@
 package xtdb.indexer
 
+import clojure.lang.PersistentArrayMap
 import io.micrometer.tracing.Tracer
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 import xtdb.NodeBase
 import xtdb.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
-import xtdb.arrow.NULL_TYPE
-import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorReader
-import xtdb.arrow.VectorType
-import xtdb.arrow.VectorWriter
-import xtdb.authz.RoleMembership
-import xtdb.database.DatabaseName
-import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
-import clojure.lang.PersistentArrayMap
-import xtdb.arrow.RelationAsStructReader
-import xtdb.arrow.SingletonListReader
+import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
+import xtdb.authz.RoleMembership
+import xtdb.database.DatabaseName
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
@@ -31,6 +23,7 @@ import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.query.PrepareOpts
 import xtdb.query.SqlStatement
+import xtdb.table.DEFAULT_SCHEMA
 import xtdb.table.SchemaName
 import xtdb.table.TableName
 import xtdb.table.TableRef
@@ -47,6 +40,7 @@ import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.ZoneId
+import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 
@@ -79,15 +73,16 @@ class OpenTx(
 
     private val tableTxs = HashMap<TableRef, Table>()
 
+    internal fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }
+
     /**
      * The staging area for writes to [table] in this tx, created on first access.
      *
-     * See [Table] for the write protocol.
+     * @see [Table] for the write protocol
      */
-    // TODO add table(schemaAndTable), make table(TableRef) internal
-    fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }
-
-    fun table(schemaName: SchemaName, tableName: TableName) = table(TableRef(schemaName, tableName))
+    @JvmOverloads
+    fun table(schemaName: SchemaName = DEFAULT_SCHEMA, tableName: TableName) =
+        table(TableRef(schemaName, tableName))
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 

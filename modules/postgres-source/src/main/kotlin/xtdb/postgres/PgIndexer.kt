@@ -27,7 +27,7 @@ interface PgIndexer : AutoCloseable {
     override fun close() = Unit
 
     interface Factory {
-        fun open(dbName: String): PgIndexer
+        fun open(): PgIndexer
 
         companion object {
             private val registrations = ServiceLoader.load(Registration::class.java).toList()

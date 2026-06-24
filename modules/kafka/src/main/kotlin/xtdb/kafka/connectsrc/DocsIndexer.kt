@@ -21,7 +21,6 @@ import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
 import xtdb.table.TableRef
-import xtdb.util.asIid
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -30,9 +29,7 @@ import com.google.protobuf.Any as ProtoAny
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
-class DocsIndexer(
-    private val table: TableRef,
-) : RecordIndexer {
+class DocsIndexer(private val table: TableRef) : RecordIndexer {
 
     @Serializable
     @SerialName("!Docs")
@@ -40,7 +37,7 @@ class DocsIndexer(
         val table: String,
     ) : RecordIndexer.Factory {
 
-        override fun open(dbName: String): RecordIndexer =
+        override fun open(): RecordIndexer =
             DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {
@@ -85,7 +82,7 @@ class DocsIndexer(
         mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset())
 
     private fun writeRecord(openTx: OpenTx, rec: SinkRecord) {
-        val openTxTable = openTx.table(table)
+        val openTxTable = openTx.table(table.schemaName, table.tableName)
         val value = rec.value()
 
         if (value == null) {
