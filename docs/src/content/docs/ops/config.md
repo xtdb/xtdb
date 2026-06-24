@@ -3,68 +3,141 @@ title: Configuration
 ---
 
 <details>
-<summary>Changelog (last updated v2.1)</summary>
+<summary>Changelog (last updated v2.2)</summary>
+
+v2.2: `remotes` replaces `logClusters`
+
+: Named connections to external systems are now configured under [`remotes`](#remotes).
+
+  Previously these lived under `logClusters`, which was scoped to transaction-log clusters. `remotes` generalises it to any external connection — Kafka clusters, cloud identities, Postgres databases, etc.
+
+  `logClusters` is deprecated but still honoured: entries under both names are merged, so existing config keeps working — rename to `remotes` when convenient.
+
+  The pre-existing `!Kafka` can simply be moved under `remotes` with no other changes.
 
 v2.1: multi-database support
 
-: The log and storage configurations were changed as part of 2.1's multi-db support. 
+: The log and storage configurations were changed as part of 2.1's multi-db support.
 
   For more details on those changes, see the [Transaction Logs](config/log) and [Object Storage](config/storage) documentation.
-    
+
 </details>
 
 XTDB nodes are configured using YAML files.
 
-The two main pluggable components of XTDB are transaction logs and object storage - these can be configured in the `databases` section of the configuration file.
+All config options have default values, it is therefore valid to not specify a config file or not specify any part of the top-level config.
+
+## Log & Storage
+
+The two main pluggable components of XTDB are [transaction logs](config/log) and [object storage](config/storage).
 
 ``` yaml
-## -- optional
-
 ## transaction log configuration
-## defaults to an in-memory transaction log
 log: !Local
   path: /path/to/log-file
 
 ## object store configuration
-## defaults to an in-memory object store
 storage: !Local
   path: /path/to/storage-dir
 ```
 
-If no `databases` section is specified, XTDB will use the default configuration - an in-memory transaction log and an in-memory object store.
-
-For more details on the log and storage configurations, including the available components, see the [Transaction Logs](config/log) and [Object Storage](config/storage) documentation.
-
-## Using `!Env`
-
-For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change **location** across environments.
-Generally, they are either "paths" or "strings".
-
-When specifying a key, you can use the `!
-Env` tag to reference an environment variable.
-As an example:
-
-``` yaml
-storage: !Local
-  path: !Env XTDB_STORAGE_PATH
-```
-
-Any key that we allow the use of `!
-Env` will be documented as such.
+By default XTDB will use an [in-memory transaction log](config/log#in-memory) and an [in-memory object store](config/storage#in-memory).
 
 ## Monitoring & Observability
 
-XTDB provides a suite of tools & templates to facilitate monitoring and observability.
-See [Monitoring & Observability](config/monitoring).
+XTDB provides a suite of tools & templates to facilitate [Monitoring & Observability](config/monitoring).
+
+By default [healthz](config/monitoring#healthz-server), [monitoring](config/monitoring#metrics) & [tracing](config/monitoring#tracing) are disabled.
 
 ## Authentication
 
-The pg-wire server supports authentication which can be configured via authentication rules.
-See [Authentication](config/authentication).
+The Postgres wire-compatible server supports [authentication](config/authentication) which can be configured via authentication rules.
 
-## Other configuration:
+By default a [single root user](config/authentication#single-root-user-v22) named `xtdb` accepting any password is configured.
 
-XTDB nodes accept other optional configuration, as follows:
+## Caching
+
+XTDB has two caches for [object store](config/storage) data:
+
+```yaml
+# By default configured to use half the JVM's maximum direct memory
+memoryCache:
+  # Maximum size of the cache, in bytes.
+  # Defaults to being calculated via `maxSizeRatio`
+  maxSizeBytes: 1073741824
+
+  # Maximum size of the cache, as a proportion of the JVM's maximum direct memory.
+  # Ignored when `maxSizeBytes` is set.
+  maxSizeRatio: 0.5 # default
+
+# Required when using a remote object store, otherwise unused
+# Defaults to being disabled
+diskCache:
+  # Directory in which to store cached files. Required.
+  path: /path/to/disk-cache
+
+  # Maximum size of the cache, in bytes.
+  # Defaults to being calculated via `maxSizeRatio`
+  maxSizeBytes: 10737418240
+
+  # Maximum size of the cache, as a proportion of the filesystem's total space.
+  # Ignored when `maxSizeBytes` is set.
+  maxSizeRatio: 0.75 # default
+```
+
+## Remotes
+
+`remotes` is a registry of named connections to the external systems XTDB authenticates against — Postgres instances, Kafka clusters, cloud identities (AWS/Azure/GCP), etc.
+
+You define a connection once here under an alias, then reference it by that alias from the parts of the config that use it — the [transaction log](config/log), [object storage](config/storage), and external sources.
+
+Each entry maps an alias to a connection. The tag (`!Postgres`, `!Kafka`, ...) selects the remote type, and the available fields depend on that type:
+
+```yaml
+remotes:
+  my-kafka: !Kafka
+    bootstrapServers: "localhost:9092"
+
+# ...then referenced by alias, e.g. by a Kafka transaction log:
+log: !Kafka
+  cluster: my-kafka
+  topic: xtdb_topic
+```
+
+For the fields each remote type takes, and how a given component references its alias, see that component's documentation — e.g. [transaction log](config/log), [object storage](config/storage).
+
+## Troubleshooting configuration
+
+Config options to help an operator troubleshoot XTDB.
+
+### Read-only Databases
+
+Set all databases in the cluster to be in read-only mode.
+
+By default set to false to have [databases](/about/dbs-in-xtdb) run in their configured modes.
+
+```yaml
+## Set to true to have *all* databases run in read-only mode
+readOnlyDatabases: true
+```
+
+### Skip Databases
+
+Set the configured databases as dormant (queriable but not accepting transactions).
+
+By default an empty list or the result of splitting `!Env XTDB_SKIP_DBS` by `,`.
+
+```yaml
+skipDbs:
+  - my_db
+  - my_other_db
+```
+
+## Other configuration
+
+### Postgres wire-compatible server
+
+By default read-write Postgres wire-compatible server is started on localhost:5432.
 
 ``` yaml
 server:
@@ -89,16 +162,128 @@ server:
   # Default is -1, to not start a read-only server.
   # Set to 0 to have the server choose an available port.
   readOnlyPort: -1
+```
 
+### Flight SQL Server
+
+By default a Flight SQL server is started on localhost:9832.
+
+``` yaml
+flightSql:
+  # Host on which to start the Flight SQL server.
+  #
+  # Default is "127.0.0.1", which means the server will only accept connections on the loopback interface.
+  # Set to '*' to accept connections on all interfaces.
+  host: 127.0.0.1
+
+  # Port on which to start the FLight SQL server.
+  #
+  # Default is 0, to have the server choose an available port.
+  # (In the XTDB Docker images, this is defaulted to 9832.)
+  # Set to -1 to not start a Flight SQL server.
+  port: 0
+```
+
+### Compactor
+
+Defaults to running on roughly half the number of threads the system has processor cores.
+
+```yaml
 compactor:
   # Number of threads to use for compaction.
 
-  # Defaults to min(availableProcessors / 2, 1).
+  # Defaults to !Env XTDB_COMPACTOR_THREADS # or if that's not specified min(availableProcessors / 2, 1).
   # Set to 0 to disable the compactor.
   threads: 4
 ```
 
-## CLI tools/flags
+### Indexer
+
+Responsible for indexing transactions from the [transaction log](config/log).
+
+Please consider reaching out at hello@xtdb.com if you feel the need to change any of these!
+
+```yaml
+indexer:
+  # Set to false to disable indexing on the primary database (xtdb).
+  #
+  # Transactions are still accepted onto the log but are never processed,
+  # so synchronous submits will hang waiting for a result that never arrives.
+  # Submit with `async=true` to not hang.
+  enabled: true # default
+
+  # Number of operations the in-memory live-index buffers before reorganising them.
+  # Low-level tuning, most deployments leave this alone.
+  logLimit: 64 # default
+
+  # The maximum size of a page in the in-memory live-index.
+  # Low-level tuning, most deployments leave this alone.
+  pageLimit: 1024 # default
+
+  # Number of operations the in-memory live-index buffers before flushing to the object store.
+  # Low-level tuning, most deployments leave this alone.
+  rowsPerBlock: 102400 # default
+
+  # ISO-8601 duration after which the current block is finished even if it
+  # hasn't reached `rowsPerBlock`
+  flushDuration: PT4H # default
+
+  # Transaction ids to skip during indexing
+  # Useful to work around a transaction that crashes the indexer.
+  #
+  # Applies to *all* databases on the node.
+  #
+  # Defaults to the `XTDB_SKIP_TXS` environment variable (a comma-separated list
+  # of transaction ids, e.g. "12,15,16") if set, otherwise empty.
+  skipTxs: []
+```
+
+### Garbage Collector
+
+Reclaims object-store space by deleting files left behind once compaction has superseded them.
+
+Disabled by default.
+
+```yaml
+garbageCollector:
+  # Set to true to enable garbage collection
+  enabled: false # default
+
+  # Number of recent blocks to retain
+  blocksToKeep: 10 # default
+
+  # ISO-8601 duration for which superseded trie files are retained
+  garbageLifetime: PT24H # default
+```
+
+### Node ID
+
+An identifier for the node. For example, used in [metrics](config/monitoring#metrics) and crash logging.
+
+Defaults to `!Env XTDB_NODE_ID` otherwise is a short random string.
+
+### Default TZ
+
+Defaults to UTC.
+
+## Additional Concepts
+
+### Using `!Env`
+
+For certain keys, we allow the use of environment variables - typically, the keys where we allow this are things that may change **location** across environments.
+Generally, they are either "paths" or "strings".
+
+When specifying a key, you can use the `!Env` tag to reference an environment variable.
+As an example:
+
+``` yaml
+storage: !Local
+  path: !Env XTDB_STORAGE_PATH
+```
+
+Any key that we allow the use of `!Env` will be documented as such.
+
+### CLI tools/flags
 
 <details>
 <summary>Changelog (last updated v2.1)</summary>

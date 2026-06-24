@@ -19,6 +19,12 @@ v2.2: single-writer support — two topics per database
   - If multiple XTDB deployments share a Kafka cluster, set `transactionalIdPrefix` on each deployment's `!Kafka` cluster config — otherwise their leaders will fence each other across deployment boundaries.
   - ACL-restricted topics now need `Describe` / `Read` / `Write` on both the source and replica topics, plus transactional-producer permissions (see [Setup](#setup)).
 
+v2.2: `logClusters` renamed to `remotes`
+
+: The Kafka cluster is now declared under [`remotes`](/ops/config#remotes) rather than `logClusters`.
+
+  `logClusters` is deprecated but still honoured, so existing config keeps working — rename to `remotes` when convenient.
+
 v2.1: multi-database support
 
 : As part of multi-database support, `logClusters` were extracted in v2.1.
@@ -97,9 +103,9 @@ See ['Database architecture'](/about/dbs-in-xtdb#database-architecture) for the 
 To use the Kafka module, include the following in your node configuration:
 
 ``` yaml
-## We first declare the Kafka log cluster:
+## We first declare the Kafka cluster under `remotes`:
 
-logClusters:
+remotes:
   # You can define multiple Kafka clusters here, and refer to them by name in the log configuration.
   # Here we define a single Kafka cluster named "kafkaCluster".
   kafkaCluster: !Kafka
@@ -168,7 +174,7 @@ The following piece of node configuration demonstrates the following common use 
 - Configuration values are being passed in as environment variables.
 
 ``` yaml
-logClusters:
+remotes:
   kafkaCluster: !Kafka
     bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
     propertiesMap:
@@ -177,6 +183,7 @@ logClusters:
       sasl.jaas.config: !Env KAFKA_SASL_JAAS_CONFIG
 
 log: !Kafka
+  cluster: kafkaCluster
   topic: !Env XTDB_LOG_TOPIC
   autoCreateTopic: false
 ```
@@ -213,7 +220,7 @@ If you run multiple XTDB deployments against the same Kafka cluster (e.g. stagin
 Set `transactionalIdPrefix` on each deployment's cluster config to disambiguate:
 
 ``` yaml
-logClusters:
+remotes:
   kafkaCluster: !Kafka
     bootstrapServers: "localhost:9092"
     transactionalIdPrefix: "prod"   # → "prod-xtdb-leader", etc.

@@ -264,9 +264,25 @@ To use Azure Blob Storage as the object store, the following infrastructure is r
 
 ### Authentication
 
-XTDB uses the Azure SDK for authentication, relying on the `DefaultAzureCredential`.
-This supports multiple authentication methods, including Managed Identity.
+By default, XTDB authenticates using the Azure SDK's `DefaultAzureCredential`, which supports multiple methods including Managed Identity.
 For more details, refer to the [Azure Documentation](https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable).
+
+Alternatively, you can authenticate with a **storage-account key** or **connection string** (v2.2+).
+Declare an `!AzureBlob` [remote](/ops/config#remotes) holding the credential, then reference it from the object store with `remote:`:
+
+```yaml
+remotes:
+  my-azure: !AzureBlob
+    # supply one of:
+    storageAccountKey: !Env AZURE_STORAGE_ACCOUNT_KEY
+    # connectionString: !Env AZURE_STORAGE_CONNECTION_STRING
+
+storage: !Remote
+  objectStore: !Azure
+    storageAccount: storage-account
+    container: xtdb-container
+    remote: my-azure
+```
 
 ### Configuration
 
