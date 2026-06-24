@@ -28,6 +28,7 @@ import xtdb.database.DatabaseState
 import xtdb.error.Fault
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
+import xtdb.util.closeAll
 import java.time.Instant
 
 private fun txKeyAt(txId: Long) = TransactionKey(txId, Instant.EPOCH)
@@ -44,6 +45,10 @@ class FollowerLogProcessorTest {
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var dbState: DatabaseState
     private lateinit var replicaLog: Log<ReplicaMessage>
+
+    // runTest cancels and joins backgroundScope before tearDown, so the followers are quiescent here
+    // and freed before `allocator` closes.
+    private val followersToClose = mutableListOf<AutoCloseable>()
 
     @BeforeEach
     fun setUp() {
@@ -67,6 +72,7 @@ class FollowerLogProcessorTest {
 
     @AfterEach
     fun tearDown() {
+        followersToClose.closeAll()
         allocator.close()
     }
 
@@ -81,7 +87,7 @@ class FollowerLogProcessorTest {
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
-        )
+        ).also(followersToClose::add)
 
     private fun <M> record(offset: Long, message: M) =
         Log.Record(0, offset, Instant.now(), message)

@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
@@ -25,7 +26,6 @@ import xtdb.table.TableRef
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
 import xtdb.util.error
-import xtdb.util.launchWithCleanup
 import xtdb.util.logger
 import xtdb.util.trace
 
@@ -277,11 +277,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
     }
 
     // Launched last so every field the tail touches is initialised before the first record.
-    // See dev/doc/coroutines.adoc / #5703 for why this uses launchWithCleanup rather than
-    // invokeOnCompletion. `allocator` is `this@…`-qualified: bare `allocator` in a launch lambda
-    // binds the ctor param.
     init {
-        scope.launchWithCleanup(cleanup = { this@FollowerLogProcessor.allocator.close() }) {
+        scope.launch {
             try {
                 replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
             } catch (e: CancellationException) {
@@ -290,5 +287,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 notifyError(e); throw e
             }
         }
+    }
+
+    override fun close() {
+        allocator.close()
     }
 }

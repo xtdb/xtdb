@@ -131,13 +131,9 @@ class Database(
 
     override fun close() {
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        runBlocking {
-            // One cancel for the whole job tree: the compactor, the source-log subscription and the
-            // live leader/follower term all run under `job`, so cancelling and joining it stops them
-            // and waits for their `launchWithCleanup` frees (driver, allocator, replica producer, ext
-            // source) before `closeAll` frees the database allocator below.
-            job?.cancelAndJoin()
-        }
+        // Everything runs under `job`, so one cancel stops the tree; then free, children before the
+        // database allocator.
+        runBlocking { job?.cancelAndJoin() }
         (partitions.values + listOf(storage, allocator)).closeAll()
     }
 
@@ -266,20 +262,26 @@ class Database(
 
             val job = Job()
 
-            // A child of the database `job`, so `close()`'s single `job.cancelAndJoin()` stops the
-            // compactor and frees its driver (via the compactor's `launchWithCleanup`) before the
-            // database allocator closes. Also registered with safelyOpening so a failure later in
-            // `open` cancels the loop — it runs against the driver, which safelyOpening would
-            // otherwise free out from under it.
+            // Child of the database `job`; `close`'s single `job.cancelAndJoin()` stops and joins it
+            // along with the rest of the tree.
             val compactorScope = CoroutineScope(Job(job))
-            open {
-                AutoCloseable {
-                    runBlocking { compactorScope.coroutineContext.job.cancelAndJoin() }
-                }
-            }
+
+            // For open-failure unwinding, each coroutine-owning resource registers a closeable that
+            // cancel-joins its scope then frees it. Per-resource (rather than one global cancel
+            // registered last) so a failure *between* resources can't leave safelyOpening freeing a
+            // child allocator while its loop is still live. safelyOpening unwinds last-registered-
+            // first, so these run before the plain allocator/storage/state closes — children first.
             val compactorForDb =
-                if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
-                else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers)
+                (if (readOnly) Compactor.NOOP.openForDatabase(compactorScope, allocator, storage, state, watchers)
+                else compactor.openForDatabase(compactorScope, allocator, storage, state, watchers))
+                    .also { forDb ->
+                        open {
+                            AutoCloseable {
+                                runBlocking { compactorScope.coroutineContext.job.cancelAndJoin() }
+                                forDb.close()
+                            }
+                        }
+                    }
 
             val scope = CoroutineScope(job + CoroutineExceptionHandler { _, e ->
                 watchers.notifyError(e)
@@ -301,8 +303,7 @@ class Database(
                         meterRegistry = base.meterRegistry,
                     )
 
-                    // The leader term owns its replica producer and ext source; both are freed by
-                    // LeaderLogProcessor's `launchWithCleanup` cleanup when `termScope` is cancelled.
+                    // The leader term owns (and frees) its replica producer and ext source.
                     override fun openLeader(
                         termScope: CoroutineScope,
                         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -333,6 +334,10 @@ class Database(
                 }
 
                 LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
+                    .also { lp ->
+                        // job.cancelAndJoin joins the term *and* the source-log subscription below.
+                        open { AutoCloseable { runBlocking { job.cancelAndJoin() }; lp.close() } }
+                    }
             } else null
 
             val meterRegistry = base.meterRegistry

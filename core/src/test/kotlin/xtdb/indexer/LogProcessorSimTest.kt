@@ -95,7 +95,7 @@ class LogProcessorSimTest : SimulationTestBase() {
      * driver against a stale `TxIndexer` reference) is what keeps the leader's allocator
      * accounting clean across rebalances: `indexTx` allocates an `OpenTx` from the
      * leader's allocator; if the leader term's scope were cancelled while that `OpenTx` is
-     * still live, the leader's cleanup `allocator.close()` would throw on the
+     * still live, the leader's `allocator.close()` would throw on the
      * outstanding allocation. Holding the call inside `onPartitionAssigned` ties its lifetime
      * to the leader's scope — cancelling that scope propagates cancellation through `indexTx`'s
      * inner catch, which closes the `OpenTx` before the allocator does.
@@ -204,10 +204,14 @@ class LogProcessorSimTest : SimulationTestBase() {
                 hasExternalSource = true,
             )
 
+        private var logProcessor: LogProcessor? = null
+
         fun openLogProcessor(scope: CoroutineScope) =
             LogProcessor(this, dbStorage, dbState, watchers, blockUploader, scope)
+                .also { logProcessor = it }
 
         override fun close() {
+            logProcessor?.close()
             dbState.close()
         }
     }

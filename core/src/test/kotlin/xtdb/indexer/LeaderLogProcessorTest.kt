@@ -32,6 +32,7 @@ import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.trie.TrieCatalog
+import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 
@@ -39,6 +40,10 @@ class LeaderLogProcessorTest {
 
     private lateinit var nodeBase: NodeBase
     private lateinit var allocator: BufferAllocator
+
+    // runTest cancels and joins backgroundScope before tearDown, so the leaders are quiescent here
+    // and freed before `allocator` closes.
+    private val leadersToClose = mutableListOf<AutoCloseable>()
 
     @BeforeEach
     fun setUp() {
@@ -48,6 +53,7 @@ class LeaderLogProcessorTest {
 
     @AfterEach
     fun tearDown() {
+        leadersToClose.closeAll()
         allocator.close()
         nodeBase.close()
     }
@@ -76,7 +82,7 @@ class LeaderLogProcessorTest {
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
             scope = backgroundScope,
-        )
+        ).also(leadersToClose::add)
     }
 
     @Test
@@ -132,7 +138,7 @@ class LeaderLogProcessorTest {
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
             scope = backgroundScope,
-        )
+        ).also(leadersToClose::add)
 
         val now = Instant.now()
         lp.processRecords(listOf(
@@ -199,7 +205,7 @@ class LeaderLogProcessorTest {
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
             scope = backgroundScope,
-        )
+        ).also(leadersToClose::add)
 
         val now = Instant.now()
         lp.processRecords(listOf(

@@ -50,7 +50,7 @@ interface Compactor : AutoCloseable {
         fun create(meterRegistry: MeterRegistry?, threads: Int): Compactor
     }
 
-    interface ForDatabase {
+    interface ForDatabase : AutoCloseable {
         fun signalBlock()
         suspend fun compactAll()
 
@@ -196,19 +196,7 @@ interface Compactor : AutoCloseable {
             }
 
             init {
-                // Cancelling the owner scope stops the loop and its per-job coroutines, then frees
-                // the driver's resources (child allocator + SegmentMerge temp dir) — leaf-first:
-                // `supervisorScope` doesn't return until every in-flight job's `.use` has released
-                // its buffers, so no buffer outlives its allocator, and the cleanup gates the
-                // owner's `cancelAndJoin` (see dev/doc/coroutines.adoc / #5703 for why this is
-                // launchWithCleanup rather than invokeOnCompletion).
-                scope.launchWithCleanup(
-                    dispatcher + CoroutineName("outer loop"),
-                    cleanup = {
-                        driver.close()
-                        LOGGER.debug("compactor closed")
-                    }
-                ) {
+                scope.launch(dispatcher + CoroutineName("outer loop")) {
                     // supervisorScope so a failed job doesn't cancel the loop or its sibling jobs.
                     supervisorScope {
                         while (true) {
@@ -283,6 +271,11 @@ interface Compactor : AutoCloseable {
                 // catalog, so refresh the snap here rather than at every test/dev call-site.
                 liveIndex?.refreshSnap()
             }
+
+            override fun close() {
+                driver.close()
+                LOGGER.debug("compactor closed")
+            }
         }
     }
 
@@ -294,6 +287,7 @@ interface Compactor : AutoCloseable {
             override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override suspend fun compactAll() = Unit
+                override fun close() = Unit
             }
 
             override fun close() = Unit

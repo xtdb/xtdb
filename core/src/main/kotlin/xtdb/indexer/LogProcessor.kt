@@ -28,9 +28,9 @@ class LogProcessor(
     private val blockUploader: BlockUploader,
     private val scope: CoroutineScope,
     meterRegistry: MeterRegistry? = null,
-) : Log.SubscriptionListener<SourceMessage> {
+) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
-    interface Processor<M> : Log.RecordProcessor<M> {
+    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
         val latestReplicaMsgId: MessageId
     }
 
@@ -39,8 +39,8 @@ class LogProcessor(
     }
 
     // State, not a Service: driven synchronously through the transition, no loop of its own — so
-    // it's a plain AutoCloseable, torn down via `use` rather than a scope cancel.
-    interface TransitionProcessor : Processor<ReplicaMessage>, AutoCloseable
+    // it has no term scope to cancel, just `use` it.
+    interface TransitionProcessor : Processor<ReplicaMessage>
 
     interface FollowerProcessor : Processor<ReplicaMessage> {
         val pendingBlock: PendingBlock?
@@ -70,16 +70,16 @@ class LogProcessor(
         ): FollowerProcessor
     }
 
-    // The running term: the role-specific subsystem and the SupervisorJob its processor runs under (a
-    // child of the database scope). `sys` holds it as one atomically-swapped value — a job-less term
-    // is unrepresentable. Cancelling the job tears the term down; structured concurrency joins the
-    // term's coroutines and each processor frees what it opened via its own `launchWithCleanup`.
-    private sealed class SubSystem(private val job: Job) {
+    // The running term: processor + the SupervisorJob its coroutines run under, held as one
+    // atomically-swapped value so a job-less or unfreeable term is unrepresentable. `close` MUST
+    // follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
+    private sealed class SubSystem(private val job: Job, private val closeable: AutoCloseable) : AutoCloseable {
         suspend fun cancelAndJoin() = job.cancelAndJoin()
+        override fun close() = closeable.close()
     }
 
-    private class LeaderSystem(val proc: LeaderProcessor, job: Job) : SubSystem(job)
-    private class FollowerSystem(val proc: FollowerProcessor, job: Job) : SubSystem(job)
+    private class LeaderSystem(val proc: LeaderProcessor, job: Job) : SubSystem(job, proc)
+    private class FollowerSystem(val proc: FollowerProcessor, job: Job) : SubSystem(job, proc)
 
     // Open a fresh term: a SupervisorJob child of the database scope — so one role's failure surfaces
     // via `notifyError` rather than cancelling the source-log subscription (its sibling) — and the
@@ -147,6 +147,7 @@ class LogProcessor(
                         followerProc.awaitReplicaMsgId(replayTarget)
                         LOG.debug("[$dbName] transition: closing follower system")
                         oldSys.cancelAndJoin()
+                        oldSys.close()
 
                         val pendingBlock = followerProc.pendingBlock
 
@@ -189,9 +190,11 @@ class LogProcessor(
         when (val oldSys = sys) {
             is LeaderSystem -> {
                 LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
-                // Cancel first: Kafka guarantees no concurrent processing during rebalance, and the
-                // leader's watermark fields stay readable after the cancel — they're not allocator-backed.
+                // Cancel first: Kafka guarantees no concurrent processing during rebalance. The
+                // leader's watermark fields stay readable after the cancel/close — they're not
+                // allocator-backed — so we free the old term before reading them to seed the follower.
                 oldSys.cancelAndJoin()
+                oldSys.close()
                 val proc = oldSys.proc
                 this.sys = openFollowerSystem(proc.latestReplicaMsgId, proc.pendingBlock)
             }
@@ -201,6 +204,8 @@ class LogProcessor(
             }
         }
     }
+
+    override fun close() = sys.close()
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for

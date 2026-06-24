@@ -28,6 +28,7 @@ import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
+import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
@@ -39,6 +40,9 @@ class ExternalSourceTest {
     private lateinit var nodeBase: NodeBase
     private lateinit var bufferPool: MemoryStorage
     private lateinit var liveIndex: LiveIndex
+
+    // runTest cancels and joins backgroundScope before tearDown, so the leaders are quiescent here.
+    private val leadersToClose = mutableListOf<AutoCloseable>()
 
     @BeforeEach
     fun setUp() {
@@ -54,6 +58,7 @@ class ExternalSourceTest {
 
     @AfterEach
     fun tearDown() {
+        leadersToClose.closeAll()
         liveIndex.close()
         bufferPool.close()
         nodeBase.close()
@@ -85,9 +90,8 @@ class ExternalSourceTest {
         }
     }
 
-    // The leader is launched into `backgroundScope`, which runTest cancels at the end of the test —
-    // that cancel is the teardown: it stops the persister and ext-source loop and, once they've
-    // joined, the leader's `launchWithCleanup` cleanup frees its allocator and replica producer.
+    // The leader is launched into `backgroundScope`, which runTest cancels and joins at end of test;
+    // tearDown then frees the leader's allocator and replica producer.
     private fun TestScope.leaderProc(
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -112,7 +116,7 @@ class ExternalSourceTest {
             dbState, blockUploader, watchers, extSource, replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1, scope = backgroundScope
-        )
+        ).also(leadersToClose::add)
     }
 
     @Test

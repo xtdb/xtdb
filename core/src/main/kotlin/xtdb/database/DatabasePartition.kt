@@ -27,9 +27,9 @@ class DatabasePartition(
 
     fun openSnapshot(): Snapshot = state.liveIndex.openSnapshot()
 
-    // The compactor is no longer closed here — its driver is freed when the compactor job
-    // completes (cancelled via the Database's compactorScope), not by an AutoCloseable call.
     override fun close() {
+        logProcessor?.close()
+        compactorOrNull?.close()
         state.close()
     }
 }

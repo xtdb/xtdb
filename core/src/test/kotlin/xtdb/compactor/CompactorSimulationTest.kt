@@ -326,25 +326,29 @@ class CompactorSimulationTest : SimulationTestBase() {
     }
 
 
-    // Open the compactor on a scope and tear it down by cancelling that scope — the driver's
-    // resources are freed when the compactor job completes (the job tree), not via a close() call.
+    // Open the compactor on a scope and tear it down: cancel+join the scope, then close the
+    // ForDatabase to free the driver.
     private fun MockDb.withCompactor(block: (Compactor.ForDatabase) -> Unit) {
         val scope = CoroutineScope(dispatcher)
+        val forDb = compactor.openForDatabase(scope, allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
         try {
-            block(compactor.openForDatabase(scope, allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1)))
+            block(forDb)
         } finally {
             runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+            forDb.close()
         }
     }
 
     private fun withCompactors(dbs: List<MockDb>, block: (List<Compactor.ForDatabase>) -> Unit) {
         val scopes = dbs.map { CoroutineScope(dispatcher) }
+        val forDbs = dbs.zip(scopes).map { (db, scope) ->
+            db.compactor.openForDatabase(scope, allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+        }
         try {
-            block(dbs.zip(scopes).map { (db, scope) ->
-                db.compactor.openForDatabase(scope, allocator, db.dbStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
-            })
+            block(forDbs)
         } finally {
             runBlocking { scopes.forEach { it.coroutineContext.job.cancelAndJoin() } }
+            forDbs.forEach { it.close() }
         }
     }
 

@@ -292,15 +292,8 @@ class LeaderLogProcessor(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    // Hosts persister + the optional ext-source loop + cleanup. See dev/doc/coroutines.adoc /
-    // #5703 for why this uses launchWithCleanup rather than invokeOnCompletion.
-    private val termJob: Job = scope.launchWithCleanup(
-        cleanup = {
-            extSource?.close()
-            replicaProducer.close()
-            this@LeaderLogProcessor.allocator.close()
-        }
-    ) {
+    // Hosts the persister + the optional ext-source loop.
+    private val termJob: Job = scope.launch {
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
             // Persister: unbiased select across source-log records, external-source resolved
@@ -599,4 +592,9 @@ class LeaderLogProcessor(
         }
     }
 
+    override fun close() {
+        extSource?.close()
+        replicaProducer.close()
+        allocator.close() // last: Arrow won't close it while a child buffer is live
+    }
 }

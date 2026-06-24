@@ -7,62 +7,63 @@ We are on kotlinx-coroutines `1.10.2`; source links point there.
 
 == Patterns
 
-=== `launchWithCleanup` for cleanup that gates parent close
+=== Two-phase teardown
 
-For "do work, then close some things, and make sure a parent's `cancelAndJoin` waits for the close," use `xtdb.util.launchWithCleanup`.
+A long-running unit (a leader/follower indexer term, the compactor) owns standing resources — a child allocator, and for the leader its replica producer and ext source — that were acquired *before* its coroutines launched and must be freed *after* they stop.
 
-[source,kotlin]
-----
-scope.launchWithCleanup(
-    cleanup = {
-        extSource?.close()
-        replicaProducer.close()
-        allocator.close()
-    }
-) {
-    supervisorScope {
-        launch { runPersister() }
-        launch { runExt() }
-    }
-}
-----
+The shape is symmetric with construction: resources owned from a unit's instantiation (created there, or handed to it) are freed at the unit's `close()`; resources a coroutine creates *during* the job are freed in that job's own `finally`/`use`.
+The unit's lifetime, not the job's, is what owns the standing resources — so we don't make the job's end the unit's end.
 
-The helper's kdoc states the lifecycle contract it gives you, and when *not* to use it (resources the coroutine acquires itself belong in the body, under `.use`/`try/finally`, with a plain `launch`).
-In-tree users: `LeaderLogProcessor`, `FollowerLogProcessor`, `Compactor`.
+We tear these down in two explicit phases:
 
-Most reaches for `Job.invokeOnCompletion` to close resources should be this helper instead — see the gotchas below.
+Phase 1 (stop)::
+Cancel-and-join the unit's Job.
+At the database level this is a single `job.cancelAndJoin()` over the whole tree (every term, the compactor and the source-log subscription run under that one `job`); at the term level it is a scoped cancel of just that term's `SupervisorJob` (used on Kafka rebalance).
 
-When the body hosts further workers (its own `launch`es), wrap them in `supervisorScope`/`coroutineScope` rather than launching them as plain siblings: the scope builder doesn't return until every child has completed, so the `finally` — and with it the cleanup — runs strictly after the workers have released what they hold.
-Unfenced workers would be children of the hosting Job, not of the body statement — the cleanup would race them.
+Phase 2 (free)::
+Call a synchronous `AutoCloseable.close()` on each unit, freeing its standing resources in allocator-parentage order — children before parents, which Arrow requires.
 
-.Considered, deferred — wrapping the body in `coroutineScope`
-[NOTE]
-====
-The fencing obligation above could be made structural instead of documented, by the helper wrapping the body itself:
+The ordering contract is the whole point: Phase 2 runs *after* Phase 1 has joined, so it executes with no live coroutine touching those resources.
+Closing is then plain synchronous code — no `NonCancellable`, no cleanup welded onto a Job, no race against the parent's join.
+
+`Database.close()` is the canonical shape:
 
 [source,kotlin]
 ----
-try {
-    ensureActive()
-    coroutineScope(body)   // body's launches attach to the block's own Job
-} finally {
-    withContext(NonCancellable) { cleanup() }
-}
+runBlocking { job?.cancelAndJoin() }                          // Phase 1: stop + join the whole tree
+(partitions.values + listOf(storage, allocator)).closeAll()  // Phase 2: free, children before db allocator
 ----
 
-`coroutineScope` doesn't return until every child completes, so "cleanup runs after all body-launched workers" holds by construction — the unfenced state stops being representable.
-A body wanting failure isolation between its workers writes `supervisorScope` inside, as `LeaderLogProcessor` already does; the extra Job per scope builder is not a factor (one allocation, started undispatched, no thread hop).
+Each `DatabasePartition.close()` in that `closeAll()` frees its term (`LogProcessor.close()` → the live term's processor) and compactor (`Compactor.ForDatabase.close()` → the driver) child allocators before the database allocator closes last.
 
-Deferred until more worker-hosting callers exist, to confirm the fencing default from observed usage rather than one caller's shape.
-====
+The same split is mirrored on the open-failure path: in `Database.open`, each coroutine-owning resource registers a `safelyOpening` closeable that cancel-joins its own scope and then frees it, so a mid-open throw tears each resource down two-phase — never freeing a child allocator while its loop is still live.
+Per-resource rather than one global cancel, so a failure *between* resources can't leave a launched loop uncancelled while its allocator is freed.
 
-== Gotchas
+Implementation rules that keep this safe:
+
+* A unit's `close()` MUST be called only after its Job has been cancelled and joined.
+  State this as a precondition on the method; it runs no cancellation itself.
+* `close()` MUST stay non-suspend, so a rebalance callback that closes a term mid-flight completes within the joined coroutine frame rather than suspending.
+* Standing resources are acquired before the loop and freed by `close()`.
+  Resources a coroutine acquires *itself* mid-flight still belong in `.use`/`try-finally` inside the body — they are not standing resources and are not Phase 2's concern.
+* A term is modelled as `(job, closeable)` (`LogProcessor.SubSystem`) so that a job-less or unfreeable term is unrepresentable.
+
+=== Accepted behaviour: resources of a self-crashed unit are freed lazily
+
+Because freeing rides on the explicit teardown (rebalance or db close) rather than on Job completion, a unit that *crashes internally with no following rebalance* holds its resources until the next lifecycle event — a rebalance (which cancel-then-closes the old term) or database close.
+This is by design.
+A self-crashed term has already poisoned `watchers` via `notifyError`, so the node is in an error state headed for shutdown; the window is "until close", not a leak; and wiring crash → close would re-introduce the completion-driven free path this model deliberately removes (see the gotchas below for why that path is hazardous).
+
+== Gotchas — why cleanup no longer rides on Job completion
+
+These were the failure modes of welding resource cleanup onto a Job's completion (the now-removed `launchWithCleanup` helper, and `invokeOnCompletion`).
+Both vanish under two-phase teardown, because Phase 2 runs with no live coroutines — but the reasoning is worth keeping, since the temptation to free a resource "when the coroutine finishes" recurs.
 
 === A cancel before first dispatch skips the coroutine body entirely
 
 With `CoroutineStart.DEFAULT`, a coroutine cancelled before its first dispatch never executes its block — including any `try/finally` inside it.
 Cleanup hung on a `finally` therefore silently doesn't run if the scope is cancelled in the window between `launch` returning and the dispatcher first running the coroutine — leaking anything acquired before the launch (allocators, drivers) that the cleanup was meant to free.
-`launchWithCleanup` starts its coroutine with `CoroutineStart.ATOMIC` (stable since kotlinx-coroutines 1.9) to close this window, but only so the `try/finally` is entered: an `ensureActive()` ahead of the body keeps default-start semantics for the body itself, so user code still doesn't run when cancellation has already landed.
+Phase 2 sidesteps this entirely: the free is unconditional sequential code keyed off the unit existing, not off its coroutine having run.
 
 === `invokeOnCompletion` is not a fence over `cancelAndJoin`
 
@@ -87,7 +88,7 @@ private tailrec fun tryWaitForChild(state: Finishing, child: ChildHandleNode, ..
 <2> Child already final — the parent skips it without registering a wait.
 
 So if your `invokeOnCompletion` handler does any non-trivial work — slow I/O, multiple `.close()` calls — that work can race the parent's `cancelAndJoin` returning and whatever happens next.
-For cleanup that needs to gate a parent's close, put it in the coroutine body's `try/finally` instead (or use `launchWithCleanup`).
+Under two-phase teardown the free isn't a completion handler at all: the parent joins first (Phase 1), then frees synchronously (Phase 2), so there is nothing to race.
 
 Background: this was the root cause of link:https://github.com/xtdb/xtdb/issues/5703[#5703].
 

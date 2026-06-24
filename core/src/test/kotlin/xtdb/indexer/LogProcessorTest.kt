@@ -121,8 +121,9 @@ class LogProcessorTest {
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -145,8 +146,9 @@ class LogProcessorTest {
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
-        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -182,8 +184,9 @@ class LogProcessorTest {
 
         verify { liveIndex.importTx(any()) }
 
-        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
@@ -216,8 +219,9 @@ class LogProcessorTest {
 
         verify { liveIndex.importTx(any()) }
 
-        // Teardown is the owner cancelling its own scope — reaps the subscription and the live term.
+        // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
         sourceLog.close()
         replicaLog.close()
     }
