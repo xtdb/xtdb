@@ -5,6 +5,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -356,6 +357,43 @@ class KafkaClusterTest {
 
         override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
             revokedPartitions.add(partitions)
+        }
+    }
+
+    // The processor blocks in processRecords, standing in for a leader term's persister that never
+    // drains — the real #5711 deadlock. runBlocking (not runTest) keeps the timeout real.
+    @Test
+    fun `subscription teardown completes when the poll loop is blocked in processRecords`() = runBlocking {
+        val topic = "test-blocked-delivery-${UUID.randomUUID()}"
+        withClusterAndLogs(listOf(topic)) { _, logs ->
+            val log = logs.single()
+            val assigned = CompletableDeferred<Unit>()
+            val deliveryStarted = CompletableDeferred<Unit>()
+
+            val listener = object : SubscriptionListener<SourceMessage> {
+                private val processor = RecordProcessor<SourceMessage> {
+                    deliveryStarted.complete(Unit)
+                    awaitCancellation()
+                }
+
+                override suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<SourceMessage> {
+                    assigned.complete(Unit)
+                    return TailSpec(-1L, processor)
+                }
+
+                override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+            }
+
+            val subJob = launch { log.openGroupSubscription(listener) }
+            assigned.await()
+            log.appendMessage(txMessage(1))
+            deliveryStarted.await()
+
+            subJob.cancel()
+            assertNotNull(
+                withTimeoutOrNull(10.seconds) { subJob.join() },
+                "teardown deadlocked: poll loop blocked in processRecords, unregister waits on it (#5711)",
+            )
         }
     }
 
