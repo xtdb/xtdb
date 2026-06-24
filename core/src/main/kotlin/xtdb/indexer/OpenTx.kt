@@ -257,7 +257,7 @@ class OpenTx(
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
-                                    table(stmt.table).writePuts(rel, 0, MAX_LONG)
+                                    table(stmt.table).writePuts(rel, currentTimeMicros, MAX_LONG)
                             }
                         }
                     }
@@ -268,7 +268,7 @@ class OpenTx(
                         query.openQuery(args, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
-                                    table(stmt.table).writeDeletes(rel, 0, MAX_LONG)
+                                    table(stmt.table).writeDeletes(rel, currentTimeMicros, MAX_LONG)
                             }
                         }
                     }
@@ -427,7 +427,7 @@ class OpenTx(
         @Suppress("IfThenToElvis") // because I wasn't sure that Elvis doesn't box primitives
         fun writeValidTimes(validFrom: Instant? = null, validTo: Instant? = null) =
             writeValidTimeMicros(
-                if (validFrom != null) validFrom.asMicros else MIN_LONG,
+                if (validFrom != null) validFrom.asMicros else systemTimeMicros,
                 if (validTo != null) validTo.asMicros else MAX_LONG
             )
 
@@ -462,7 +462,9 @@ class OpenTx(
          * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
          * temporal columns; otherwise per-row.
          */
-        fun writePuts(rel: RelationReader, defaultValidFromMicros: Long, defaultValidToMicros: Long) {
+        fun writePuts(
+            rel: RelationReader, defaultValidFromMicros: Long = systemTimeMicros, defaultValidToMicros: Long = MAX_LONG
+        ) {
             val rowCount = rel.rowCount
             if (rowCount == 0) return
 
@@ -521,7 +523,9 @@ class OpenTx(
          * Rejects zero-width or inverted ranges — one check over the defaults if the rel has no per-row
          * temporal columns; otherwise per-row.
          */
-        fun writeDeletes(rel: RelationReader, defaultValidFromMicros: Long, defaultValidToMicros: Long) {
+        fun writeDeletes(
+            rel: RelationReader, defaultValidFromMicros: Long = systemTimeMicros, defaultValidToMicros: Long = MAX_LONG
+        ) {
             val rowCount = rel.rowCount
             if (rowCount == 0) return
 
@@ -624,7 +628,7 @@ class OpenTx(
          */
         @JvmOverloads
         fun patchDocs(docs: RelationReader, validFrom: Instant? = null, validTo: Instant? = null) =
-            patchDocs(docs, validFrom?.asMicros ?: MIN_LONG, validTo?.asMicros ?: MAX_LONG)
+            patchDocs(docs, validFrom?.asMicros ?: systemTimeMicros, validTo?.asMicros ?: MAX_LONG)
 
         internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
