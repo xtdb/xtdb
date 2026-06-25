@@ -206,7 +206,7 @@ ATTACH DATABASE new_db WITH $$
               :message "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, storage" ,
               :detail #xt/error [:incorrect :xtdb/invalid-database-config
                                  "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, storage"
-                                 {:sql "ATTACH DATABASE new_db WITH $$ somethingElse: $$ "}]},
+                                 {:sql "ATTACH DATABASE new_db WITH $$ somethingElse: $$"}]},
 
              (pgw-test/reading-ex
               (jdbc/execute! node ["ATTACH DATABASE new_db WITH $$ somethingElse: $$ "]))))))

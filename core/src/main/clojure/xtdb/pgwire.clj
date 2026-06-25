@@ -37,10 +37,8 @@
            [java.time Clock Duration ZoneId]
            [java.util.concurrent ExecutorService Executors Future$State FutureTask TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
-           (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext SqlVisitor)
            (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
@@ -52,7 +50,10 @@
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
-           (xtdb.query PreparedQuery QueryOpts)
+           (xtdb.query PreparedQuery QueryOpts SqlParser
+                       ParsedStatement ParsedStatement$Visitor ParsedStatement$TxOptions
+                       ParsedStatement$Query ParsedStatement$Dml ParsedStatement$ShowVariable
+                       ParsedStatement$CopyIn ParsedStatement$Execute)
            (xtdb.tx PutDocs PutRel Sql TxOpts)))
 
 ;; references
@@ -660,11 +661,11 @@
     (cmd-send-row-description conn pg-cols)
     (pgio/cmd-write-msg conn pgio/msg-no-data)))
 
-(defn cmd-send-parameter-description [conn {:keys [statement-type param-oids]}]
+(defn cmd-send-parameter-description [conn {:keys [parsed param-oids]}]
   (log/trace "sending parameter description - " {:param-oids param-oids})
   (pgio/cmd-write-msg conn pgio/msg-parameter-description
-                      {:parameter-oids (case statement-type
-                                         :show-variable []
+                      {:parameter-oids (if (instance? ParsedStatement$ShowVariable parsed)
+                                         []
                                          (vec (for [^long param-oid param-oids]
                                                 (if (zero? param-oid)
                                                   (.getOid PgType/PG_TEXT)
@@ -680,7 +681,7 @@
                  :portal :portals
                  :prepared-stmt :prepared-statements
                  (Object.))
-        {:keys [statement-type canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
+        {:keys [parsed canned-response] :as describe-target} (get-in @conn-state [coll-k describe-name])]
 
     (letfn [(describe* [{:keys [pg-cols] :as describe-target}]
               (when (= :prepared-stmt describe-type)
@@ -690,15 +691,23 @@
                 (cmd-send-row-description conn pg-cols)
                 (pgio/cmd-write-msg conn pgio/msg-no-data)))]
 
-      (case statement-type
-        :canned-response (cmd-describe-canned-response conn canned-response)
-        (:begin :query :dml :show-variable) (describe* describe-target)
+      (cond
+        canned-response (cmd-describe-canned-response conn canned-response)
 
-        :execute (let [inner (get-in @conn-state [:prepared-statements (:statement-name describe-target)])]
-                   (describe* {:param-oids (:param-oids describe-target)
-                               :pg-cols (:pg-cols inner)}))
+        parsed
+        (.accept parsed
+                 (reify ParsedStatement$Visitor
+                   (visitQuery [_ _] (describe* describe-target))
+                   (visitShowVariable [_ _] (describe* describe-target))
+                   (visitDml [_ _] (describe* describe-target))
+                   (visitBegin [_ _] (describe* describe-target))
+                   (visitExecute [_ stmt]
+                     (let [inner (get-in @conn-state [:prepared-statements (.getName stmt)])]
+                       (describe* {:param-oids (:param-oids describe-target)
+                                   :pg-cols (:pg-cols inner)})))
+                   (visitOther [_ _] (pgio/cmd-write-msg conn pgio/msg-no-data))))
 
-        (pgio/cmd-write-msg conn pgio/msg-no-data)))))
+        :else (pgio/cmd-write-msg conn pgio/msg-no-data)))))
 
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
@@ -717,15 +726,6 @@
 
 (defmethod handle-msg* :msg-flush [{:keys [frontend]} _]
   (pgio/flush! frontend))
-
-(defn session-param-name [^ParserRuleContext ctx]
-  (some-> ctx
-          (.accept (reify SqlVisitor
-                     (visitRegularIdentifier [_ ctx] (.getText ctx))
-                     (visitDelimitedIdentifier [_ ctx]
-                       (let [di-str (.getText ctx)]
-                         (subs di-str 1 (dec (count di-str)))))))
-          (str/lower-case)))
 
 (def replace-queries
   {; dbeaver, #4528 - remove if/when we support duplicate projections
@@ -768,196 +768,17 @@
   (when sql-str (first (filter #(probably-same-query? sql-str (:q %)) canned-responses))))
 
 (defn parse-sql [sql]
-  (log/debug "Interpreting SQL: " sql)
+  (log/debug "Interpreting SQL:" sql)
   (err/wrap-anomaly {:sql sql}
     (loop [sql (trim-sql sql)]
       (if-let [replacement (replace-queries sql)]
         (recur replacement)
+        (cond
+          (or (str/blank? sql) (comment-only? sql)) [{:empty? true}]
 
-        (or (when (or (str/blank? sql) (comment-only? sql))
-              [{:statement-type :empty-query}])
-
-            (when-some [canned-response (get-canned-response sql)]
-              [{:statement-type :canned-response, :canned-response canned-response}])
-
-            (try
-              (letfn [(subsql [^ParserRuleContext ctx]
-                        (subs sql (.getStartIndex (.getStart ctx)) (inc (.getStopIndex (.getStop ctx)))))]
-                (let [env (sql/->env)]
-                  (->> (antlr/parse-multi-statement sql)
-                       (mapv (partial sql/accept-visitor
-                                      (reify SqlVisitor
-                                        (visitSetSessionVariableStatement [_ ctx]
-                                          {:statement-type :set-session-parameter
-                                           :parameter (session-param-name (.identifier ctx))
-                                           :value (sql/plan-expr (.literal ctx) env)})
-
-                                        (visitSetSessionCharacteristicsStatement [this ctx]
-                                          {:statement-type :set-session-characteristics
-                                           :session-characteristics
-                                           (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.sessionCharacteristic ctx))})
-
-                                        (visitSessionTxCharacteristics [this ctx]
-                                          (let [[^ParserRuleContext session-mode & more-modes] (.sessionTxMode ctx)]
-                                            (assert (nil? more-modes) "pgwire only supports one for now")
-                                            (.accept session-mode this)))
-
-                                        (visitSetTransactionStatement [_ _]
-                                          ;; no-op for us
-                                          {:statement-type :set-transaction
-                                           :tx-characteristics {}})
-
-                                        (visitStartTransactionStatement [this ctx]
-                                          {:statement-type :begin
-                                           :tx-characteristics (some-> (.transactionCharacteristics ctx) (.accept this))})
-
-                                        (visitTransactionCharacteristics [this ctx]
-                                          (into {} (mapcat #(.accept ^ParserRuleContext % this)) (.transactionMode ctx)))
-
-                                        (visitIsolationLevel [_ _] {})
-                                        (visitSessionIsolationLevel [_ _] {})
-
-                                        (visitReadWriteTransaction [this ctx]
-                                          (into {:access-mode :read-write}
-                                                (mapcat (partial sql/accept-visitor this) (.readWriteTxOption ctx))))
-
-                                        (visitReadOnlyTransaction [this ctx]
-                                          (into {:access-mode :read-only}
-                                                (mapcat (partial sql/accept-visitor this) (.readOnlyTxOption ctx))))
-
-                                        (visitTxTzOption0 [this ctx] (.accept (.txTzOption ctx) this))
-                                        (visitTxTzOption1 [this ctx] (.accept (.txTzOption ctx) this))
-
-                                        (visitTxTzOption [_ ctx]
-                                          {:default-tz (sql/plan-expr (.tz ctx) env)})
-
-                                        (visitAwaitTokenTxOption [_ ctx]
-                                          {:await-token (sql/plan-expr (.awaitToken ctx) env)})
-
-                                        (visitReadWriteSession [_ _] {:access-mode :read-write})
-
-                                        (visitReadOnlySession [_ _] {:access-mode :read-only})
-
-                                        (visitSystemTimeTxOption [_ ctx]
-                                          {:system-time (sql/plan-expr (.systemTime ctx) env)})
-
-                                        (visitAsyncTxOption [_ ctx]
-                                          {:async? (boolean (sql/plan-expr (.async ctx) env))})
-
-                                        (visitSnapshotTokenTxOption [_ ctx]
-                                          {:snapshot-token (sql/plan-expr (.snapshotToken ctx) env)})
-
-                                        (visitSnapshotTimeTxOption [_ ctx]
-                                          {:snapshot-time (sql/plan-expr (.snapshotTime ctx) env)})
-
-                                        (visitClockTimeTxOption [_ ctx]
-                                          {:current-time (sql/plan-expr (.clockTime ctx) env)})
-
-                                        (visitMetadataTxOption [_ ctx]
-                                          {:user-metadata (sql/plan-expr (.metadata ctx) env)})
-
-                                        (visitCommitStatement [_ _] {:statement-type :commit})
-                                        (visitRollbackStatement [_ _] {:statement-type :rollback})
-
-                                        (visitSetRoleStatement [_ _] {:statement-type :set-role})
-
-                                        (visitSetTimeZoneStatement [_ ctx]
-                                          ;; not sure if handlling time zone explicitly is the right approach
-                                          ;; might be cleaner to handle it like any other session param
-                                          {:statement-type :set-time-zone
-                                           :tz (sql/plan-expr (.zone ctx) env)})
-
-                                        (visitInsertStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :insert, :query (subsql ctx)})
-
-                                        (visitPatchStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :patch, :query (subsql ctx)})
-
-                                        (visitUpdateStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :update, :query (subsql ctx)})
-
-                                        (visitDeleteStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :delete, :query (subsql ctx)})
-
-                                        (visitEraseStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :erase, :query (subsql ctx)})
-
-                                        (visitAssertStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :assert, :query (subsql ctx)})
-
-                                        (visitGrantRoleStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :grant-role, :query (subsql ctx)})
-
-                                        (visitRevokeRoleStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :revoke-role, :query (subsql ctx)})
-
-                                        (visitCreateTableStatement [_ ctx]
-                                          {:statement-type :dml, :dml-type :create-table, :query (subsql ctx)})
-
-                                        (visitQueryExpr [_ ctx]
-                                          {:statement-type :query, :query (subsql ctx), :parsed-query ctx})
-
-                                        (visitCopyInStmt [this ctx]
-                                          (into {:statement-type :copy-in,
-                                                 :table-name (sql/identifier-sym (.targetTable ctx))}
-                                                (map (partial sql/accept-visitor this))
-                                                (some-> (.opts ctx) (.copyOpt))))
-
-                                        (visitCopyFormatOption [_ ctx]
-                                          [:format (sql/plan-expr (.format ctx) env)])
-
-                                        (visitPrepareStatement [this ctx]
-                                          (let [inner-ctx (.directlyExecutableStatement ctx)]
-                                            {:statement-type :prepare
-                                             :statement-name (str (sql/identifier-sym (.statementName ctx)))
-                                             :inner (.accept inner-ctx this)}))
-
-                                        (visitExecuteStatement [_ ctx]
-                                          {:statement-type :execute,
-                                           :statement-name (str (sql/identifier-sym (.statementName ctx))),
-                                           :query (subsql ctx)
-                                           :parsed-query ctx})
-
-                                        (visitShowVariableStatement [_ ctx]
-                                          {:statement-type :query, :query sql, :parsed-query ctx})
-
-                                        (visitSetAwaitTokenStatement [_ ctx]
-                                          (let [await-token (sql/plan-expr (.awaitToken ctx) env)]
-                                            {:statement-type :set-await-token, :await-token await-token}))
-
-                                        (visitShowAwaitTokenStatement [_ _]
-                                          {:statement-type :show-variable, :query sql, :variable "await_token"})
-
-                                        (visitShowSnapshotTokenStatement [_ ctx]
-                                          {:statement-type :query, :query sql, :parsed-query ctx})
-
-                                        (visitShowClockTimeStatement [_ ctx]
-                                          {:statement-type :query, :query sql, :parsed-query ctx})
-
-                                        (visitShowSessionVariableStatement [_ ctx]
-                                          {:statement-type :show-variable
-                                           :query sql
-                                           :variable (session-param-name (.identifier ctx))})
-
-                                        (visitAttachDatabaseStatement [_ ctx]
-                                          {:statement-type :attach-db
-                                           :db-name (str (sql/identifier-sym (.dbName ctx)))
-                                           :db-config (try
-                                                        (or (some-> (.configYaml ctx)
-                                                                    (sql/plan-expr env)
-                                                                    (Database$Config/fromYaml))
-                                                            (Database$Config.))
-                                                        (catch Exception e
-                                                          (throw (err/incorrect :xtdb/invalid-database-config
-                                                                                (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))))))})
-
-                                        (visitDetachDatabaseStatement [_ ctx]
-                                          {:statement-type :detach-db
-                                           :db-name (str (sql/identifier-sym (.dbName ctx)))})))))))
-
-              (catch Exception e
-                (log/debug e "Error parsing SQL")
-                (throw e))))))))
+          :else (if-let [canned-response (get-canned-response sql)]
+                  [{:canned-response canned-response}]
+                  (mapv (fn [ps] {:parsed ps}) (SqlParser/parseStatements sql))))))))
 
 (defn- show-var-query [variable]
   (case variable
@@ -989,50 +810,54 @@
 (defn- conn-db-name ^String [{:keys [conn-state]}]
   (.getDbName ^Xtdb$Connection (:node-conn @conn-state)))
 
-(defn- prep-stmt [{:keys [node conn-state] :as conn} {:keys [statement-type param-oids] :as stmt}]
-  (case statement-type
-    (:query :execute :show-variable)
-    (try
-      (let [{:keys [^Sql$DirectlyExecutableStatementContext parsed-query]} stmt
+(defn- prep-stmt [{:keys [node conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
+  ;; query/execute prepare the AST; show-variable prepares a synthetic RA query; everything else passes through.
+  (letfn [(finish [^PreparedQuery pq param-types]
+            (when-let [warnings (.getWarnings pq)]
+              (doseq [warning warnings]
+                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
-            {:keys [^Xtdb$Connection node-conn]} @conn-state
+            (let [param-oids (->> (concat param-oids (repeat 0))
+                                  (into [] (take (.getParamCount pq))))
+                  param-types (or param-types (map #(some-> (PgType/fromOid %) .getXtType) param-oids))
+                  pg-cols (if (some nil? param-types)
+                            ;; if we're unsure on some of the col-types, return all output cols as the fallback type (#4455)
+                            (for [col-name (map str (.getColumnNames pq))]
+                              {:pg-type PgType/PG_DEFAULT, :col-name col-name})
 
-            ^PreparedQuery pq (case statement-type
-                                (:query :execute)
-                                (with-auth-check conn
-                                  (.prepareSql node-conn parsed-query (:query stmt)))
+                            (->> (.getColumnFields pq (->> param-types
+                                                           (into [] (comp (map types/->nullable-type)
+                                                                          (map-indexed (fn [idx vt]
+                                                                                         (types/->field (str "?_" idx) vt)))))))
+                                 (mapv field->pg-col)))]
+              (assoc stmt
+                     :prepared-query pq
+                     :param-oids param-oids
+                     :prepared-pg-cols pg-cols
+                     :pg-cols pg-cols)))
 
-                                :show-variable
-                                (with-auth-check conn
-                                  (xtp/prepare-ra node (show-var-query (:variable stmt))
-                                                  {:await-token (.getAwaitToken node-conn)
-                                                   :default-tz (.getDefaultTz node-conn)
-                                                   :default-db (.getDbName node-conn)})))]
+          (prepare-ast [^ParsedStatement ps]
+            (finish (with-auth-check conn
+                      (.prepareSql ^Xtdb$Connection (:node-conn @conn-state) (.getAst ps) (.getOriginalSql ps)))
+                    nil))]
 
-        (when-let [warnings (.getWarnings pq)]
-          (doseq [warning warnings]
-            (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
-
-        (let [param-oids (->> (concat param-oids (repeat 0))
-                              (into [] (take (.getParamCount pq))))
-              param-types (case statement-type
-                            (:query :execute) (map #(some-> (PgType/fromOid %) .getXtType) param-oids)
-                            :show-variable (show-var-param-types (:variable stmt)))
-              pg-cols (if (some nil? param-types)
-                        ;; if we're unsure on some of the col-types, return all of the output cols as the fallback type (#4455)
-                        (for [col-name (map str (.getColumnNames pq))]
-                          {:pg-type PgType/PG_DEFAULT, :col-name col-name})
-
-                        (->> (.getColumnFields pq (->> param-types
-                                                       (into [] (comp (map types/->nullable-type)
-                                                                      (map-indexed (fn [idx vt]
-                                                                                     (types/->field (str "?_" idx) vt)))))))
-                             (mapv field->pg-col)))]
-          (assoc stmt
-                 :prepared-query pq
-                 :param-oids param-oids
-                 :prepared-pg-cols pg-cols
-                 :pg-cols pg-cols)))
+    (if (nil? parsed)                   ; :empty? / :canned-response markers carry no parsed statement
+      stmt
+      (try
+       (.accept parsed
+               (reify ParsedStatement$Visitor
+                 (visitQuery [_ ps] (prepare-ast ps))
+                 (visitExecute [_ ps] (prepare-ast ps))
+                 (visitShowVariable [_ ps]
+                   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
+                         variable (.getVariable ps)]
+                     (finish (with-auth-check conn
+                               (xtp/prepare-ra node (show-var-query variable)
+                                               {:await-token (.getAwaitToken node-conn)
+                                                :default-tz (.getDefaultTz node-conn)
+                                                :default-db (.getDbName node-conn)}))
+                             (show-var-param-types variable))))
+                 (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
@@ -1040,11 +865,9 @@
       (catch RuntimeException e
         (log/debug e "Error preparing statement")
         (throw e))
-      (catch Throwable e
-        (log/error e "Error preparing statement")
-        (throw e)))
-
-    stmt))
+       (catch Throwable e
+         (log/error e "Error preparing statement")
+         (throw e))))))
 
 (defmethod handle-msg* :msg-parse [{:keys [conn-state tx-error-counter] :as conn}
                                    {:keys [stmt-name param-oids] :as msg-data}]
@@ -1068,18 +891,14 @@
 
       (throw e))))
 
-(defn cmd-prepare [{:keys [conn-state] :as conn} {:keys [statement-name inner] :as _portal}]
-  (let [{:keys [query]} inner
-        [prepared-stmt & more-stmts] (parse-sql query)]
-    (when (seq more-stmts)
-      (throw (UnsupportedOperationException. "Multiple statements in a single PREPARE are not supported")))
+(defn cmd-prepare [{:keys [conn-state] :as conn} statement-name inner-ps]
+  ;; the grammar allows a single inner statement, already parsed by the enclosing PREPARE
+  (let [prepared-stmt (prep-stmt conn {:parsed inner-ps})]
+    (swap! conn-state assoc-in [:prepared-statements statement-name]
+           (assoc prepared-stmt
+                  :statement-name statement-name))
 
-    (let [prepared-stmt (prep-stmt conn prepared-stmt)]
-      (swap! conn-state assoc-in [:prepared-statements statement-name]
-             (assoc prepared-stmt
-                    :statement-name statement-name))
-
-      (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "PREPARE"}))))
+    (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "PREPARE"})))
 
 (defn- normalize-arg-formats [arg-format arg-count]
   (case (count arg-format)
@@ -1122,7 +941,7 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [statement-type ^PreparedQuery prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [session transaction ^Xtdb$Connection node-conn]} @conn-state
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction (.getAwaitToken node-conn))
@@ -1157,76 +976,88 @@
                                         :resolved-cols resolved-pg-cols})))
                 (with-result-formats prepared-pg-cols result-format)))]
 
-      (case statement-type
-        :query (util/with-close-on-catch [cursor (->cursor xt-args)]
-                 (-> stmt
-                     (assoc :cursor cursor,
-                            :pg-cols (->pg-cols (:pg-cols stmt) cursor))))
+      (if (nil? parsed)                 ; :empty? / :canned-response markers carry no parsed statement
+        (-> stmt (assoc :args xt-args))
+        (.accept parsed
+               (reify ParsedStatement$Visitor
+                 (visitQuery [_ _]
+                   (util/with-close-on-catch [cursor (->cursor xt-args)]
+                     (-> stmt
+                         (assoc :cursor cursor,
+                                :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))
 
-        :show-variable (let [{:keys [variable]} stmt]
-                         (util/with-close-on-catch [cursor (->cursor (case variable
-                                                                       "await_token" [await-token]
-                                                                       "latest_completed_txs" [(for [[db-name parts] (xtp/latest-completed-txs node)
-                                                                                                     [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)]
+                 (visitShowVariable [_ ps]
+                   (let [variable (.getVariable ps)]
+                     (util/with-close-on-catch [cursor (->cursor (case variable
+                                                                   "await_token" [await-token]
+                                                                   "latest_completed_txs" [(for [[db-name parts] (xtp/latest-completed-txs node)
+                                                                                                 [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)]
+                                                                                             {:db_name db-name
+                                                                                              :part (int part-idx)
+                                                                                              :tx_id tx-id
+                                                                                              :system_time system-time})]
+                                                                   "latest_submitted_msg_ids" [(for [[db-name parts] (xtp/latest-submitted-msg-ids node)
+                                                                                                     [part-idx msg-id] (map vector (range) parts)]
                                                                                                  {:db_name db-name
                                                                                                   :part (int part-idx)
-                                                                                                  :tx_id tx-id
-                                                                                                  :system_time system-time})]
-                                                                       "latest_submitted_msg_ids" [(for [[db-name parts] (xtp/latest-submitted-msg-ids node)
-                                                                                                         [part-idx msg-id] (map vector (range) parts)]
-                                                                                                     {:db_name db-name
-                                                                                                      :part (int part-idx)
-                                                                                                      :msg_id msg-id})]
+                                                                                                  :msg_id msg-id})]
 
-                                                                       "latest_processed_msg_ids" [(for [[db-name parts] (xtp/latest-processed-msg-ids node)
-                                                                                                         [part-idx msg-id] (map vector (range) parts)]
-                                                                                                     {:db_name db-name
-                                                                                                      :part (int part-idx)
-                                                                                                      :msg_id msg-id})]
+                                                                   "latest_processed_msg_ids" [(for [[db-name parts] (xtp/latest-processed-msg-ids node)
+                                                                                                     [part-idx msg-id] (map vector (range) parts)]
+                                                                                                 {:db_name db-name
+                                                                                                  :part (int part-idx)
+                                                                                                  :msg_id msg-id})]
 
-                                                                       "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
-                                                                                                                   :await-token await-token))
-                                                                                                   [:tx-id :system-time :committed? :error :await-token])
-                                                                       [(get session-params variable)]))]
+                                                                   "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
+                                                                                                               :await-token await-token))
+                                                                                               [:tx-id :system-time :committed? :error :await-token])
+                                                                   [(get session-params variable)]))]
 
-                           (-> stmt
-                               (assoc :cursor cursor,
-                                      :pg-cols (-> (:pg-cols stmt)
-                                                   (with-result-formats result-format))))))
+                       (-> stmt
+                           (assoc :cursor cursor,
+                                  :pg-cols (-> (:pg-cols stmt)
+                                               (with-result-formats result-format)))))))
 
-        :execute (util/with-open [^ResultCursor args-cursor (->cursor xt-args)]
-                   ;; in the case of execute, we've just bound the args query rather than the inner query.
-                   ;; so now we bind the inner query and pretend this was the one we were running all along
-                   (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (:statement-name stmt)])
-                         !args (object-array 1)]
+                 (visitExecute [_ ps]
+                   (util/with-open [^ResultCursor args-cursor (->cursor xt-args)]
+                     ;; we've bound the args query rather than the inner query; now bind the inner query and
+                     ;; pretend this was the one we were running all along
+                     (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (.getName ps)])
+                           ^ParsedStatement inner-parsed (:parsed inner)
+                           !args (object-array 1)]
 
-                     (.forEachRemaining args-cursor
-                                        (fn [^RelationReader args-rel]
-                                          (aset !args 0 (.openSlice args-rel allocator))))
+                       (.forEachRemaining args-cursor
+                                          (fn [^RelationReader args-rel]
+                                            (aset !args 0 (.openSlice args-rel allocator))))
 
-                     (let [^RelationReader args-rel (aget !args 0)]
-                       (case (:statement-type inner)
-                         :query (with-auth-check conn
-                                  (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel query-opts)]
-                                    (-> inner
-                                        (assoc :cursor inner-cursor
-                                               :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
-                                                            (with-result-formats result-format))))))
+                       (let [^RelationReader args-rel (aget !args 0)]
+                         (cond
+                           (instance? ParsedStatement$Query inner-parsed)
+                           (with-auth-check conn
+                             (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel query-opts)]
+                               (-> inner
+                                   (assoc :cursor inner-cursor
+                                          :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
+                                                       (with-result-formats result-format))))))
 
-                         :dml (let [arg-types (.getResultTypes args-cursor)]
-                                (try
-                                  (-> inner
-                                      (assoc :args (vec (for [col-name (keys arg-types)]
-                                                          (-> (.vectorForOrNull args-rel col-name)
-                                                              (.getObject 0))))
-                                             :param-oids (->> arg-types
-                                                              (mapv (fn [[col-name ^VectorType vec-type]]
-                                                                      (PgType/.getOid (PgType/fromVectorType vec-type)))))))
-                                  (finally
-                                    (util/close args-rel))))))))
+                           (instance? ParsedStatement$Dml inner-parsed)
+                           (let [arg-types (.getResultTypes args-cursor)]
+                             (try
+                               (-> inner
+                                   (assoc :args (vec (for [col-name (keys arg-types)]
+                                                       (-> (.vectorForOrNull args-rel col-name)
+                                                           (.getObject 0))))
+                                          :param-oids (->> arg-types
+                                                           (mapv (fn [[_col-name ^VectorType vec-type]]
+                                                                   (PgType/.getOid (PgType/fromVectorType vec-type)))))))
+                               (finally
+                                 (util/close args-rel))))
 
-        (-> stmt
-            (assoc :args xt-args))))))
+                           :else (throw (err/unsupported ::unsupported-execute "EXECUTE only supports a prepared query or DML statement")))))))
+
+                 (visitOther [_ _]
+                   (-> stmt
+                       (assoc :args xt-args)))))))))
 
 (defn unnamed-portal? [portal-name]
   (= "" portal-name))
@@ -1261,23 +1092,25 @@
   "SELECT pg_type.oid, typname FROM pg_catalog.pg_type LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r from pg_namespace as ns join ( select s.r, (current_schemas(false))[s.r] as nspname from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r using ( nspname ) ) as sp ON sp.nspoid = typnamespace WHERE typname = $1 ORDER BY sp.r, pg_type.oid DESC LIMIT 1")
 
 (defn- verify-permissibility
-  [{:keys [conn-state server]} {:keys [statement-type] :as stmt}]
-  (let [{:keys [access-mode]} (:transaction @conn-state)]
-    (when (and (= :dml statement-type) (:read-only? server))
+  [{:keys [conn-state server]} {:keys [^ParsedStatement parsed]}]
+  (let [{:keys [access-mode]} (:transaction @conn-state)
+        dml? (instance? ParsedStatement$Dml parsed)
+        query? (instance? ParsedStatement$Query parsed)]
+    (when (and dml? (:read-only? server))
       (throw (err/incorrect :xtdb/dml-in-read-only-server
                             "DML is not allowed on the READ ONLY server"
-                            {:query (:query stmt)})))
+                            {:query (.getOriginalSql parsed)})))
 
-    (when (and (= :dml statement-type) (= :read-only access-mode))
+    (when (and dml? (= :read-only access-mode))
       (throw (err/incorrect :xtdb/dml-in-read-only-tx
                             "DML is not allowed in a READ ONLY transaction"
-                            {:query (:query stmt)})))
+                            {:query (.getOriginalSql parsed)})))
 
-    (when (and (= :query statement-type) (= :read-write access-mode)
-               (not= pgjdbc-type-query (str/replace (:query stmt) #"  +" " ")))
+    (when (and query? (= :read-write access-mode)
+               (not= pgjdbc-type-query (str/replace (.getOriginalSql parsed) #"  +" " ")))
       (throw (err/incorrect :xtdb/queries-in-read-write-tx
                             "Queries are unsupported in a DML transaction"
-                            {:query (:query stmt)})))))
+                            {:query (.getOriginalSql parsed)})))))
 
 (defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
   (let [rows (rows conn)]
@@ -1297,81 +1130,78 @@
   ;; doesn't mean anything to us because we're always serializable
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [conn {:keys [tz args]}]
-  (let [tz (-> tz (apply-args args))]
-    (set-time-zone conn tz))
+(defn cmd-set-time-zone [conn zone-expr args]
+  (set-time-zone conn (-> zone-expr (sql/plan-expr (sql/->env)) (apply-args args)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [conn-state] :as conn} {:keys [args], new-token :await-token}]
-  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (-> new-token (apply-args args)))
+(defn cmd-set-await-token [{:keys [conn-state] :as conn} token-expr args]
+  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (-> token-expr (sql/plan-expr (sql/->env)) (apply-args args)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
   (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter] :as conn} {:keys [dml-type query args param-oids]}]
+(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
   (when (get-in @conn-state [:transaction :failed])
     (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
-  (when (or (not= (count param-oids) (count args))
-            (some (fn [idx]
-                    (and (zero? (nth param-oids idx))
-                         (some? (nth args idx))))
-                  (range (count param-oids))))
-    (metrics/inc-counter! tx-error-counter)
-    (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
-                          {:query query, :param-oids param-oids})))
+  (let [query (.getOriginalSql parsed)]
+    (when (or (not= (count param-oids) (count args))
+              (some (fn [idx]
+                      (and (zero? (nth param-oids idx))
+                           (some? (nth args idx))))
+                    (range (count param-oids))))
+      (metrics/inc-counter! tx-error-counter)
+      (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
+                            {:query query, :param-oids param-oids})))
 
-  ;; Extract warnings during interactive sessions (typically non-parameterized statements)
-  (when (empty? param-oids)
-    (try
-      (let [^PreparedQuery pq (with-auth-check conn
-                                (xtp/prepare-sql node
-                                                 (antlr/parse-statement query)
-                                                 {:default-db (conn-db-name conn)}))]
+    ;; Extract warnings during interactive sessions (typically non-parameterized statements)
+    (when (empty? param-oids)
+      (try
+        (let [^PreparedQuery pq (with-auth-check conn
+                                  (xtp/prepare-sql node
+                                                   (antlr/parse-statement query)
+                                                   {:default-db (conn-db-name conn)}))]
 
-        ;; Send any warnings to the client
-        (when-let [warnings (.getWarnings pq)]
-          (doseq [warning warnings]
-            (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
+          ;; Send any warnings to the client
+          (when-let [warnings (.getWarnings pq)]
+            (doseq [warning warnings]
+              (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
 
-      (catch IllegalArgumentException e
-        (log/debug e "Error planning DML statement for warnings"))
-      (catch RuntimeException e
-        (log/debug e "Error planning DML statement for warnings"))
-      (catch Throwable e
-        (log/debug e "Error planning DML statement for warnings"))))
+        (catch IllegalArgumentException e
+          (log/debug e "Error planning DML statement for warnings"))
+        (catch RuntimeException e
+          (log/debug e "Error planning DML statement for warnings"))
+        (catch Throwable e
+          (log/debug e "Error planning DML statement for warnings"))))
 
-  (when-not (:transaction @conn-state)
-    (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
+    (when-not (:transaction @conn-state)
+      (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
 
-  (swap! conn-state update-in [:transaction :dml-buf]
-         (fnil (fn [dml-ops]
-                 (or (when-let [^Sql last-op (peek dml-ops)]
-                       (when (and (instance? Sql last-op)
-                                  (= (.getSql last-op) query))
-                         (conj (pop dml-ops)
-                               (Sql. query (conj (or (.getArgRows last-op) []) args)))))
-                     (conj dml-ops (Sql. query [args]))))
-               []))
+    (swap! conn-state update-in [:transaction :dml-buf]
+           (fnil (fn [dml-ops]
+                   (or (when-let [^Sql last-op (peek dml-ops)]
+                         (when (and (instance? Sql last-op)
+                                    (= (.getSql last-op) query))
+                           (conj (pop dml-ops)
+                                 (Sql. query (conj (or (.getArgRows last-op) []) args)))))
+                       (conj dml-ops (Sql. query [args]))))
+                 []))
 
-  (pgio/cmd-write-msg conn pgio/msg-command-complete
-                      {:command (case dml-type
-                                  ;; insert <oid> <rows>
-                                  ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                  ;; rows is 0 for us cus async
-                                  :insert "INSERT 0 0"
-                                  ;; otherwise head <rows>
-                                  :delete "DELETE 0"
-                                  :update "UPDATE 0"
-                                  :patch "PATCH 0"
-                                  :erase "ERASE 0"
-                                  :assert "ASSERT"
-                                  :grant-role "GRANT"
-                                  :revoke-role "REVOKE"
-                                  :create-table "CREATE TABLE"
-                                  :create-role "CREATE ROLE")}))
+    ;; oid is always 0 (legacy pg); row count is 0 because we're async
+    (pgio/cmd-write-msg conn pgio/msg-command-complete
+                        {:command (.accept parsed
+                                           (reify ParsedStatement$Visitor
+                                             (visitInsert [_ _] "INSERT 0 0")
+                                             (visitUpdate [_ _] "UPDATE 0")
+                                             (visitDelete [_ _] "DELETE 0")
+                                             (visitPatch [_ _] "PATCH 0")
+                                             (visitErase [_ _] "ERASE 0")
+                                             (visitAssert [_ _] "ASSERT")
+                                             (visitGrantRole [_ _] "GRANT")
+                                             (visitRevokeRole [_ _] "REVOKE")
+                                             (visitCreateTable [_ _] "CREATE TABLE")))})))
 
 (defn run-cancellable-query! [{:keys [conn-state] :as _conn} f]
   (let [task (FutureTask. f)] ; FutureTask used for cancellation
@@ -1389,14 +1219,14 @@
       Future$State/FAILED (throw (.exceptionNow task)))))
 
 (defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
-                      {:keys [limit statement-type query ^ResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
+                      {:keys [limit ^ParsedStatement parsed ^ResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
   (let [transaction (get-in @conn-state [:transaction])]
     (when (:failed transaction)
       (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
-    (when-not (or transaction (= statement-type :show-variable))
+    (when-not (or transaction (instance? ParsedStatement$ShowVariable parsed))
       (cmd-begin conn {:implicit? true :access-mode :read-only} {})))
 
   (try
@@ -1454,7 +1284,7 @@
 
         (if (= @!n-rows-out limit)
           (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
-          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head query) " " cumulative-rows)}))))
+          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head (.getOriginalSql parsed)) " " cumulative-rows)}))))
 
     (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
@@ -1462,7 +1292,7 @@
       (metrics/inc-counter! query-error-counter)
       (throw e))))
 
-(defn- attach-db [{:keys [node conn-state] :as conn} {:keys [db-name db-config]}]
+(defn- attach-db [{:keys [node conn-state] :as conn} db-name config-yaml sql]
   (let [default-db (conn-db-name conn)]
     (when-not (= default-db "xtdb")
       (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
@@ -1472,15 +1302,21 @@
     (throw (err/incorrect ::attach-db-in-tx "Cannot attach a database in a transaction."
                           {:db-name db-name})))
 
-  (with-auth-check conn
-    (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
-      (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
-      (swap! conn-state assoc :latest-submitted-tx tx)
+  (let [db-config (try
+                    (or (some-> config-yaml (Database$Config/fromYaml)) (Database$Config.))
+                    (catch Exception e
+                      (throw (err/incorrect :xtdb/invalid-database-config
+                                            (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))
+                                            {:sql sql}))))]
+    (with-auth-check conn
+      (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
+        (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
+        (swap! conn-state assoc :latest-submitted-tx tx)
 
-      (when error
-        (throw error)))))
+        (when error
+          (throw error))))))
 
-(defn- detach-db [{:keys [node conn-state] :as conn} {:keys [db-name]}]
+(defn- detach-db [{:keys [node conn-state] :as conn} db-name]
   (let [default-db (conn-db-name conn)]
     (when-not (= default-db "xtdb")
       (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
@@ -1498,80 +1334,111 @@
       (when error
         (throw error)))))
 
-(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [statement-type canned-response parameter value session-characteristics tx-characteristics] :as portal}]
+(defn- ->tx-opts-map [^ParsedStatement$TxOptions tx-opts]
+  ;; resolve a parsed Begin's options into the map cmd-begin consumes (planned exprs; cmd-begin apply-args + coerces)
+  (let [env (sql/->env)
+        pe (fn [expr] (some-> expr (sql/plan-expr env)))]
+    (cond-> {}
+      (.getAccessMode tx-opts) (assoc :access-mode (case (str (.getAccessMode tx-opts))
+                                                     "READ_ONLY" :read-only
+                                                     "READ_WRITE" :read-write))
+      (.getSystemTime tx-opts) (assoc :system-time (pe (.getSystemTime tx-opts)))
+      (.getSnapshotToken tx-opts) (assoc :snapshot-token (pe (.getSnapshotToken tx-opts)))
+      (.getSnapshotTime tx-opts) (assoc :snapshot-time (pe (.getSnapshotTime tx-opts)))
+      (.getClockTime tx-opts) (assoc :current-time (pe (.getClockTime tx-opts)))
+      (.getAwaitToken tx-opts) (assoc :await-token (pe (.getAwaitToken tx-opts)))
+      (.getDefaultTz tx-opts) (assoc :default-tz (pe (.getDefaultTz tx-opts)))
+      (.getUserMetadata tx-opts) (assoc :user-metadata (pe (.getUserMetadata tx-opts)))
+      (.getAsync tx-opts) (assoc :async? (boolean (sql/plan-expr (.getAsync tx-opts) env))))))
+
+(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
   (swap! conn-state (fn [{:keys [transaction] :as cs}]
                       (cond-> cs
                         transaction (update-in [:transaction :access-mode]
                                                (fnil identity
-                                                     (case statement-type
-                                                       :query :read-only
-                                                       :dml :read-write
-                                                       nil))))))
+                                                     (cond
+                                                       (instance? ParsedStatement$Query parsed) :read-only
+                                                       (instance? ParsedStatement$Dml parsed) :read-write
+                                                       :else nil))))))
 
-  (case statement-type
-    :empty-query (pgio/cmd-write-msg conn pgio/msg-empty-query)
-    :canned-response (cmd-write-canned-response conn canned-response)
-    :set-session-parameter (cmd-set-session-parameter conn parameter value)
-    :set-session-characteristics (cmd-set-session-characteristics conn session-characteristics)
-    :set-role nil
-    :set-transaction (cmd-set-transaction conn tx-characteristics)
-    :set-time-zone (cmd-set-time-zone conn portal)
-    :set-await-token (cmd-set-await-token conn portal)
-    :ignore (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "IGNORED"})
+  (cond
+    canned-response (cmd-write-canned-response conn canned-response)
+    (:empty? portal) (pgio/cmd-write-msg conn pgio/msg-empty-query)
 
-    :begin (do
-             (cmd-begin conn tx-characteristics portal)
-             (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
+    :else
+    (.accept parsed
+             (reify ParsedStatement$Visitor
+               (visitQuery [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
+               (visitShowVariable [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
+               (visitDml [_ _] (cmd-exec-dml conn portal))
 
-    :rollback (do
-                (cmd-rollback conn)
-                (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ROLLBACK"}))
+               (visitBegin [_ stmt]
+                 (cmd-begin conn (->tx-opts-map (.getTxOptions stmt)) portal)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
-    :commit (do
-              (cmd-commit conn)
-              (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
+               (visitCommit [_ _]
+                 (cmd-commit conn)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
-    (:query :show-variable) (metrics/record-callable! query-timer (cmd-exec-query conn portal))
-    :prepare (cmd-prepare conn portal)
-    :dml (cmd-exec-dml conn portal)
+               (visitRollback [_ _]
+                 (cmd-rollback conn)
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ROLLBACK"}))
 
-    :copy-in (let [format (case (:format portal)
-                            "transit-json" :transit-json
-                            "transit-msgpack" :transit-msgpack
-                            "arrow-file" :arrow-file
-                            "arrow-stream" :arrow-stream
-                            (throw (err/incorrect ::invalid-copy-format "COPY IN requires a valid format: 'arrow-file', 'arrow-stream', 'transit-json', 'transit-msgpack'"
-                                                  {:format (:format portal)})))
-                   {:keys [table-name]} portal
-                   copy-file (doto (util/->temp-file "copy-in" "")
-                               (-> .toFile (.deleteOnExit)))]
+               (visitSetTransaction [_ _] (cmd-set-transaction conn nil))
 
-               (swap! conn-state assoc
-                      :copy {:table-name table-name
-                             :format format
-                             :copy-file copy-file
-                             :write-ch (util/->file-channel copy-file util/write-truncate-open-opts)})
+               (visitSetSessionCharacteristics [_ stmt]
+                 (cmd-set-session-characteristics conn (when-let [am (.getAccessMode stmt)]
+                                                         {:access-mode (case (str am)
+                                                                         "READ_ONLY" :read-only
+                                                                         "READ_WRITE" :read-write)})))
 
-               (log/trace "Starting COPY IN" {:cid (:cid conn), :table-name table-name, :copy-file copy-file})
+               (visitSetTimeZone [_ stmt] (cmd-set-time-zone conn (.getZone stmt) (:args portal)))
+               (visitSetAwaitToken [_ stmt] (cmd-set-await-token conn (.getToken stmt) (:args portal)))
+               (visitSetSessionParameter [_ stmt]
+                 (cmd-set-session-parameter conn (.getName stmt) (sql/plan-expr (.getValue stmt) (sql/->env))))
+               (visitSetRole [_ _] nil)
 
-               (pgio/cmd-write-msg conn pgio/msg-copy-in-response
-                                   (let [copy-format (case format
-                                                       :transit-json :text
-                                                       (:transit-msgpack :arrow-file :arrow-stream) :binary)]
-                                     {:copy-format copy-format
-                                      :column-formats [copy-format]})))
+               (visitCopyIn [_ stmt]
+                 (when (nil? (.getFormat stmt))
+                   (throw (err/incorrect ::invalid-copy-format
+                                         "COPY IN requires a valid format: 'arrow-file', 'arrow-stream', 'transit-json', 'transit-msgpack'"
+                                         {:format nil})))
+                 (let [format (case (str (.getFormat stmt))
+                                "TRANSIT_JSON" :transit-json
+                                "TRANSIT_MSGPACK" :transit-msgpack
+                                "ARROW_FILE" :arrow-file
+                                "ARROW_STREAM" :arrow-stream)
+                       table-name (let [s (.getSchema stmt) t (.getTable stmt)]
+                                    (if s (symbol s t) (symbol t)))
+                       copy-file (doto (util/->temp-file "copy-in" "")
+                                   (-> .toFile (.deleteOnExit)))]
 
-    :attach-db (do
-                 (attach-db conn portal)
+                   (swap! conn-state assoc
+                          :copy {:table-name table-name
+                                 :format format
+                                 :copy-file copy-file
+                                 :write-ch (util/->file-channel copy-file util/write-truncate-open-opts)})
+
+                   (log/trace "Starting COPY IN" {:cid (:cid conn), :table-name table-name, :copy-file copy-file})
+
+                   (pgio/cmd-write-msg conn pgio/msg-copy-in-response
+                                       (let [copy-format (case format
+                                                           :transit-json :text
+                                                           (:transit-msgpack :arrow-file :arrow-stream) :binary)]
+                                         {:copy-format copy-format
+                                          :column-formats [copy-format]}))))
+
+               (visitPrepare [_ stmt] (cmd-prepare conn (.getName stmt) (.getInner stmt)))
+
+               (visitAttachDatabase [_ stmt]
+                 (attach-db conn (.getDbName stmt) (.getConfigYaml stmt) (.getOriginalSql stmt))
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "ATTACH DATABASE"}))
 
-    :detach-db (do
-                 (detach-db conn portal)
-                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))
-
-    (throw (UnsupportedOperationException. (pr-str {:portal portal})))))
+               (visitDetachDatabase [_ stmt]
+                 (detach-db conn (.getDbName stmt))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "DETACH DATABASE"}))))))
 
 (defmethod handle-msg* :msg-execute [{:keys [conn-state] :as conn} {:keys [portal-name limit]}]
   ;; Handles a msg-execute to run a previously bound portal (via msg-bind).
@@ -1587,24 +1454,26 @@
   (close-portal conn "")
 
   (try
-    (doseq [{:keys [statement-type] :as stmt} (parse-sql query)]
+    (doseq [{:keys [^ParsedStatement parsed] :as stmt} (parse-sql query)]
       (when-not (or (boolean (:transaction @conn-state))
-                    (= statement-type :show-variable)
-                    (= statement-type :copy-in))
+                    (instance? ParsedStatement$ShowVariable parsed)
+                    (instance? ParsedStatement$CopyIn parsed))
         (cmd-begin conn {:implicit? true} {}))
 
       (try
-        (let [{:keys [param-oids statement-type] :as prepared-stmt} (prep-stmt conn stmt)]
-          (when (and (seq param-oids) (not= statement-type :show-variable))
+        (let [{:keys [param-oids canned-response] :as prepared-stmt} (prep-stmt conn stmt)]
+          (when (and (seq param-oids) (not (instance? ParsedStatement$ShowVariable parsed)))
             (throw (pgio/err-protocol-violation "Parameters not allowed in simple queries")))
 
           (let [portal (bind-stmt conn prepared-stmt)]
             (try
-              (when (or (contains? #{:query :canned-response :show-variable} statement-type)
-                        (and (= :execute statement-type)
-                             (= :query (get-in @conn-state [:prepared-statements (:statement-name prepared-stmt) :statement-type]))))
-                ;; Client only expects to see a RowDescription (result of cmd-descibe)
-                ;; for certain statement types
+              (when (or canned-response
+                        (instance? ParsedStatement$Query parsed)
+                        (instance? ParsedStatement$ShowVariable parsed)
+                        (and (instance? ParsedStatement$Execute parsed)
+                             (instance? ParsedStatement$Query
+                                        (:parsed (get-in @conn-state [:prepared-statements (.getName ^ParsedStatement$Execute parsed)])))))
+                ;; client only expects a RowDescription (from cmd-describe) for certain statement types
                 (cmd-describe-portal conn portal))
 
               (execute-portal conn portal)
