@@ -36,6 +36,7 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
@@ -138,7 +139,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val awaitTimeout: Duration = Duration.ofMinutes(1)
 
         private var autoCommit = true
-        private val pendingOps = mutableListOf<TxOp>()
+        private var tx: Transaction? = null
 
         private fun db(dbName: DatabaseName): Database =
             dbCat.databaseOrNull(dbName)
@@ -321,29 +322,95 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
+        // Manual-tx DML buffer: consecutive same-SQL ops coalesce, their args appended into the last op's own
+        // relation, so a prepared INSERT in a loop becomes one multi-row op.
+        private class DmlBuffer(private val al: BufferAllocator) : AutoCloseable {
+            private val ops = mutableListOf<TxOp>()
+
+            fun add(op: TxOp) {
+                if (op !is TxOp.Sql || op.args == null) {
+                    ops.add(op)
+                    return
+                }
+
+                val target = (ops.lastOrNull() as? TxOp.Sql)?.takeIf { it.sql == op.sql }?.args as? RelationWriter
+                if (target != null) {
+                    op.args.use(target::append)
+                } else {
+                    val rel = Relation(al)
+                    rel.closeOnCatch { op.args.use(rel::append) }
+                    ops.add(TxOp.Sql(op.sql, rel))
+                }
+            }
+
+            fun drain(): List<TxOp> = ops.toList().also { ops.clear() }
+
+            override fun close() = ops.forEach { it.close() }
+        }
+
+        // resolved on the first statement: a query makes it read-only, DML makes it read-write. In XTDB a
+        // "read-write" tx is write-only — queries are rejected in a DML tx, DML in a read-only one.
+        private sealed interface AccessMode : AutoCloseable {
+            data object ReadOnly : AccessMode {
+                override fun close() {}
+            }
+
+            class ReadWrite(
+                val buffer: DmlBuffer,
+                val systemTime: Instant? = null,
+                val userMetadata: Map<*, *>? = null,
+                val async: Boolean = false,
+            ) : AccessMode {
+                override fun close() = buffer.close()
+            }
+        }
+
+        private class Transaction(var mode: AccessMode? = null, var failed: Throwable? = null) : AutoCloseable {
+            override fun close() { mode?.close() }
+        }
+
+        private fun commitTx() {
+            val tx = tx ?: return
+            this.tx = null
+            val ops = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain()
+            if (!ops.isNullOrEmpty()) ops.useAll { executeTx(it) }
+        }
+
         internal fun executeDml(op: TxOp) {
             if (autoCommit) {
                 listOf(op).useAll { ops -> executeTx(ops) }
-            } else {
-                pendingOps.add(op)
+                return
+            }
+            val tx = tx ?: Transaction().also { tx = it }
+            when (val mode = tx.mode) {
+                is AccessMode.ReadWrite -> mode.buffer.add(op)
+                null -> AccessMode.ReadWrite(DmlBuffer(allocator)).also { tx.mode = it }.buffer.add(op)
+                is AccessMode.ReadOnly -> {
+                    op.close()
+                    throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
+                }
             }
         }
 
         override fun setAutoCommit(autoCommit: Boolean) {
+            if (this.autoCommit == autoCommit) return
+            if (autoCommit) commitTx()
             this.autoCommit = autoCommit
         }
 
         override fun commit() {
-            val ops = pendingOps.toList()
-            pendingOps.clear()
-            if (ops.isNotEmpty()) {
-                ops.useAll { executeTx(it) }
-            }
+            if (autoCommit) throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+            commitTx()
+        }
+
+        private fun discardTx() {
+            tx?.close()
+            tx = null
         }
 
         override fun rollback() {
-            pendingOps.forEach { it.close() }
-            pendingOps.clear()
+            if (autoCommit) throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
+            discardTx()
         }
 
         override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): Statement {
@@ -652,7 +719,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         override fun getCurrentDbSchema(): String = "public"
 
         override fun close() {
-            rollback()
+            discardTx()
         }
     }
 
