@@ -189,4 +189,148 @@ class InProcessAdbcTest {
             }
         }
     }
+
+    private fun allRows(stmt: AdbcStatement): List<Map<*, *>> {
+        val res = mutableListOf<Map<*, *>>()
+        stmt.executeQuery().reader.use { rdr ->
+            while (rdr.loadNextBatch())
+                Relation.fromRoot(al, rdr.vectorSchemaRoot).use { res.addAll(it.toMaps(SNAKE_CASE_STRING)) }
+        }
+        return res
+    }
+
+    private fun Xtdb.Connection.select(sql: String) =
+        createStatement().use { stmt -> stmt.setSqlQuery(sql); allRows(stmt) }
+
+    private fun Xtdb.Connection.update(sql: String) =
+        createStatement().use { stmt -> stmt.setSqlQuery(sql); stmt.executeUpdate() }
+
+    @Test
+    fun `commit and rollback are illegal in autocommit mode`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) { conn.commit() }
+            assertThrows(Incorrect::class.java) { conn.rollback() }
+        }
+    }
+
+    @Test
+    fun `manual-mode writes are buffered until commit`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "the buffered write is not yet committed"
+            )
+
+            conn.commit()
+            assertEquals(
+                listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "visible once committed"
+            )
+        }
+    }
+
+    @Test
+    fun `rollback discards buffered writes`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.rollback()
+
+            assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
+        }
+    }
+
+    @Test
+    fun `switching to autocommit commits the open transaction`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.setAutoCommit(true)
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id")
+            )
+        }
+    }
+
+    @Test
+    fun `consecutive prepared inserts coalesce and every row lands on commit`() {
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+                for (id in 1L..5L) {
+                    bindLongParam(stmt, id)
+                    stmt.executeUpdate()
+                }
+            }
+            conn.commit()
+
+            assertEquals(
+                (1L..5L).map { mapOf("_id" to it) },
+                conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "every row of the coalesced run lands as a distinct insert"
+            )
+        }
+    }
+
+    @Test
+    fun `a different statement seals the run, then a fresh run resumes`() {
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+                bindLongParam(stmt, 1L); stmt.executeUpdate()
+                bindLongParam(stmt, 2L); stmt.executeUpdate()
+            }
+
+            conn.update("INSERT INTO bar RECORDS {_id: 10}")
+
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+                bindLongParam(stmt, 3L); stmt.executeUpdate()
+            }
+
+            conn.commit()
+
+            assertEquals((1L..3L).map { mapOf("_id" to it) }, conn.select("SELECT _id FROM foo ORDER BY _id"))
+            assertEquals(listOf(mapOf("_id" to 10L)), conn.select("SELECT _id FROM bar"))
+        }
+    }
+
+    @Test
+    fun `rollback discards a buffered coalescing run`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("INSERT INTO foo (_id) VALUES (?)")
+                stmt.prepare()
+                for (id in 1L..3L) {
+                    bindLongParam(stmt, id)
+                    stmt.executeUpdate()
+                }
+            }
+            conn.rollback()
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "the buffered run is discarded; the run relation is freed (tearDown's allocator close would fail on a leak)"
+            )
+        }
+    }
 }
