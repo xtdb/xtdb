@@ -36,6 +36,7 @@ import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
+import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.unsupported
@@ -56,6 +57,7 @@ import xtdb.query.QueryOpts
 import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
+import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.useAll
 import java.util.concurrent.ExecutionException
@@ -138,7 +140,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val awaitTimeout: Duration = Duration.ofMinutes(1)
 
         private var autoCommit = true
-        private val pendingOps = mutableListOf<TxOp>()
+        private var tx: Transaction? = null
 
         private fun db(dbName: DatabaseName): Database =
             dbCat.databaseOrNull(dbName)
@@ -222,8 +224,26 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
+        // Reads go through here so an open read-only transaction supplies its pinned basis: the tx's basis wins,
+        // falling back to whatever the caller pinned per-statement (vestigial today) and then its default. With no
+        // tx the caller's opts pass through untouched. The first read also resolves an undecided tx to read-only.
+        fun openQuery(pq: PreparedQuery, args: RelationReader?, opts: QueryOpts): ResultCursor {
+            val tx = tx
+            val merged = if (tx != null && tx.mode !is AccessMode.ReadWrite) {
+                if (tx.mode == null) tx.mode = AccessMode.ReadOnly
+                // only the read basis is pinned at begin; tz is session-live (PG SET TIME ZONE is immediate), so
+                // it's left to the caller's opts rather than overridden from the tx.
+                opts.copy(
+                    currentTime = tx.basis.currentTime ?: opts.currentTime,
+                    snapshotToken = tx.basis.snapshotToken ?: opts.snapshotToken,
+                    snapshotTime = tx.basis.snapshotTime ?: opts.snapshotTime,
+                )
+            } else opts
+            return pq.openQuery(args, merged)
+        }
+
         fun openSqlQuery(sql: String): ResultCursor =
-            prepareSql(sql).openQuery(null, QueryOpts(null, defaultTz))
+            openQuery(prepareSql(sql), null, QueryOpts(null, defaultTz))
 
         fun openSnapshot(): DatabaseSnapshot {
             val db = db(dbName)
@@ -299,7 +319,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 val queryArgs = openQueryArgs()
                 val cursor = try {
-                    prepared?.openQuery(queryArgs, QueryOpts()) ?: openSqlQuery(sql)
+                    prepared?.let { openQuery(it, queryArgs, QueryOpts()) } ?: openSqlQuery(sql)
                 } catch (t: Throwable) {
                     queryArgs?.close()
                     throw t
@@ -321,29 +341,148 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        internal fun executeDml(op: TxOp) {
+        // Manual-tx DML buffer: consecutive same-SQL ops coalesce, their args appended into the last op's own
+        // relation, so a prepared INSERT in a loop becomes one multi-row op.
+        private class DmlBuffer(private val al: BufferAllocator) : AutoCloseable {
+            private val ops = mutableListOf<TxOp>()
+
+            fun add(op: TxOp) {
+                if (op !is TxOp.Sql || op.args == null) {
+                    ops.add(op)
+                    return
+                }
+
+                val target = (ops.lastOrNull() as? TxOp.Sql)?.takeIf { it.sql == op.sql }?.args as? RelationWriter
+                if (target != null) {
+                    op.args.use(target::append)
+                } else {
+                    val rel = Relation(al)
+                    rel.closeOnCatch { op.args.use(rel::append) }
+                    ops.add(TxOp.Sql(op.sql, rel))
+                }
+            }
+
+            fun drain(): List<TxOp> = ops.toList().also { ops.clear() }
+
+            override fun close() = ops.forEach { it.close() }
+        }
+
+        private class Basis(val currentTime: Instant?, val snapshotToken: String?, val snapshotTime: Instant?)
+
+        // resolved on the first statement: a query makes it read-only, DML makes it read-write. A "read-write" tx
+        // is write-only in XTDB — queries are rejected in a DML tx — so only ReadOnly reads a basis.
+        private sealed interface AccessMode : AutoCloseable {
+            data object ReadOnly : AccessMode {
+                override fun close() {}
+            }
+
+            class ReadWrite(val buffer: DmlBuffer) : AccessMode {
+                override fun close() = buffer.close()
+            }
+        }
+
+        // Begin-time state, pinned before the mode is known: [basis] serves a read-only tx's reads, the commit
+        // metadata a read-write tx's submit. ADBC starts one lazily with defaults; pgwire's beginTx fills it.
+        private class Transaction(
+            val basis: Basis = Basis(null, null, null),
+            val awaitToken: String? = null,
+            val defaultTz: ZoneId? = null,
+            val systemTime: Instant? = null,
+            val user: String? = null,
+            val userMetadata: Map<*, *>? = null,
+            val async: Boolean = false,
+            var mode: AccessMode? = null,
+            var failed: Throwable? = null,
+        ) : AutoCloseable {
+            override fun close() { mode?.close() }
+        }
+
+        // Start an explicit transaction, pinning its basis and commit metadata. readOnly fixes the mode up front
+        // (BEGIN READ ONLY / READ WRITE); left null, the first statement resolves it.
+        fun beginTx(
+            currentTime: Instant? = null, snapshotToken: String? = null, snapshotTime: Instant? = null,
+            awaitToken: String? = null, defaultTz: ZoneId? = null,
+            systemTime: Instant? = null, user: String? = null, userMetadata: Map<*, *>? = null,
+            async: Boolean = false, readOnly: Boolean? = null,
+        ) {
+            if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
+            tx = Transaction(
+                Basis(currentTime, snapshotToken, snapshotTime),
+                awaitToken, defaultTz, systemTime, user, userMetadata, async,
+                mode = when (readOnly) {
+                    true -> AccessMode.ReadOnly
+                    false -> AccessMode.ReadWrite(DmlBuffer(allocator))
+                    null -> null
+                }
+            )
+        }
+
+        val txOpen get() = tx != null
+        val txFailed get() = tx?.failed != null
+        val txReadOnly get() = tx?.mode is AccessMode.ReadOnly
+
+        fun failTx(cause: Throwable) { tx?.let { it.failed = cause } }
+
+        // returns the SubmittedTx (async) / ExecutedTx (sync) for the frontend to report, or null if nothing buffered.
+        // INSERT/PATCH ops are statically expanded to PutDocs/PatchDocs via qSrc (shared with pgwire); everything
+        // else submits raw. `drained` owns the buffered originals, `expanded` the freshly-opened expansion relations;
+        // both close once in finally (disjoint), while submit/execute only read them.
+        fun commitTx(): Any? {
+            val tx = tx ?: return null
+            this.tx = null
+            val drained = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain() ?: return null
+            if (drained.isEmpty()) return null
+            val opts = TxOpts(tx.defaultTz, tx.systemTime, tx.user, tx.userMetadata)
+            val tz = tx.defaultTz ?: defaultTz
+            val expanded = mutableListOf<TxOp>()
+            try {
+                val toSubmit = drained.flatMap { op ->
+                    (op as? TxOp.Sql)?.let { qSrc.sqlToStaticOps(it.sql, it.args, allocator, tz) }
+                        ?.also { expanded += it }
+                        ?: listOf(op)
+                }
+                return if (tx.async) submitTx(toSubmit, opts) else executeTx(toSubmit, opts)
+            } finally {
+                drained.closeAll()
+                expanded.closeAll()
+            }
+        }
+
+        fun executeDml(op: TxOp) {
             if (autoCommit) {
                 listOf(op).useAll { ops -> executeTx(ops) }
-            } else {
-                pendingOps.add(op)
+                return
+            }
+            val tx = tx ?: Transaction().also { tx = it }
+            when (val mode = tx.mode) {
+                is AccessMode.ReadWrite -> mode.buffer.add(op)
+                null -> AccessMode.ReadWrite(DmlBuffer(allocator)).also { tx.mode = it }.buffer.add(op)
+                is AccessMode.ReadOnly -> {
+                    op.close()
+                    throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
+                }
             }
         }
 
         override fun setAutoCommit(autoCommit: Boolean) {
+            if (this.autoCommit == autoCommit) return
+            if (autoCommit) commitTx()
             this.autoCommit = autoCommit
         }
 
         override fun commit() {
-            val ops = pendingOps.toList()
-            pendingOps.clear()
-            if (ops.isNotEmpty()) {
-                ops.useAll { executeTx(it) }
-            }
+            if (autoCommit) throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+            commitTx()
+        }
+
+        private fun discardTx() {
+            tx?.close()
+            tx = null
         }
 
         override fun rollback() {
-            pendingOps.forEach { it.close() }
-            pendingOps.clear()
+            if (autoCommit) throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
+            discardTx()
         }
 
         override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): Statement {
@@ -652,7 +791,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         override fun getCurrentDbSchema(): String = "public"
 
         override fun close() {
-            rollback()
+            discardTx()
         }
     }
 
