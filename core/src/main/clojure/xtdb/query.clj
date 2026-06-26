@@ -47,7 +47,7 @@
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor ResultCursor ResultCursor$ErrorTrackingCursor PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
-           (xtdb.api.query IKeyFn)
+           (xtdb.api.query IKeyFn IKeyFn$KeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
@@ -480,6 +480,23 @@
             (throw (err/incorrect ::invalid-sql-tx-op
                                   "Invalid SQL query sent as transaction operation"
                                   {:query sql})))))))
+
+  (sqlToStaticOps [_ sql args allocator default-tz]
+    ;; row-major bridge to the existing (row-major) expander: read args back to arg-rows, then open the deferred
+    ;; ClientTxOps into eager TxOps against the connection allocator. requiring-resolve breaks a
+    ;; query->log->node->query cycle. nil → not statically expandable; caller submits the raw SQL op.
+    ;; Read by `?_N` name, NOT vector position: open-args builds the row via `(into {} …)`, so ≥9 params land in
+    ;; hash order, not `?_0..?_n` — `->param-row` re-keys by position and would otherwise swap them. SNAKE_CASE_STRING
+    ;; keys so record-valued args carry the string keys the PutDocs/PatchDocs writers look up.
+    (let [arg-rows (when-let [^RelationReader args args]
+                     (let [cols (count (.getVectors args))]
+                       (vec (for [row-idx (range (.getRowCount args))]
+                              (vec (for [col-idx (range cols)]
+                                     (when-let [^VectorReader v (.vectorForOrNull args (str "?_" col-idx))]
+                                       (.getObject v row-idx IKeyFn$KeyFn/SNAKE_CASE_STRING))))))))]
+      (when-let [tx-ops (seq (sql/sql->static-ops sql arg-rows))]
+        (let [open-tx-op (requiring-resolve 'xtdb.log/open-tx-op)]
+          (util/safe-mapv #(open-tx-op % allocator {:default-tz default-tz}) tx-ops)))))
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (:default-db opts)

@@ -57,6 +57,7 @@ import xtdb.query.QueryOpts
 import xtdb.table.TableRef
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
+import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.useAll
 import java.util.concurrent.ExecutionException
@@ -421,16 +422,32 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun failTx(cause: Throwable) { tx?.let { it.failed = cause } }
 
-        private fun commitTx() {
-            val tx = tx ?: return
+        // returns the SubmittedTx (async) / ExecutedTx (sync) for the frontend to report, or null if nothing buffered.
+        // INSERT/PATCH ops are statically expanded to PutDocs/PatchDocs via qSrc (shared with pgwire); everything
+        // else submits raw. `drained` owns the buffered originals, `expanded` the freshly-opened expansion relations;
+        // both close once in finally (disjoint), while submit/execute only read them.
+        fun commitTx(): Any? {
+            val tx = tx ?: return null
             this.tx = null
-            val ops = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain() ?: return
-            if (ops.isEmpty()) return
+            val drained = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain() ?: return null
+            if (drained.isEmpty()) return null
             val opts = TxOpts(tx.defaultTz, tx.systemTime, tx.user, tx.userMetadata)
-            ops.useAll { if (tx.async) submitTx(it, opts) else executeTx(it, opts) }
+            val tz = tx.defaultTz ?: defaultTz
+            val expanded = mutableListOf<TxOp>()
+            try {
+                val toSubmit = drained.flatMap { op ->
+                    (op as? TxOp.Sql)?.let { qSrc.sqlToStaticOps(it.sql, it.args, allocator, tz) }
+                        ?.also { expanded += it }
+                        ?: listOf(op)
+                }
+                return if (tx.async) submitTx(toSubmit, opts) else executeTx(toSubmit, opts)
+            } finally {
+                drained.closeAll()
+                expanded.closeAll()
+            }
         }
 
-        internal fun executeDml(op: TxOp) {
+        fun executeDml(op: TxOp) {
             if (autoCommit) {
                 listOf(op).useAll { ops -> executeTx(ops) }
                 return

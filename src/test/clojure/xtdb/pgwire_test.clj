@@ -32,8 +32,7 @@
            (xtdb JsonSerde JsonLdSerde)
            (xtdb.api DataSource$ConnectionBuilder PasswordHash)
            xtdb.api.log.SourceMessage$FlushBlock
-           xtdb.pgwire.Server
-           xtdb.tx.Sql))
+           xtdb.pgwire.Server))
 
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
@@ -1791,26 +1790,25 @@
       (jdbc/execute! tx ["INSERT INTO foo RECORDS {_id: ?, a: ?}" 3, "three"])
       (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}])
 
-      ;; HACK - leaning into internal state
-      (let [dml-buf (-> @(:server-state *server*)
-                        (get-in [:connections 1 :conn-state])
-                        deref
-                        (get-in [:transaction :dml-buf]))]
-        (t/is (= ["INSERT INTO foo RECORDS $1"
-                   "INSERT INTO foo RECORDS {_id: $1, a: $2}"
-                   "INSERT INTO foo RECORDS $1"]
-                  (mapv Sql/.getSql dml-buf)))
-        (t/is (= [[[{:_id 1, :a "one"}]
-                   [{:_id 2, :a "two"}]]
-                  [[3 "three"]]
-                  [[{:_id 4, :a "four"}]]]
-                  (mapv Sql/.getArgRows dml-buf)))))
+      ;; op-coalescing moved into the connection's DmlBuffer (pgwire's :transaction :dml-buf is gone); it's verified
+      ;; directly in InProcessAdbcTest. Here we just check the combined writes all land.
+      )
 
     (t/is (= [{:xt/id 1, :a "one"}
               {:xt/id 2, :a "two"}
               {:xt/id 3, :a "three"}
               {:xt/id 4, :a "four"}]
              (q conn ["SELECT * FROM foo ORDER BY _id"])))))
+
+(t/deftest test-static-ops-arg-order-over-8-params
+  ;; >8 params: open-args builds the arg row via `(into {} …)`, which promotes to a hash-ordered map, so the
+  ;; relation's columns aren't `?_0..?_n` in order. Static expansion must read args back by name, else the
+  ;; column values get permuted. (≤8 params stay an array-map and wouldn't catch this.)
+  (with-open [conn (jdbc-conn)]
+    (jdbc/execute! conn ["INSERT INTO foo (_id, c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                         0 1 2 3 4 5 6 7 8])
+    (t/is (= [{:xt/id 0, :c1 1, :c2 2, :c3 3, :c4 4, :c5 5, :c6 6, :c7 7, :c8 8}]
+             (q conn ["SELECT * FROM foo"])))))
 
 (deftest test-java-sql-timestamp
   (testing "java.sql.Timestamp"
