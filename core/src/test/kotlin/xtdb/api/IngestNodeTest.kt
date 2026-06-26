@@ -43,7 +43,7 @@ private class CountingExternalSource(
     override suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer) {
         leaderFor.add(dbName)
         repeat(rowsToIndex) {
-            txIndexer.indexTx(externalSourceToken = null) { TxResult.Committed() }
+            txIndexer.executeTx(externalSourceToken = null) { TxResult.Committed() }
             indexed.countDown()
         }
     }

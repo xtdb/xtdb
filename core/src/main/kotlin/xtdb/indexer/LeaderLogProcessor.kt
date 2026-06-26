@@ -140,8 +140,10 @@ class LeaderLogProcessor(
     // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending the send.
     private val sourceLogCh =
         Channel<SourceLogTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+    // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
+    // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
-        Channel<ExtSourceTask>(onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
@@ -290,13 +292,16 @@ class LeaderLogProcessor(
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
-    private suspend fun submit(task: PersisterTask) {
+    // Hand the task to the persister and return its completion handle. The caller decides whether to
+    // await it: `executeTx`, GC and `processRecords` await (they need the work done before returning);
+    // `submitTx` doesn't (fire-and-forget). Suspends only on the channel send (backpressure).
+    private suspend fun enqueue(task: PersisterTask): Deferred<Unit> {
         when (task) {
             is SourceLogTask -> sourceLogCh.send(task)
             is ExtSourceTask -> extSourceCh.send(task)
             is GcTask -> gcCh.send(task)
         }
-        task.onComplete.await()
+        return task.onComplete
     }
 
     internal val trieGc = nodeBase.config.garbageCollector.let { cfg ->
@@ -317,7 +322,7 @@ class LeaderLogProcessor(
         // The table-block file uploaded at (2) is now a persistent snapshot of state that
         // disagrees with the replica log it claims to be a snapshot of.
         val commitTriesDeleted: suspend (TableRef, Set<TrieKey>) -> Unit = { tableName, trieKeys ->
-            submit(GcTask.TriesDeleted(tableName, trieKeys))
+            enqueue(GcTask.TriesDeleted(tableName, trieKeys)).await()
         }
 
         TrieGarbageCollector(
@@ -336,8 +341,10 @@ class LeaderLogProcessor(
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
             launch {
-                // Close the channels with the failure cause so a subsequent `processRecords` send
-                // (no longer awaited per-record) throws it rather than a bare ClosedSendChannelException.
+                // Close the channels with the failure cause so a subsequent `enqueue` send throws it rather
+                // than a bare ClosedSendChannelException. An awaiting caller (`executeTx`, GC, `processRecords`)
+                // sees the cause through its `await`; this close-with-cause is the safety net for fire-and-forget
+                // `submitTx`, and for any caller's next send once the persister loop has exited.
                 var cause: Throwable? = null
                 try {
                     while (true) {
@@ -402,13 +409,23 @@ class LeaderLogProcessor(
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
 
-    override suspend fun indexTx(
+    override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
     ): TxResult =
         ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
-            .also { submit(it) }
+            .also { enqueue(it).await() }
             .result.await()
+
+    override suspend fun submitTx(
+        externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+        writer: suspend (OpenTx) -> TxResult,
+    ) {
+        // Fire-and-forget: enqueue and return without awaiting the completion handle. The task's
+        // `result`/`onComplete` are completed by the persister but go unawaited here — an unrecoverable
+        // failure closes the channel with its cause, so the next `enqueue` (this or `executeTx`) throws it.
+        enqueue(ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer))
+    }
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
@@ -587,7 +604,7 @@ class LeaderLogProcessor(
         // run a leader/follower transition under `runBlocking` — the persister is quiescent, so a
         // concurrent DETACH/shutdown that must cancel-join the term doesn't wedge against in-flight
         // import work on a starved dispatcher (#5741).
-        if (records.isNotEmpty()) submit(SourceLogTask.Batch(records))
+        if (records.isNotEmpty()) enqueue(SourceLogTask.Batch(records)).await()
     }
 
     override fun close() {

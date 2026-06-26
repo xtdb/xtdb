@@ -65,7 +65,10 @@ class DocsIndexer(private val table: TableRef) : RecordIndexer {
             val token = kafkaConnectSourceToken { offset = rec.kafkaOffset() }.toByteArray()
             val systemTime = rec.timestamp()?.let { Instant.ofEpochMilli(it) }
 
-            txIndexer.indexTx(token, systemTime = systemTime) { openTx ->
+            // Fire-and-forget: resume is anchored to XTDB's per-tx import token (the consumer re-seeks from
+            // it on restart and never commits offsets back to Kafka), so a crash replays from the last
+            // *imported* offset — handing off without awaiting the result can't lose or skip a record.
+            txIndexer.submitTx(token, systemTime = systemTime) { openTx ->
                 try {
                     writeRecord(openTx, rec)
                     TxResult.Committed()

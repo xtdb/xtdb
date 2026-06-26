@@ -851,9 +851,13 @@ rule ExternalSourceAssigned {
 }
 
 rule ExternalSourceIndexesTx {
-    -- Per-tx entry point. The external source calls TxIndexer.indexTx with
-    -- an opaque resume token, optional system_time, and a writer that
-    -- populates an OpenTx with the transformed row data.
+    -- Per-tx entry point. The external source calls TxIndexer.executeTx
+    -- (synchronous, returns the TxResult) or TxIndexer.submitTx
+    -- (fire-and-forget, returns without awaiting) with an opaque resume
+    -- token, optional system_time, and a writer that populates an OpenTx
+    -- with the transformed row data. The per-tx indexing behaviour below is
+    -- identical for both; they differ only in whether the caller awaits the
+    -- result, which is caller-side and below this spec's abstraction level.
     --
     -- Unlike the client-driven leader, tx_id here is assigned by the
     -- processor as live_index.latest_completed_tx.tx_id + 1, NOT taken

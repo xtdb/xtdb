@@ -8,7 +8,6 @@ import xtdb.error.Unsupported
 import xtdb.indexer.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
-import xtdb.database.proto.DatabaseConfig
 import java.util.*
 import com.google.protobuf.Any as ProtoAny
 
@@ -20,7 +19,7 @@ typealias ExternalSourceToken = ByteArray
  * instead of XTDB's own DML.
  *
  * The source owns the read side of its upstream: it receives events (via polling or other methods),
- * maps each to a transaction, and submits it * through [TxIndexer.indexTx].
+ * maps each to a transaction, and submits it through [TxIndexer.executeTx].
  *
  * XTDB drives the source via [onPartitionAssigned] and persists the per-tx [ExternalSourceToken]
  * so the source can resume after the last indexed event.
