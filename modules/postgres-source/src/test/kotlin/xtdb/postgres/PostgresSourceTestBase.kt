@@ -27,11 +27,13 @@ abstract class PostgresSourceTestBase {
 
     // --- pg ---
 
-    protected fun pgConn(): Connection =
-        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password)
+    protected fun pgConn(pg: PostgreSQLContainer = postgres): Connection =
+        DriverManager.getConnection(pg.jdbcUrl, pg.username, pg.password)
 
-    protected fun pgExecute(vararg statements: String) =
-        pgConn().use { c -> c.createStatement().use { s -> statements.forEach { s.execute(it) } } }
+    protected fun pgExecute(pg: PostgreSQLContainer, vararg statements: String) =
+        pgConn(pg).use { c -> c.createStatement().use { s -> statements.forEach { s.execute(it) } } }
+
+    protected fun pgExecute(vararg statements: String) = pgExecute(postgres, *statements)
 
     protected fun unique(prefix: String) = "${prefix}_${UUID.randomUUID().toString().replace("-", "_")}"
 
@@ -50,22 +52,26 @@ abstract class PostgresSourceTestBase {
 
     // --- node ---
 
-    protected fun openNode(logDir: Path, storageDir: Path): Xtdb = Xtdb.openNode {
+    protected fun openNode(
+        logDir: Path, storageDir: Path,
+        pg: PostgreSQLContainer = postgres,
+        username: String = "testuser", password: String = "testpass",
+    ): Xtdb = Xtdb.openNode {
         server { port = 0 }
         log(localLog(logDir))
         storage(Storage.local(storageDir))
         remote("pg", PostgresRemote.Factory(
-            hostname = postgres.host, port = postgres.firstMappedPort,
-            database = "testdb", username = "testuser", password = "testpass",
+            hostname = pg.host, port = pg.firstMappedPort,
+            database = "testdb", username = username, password = password,
         ))
     }
 
-    protected fun attachCdc(node: Xtdb, cdcLog: Path, cdcStorage: Path, slot: String, pub: String) {
+    protected fun attachCdc(node: Xtdb, database: String, cdcLog: Path, cdcStorage: Path, slot: String, pub: String) {
         node.createConnectionBuilder().build().use { c ->
             c.createStatement().use { s ->
                 s.execute(
                     """
-                    ATTACH DATABASE cdc WITH $$
+                    ATTACH DATABASE $database WITH $$
                         storage: !Local
                           path: $cdcStorage
                         log: !Local
@@ -80,8 +86,8 @@ abstract class PostgresSourceTestBase {
         }
     }
 
-    protected fun xtQuery(node: Xtdb, sql: String): List<Map<String, Any?>> =
-        node.createConnectionBuilder().database("cdc").build().use { c ->
+    protected fun xtQuery(node: Xtdb, database: String, sql: String): List<Map<String, Any?>> =
+        node.createConnectionBuilder().database(database).build().use { c ->
             c.createStatement().use { s ->
                 s.executeQuery(sql).use { rs ->
                     val cols = (1..rs.metaData.columnCount).map { rs.metaData.getColumnName(it) }

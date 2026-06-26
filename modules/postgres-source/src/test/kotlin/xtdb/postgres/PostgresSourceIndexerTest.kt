@@ -76,7 +76,7 @@ class PostgresSourceIndexerTest : PostgresSourceTestBase() {
             // from the projection (proving the drop) — `name` survives
             val gadgets = await(
                 done = { rows: List<Map<String, Any?>> -> rows.isNotEmpty() },
-            ) { xtQuery(node, "SELECT * FROM gadgets") }
+            ) { xtQuery(node, database = "cdc", sql = "SELECT * FROM gadgets") }
 
             assertEquals(1, gadgets.size)
             assertEquals("anvil", gadgets[0]["name"])

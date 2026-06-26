@@ -58,7 +58,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         (node as Xtdb.XtdbInternal).dbCatalog["cdc"]?.ingestionError
 
     private fun qRows(node: Xtdb, table: String): List<Pair<Int, String?>> =
-        xtQuery(node, "SELECT _id, name FROM public.$table ORDER BY _id")
+        xtQuery(node, database = "cdc", sql = "SELECT _id, name FROM public.$table ORDER BY _id")
             .map { (it["_id"] as Number).toInt() to (it["name"] as String?) }
 
     /** The oracle: waits for the cdc pipeline to drain, then asserts the cdc table matches the
@@ -96,7 +96,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         var node = openNode(dirs[0], dirs[1])
         var model = emptyMap<Int, String>()
         try {
-            attachCdc(node, dirs[2], dirs[3], slot, pub)
+            attachCdc(node, database = "cdc", cdcLog = dirs[2], cdcStorage = dirs[3], slot = slot, pub = pub)
             awaitStreaming(node)
             flushBlock(node)
 

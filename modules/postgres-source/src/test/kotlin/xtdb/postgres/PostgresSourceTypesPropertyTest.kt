@@ -209,7 +209,7 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
         val dirs = List(4) { Files.createTempDirectory("pg-prop") }
         try {
             openNode(dirs[0], dirs[1]).use { node ->
-                attachCdc(node, dirs[2], dirs[3], slot, pub)
+                attachCdc(node, database = "cdc", cdcLog = dirs[2], cdcStorage = dirs[3], slot = slot, pub = pub)
                 awaitStreaming(node)
                 f(node, table)
             }
@@ -223,7 +223,7 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
     // errors table-not-found; the awaits want that to read as "no rows yet" so they poll on
     private fun xtQueryAwaiting(node: Xtdb, sql: String): List<Map<String, Any?>> =
         try {
-            xtQuery(node, sql)
+            xtQuery(node, database = "cdc", sql = sql)
         } catch (e: SQLException) {
             if (e.message?.contains("Table not found") == true) emptyList() else throw e
         }
