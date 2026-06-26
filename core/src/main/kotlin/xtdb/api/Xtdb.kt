@@ -231,11 +231,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             val tx = tx
             val merged = if (tx != null && tx.mode !is AccessMode.ReadWrite) {
                 if (tx.mode == null) tx.mode = AccessMode.ReadOnly
+                // only the read basis is pinned at begin; tz is session-live (PG SET TIME ZONE is immediate), so
+                // it's left to the caller's opts rather than overridden from the tx.
                 opts.copy(
                     currentTime = tx.basis.currentTime ?: opts.currentTime,
                     snapshotToken = tx.basis.snapshotToken ?: opts.snapshotToken,
                     snapshotTime = tx.basis.snapshotTime ?: opts.snapshotTime,
-                    defaultTz = tx.defaultTz ?: opts.defaultTz,
                 )
             } else opts
             return pq.openQuery(args, merged)

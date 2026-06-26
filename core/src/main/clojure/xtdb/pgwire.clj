@@ -578,14 +578,15 @@
                                            (->> (into {} (filter (comp some? val))))))
                                  (assoc :await-token await-token)))))))))
 
-  ;; mirror the write-side opts onto the connection's tx, so executeDml buffers and commit submits with them.
-  ;; the read basis (current-time/snapshot/await-token) still flows via the :transaction map + bind-stmt — that's C′.
+  ;; mirror the tx onto the connection: it pins the read basis (a read-only tx's queries read it via openQuery) and
+  ;; the commit metadata (a read-write tx's submit uses it).
   (let [{:keys [^Xtdb$Connection node-conn session]
-         {:keys [access-mode default-tz system-time user-metadata async?]} :transaction} @conn-state]
+         {:keys [access-mode current-time snapshot-token snapshot-time await-token
+                 default-tz system-time user-metadata async?]} :transaction} @conn-state]
     ;; pgwire's swap above already decided whether a (re-)begin is allowed (it throws on a double explicit BEGIN).
     ;; an explicit BEGIN is preceded by an empty implicit auto-begin (msg-simple-query) — discard it and re-begin.
     (.rollback node-conn)
-    (.beginTx node-conn nil nil nil nil
+    (.beginTx node-conn current-time snapshot-token (some-> snapshot-time time/->instant) await-token
               default-tz system-time (get-in session [:parameters "user"]) user-metadata
               (boolean async?)
               (case access-mode :read-only true :read-write false nil))))
@@ -947,21 +948,27 @@
         {:keys [^Clock clock], session-params :parameters} session
         await-token (:await-token transaction (.getAwaitToken node-conn))
 
-        query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
-                                            (time/->instant))
-                                   (.instant clock))
-                              (or (:default-tz transaction) (.getDefaultTz node-conn))
-                              (:snapshot-token stmt (:snapshot-token transaction))
-                              (some-> (or (:snapshot-time stmt) (:snapshot-time transaction))
-                                      (time/->instant))
-                              query-tracer)
+        ;; current-time/snapshot are the read basis: tx-less reads fall back to the session clock here, an open
+        ;; read-only tx's pinned basis is overlaid by the connection's openQuery. tz is NOT basis — it's session
+        ;; state (begin-initialised, SET TIME ZONE-mutable), so it stays pgwire-side and rides through here.
+        query-opts (QueryOpts. (.instant clock)
+                               (or (:default-tz transaction) (.getDefaultTz node-conn))
+                               nil nil query-tracer)
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->cursor ^xtdb.ResultCursor [xt-args]
+    (letfn [;; meta-reads (SHOW, EXECUTE's arg evaluation) open the prepared query directly — they mustn't pin a
+            ;; basis or resolve the connection's tx access-mode (an EXECUTE-of-DML evaluates its args first).
+            (->cursor ^xtdb.ResultCursor [xt-args]
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
                   (.openQuery prepared-query args-rel query-opts))))
+
+            ;; genuine user queries go through the connection, which overlays an open read-only tx's pinned basis
+            (->tx-cursor ^xtdb.ResultCursor [xt-args]
+              (with-auth-check conn
+                (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
+                  (.openQuery node-conn prepared-query args-rel query-opts))))
 
             (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
@@ -982,7 +989,7 @@
         (.accept parsed
                (reify ParsedStatement$Visitor
                  (visitQuery [_ _]
-                   (util/with-close-on-catch [cursor (->cursor xt-args)]
+                   (util/with-close-on-catch [cursor (->tx-cursor xt-args)]
                      (-> stmt
                          (assoc :cursor cursor,
                                 :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))
@@ -1035,7 +1042,7 @@
                          (cond
                            (instance? ParsedStatement$Query inner-parsed)
                            (with-auth-check conn
-                             (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel query-opts)]
+                             (util/with-close-on-catch [inner-cursor (.openQuery node-conn inner-pq args-rel query-opts)]
                                (-> inner
                                    (assoc :cursor inner-cursor
                                           :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
