@@ -111,14 +111,9 @@ class LeaderLogProcessor(
     }
 
     private sealed interface SourceLogTask : PersisterTask {
-        data class Record(val record: Log.Record<SourceMessage>) : SourceLogTask {
-            override val onComplete = CompletableDeferred<Unit>()
-        }
-
-        data class ResolvedTx(
-            val resolvedTx: ReplicaMessage.ResolvedTx,
-            val srcMsgId: MessageId,
-        ) : SourceLogTask {
+        // One task per poll batch; the persister resolves + imports the records in order.
+        // onComplete is required by PersisterTask but unused here — processRecords fires and returns.
+        data class Batch(val records: List<Log.Record<SourceMessage>>) : SourceLogTask {
             override val onComplete = CompletableDeferred<Unit>()
         }
     }
@@ -141,19 +136,28 @@ class LeaderLogProcessor(
         }
     }
 
+    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
+    // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending the send.
     private val sourceLogCh =
-        Channel<SourceLogTask>(onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<SourceLogTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
     private val extSourceCh =
         Channel<ExtSourceTask>(onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
-    private suspend fun handleSourceLogRecord(task: SourceLogTask.Record) {
-        val record = task.record
+    private suspend fun handleSourceLogBatch(records: List<Log.Record<SourceMessage>>) {
+        for (record in records) {
+            LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
+            handleSourceLogRecord(record)
+        }
+    }
+
+    private suspend fun handleSourceLogRecord(record: Log.Record<SourceMessage>) {
         val msgId = record.msgId
 
         when (val msg = record.message) {
-            is SourceMessage.Tx, is SourceMessage.LegacyTx -> error("send ResolvedTx instead")
+            is SourceMessage.Tx, is SourceMessage.LegacyTx ->
+                handleResolvedTx(resolveTx(msgId, record, msg), msgId)
 
             is SourceMessage.FlushBlock -> {
                 val expectedBlockIdx = msg.expectedBlockIdx
@@ -332,6 +336,9 @@ class LeaderLogProcessor(
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
             launch {
+                // Close the channels with the failure cause so a subsequent `processRecords` send
+                // (no longer awaited per-record) throws it rather than a bare ClosedSendChannelException.
+                var cause: Throwable? = null
                 try {
                     while (true) {
                         val task: PersisterTask = selectUnbiased {
@@ -341,8 +348,7 @@ class LeaderLogProcessor(
                         }
                         try {
                             when (task) {
-                                is SourceLogTask.Record -> handleSourceLogRecord(task)
-                                is SourceLogTask.ResolvedTx -> handleResolvedTx(task.resolvedTx, task.srcMsgId)
+                                is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
                                 is ExtSourceTask.IndexTx -> handleIndexTx(task)
                                 is GcTask.TriesDeleted -> handleTriesDeleted(task)
                             }
@@ -362,11 +368,14 @@ class LeaderLogProcessor(
                             throw e
                         }
                     }
-                } catch (_: Throwable) {
+                } catch (e: CancellationException) {
+                    // term cancellation: close the channels without an error cause
+                } catch (t: Throwable) {
+                    cause = t
                 } finally {
-                    sourceLogCh.close()
-                    extSourceCh.close()
-                    gcCh.close()
+                    sourceLogCh.close(cause)
+                    extSourceCh.close(cause)
+                    gcCh.close(cause)
                 }
             }
 
@@ -571,19 +580,9 @@ class LeaderLogProcessor(
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
-        for (record in records) {
-            val msgId = record.msgId
-            LOG.trace { "[$dbName] leader: message $msgId (${record.message::class.simpleName})" }
-
-            val persisterTask = when (val msg = record.message) {
-                is SourceMessage.Tx, is SourceMessage.LegacyTx ->
-                    SourceLogTask.ResolvedTx(resolveTx(msgId, record, msg), msgId)
-
-                else -> SourceLogTask.Record(record)
-            }
-
-            submit(persisterTask)
-        }
+        // Fire the batch onto the persister and return, freeing the (shared) consumer poll thread.
+        // The persister resolves + imports; clients observe completion via the watchers, not this return.
+        if (records.isNotEmpty()) sourceLogCh.send(SourceLogTask.Batch(records))
     }
 
     override fun close() {

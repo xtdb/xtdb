@@ -89,7 +89,8 @@ class LeaderLogProcessorTest {
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = mockk<TrieCatalog>(relaxed = true)
-        val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog, watchers = watchers)
 
         val tries = listOf(
             TrieDetails.newBuilder()
@@ -104,6 +105,7 @@ class LeaderLogProcessorTest {
         lp.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
         ))
+        watchers.awaitSource(0)
 
         verify { trieCatalog.addTries(any(), any(), any()) }
         assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
@@ -130,10 +132,11 @@ class LeaderLogProcessorTest {
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true),
-            dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
+            dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
@@ -144,6 +147,7 @@ class LeaderLogProcessorTest {
         lp.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
+        watchers.awaitSource(0)
 
         verify { liveIndex.finishBlock(any(), eq(0)) }
         verify { liveIndex.nextBlock() }
@@ -154,12 +158,14 @@ class LeaderLogProcessorTest {
     @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
         val liveIndex = mockk<LiveIndex>(relaxed = true)
-        val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
 
         val now = Instant.now()
         lp.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
         ))
+        watchers.awaitSource(0)
 
         verify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
     }
@@ -197,10 +203,11 @@ class LeaderLogProcessorTest {
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true),
-            dbState, blockUploader, Watchers(latestTxId = -1, latestSourceMsgId = -1),
+            dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
@@ -211,6 +218,7 @@ class LeaderLogProcessorTest {
         lp.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
+        watchers.awaitSource(0)
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
         backgroundScope.launch { replicaLog.tailAll(-1) { records ->
