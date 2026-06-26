@@ -324,11 +324,11 @@
   If the status is omitted, the status is determined from whether a transaction is currently open."
   ([conn]
    ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
-   (if-some [transaction (:transaction @(:conn-state conn))]
-     (if (:failed transaction)
-       (cmd-send-ready conn :failed-transaction)
-       (cmd-send-ready conn :transaction))
-     (cmd-send-ready conn :idle)))
+   (let [cs @(:conn-state conn)]
+     (cond
+       (.getTxFailed ^Xtdb$Connection (:node-conn cs)) (cmd-send-ready conn :failed-transaction)
+       (:transaction cs) (cmd-send-ready conn :transaction)
+       :else (cmd-send-ready conn :idle))))
   ([conn status]
    (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
@@ -599,8 +599,8 @@
 
 (defn cmd-commit [{:keys [conn-state tx-error-counter tx-latency-timer tx-submit-timer tx-execute-timer] :as conn}]
   (let [{:keys [transaction ^Xtdb$Connection node-conn]} @conn-state
-        {:keys [failed async?]} transaction]
-    (if failed
+        {:keys [async?]} transaction]
+    (if (.getTxFailed node-conn)
       (throw (pgio/err-protocol-violation "transaction failed"))
 
       (try
@@ -714,10 +714,10 @@
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
-  (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+  (let [{:keys [implicit?]} (:transaction @conn-state)]
     (try
       (when implicit?
-        (if failed
+        (if (.getTxFailed ^Xtdb$Connection (:node-conn @conn-state))
           (cmd-rollback conn)
           (cmd-commit conn)))
       (catch Throwable t
@@ -1151,7 +1151,7 @@
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
 (defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
-  (when (get-in @conn-state [:transaction :failed])
+  (when (.getTxFailed ^Xtdb$Connection (:node-conn @conn-state))
     (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
   (let [query (.getOriginalSql parsed)]
@@ -1227,7 +1227,7 @@
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
   (let [transaction (get-in @conn-state [:transaction])]
-    (when (:failed transaction)
+    (when (.getTxFailed ^Xtdb$Connection (:node-conn @conn-state))
       (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
     (when-not (or transaction (instance? ParsedStatement$ShowVariable parsed))
@@ -1490,13 +1490,13 @@
           (when-let [{:keys [implicit?]} (:transaction @conn-state)]
             (if implicit?
               (cmd-rollback conn)
-              (swap! conn-state util/maybe-update :transaction assoc :failed true, :err e)))
+              (.failTx ^Xtdb$Connection (:node-conn @conn-state) e)))
 
           (send-ex conn e))))
 
-    (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+    (let [{:keys [implicit?]} (:transaction @conn-state)]
       (when implicit?
-        (if failed
+        (if (.getTxFailed ^Xtdb$Connection (:node-conn @conn-state))
           (cmd-rollback conn)
           (cmd-commit conn))))
 
@@ -1644,14 +1644,14 @@
 
     (catch Throwable e
       (log/debug e "error processing message: " (ex-message e))
+      ;; error seen while in :extended mode, start skipping messages until sync received
       (swap! conn-state
-             (fn [{:keys [transaction protocol] :as cs}]
+             (fn [{:keys [protocol] :as cs}]
                (cond-> cs
-                 ;; error seen while in :extended mode, start skipping messages until sync received
-                 (= :extended protocol) (assoc :skip-until-sync? true)
+                 (= :extended protocol) (assoc :skip-until-sync? true))))
 
-                 ;; mark a transaction (if open as failed), for now we will consider all errors to do this
-                 transaction (update :transaction assoc :failed true, :err e))))
+      ;; mark any open tx as failed (no-op if none) — all errors abort the tx for now
+      (.failTx ^Xtdb$Connection (:node-conn @conn-state) e)
 
       (send-ex conn e))))
 
