@@ -82,8 +82,9 @@
            :error error}))))
 
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
-                                           ^IQuerySource q-src default-tz ^Counter tx-error-counter tx-await-timer db-name]
-  (Xtdb$Connection. allocator db-cat q-src default-tz tx-error-counter tx-await-timer db-name))
+                                           ^IQuerySource q-src default-tz ^Counter tx-error-counter
+                                           tx-await-timer tx-submit-timer tx-execute-timer db-name]
+  (Xtdb$Connection. allocator db-cat q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src
@@ -91,7 +92,7 @@
                  default-tz, ^AtomicReference !await-token
                  system, close-fn,
                  query-timer, ^Counter query-error-counter, ^Counter tx-error-counter
-                 tx-await-timer]
+                 tx-await-timer tx-submit-timer tx-execute-timer]
   Xtdb
   (getAllocator [_] allocator)
 
@@ -114,7 +115,7 @@
       (.createConnectionBuilder data-source)))
 
   (connect [_]
-    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer "xtdb"))
+    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer "xtdb"))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -186,7 +187,7 @@
       (await-msg-result this primary-db msg-id)))
 
   (open-connection [_ db-name]
-    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer db-name))
+    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
   xtp/PStatus
   (latest-completed-txs [_]
@@ -281,7 +282,11 @@
                                    :query-error-counter (metrics/add-counter metrics-registry "query.error")
                                    :tx-error-counter (metrics/add-counter metrics-registry "tx.error")
                                    :tx-await-timer (metrics/add-timer metrics-registry "node.tx.await"
-                                                                      {:description "Time spent in executeTx waiting for the indexer to catch up to a just-submitted tx (sync-path indexer await)."}))))]
+                                                                      {:description "Time spent in executeTx waiting for the indexer to catch up to a just-submitted tx (sync-path indexer await)."})
+                                   :tx-submit-timer (metrics/add-timer metrics-registry "node.tx.submit"
+                                                                       {:description "Time spent in submitTx (async-path log append + ack), across all frontends."})
+                                   :tx-execute-timer (metrics/add-timer metrics-registry "node.tx.execute"
+                                                                        {:description "Time spent in executeTx (sync-path log append + indexer await), across all frontends."}))))]
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]

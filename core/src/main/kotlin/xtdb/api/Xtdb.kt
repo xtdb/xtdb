@@ -129,6 +129,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
+        private val txSubmitTimer: Timer?,
+        private val txExecuteTimer: Timer?,
         var dbName: DatabaseName,
     ) : AdbcConnection {
 
@@ -149,6 +151,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
         }
 
+        private inline fun <T> Timer?.timed(body: () -> T): T {
+            val sample = Timer.start()
+            return try {
+                body()
+            } finally {
+                this?.let { sample.stop(it) }
+            }
+        }
+
         // unwrap ExecutionException → cause (mirrors util/rethrowing-cause), counting Anomalies on the way out
         private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx =
             try {
@@ -163,13 +174,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
 
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
-            doSubmit(ops, opts).also { recordTx(dbName, it.txId) }
+            txSubmitTimer.timed { doSubmit(ops, opts) }.also { recordTx(dbName, it.txId) }
 
-        fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx {
-            val txId = doSubmit(ops, opts).txId
-            val tx = if (txAwaitTimer != null) txAwaitTimer.recordCallable { awaitTx(txId) } else awaitTx(txId)
-            return tx.also { recordTx(dbName, it.txId) }
-        }
+        fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
+            txExecuteTimer.timed {
+                val txId = doSubmit(ops, opts).txId
+                txAwaitTimer.timed { awaitTx(txId) }
+            }.also { recordTx(dbName, it.txId) }
 
         private fun TransactionResult.toExecutedTx() =
             ExecutedTx(

@@ -34,7 +34,7 @@ class ConnectionTest {
         val dbCat = mockk<Database.Catalog>(relaxed = true)
         every { dbCat.databaseOrNull(any()) } returns db
 
-        return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), ZoneOffset.UTC, null, null, dbName)
+        return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), ZoneOffset.UTC, null, null, null, null, dbName)
     }
 
     private fun tokenOf(awaitToken: String?) = awaitToken?.decodeTxBasisToken()
