@@ -20,7 +20,7 @@ typealias ExternalSourceToken = ByteArray
  * instead of XTDB's own DML.
  *
  * The source owns the read side of its upstream: it receives events (via polling or other methods),
- * maps each to a transaction, and submits it * through [TxIndexer.indexTx].
+ * maps each to a transaction, and submits it through [TxIndexer.execute].
  *
  * XTDB drives the source via [onPartitionAssigned] and persists the per-tx [ExternalSourceToken]
  * so the source can resume after the last indexed event.

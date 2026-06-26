@@ -2,6 +2,8 @@ package xtdb.database
 
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -67,10 +69,14 @@ class ExternalSourceTest {
 
     /**
      * Simple in-memory ExternalSource for testing.
-     * Send signals to [channel]; each signal submits a tx via [xtdb.indexer.TxIndexer.indexTx].
+     * Send signals to [channel]; each signal submits a tx via [index] (by default the blocking
+     * [xtdb.indexer.TxIndexer.execute]; pass a `submit`-based [index] to drive the fire-and-forget path).
      */
     class InMemoryExternalSource(
         val channel: Channel<ExternalSourceToken?> = Channel(100),
+        private val index: suspend TxIndexer.(ExternalSourceToken?) -> Unit = {
+            execute(it) { TxResult.Committed() }
+        },
     ) : ExternalSource {
 
         override suspend fun onPartitionAssigned(
@@ -79,9 +85,7 @@ class ExternalSourceTest {
             txIndexer: TxIndexer
         ) {
             for (token in channel) {
-                txIndexer.indexTx(token) { _ ->
-                    TxResult.Committed()
-                }
+                txIndexer.index(token)
             }
         }
 
@@ -120,7 +124,7 @@ class ExternalSourceTest {
     }
 
     @Test
-    fun `indexTx appends ResolvedTx to replica log`() = runTest {
+    fun `execute appends ResolvedTx to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val extSource = InMemoryExternalSource()
 
@@ -191,7 +195,7 @@ class ExternalSourceTest {
     }
 
     @Test
-    fun `indexTx threads resumeToken to watchers`() = runTest {
+    fun `execute threads resumeToken to watchers`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val extSource = InMemoryExternalSource()
         leaderProc(watchers = watchers, extSource = extSource)
@@ -240,6 +244,67 @@ class ExternalSourceTest {
         extSource.channel.send(null)
         delay(500.milliseconds)
         assertNotNull(watchers.exception, "watchers should be in failed state")
+    }
+
+    @Test
+    fun `submit applies txs fire-and-forget with monotonic txIds`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val extSource = InMemoryExternalSource(index = { submit(it) { TxResult.Committed() } })
+
+        leaderProc(replicaLog = replicaLog, extSource = extSource)
+
+        extSource.channel.send(null)
+        extSource.channel.send(null)
+        delay(500.milliseconds)
+
+        val resolvedTxs = mutableListOf<ReplicaMessage.ResolvedTx>()
+        backgroundScope.launch {
+            replicaLog.tailAll(-1) { records ->
+                records.forEach { (it.message as? ReplicaMessage.ResolvedTx)?.let(resolvedTxs::add) }
+            }
+        }
+        delay(200.milliseconds)
+
+        assertEquals(listOf(0L, 1L), resolvedTxs.map { it.txId })
+        assertTrue(resolvedTxs.all { it.committed }, "both fire-and-forget txs should commit")
+    }
+
+    @Test
+    fun `submit surfaces an unrecoverable failure to the caller on a later submit`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { importTx(any()) } throws RuntimeException("commit pipeline fault")
+        }
+
+        val caught = CompletableDeferred<Throwable>()
+        val failingSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    while (true) {
+                        txIndexer.submit(null) { TxResult.Committed() }
+                        delay(10.milliseconds)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    caught.complete(e)
+                    throw e
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(watchers = watchers, liveIndex = liveIndex, extSource = failingSource)
+
+        val caughtError = caught.await()
+        assertEquals(
+            "commit pipeline fault", caughtError.message,
+            "the fire-and-forget caller sees the original failure cause"
+        )
+        assertNotNull(watchers.exception, "watchers should also be in failed state")
     }
 
     @Test

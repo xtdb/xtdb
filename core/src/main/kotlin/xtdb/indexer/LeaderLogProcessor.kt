@@ -140,8 +140,10 @@ class LeaderLogProcessor(
     // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending the send.
     private val sourceLogCh =
         Channel<SourceLogTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+    // capacity 1 so a fire-and-forget `submit` caller can queue one tx ahead while the persister works the
+    // current one (bounding lookahead to ~2). `execute` still blocks on the result regardless of capacity.
     private val extSourceCh =
-        Channel<ExtSourceTask>(onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
@@ -290,7 +292,7 @@ class LeaderLogProcessor(
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
-    private suspend fun submit(task: PersisterTask) {
+    private suspend fun enqueueAndAwait(task: PersisterTask) {
         when (task) {
             is SourceLogTask -> sourceLogCh.send(task)
             is ExtSourceTask -> extSourceCh.send(task)
@@ -317,7 +319,7 @@ class LeaderLogProcessor(
         // The table-block file uploaded at (2) is now a persistent snapshot of state that
         // disagrees with the replica log it claims to be a snapshot of.
         val commitTriesDeleted: suspend (TableRef, Set<TrieKey>) -> Unit = { tableName, trieKeys ->
-            submit(GcTask.TriesDeleted(tableName, trieKeys))
+            enqueueAndAwait(GcTask.TriesDeleted(tableName, trieKeys))
         }
 
         TrieGarbageCollector(
@@ -336,8 +338,9 @@ class LeaderLogProcessor(
         // supervisorScope so an ext-source crash doesn't kill the persister.
         supervisorScope {
             launch {
-                // Close the channels with the failure cause so a subsequent `processRecords` send
-                // (no longer awaited per-record) throws it rather than a bare ClosedSendChannelException.
+                // Close the channels with the failure cause so a subsequent send throws it rather than a bare
+                // ClosedSendChannelException. This is how a no-longer-awaited caller learns of an unrecoverable
+                // failure — `processRecords` for the source log, and fire-and-forget `submit` for ext-sources.
                 var cause: Throwable? = null
                 try {
                     while (true) {
@@ -402,13 +405,23 @@ class LeaderLogProcessor(
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
 
-    override suspend fun indexTx(
+    override suspend fun execute(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
     ): TxResult =
         ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
-            .also { submit(it) }
+            .also { enqueueAndAwait(it) }
             .result.await()
+
+    override suspend fun submit(
+        externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+        writer: suspend (OpenTx) -> TxResult,
+    ) {
+        // Fire-and-forget: hand the task to the persister and return. The task's `result`/`onComplete` are
+        // completed by the persister but go unawaited here — an unrecoverable failure closes the channel with
+        // its cause, so the next `send` (this or `execute`) throws it.
+        extSourceCh.send(ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer))
+    }
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {

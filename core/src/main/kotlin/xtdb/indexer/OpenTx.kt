@@ -47,7 +47,7 @@ import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
 private val LOG = OpenTx::class.logger
 
 /**
- * The per-transaction write/read handle passed to an external-source [writer][TxIndexer.indexTx].
+ * The per-transaction write/read handle passed to an external-source [writer][TxIndexer.execute].
  *
  * Stage writes per table via [table]; [openQuery] / [executeSql] run SQL against the live index with
  * read-your-writes visibility into those staged writes. [TxIndexer] owns opening, committing and closing the
