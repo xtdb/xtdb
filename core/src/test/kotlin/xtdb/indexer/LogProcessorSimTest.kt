@@ -83,7 +83,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     /**
      * Test-side `ExternalSource`. Holds a pre-built sequence of `SimAction`s; its
      * `onPartitionAssigned` drains the iterator through whichever node is currently leader,
-     * calling `txIndexer.indexTx { … }` from inside the leader's coroutine scope.
+     * calling `txIndexer.execute { … }` from inside the leader's coroutine scope.
      *
      * A single instance is shared across all `SimNode`s in a test. Leadership transitions
      * surface as fresh `onPartitionAssigned` invocations on the same instance — the iterator
@@ -91,13 +91,13 @@ class LogProcessorSimTest : SimulationTestBase() {
      * `close()` is a no-op so the per-`LeaderLogProcessor` `extSource.close()` doesn't tear
      * down the shared instance.
      *
-     * Putting `indexTx` inside `onPartitionAssigned` (rather than calling it from the test
+     * Putting `execute` inside `onPartitionAssigned` (rather than calling it from the test
      * driver against a stale `TxIndexer` reference) is what keeps the leader's allocator
-     * accounting clean across rebalances: `indexTx` allocates an `OpenTx` from the
+     * accounting clean across rebalances: `execute` allocates an `OpenTx` from the
      * leader's allocator; if the leader term's scope were cancelled while that `OpenTx` is
      * still live, the leader's `allocator.close()` would throw on the
      * outstanding allocation. Holding the call inside `onPartitionAssigned` ties its lifetime
-     * to the leader's scope — cancelling that scope propagates cancellation through `indexTx`'s
+     * to the leader's scope — cancelling that scope propagates cancellation through `execute`'s
      * inner catch, which closes the `OpenTx` before the allocator does.
      */
     private inner class SimExtSource(private val actions: List<SimAction>) : ExternalSource {
@@ -123,7 +123,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                 val action = actions[actionIdx]
 
                 val externalSourceToken = ByteArray(Integer.BYTES).also { ByteBuffer.wrap(it).putInt(actionIdx) }
-                txIndexer.indexTx(externalSourceToken = externalSourceToken) { openTx ->
+                txIndexer.execute(externalSourceToken = externalSourceToken) { openTx ->
                     when (action) {
                         is SimAction.Commit -> {
                             val table = openTx.table(docsTable)

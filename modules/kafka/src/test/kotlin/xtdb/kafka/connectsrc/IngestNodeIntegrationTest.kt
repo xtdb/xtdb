@@ -90,7 +90,7 @@ class IngestNodeIntegrationTest {
 
         override suspend fun indexRecords(records: List<SinkRecord>, txIndexer: TxIndexer) {
             for (rec in records) {
-                txIndexer.indexTx(externalSourceToken = null) {
+                txIndexer.execute(externalSourceToken = null) {
                     seenKeys.add(rec.key() as String)
                     TxResult.Committed()
                 }

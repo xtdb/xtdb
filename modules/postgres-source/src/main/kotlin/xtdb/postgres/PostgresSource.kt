@@ -261,7 +261,7 @@ class PostgresSource(
                         snapshotCompleted = false
                     }.toByteArray()
 
-                    txIndexer.indexTx(token) { openTx ->
+                    txIndexer.execute(token) { openTx ->
                         // snapshot has no upstream commit time — use the tx's system-time
                         val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.txKey.systemTime, batch)
                         indexer.indexTx(snapshotTx, openTx)
@@ -275,7 +275,7 @@ class PostgresSource(
                 }.toByteArray()
 
                 LOG.debug { "[$dbName] Writing snapshot-complete marker" }
-                txIndexer.indexTx(completeToken) {
+                txIndexer.execute(completeToken) {
                     TxResult.Committed()
                 }
             }
@@ -295,7 +295,12 @@ class PostgresSource(
                             snapshotCompleted = true
                         }.toByteArray()
 
-                        txIndexer.indexTx(token, systemTime = tx.commitTime) { openTx ->
+                        // Stays `execute`, NOT fire-and-forget `submit`: `nextTransaction` advances the
+                        // replication slot (`acknowledgeLsn`) as soon as this returns, letting Postgres recycle
+                        // WAL. Blocking until the tx is durably imported is what keeps that ack honest — handing
+                        // off early would ack before durability and lose the tx on a crash. Going async here
+                        // needs the slot ack moved behind durable import first.
+                        txIndexer.execute(token, systemTime = tx.commitTime) { openTx ->
                             indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
