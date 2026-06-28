@@ -580,9 +580,14 @@ class LeaderLogProcessor(
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
-        // Fire the batch onto the persister and return, freeing the (shared) consumer poll thread.
-        // The persister resolves + imports; clients observe completion via the watchers, not this return.
-        if (records.isNotEmpty()) sourceLogCh.send(SourceLogTask.Batch(records))
+        // Await the batch through the persister rather than firing and returning. The persister still
+        // resolves + imports on its own thread (the heavy work is off the poll thread), but blocking
+        // here until it's done keeps the shared consumer's poll loop and the persister in lock-step:
+        // whenever the poll thread is back in `poll()` — where Kafka runs rebalance callbacks, which
+        // run a leader/follower transition under `runBlocking` — the persister is quiescent, so a
+        // concurrent DETACH/shutdown that must cancel-join the term doesn't wedge against in-flight
+        // import work on a starved dispatcher (#5741).
+        if (records.isNotEmpty()) submit(SourceLogTask.Batch(records))
     }
 
     override fun close() {
