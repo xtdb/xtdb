@@ -1,5 +1,10 @@
 package xtdb.api
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.cache.DiskCache
@@ -9,7 +14,6 @@ import xtdb.database.DatabaseName
 import xtdb.error.Incorrect
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
-import xtdb.util.safeMapValues
 import java.util.UUID.randomUUID
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -25,13 +29,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 class IngestNode internal constructor(
     private val base: NodeBase,
     private val databases: Map<DatabaseName, Database>,
+    private val rootJob: Job,
 ) : AutoCloseable {
     private val closing = AtomicBoolean(false)
 
     override fun close() {
         if (closing.compareAndSet(false, true)) {
-            // close the databases (each owns its own LogProcessor / external source) before the base,
-            // which owns the allocator they're children of.
+            // One cancel stops every database's job tree (Phase 1 — the single thread-parking bridge,
+            // at node shutdown); then free the databases (each owns its LogProcessor / external source)
+            // before the base, which owns the allocator they're children of.
+            runBlocking { rootJob.cancelAndJoin() }
             databases.closeAll()
             base.close()
         }
@@ -106,10 +113,24 @@ class IngestNode internal constructor(
             // db never calls back into a catalog, so the ingest node needs neither the DatabaseCatalog
             // nor its "xtdb" primary. Each db joins leader election and runs its source only when leader.
             return NodeBase.openBase(toBaseConfig()).closeOnCatch { base ->
-                val dbs = databases.safeMapValues { dbName, dbConfig ->
-                    Database.open(base, dbName, dbConfig, base.compactor)
+                // The ingest node owns its databases' job tree directly (no DatabaseCatalog). A
+                // SupervisorJob so one database's failure doesn't cancel its siblings; `close`
+                // cancels it once to stop every database in one go.
+                val rootJob = SupervisorJob()
+                val rootScope = CoroutineScope(rootJob)
+                val openedDbs = LinkedHashMap<DatabaseName, Database>()
+                try {
+                    for ((dbName, dbConfig) in databases)
+                        openedDbs[dbName] = Database.open(base, dbName, dbConfig, base.compactor, rootScope)
+                } catch (t: Throwable) {
+                    // Cancel the job tree (Phase 1) before freeing the already-opened databases
+                    // (Phase 2) — closing them while their coroutines still run would free
+                    // allocator-backed state out from under live work.
+                    runBlocking { rootJob.cancelAndJoin() }
+                    openedDbs.values.closeAll()
+                    throw t
                 }
-                IngestNode(base, dbs)
+                IngestNode(base, openedDbs, rootJob)
             }
         }
     }

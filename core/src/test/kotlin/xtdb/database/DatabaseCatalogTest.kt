@@ -1,13 +1,13 @@
 package xtdb.database
 
 import clojure.lang.Keyword
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.Dispatchers
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.NodeBase
 import xtdb.error.Conflict
+import java.util.concurrent.TimeUnit.SECONDS
 
 class DatabaseCatalogTest {
 
@@ -17,13 +17,12 @@ class DatabaseCatalogTest {
 
     @Test
     fun `reattach during detach returns transient conflict (#5613)`() {
-        val scheduler = TestCoroutineScheduler()
-        val dispatcher = StandardTestDispatcher(scheduler)
-
         NodeBase.openBase(openMeterRegistry = false).use { base ->
-            DatabaseCatalog.open(base, dispatcher).use { catalog ->
+            // Unconfined runs the detach inline up to its first real suspension — the suspend
+            // cancelAndJoin of the database's job tree — so the database is still mid-teardown
+            // (isClosing, not yet removed) when we observe the conflict, with no scheduler poking.
+            DatabaseCatalog.open(base, Dispatchers.Unconfined).use { catalog ->
                 catalog.attach("test_db", Database.Config())
-                // close is enqueued on the paused dispatcher
                 catalog.detach("test_db")
 
                 val ex = assertThrows<Conflict> {
@@ -31,9 +30,17 @@ class DatabaseCatalogTest {
                 }
                 assertEquals("xtdb/db-being-detached", ex.errCode())
 
-                // drain the closer, then re-attach succeeds
-                scheduler.advanceUntilIdle()
-                catalog.attach("test_db", Database.Config())
+                // Teardown finishes on the database's own dispatcher in the background; the conflict
+                // is transient, so the name frees up and re-attach eventually succeeds.
+                val deadline = System.nanoTime() + SECONDS.toNanos(10)
+                while (true) {
+                    try {
+                        catalog.attach("test_db", Database.Config()); break
+                    } catch (e: Conflict) {
+                        check(System.nanoTime() < deadline) { "detach did not complete within 10s" }
+                        Thread.sleep(10)
+                    }
+                }
             }
         }
     }

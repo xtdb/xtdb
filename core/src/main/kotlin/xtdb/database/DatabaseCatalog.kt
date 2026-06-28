@@ -3,9 +3,12 @@ package xtdb.database
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import xtdb.NodeBase
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
@@ -32,8 +35,15 @@ class DatabaseCatalog @JvmOverloads constructor(
     private val databases = ConcurrentHashMap<DatabaseName, Database>()
     private val dormantDatabases = ConcurrentHashMap<DatabaseName, DatabaseConfig>()
 
-    // Closing databases stay in `databases` until their close completes — see #5613.
-    private val closerJob = SupervisorJob()
+    // Parent of every database's job tree. A SupervisorJob so one database's failure is contained
+    // here (on the common parent) rather than cancelling its siblings; node shutdown cancels this
+    // once to stop every database's indexing/compaction in one go.
+    private val dbJob = SupervisorJob()
+    private val dbScope = CoroutineScope(dbJob)
+
+    // Detaching databases tear down off the caller's thread on this scope, and stay in `databases`
+    // until that completes — see #5613. Nested under `dbJob` so node shutdown's single cancel covers it.
+    private val closerJob = SupervisorJob(dbJob)
     private val closerScope = CoroutineScope(closerJob + closerDispatcher)
 
     override val databaseNames: Collection<DatabaseName>
@@ -75,7 +85,7 @@ class DatabaseCatalog @JvmOverloads constructor(
         val readOnlyConfig = if (base.config.readOnlyDatabases) dbConfig.mode(Database.Mode.READ_ONLY) else dbConfig
 
         val db = try {
-            Database.open(base, dbName, readOnlyConfig, compactor, this.takeIf { dbName == "xtdb" })
+            Database.open(base, dbName, readOnlyConfig, compactor, dbScope, this.takeIf { dbName == "xtdb" })
         } catch (t: Throwable) {
             LOG.debug { "Failed to open database: db-name=$dbName, exception=${t.javaClass}, message=${t.message}" }
             t.cause?.let { LOG.debug { "Cause: class=${it.javaClass}, message=${it.message}" } }
@@ -100,23 +110,34 @@ class DatabaseCatalog @JvmOverloads constructor(
         if (db.isClosing)
             throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
 
-        // Close off the persister's stack — see #5613.
+        // Close off the persister's stack — see #5613. `cancelAndJoin` suspends rather than parking a
+        // thread in `runBlocking`, so the detach can't deadlock against another thread-parking
+        // teardown on a constrained dispatcher.
         db.isClosing = true
         closerScope.launch {
-            try {
-                db.close()
-            } catch (t: Throwable) {
-                LOG.error(t) { "Failed to close detaching database '$dbName'" }
-            } finally {
-                databases.remove(dbName, db)
+            // NonCancellable: once teardown starts it must run to completion. Node shutdown cancels
+            // `dbJob` (this coroutine's ancestor); without the shield a detach caught mid-cancelAndJoin
+            // would skip `db.close()` yet still remove the database from the map — leaking its state.
+            withContext(NonCancellable) {
+                try {
+                    db.cancelAndJoin()
+                    db.close()
+                } catch (t: Throwable) {
+                    LOG.error(t) { "Failed to close detaching database '$dbName'" }
+                } finally {
+                    databases.remove(dbName, db)
+                }
             }
         }
     }
 
     override fun close() {
-        // Join without cancelling — cancelling would interrupt each db.close() mid-teardown.
-        runBlocking { closerJob.children.toList().forEach { it.join() } }
-        closerJob.cancel()
+        runBlocking {
+            // In-flight detaches own their database's teardown — let them finish before we cancel.
+            closerJob.children.toList().forEach { it.join() }
+            // One cancel stops every remaining database's job tree (Phase 1); free synchronously below.
+            dbJob.cancelAndJoin()
+        }
         databases.values.closeAll()
     }
 

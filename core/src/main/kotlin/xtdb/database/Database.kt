@@ -129,11 +129,16 @@ class Database(
 
     override fun hashCode() = Objects.hash(name)
 
+    // Phase 1: cancel-join this database's job tree. A suspend (not `runBlocking`) so DETACH's closer
+    // coroutine needn't park a thread. `close` MUST follow a returned `cancelAndJoin` — see the
+    // SubSystem precedent in LogProcessor. Node shutdown cancels the whole catalog tree at once
+    // instead, so its owner cancel-joins on its behalf and only `close` runs per database.
+    suspend fun cancelAndJoin() = job?.cancelAndJoin()
+
     override fun close() {
+        // Phase 2: the job tree has already been cancel-joined (by `cancelAndJoin` above, or by the
+        // owner cancelling the catalog root). Free state, children before the database allocator.
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        // Everything runs under `job`, so one cancel stops the tree; then free, children before the
-        // database allocator.
-        runBlocking { job?.cancelAndJoin() }
         (partitions.values + listOf(storage, allocator)).closeAll()
     }
 
@@ -230,6 +235,7 @@ class Database(
             dbName: DatabaseName,
             dbConfig: Config,
             compactor: Compactor,
+            parentScope: CoroutineScope,
             dbCatalog: Catalog? = null,
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
@@ -260,10 +266,17 @@ class Database(
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)
 
-            val job = Job()
+            // SupervisorJob child of the catalog's root job: the owner's single cancel still cascades
+            // down to this database's whole tree (term, compactor, source-log subscription), but a
+            // failure *within* the database (e.g. the source-log subscription) surfaces through this
+            // scope's CoroutineExceptionHandler — `watchers.notifyError` — rather than propagating
+            // up. A CoroutineExceptionHandler only fires for a root coroutine or a direct child of a
+            // SupervisorJob, so this must be a SupervisorJob (cf. LogProcessor.openTerm). Sibling-
+            // database isolation is a separate concern, provided by the parent dbJob being a Supervisor.
+            val job = SupervisorJob(parentScope.coroutineContext.job)
 
-            // Child of the database `job`; `close`'s single `job.cancelAndJoin()` stops and joins it
-            // along with the rest of the tree.
+            // Child of the database `job`; the owner's cancel stops and joins it along with the rest
+            // of the tree.
             val compactorScope = CoroutineScope(Job(job))
 
             // For open-failure unwinding, each coroutine-owning resource registers a closeable that
