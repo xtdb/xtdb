@@ -147,6 +147,41 @@ class LeaderLogProcessor(
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
+    // proc 1 resolves a record into a ReplicaTask and hands it to proc 2 (the replica-writer, sole
+    // owner of `replicaProducer`), then awaits the ack. RENDEZVOUS for now → fully serial, so runtime
+    // behaviour matches the single-loop persister; the seam is here for later batching/pipelining.
+    private sealed interface ReplicaTask {
+        val onApplied: CompletableDeferred<Unit>
+
+        data class ResolvedTx(val resolvedTx: ReplicaMessage.ResolvedTx, val srcMsgId: MessageId?) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+
+        data class DbOpTx(val resolvedTx: ReplicaMessage.ResolvedTx) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+
+        data class Forward(val message: ReplicaMessage, val srcMsgId: MessageId) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+
+        data class FlushBlockFinish(
+            val latestProcessedMsgId: MessageId, val externalSourceToken: ExternalSourceToken?
+        ) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+
+        data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+
+        data class NotifyMsg(val msgId: MessageId) : ReplicaTask {
+            override val onApplied = CompletableDeferred<Unit>()
+        }
+    }
+
+    private val replicaCh = Channel<ReplicaTask>(onUndeliveredElement = { it.onApplied.cancel() })
+
     private suspend fun handleSourceLogBatch(records: List<Log.Record<SourceMessage>>) {
         for (record in records) {
             LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
@@ -159,17 +194,16 @@ class LeaderLogProcessor(
 
         when (val msg = record.message) {
             is SourceMessage.Tx, is SourceMessage.LegacyTx ->
-                handleResolvedTx(resolveTx(msgId, record, msg), msgId)
+                dispatch(ReplicaTask.ResolvedTx(resolveTx(msgId, record, msg), msgId))
 
             is SourceMessage.FlushBlock -> {
                 val expectedBlockIdx = msg.expectedBlockIdx
                 if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                    finishBlock(msgId, watchers.externalSourceToken)
+                    dispatch(ReplicaTask.FlushBlockFinish(msgId, watchers.externalSourceToken))
                 } else {
                     // see #5680
-                    appendToReplica(ReplicaMessage.NoOp(srcMsgId = msgId))
+                    dispatch(ReplicaTask.Forward(ReplicaMessage.NoOp(srcMsgId = msgId), msgId))
                 }
-                watchers.notifyMsg(msgId)
             }
 
             is SourceMessage.AttachDatabase -> {
@@ -187,11 +221,7 @@ class LeaderLogProcessor(
                 val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
                     .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
 
-                appendToReplica(resolvedTx)
-                liveIndex.importTx(resolvedTx)
-
-                val result = if (error == null) Committed(txKey) else Aborted(txKey, error)
-                watchers.notifyTx(result, msgId, null)
+                dispatch(ReplicaTask.DbOpTx(resolvedTx))
             }
 
             is SourceMessage.DetachDatabase -> {
@@ -209,11 +239,7 @@ class LeaderLogProcessor(
                 val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
                     .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
 
-                appendToReplica(resolvedTx)
-                liveIndex.importTx(resolvedTx)
-
-                val result = if (error == null) Committed(txKey) else Aborted(txKey, error)
-                watchers.notifyTx(result, msgId, null)
+                dispatch(ReplicaTask.DbOpTx(resolvedTx))
             }
 
             is SourceMessage.TriesAdded -> {
@@ -223,19 +249,30 @@ class LeaderLogProcessor(
                     }
                 }
 
-                appendToReplica(TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId))
-
-                watchers.notifyMsg(msgId)
+                dispatch(
+                    ReplicaTask.Forward(
+                        TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId), msgId
+                    )
+                )
             }
 
             // TODO this one's going after 2.2
-            is SourceMessage.BlockUploaded -> {
-                watchers.notifyMsg(msgId)
-            }
+            is SourceMessage.BlockUploaded ->
+                dispatch(ReplicaTask.NotifyMsg(msgId))
         }
     }
 
-    private suspend fun handleResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx, srcMsgId: MessageId?) {
+    // Dispatch a resolved task to proc 2 and await its ack — keeps proc 1 and proc 2 in lock-step
+    // (fully serial) for now. If proc 2 fails applying this task it completes `onApplied` exceptionally,
+    // so the `await` rethrows the cause into proc 1's per-task catch (and any later `send` onto the
+    // now-closed channel throws it too).
+    private suspend fun dispatch(task: ReplicaTask) {
+        replicaCh.send(task)
+        task.onApplied.await()
+    }
+
+    // proc 2: append + import + notify for a source-log/ext-source tx.
+    private suspend fun applyResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx, srcMsgId: MessageId?) {
         val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val txResult = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
 
@@ -254,6 +291,17 @@ class LeaderLogProcessor(
 
         if (liveIndex.isFull())
             finishBlock(effectiveSrcMsgId, resolvedTx.externalSourceToken)
+    }
+
+    // proc 2: append + import + notify for an attach/detach. No isFull/finishBlock — preserving the
+    // attach/detach asymmetry against `applyResolvedTx`.
+    private suspend fun applyDbOpTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+        appendToReplica(resolvedTx)
+        liveIndex.importTx(resolvedTx)
+
+        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
+        val result = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
+        watchers.notifyTx(result, resolvedTx.txId, null)
     }
 
     private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
@@ -280,16 +328,11 @@ class LeaderLogProcessor(
                 }
             }
 
-            handleResolvedTx(resolvedTx, srcMsgId = null)
+            dispatch(ReplicaTask.ResolvedTx(resolvedTx, srcMsgId = null))
             task.result.complete(writerResult)
         } finally {
             openTx.close()
         }
-    }
-
-    private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
-        appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
-        trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
     // Hand the task to the persister and return its completion handle. The caller decides whether to
@@ -357,7 +400,7 @@ class LeaderLogProcessor(
                             when (task) {
                                 is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
                                 is ExtSourceTask.IndexTx -> handleIndexTx(task)
-                                is GcTask.TriesDeleted -> handleTriesDeleted(task)
+                                is GcTask.TriesDeleted -> dispatch(ReplicaTask.TriesDeleted(task.tableName, task.trieKeys))
                             }
                             task.onComplete.complete(Unit)
                         } catch (e: CancellationException) {
@@ -383,6 +426,61 @@ class LeaderLogProcessor(
                     sourceLogCh.close(cause)
                     extSourceCh.close(cause)
                     gcCh.close(cause)
+                }
+            }
+
+            // proc 2: the replica-writer. Sole owner of `replicaProducer` — proc 1 resolves and hands off
+            // here, then awaits the ack. On failure, close `replicaCh` with the cause so proc 1's next
+            // `send` throws it (mirroring how the persister loop closes the source channels).
+            launch {
+                var cause: Throwable? = null
+                try {
+                    for (task in replicaCh) {
+                        try {
+                            when (task) {
+                                is ReplicaTask.ResolvedTx -> applyResolvedTx(task.resolvedTx, task.srcMsgId)
+                                is ReplicaTask.DbOpTx -> applyDbOpTx(task.resolvedTx)
+                                is ReplicaTask.Forward -> {
+                                    appendToReplica(task.message)
+                                    watchers.notifyMsg(task.srcMsgId)
+                                }
+
+                                is ReplicaTask.FlushBlockFinish -> {
+                                    finishBlock(task.latestProcessedMsgId, task.externalSourceToken)
+                                    watchers.notifyMsg(task.latestProcessedMsgId)
+                                }
+
+                                is ReplicaTask.TriesDeleted -> {
+                                    appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
+                                    trieCatalog.deleteTries(task.tableName, task.trieKeys)
+                                }
+
+                                is ReplicaTask.NotifyMsg -> watchers.notifyMsg(task.msgId)
+                            }
+                            task.onApplied.complete(Unit)
+                        } catch (e: CancellationException) {
+                            task.onApplied.cancel(e)
+                            throw e
+                        } catch (e: InterruptedException) {
+                            task.onApplied.completeExceptionally(e)
+                            throw e
+                        } catch (e: Interrupted) {
+                            task.onApplied.completeExceptionally(e)
+                            throw e
+                        } catch (e: Throwable) {
+                            // Don't notifyError here: proc 1 awaits onApplied, so completing it
+                            // exceptionally surfaces the failure in the persister loop's own catch,
+                            // which is the single notifyError + source-channel teardown point.
+                            task.onApplied.completeExceptionally(e)
+                            throw e
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    // term cancellation: close the channel without an error cause
+                } catch (t: Throwable) {
+                    cause = t
+                } finally {
+                    replicaCh.close(cause)
                 }
             }
 

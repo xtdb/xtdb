@@ -18,10 +18,29 @@
 --     which variant is in play.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
 --   - Writes don't block reads: a shared, reference-counted snapshot is published
---     after each commit; existing snapshots remain valid until their last holder
---     releases them
+--     after each DURABLE confirmation; existing snapshots remain valid until their
+--     last holder releases them
 --
--- Critical invariant: External queries MUST NOT see in-flight transaction data
+-- Pipelining (leader only):
+--   On a leader, transaction RESOLUTION runs ahead of the replica-log write. A
+--   resolved, committed tx is applied to a STAGING index immediately (so later
+--   txs in the same stream resolve against it — read-your-writes), advancing the
+--   staging area's own APPLIED head (StagingIndex.latest_completed_tx). It is
+--   NOT yet visible to external queries. Only once its batch is confirmed durably
+--   written to the replica log is it PROMOTED into the durable live tables,
+--   advancing the DURABLE basis (LiveIndex.latest_completed_tx), refreshing the
+--   shared external snapshot, and notifying watchers. Followers and the
+--   transition processor have no staging index: the messages they import are
+--   already durable, so they advance LiveIndex.latest_completed_tx directly.
+--
+--   Two heads, two homes — callers choose: the durable basis is
+--   LiveIndex.latest_completed_tx (query basis); the applied/resolution head is
+--   StagingIndex.latest_completed_tx (next tx_id, smoothing).
+--
+-- Critical invariant: External queries see only durably-replicated transactions
+--   (LiveIndex.latest_completed_tx). A query returned to a user must never
+--   include a tx that could vanish if the leader crashed before its replica-log
+--   write landed. Resolution sees durable ⊕ staging.
 
 ------------------------------------------------------------
 -- External Entities
@@ -90,18 +109,84 @@ value Erase { }    -- null marker in the "erase" leg
 ------------------------------------------------------------
 
 entity LiveIndex {
+    -- DURABLE basis / QUERY BASIS: the highest tx in the durable live tables.
+    -- shared_snap is built with basis_tx = latest_completed_tx; external queries
+    -- open at it. On a leader it is advanced by promotion from staging (it lags
+    -- the APPLIED head by the in-flight/staged txs); on a follower/transition by
+    -- importTx (every imported message is already durable, so there is no lag).
+    --
+    -- The APPLIED head (the resolution head — next external-source tx_id is
+    -- head.tx_id + 1, and system-time smoothing reads it) is NOT here: on a
+    -- leader the staging area maintains its own latest_completed_tx (see
+    -- StagingIndex). Callers choose which to read — resolution reads the staging
+    -- head, external queries read this durable one.
     latest_completed_tx: TransactionKey?
+
     rows_per_block: Integer
 
+    -- Durable live tables: hold only promoted (durably-replicated) rows.
     tables: LiveTable with index = this
 
-    -- Current shared external snapshot. Refreshed on every commit and on
-    -- NextBlock (see RefreshSharedSnapshot). External readers retain this
-    -- snapshot when calling OpenSnapshot(index); see OpenExternalSnapshot.
+    -- Staging index: committed-but-not-yet-durable txs. Leader-owned and
+    -- leader-term-scoped (dropped wholesale on demotion; see DropStaging).
+    -- Absent on followers and the transition processor, which only import
+    -- already-durable messages. See StagingIndex.
+    staging: StagingIndex?
+
+    -- Current shared external snapshot. Refreshed on each durable confirmation
+    -- (promotion) and on NextBlock (see RefreshSharedSnapshot). External readers
+    -- retain this snapshot when calling OpenSnapshot(index); see
+    -- OpenExternalSnapshot. Its basis is latest_completed_tx (durable).
     shared_snap: Snapshot
 
     row_count: tables.sum(t => t.row_count)
     is_full: row_count >= rows_per_block
+}
+
+entity StagingIndex {
+    -- Holds committed-but-not-yet-durable transactions, double-buffered into
+    -- exactly two slots. At most one batch is ever in flight to the replica log
+    -- (the producer is single / not concurrent-safe), so two slots is optimal:
+    --   - accumulating: open, taking newly-resolved committed txs
+    --   - committing:   sealed, its batch currently being written to the
+    --                   replica log; promoted on durable confirmation
+    -- Each slot mirrors the live tables (per-table relation + trie) so it
+    -- composes with the snapshot/segment layering as an extra segment layer.
+    index: LiveIndex
+
+    -- APPLIED head: the highest tx resolved and applied to staging. Drives
+    -- RESOLUTION — next external-source tx_id is latest_completed_tx.tx_id + 1,
+    -- and system-time smoothing reads it. Seeded from index.latest_completed_tx
+    -- (the durable head) when the staging area is created, then advanced by
+    -- CommitTransaction / AbortTransaction. Always >= index.latest_completed_tx.
+    latest_completed_tx: TransactionKey?
+
+    accumulating: StagingSlot
+    committing: StagingSlot?   -- absent when no batch is in flight
+
+    -- Derived: staging is drained when nothing is accumulated and nothing is
+    -- in flight. FinishBlock requires this so a durable block never contains
+    -- non-durable rows.
+    is_drained: accumulating.is_empty and committing = null
+}
+
+entity StagingSlot {
+    -- One double-buffer slot. Mirrors the live tables structurally.
+    staging: StagingIndex
+    tables: StagingTable with slot = this
+
+    row_count: tables.sum(t => t.row_count)
+    is_empty: row_count = 0
+}
+
+entity StagingTable {
+    -- Per-table relation + trie within a staging slot. The staged counterpart
+    -- of LiveTable; promoted into the matching LiveTable on durable confirmation.
+    slot: StagingSlot
+    table_ref: TableRef
+    rows: Set<Row>
+
+    row_count: rows.count
 }
 
 entity LiveTable {
@@ -182,14 +267,22 @@ entity TableSnapshot {
     snapshot: Snapshot
     table_ref: TableRef
 
-    -- Live segment: slice of the LiveTable's liveRelation paired with its
-    -- MemoryHashTrie. Absent when the table has no live data at snapshot time.
+    -- Live segment: slice of the LiveTable's (DURABLE) liveRelation paired with
+    -- its MemoryHashTrie. Absent when the table has no durable data at snapshot
+    -- time. This is the only layer on external snapshots.
     live_segment: MemorySegment?
+
+    -- Staging segments: slices of this table's StagingTable relations from each
+    -- occupied staging slot (committing below accumulating), layered on top of
+    -- live_segment. Empty on external snapshots (which see durable data only);
+    -- populated only on transaction snapshots so a resolving tx reads staged
+    -- prior txs. See StagingSegments.for.
+    staging_segments: Set<MemorySegment>
 
     -- Tx segment: slice of the enclosing OpenTx.Table's txRelation paired with
     -- its MemoryHashTrie. Present only on transaction snapshots where the tx
-    -- has written rows for this table. Layered on top of live_segment so that
-    -- a query inside the tx sees committed rows + its own uncommitted rows.
+    -- has written rows for this table. Layered on top of staging_segments so a
+    -- query inside the tx sees durable + staged rows + its own uncommitted rows.
     tx_segment: MemorySegment?
 }
 
@@ -283,63 +376,133 @@ rule LogErase {
 ------------------------------------------------------------
 
 rule CommitTransaction {
+    -- A committed tx is imported into the STAGING accumulating slot and advances
+    -- the staging area's APPLIED head (StagingIndex.latest_completed_tx). It does
+    -- NOT advance the DURABLE basis (LiveIndex.latest_completed_tx) and does NOT
+    -- refresh the external shared snapshot — those happen only on durable
+    -- confirmation (see PromoteStaging). Later txs in the same stream resolve
+    -- against staging (read-your-writes), but external queries cannot yet see it.
     when: CommitTransaction(tx)
 
     requires: tx.status = active
+    -- Staging only exists on a leader; resolution runs there.
+    requires: tx.index.staging != null
 
     ensures: tx.status = committed
-    ensures: tx.index.latest_completed_tx = tx.tx_key
+    ensures: tx.index.staging.latest_completed_tx = tx.tx_key
 
     -- For each touched table with tx data: import the tx rows into the
-    -- (possibly new) live table. There is a single path regardless of
-    -- whether the live table previously existed: `tables.getOrPut` creates
-    -- one on demand, and tables with no tx rows are skipped entirely.
+    -- (possibly new) staging table in the accumulating slot. Single path:
+    -- the staging slot creates a StagingTable on demand, and tables with no tx
+    -- rows are skipped entirely.
     ensures: for table_tx in tx.table_txs where table_tx.rows.count > 0:
-        let live_table =
-            if table_tx.live_table != null:
-                table_tx.live_table
+        let slot = tx.index.staging.accumulating
+        let staging_table =
+            let existing = slot.tables.find(st => st.table_ref = table_tx.table_ref)
+            if existing != null:
+                existing
             else:
-                LiveTable.created(
-                    index: tx.index,
+                StagingTable.created(
+                    slot: slot,
                     table_ref: table_tx.table_ref,
                     rows: {}
                 )
-        live_table.rows.addAll(table_tx.rows)
+        staging_table.rows.addAll(table_tx.rows)
+}
 
-    -- After committing, the shared external snapshot is refreshed to a new
-    -- Snapshot with basis_tx = tx.tx_key. Previously-published shared
-    -- snapshots remain valid for any readers still holding them until those
-    -- readers release their retention.
-    ensures: RefreshSharedSnapshot(tx.index)
+rule SealStagingBatch {
+    -- The replica-writer takes the current batch in flight: the accumulating
+    -- slot is sealed and becomes the committing slot, and a fresh empty slot
+    -- takes over accumulation. Double-buffering means there are only ever two
+    -- slots; this is invoked only when no batch is already in flight (the
+    -- replica-log producer is single, so at most one batch at a time).
+    when: SealStagingBatch(index)
+
+    requires: index.staging != null
+    requires: index.staging.committing = null
+    requires: not index.staging.accumulating.is_empty
+
+    ensures:
+        index.staging.committing = index.staging.accumulating
+        index.staging.accumulating = StagingSlot.created(
+            staging: index.staging,
+            tables: {}
+        )
+}
+
+rule PromoteStaging {
+    -- Durable confirmation: the committing slot's batch has been confirmed
+    -- durably written to the replica log. Promote its rows into the durable
+    -- live tables, advance the DURABLE basis, refresh the external shared
+    -- snapshot (now reflecting the newly-durable txs), and notify watchers.
+    -- This is the point at which committed txs become queryable.
+    -- durable_tx is the highest tx key in the promoted batch.
+    when: PromoteStaging(index, durable_tx)
+
+    requires: index.staging != null
+    requires: index.staging.committing != null
+
+    ensures:
+        -- Move each staged table's rows into the (possibly new) durable live table.
+        for staging_table in index.staging.committing.tables where staging_table.rows.count > 0:
+            let live_table =
+                let existing = index.tables.find(t => t.table_ref = staging_table.table_ref)
+                if existing != null:
+                    existing
+                else:
+                    LiveTable.created(
+                        index: index,
+                        table_ref: staging_table.table_ref,
+                        rows: {}
+                    )
+            live_table.rows.addAll(staging_table.rows)
+
+        -- The committing slot is now empty; drop it (no batch in flight).
+        index.staging.committing = null
+
+        -- Advance the durable basis (the durable live index's own
+        -- latest_completed_tx) and refresh the external snapshot to reflect the
+        -- newly-durable txs.
+        index.latest_completed_tx = durable_tx
+        RefreshSharedSnapshot(index)
+        -- Watcher notification (post-durable, not at resolution time) is driven
+        -- by the replica-writer in db.allium, which orchestrates promotion.
 }
 
 rule AbortTransaction {
     when: AbortTransaction(tx)
 
     requires: tx.status = active
+    -- Staging only exists on a leader; resolution runs there.
+    requires: tx.index.staging != null
 
     ensures: tx.status = aborted
-    -- latest_completed_tx tracks "processed up to", not "successfully committed up to"
-    -- even aborted transactions advance this marker
-    ensures: tx.index.latest_completed_tx = tx.tx_key
-    -- tx rows are discarded (not moved to live tables)
-    -- new tables are not created
+    -- The applied head tracks "resolved up to", not "successfully committed up
+    -- to" — even aborted transactions consume a tx_id and advance the staging
+    -- area's marker, so the next tx_id is correct.
+    ensures: tx.index.staging.latest_completed_tx = tx.tx_key
+    -- tx rows are discarded (not staged); new tables are not created
 }
 
 ------------------------------------------------------------
 -- Rules: Snapshot visibility
 --
--- CRITICAL: External queries must not see in-flight transaction data
+-- CRITICAL: External queries see only DURABLY-REPLICATED transactions
+-- (LiveIndex.latest_completed_tx) — durable live segments only, no staging.
+-- Resolution (queries inside an in-flight tx) sees durable ⊕ staging ⊕ the
+-- tx's own writes.
 ------------------------------------------------------------
 
 rule OpenExternalSnapshot {
     -- Called by queries outside any transaction.
     --
-    -- The index publishes a single shared Snapshot that is refreshed on each
-    -- commit (see CommitTransaction / RefreshSharedSnapshot). Each external
-    -- opener retains the current shared snapshot rather than building a
-    -- fresh one, and releases it on close. The underlying segments are
-    -- freed when the last holder releases.
+    -- The index publishes a single shared Snapshot whose basis is
+    -- latest_completed_tx (durable) and whose layers are the DURABLE live segments only
+    -- — no staging. It is refreshed on each durable confirmation (see
+    -- PromoteStaging / RefreshSharedSnapshot). Each external opener retains
+    -- the current shared snapshot rather than building a fresh one, and
+    -- releases it on close. The underlying segments are freed when the last
+    -- holder releases.
     when: OpenSnapshot(index)
 
     ensures:
@@ -349,45 +512,48 @@ rule OpenExternalSnapshot {
 }
 
 rule OpenTransactionSnapshot {
-    -- Called by queries within a transaction (e.g. UPDATE...WHERE).
-    -- Only active transactions can open snapshots; committed/aborted txs
-    -- are closed. Transaction snapshots are built per-OpenTx and are NOT
-    -- shared: each call produces a fresh Snapshot whose table snapshots
-    -- layer the tx segment on top of the live table segment.
+    -- Called by queries within an in-flight resolving transaction
+    -- (e.g. UPDATE...WHERE). Only active transactions can open snapshots;
+    -- committed/aborted txs are closed. Transaction snapshots are built
+    -- per-OpenTx and are NOT shared.
+    --
+    -- A resolving tx must read all prior txs whether DURABLE or merely STAGED,
+    -- plus its own uncommitted writes. So each TableSnapshot layers, bottom to
+    -- top: the durable live segment ⊕ the staging segments (accumulating, and
+    -- the committing slot if a batch is in flight) ⊕ the tx's own segment.
     when: OpenSnapshot(tx)
 
     requires: tx.status = active
+    -- Resolution only runs on a leader, where staging exists.
+    requires: tx.index.staging != null
 
     ensures:
         let snap = Snapshot.created(basis_tx: tx.tx_key, ref_count: 1)
+        let staging = tx.index.staging
 
-        -- One TableSnapshot per table touched by the tx: live segment from
-        -- the existing LiveTable (if any) plus the tx segment from this
-        -- OpenTx's Table.
+        -- One TableSnapshot per table touched by the tx: durable live segment
+        -- from the existing LiveTable (if any), the staging segments for the
+        -- table from each occupied slot, and the tx segment from this OpenTx.
         for table_tx in tx.table_txs:
+            let live_seg = if table_tx.live_table != null: MemorySegment.for(table_tx.live_table) else: null
+            let tx_seg = if table_tx.rows.count > 0: MemorySegment.for(table_tx) else: null
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table_tx.table_ref,
-                live_segment:
-                    if table_tx.live_table != null:
-                        MemorySegment.for(table_tx.live_table)
-                    else:
-                        null,
-                tx_segment:
-                    if table_tx.rows.count > 0:
-                        MemorySegment.for(table_tx)
-                    else:
-                        null
+                live_segment: live_seg,
+                staging_segments: StagingSegments.for(staging, table_tx.table_ref),
+                tx_segment: tx_seg
             )
 
-        -- Plus the remaining live tables the tx hasn't touched: live
-        -- segment only, no tx segment.
+        -- Plus the remaining live tables the tx hasn't touched: durable live
+        -- segment plus any staging segments for the table, no tx segment.
         for table in tx.index.tables
                 where not tx.table_txs.any(tt => tt.table_ref = table.table_ref):
             TableSnapshot.created(
                 snapshot: snap,
                 table_ref: table.table_ref,
                 live_segment: MemorySegment.for(table),
+                staging_segments: StagingSegments.for(staging, table.table_ref),
                 tx_segment: null
             )
 
@@ -395,16 +561,18 @@ rule OpenTransactionSnapshot {
 }
 
 rule RefreshSharedSnapshot {
-    -- Triggered at the end of each commit (and on NextBlock, which drops
-    -- all live tables). The index atomically swaps its shared snapshot for
-    -- a freshly-built one reflecting the new committed state, and releases
-    -- its own retention on the previous shared snapshot. Readers already
-    -- holding the previous shared snapshot retain it independently.
+    -- Triggered on each durable confirmation (promotion) and on NextBlock (which
+    -- drops all live tables). The index atomically swaps its shared snapshot for
+    -- a freshly-built one reflecting the newly-durable state, and releases its
+    -- own retention on the previous shared snapshot. Readers already holding the
+    -- previous shared snapshot retain it independently.
     when: RefreshSharedSnapshot(index)
 
     ensures:
         let old_snap = index.shared_snap
         let new_snap = Snapshot.created(
+            -- DURABLE basis: the external snapshot sees only durably-replicated
+            -- txs, never the staged-but-not-yet-durable head.
             basis_tx: index.latest_completed_tx,
             ref_count: 1   -- the index's own retention on the shared snap
         )
@@ -413,6 +581,8 @@ rule RefreshSharedSnapshot {
                 snapshot: new_snap,
                 table_ref: table.table_ref,
                 live_segment: MemorySegment.for(table),
+                -- External snapshot: durable data only, no staging layers.
+                staging_segments: {},
                 tx_segment: null
             )
         index.shared_snap = new_snap
@@ -428,9 +598,30 @@ rule RefreshSharedSnapshot {
 rule FinishBlock {
     when: FinishBlock(index, block_idx)
 
-    -- Writes current live table contents to block storage
-    -- Rows remain in memory until NextBlock
+    -- Staging MUST be drained before the block is written: all in-flight
+    -- commits promoted, nothing accumulated or committing. Otherwise a durable
+    -- L0 block could contain non-durable rows. ("BlockBoundary closes the
+    -- batch": the replica-writer flushes and promotes the pending batch before
+    -- the boundary, leaving staging drained.) On followers/transition there is
+    -- no staging, so this is trivially satisfied.
+    requires: index.staging = null or index.staging.is_drained
+
+    -- Writes current (durable) live table contents to block storage.
+    -- Rows remain in memory until NextBlock.
     ensures: BlockWritten(index, block_idx)
+}
+
+rule DropStaging {
+    -- Leader → follower demotion: the staging index is discarded wholesale.
+    -- The uncommitted txs it held will be re-read from the source log and
+    -- re-resolved by the next leader. The DURABLE live index is untouched —
+    -- only staged, not-yet-durable rows are lost, and those were never visible
+    -- to external queries.
+    when: DropStaging(index)
+
+    requires: index.staging != null
+
+    ensures: index.staging = null
 }
 
 rule NextBlock {
