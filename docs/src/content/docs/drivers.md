@@ -5,7 +5,7 @@ title: Language Drivers
 XTDB exposes two client surfaces:
 
 - A PostgreSQL wire-compatible server — works with standard PostgreSQL tools and drivers (psql, JDBC, psycopg, etc.).
-- An [Arrow Database Connectivity](/drivers/adbc) (ADBC) endpoint, served over Apache Arrow Flight SQL — Arrow batches stream straight into your client, and bulk-ingesting an Arrow table is a single round trip.
+- An [Arrow Database Connectivity](/adbc) (ADBC) endpoint, served over Apache Arrow Flight SQL — Arrow batches stream straight into your client, and bulk-ingesting an Arrow table is a single round trip.
 
 For PostgreSQL-shaped tooling, the pgwire path is what you want.
 
@@ -28,7 +28,7 @@ For details of how to connect to XTDB from your favourite language, see the foll
 - [Python](/drivers/python)
 - [Ruby](/drivers/ruby)
 
-If your pipeline is Arrow-shaped end-to-end (pandas / polars / DuckDB / DataFusion / arrow-rs / pyarrow), you'll want the [ADBC driver](/drivers/adbc) instead — it keeps everything Arrow-native and adds bulk-Arrow ingest in one round trip.
+If your pipeline is Arrow-shaped end-to-end (pandas / polars / DuckDB / DataFusion / arrow-rs / pyarrow), you'll want the [ADBC driver](/adbc) instead — it keeps everything Arrow-native and adds bulk-Arrow ingest in one round trip.
 
 XTDB is also compatible with many different PostgreSQL tools, including:
 

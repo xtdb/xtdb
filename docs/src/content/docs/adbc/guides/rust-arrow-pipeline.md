@@ -14,7 +14,7 @@ This guide walks the full path:
 3. Register those batches with DataFusion and run analytical SQL.
 4. Write the aggregate out to Parquet via `parquet::arrow::ArrowWriter`.
 
-The runnable crate is in [`examples/rust-arrow-pipeline/`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/rust-arrow-pipeline).
+The runnable crate is in [`examples/rust-arrow-pipeline/`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/rust-arrow-pipeline).
 It's a single file: point it at your node and change the SQL.
 
 ## Cargo.toml: a version matrix that resolves
@@ -160,7 +160,7 @@ docker run --rm -d --name xtdb-g6 \
     -p 5432:5432 -p 9832:9832 \
     ghcr.io/xtdb/xtdb:nightly
 
-cd docs/src/content/docs/drivers/adbc/examples/rust-arrow-pipeline
+cd docs/src/content/docs/adbc/examples/rust-arrow-pipeline
 ADBC_FLIGHTSQL_VERSION=1.11.0 cargo run --release
 ```
 

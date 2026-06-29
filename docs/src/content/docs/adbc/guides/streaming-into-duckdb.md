@@ -1,10 +1,10 @@
 ---
 title: Streaming XTDB results into DuckDB via Arrow
-description: Stream Arrow batches from XTDB straight into DuckDB for analytics, with no serialise/deserialise step.
+description: Combine XTDB's bitemporal data with DuckDB-resident data over Arrow, with no serialise/deserialise step.
 ---
 
-XTDB and DuckDB are both Arrow-native, so ADBC can stream Arrow batches from XTDB directly into DuckDB with no serialise/deserialise step.
-The worked scenario: as of Q4 2024, group a bitemporal trade snapshot from XTDB by counterparty tier held in a DuckDB lookup table.
+When you already have data in DuckDB, ADBC lets you bring XTDB's bitemporal data alongside it without a copy: both are Arrow-native, so a query result streams from XTDB straight into DuckDB to be joined with what's already there.
+The worked scenario: take a bitemporal trade snapshot from XTDB as of Q4 2024 and join it to a counterparty-tier lookup table held in DuckDB.
 
 ## Prerequisites
 
@@ -87,7 +87,7 @@ with flight_sql.connect(FSQL_URI) as conn:
 ```
 
 `fetch_arrow_table()` returns a `pyarrow.Table`.
-The data travels from XTDB's in-memory Arrow buffers across the FlightSQL gRPC stream and lands in the client as Arrow: no row-by-row decode, no type widening.
+The data travels from XTDB's in-memory Arrow buffers across the FlightSQL gRPC stream and lands in the client as Arrow, so it isn't decoded row by row or widened through a text wire format.
 
 `snapshot` now holds 6 rows: T001–T004, T006, T007.
 
@@ -96,7 +96,7 @@ The data travels from XTDB's in-memory Arrow buffers across the FlightSQL gRPC s
 ```python
 import duckdb
 
-duck = duckdb.connect()          # in-memory analytical engine
+duck = duckdb.connect()          # in-memory DuckDB instance
 duck.register("xtdb_trades", snapshot)
 ```
 
@@ -130,7 +130,7 @@ duck.execute("CREATE TABLE counterparty_tiers AS SELECT * FROM 'tiers.parquet'")
 
 ## Step 5: Join and aggregate in DuckDB
 
-The analytical query runs entirely inside DuckDB's vectorised engine, over the Arrow buffers XTDB produced.
+The join runs inside DuckDB, over the Arrow buffers XTDB produced, combining the bitemporal snapshot with DuckDB's local lookup table.
 No round-trip to XTDB, no re-serialisation.
 
 ```python
@@ -214,12 +214,12 @@ pq.write_table(result, "tier_exposure_q4_2024.parquet")
 ## Runnable example
 
 A self-contained script that runs the full scenario is in
-[`examples/streaming-into-duckdb/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/streaming-into-duckdb/main.py).
+[`examples/streaming-into-duckdb/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/streaming-into-duckdb/main.py).
 
 ```sh
 docker run --rm -d --name xtdb-g5 -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow duckdb psycopg
-python docs/src/content/docs/drivers/adbc/examples/streaming-into-duckdb/main.py
+python docs/src/content/docs/adbc/examples/streaming-into-duckdb/main.py
 docker rm -f xtdb-g5
 ```
 

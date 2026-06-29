@@ -10,12 +10,12 @@ XTDB's storage layer, query engine, and wire format are all Arrow-native, and AD
 
 ## Where to next
 
-- **[Tutorial](/drivers/adbc/tutorial)**: an end-to-end walkthrough covering install, connect, ingest, query, transactions, and prepared statements.
-- **[Reference](/drivers/adbc/reference)**: the supported ADBC surface in detail.
+- **[Tutorial](/adbc/tutorial)**: an end-to-end walkthrough covering install, connect, ingest, query, transactions, and prepared statements.
+- **[Reference](/adbc/reference)**: the supported ADBC surface in detail.
   Which calls work, which don't, and the per-client caveats (Python vs Rust vs Java).
-- **[How-to guides](/drivers/adbc/guides)**: task-shaped recipes.
+- **[How-to guides](/adbc/guides)**: task-shaped recipes.
   "Bulk-load Parquet via ADBC", "round-trip a pandas DataFrame", "stream results into DuckDB".
-- **[Examples](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples)**: minimal runnable hello-world programs in each supported language.
+- **[Examples](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples)**: minimal runnable hello-world programs in each supported language.
 
 ## ADBC vs pgwire
 

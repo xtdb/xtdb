@@ -114,7 +114,6 @@ export default defineConfig({
                         { label: 'Overview', link: '/reference/main' },
                         { label: 'SQL Transactions/DML', link: '/reference/main/sql/txs' },
                         { label: 'SQL Queries', link: '/reference/main/sql/queries' },
-                        { label: 'SQL Schema', link: '/reference/main/sql/schema' },
                         { label: 'Data Types', link: '/reference/main/data-types' },
                         {
                             label: 'Standard Library',
@@ -129,6 +128,29 @@ export default defineConfig({
                                 { label: 'Aggregate functions', link: '/reference/main/stdlib/aggregates' },
                                 { label: 'Table functions', link: '/reference/main/stdlib/table' },
                                 { label: 'Other functions', link: '/reference/main/stdlib/other' }
+                            ]
+                        },
+                    ]
+                },
+
+                {
+                    label: 'ADBC (Arrow)',
+                    collapsed: true,
+                    items: [
+                        { label: 'Overview', link: '/adbc' },
+                        { label: 'Reference', link: '/adbc/reference' },
+                        { label: 'Tutorial', link: '/adbc/tutorial' },
+                        {
+                            label: 'How-to guides',
+                            collapsed: true,
+                            items: [
+                                { label: 'Overview', link: '/adbc/guides' },
+                                { label: 'Bulk-load Parquet', link: '/adbc/guides/bulk-ingest-from-parquet' },
+                                { label: 'pandas / polars round-trip', link: '/adbc/guides/pandas-polars-round-trip' },
+                                { label: 'Point-in-time feature extraction (ML)', link: '/adbc/guides/point-in-time-feature-extraction' },
+                                { label: 'Stream into DuckDB', link: '/adbc/guides/streaming-into-duckdb' },
+                                { label: 'Rust + arrow-rs pipeline', link: '/adbc/guides/rust-arrow-pipeline' },
+                                { label: 'Prepared statements & transactions', link: '/adbc/guides/prepared-statements-and-transactions' },
                             ]
                         },
                     ]

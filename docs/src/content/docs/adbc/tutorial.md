@@ -4,7 +4,7 @@ description: "An Arrow-native walkthrough: install the driver, connect, ingest, 
 ---
 
 The tutorial is Python-first: `adbc_driver_flightsql` + `pyarrow` keep results in Arrow from XTDB to your process, with no intermediate decode.
-A complete, runnable version of every snippet here lives in [`examples/tutorial/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/tutorial/main.py).
+A complete, runnable version of every snippet here lives in [`examples/tutorial/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/tutorial/main.py).
 
 ## What you'll build
 
@@ -34,7 +34,7 @@ conn = flight_sql.connect("grpc://localhost:9832")
 The connection string is a standard gRPC URI.
 `flight_sql.connect` returns a DB-API 2.0 `Connection` object and can also be used as a context manager.
 
-For JVM readers: the in-process `Xtdb.Connection` path requires no network hop and no gRPC; see the [reference](/drivers/adbc/reference#in-process-kotlin--jvm) for the Kotlin API.
+For JVM readers: the in-process `node.connect()` path requires no network hop and no gRPC; see the [reference](/adbc/reference#in-process-kotlin--jvm) for the Kotlin API.
 
 ## 3. Your first query
 
@@ -109,7 +109,7 @@ with conn.cursor() as cur:
 ```
 
 XTDB auto-creates the `trades` table.
-The table name you pass becomes the target; XTDB's implicit schema creation means there's no `CREATE TABLE` step.
+The table name you pass becomes the target, and XTDB infers the schema from the data, so no `CREATE TABLE` is required first (you can still declare one explicitly if you want).
 Every row must have an `_id` column: XTDB's document model requires it.
 
 Verify the round-trip:
@@ -174,7 +174,7 @@ conn = flight_sql.connect("grpc://localhost:9832", autocommit=True)
 ```
 
 `adbc_ingest` commits atomically on its own regardless of commit mode, which is why the ingests in this tutorial are visible without any extra step.
-For the full commit-mode, visibility, and multi-statement transaction rules see [Transactions](/drivers/adbc/reference#transactions) in the reference.
+For the full commit-mode, visibility, and multi-statement transaction rules see [Transactions](/adbc/reference#transactions) in the reference.
 
 A committed write is visible to subsequent reads on the same connection, with no explicit synchronisation step:
 
@@ -339,10 +339,10 @@ The ADBC path returns the result in Arrow form rather than decoded rows.
 
 ## 10. Where next
 
-- **[Reference](/drivers/adbc/reference)**: the full supported ADBC surface in detail: which calls work, which don't, per-client caveats.
-- **[How-to guides](/drivers/adbc/guides)**: task-shaped recipes:
-  - [Bulk-load Parquet](/drivers/adbc/guides/bulk-ingest-from-parquet): load a Parquet file in one `adbc_ingest` call.
-  - [pandas / polars round-trip](/drivers/adbc/guides/pandas-polars-round-trip): read query results directly into a DataFrame without an intermediate copy.
-  - [Stream results into DuckDB](/drivers/adbc/guides/streaming-into-duckdb): feed XTDB query output into DuckDB via the Arrow C Data Interface.
-  - [Point-in-time feature extraction](/drivers/adbc/guides/point-in-time-feature-extraction): use `FOR SYSTEM_TIME AS OF` inside a pipeline to recreate historical feature sets.
-- **[Examples](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples)**: minimal hello-world programs in Python, Rust, and other languages.
+- **[Reference](/adbc/reference)**: the full supported ADBC surface in detail: which calls work, which don't, per-client caveats.
+- **[How-to guides](/adbc/guides)**: task-shaped recipes:
+  - [Bulk-load Parquet](/adbc/guides/bulk-ingest-from-parquet): load a Parquet file in one `adbc_ingest` call.
+  - [pandas / polars round-trip](/adbc/guides/pandas-polars-round-trip): read query results directly into a DataFrame without an intermediate copy.
+  - [Stream results into DuckDB](/adbc/guides/streaming-into-duckdb): feed XTDB query output into DuckDB via the Arrow C Data Interface.
+  - [Point-in-time feature extraction](/adbc/guides/point-in-time-feature-extraction): use `FOR SYSTEM_TIME AS OF` inside a pipeline to recreate historical feature sets.
+- **[Examples](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples)**: minimal hello-world programs in Python, Rust, and other languages.

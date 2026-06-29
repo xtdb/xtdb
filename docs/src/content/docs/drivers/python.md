@@ -54,6 +54,26 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Arrow-native access via ADBC
+
+For Arrow-native workloads (query results as Arrow batches, bulk-ingesting an Arrow table in one round trip, zero-copy hand-off to pandas / polars / DuckDB), XTDB also exposes [ADBC](https://arrow.apache.org/adbc/) over its FlightSQL listener.
+In Python that's the [`adbc_driver_flightsql`](https://pypi.org/project/adbc-driver-flightsql/) driver:
+
+```bash
+pip install adbc-driver-flightsql pyarrow
+```
+
+```python
+import adbc_driver_flightsql.dbapi as flight_sql
+
+with flight_sql.connect("grpc://localhost:9832") as conn:
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1")
+        print(cur.fetch_arrow_table())
+```
+
+See the [ADBC tutorial](/adbc/tutorial) for an end-to-end Python walkthrough and the [ADBC reference](/adbc/reference) for the supported surface.
+
 ## Examples
 
 For more examples and tests, see the [XTDB driver-examples repository](https://github.com/xtdb/driver-examples), which contains comprehensive test suites demonstrating various features and use cases.

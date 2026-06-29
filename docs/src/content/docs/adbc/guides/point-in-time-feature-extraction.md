@@ -12,7 +12,7 @@ Much of what feature stores (Feast, Tecton, Hopsworks) do is to perform this joi
 In XTDB the join is one SQL query, because every row already carries its valid-time interval.
 `adbc_driver_flightsql` returns the result as Arrow, and `pyarrow.Table.to_pandas()` gives you a model-ready dataframe.
 
-The runnable example for this guide is in [`docs/.../examples/point-in-time-feature-extraction/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/point-in-time-feature-extraction/main.py).
+The runnable example for this guide is in [`docs/.../examples/point-in-time-feature-extraction/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/point-in-time-feature-extraction/main.py).
 
 ## The scenario
 
@@ -20,6 +20,8 @@ Loan-default prediction.
 
 **Labels.**
 One row per event we want to train on: `(customer_id, observed_at, did_default)`.
+A label is an *event*, observed at a single instant, not a state that holds over a span.
+So we model its valid-time as the instantaneous chronon `[observed_at, observed_at + 1µs)`: `observed_at` becomes the label's own `_valid_from`, and the as-of join below is a clean period-vs-period one.
 
 **Features.**
 Per-customer attributes that drift: `account_balance`, `credit_score`, `employment_status`.
@@ -81,9 +83,9 @@ No audit table, no `effective_from` column, no triggers, no manual interval book
 This is what most pipelines start with:
 
 ```sql
-SELECT l._id          AS label_id,
+SELECT l._id            AS label_id,
        l.customer_id,
-       l.observed_at,
+       l._valid_from    AS observed_at,
        l.did_default,
        f.account_balance,
        f.credit_score,
@@ -115,25 +117,25 @@ Train on this and the model learns the aftermath of a default, not the signals t
 
 ## The bitemporal AS-OF join: right
 
-The fix is one SQL clause: `FOR ALL VALID_TIME` on the features table, joined against the label's `observed_at`:
+The fix is one SQL clause: `FOR ALL VALID_TIME` on the features table, joined against the label's valid-time period:
 
 ```sql
-SELECT l._id          AS label_id,
+SELECT l._id            AS label_id,
        l.customer_id,
-       l.observed_at,
+       l._valid_from    AS observed_at,
        l.did_default,
        f.account_balance,
        f.credit_score,
        f.employment_status
-FROM loan_labels AS l
+FROM loan_labels FOR ALL VALID_TIME AS l
 LEFT JOIN customer_features FOR ALL VALID_TIME AS f
   ON f._id = l.customer_id
-  AND f._valid_from <= l.observed_at
-  AND (f._valid_to IS NULL OR f._valid_to > l.observed_at)
+  AND f._valid_time CONTAINS l._valid_time
 ```
 
 `FOR ALL VALID_TIME` opens up every historical version of `customer_features`.
-The `_valid_from <= observed_at < _valid_to` predicate picks the one version per customer whose interval contains the label's timestamp.
+Both sides are valid-time periods, so the join is period-against-period: `f._valid_time CONTAINS l._valid_time` picks the one feature version per customer whose period contains the label's event chronon, without spelling out the interval bounds by hand.
+(`observed_at` is the label's `_valid_from`, so we project it from there.)
 
 Same data, run again:
 
@@ -190,17 +192,14 @@ Land them as an in-memory `pyarrow.Table` and ingest, or `INSERT` them directly;
 **Multi-table join.** Multiple feature tables, each with their own timeline:
 
 ```sql
-SELECT l._id, l.customer_id, l.observed_at, l.did_default,
+SELECT l._id, l.customer_id, l._valid_from AS observed_at, l.did_default,
        cf.credit_score,
        acc.account_balance,
        emp.status AS employment_status
-FROM loan_labels AS l
-LEFT JOIN credit_scores      FOR ALL VALID_TIME AS cf  ON cf._id = l.customer_id
-  AND cf._valid_from  <= l.observed_at AND (cf._valid_to  IS NULL OR cf._valid_to  > l.observed_at)
-LEFT JOIN accounts           FOR ALL VALID_TIME AS acc ON acc._id = l.customer_id
-  AND acc._valid_from <= l.observed_at AND (acc._valid_to IS NULL OR acc._valid_to > l.observed_at)
-LEFT JOIN employment_history FOR ALL VALID_TIME AS emp ON emp._id = l.customer_id
-  AND emp._valid_from <= l.observed_at AND (emp._valid_to IS NULL OR emp._valid_to > l.observed_at)
+FROM loan_labels FOR ALL VALID_TIME AS l
+LEFT JOIN credit_scores      FOR ALL VALID_TIME AS cf  ON cf._id  = l.customer_id AND cf._valid_time  CONTAINS l._valid_time
+LEFT JOIN accounts           FOR ALL VALID_TIME AS acc ON acc._id = l.customer_id AND acc._valid_time CONTAINS l._valid_time
+LEFT JOIN employment_history FOR ALL VALID_TIME AS emp ON emp._id = l.customer_id AND emp._valid_time CONTAINS l._valid_time
 ```
 
 Each feature table is joined at its own correct point in time.
@@ -221,7 +220,7 @@ This is the bitemporal pair; see [Time in XTDB](/about/time-in-xtdb) for the und
 
 The example script seeds each table in a single `adbc_ingest` call, including a `_valid_from` column so every row sets its own valid-time and the customers build a real timeline.
 `_valid_from` must be a `timestamp` column in the Arrow table, not a `date`.
-For bulk loads of labels or feature timelines from Parquet or pandas, see [Bulk-load Parquet into XTDB via ADBC](/drivers/adbc/guides/bulk-ingest-from-parquet).
+For bulk loads of labels or feature timelines from Parquet or pandas, see [Bulk-load Parquet into XTDB via ADBC](/adbc/guides/bulk-ingest-from-parquet).
 
 Training-set extraction is a single read query, so transactions don't enter into it.
-But if you combine ingestion and querying on the same connection, see [Transactions](/drivers/adbc/reference#transactions) in the reference.
+But if you combine ingestion and querying on the same connection, see [Transactions](/adbc/reference#transactions) in the reference.

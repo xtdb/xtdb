@@ -71,13 +71,14 @@ composite = pc.binary_join_element_wise(
 table = table.append_column("_id", composite)
 ```
 
-**Option 3: assign a positional index.**
-For a one-time load where rows have no natural key, a sequential integer works:
+**Option 3: generate a random UUID per row.**
+When the rows have no natural key, a random UUID is the best default: it's unique by construction and works for both one-time loads and ongoing production ingest (unlike a positional index, which shifts if you re-ingest and silently overwrites).
 
 ```python
+import uuid
 import pyarrow as pa
 
-ids = pa.array(range(len(table)), type=pa.string())
+ids = pa.array([str(uuid.uuid4()) for _ in range(len(table))], type=pa.string())
 table = table.append_column("_id", ids)
 ```
 
@@ -109,7 +110,7 @@ Batches stream through without materialising the whole dataset in either the cli
 
 `create`, `append`, and `create_append` are all accepted and behave the same here, since XTDB auto-creates tables and upserts on `_id`.
 `replace` and the fail-if-exists / fail-if-not-exist variants are rejected with a gRPC `INVALID_ARGUMENT`.
-See [Bulk ingest](/drivers/adbc/reference#bulk-ingest) in the reference for the full mode table and the reasoning.
+See [Bulk ingest](/adbc/reference#bulk-ingest) in the reference for the full mode table and the reasoning.
 
 ## Error handling
 
@@ -166,10 +167,10 @@ with conn.cursor() as cur:
 ## Runnable example
 
 A self-contained script that writes a Parquet fixture and bulk-loads it is in the repository at
-[`docs/drivers/adbc/examples/bulk-ingest-from-parquet/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/bulk-ingest-from-parquet/main.py).
+[`docs/adbc/examples/bulk-ingest-from-parquet/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/bulk-ingest-from-parquet/main.py).
 
 ```bash
 docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow
-python docs/src/content/docs/drivers/adbc/examples/bulk-ingest-from-parquet/main.py
+python docs/src/content/docs/adbc/examples/bulk-ingest-from-parquet/main.py
 ```
