@@ -19,6 +19,7 @@
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
+           (java.time Clock)
            (java.util HashMap)
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
@@ -85,7 +86,7 @@
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
                                            ^IQuerySource q-src ^SqlPlanner sql-planner default-tz ^Counter tx-error-counter
                                            tx-await-timer tx-submit-timer tx-execute-timer db-name]
-  (Xtdb$Connection. allocator db-cat q-src sql-planner default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
+  (Xtdb$Connection. allocator db-cat q-src sql-planner (Clock/systemDefaultZone) default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src ^SqlPlanner sql-planner

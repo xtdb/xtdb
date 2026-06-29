@@ -16,6 +16,8 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.database.encodeTimeBasisToken
+import java.time.Instant
 
 class InProcessAdbcTest {
 
@@ -255,6 +257,83 @@ class InProcessAdbcTest {
             assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
 
             assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+        }
+    }
+
+    @Test
+    fun `a read-only transaction is isolated from a concurrent write`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ ONLY")
+            assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
+
+            insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "the concurrent write is invisible within the begin-pinned snapshot"
+            )
+
+            conn.update("COMMIT")
+            assertEquals(
+                listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "visible once the snapshot is released"
+            )
+        }
+    }
+
+    @Test
+    fun `manual-mode reads share a snapshot without an explicit BEGIN`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.setAutoCommit(false)
+            assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
+
+            insertData("INSERT INTO foo RECORDS {_id: 1}")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "the first read lazily pinned the snapshot; the concurrent write stays invisible"
+            )
+
+            conn.rollback()
+        }
+    }
+
+    @Test
+    fun `current-time is pinned across a read-only transaction`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ ONLY")
+            val first = conn.select("SELECT CURRENT_TIMESTAMP ts")
+            val second = conn.select("SELECT CURRENT_TIMESTAMP ts")
+            assertEquals(first, second, "current_timestamp is fixed at BEGIN, identical across reads in the tx")
+            conn.update("COMMIT")
+        }
+    }
+
+    @Test
+    fun `READ ONLY WITH CLOCK_TIME pins the transaction wall-clock`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ ONLY WITH (CLOCK_TIME = TIMESTAMP '2021-07-01T00:00:00Z')")
+            assertEquals(
+                listOf(mapOf("in_2021" to true)),
+                conn.select(
+                    "SELECT (CURRENT_TIMESTAMP >= TIMESTAMP '2021-01-01T00:00:00Z'" +
+                        " AND CURRENT_TIMESTAMP < TIMESTAMP '2022-01-01T00:00:00Z') in_2021"
+                )
+            )
+            conn.update("COMMIT")
+        }
+    }
+
+    @Test
+    fun `READ ONLY WITH AWAIT_TOKEN is rejected`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) {
+                conn.update("BEGIN READ ONLY WITH (AWAIT_TOKEN = 'whatever')")
+            }
         }
     }
 
@@ -521,9 +600,21 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ ONLY WITH SNAPSHOT_TOKEN is rejected`() {
+    fun `READ ONLY WITH SNAPSHOT_TOKEN bounds reads to the given snapshot`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        // a past snapshot bound — earlier than the row's commit, so the explicit token must decode, apply, and
+        // bound the read below it: the row is excluded. (Avoid the epoch: it collides with the encoding's
+        // "no completed tx" sentinel and decodes to null; a future token would be rejected as unindexed.)
+        val token = mapOf("xtdb" to listOf<Instant?>(Instant.parse("2020-01-01T00:00:00Z"))).encodeTimeBasisToken()
+
         xtdb.connect().use { conn ->
-            assertThrows(Incorrect::class.java) { conn.update("BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = 'tok')") }
+            conn.update("BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = '$token')")
+            assertEquals(
+                emptyList<Map<*, *>>(), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "as of the epoch the row's commit is in the future, so nothing is visible"
+            )
+            conn.update("COMMIT")
         }
     }
 

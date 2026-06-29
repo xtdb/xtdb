@@ -99,16 +99,25 @@ value TxBasisToken {
     -- it; each read threads it through. See: database/encodeTxBasisToken.
 }
 
+value TimeBasisToken {
+    -- An opaque snapshot token: per-database latest-completed system-times, the upper bound
+    -- on the data a read observes. Captured from the Database catalog at BEGIN to pin a
+    -- transaction's snapshot. See: database/encodeTimeBasisToken, Database.Catalog.snapshotToken.
+}
+
 value ReadBasis {
     -- The pinned point-in-time a transaction's reads observe, fixed AT BEGIN for every
-    -- transaction (begin-time snapshot isolation). The begin-time pin sets snapshot_token
-    -- to the connection's await_token and clock_time to the current-time at begin; a
-    -- BEGIN READ ONLY WITH (...) clause overrides individual fields. The WITH options are
-    -- grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
-    --   snapshot_token — an opaque basis token (as TxBasisToken).
+    -- transaction (begin-time snapshot isolation). The begin-time pin awaits the connection's
+    -- await_token (so the snapshot reflects this connection's own writes), then sets
+    -- snapshot_token to the resulting latest-completed snapshot and clock_time to the
+    -- current-time at begin; a BEGIN READ ONLY WITH (...) clause overrides individual fields.
+    -- The WITH options are grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
+    --   snapshot_token — the data snapshot's upper bound, a TimeBasisToken (per-database
+    --                    latest-completed system-times). Distinct from the await_token, which
+    --                    is a TxBasisToken of message-ids the read awaits before snapshotting.
     --   snapshot_time  — observe state as of a wall-clock instant.
     --   clock_time     — pin the transaction's notion of "now".
-    snapshot_token: TxBasisToken?
+    snapshot_token: TimeBasisToken?
     snapshot_time: Timestamp?
     clock_time: Timestamp?
 }
@@ -219,8 +228,9 @@ entity DmlBuffer {
 -- An explicit SQL BEGIN opens a transaction regardless of auto_commit; the flag is left
 -- untouched and the explicit transaction coexists with it.
 --
--- Every BEGIN pins a read basis NOW, at begin-time — the connection's current await_token
--- as the snapshot token and the current-time as the clock_time. This gives begin-time
+-- Every BEGIN pins a read basis NOW, at begin-time — awaiting the connection's await_token
+-- then capturing the latest-completed snapshot as the snapshot token, and the current-time as
+-- the clock_time. This gives begin-time
 -- snapshot isolation: a transaction's notion of visible data and "now" is fixed at BEGIN,
 -- before the access mode is known. The variant opened depends on the access mode carried
 -- on the BEGIN event (READ_ONLY | READ_WRITE | none — see BeginAccessMode):
@@ -233,9 +243,10 @@ entity DmlBuffer {
 -- begin-time basis.
 
 rule BeginReadOnly {
-    -- BEGIN READ ONLY [WITH (snapshot-token | snapshot-time | clock-time)]. The basis is
-    -- the begin-time pin (connection await_token + current-time); any field supplied in
-    -- the WITH clause overrides the corresponding pinned default.
+    -- BEGIN READ ONLY [WITH (snapshot-token | snapshot-time | clock-time)]. The basis is the
+    -- begin-time pin — the latest-completed snapshot (Database.snapshotToken, captured after
+    -- awaiting the connection's await_token) plus the current-time; any field supplied in the
+    -- WITH clause overrides the corresponding pinned default.
     when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
     requires: connection.tx = null
     requires: access_mode = read_only
@@ -245,7 +256,7 @@ rule BeginReadOnly {
             connection: connection,
             failed: false,
             read_basis: ReadBasis(
-                snapshot_token: read_basis?.snapshot_token ?? connection.await_token,
+                snapshot_token: read_basis?.snapshot_token ?? Database.snapshotToken,
                 snapshot_time: read_basis?.snapshot_time,
                 clock_time: read_basis?.clock_time ?? now
             )
@@ -260,7 +271,8 @@ rule BeginReadWrite {
     -- The commit-opts values (system_time, user_metadata, async) are obtained by evaluating
     -- their WITH-clause expressions through the SqlPlanner — it plans each option expression
     -- (e.g. SYSTEM_TIME's `TIMESTAMP '…'`) and substitutes positional params to a runtime
-    -- value. The READ ONLY read-basis options are evaluated likewise, once that increment lands.
+    -- value. The READ ONLY read-basis options (SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME) are
+    -- evaluated likewise.
     when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
     requires: connection.tx = null
     requires: access_mode = read_write
@@ -293,7 +305,7 @@ rule BeginUnresolved {
             connection: connection,
             failed: false,
             read_basis: ReadBasis(
-                snapshot_token: connection.await_token,
+                snapshot_token: Database.snapshotToken,
                 snapshot_time: null,
                 clock_time: now
             )

@@ -113,6 +113,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
         private val sqlPlanner: SqlPlanner,
+        private val clock: Clock,
         var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
@@ -260,7 +261,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         fun openSqlQuery(sql: String): ResultCursor =
-            prepareSql(sql).openQuery(null, QueryOpts(null, defaultTz))
+            prepareSql(sql).openQuery(null, queryOpts())
 
         fun openSnapshot(): DatabaseSnapshot {
             val db = db(dbName)
@@ -337,7 +338,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 val queryArgs = openQueryArgs()
                 val cursor = try {
-                    prepared?.openQuery(queryArgs, QueryOpts()) ?: openSqlQuery(sql)
+                    prepared?.openQuery(queryArgs, queryOpts()) ?: openSqlQuery(sql)
                 } catch (t: Throwable) {
                     queryArgs?.close()
                     throw t
@@ -415,7 +416,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             override fun close() = buffer.close()
         }
 
-        private class Transaction(var mode: AccessMode? = null) : AutoCloseable {
+        // The read basis pinned at BEGIN and observed by every query in the transaction — the lever for
+        // cross-query snapshot isolation. Carried by an unresolved tx and a ReadOnly one (resolving the
+        // former to the latter inherits it unchanged); a ReadWrite tx has none — writes don't read.
+        private class ReadBasis(val snapshotToken: String?, val snapshotTime: Instant?, val currentTime: Instant)
+
+        private class Transaction(var mode: AccessMode? = null, val readBasis: ReadBasis? = null) : AutoCloseable {
             var failed: Throwable? = null
 
             override fun close() {
@@ -423,20 +429,32 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        // Open an explicit transaction (SQL BEGIN). [readOnly] fixes the access mode — READ ONLY rejects writes,
-        // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
-        // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
-        private fun beginTx(accessMode: AccessMode?) {
-            if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
-            tx = Transaction(accessMode)
+        // Pin the begin-time read basis: await this connection's own writes, then snapshot the data
+        // (latest-completed system-times) and the clock. A READ ONLY WITH clause overrides any of the three.
+        private fun pinReadBasis(
+            snapshotToken: String? = null, snapshotTime: Instant? = null, currentTime: Instant? = null
+        ): ReadBasis {
+            dbCat.awaitAll(awaitToken, awaitTimeout)
+            return ReadBasis(snapshotToken ?: dbCat.snapshotToken(), snapshotTime, currentTime ?: clock.instant())
         }
 
-        fun beginTx() = beginTx(null)
+        // Open an explicit transaction (SQL BEGIN). [accessMode] fixes the mode — READ ONLY rejects writes,
+        // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
+        // [readBasis] pins the begin-time read snapshot (null for an explicit READ WRITE — writes don't read).
+        // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
+        private fun beginTx(accessMode: AccessMode?, readBasis: ReadBasis?) {
+            if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
+            tx = Transaction(accessMode, readBasis)
+        }
 
-        fun beginReadOnly() = beginTx(ReadOnly)
+        // a bare BEGIN pins a basis even while unresolved: if a query resolves it to read-only the basis is
+        // inherited; if DML resolves it to read-write the basis is simply ignored.
+        fun beginTx() = beginTx(null, pinReadBasis())
+
+        fun beginReadOnly() = beginTx(ReadOnly, pinReadBasis())
 
         fun beginWriteOnly(systemTime: Instant? = null, userMetadata: Map<*, *>? = null, async: Boolean = false) =
-            beginTx(ReadWrite(systemTime, userMetadata, async))
+            beginTx(ReadWrite(systemTime, userMetadata, async), null)
 
         // Coerce a planned BEGIN-option value to an Instant, mirroring xtdb.time/->instant so the connection and
         // pgwire agree on the system-time a SQL temporal literal resolves to. SqlPlanner plans `TIMESTAMP '…'`
@@ -483,9 +501,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 ParsedStatement.AccessMode.READ_ONLY -> {
-                    // the read basis is not implemented yet, so reject any WITH option
-                    if (opts != ParsedStatement.TxOptions(accessMode = opts.accessMode)) rejectOpt()
-                    beginReadOnly()
+                    // SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME override the begin-time auto-pin. AWAIT_TOKEN
+                    // (the only other READ ONLY option in the grammar) isn't wired through yet — reject it fail-closed.
+                    if (opts.awaitToken != null) rejectOpt()
+
+                    val snapshotToken = opts.snapshotToken?.let { sqlPlanner.evalLiteral(it, null) } as String?
+                    val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, null) })
+                    val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, null) })
+
+                    beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime))
                 }
 
                 null -> beginTx()
@@ -523,10 +547,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // The read counterpart of executeDml's access-mode resolution: a query resolves an unresolved tx to
-        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only. With no open
-        // tx (autocommit, or none begun) the query reads latest, unchanged.
+        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only.
         private fun resolveForQuery() {
-            val tx = tx ?: return
+            val tx = tx
+            if (tx == null) {
+                // manual mode mirrors executeDml's lazy open: a query opens a read-only tx pinning the
+                // begin-time basis, so subsequent reads share its snapshot. Under autocommit there is no open
+                // tx — the query reads latest at the connection's current basis, unchanged.
+                if (!autoCommit) this.tx = Transaction(ReadOnly, pinReadBasis())
+                return
+            }
             when (tx.mode) {
                 is ReadWrite -> throw Incorrect(
                     "Queries are unsupported in a DML transaction", "xtdb/queries-in-read-write-tx"
@@ -535,6 +565,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 is ReadOnly -> {}
                 null -> tx.mode = ReadOnly
             }
+        }
+
+        // QueryOpts for a user read: an open tx's pinned basis (snapshot isolation), else null fields so the
+        // planner defaults to latest data and the wall-clock now (autocommit / no open tx).
+        private fun queryOpts() = tx?.readBasis.let { b ->
+            QueryOpts(b?.currentTime, defaultTz, b?.snapshotToken, b?.snapshotTime)
         }
 
         override fun setAutoCommit(autoCommit: Boolean) {
