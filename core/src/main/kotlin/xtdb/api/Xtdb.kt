@@ -152,6 +152,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
 
+        // the authenticated user, threaded into every write's [TxOpts] for the audit trail. Established by the
+        // frontend at connect-time (pgwire's startup handshake); null until a frontend sets it.
+        var user: String? = null
+
         // how long to wait for this connection's writes to become visible before giving up, shared by every
         // read this connection prepares or snapshots
         private val awaitTimeout: Duration = Duration.ofMinutes(1)
@@ -161,7 +165,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // session parameters (SET <param> = <value>) — stored raw; param-specific interpretation (e.g.
         // pgwire's fallback_output_format) stays with the consumer. SHOW <param> reads back from here.
-        private val sessionParameters = mutableMapOf<String, String?>()
+        private val _sessionParameters = mutableMapOf<String, String?>()
+
+        // read view for the frontend (pgwire's serialization env / ParameterStatus echo); writes go through SET.
+        val sessionParameters: Map<String, String?> get() = _sessionParameters
 
         // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
         // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
@@ -385,7 +392,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     is ParsedStatement.Rollback -> rollbackTx()
 
                     is ParsedStatement.SetSessionParameter ->
-                        sessionParameters[stmt.name] = sqlPlanner.evalLiteral(stmt.value, null)?.toString()
+                        _sessionParameters[stmt.name] = sqlPlanner.evalLiteral(stmt.value, null)?.toString()
                     is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
                     is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
                     is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
@@ -506,6 +513,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                            tz: ZoneId = defaultTz) =
             beginTx(ReadWrite(systemTime, userMetadata, async), null, tz)
 
+        // tx status for the frontend's ready-state + commit/abort decisions. A failed tx rejects further work
+        // until ROLLBACK (Postgres' "current transaction is aborted").
+        val isTxOpen: Boolean get() = tx != null
+        val isTxFailed: Boolean get() = tx?.failed != null
+
+        // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
+        fun failTx(cause: Throwable) {
+            tx?.let { it.failed = it.failed ?: cause }
+        }
+
         // Coerce a planned BEGIN-option value to an Instant, mirroring xtdb.time/->instant so the connection and
         // pgwire agree on the system-time a SQL temporal literal resolves to. SqlPlanner plans `TIMESTAMP '…'`
         // to a java.time temporal (ZonedDateTime when zoned, else LocalDateTime); a bare string falls back to
@@ -604,7 +621,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             // a ReadWrite tx commits even when its buffer is empty — an explicit write tx records a transaction
             // (and advances the await-token); a ReadOnly / still-unresolved tx is a no-op.
             val mode = tx.mode as? ReadWrite ?: return
-            val opts = TxOpts(systemTime = mode.systemTime, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
+            val opts = TxOpts(systemTime = mode.systemTime, user = user, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
             expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops -> if (mode.async) submitTx(ops, opts) else executeTx(ops, opts) }
         }
 
@@ -630,7 +647,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         internal fun executeDml(op: TxOp) {
             // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
             if (autoCommit && tx == null) {
-                expandStaticOps(listOf(op), defaultTz).useAll { ops -> executeTx(ops) }
+                expandStaticOps(listOf(op), defaultTz).useAll { ops -> executeTx(ops, TxOpts(user = user)) }
                 return
             }
 
@@ -647,7 +664,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // The read counterpart of executeDml's access-mode resolution: a query resolves an unresolved tx to
-        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only.
+        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only. Applied by
+        // openQuery, so every read gates through one place.
         private fun resolveForQuery() {
             val tx = tx
             if (tx == null) {
@@ -754,8 +772,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // SQL ROLLBACK: discards the open tx regardless of autoCommit (unlike [rollback], which rejects rollback in
-        // autocommit). The explicit-tx mechanism the SQL tx-control path drives.
-        private fun rollbackTx() {
+        // autocommit). The explicit-tx mechanism the SQL tx-control path (and the pgwire frontend) drives.
+        fun rollbackTx() {
             // defaultTz was never touched while the tx was open, so dropping the tx reverts any mid-tx SET TIME ZONE
             tx?.close()
             tx = null
