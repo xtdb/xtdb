@@ -1,0 +1,728 @@
+-- allium: 3
+-- tx.allium
+--
+-- The connection-level transaction model of XTDB: the client-facing transaction
+-- lifecycle that sits ABOVE db.allium. Where db.allium begins at submitTx/executeTx
+-- (the Database boundary), this spec covers everything a client does before that —
+-- begin / buffer / commit, access-mode resolution, and the read basis a transaction's
+-- reads observe.
+--
+-- Scope: one client connection's transaction lifecycle.
+-- Entity/field names match the Kotlin in core/src/main/kotlin/xtdb/api/Xtdb.kt
+-- (Connection, Transaction, AccessMode.ReadOnly/ReadWrite, DmlBuffer) and the SQL
+-- classifier in core/src/main/kotlin/xtdb/query/SqlParser.kt → ParsedStatement.
+--
+-- == Frontend parity (the point of this spec) ==
+--
+-- Both protocol frontends — pgwire and ADBC / Flight SQL — reach this ENTIRE model
+-- through one shared Connection. There are two ways a client drives a transaction:
+--
+--   1. tx-control-as-SQL: BEGIN [READ ONLY | READ WRITE] [WITH (...)], COMMIT, ROLLBACK
+--      sent as SQL, classified by the SqlParser (Begin / Commit / Rollback) and handled
+--      by the connection. This is the FULL surface — access mode, read basis and
+--      commit-opts are all expressible here. An ADBC / Flight SQL client expresses the
+--      whole model this way.
+--   2. programmatic basic-control: setAutoCommit / commit / rollback on the ADBC
+--      AdbcConnection surface. Retained for driver ergonomics; a strict subset of (1).
+--
+-- This is the TARGET contract for an in-progress arc. The work in progress brings ADBC
+-- up to this contract (tx-control-as-SQL + retained programmatic control); once ADBC
+-- reaches it, pgwire is migrated onto the same Connection model wholesale. Code will
+-- catch up increment by increment — this describes the intended complete model, not
+-- only what is implemented today.
+--
+-- == Boundaries ==
+--
+-- Below: db.allium's submitTx / executeTx. A ReadWrite commit drains the buffer and
+--        crosses this boundary (submit when async, execute-and-await when sync).
+-- Above: the Frontend (pgwire / ADBC client) that decodes the wire protocol and feeds
+--        SQL strings and programmatic calls into the Connection.
+
+---- Given
+
+given {
+    connection: Connection
+}
+
+---- External Entities
+
+external entity Frontend {
+    -- The protocol frontend driving the connection: pgwire, or an ADBC / Flight SQL
+    -- client. It decodes the wire protocol and feeds SQL strings (and, for ADBC, the
+    -- programmatic setAutoCommit/commit/rollback calls) into the Connection. The
+    -- connection model is frontend-agnostic; this is the party on the far side.
+}
+
+external entity Database {
+    -- The db.allium submit/execute boundary. submitTx is fire-and-forget; executeTx
+    -- submits then awaits the result. A ReadWrite commit drains the buffer across this
+    -- boundary. See: dev/doc/db.allium, database/Database.kt
+}
+
+external entity SqlParser {
+    -- The SQL classifier (xtdb.query.SqlParser → ParsedStatement). Recognises
+    -- tx-control statements (Begin / Commit / Rollback) and statement kinds
+    -- (Query vs Dml) without planning. The shared path by which a client expresses
+    -- the full transaction model as SQL. See: core/src/main/kotlin/xtdb/query/SqlParser.kt
+}
+
+external entity SqlPlanner {
+    -- The connection's expression evaluator (xtdb.query.SqlPlanner). Sibling of the
+    -- SqlParser: where the parser CLASSIFIES a statement, the planner EVALUATES a
+    -- standalone transaction-option expression to its runtime value — it plans the
+    -- expression and substitutes positional params, turning e.g. SYSTEM_TIME's
+    -- `TIMESTAMP '…'` into a concrete instant. Injected (an SPI), shared with pgwire.
+    -- See: core/src/main/kotlin/xtdb/query/SqlPlanner.kt
+}
+
+external entity User {
+    -- The session identity, established once at authentication. Stamped onto every
+    -- transaction this connection submits. Not a per-transaction option.
+}
+
+---- Value Types
+
+-- Host-platform types carried opaquely at this level. (Instants map to the Allium
+-- primitive Timestamp; ZoneId and Bytes have no primitive equivalent, so they are
+-- structureless value types — opaque by-value carriers.)
+value ZoneId {
+    -- java.time.ZoneId — a connection / transaction timezone.
+}
+
+value Bytes {
+    -- Opaque serialized bytes (e.g. per-transaction user metadata).
+}
+
+value TxBasisToken {
+    -- An opaque await-token: the read basis carried between connection and Database so
+    -- a connection's reads observe (at least) its own prior writes. Each write advances
+    -- it; each read threads it through. See: database/encodeTxBasisToken.
+}
+
+value ReadBasis {
+    -- The pinned point-in-time a transaction's reads observe, fixed AT BEGIN for every
+    -- transaction (begin-time snapshot isolation). The begin-time pin sets snapshot_token
+    -- to the connection's await_token and clock_time to the current-time at begin; a
+    -- BEGIN READ ONLY WITH (...) clause overrides individual fields. The WITH options are
+    -- grammar-scoped to READ ONLY (readOnlyTxOption in the SQL grammar).
+    --   snapshot_token — an opaque basis token (as TxBasisToken).
+    --   snapshot_time  — observe state as of a wall-clock instant.
+    --   clock_time     — pin the transaction's notion of "now".
+    snapshot_token: TxBasisToken?
+    snapshot_time: Timestamp?
+    clock_time: Timestamp?
+}
+
+value CommitOpts {
+    -- Write-side options, grammar-scoped to READ WRITE (readWriteTxOption in the SQL
+    -- grammar). Their very presence implies the transaction is ReadWrite.
+    --   system_time   — the system-time to record the transaction at.
+    --   user_metadata — opaque per-transaction metadata.
+    --   async         — true: commit submits without awaiting; false: execute-and-await.
+    --   tz_override    — overrides the connection defaultTz for this transaction.
+    system_time: Timestamp?
+    user_metadata: Bytes?
+    async: Boolean
+    tz_override: ZoneId?
+}
+
+value TxOp {
+    -- A single buffered operation (a SQL DML statement plus its column-major args, or a
+    -- doc put). Opaque at this level. See: tx/TxOp.kt
+}
+
+---- Enumerations
+
+enum StatementKind {
+    -- How the SqlParser classifies an executable statement for access-mode resolution.
+    -- A query resolves an unresolved tx to ReadOnly; a DML statement resolves it to
+    -- ReadWrite. (DDL that submits as tx-ops — CREATE TABLE, GRANT — classifies as dml.)
+    query | dml
+}
+
+enum BeginAccessMode {
+    -- The access mode carried explicitly on a BEGIN. `read_only` / `read_write` fix the
+    -- mode at BEGIN; `none` leaves it Unresolved (resolved on the first statement). This
+    -- is distinct from inferring the mode from a non-null read-basis or commit-opts: it
+    -- lets `BEGIN READ ONLY` with no WITH clause still open a ReadOnly tx.
+    read_only | read_write | none
+}
+
+---- Entities and Variants
+
+entity Connection {
+    -- A session-scoped handle onto the node, shared by both protocol frontends.
+    -- See: core/src/main/kotlin/xtdb/api/Xtdb.kt (Xtdb.Connection)
+    user: User                       -- session identity, set once at authentication
+    auto_commit: Boolean
+    default_tz: ZoneId
+    await_token: TxBasisToken?       -- advanced by every write, threaded through every read
+
+    -- At most one open transaction. Singular relationship: the value is the open
+    -- Transaction, or null when none is open.
+    tx: Transaction with connection = this
+
+    invariant AtMostOneOpenTransaction {
+        -- Enforced structurally by the singular relationship: a connection has at most
+        -- one open Transaction at a time. BEGIN while tx != null is an error
+        -- (see BeginWhileOpenRejected).
+        true
+    }
+}
+
+entity Transaction {
+    -- One open transaction on a connection. Its access mode may be fixed at BEGIN or
+    -- left to resolve on the first statement. `failed` records an abort: once set, the
+    -- transaction rejects all further statements until rolled back.
+    -- See: Xtdb.Connection.Transaction
+    connection: Connection
+    mode: Unresolved | ReadOnly | ReadWrite
+    failed: Boolean
+}
+
+variant Unresolved : Transaction {
+    -- Opened by BEGIN with no explicit access mode. Resolves on the first statement: a
+    -- query → ReadOnly, DML → ReadWrite (see FirstStatementResolvesReadOnly /
+    -- FirstStatementResolvesReadWrite).
+    --
+    -- Carries the read basis pinned AT BEGIN: a transaction's notion of visible data and
+    -- "now" is fixed at BEGIN, before the access mode is known. If the tx resolves to
+    -- ReadOnly the resolution inherits this begin-pinned basis unchanged; if it resolves
+    -- to ReadWrite the basis is discarded (writes don't read).
+    read_basis: ReadBasis
+}
+
+variant ReadOnly : Transaction {
+    -- A read-only transaction. Carries the read basis its reads observe. XTDB read-only
+    -- transactions are READ-only in the strict sense: DML is rejected (see DmlInReadOnlyRejected).
+    read_basis: ReadBasis
+}
+
+variant ReadWrite : Transaction {
+    -- A write-only transaction. Buffers DML; queries are rejected (see QueryInReadWriteRejected).
+    -- Carries the commit-opts that govern how the buffer is submitted at COMMIT.
+    buffer: DmlBuffer with transaction = this
+    commit_opts: CommitOpts
+}
+
+entity DmlBuffer {
+    -- Accumulates buffered ops for a ReadWrite transaction. Consecutive same-SQL ops
+    -- coalesce: their args are appended column-major into the last op, so a prepared
+    -- INSERT executed in a loop becomes one multi-row op. Drained at COMMIT.
+    -- See: Xtdb.Connection.DmlBuffer
+    transaction: Transaction
+    ops: List<TxOp>
+}
+
+---- Rules: Beginning a Transaction
+
+-- An explicit SQL BEGIN opens a transaction regardless of auto_commit; the flag is left
+-- untouched and the explicit transaction coexists with it.
+--
+-- Every BEGIN pins a read basis NOW, at begin-time — the connection's current await_token
+-- as the snapshot token and the current-time as the clock_time. This gives begin-time
+-- snapshot isolation: a transaction's notion of visible data and "now" is fixed at BEGIN,
+-- before the access mode is known. The variant opened depends on the access mode carried
+-- on the BEGIN event (READ_ONLY | READ_WRITE | none — see BeginAccessMode):
+--   READ ONLY [WITH (read-basis)]   → ReadOnly, basis = begin-time pin (WITH overrides)
+--   READ WRITE [WITH (commit-opts)] → ReadWrite, empty buffer (no basis — writes don't read)
+--   (no mode)                       → Unresolved carrying the begin-time pin, resolved later
+--
+-- The mode comes from the explicit access_mode, NOT from inferring ReadOnly from a non-null
+-- read-basis: `BEGIN READ ONLY` with no WITH clause still opens a ReadOnly tx, pinned to the
+-- begin-time basis.
+
+rule BeginReadOnly {
+    -- BEGIN READ ONLY [WITH (snapshot-token | snapshot-time | clock-time)]. The basis is
+    -- the begin-time pin (connection await_token + current-time); any field supplied in
+    -- the WITH clause overrides the corresponding pinned default.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    requires: connection.tx = null
+    requires: access_mode = read_only
+
+    ensures:
+        ReadOnly.created(
+            connection: connection,
+            failed: false,
+            read_basis: ReadBasis(
+                snapshot_token: read_basis?.snapshot_token ?? connection.await_token,
+                snapshot_time: read_basis?.snapshot_time,
+                clock_time: read_basis?.clock_time ?? now
+            )
+        )
+}
+
+rule BeginReadWrite {
+    -- BEGIN READ WRITE [WITH (system-time | metadata | async | tz)]. A ReadWrite tx carries
+    -- no read basis — writes don't read. commit_opts may be null (BEGIN READ WRITE with no
+    -- WITH clause); default commit-opts then apply at COMMIT.
+    --
+    -- The commit-opts values (system_time, user_metadata, async) are obtained by evaluating
+    -- their WITH-clause expressions through the SqlPlanner — it plans each option expression
+    -- (e.g. SYSTEM_TIME's `TIMESTAMP '…'`) and substitutes positional params to a runtime
+    -- value. The READ ONLY read-basis options are evaluated likewise, once that increment lands.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    requires: connection.tx = null
+    requires: access_mode = read_write
+
+    ensures:
+        let buffer = DmlBuffer.created(ops: {})
+        ReadWrite.created(
+            connection: connection,
+            failed: false,
+            buffer: buffer,
+            commit_opts: commit_opts ?? CommitOpts(
+                system_time: null,
+                user_metadata: null,
+                async: false,
+                tz_override: null
+            )
+        )
+}
+
+rule BeginUnresolved {
+    -- BEGIN with no explicit access mode. The read basis is pinned NOW (begin-time) even
+    -- though the mode is not yet known; if the tx resolves to ReadOnly this basis is
+    -- inherited unchanged. Access mode resolves on the first statement.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    requires: connection.tx = null
+    requires: access_mode = none
+
+    ensures:
+        Unresolved.created(
+            connection: connection,
+            failed: false,
+            read_basis: ReadBasis(
+                snapshot_token: connection.await_token,
+                snapshot_time: null,
+                clock_time: now
+            )
+        )
+}
+
+rule BeginWhileOpenRejected {
+    -- At most one open transaction per connection: BEGIN while one is open is an error.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    requires: connection.tx != null
+
+    ensures:
+        BeginRejected(error_code: `xtdb/tx-already-open`)
+}
+
+---- Rules: Access-Mode Resolution
+
+-- When BEGIN did not fix the access mode, the first statement resolves it: a query
+-- resolves the transaction to ReadOnly, a DML statement to ReadWrite. Only an
+-- Unresolved transaction resolves; a fixed ReadOnly / ReadWrite stays as it is and
+-- enforces its direction (see the write-only rules below).
+
+rule FirstStatementResolvesReadOnly {
+    -- First statement in an Unresolved tx is a query → resolve to ReadOnly. The basis is
+    -- INHERITED from the Unresolved tx's begin-time pin — it is NOT re-pinned to the
+    -- connection's await_token at resolution time. Reads observe state as of BEGIN.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: connection.tx != null
+    requires: connection.tx.mode = Unresolved
+    requires: kind = query
+
+    ensures:
+        connection.tx.mode = ReadOnly
+        connection.tx.read_basis = connection.tx.read_basis
+}
+
+rule FirstStatementResolvesReadWrite {
+    -- First statement in an Unresolved tx is DML → resolve to ReadWrite with an empty
+    -- buffer and default commit-opts (synchronous, no system-time override). The DML op
+    -- itself is then buffered by BufferDml.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: connection.tx != null
+    requires: connection.tx.mode = Unresolved
+    requires: kind = dml
+
+    ensures:
+        let buffer = DmlBuffer.created(ops: {})
+        connection.tx.mode = ReadWrite
+        connection.tx.buffer = buffer
+        connection.tx.commit_opts = CommitOpts(
+            system_time: null,
+            user_metadata: null,
+            async: false,
+            tz_override: null
+        )
+}
+
+---- Rules: Statement Execution
+
+-- A DML statement auto-executes as its own single-op transaction IFF no explicit
+-- transaction is open. Otherwise it buffers into the open transaction — even when
+-- auto_commit is on. (An explicit BEGIN coexists with auto_commit; the open tx wins.)
+--
+-- The auto_commit guards across these rules partition the no-explicit-BEGIN cases cleanly:
+--   {auto_commit + no tx}  → AutoCommitDml / AutoCommitQuery (transient per-statement tx)
+--   {not auto_commit + no tx} → ManualLazyOpenDml / ManualLazyOpenQuery (lazy-open, below)
+--   {tx open}              → BufferDml / QueryInReadOnly / the rejection rules
+
+rule AutoCommitDml {
+    -- No explicit transaction open: the DML statement is its own transaction. It submits
+    -- through the Database boundary as a single-op execute-and-await. auto_commit must be
+    -- on (an explicit BEGIN would have opened a tx, taking the BufferDml path instead).
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = dml
+    requires: connection.tx = null
+    requires: connection.auto_commit
+
+    ensures:
+        Database.executeTx(
+            ops: { statement },
+            opts: { user: connection.user, default_tz: connection.default_tz }
+        )
+        AwaitTokenAdvanced(connection: connection)
+
+    @guidance
+        -- A single-statement auto-commit DML carries no buffering; it is the degenerate
+        -- case of "open, buffer one op, commit synchronously". executeTx advances the
+        -- connection's await_token so subsequent reads on this connection see the write.
+}
+
+rule ManualLazyOpenDml {
+    -- Manual mode (auto_commit off), no open transaction, statement is DML. Per pgjdbc's
+    -- lazy BEGIN — setAutoCommit(false) does not BEGIN immediately; the next statement does
+    -- — this opens an Unresolved tx, pinning the begin-time basis NOW (connection
+    -- await_token + current-time), then resolves it by the normal rules: DML → ReadWrite
+    -- (basis discarded — writes don't read), with the DML buffered. Open + resolve are one
+    -- step here because the resolution rules trigger on a tx that is already open; a freshly
+    -- lazily-opened tx must resolve within the same statement.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = dml
+    requires: connection.tx = null
+    requires: not connection.auto_commit
+
+    ensures:
+        let buffer = DmlBuffer.created(ops: { statement })
+        ReadWrite.created(
+            connection: connection,
+            failed: false,
+            buffer: buffer,
+            commit_opts: CommitOpts(
+                system_time: null,
+                user_metadata: null,
+                async: false,
+                tz_override: null
+            )
+        )
+}
+
+rule ManualLazyOpenQuery {
+    -- Manual mode (auto_commit off), no open transaction, statement is a query. Per pgjdbc's
+    -- lazy BEGIN, this opens an Unresolved tx pinning the begin-time basis NOW (connection
+    -- await_token + current-time), then resolves it by the normal rules: query → ReadOnly,
+    -- inheriting that begin-time pin. Because the ReadOnly tx persists, subsequent reads in
+    -- the manual transaction share this one snapshot — this is the manual-mode transaction's
+    -- cross-statement snapshot isolation. Open + resolve are one step (see ManualLazyOpenDml).
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = query
+    requires: connection.tx = null
+    requires: not connection.auto_commit
+
+    ensures:
+        let opened = ReadOnly.created(
+            connection: connection,
+            failed: false,
+            read_basis: ReadBasis(
+                snapshot_token: connection.await_token,
+                snapshot_time: null,
+                clock_time: now
+            )
+        )
+        Database.openSnapshot(basis: opened.read_basis)
+}
+
+rule BufferDml {
+    -- An explicit transaction is open: buffer the DML into it, even when auto_commit is
+    -- on. Rejected if the open tx is ReadOnly (see DmlInReadOnlyRejected) or failed
+    -- (see FailedTransactionRejectsStatements).
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = dml
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadWrite
+    requires: not connection.tx.failed
+
+    ensures:
+        connection.tx.buffer.ops.add(statement)
+
+    @guidance
+        -- Consecutive same-SQL ops coalesce: rather than appending a distinct op, the
+        -- args are appended column-major into the trailing op when its SQL text matches.
+        -- This is a buffer-internal representation detail; observably the op is buffered.
+}
+
+rule QueryInReadWriteRejected {
+    -- ReadWrite is write-only: a query in a ReadWrite transaction is rejected. The
+    -- `not failed` guard yields failed-first precedence: on a failed tx,
+    -- FailedTransactionRejectsStatements fires instead (unambiguous).
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = query
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadWrite
+    requires: not connection.tx.failed
+
+    ensures:
+        StatementRejected(error_code: `xtdb/queries-in-read-write-tx`)
+}
+
+rule DmlInReadOnlyRejected {
+    -- ReadOnly is read-only: DML in a ReadOnly transaction is rejected. The `not failed`
+    -- guard yields failed-first precedence: on a failed tx,
+    -- FailedTransactionRejectsStatements fires instead (unambiguous).
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = dml
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadOnly
+    requires: not connection.tx.failed
+
+    ensures:
+        StatementRejected(error_code: `xtdb/read-only-tx`)
+}
+
+rule QueryInReadOnly {
+    -- A query in a ReadOnly transaction observes the pinned read basis. The basis is
+    -- threaded to the Database so reads see exactly that point-in-time.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = query
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadOnly
+    requires: not connection.tx.failed
+
+    ensures:
+        Database.openSnapshot(basis: connection.tx.read_basis)
+}
+
+rule AutoCommitQuery {
+    -- Autocommit, no open transaction: the query transiently promotes to a read-only
+    -- transaction. It resolves its basis to the connection's CURRENT basis (await_token +
+    -- current-time) at this moment, reads against it, then discards — each autocommit read
+    -- is fresh, with no cross-statement snapshot. Behaviourally identical to reading at the
+    -- current await_token; framed as a transient per-statement ReadOnly tx so that every
+    -- read in the model runs inside a read-only transaction.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: kind = query
+    requires: connection.tx = null
+    requires: connection.auto_commit
+
+    ensures:
+        Database.openSnapshot(
+            basis: ReadBasis(
+                snapshot_token: connection.await_token,
+                snapshot_time: null,
+                clock_time: now
+            )
+        )
+
+    @guidance
+        -- The transient read-only tx is not materialised as a Transaction entity: it opens,
+        -- resolves its basis, reads and discards within the single statement. The contrast
+        -- with the manual-mode lazy-open path (ManualLazyOpenQuery) is the lifetime — there
+        -- the ReadOnly tx persists and its basis is shared across subsequent reads.
+}
+
+rule FailedTransactionRejectsStatements {
+    -- A transaction that has failed (aborted) rejects all further statements until it is
+    -- rolled back. Applies to both queries and DML, on either resolved mode.
+    when: ExecuteStatement(frontend, connection, kind, statement)
+    requires: connection.tx != null
+    requires: connection.tx.failed
+
+    ensures:
+        StatementRejected(error_code: `xtdb/tx-failed`)
+}
+
+---- Rules: Commit and Rollback
+
+-- SQL COMMIT / ROLLBACK act on the explicit transaction regardless of auto_commit.
+-- Programmatic commit() / rollback() are valid only when auto_commit is off.
+
+rule CommitReadWrite {
+    -- Commit of a ReadWrite transaction drains the buffer and crosses the Database
+    -- boundary EVEN IF the buffer is empty: async commit submits (fire-and-forget),
+    -- sync commit executes-and-awaits. tz_override (if set) overrides default_tz.
+    when: CommitTransaction(frontend, connection)
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadWrite
+    requires: not connection.tx.failed
+
+    ensures:
+        let ops = connection.tx.buffer.ops
+        let opts = {
+            user: connection.user,
+            default_tz: connection.tx.commit_opts.tz_override ?? connection.default_tz,
+            system_time: connection.tx.commit_opts.system_time,
+            user_metadata: connection.tx.commit_opts.user_metadata
+        }
+
+        if connection.tx.commit_opts.async:
+            Database.submitTx(ops: ops, opts: opts)
+        else:
+            Database.executeTx(ops: ops, opts: opts)
+
+        AwaitTokenAdvanced(connection: connection)
+        not exists connection.tx
+
+    @guidance
+        -- "even if empty" is deliberate: an explicit COMMIT of a ReadWrite tx that
+        -- buffered nothing still submits an empty transaction. This differs from the
+        -- ReadOnly / Unresolved no-op below.
+}
+
+rule CommitNoOp {
+    -- Commit of a ReadOnly or still-Unresolved transaction submits nothing — there is no
+    -- buffer to drain. The transaction simply closes.
+    when: CommitTransaction(frontend, connection)
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadOnly or connection.tx.mode = Unresolved
+    requires: not connection.tx.failed
+
+    ensures:
+        not exists connection.tx
+}
+
+rule Rollback {
+    -- Rollback discards the open transaction (and its buffer, if any), submitting
+    -- nothing. Valid even on a failed transaction — this is how a failed tx is cleared.
+    when: RollbackTransaction(frontend, connection)
+    requires: connection.tx != null
+
+    ensures:
+        not exists connection.tx
+}
+
+rule ProgrammaticCommitInAutoCommitRejected {
+    -- Programmatic commit() is valid only when auto_commit is off.
+    when: ProgrammaticCommit(frontend, connection)
+    requires: connection.auto_commit
+
+    ensures:
+        CommitRejected(error_code: `xtdb.adbc/commit-in-autocommit`)
+}
+
+rule ProgrammaticRollbackInAutoCommitRejected {
+    -- Programmatic rollback() is valid only when auto_commit is off.
+    when: ProgrammaticRollback(frontend, connection)
+    requires: connection.auto_commit
+
+    ensures:
+        RollbackRejected(error_code: `xtdb.adbc/rollback-in-autocommit`)
+}
+
+rule DisableAutoCommitCommitsOpen {
+    -- setAutoCommit(false) when already off is a no-op; turning it ON commits any open
+    -- transaction first (so buffered work is not silently stranded), then sets the flag.
+    when: SetAutoCommit(frontend, connection, enabled)
+    requires: enabled
+    requires: not connection.auto_commit
+
+    ensures:
+        if connection.tx != null:
+            CommitTransaction(frontend: frontend, connection: connection)
+        connection.auto_commit = true
+}
+
+---- Rules: Connection Close
+
+rule CloseConnection {
+    -- Closing the connection discards any open transaction WITHOUT submitting. Buffered
+    -- but uncommitted work is lost — closing is not an implicit commit.
+    when: CloseConnection(frontend, connection)
+
+    ensures:
+        if connection.tx != null:
+            not exists connection.tx
+}
+
+---- Invariants
+
+invariant ReadWriteCarriesCommitOpts {
+    -- Commit-opts exist only on a ReadWrite transaction: their presence implies ReadWrite
+    -- (grammar-enforced at BEGIN). The variant structure makes this hold by construction;
+    -- stated here as the cross-cutting property.
+    true
+}
+
+invariant ReadBasisPinnedAtBegin {
+    -- The read basis is pinned at BEGIN and carried by both Unresolved and ReadOnly
+    -- transactions (a ReadWrite tx has none — writes don't read). An Unresolved tx that
+    -- resolves to ReadOnly inherits its begin-time basis unchanged; one that resolves to
+    -- ReadWrite discards it. Structural — stated here as the cross-cutting property.
+    true
+}
+
+---- Actor Declarations
+
+actor FrontendActor {
+    -- Either protocol frontend (pgwire or ADBC / Flight SQL). Any Frontend may drive a
+    -- connection through the surfaces below.
+    identified_by: Frontend where true
+}
+
+---- Surfaces
+
+surface TxControlAsSql {
+    -- The shared path: tx-control expressed as SQL, classified by the SqlParser. This is
+    -- the full surface — an ADBC / Flight SQL client reaches the entire model here.
+    facing frontend: FrontendActor
+
+    context conn: Connection
+
+    provides:
+        BeginTransaction(frontend, conn, access_mode, read_basis, commit_opts)
+            when conn.tx = null
+        ExecuteStatement(frontend, conn, kind, statement)
+        CommitTransaction(frontend, conn)
+            when conn.tx != null
+        RollbackTransaction(frontend, conn)
+            when conn.tx != null
+
+    @guarantee SingleOpenTransaction
+        -- At most one transaction is open on a connection at any time.
+
+    @guarantee WriteOnlyReadWrite
+        -- A ReadWrite transaction rejects queries; a ReadOnly transaction rejects DML.
+
+    @guarantee ConnectionScopedIdentity
+        -- Every transaction this connection submits is stamped with the connection's
+        -- user; it is not a per-transaction option.
+}
+
+surface AdbcBasicControl {
+    -- Retained programmatic control on the ADBC AdbcConnection surface: a strict subset
+    -- of TxControlAsSql, kept for driver ergonomics.
+    facing frontend: FrontendActor
+
+    context conn: Connection
+
+    provides:
+        SetAutoCommit(frontend, conn, enabled)
+        ProgrammaticCommit(frontend, conn)
+            when not conn.auto_commit
+        ProgrammaticRollback(frontend, conn)
+            when not conn.auto_commit
+
+    @guarantee ProgrammaticControlNeedsManualMode
+        -- Programmatic commit / rollback are valid only when auto_commit is off.
+}
+
+surface ConnectionLifecycle {
+    facing frontend: FrontendActor
+
+    context conn: Connection
+
+    provides:
+        CloseConnection(frontend, conn)
+
+    @guarantee CloseDiscardsOpenTx
+        -- Closing the connection discards any open transaction without submitting.
+        -- Closing is not an implicit commit.
+}
+
+---- Open Questions
+
+open question "AutoCommitDml stamps opts with user and default_tz only (no system_time). Is the read basis (await_token) the right post-write visibility contract for the immediately-following auto-commit query, or should auto-commit DML and the following query share a tighter basis?"
