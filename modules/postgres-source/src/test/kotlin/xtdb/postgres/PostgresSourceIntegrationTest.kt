@@ -121,6 +121,7 @@ class PostgresSourceIntegrationTest {
                           remote: pg
                           slotName: $slotName
                           publicationName: $publicationName
+                          indexer: !DirectMirror {}
                     $$""".trimIndent()
                 )
             }
@@ -150,6 +151,7 @@ class PostgresSourceIntegrationTest {
                           remote: pg
                           slotName: $slotName
                           publicationName: $publicationName
+                          indexer: !DirectMirror {}
                     $$""".trimIndent()
                 )
             }

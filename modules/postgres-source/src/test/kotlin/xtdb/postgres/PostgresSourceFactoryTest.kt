@@ -19,6 +19,7 @@ class PostgresSourceFactoryTest {
             remote = "pg",
             slotName = "my_slot",
             publicationName = "my_pub",
+            indexer = DirectMirror.Factory(),
         )
 
         val restored = protoRoundTrip(original)
@@ -26,27 +27,20 @@ class PostgresSourceFactoryTest {
         assertEquals("pg", restored.remote)
         assertEquals("my_slot", restored.slotName)
         assertEquals("my_pub", restored.publicationName)
+        assertTrue(restored.indexer is DirectMirror.Factory)
     }
 
+    // fix: DETACH the database, then re-ATTACH with an indexer in the config
     @Test
-    fun `indexer defaults to DirectMirror`() {
-        val factory = PostgresSource.Factory(remote = "pg", slotName = "s", publicationName = "p")
-        assertTrue(factory.indexer is DirectMirror.Factory)
-
-        assertTrue(protoRoundTrip(factory).indexer is DirectMirror.Factory, "survives proto round-trip")
-    }
-
-    @Test
-    fun `config persisted before pluggable indexers decodes to DirectMirror`() {
-        // an older PostgresSourceConfig carries no `indexer` field; the absent Any must decode as the default
+    fun `config persisted without an indexer is rejected`() {
         val legacy = xtdb.postgres.proto.postgresSourceConfig {
             remote = "pg"; slotName = "s"; publicationName = "p"
         }
         val any = com.google.protobuf.Any.pack(legacy, "proto.xtdb.com")
 
-        val factory = PostgresSource.Factory.Registration().fromProto(any)
-
-        assertTrue(factory.indexer is DirectMirror.Factory)
+        assertThrows(IllegalStateException::class.java) {
+            PostgresSource.Factory.Registration().fromProto(any)
+        }
     }
 
     @Test
@@ -56,6 +50,7 @@ class PostgresSourceFactoryTest {
               remote: pg
               slotName: my_slot
               publicationName: my_pub
+              indexer: !DirectMirror {}
         """.trimIndent()
 
         val config = Database.Config.fromYaml(yaml)
@@ -64,6 +59,7 @@ class PostgresSourceFactoryTest {
         assertEquals("pg", factory.remote)
         assertEquals("my_slot", factory.slotName)
         assertEquals("my_pub", factory.publicationName)
+        assertTrue(factory.indexer is DirectMirror.Factory)
     }
 
     @Test
@@ -122,6 +118,7 @@ class PostgresSourceFactoryTest {
               remote: pg
               slotName: s
               publicationName: p
+              indexer: !DirectMirror {}
         """.trimIndent()
 
         val nodeRemote = nodeConfig(nodeYaml).remotes["pg"]

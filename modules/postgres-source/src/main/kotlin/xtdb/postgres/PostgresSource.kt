@@ -118,7 +118,7 @@ class PostgresSource(
         val remote: RemoteAlias,
         val slotName: String,
         val publicationName: String,
-        val indexer: PgIndexer.Factory = DirectMirror.Factory(),
+        val indexer: PgIndexer.Factory,
     ) : ExternalSource.Factory {
 
         override fun open(
@@ -169,9 +169,7 @@ class PostgresSource(
                     remote = config.remote,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
-                    // absent on configs persisted before pluggable indexers landed
-                    indexer = if (config.hasIndexer()) PgIndexer.Factory.fromProto(config.indexer)
-                              else DirectMirror.Factory(),
+                    indexer = PgIndexer.Factory.fromProto(config.indexer),
                 )
             }
 

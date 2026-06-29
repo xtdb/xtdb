@@ -80,6 +80,7 @@ abstract class PostgresSourceTestBase {
                           remote: pg
                           slotName: $slot
                           publicationName: $pub
+                          indexer: !DirectMirror {}
                     $$""".trimIndent()
                 )
             }
