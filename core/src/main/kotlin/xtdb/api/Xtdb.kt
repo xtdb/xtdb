@@ -328,6 +328,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             override fun executeQuery(): QueryResult {
                 val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                resolveForQuery()
                 if (prepared == null && args != null)
                     throw Incorrect(
                         "call prepare() before executeQuery() when parameters are bound",
@@ -518,6 +519,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     op.close()
                     throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
                 }
+            }
+        }
+
+        // The read counterpart of executeDml's access-mode resolution: a query resolves an unresolved tx to
+        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only. With no open
+        // tx (autocommit, or none begun) the query reads latest, unchanged.
+        private fun resolveForQuery() {
+            val tx = tx ?: return
+            when (tx.mode) {
+                is ReadWrite -> throw Incorrect(
+                    "Queries are unsupported in a DML transaction", "xtdb/queries-in-read-write-tx"
+                )
+
+                is ReadOnly -> {}
+                null -> tx.mode = ReadOnly
             }
         }
 

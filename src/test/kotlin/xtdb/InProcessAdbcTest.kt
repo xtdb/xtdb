@@ -221,16 +221,40 @@ class InProcessAdbcTest {
             conn.setAutoCommit(false)
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
 
-            assertEquals(
-                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
-                "the buffered write is not yet committed"
-            )
+            xtdb.connect().use { other ->
+                assertEquals(
+                    listOf(mapOf("_id" to 0L)), other.select("SELECT _id FROM foo ORDER BY _id"),
+                    "the buffered write is not visible to another connection before commit"
+                )
+            }
 
             conn.commit()
             assertEquals(
                 listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
                 "visible once committed"
             )
+        }
+    }
+
+    @Test
+    fun `a query in a read-write transaction is rejected`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+
+            assertThrows(Incorrect::class.java) { conn.select("SELECT _id FROM foo") }
+        }
+    }
+
+    @Test
+    fun `a query resolves a bare BEGIN to read-only, then DML is rejected`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            assertEquals(listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"))
+
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
         }
     }
 
@@ -342,10 +366,12 @@ class InProcessAdbcTest {
             conn.update("BEGIN")
             conn.update("INSERT INTO foo RECORDS {_id: 1}")
 
-            assertEquals(
-                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
-                "buffered until COMMIT"
-            )
+            xtdb.connect().use { other ->
+                assertEquals(
+                    listOf(mapOf("_id" to 0L)), other.select("SELECT _id FROM foo ORDER BY _id"),
+                    "buffered until COMMIT — not visible to another connection"
+                )
+            }
 
             conn.update("COMMIT")
             assertEquals(
