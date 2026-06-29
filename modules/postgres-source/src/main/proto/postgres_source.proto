@@ -10,6 +10,7 @@ message PostgresSourceConfig {
     string remote = 1;
     string slot_name = 2;
     string publication_name = 3;
+    string database = 5;
 
     // Carried as Any so the proto stays decoupled from specific indexer config shapes —
     // mirrors KafkaConnectSourceConfig.indexer and DatabaseConfig.external_source.

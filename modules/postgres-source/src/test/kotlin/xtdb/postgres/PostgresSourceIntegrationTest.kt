@@ -96,7 +96,6 @@ class PostgresSourceIntegrationTest {
         remote("pg", PostgresRemote.Factory(
             hostname = pgContainer.host,
             port = pgContainer.getMappedPort(5432),
-            database = pgContainer.databaseName,
             username = pgContainer.username,
             password = pgPassword,
         ))
@@ -119,6 +118,7 @@ class PostgresSourceIntegrationTest {
                           topic: test-replica-${UUID.randomUUID()}
                         externalSource: !Postgres
                           remote: pg
+                          database: testdb
                           slotName: $slotName
                           publicationName: $publicationName
                     $$""".trimIndent()
@@ -148,6 +148,7 @@ class PostgresSourceIntegrationTest {
                           topic: test-replica-${UUID.randomUUID()}
                         externalSource: !Postgres
                           remote: pg
+                          database: testdb
                           slotName: $slotName
                           publicationName: $publicationName
                     $$""".trimIndent()

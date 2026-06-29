@@ -9,7 +9,6 @@ import xtdb.api.Remote
 class PostgresRemote(
     val hostname: String,
     val port: Int,
-    val database: String,
     val username: String,
     val password: String,
 ) : Remote {
@@ -21,11 +20,10 @@ class PostgresRemote(
     data class Factory(
         val hostname: String,
         val port: Int = 5432,
-        val database: String,
         val username: String,
         val password: String,
     ) : Remote.Factory<PostgresRemote> {
-        override fun open() = PostgresRemote(hostname, port, database, username, password)
+        override fun open() = PostgresRemote(hostname, port, username, password)
     }
 
     class Registration : Remote.Registration {

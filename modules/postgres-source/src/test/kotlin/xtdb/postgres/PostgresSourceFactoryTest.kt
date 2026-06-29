@@ -17,6 +17,7 @@ class PostgresSourceFactoryTest {
     fun `proto round-trips factory`() {
         val original = PostgresSource.Factory(
             remote = "pg",
+            database = "app",
             slotName = "my_slot",
             publicationName = "my_pub",
         )
@@ -24,13 +25,14 @@ class PostgresSourceFactoryTest {
         val restored = protoRoundTrip(original)
 
         assertEquals("pg", restored.remote)
+        assertEquals("app", restored.database)
         assertEquals("my_slot", restored.slotName)
         assertEquals("my_pub", restored.publicationName)
     }
 
     @Test
     fun `indexer defaults to DirectMirror`() {
-        val factory = PostgresSource.Factory(remote = "pg", slotName = "s", publicationName = "p")
+        val factory = PostgresSource.Factory(remote = "pg", database = "app", slotName = "s", publicationName = "p")
         assertTrue(factory.indexer is DirectMirror.Factory)
 
         assertTrue(protoRoundTrip(factory).indexer is DirectMirror.Factory, "survives proto round-trip")
@@ -54,6 +56,7 @@ class PostgresSourceFactoryTest {
         val yaml = """
             externalSource: !Postgres
               remote: pg
+              database: app
               slotName: my_slot
               publicationName: my_pub
         """.trimIndent()
@@ -62,6 +65,7 @@ class PostgresSourceFactoryTest {
         val factory = config.externalSource as PostgresSource.Factory
 
         assertEquals("pg", factory.remote)
+        assertEquals("app", factory.database)
         assertEquals("my_slot", factory.slotName)
         assertEquals("my_pub", factory.publicationName)
     }
@@ -73,7 +77,6 @@ class PostgresSourceFactoryTest {
               pg: !Postgres
                 hostname: pg.prod.internal
                 port: 5433
-                database: app
                 username: xtdb
                 password: secret
         """.trimIndent()
@@ -83,7 +86,6 @@ class PostgresSourceFactoryTest {
 
         assertEquals("pg.prod.internal", remote.hostname)
         assertEquals(5433, remote.port)
-        assertEquals("app", remote.database)
         assertEquals("xtdb", remote.username)
         assertEquals("secret", remote.password)
     }
@@ -94,7 +96,6 @@ class PostgresSourceFactoryTest {
             remotes:
               pg: !Postgres
                 hostname: localhost
-                database: test
                 username: u
                 password: p
         """.trimIndent()
@@ -112,7 +113,6 @@ class PostgresSourceFactoryTest {
             remotes:
               pg: !Postgres
                 hostname: localhost
-                database: db
                 username: u
                 password: p
         """.trimIndent()
@@ -120,6 +120,7 @@ class PostgresSourceFactoryTest {
         val dbYaml = """
             externalSource: !Postgres
               remote: pg
+              database: db
               slotName: s
               publicationName: p
         """.trimIndent()

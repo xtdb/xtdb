@@ -62,7 +62,7 @@ abstract class PostgresSourceTestBase {
         storage(Storage.local(storageDir))
         remote("pg", PostgresRemote.Factory(
             hostname = pg.host, port = pg.firstMappedPort,
-            database = "testdb", username = username, password = password,
+            username = username, password = password,
         ))
     }
 
@@ -78,6 +78,7 @@ abstract class PostgresSourceTestBase {
                           path: $cdcLog
                         externalSource: !Postgres
                           remote: pg
+                          database: testdb
                           slotName: $slot
                           publicationName: $pub
                     $$""".trimIndent()

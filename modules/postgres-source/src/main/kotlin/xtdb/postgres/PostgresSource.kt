@@ -116,6 +116,7 @@ class PostgresSource(
     @SerialName("!Postgres")
     data class Factory(
         val remote: RemoteAlias,
+        val database: String,
         val slotName: String,
         val publicationName: String,
         val indexer: PgIndexer.Factory = DirectMirror.Factory(),
@@ -143,7 +144,7 @@ class PostgresSource(
                 )
 
             val driver = PgWireDriver(
-                dbName, pg.hostname, pg.port, pg.database, pg.username, pg.password,
+                dbName, pg.hostname, pg.port, database, pg.username, pg.password,
                 slotName, publicationName,
             )
 
@@ -158,6 +159,7 @@ class PostgresSource(
             override fun toProto(factory: Factory): ProtoAny =
                 ProtoAny.pack(postgresSourceConfig {
                     remote = factory.remote
+                    database = factory.database
                     slotName = factory.slotName
                     publicationName = factory.publicationName
                     indexer = PgIndexer.Factory.toProto(factory.indexer)
@@ -167,6 +169,7 @@ class PostgresSource(
                 val config = msg.unpack(PostgresSourceConfig::class.java)
                 return Factory(
                     remote = config.remote,
+                    database = config.database,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
                     // absent on configs persisted before pluggable indexers landed

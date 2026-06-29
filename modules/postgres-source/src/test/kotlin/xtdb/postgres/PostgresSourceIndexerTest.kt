@@ -38,6 +38,7 @@ class PostgresSourceIndexerTest : PostgresSourceTestBase() {
                           path: $cdcLog
                         externalSource: !Postgres
                           remote: pg
+                          database: testdb
                           slotName: $slot
                           publicationName: $pub
                           indexer: !TestReroute

@@ -6,5 +6,5 @@
   (:import [xtdb.postgres PostgresRemote$Factory]))
 
 (defmethod remote/->remote-factory ::remote
-  [_ {:keys [host port database username password] :or {port 5432}}]
-  (PostgresRemote$Factory. host port database username password))
+  [_ {:keys [host port username password] :or {port 5432}}]
+  (PostgresRemote$Factory. host port username password))
