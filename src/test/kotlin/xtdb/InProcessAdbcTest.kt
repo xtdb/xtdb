@@ -333,4 +333,183 @@ class InProcessAdbcTest {
             )
         }
     }
+
+    @Test
+    fun `SQL BEGIN COMMIT buffers then lands the writes`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "buffered until COMMIT"
+            )
+
+            conn.update("COMMIT")
+            assertEquals(
+                listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "visible once committed"
+            )
+        }
+    }
+
+    @Test
+    fun `SQL ROLLBACK discards the buffered writes`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("ROLLBACK")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "the buffered write is discarded"
+            )
+        }
+    }
+
+    @Test
+    fun `SQL BEGIN while a transaction is open is rejected`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            assertThrows(Incorrect::class.java) { conn.update("BEGIN") }
+        }
+    }
+
+    @Test
+    fun `executeUpdate rejects multi-statement input`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) { conn.update("BEGIN; COMMIT") }
+        }
+    }
+
+    @Test
+    fun `closing the connection discards an open transaction`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            // no COMMIT/ROLLBACK — the connection closes (via use) with the write still buffered
+        }
+
+        xtdb.connect().use { conn ->
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "an uncommitted tx is dropped on close, not submitted (and its buffer freed — node close would fail on a leak)"
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN then COMMIT with no writes is a no-op`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("COMMIT")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "an unresolved tx commits as a no-op — nothing submitted"
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN READ WRITE buffers and commits`() {
+        insertData("INSERT INTO foo RECORDS {_id: 0}")
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertEquals(
+                listOf(mapOf("_id" to 0L), mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id")
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN READ ONLY rejects a write`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ ONLY")
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+        }
+    }
+
+    @Test
+    fun `BEGIN READ WRITE WITH SYSTEM_TIME applies the requested system-time`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00')")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            // connection defaultTz is UTC, so a zoneless TIMESTAMP literal anchors there
+            assertEquals(
+                listOf(mapOf("_system_from" to "2021-08-03T00:00Z[UTC]")),
+                conn.select("SELECT _system_from FROM foo").map { row -> mapOf("_system_from" to row["_system_from"].toString()) },
+                "the row's system-from is the requested system-time"
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN READ WRITE WITH METADATA round-trips`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE WITH (METADATA = {source: 'mobile-app'})")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            // the metadata is carried into the commit options; assert the tx committed and the row landed
+            assertEquals(
+                listOf(mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "a READ WRITE tx carrying user-metadata commits its writes"
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN READ WRITE WITH ASYNC commits and the row lands`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE WITH (ASYNC = TRUE)")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            conn.update("COMMIT")
+
+            assertEquals(
+                listOf(mapOf("_id" to 1L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "an async commit still lands the row (the read awaits this connection's own write)"
+            )
+        }
+    }
+
+    @Test
+    fun `BEGIN READ WRITE WITH TIMEZONE is rejected`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) { conn.update("BEGIN READ WRITE WITH (TIMEZONE = 'America/New_York')") }
+        }
+    }
+
+    @Test
+    fun `BEGIN READ ONLY WITH SNAPSHOT_TOKEN is rejected`() {
+        xtdb.connect().use { conn ->
+            assertThrows(Incorrect::class.java) { conn.update("BEGIN READ ONLY WITH (SNAPSHOT_TOKEN = 'tok')") }
+        }
+    }
+
+    @Test
+    fun `empty READ WRITE commit still records a transaction`() {
+        xtdb.connect().use { conn ->
+            val before = conn.select("SELECT count(*) AS c FROM xt.txs").single()["c"] as Long
+            conn.update("BEGIN READ WRITE")
+            conn.update("COMMIT")
+            val after = conn.select("SELECT count(*) AS c FROM xt.txs").single()["c"] as Long
+
+            assertEquals(before + 1, after, "an explicit write tx commits even when empty")
+        }
+    }
 }

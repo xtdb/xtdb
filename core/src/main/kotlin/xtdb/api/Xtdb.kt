@@ -2,20 +2,15 @@
 
 package xtdb.api
 
+import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import io.micrometer.core.instrument.Counter
-import io.micrometer.core.instrument.Timer
-import org.apache.arrow.adbc.core.AdbcConnection
+import org.apache.arrow.adbc.core.*
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
-import org.apache.arrow.adbc.core.AdbcDatabase
-import org.apache.arrow.adbc.core.AdbcInfoCode
-import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.AdbcStatement.UpdateResult
-import org.apache.arrow.adbc.core.BulkIngestMode
-import org.apache.arrow.adbc.core.StandardSchemas
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VectorLoader
@@ -34,12 +29,8 @@ import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
-import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
-import xtdb.arrow.RelationWriter
-import xtdb.arrow.VectorType
+import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.unsupported
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
@@ -50,25 +41,20 @@ import xtdb.error.Anomaly
 import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.indexer.DatabaseSnapshot
-import xtdb.query.IQuerySource
-import xtdb.query.PrepareOpts
-import xtdb.query.PreparedQuery
-import xtdb.query.QueryOpts
+import xtdb.query.*
 import xtdb.table.TableRef
+import xtdb.time.asInstant
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
 import xtdb.util.closeOnCatch
-import xtdb.util.useAll
-import java.util.concurrent.ExecutionException
 import xtdb.util.requiringResolve
+import xtdb.util.useAll
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.ZoneOffset
+import java.time.*
+import java.util.Date
 import java.util.UUID.randomUUID
+import java.util.concurrent.ExecutionException
 import kotlin.io.path.extension
 
 private fun parseSkipDbsEnv(skipDbs: String): Set<String> =
@@ -126,6 +112,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
+        private val sqlPlanner: SqlPlanner,
         var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
@@ -360,8 +347,20 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             override fun executeUpdate(): UpdateResult {
                 val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
-                val op = TxOp.Sql(sql, openQueryArgs())
-                executeDml(op)
+
+                val stmt = parseStatements(sql).singleOrNull()
+                    ?: throw Incorrect(
+                        "executeUpdate expects exactly one SQL statement",
+                        "xtdb.adbc/expected-single-statement",
+                        mapOf("sql" to sql)
+                    )
+                when (stmt) {
+                    is ParsedStatement.Begin -> beginParsedTx(stmt.txOptions, sql)
+
+                    is ParsedStatement.Commit -> commitTx()
+                    is ParsedStatement.Rollback -> rollbackTx()
+                    else -> executeDml(TxOp.Sql(sql, openQueryArgs()))
+                }
                 return UpdateResult(-1)
             }
 
@@ -399,42 +398,123 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // resolved on the first statement: a query makes it read-only, DML makes it read-write. In XTDB a
         // "read-write" tx is write-only — queries are rejected in a DML tx, DML in a read-only one.
-        private sealed interface AccessMode : AutoCloseable {
-            data object ReadOnly : AccessMode {
-                override fun close() {}
-            }
+        private sealed interface AccessMode : AutoCloseable
 
-            class ReadWrite(
-                val buffer: DmlBuffer,
-                val systemTime: Instant? = null,
-                val userMetadata: Map<*, *>? = null,
-                val async: Boolean = false,
-            ) : AccessMode {
-                override fun close() = buffer.close()
+        private data object ReadOnly : AccessMode {
+            override fun close() {}
+        }
+
+        private inner class ReadWrite(
+            val systemTime: Instant? = null,
+            val userMetadata: Map<*, *>? = null,
+            val async: Boolean = false,
+        ) : AccessMode {
+            val buffer = DmlBuffer(allocator)
+
+            override fun close() = buffer.close()
+        }
+
+        private class Transaction(var mode: AccessMode? = null) : AutoCloseable {
+            var failed: Throwable? = null
+
+            override fun close() {
+                mode?.close()
             }
         }
 
-        private class Transaction(var mode: AccessMode? = null, var failed: Throwable? = null) : AutoCloseable {
-            override fun close() { mode?.close() }
+        // Open an explicit transaction (SQL BEGIN). [readOnly] fixes the access mode — READ ONLY rejects writes,
+        // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
+        // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
+        private fun beginTx(accessMode: AccessMode?) {
+            if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
+            tx = Transaction(accessMode)
         }
 
-        private fun commitTx() {
+        fun beginTx() = beginTx(null)
+
+        fun beginReadOnly() = beginTx(ReadOnly)
+
+        fun beginWriteOnly(systemTime: Instant? = null, userMetadata: Map<*, *>? = null, async: Boolean = false) =
+            beginTx(ReadWrite(systemTime, userMetadata, async))
+
+        // Coerce a planned BEGIN-option value to an Instant, mirroring xtdb.time/->instant so the connection and
+        // pgwire agree on the system-time a SQL temporal literal resolves to. SqlPlanner plans `TIMESTAMP '…'`
+        // to a java.time temporal (ZonedDateTime when zoned, else LocalDateTime); a bare string falls back to
+        // the SQL-timestamp parse. LocalDate/LocalDateTime are anchored in [defaultTz], as pgwire does.
+        private fun coerceInstant(value: Any?): Instant? = when (value) {
+            null -> null
+            is Instant -> value
+            is ZonedDateTime -> value.toInstant()
+            is OffsetDateTime -> value.toInstant()
+            is LocalDateTime -> value.atZone(defaultTz).toInstant()
+            is LocalDate -> value.atStartOfDay(defaultTz).toInstant()
+            is Date -> value.toInstant()
+            is String -> value.asInstant(defaultTz)
+            else -> throw Incorrect(
+                "cannot coerce SYSTEM_TIME option to an instant",
+                "xtdb.adbc/invalid-system-time",
+                mapOf("value" to value, "type" to value::class.java.name)
+            )
+        }
+
+        // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
+        // SqlPlanner. BEGIN options carry no bound params, so args is null.
+        private fun beginParsedTx(opts: ParsedStatement.TxOptions, sql: String) {
+            fun rejectOpt(): Nothing = throw Incorrect(
+                "BEGIN ... WITH option is not yet supported here",
+                "xtdb.adbc/unsupported-tx-option",
+                mapOf("sql" to sql)
+            )
+
+            when (opts.accessMode) {
+                ParsedStatement.AccessMode.READ_WRITE -> {
+                    if (opts.defaultTz != null) throw Incorrect(
+                        "BEGIN READ WRITE WITH (TIMEZONE …) is not yet supported",
+                        "xtdb.adbc/unsupported-tx-option",
+                        mapOf("sql" to sql)
+                    )
+
+                    val systemTime = coerceInstant(opts.systemTime?.let { sqlPlanner.evalLiteral(it, null) })
+                    val userMetadata = opts.userMetadata?.let { sqlPlanner.evalLiteral(it, null) } as Map<*, *>?
+                    val async = (opts.async?.let { sqlPlanner.evalLiteral(it, null) } as Boolean?) ?: false
+
+                    beginWriteOnly(systemTime, userMetadata, async)
+                }
+
+                ParsedStatement.AccessMode.READ_ONLY -> {
+                    // the read basis is not implemented yet, so reject any WITH option
+                    if (opts != ParsedStatement.TxOptions(accessMode = opts.accessMode)) rejectOpt()
+                    beginReadOnly()
+                }
+
+                null -> beginTx()
+            }
+        }
+
+        fun commitTx() {
             val tx = tx ?: return
             this.tx = null
-            val ops = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain()
-            if (!ops.isNullOrEmpty()) ops.useAll { executeTx(it) }
+            // a ReadWrite tx commits even when its buffer is empty — an explicit write tx records a transaction
+            // (and advances the await-token); a ReadOnly / still-unresolved tx is a no-op.
+            val mode = tx.mode as? ReadWrite ?: return
+            // defaultTz/user left null: doSubmit fills defaultTz via withFallbackTz, and there's no connection user yet.
+            val opts = TxOpts(systemTime = mode.systemTime, userMetadata = mode.userMetadata)
+            mode.buffer.drain().useAll { ops -> if (mode.async) submitTx(ops, opts) else executeTx(ops, opts) }
         }
 
         internal fun executeDml(op: TxOp) {
-            if (autoCommit) {
+            // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
+            if (autoCommit && tx == null) {
                 listOf(op).useAll { ops -> executeTx(ops) }
                 return
             }
+
             val tx = tx ?: Transaction().also { tx = it }
+
             when (val mode = tx.mode) {
-                is AccessMode.ReadWrite -> mode.buffer.add(op)
-                null -> AccessMode.ReadWrite(DmlBuffer(allocator)).also { tx.mode = it }.buffer.add(op)
-                is AccessMode.ReadOnly -> {
+                is ReadWrite -> mode.buffer.add(op)
+                null -> ReadWrite().also { tx.mode = it }.buffer.add(op)
+                is ReadOnly -> {
                     op.close()
                     throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
                 }
@@ -448,18 +528,24 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         override fun commit() {
-            if (autoCommit) throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+            if (autoCommit)
+                throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+
             commitTx()
         }
 
-        private fun discardTx() {
+        // SQL ROLLBACK: discards the open tx regardless of autoCommit (unlike [rollback], which rejects rollback in
+        // autocommit). The explicit-tx mechanism the SQL tx-control path drives.
+        private fun rollbackTx() {
             tx?.close()
             tx = null
         }
 
         override fun rollback() {
-            if (autoCommit) throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
-            discardTx()
+            if (autoCommit)
+                throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
+
+            rollbackTx()
         }
 
         override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): Statement {
@@ -768,7 +854,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         override fun getCurrentDbSchema(): String = "public"
 
         override fun close() {
-            discardTx()
+            rollbackTx()
         }
     }
 
