@@ -30,7 +30,7 @@ It avoids training on information that wasn't yet available at the label time, t
 ### [Streaming results into DuckDB](./guides/streaming-into-duckdb)
 
 `cur.fetch_arrow_table()` → DuckDB `register_arrow` → join with DuckDB-resident data.
-XTDB holds the bitemporal source of truth, DuckDB runs the ad-hoc analytics, and Arrow moves between them with no serialise/deserialise step.
+When some of your data already lives in DuckDB, Arrow lets you join it against XTDB's bitemporal data with no serialise/deserialise step between them.
 
 ### [Rust ADBC + arrow-rs pipeline](./guides/rust-arrow-pipeline)
 

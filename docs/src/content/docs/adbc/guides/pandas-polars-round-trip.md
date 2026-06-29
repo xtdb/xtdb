@@ -18,7 +18,7 @@ docker run --rm -d --name xtdb -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:night
 ```
 
 All examples below connect to `grpc://localhost:9832`.
-The [runnable companion script](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/pandas-polars-round-trip/main.py) exercises every code block in order.
+The [runnable companion script](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/pandas-polars-round-trip/main.py) exercises every code block in order.
 
 ## The dataset
 

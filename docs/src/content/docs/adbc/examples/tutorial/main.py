@@ -2,7 +2,7 @@
 """
 XTDB ADBC tutorial: FX trades end-to-end.
 
-Companion script to docs/src/content/docs/drivers/adbc/tutorial.md.
+Companion script to docs/src/content/docs/adbc/tutorial.md.
 Every section in the tutorial maps to a numbered function below.
 
 Requirements:

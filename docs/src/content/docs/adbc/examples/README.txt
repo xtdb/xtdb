@@ -1,7 +1,7 @@
 XTDB ADBC examples
 ==================
 
-Runnable companion code for the ADBC docs (/drivers/adbc).
+Runnable companion code for the ADBC docs (/adbc).
 One example per directory. Each one round-trips ingest + query against a
 local XTDB node, and corresponds to a tutorial or how-to guide page.
 
@@ -44,7 +44,7 @@ Tutorial companion:
   tutorial/              main.py: the FX-trades worked example from tutorial.md.
                          Every numbered section in the tutorial maps to a function here.
 
-How-to guide companions (one per /drivers/adbc/guides/* page):
+How-to guide companions (one per /adbc/guides/* page):
 
   bulk-ingest-from-parquet/        pyarrow.parquet.read_table -> cur.adbc_ingest;
                                    schema (_id) requirements, chunked ingest, rejection modes.

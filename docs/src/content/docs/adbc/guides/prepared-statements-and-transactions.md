@@ -10,7 +10,7 @@ This guide covers the basics:
 the prepare→bind→execute lifecycle, Arrow batch parameter binding, multi-statement transactions, and same-connection write-then-read consistency.
 
 The runnable companion script exercises every section in order:
-[`docs/drivers/adbc/examples/prepared-statements-and-transactions/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/drivers/adbc/examples/prepared-statements-and-transactions/main.py)
+[`docs/adbc/examples/prepared-statements-and-transactions/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/prepared-statements-and-transactions/main.py)
 
 ## Prerequisites
 

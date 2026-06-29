@@ -83,7 +83,11 @@ def seed(cur) -> None:
     })
     cur.adbc_ingest("customer_features", features, mode="create_append")
 
-    # Labels: events we want to train on.
+    # Labels: events we want to train on. A label is an *event* (observed at a
+    # single instant), so we model its valid-time as the instantaneous chronon
+    # [observed_at, observed_at + 1us). That makes observed_at the label's own
+    # _valid_from, and the as-of join below a clean period-vs-period one.
+    one_us = dt.timedelta(microseconds=1)
     label_rows = [
         # (label_id, customer_id, observed_at, did_default)
         ("L1", "c1", "2024-08-15", True),
@@ -93,16 +97,19 @@ def seed(cur) -> None:
     labels = pa.table({
         "_id":          pa.array([r[0] for r in label_rows], type=pa.string()),
         "customer_id":  pa.array([r[1] for r in label_rows], type=pa.string()),
-        "observed_at":  pa.array([ts(r[2]) for r in label_rows], type=pa.timestamp("us", tz="UTC")),
+        "_valid_from":  pa.array([ts(r[2]) for r in label_rows], type=pa.timestamp("us", tz="UTC")),
+        "_valid_to":    pa.array([ts(r[2]) + one_us for r in label_rows], type=pa.timestamp("us", tz="UTC")),
         "did_default":  pa.array([r[3] for r in label_rows], type=pa.bool_()),
     })
     cur.adbc_ingest("loan_labels", labels, mode="create_append")
 
 
+# observed_at is the label's _valid_from (its event chronon), so we project it
+# from there.
 NAIVE_SQL = """
-SELECT l._id          AS label_id,
+SELECT l._id            AS label_id,
        l.customer_id,
-       l.observed_at,
+       l._valid_from    AS observed_at,
        l.did_default,
        f.account_balance,
        f.credit_score,
@@ -113,22 +120,22 @@ JOIN customer_features AS f
 ORDER BY l._id
 """
 
-# Bitemporal AS-OF join: for each label row, pick the customer_features
-# version whose valid-time interval contains observed_at. One query covering
-# every label, no Python loop.
+# Bitemporal AS-OF join: both sides are valid-time periods, so the join is a
+# clean period-vs-period one. CONTAINS picks the customer_features version
+# whose valid-time period contains the label's event chronon. One query
+# covering every label, no Python loop.
 ASOF_SQL = """
-SELECT l._id          AS label_id,
+SELECT l._id            AS label_id,
        l.customer_id,
-       l.observed_at,
+       l._valid_from    AS observed_at,
        l.did_default,
        f.account_balance,
        f.credit_score,
        f.employment_status
-FROM loan_labels AS l
+FROM loan_labels FOR ALL VALID_TIME AS l
 LEFT JOIN customer_features FOR ALL VALID_TIME AS f
   ON f._id = l.customer_id
-  AND f._valid_from <= l.observed_at
-  AND (f._valid_to IS NULL OR f._valid_to > l.observed_at)
+  AND f._valid_time CONTAINS l._valid_time
 ORDER BY l._id
 """
 
