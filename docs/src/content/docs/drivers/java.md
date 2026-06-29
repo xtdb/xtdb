@@ -70,11 +70,11 @@ Users:
 
 For Arrow-native workloads (query results as Arrow batches, bulk-ingesting an Arrow table in one round trip), XTDB exposes [ADBC](https://arrow.apache.org/adbc/) both in-process and over FlightSQL.
 
-In-process is the zero-copy path: `node.openAdbcConnection()` returns an `XtdbConnection` implementing `org.apache.arrow.adbc.core.AdbcConnection`, so anything written against the ADBC Java API works against it directly with no network hop:
+In-process is the zero-copy path: `node.connect()` returns an `org.apache.arrow.adbc.core.AdbcConnection`, so anything written against the ADBC Java API works against it directly with no network hop:
 
 ```java
 try (var node = Xtdb.openNode();
-     var conn = node.openAdbcConnection();
+     var conn = node.connect();
      var stmt = conn.createStatement()) {
     stmt.setSqlQuery("SELECT 1");
     try (var result = stmt.executeQuery()) {

@@ -34,7 +34,7 @@ conn = flight_sql.connect("grpc://localhost:9832")
 The connection string is a standard gRPC URI.
 `flight_sql.connect` returns a DB-API 2.0 `Connection` object and can also be used as a context manager.
 
-For JVM readers: the in-process `XtdbConnection` path requires no network hop and no gRPC; see the [reference](/adbc/reference#in-process-kotlin--jvm) for the Kotlin API.
+For JVM readers: the in-process `node.connect()` path requires no network hop and no gRPC; see the [reference](/adbc/reference#in-process-kotlin--jvm) for the Kotlin API.
 
 ## 3. Your first query
 

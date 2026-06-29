@@ -5,27 +5,30 @@ description: The ADBC surface XTDB supports, in-process and over FlightSQL, with
 
 XTDB exposes [ADBC](https://arrow.apache.org/adbc/), the Arrow Database Connectivity standard, through two surfaces:
 
-- **In-process**, via `xtdb.adbc.XtdbConnection` on the JVM. Zero copies, direct access to the in-memory Arrow buffers.
+- **In-process**, via `node.connect()` on the JVM, which returns an `org.apache.arrow.adbc.core.AdbcConnection`. Zero copies, direct access to the in-memory Arrow buffers.
 - **Over the wire**, via the [Apache Arrow Flight SQL](https://arrow.apache.org/docs/format/FlightSql.html) server bundled into XTDB. Any ADBC FlightSQL driver (Python, Rust, Go, C, R, Java) connects to it.
 
-The FlightSQL producer is a thin shim over the same `XtdbConnection` / `XtdbStatement` implementation the in-process client uses, so a behaviour documented here holds on either surface, barring the per-client caveats noted below.
+The FlightSQL producer is a thin shim over the same in-process `AdbcConnection` / `AdbcStatement` implementation, so a behaviour documented here holds on either surface, barring the per-client caveats noted below.
 Signatures and examples are given in the in-process Kotlin API; over the wire the same operations are whatever your driver's ADBC binding calls them.
 
 ## Connecting
 
 ### In-process (Kotlin / JVM)
 
-`XtdbConnection` (which implements `org.apache.arrow.adbc.core.AdbcConnection`) is obtained from a running node:
+An `org.apache.arrow.adbc.core.AdbcConnection` is obtained from a running node via `node.connect()`:
 
 ```kotlin
-import xtdb.adbc.XtdbConnection
 import xtdb.api.Xtdb
 
-val node = Xtdb.openNode()
-node.openAdbcConnection().use { conn ->
-    val stmt = conn.createStatement()
-    stmt.setSqlQuery("SELECT 1")
-    val result = stmt.executeQuery()   // result.reader: org.apache.arrow.vector.ipc.ArrowReader
+Xtdb.openNode().use { node ->
+    node.connect().use { conn ->
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT 1")
+            stmt.executeQuery().use { result ->
+                // result.reader: org.apache.arrow.vector.ipc.ArrowReader
+            }
+        }
+    }
 }
 ```
 
@@ -163,6 +166,6 @@ The schema is not settable: `public` is the only accepted value (a confirming no
 - Bulk-ingest `replace` and existence-check modes (rejected with an explanatory `INVALID_ARGUMENT`).
 - Per-call catalog override on bulk ingest.
 - The Substrait variant of `executeSchema` (`getSchemaSubstraitPlan`): no current driver consumer.
-- `getCurrentCatalog` / `getCurrentDbSchema` on the Java FlightSQL client: an upstream Apache ADBC gap (its Java client doesn't query `getSessionOptions`), not an XTDB limitation. The in-process Kotlin/JVM `XtdbConnection` is unaffected.
+- `getCurrentCatalog` / `getCurrentDbSchema` on the Java FlightSQL client: an upstream Apache ADBC gap (its Java client doesn't query `getSessionOptions`), not an XTDB limitation. The in-process JVM connection is unaffected.
 - Parameter type inference for `executeSchema` (placeholder types only).
 - TLS / auth on the FlightSQL listener.

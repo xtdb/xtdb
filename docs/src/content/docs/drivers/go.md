@@ -77,7 +77,7 @@ From Go that's the [`flightsql`](https://pkg.go.dev/github.com/apache/arrow-adbc
 import (
     "github.com/apache/arrow-adbc/go/adbc"
     "github.com/apache/arrow-adbc/go/adbc/driver/flightsql"
-    "github.com/apache/arrow/go/v18/arrow/memory"
+    "github.com/apache/arrow-go/v18/arrow/memory"
 )
 
 drv := flightsql.NewDriver(memory.DefaultAllocator)
