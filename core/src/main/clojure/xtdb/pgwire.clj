@@ -50,7 +50,7 @@
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
-           (xtdb.query PreparedQuery QueryOpts SqlParser
+           (xtdb.query PreparedQuery QueryOpts SqlParser SqlPlanner
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$TxOptions
                        ParsedStatement$Query ParsedStatement$Dml ParsedStatement$ShowVariable
                        ParsedStatement$CopyIn ParsedStatement$Execute)
@@ -73,7 +73,9 @@
 
                    server-state
 
-                   ^Authenticator authn]
+                   ^Authenticator authn
+
+                   ^SqlPlanner sql-planner]
   DataSource
   (createConnectionBuilder [_]
     ;; connect back to the interface we actually bound, not a hardcoded
@@ -523,16 +525,6 @@
 
 ;;; server impl
 
-(defn- apply-args [expr args]
-  (if (symbol? expr)
-    (let [args-map (zipmap (map (fn [idx]
-                                  (symbol (str "?_" idx)))
-                                (range))
-                           args)]
-      (or (args-map expr)
-          (throw (pgio/err-protocol-violation (str "missing arg: " expr)))))
-    expr))
-
 (defn- coerce->tz [tz]
   (cond
     (instance? ZoneId tz) tz
@@ -543,37 +535,40 @@
 
     :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
 
-(defn cmd-begin [{:keys [node conn-state]} tx-opts {:keys [args]}]
-  (swap! conn-state
-         (fn [{:keys [session ^Xtdb$Connection node-conn] :as st}]
-           (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
-                               (apply-args tok args)
-                               (.getAwaitToken node-conn))
-                 {:keys [^Clock clock]} session]
+(defn cmd-begin [{:keys [node conn-state server]} tx-opts {:keys [args]}]
+  (let [^SqlPlanner planner (:sql-planner server)
+        eval-lit (fn [expr] (.evalLiteral planner expr args))]
+    (swap! conn-state
+           (fn [{:keys [session ^Xtdb$Connection node-conn] :as st}]
+             (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
+                                 (eval-lit tok)
+                                 (.getAwaitToken node-conn))
+                   {:keys [^Clock clock]} session]
 
-             (when-not (= :read-write (:access-mode tx-opts))
-               (xt-log/await-node node await-token #xt/duration "PT30S"))
+               (when-not (= :read-write (:access-mode tx-opts))
+                 (xt-log/await-node node await-token #xt/duration "PT30S"))
 
-             (-> st
-                 (update :transaction
-                         (fn [{:keys [access-mode]}]
-                           (if access-mode
-                             (throw (pgio/err-protocol-violation "transaction already started"))
+               (-> st
+                   (update :transaction
+                           (fn [{:keys [access-mode]}]
+                             (if access-mode
+                               (throw (pgio/err-protocol-violation "transaction already started"))
 
-                             (-> {:current-time (.instant clock)
-                                  :snapshot-token (xtp/snapshot-token node)
-                                  :default-tz (.getDefaultTz node-conn)
-                                  :implicit? false}
-                                 (into (:characteristics session))
-                                 (into (-> tx-opts
-                                           (update :default-tz #(some-> % (apply-args args) (coerce->tz)))
-                                           (update :system-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getDefaultTz node-conn)})))
-                                           (update :current-time #(some-> % (apply-args args) (time/->instant {:default-tz (.getDefaultTz node-conn)})))
-                                           (update :snapshot-token #(some-> % (apply-args args)))
-                                           (update :snapshot-time #(some-> % (apply-args args)))
-                                           (update :user-metadata #(some-> % (apply-args args)))
-                                           (->> (into {} (filter (comp some? val))))))
-                                 (assoc :await-token await-token))))))))))
+                               (-> {:current-time (.instant clock)
+                                    :snapshot-token (xtp/snapshot-token node)
+                                    :default-tz (.getDefaultTz node-conn)
+                                    :implicit? false}
+                                   (into (:characteristics session))
+                                   (into (-> tx-opts
+                                             (update :default-tz #(some-> % eval-lit (coerce->tz)))
+                                             (update :system-time #(some-> % eval-lit (time/->instant {:default-tz (.getDefaultTz node-conn)})))
+                                             (update :current-time #(some-> % eval-lit (time/->instant {:default-tz (.getDefaultTz node-conn)})))
+                                             (update :snapshot-token #(some-> % eval-lit))
+                                             (update :snapshot-time #(some-> % eval-lit))
+                                             (update :user-metadata #(some-> % eval-lit))
+                                             (update :async? #(some-> % eval-lit boolean))
+                                             (->> (into {} (filter (comp some? val))))))
+                                   (assoc :await-token await-token)))))))))))
 
 (defn close-transaction [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1128,12 +1123,12 @@
   ;; doesn't mean anything to us because we're always serializable
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [conn zone-expr args]
-  (set-time-zone conn (-> zone-expr (sql/plan-expr (sql/->env)) (apply-args args)))
+(defn cmd-set-time-zone [{:keys [server] :as conn} zone-expr args]
+  (set-time-zone conn (.evalLiteral ^SqlPlanner (:sql-planner server) zone-expr args))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [conn-state] :as conn} token-expr args]
-  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (-> token-expr (sql/plan-expr (sql/->env)) (apply-args args)))
+(defn cmd-set-await-token [{:keys [conn-state server] :as conn} token-expr args]
+  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (.evalLiteral ^SqlPlanner (:sql-planner server) token-expr args))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
@@ -1333,21 +1328,19 @@
         (throw error)))))
 
 (defn- ->tx-opts-map [^ParsedStatement$TxOptions tx-opts]
-  ;; resolve a parsed Begin's options into the map cmd-begin consumes (planned exprs; cmd-begin apply-args + coerces)
-  (let [env (sql/->env)
-        pe (fn [expr] (some-> expr (sql/plan-expr env)))]
-    (cond-> {}
-      (.getAccessMode tx-opts) (assoc :access-mode (case (str (.getAccessMode tx-opts))
-                                                     "READ_ONLY" :read-only
-                                                     "READ_WRITE" :read-write))
-      (.getSystemTime tx-opts) (assoc :system-time (pe (.getSystemTime tx-opts)))
-      (.getSnapshotToken tx-opts) (assoc :snapshot-token (pe (.getSnapshotToken tx-opts)))
-      (.getSnapshotTime tx-opts) (assoc :snapshot-time (pe (.getSnapshotTime tx-opts)))
-      (.getClockTime tx-opts) (assoc :current-time (pe (.getClockTime tx-opts)))
-      (.getAwaitToken tx-opts) (assoc :await-token (pe (.getAwaitToken tx-opts)))
-      (.getDefaultTz tx-opts) (assoc :default-tz (pe (.getDefaultTz tx-opts)))
-      (.getUserMetadata tx-opts) (assoc :user-metadata (pe (.getUserMetadata tx-opts)))
-      (.getAsync tx-opts) (assoc :async? (boolean (sql/plan-expr (.getAsync tx-opts) env))))))
+  ;; pass the raw expr contexts through; cmd-begin evaluates them via the SqlPlanner and coerces
+  (cond-> {}
+    (.getAccessMode tx-opts) (assoc :access-mode (case (str (.getAccessMode tx-opts))
+                                                   "READ_ONLY" :read-only
+                                                   "READ_WRITE" :read-write))
+    (.getSystemTime tx-opts) (assoc :system-time (.getSystemTime tx-opts))
+    (.getSnapshotToken tx-opts) (assoc :snapshot-token (.getSnapshotToken tx-opts))
+    (.getSnapshotTime tx-opts) (assoc :snapshot-time (.getSnapshotTime tx-opts))
+    (.getClockTime tx-opts) (assoc :current-time (.getClockTime tx-opts))
+    (.getAwaitToken tx-opts) (assoc :await-token (.getAwaitToken tx-opts))
+    (.getDefaultTz tx-opts) (assoc :default-tz (.getDefaultTz tx-opts))
+    (.getUserMetadata tx-opts) (assoc :user-metadata (.getUserMetadata tx-opts))
+    (.getAsync tx-opts) (assoc :async? (.getAsync tx-opts))))
 
 (defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
@@ -1395,7 +1388,8 @@
                (visitSetTimeZone [_ stmt] (cmd-set-time-zone conn (.getZone stmt) (:args portal)))
                (visitSetAwaitToken [_ stmt] (cmd-set-await-token conn (.getToken stmt) (:args portal)))
                (visitSetSessionParameter [_ stmt]
-                 (cmd-set-session-parameter conn (.getName stmt) (sql/plan-expr (.getValue stmt) (sql/->env))))
+                 (cmd-set-session-parameter conn (.getName stmt)
+                                            (.evalLiteral ^SqlPlanner (-> conn :server :sql-planner) (.getValue stmt) nil)))
                (visitSetRole [_ _] nil)
 
                (visitCopyIn [_ stmt]
@@ -1818,6 +1812,7 @@
            server (map->Server {:allocator allocator
                                 :node node
                                 :authn (authn/<-node node)
+                                :sql-planner (sql/->sql-planner)
                                 :host host
                                 :port port
                                 :read-only? read-only?

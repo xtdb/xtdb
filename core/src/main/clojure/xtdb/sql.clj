@@ -25,6 +25,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
+           xtdb.query.SqlPlanner
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            xtdb.table.TableRef
            xtdb.util.StringUtil))
@@ -3408,6 +3409,19 @@
 (defn plan-expr
   ([sql] (plan-expr sql {}))
   ([sql opts] (-plan-expr sql opts)))
+
+(defn- apply-args [expr args]
+  (if (symbol? expr)
+    (let [args-map (zipmap (map (fn [idx] (symbol (str "?_" idx))) (range)) args)]
+      (or (args-map expr)
+          (throw (err/incorrect :xtdb/missing-arg (str "missing arg: " expr) {}))))
+    expr))
+
+(defn ->sql-planner ^SqlPlanner []
+  (reify SqlPlanner
+    (evalLiteral [_ expr args]
+      (-> (plan-expr expr (->env))
+          (apply-args args)))))
 
 (defprotocol PlanQuery
   (-plan-query [query opts]))
