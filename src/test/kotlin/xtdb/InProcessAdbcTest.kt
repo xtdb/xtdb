@@ -338,6 +338,82 @@ class InProcessAdbcTest {
     }
 
     @Test
+    fun `SET and SHOW AWAIT_TOKEN round-trip`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET AWAIT_TOKEN = 'abc'")
+            assertEquals(listOf(mapOf("await_token" to "abc")), conn.select("SHOW AWAIT_TOKEN"))
+        }
+    }
+
+    @Test
+    fun `SET and SHOW a session parameter round-trip`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET datestyle = 'ISO'")
+            assertEquals(listOf(mapOf("datestyle" to "ISO")), conn.select("SHOW datestyle"))
+        }
+    }
+
+    @Test
+    fun `SET SESSION CHARACTERISTICS READ ONLY makes a bare BEGIN read-only`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+            conn.update("BEGIN")
+            assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {_id: 1}") }
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `SET TIME ZONE is reflected by SHOW timezone`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'America/New_York'")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+        }
+    }
+
+    @Test
+    fun `a mid-transaction SET TIME ZONE is discarded on ROLLBACK and kept on COMMIT`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TIME ZONE 'UTC'")
+
+            conn.update("BEGIN")
+            conn.update("SET TIME ZONE 'America/New_York'")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            conn.update("ROLLBACK")
+            assertEquals(
+                listOf(mapOf("timezone" to "UTC")), conn.select("SHOW timezone"),
+                "ROLLBACK reverts the mid-transaction SET TIME ZONE"
+            )
+
+            conn.update("BEGIN")
+            conn.update("SET TIME ZONE 'America/New_York'")
+            conn.update("COMMIT")
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"),
+                "COMMIT keeps it"
+            )
+        }
+    }
+
+    @Test
+    fun `SET TIME ZONE is rejected in a write transaction with buffered writes`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+            assertThrows(Incorrect::class.java) { conn.update("SET TIME ZONE 'UTC'") }
+            conn.update("ROLLBACK")
+        }
+    }
+
+    @Test
+    fun `SET TRANSACTION and SET ROLE are accepted no-ops`() {
+        xtdb.connect().use { conn ->
+            conn.update("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            conn.update("SET ROLE some_role")
+        }
+    }
+
+    @Test
     fun `rollback discards buffered writes`() {
         insertData("INSERT INTO foo RECORDS {_id: 0}")
 

@@ -157,6 +157,13 @@ enum BeginAccessMode {
     read_only | read_write | none
 }
 
+enum SessionAccessMode {
+    -- The connection's session-level default access mode, set by SET SESSION CHARACTERISTICS
+    -- AS TRANSACTION READ ONLY / READ WRITE. When set, a bare BEGIN (access_mode = none) takes
+    -- this default; absent (null), a bare BEGIN stays Unresolved.
+    read_only | read_write
+}
+
 ---- Entities and Variants
 
 entity Connection {
@@ -166,6 +173,7 @@ entity Connection {
     auto_commit: Boolean
     default_tz: ZoneId
     await_token: TxBasisToken?       -- advanced by every write, threaded through every read
+    default_access_mode: SessionAccessMode?  -- set by SET SESSION CHARACTERISTICS; null leaves a bare BEGIN unresolved
 
     -- At most one open transaction. Singular relationship: the value is the open
     -- Transaction, or null when none is open.
@@ -187,6 +195,7 @@ entity Transaction {
     connection: Connection
     mode: Unresolved | ReadOnly | ReadWrite
     failed: Boolean
+    entered_tz: ZoneId               -- the connection's default_tz as at BEGIN; ROLLBACK restores it
 }
 
 variant Unresolved : Transaction {
@@ -255,6 +264,7 @@ rule BeginReadOnly {
         ReadOnly.created(
             connection: connection,
             failed: false,
+            entered_tz: connection.default_tz,
             read_basis: ReadBasis(
                 snapshot_token: read_basis?.snapshot_token ?? Database.snapshotToken,
                 snapshot_time: read_basis?.snapshot_time,
@@ -282,6 +292,7 @@ rule BeginReadWrite {
         ReadWrite.created(
             connection: connection,
             failed: false,
+            entered_tz: connection.default_tz,
             buffer: buffer,
             commit_opts: commit_opts ?? CommitOpts(
                 system_time: null,
@@ -293,23 +304,49 @@ rule BeginReadWrite {
 }
 
 rule BeginUnresolved {
-    -- BEGIN with no explicit access mode. The read basis is pinned NOW (begin-time) even
-    -- though the mode is not yet known; if the tx resolves to ReadOnly this basis is
-    -- inherited unchanged. Access mode resolves on the first statement.
+    -- Bare BEGIN (no explicit access mode). The session default access mode decides the
+    -- variant: a connection with default_access_mode set (via SET SESSION CHARACTERISTICS)
+    -- opens ReadOnly / ReadWrite directly; with no default set it stays Unresolved, resolved
+    -- on the first statement (the common case). Either way the read basis is pinned NOW
+    -- (begin-time): an Unresolved or ReadOnly tx inherits it; a ReadWrite tx discards it.
     when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
     requires: connection.tx = null
     requires: access_mode = none
 
     ensures:
-        Unresolved.created(
-            connection: connection,
-            failed: false,
-            read_basis: ReadBasis(
-                snapshot_token: Database.snapshotToken,
-                snapshot_time: null,
-                clock_time: now
-            )
+        let begin_basis = ReadBasis(
+            snapshot_token: Database.snapshotToken,
+            snapshot_time: null,
+            clock_time: now
         )
+        if connection.default_access_mode = read_only:
+            ReadOnly.created(
+                connection: connection,
+                failed: false,
+                entered_tz: connection.default_tz,
+                read_basis: begin_basis
+            )
+        else if connection.default_access_mode = read_write:
+            let buffer = DmlBuffer.created(ops: {})
+            ReadWrite.created(
+                connection: connection,
+                failed: false,
+                entered_tz: connection.default_tz,
+                buffer: buffer,
+                commit_opts: CommitOpts(
+                    system_time: null,
+                    user_metadata: null,
+                    async: false,
+                    tz_override: null
+                )
+            )
+        else:
+            Unresolved.created(
+                connection: connection,
+                failed: false,
+                entered_tz: connection.default_tz,
+                read_basis: begin_basis
+            )
 }
 
 rule BeginWhileOpenRejected {
@@ -414,6 +451,7 @@ rule ManualLazyOpenDml {
         ReadWrite.created(
             connection: connection,
             failed: false,
+            entered_tz: connection.default_tz,
             buffer: buffer,
             commit_opts: CommitOpts(
                 system_time: null,
@@ -440,6 +478,7 @@ rule ManualLazyOpenQuery {
         let opened = ReadOnly.created(
             connection: connection,
             failed: false,
+            entered_tz: connection.default_tz,
             read_basis: ReadBasis(
                 snapshot_token: connection.await_token,
                 snapshot_time: null,
@@ -600,10 +639,14 @@ rule CommitNoOp {
 rule Rollback {
     -- Rollback discards the open transaction (and its buffer, if any), submitting
     -- nothing. Valid even on a failed transaction — this is how a failed tx is cleared.
+    -- Restores the connection's default_tz to the value captured at BEGIN, discarding any
+    -- mid-transaction SET TIME ZONE (Postgres semantics — a plain SET in an aborted tx is
+    -- rolled back; COMMIT keeps the new zone).
     when: RollbackTransaction(frontend, connection)
     requires: connection.tx != null
 
     ensures:
+        connection.default_tz = connection.tx.entered_tz
         not exists connection.tx
 }
 

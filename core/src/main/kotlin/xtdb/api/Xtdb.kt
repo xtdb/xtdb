@@ -19,6 +19,7 @@ import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.ICursor
 import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
 import xtdb.antlr.Sql
@@ -53,6 +54,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.*
 import java.util.Date
+import java.util.SequencedMap
+import java.util.function.Consumer
 import java.util.UUID.randomUUID
 import java.util.concurrent.ExecutionException
 import kotlin.io.path.extension
@@ -149,6 +152,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private var autoCommit = true
         private var tx: Transaction? = null
+
+        // session parameters (SET <param> = <value>) — stored raw; param-specific interpretation (e.g.
+        // pgwire's fallback_output_format) stays with the consumer. SHOW <param> reads back from here.
+        private val sessionParameters = mutableMapOf<String, String?>()
+
+        // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
+        // null leaves a bare BEGIN unresolved (resolved by its first statement).
+        private var defaultAccessMode: ParsedStatement.AccessMode? = null
 
         private fun db(dbName: DatabaseName): Database =
             dbCat.databaseOrNull(dbName)
@@ -329,6 +340,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             override fun executeQuery(): QueryResult {
                 val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                // SHOW is answered from connection state, ahead of the access-mode gate — it is session
+                // introspection, valid in any transaction (pgwire's verify-permissibility doesn't gate it).
+                if (prepared == null)
+                    (parseStatements(sql).singleOrNull() as? ParsedStatement.ShowVariable)
+                        ?.let { return showVariable(it.variable) }
                 resolveForQuery()
                 if (prepared == null && args != null)
                     throw Incorrect(
@@ -361,6 +377,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                     is ParsedStatement.Commit -> commitTx()
                     is ParsedStatement.Rollback -> rollbackTx()
+
+                    is ParsedStatement.SetSessionParameter ->
+                        sessionParameters[stmt.name] = sqlPlanner.evalLiteral(stmt.value, null)?.toString()
+                    is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
+                    is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
+                    is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
+                    is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op
+                    is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+
                     else -> executeDml(TxOp.Sql(sql, openQueryArgs()))
                 }
                 return UpdateResult(-1)
@@ -376,6 +401,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // relation, so a prepared INSERT in a loop becomes one multi-row op.
         private class DmlBuffer(private val al: BufferAllocator) : AutoCloseable {
             private val ops = mutableListOf<TxOp>()
+
+            val isEmpty get() = ops.isEmpty()
 
             fun add(op: TxOp) {
                 if (op !is TxOp.Sql || op.args == null) {
@@ -421,7 +448,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // former to the latter inherits it unchanged); a ReadWrite tx has none — writes don't read.
         private class ReadBasis(val snapshotToken: String?, val snapshotTime: Instant?, val currentTime: Instant)
 
-        private class Transaction(var mode: AccessMode? = null, val readBasis: ReadBasis? = null) : AutoCloseable {
+        // [enteredTz] is the connection's time zone as it was at BEGIN; ROLLBACK restores it, discarding any
+        // mid-transaction SET TIME ZONE (Postgres semantics — a plain SET in an aborted tx is rolled back).
+        private class Transaction(
+            var mode: AccessMode? = null, val readBasis: ReadBasis? = null, val enteredTz: ZoneId
+        ) : AutoCloseable {
             var failed: Throwable? = null
 
             override fun close() {
@@ -444,12 +475,17 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
         private fun beginTx(accessMode: AccessMode?, readBasis: ReadBasis?) {
             if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
-            tx = Transaction(accessMode, readBasis)
+            tx = Transaction(accessMode, readBasis, defaultTz)
         }
 
-        // a bare BEGIN pins a basis even while unresolved: if a query resolves it to read-only the basis is
-        // inherited; if DML resolves it to read-write the basis is simply ignored.
-        fun beginTx() = beginTx(null, pinReadBasis())
+        // a bare BEGIN takes the session default access mode (SET SESSION CHARACTERISTICS); with none set it
+        // stays unresolved, pinning a basis anyway — a query resolving it to read-only inherits the basis, DML
+        // resolving it to read-write ignores it.
+        fun beginTx() = when (defaultAccessMode) {
+            ParsedStatement.AccessMode.READ_ONLY -> beginReadOnly()
+            ParsedStatement.AccessMode.READ_WRITE -> beginWriteOnly()
+            null -> beginTx(null, pinReadBasis())
+        }
 
         fun beginReadOnly() = beginTx(ReadOnly, pinReadBasis())
 
@@ -474,6 +510,39 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 "xtdb.adbc/invalid-system-time",
                 mapOf("value" to value, "type" to value::class.java.name)
             )
+        }
+
+        private fun coerceZoneId(value: Any?): ZoneId = when (value) {
+            is ZoneId -> value
+            is String -> ZoneId.of(value)
+            else -> throw Incorrect(
+                "cannot coerce TIME ZONE to a zone",
+                "xtdb.adbc/invalid-time-zone",
+                mapOf("value" to value)
+            )
+        }
+
+        private fun coerceAwaitToken(value: Any?): String? = when (value) {
+            null -> null
+            is String -> value
+            else -> throw Incorrect(
+                "AWAIT_TOKEN must be a string",
+                "xtdb.adbc/invalid-await-token",
+                mapOf("value" to value)
+            )
+        }
+
+        // SET TIME ZONE. Session-level when no tx is open. Inside a tx it's tx-local — [Transaction.enteredTz]
+        // preserves the pre-tx zone for ROLLBACK to restore. Rejected once a write tx has buffered ops: those
+        // ops captured temporal literals under the old zone, so changing it mid-buffer would be inconsistent.
+        private fun setTimeZone(zone: ZoneId) {
+            (tx?.mode as? ReadWrite)?.let {
+                if (!it.buffer.isEmpty) throw Incorrect(
+                    "Cannot SET TIME ZONE in a read-write transaction with buffered writes",
+                    "xtdb/set-tz-in-write-tx"
+                )
+            }
+            defaultTz = zone
         }
 
         // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
@@ -534,7 +603,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 return
             }
 
-            val tx = tx ?: Transaction().also { tx = it }
+            val tx = tx ?: Transaction(enteredTz = defaultTz).also { tx = it }
 
             when (val mode = tx.mode) {
                 is ReadWrite -> mode.buffer.add(op)
@@ -554,7 +623,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 // manual mode mirrors executeDml's lazy open: a query opens a read-only tx pinning the
                 // begin-time basis, so subsequent reads share its snapshot. Under autocommit there is no open
                 // tx — the query reads latest at the connection's current basis, unchanged.
-                if (!autoCommit) this.tx = Transaction(ReadOnly, pinReadBasis())
+                if (!autoCommit) this.tx = Transaction(ReadOnly, pinReadBasis(), defaultTz)
                 return
             }
             when (tx.mode) {
@@ -573,6 +642,37 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             QueryOpts(b?.currentTime, defaultTz, b?.snapshotToken, b?.snapshotTime)
         }
 
+        // Answer a SHOW from connection state. SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any
+        // other identifier reads a session parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar
+        // `showVariable`s — classified as Query and answered by the engine from the basis, not here.) The
+        // node-level status SHOWs (latest_completed_txs, …) stay in pgwire for now.
+        private fun showVariable(variable: String): QueryResult =
+            showResult(variable, if (variable == "await_token") awaitToken else sessionParameters[variable])
+
+        // A one-row, single-(nullable-utf8)-column result built directly from a value — the SHOW counterpart of
+        // the query engine's cursor, so executeQuery can return session state as an Arrow result set.
+        private fun showResult(col: String, value: String?): QueryResult {
+            val types: SequencedMap<String, VectorType> = linkedMapOf(col to VectorType.maybe(VectorType.UTF8))
+            val rel = Relation(allocator, types).closeOnCatch { it.writeRow(mapOf(col to value)); it }
+            val cursor = object : ResultCursor {
+                override val resultTypes get() = types
+                override val cursorType get() = "show"
+                override val childCursors get() = emptyList<ICursor>()
+
+                private var done = false
+                override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                    if (done) return false
+                    done = true
+                    c.accept(rel)
+                    return true
+                }
+
+                override fun close() = rel.close()
+            }
+            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
+            return QueryResult(-1, cursorToArrowReader(cursor, schema))
+        }
+
         override fun setAutoCommit(autoCommit: Boolean) {
             if (this.autoCommit == autoCommit) return
             if (autoCommit) commitTx()
@@ -589,6 +689,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // SQL ROLLBACK: discards the open tx regardless of autoCommit (unlike [rollback], which rejects rollback in
         // autocommit). The explicit-tx mechanism the SQL tx-control path drives.
         private fun rollbackTx() {
+            tx?.let { defaultTz = it.enteredTz }   // discard any mid-tx SET TIME ZONE
             tx?.close()
             tx = null
         }
