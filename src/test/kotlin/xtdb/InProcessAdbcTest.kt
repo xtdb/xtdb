@@ -18,6 +18,7 @@ import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.database.encodeTimeBasisToken
 import java.time.Instant
+import java.util.UUID
 
 class InProcessAdbcTest {
 
@@ -703,6 +704,55 @@ class InProcessAdbcTest {
             val after = conn.select("SELECT count(*) AS c FROM xt.txs").single()["c"] as Long
 
             assertEquals(before + 1, after, "an explicit write tx commits even when empty")
+        }
+    }
+
+    @Test
+    fun `a literal UUID _id round-trips through static expansion`() {
+        val id = "7f8e9d6c-5b4a-4c2d-9e0f-a9b8c7d6e5f4"
+        insertData("INSERT INTO foo RECORDS {_id: UUID '$id', n: 1}")
+
+        xtdb.connect().use { conn ->
+            assertEquals(
+                listOf(mapOf("_id" to UUID.fromString(id), "n" to 1L)),
+                conn.select("SELECT _id, n FROM foo"),
+                "a literal UUID id is coerced via PutDocs, not rejected as raw-SQL 'Invalid ID type: [B'"
+            )
+        }
+    }
+
+    @Test
+    fun `a literal UUID _id in PATCH RECORDS round-trips`() {
+        val id = "7f8e9d6c-5b4a-4c2d-9e0f-a9b8c7d6e5f4"
+        insertData("INSERT INTO foo RECORDS {_id: UUID '$id', n: 1}")
+        insertData("PATCH INTO foo RECORDS {_id: UUID '$id', n: 2}")
+
+        xtdb.connect().use { conn ->
+            assertEquals(
+                listOf(mapOf("_id" to UUID.fromString(id), "n" to 2L)),
+                conn.select("SELECT _id, n FROM foo")
+            )
+        }
+    }
+
+    @Test
+    fun `INSERT RECORDS without _id surfaces the static missing-id error`() {
+        xtdb.connect().use { conn ->
+            val ex = assertThrows(Incorrect::class.java) { conn.update("INSERT INTO foo RECORDS {n: 1}") }
+            assertTrue(ex.message?.contains("_id") == true, "expected a missing-_id message, got: ${ex.message}")
+        }
+    }
+
+    @Test
+    fun `a non-expandable DELETE falls back to the raw Sql op`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}, {_id: 2}")
+
+        xtdb.connect().use { conn ->
+            conn.update("DELETE FROM foo WHERE _id = 1")
+            assertEquals(
+                listOf(mapOf("_id" to 2L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
+                "DELETE isn't statically expandable — it submits the raw Sql op, expanded at index time"
+            )
         }
     }
 }
