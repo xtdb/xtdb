@@ -1047,4 +1047,91 @@ class PostgresSourceIntegrationTest {
             }
         }
     }
+
+    @Test
+    fun `streamed tx system-time is the postgres commit time`() = runTest(timeout = 120.seconds) {
+        // dedicated PG so we can turn on commit-timestamp tracking and read the exact commit time
+        val pg = newDedicatedPostgres()
+            .withCommand("postgres", "-c", "wal_level=logical", "-c", "track_commit_timestamp=on")
+        pg.start()
+        try {
+            val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+            val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+            val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+            pg.executeSql(
+                "CREATE TABLE pg_systime (_id INT PRIMARY KEY, name TEXT)",
+                "CREATE PUBLICATION $pubName FOR TABLE pg_systime",
+            )
+
+            openNode(sourceTopic, pgContainer = pg).use { node ->
+                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+                // wait until the snapshot is done and streaming is live, so the insert below streams
+                awaitCondition("streaming live", timeout = 60.seconds) {
+                    (node as Xtdb.XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
+                        ?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
+                }
+
+                pg.executeSql("INSERT INTO pg_systime (_id, name) VALUES (1, 'streamed')")
+                awaitCondition("streamed row visible", timeout = 60.seconds) {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_systime WHERE _id = 1").isNotEmpty()
+                }
+
+                // pgwire hands these back as different types from the two connections —
+                // PG's commit ts as java.sql.Timestamp, XTDB's _system_from as ZonedDateTime —
+                // so compare them as the absolute instants they represent.
+                val pgCommit = DriverManager.getConnection(pg.jdbcUrl, pg.username, pg.password).use { conn ->
+                    conn.createStatement().use { stmt ->
+                        stmt.executeQuery(
+                            "SELECT pg_xact_commit_timestamp(xmin) AS ts FROM pg_systime WHERE _id = 1").use { rs ->
+                            check(rs.next()); (rs.getObject("ts") as java.sql.Timestamp).toInstant()
+                        }
+                    }
+                }
+                val sysFrom = (xtQueryDb(node, "cdc",
+                    "SELECT _system_from FROM public.pg_systime WHERE _id = 1")[0]["_system_from"]
+                    as java.time.ZonedDateTime).toInstant()
+
+                assertEquals(pgCommit, sysFrom,
+                    "streamed tx _system_from should equal the Postgres commit timestamp")
+            }
+        } finally {
+            pg.stop()
+        }
+    }
+
+    @Test
+    fun `snapshot tx system-time is xtdb-assigned, not the postgres commit time`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE pg_snap_systime (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_snap_systime",
+            "INSERT INTO pg_snap_systime (_id, name) VALUES (1, 'preexisting')",
+        )
+
+        val committedAround = java.time.Instant.now()
+        // a real wall-clock gap (delay() would be skipped under runTest) so the snapshot's
+        // index-time can't be confused with the row's earlier commit time
+        runInterruptible { Thread.sleep(2_000) }
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            awaitCondition("snapshot row visible", timeout = 60.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_systime WHERE _id = 1").isNotEmpty()
+            }
+
+            // XTDB returns _system_from (timestamptz) as a ZonedDateTime over pgwire
+            val sysFrom = (xtQueryDb(node, "cdc",
+                "SELECT _system_from FROM public.pg_snap_systime WHERE _id = 1")[0]["_system_from"]
+                as java.time.ZonedDateTime).toInstant()
+
+            assertTrue(java.time.Duration.between(committedAround, sysFrom).seconds >= 1,
+                "snapshot _system_from ($sysFrom) should be the XTDB-assigned time, well after the PG commit (~$committedAround)")
+        }
+    }
 }
