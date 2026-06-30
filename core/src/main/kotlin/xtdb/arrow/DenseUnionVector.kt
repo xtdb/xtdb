@@ -261,7 +261,21 @@ class DenseUnionVector private constructor(
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
-                if (leg.arrowType != arrowType) throw Unsupported("cannot promote DUV leg")
+                // `op` keys legs by operation, so `put` is a Struct where a segment has documents and
+                // Null in a put-less one. Null is the lattice bottom — reconcile rather than throw. We
+                // deliberately don't assert nullability: an incoming Null yields to the existing type,
+                // and real nulls (if any) fold in via writeNull, which auto-nullables. So op.put's
+                // zero-row Null leg leaves `put` a non-nullable Mono(STRUCT) — the shape logRelTypes
+                // asserts and the #4467 Nothing work relies on — rather than spuriously widening it.
+                // Two genuinely-distinct non-null types have no single-leg join. #5714
+                if (leg.arrowType != arrowType) {
+                    when {
+                        arrowType == NULL_TYPE -> {} // incoming Null yields to the existing typed leg
+                        leg.arrowType == NULL_TYPE -> legVectors[i] = leg.maybePromote(allocator, arrowType, nullable)
+                        else -> throw Unsupported("cannot promote DUV leg: '$name' (existing ${leg.arrowType}, incoming $arrowType)")
+                    }
+                    return LegVector(i.toByte(), legVectors[i])
+                }
                 leg.nullable = leg.nullable || nullable
 
                 return LegVector(i.toByte(), leg)
