@@ -39,7 +39,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -596,19 +596,11 @@
                                                                                  [op])))
                                                                    (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
                                         (if async?
-                                          (let [^Xtdb$SubmittedTx tx-id (with-auth-check conn
-                                                                          (.submitTx node-conn tx-ops tx-opts))
-                                                msg-id (.getTxId tx-id)]
-                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id}))
+                                          (with-auth-check conn
+                                            (.submitTx node-conn tx-ops tx-opts))
 
                                           (let [^Xtdb$ExecutedTx tx (with-auth-check conn
-                                                                      (.executeTx node-conn tx-ops tx-opts))
-                                                msg-id (.getTxId tx)]
-                                            (swap! conn-state assoc :latest-submitted-tx {:tx-id msg-id
-                                                                                          :system-time (.getSystemTime tx)
-                                                                                          :committed? (.getCommitted tx)
-                                                                                          :error (.getError tx)})
-
+                                                                      (.executeTx node-conn tx-ops tx-opts))]
                                             (when-let [error (.getError tx)]
                                               (throw error))))))))
         (catch Throwable t
@@ -1001,9 +993,10 @@
                                                                                                   :part (int part-idx)
                                                                                                   :msg_id msg-id})]
 
-                                                                   "latest_submitted_tx" (mapv (into {} (assoc (:latest-submitted-tx @conn-state)
-                                                                                                               :await-token await-token))
-                                                                                               [:tx-id :system-time :committed? :error :await-token])
+                                                                   "latest_submitted_tx" (let [lst (.getLastSubmittedTx node-conn)]
+                                                                                           [(some-> lst .getTxId) (some-> lst .getSystemTime)
+                                                                                            (some-> lst .getCommitted) (some-> lst .getError)
+                                                                                            await-token])
                                                                    [(get session-params variable)]))]
 
                        (-> stmt
@@ -1285,7 +1278,7 @@
       (metrics/inc-counter! query-error-counter)
       (throw e))))
 
-(defn- attach-db [{:keys [node conn-state] :as conn} db-name config-yaml sql]
+(defn- attach-db [{:keys [conn-state] :as conn} db-name config-yaml sql]
   (let [default-db (conn-db-name conn)]
     (when-not (= default-db "xtdb")
       (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
@@ -1302,14 +1295,11 @@
                                             (str "Invalid database config in `ATTACH DATABASE`: " (ex-message e))
                                             {:sql sql}))))]
     (with-auth-check conn
-      (let [{:keys [tx-id error] :as tx} (xtp/attach-db node db-name db-config)]
-        (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
-        (swap! conn-state assoc :latest-submitted-tx tx)
-
-        (when error
+      (let [tx (.attachDb ^Xtdb$Connection (:node-conn @conn-state) db-name db-config)]
+        (when-let [error (.getError tx)]
           (throw error))))))
 
-(defn- detach-db [{:keys [node conn-state] :as conn} db-name]
+(defn- detach-db [{:keys [conn-state] :as conn} db-name]
   (let [default-db (conn-db-name conn)]
     (when-not (= default-db "xtdb")
       (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
@@ -1320,11 +1310,8 @@
                           {:db-name db-name})))
 
   (with-auth-check conn
-    (let [{:keys [tx-id error] :as tx} (xtp/detach-db node db-name)]
-      (.recordTx ^Xtdb$Connection (:node-conn @conn-state) "xtdb" tx-id)
-      (swap! conn-state assoc :latest-submitted-tx tx)
-
-      (when error
+    (let [tx (.detachDb ^Xtdb$Connection (:node-conn @conn-state) db-name)]
+      (when-let [error (.getError tx)]
         (throw error)))))
 
 (defn- ->tx-opts-map [^ParsedStatement$TxOptions tx-opts]
