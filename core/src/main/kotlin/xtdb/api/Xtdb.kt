@@ -119,7 +119,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
         private val sqlPlanner: SqlPlanner,
-        private val clock: Clock,
+        // mutable so a frontend can seed it (pgwire pushes the server clock at startup); current-time only,
+        // and only really exercised by tests pinning a fixed instant.
+        var clock: Clock,
         // the query tracer, gated by the node's query-tracing config (null = off); threaded into every read's
         // QueryOpts so the connection — not each frontend — owns query tracing.
         private val tracer: Tracer?,
@@ -614,15 +616,20 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        fun commitTx() {
-            val tx = tx ?: return
+        // Returns the executed tx (committed flag + system-time + error) so a frontend can both react to an
+        // abort and surface it via SHOW LATEST_SUBMITTED_TX. null when there's nothing to commit (no tx, or a
+        // ReadOnly / still-unresolved one) and for an async submit, which isn't awaited so has no outcome yet.
+        fun commitTx(): ExecutedTx? {
+            val tx = tx ?: return null
             this.tx = null
             defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
             // a ReadWrite tx commits even when its buffer is empty — an explicit write tx records a transaction
             // (and advances the await-token); a ReadOnly / still-unresolved tx is a no-op.
-            val mode = tx.mode as? ReadWrite ?: return
+            val mode = tx.mode as? ReadWrite ?: return null
             val opts = TxOpts(systemTime = mode.systemTime, user = user, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
-            expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops -> if (mode.async) submitTx(ops, opts) else executeTx(ops, opts) }
+            return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops ->
+                if (mode.async) { submitTx(ops, opts); null } else executeTx(ops, opts)
+            }
         }
 
         private fun expandStaticOps(ops: List<TxOp>, tz: ZoneId): List<TxOp> =
