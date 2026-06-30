@@ -30,10 +30,9 @@
            (org.postgresql.util PGobject PSQLException)
            (xtdb.pgwire PgType)
            (xtdb JsonSerde JsonLdSerde)
-           (xtdb.api DataSource$ConnectionBuilder PasswordHash)
+           (xtdb.api DataSource$ConnectionBuilder PasswordHash Xtdb$Connection)
            xtdb.api.log.SourceMessage$FlushBlock
-           xtdb.pgwire.Server
-           xtdb.tx.Sql))
+           xtdb.pgwire.Server))
 
 (set! *warn-on-reflection* false) ; gagh! lazy. don't do this.
 (set! *unchecked-math* false)
@@ -831,12 +830,12 @@
       (q db ["insert into foo(_id) values (42)"]))
     (is (= [{:xt/id 42}] (q conn ["SELECT * FROM foo"])))))
 
-(defn- session-variables [server-conn ks]
-  (-> server-conn :conn-state deref :session (select-keys ks)))
-
 (deftest session-access-mode-default-test
   (with-open [_ (jdbc-conn)]
-    (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode])))))
+    ;; a fresh connection forces no session access mode — a bare BEGIN stays unresolved, inferred by its
+    ;; first statement (see transactions-infer-access-mode-by-default-test)
+    (let [{:keys [conn-state]} (get-last-conn)]
+      (is (nil? (.getDefaultAccessMode ^Xtdb$Connection (:node-conn @conn-state)))))))
 
 (defn tx! [conn & sql]
   (jdbc/with-transaction [tx conn]
@@ -924,7 +923,7 @@
         (testing "current ts instant is pinned at BEGIN, regardless of what happens to the session clock"
 
           (let [{:keys [conn-state]} (get-last-conn)]
-            (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
+            (.setClock ^Xtdb$Connection (:node-conn @conn-state) (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
 
           (jdbc/with-transaction [tx conn]
             (let [epoch Instant/EPOCH]
@@ -934,7 +933,7 @@
 
               (testing "inside a transaction the instant is fixed, regardless of the session clock"
                 (let [{:keys [conn-state]} (get-last-conn)]
-                  (swap! conn-state assoc-in [:session :clock] custom-clock))
+                  (.setClock ^Xtdb$Connection (:node-conn @conn-state) custom-clock))
                 (t/is (= epoch (current-instant tx)))))))))))
 
 (deftest test-timezone
@@ -1306,7 +1305,7 @@
       (t/is (thrown-with-msg? PSQLException #"Data Exception - trim error."
                               (q conn ["INSERT INTO foo (_id) VALUES (TRIM(LEADING 'abc' FROM ''))"])))
 
-      (t/is (thrown-with-msg? PSQLException #"ERROR: Parameter error: 0 provided, 2 expected"
+      (t/is (thrown-with-msg? PSQLException #"ERROR: Arguments list was expected but not provided"
                               (q conn ["INSERT INTO tbl1 (_id, foo) VALUES ($1, $2)"]))))))
 
 (deftest test-column-order
@@ -1428,7 +1427,7 @@
 
     (t/is (= [{:xt/id 2, :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
-                                 {:arg-idx 0, :sql "ASSERT 1 = (SELECT COUNT(*) FROM foo)", :tx-op-idx 0
+                                 {:sql "ASSERT 1 = (SELECT COUNT(*) FROM foo)", :tx-op-idx 0
                                   :tx-key #xt/tx-key {:tx-id 2, :system-time #xt/instant "2020-01-03T00:00:00Z"}}]}
               {:xt/id 1, :committed true}
               {:xt/id 0, :committed true}]
@@ -1789,23 +1788,10 @@
       (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 1, :a "one"}])
       (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 2, :a "two"}])
       (jdbc/execute! tx ["INSERT INTO foo RECORDS {_id: ?, a: ?}" 3, "three"])
-      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}])
+      (jdbc/execute! tx ["INSERT INTO foo RECORDS ?" {:xt/id 4, :a "four"}]))
 
-      ;; HACK - leaning into internal state
-      (let [dml-buf (-> @(:server-state *server*)
-                        (get-in [:connections 1 :conn-state])
-                        deref
-                        (get-in [:transaction :dml-buf]))]
-        (t/is (= ["INSERT INTO foo RECORDS $1"
-                   "INSERT INTO foo RECORDS {_id: $1, a: $2}"
-                   "INSERT INTO foo RECORDS $1"]
-                  (mapv Sql/.getSql dml-buf)))
-        (t/is (= [[[{:_id 1, :a "one"}]
-                   [{:_id 2, :a "two"}]]
-                  [[3 "three"]]
-                  [[{:_id 4, :a "four"}]]]
-                  (mapv Sql/.getArgRows dml-buf)))))
-
+    ;; the connection coalesces consecutive same-SQL ops (verified structurally in InProcessAdbcTest); through
+    ;; pgwire, every row of the run still lands as a distinct insert
     (t/is (= [{:xt/id 1, :a "one"}
               {:xt/id 2, :a "two"}
               {:xt/id 3, :a "three"}
@@ -1916,7 +1902,7 @@
 
     (t/is (= [{:tx-id 1, :system-time #xt/zdt "2020-01-02T00:00Z[UTC]", :committed false,
                :error #xt/error [:conflict :xtdb/assert-failed "Assert failed"
-                                 {:arg-idx 0, :sql "ASSERT FALSE", :tx-op-idx 0,
+                                 {:sql "ASSERT FALSE", :tx-op-idx 0,
                                   :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]
                :await-token (basis/->tx-basis-str {"xtdb" [1]})}]
              (q conn ["SHOW LATEST_SUBMITTED_TX"])))))
@@ -2873,7 +2859,7 @@ ORDER BY 1,2;")
       (t/is (= {:sql-state "P0004",
                 :message "boom",
                 :detail #xt/error [:conflict :xtdb/assert-failed "boom"
-                                   {:arg-idx 0, :sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
+                                   {:sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
                                     :tx-key #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}}]}
                (reading-ex
                  (q conn ["ASSERT 2 < 1, 'boom'"])))))
@@ -2884,7 +2870,7 @@ ORDER BY 1,2;")
       (t/is (= {:sql-state "P0004",
                 :message "boom",
                 :detail #xt/error [:conflict :xtdb/assert-failed "boom"
-                                   {:arg-idx 0, :sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
+                                   {:sql "ASSERT 2 < 1, 'boom'", :tx-op-idx 0,
                                     :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}]}
                (reading-ex
                  (q conn ["COMMIT"]))))

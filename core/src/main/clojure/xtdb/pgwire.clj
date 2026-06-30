@@ -18,7 +18,6 @@
             [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
-            [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -39,7 +38,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$CommittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -50,11 +49,11 @@
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
-           (xtdb.query PreparedQuery QueryOpts SqlParser SqlPlanner
-                       ParsedStatement ParsedStatement$Visitor ParsedStatement$TxOptions
+           (xtdb.query PreparedQuery SqlParser SqlPlanner
+                       ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Query ParsedStatement$Dml ParsedStatement$ShowVariable
                        ParsedStatement$CopyIn ParsedStatement$Execute)
-           (xtdb.tx PutDocs PutRel Sql TxOpts)))
+           (xtdb.tx PutDocs PutRel TxOp$Sql)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -231,12 +230,10 @@
                                                                  (str value))})))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
+  ;; the connection owns the tz; mid-tx it's tx-local (session-scoped on COMMIT, reverted on ROLLBACK) — so
+  ;; go through setTimeZone rather than the raw defaultTz setter, which would miss the open tx.
   (let [^ZoneId zone-id (if (instance? ZoneId tz) tz (ZoneId/of tz))]
-    (.setDefaultTz ^Xtdb$Connection (:node-conn @conn-state) zone-id)
-    (swap! conn-state
-           (fn [conn-state]
-             (cond-> conn-state
-               (:transaction conn-state) (assoc-in [:transaction :default-tz] zone-id)))))
+    (.setTimeZone ^Xtdb$Connection (:node-conn @conn-state) zone-id))
 
   (set-session-parameter conn time-zone-nf-param-name tz))
 
@@ -325,12 +322,11 @@
   "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
   If the status is omitted, the status is determined from whether a transaction is currently open."
   ([conn]
-   ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
-   (if-some [transaction (:transaction @(:conn-state conn))]
-     (if (:failed transaction)
-       (cmd-send-ready conn :failed-transaction)
-       (cmd-send-ready conn :transaction))
-     (cmd-send-ready conn :idle)))
+   (let [^Xtdb$Connection node-conn (:node-conn @(:conn-state conn))]
+     (cond
+       (.isTxFailed node-conn) (cmd-send-ready conn :failed-transaction)
+       (.isTxOpen node-conn) (cmd-send-ready conn :transaction)
+       :else (cmd-send-ready conn :idle))))
   ([conn status]
    (pgio/cmd-write-msg conn pgio/msg-ready {:status status})))
 
@@ -346,6 +342,9 @@
         (if (= time-zone-nf-param-name k)
           (set-time-zone conn v)
           (set-session-parameter conn k v))))
+
+    ;; thread the authenticated user onto the connection — it goes into every write's TxOpts (audit trail)
+    (.setUser ^Xtdb$Connection (:node-conn @(:conn-state conn)) (get startup-opts "user"))
 
     (-> conn
         ;; backend key data (used to identify conn for cancellation)
@@ -378,7 +377,13 @@
                  (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
-        node-conn (xtp/open-connection node db-name)
+        node-conn (let [^Xtdb$Connection node-conn (xtp/open-connection node db-name)]
+                    ;; seed the connection's clock from the server's, when set (tests pin a fixed clock there);
+                    ;; otherwise the connection keeps its own. It owns the clock thereafter, pinning
+                    ;; current-time off it at BEGIN.
+                    (when-let [clock (:clock @(:server-state server))]
+                      (.setClock node-conn clock))
+                    node-conn)
         conn (assoc conn :node node, :authn authn, :db db)
         _ (swap! (:conn-state conn) assoc :node-conn node-conn)]
     (if authn
@@ -525,95 +530,55 @@
 
 ;;; server impl
 
-(defn- coerce->tz [tz]
-  (cond
-    (instance? ZoneId tz) tz
-    (instance? String tz) (try
-                            (ZoneId/of tz)
-                            (catch Exception e
-                              (throw (pgio/err-protocol-violation (format "invalid timezone '%s': %s" tz (ex-message e))))))
+(defn- begin-implicit
+  "Open an implicit transaction — one pgwire started itself (no client BEGIN), so pgwire will auto-commit it.
+  [access-mode] is :read-only / :read-write / nil (bare — the connection takes its session default access mode).
+  The connection pins the read basis (awaiting this connection's own writes) at BEGIN."
+  [{:keys [conn-state]} access-mode]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+    (case access-mode
+      :read-only (.beginReadOnly node-conn)
+      :read-write (.beginWriteOnly node-conn nil nil false)
+      (.beginTx node-conn))
+    (swap! conn-state assoc :implicit-tx? true)))
 
-    :else (throw (pgio/err-protocol-violation (format "invalid timezone '%s'" (str tz))))))
+(defn- end-transaction
+  "Tear down pgwire's per-tx wire state — open portals and the implicit-tx marker. The connection has
+  already discarded its own transaction (commitTx / rollbackTx)."
+  [{:keys [conn-state] :as conn}]
+  (close-all-portals conn)
+  (swap! conn-state dissoc :implicit-tx?))
 
-(defn cmd-begin [{:keys [node conn-state server]} tx-opts {:keys [args]}]
-  (let [^SqlPlanner planner (:sql-planner server)
-        eval-lit (fn [expr] (.evalLiteral planner expr args))]
-    (swap! conn-state
-           (fn [{:keys [session ^Xtdb$Connection node-conn] :as st}]
-             (let [await-token (if-let [[_ tok] (find tx-opts :await-token)]
-                                 (eval-lit tok)
-                                 (.getAwaitToken node-conn))
-                   {:keys [^Clock clock]} session]
-
-               (when-not (= :read-write (:access-mode tx-opts))
-                 (xt-log/await-node node await-token #xt/duration "PT30S"))
-
-               (-> st
-                   (update :transaction
-                           (fn [{:keys [access-mode]}]
-                             (if access-mode
-                               (throw (pgio/err-protocol-violation "transaction already started"))
-
-                               (-> {:current-time (.instant clock)
-                                    :snapshot-token (xtp/snapshot-token node)
-                                    :default-tz (.getDefaultTz node-conn)
-                                    :implicit? false}
-                                   (into (:characteristics session))
-                                   (into (-> tx-opts
-                                             (update :default-tz #(some-> % eval-lit (coerce->tz)))
-                                             (update :system-time #(some-> % eval-lit (time/->instant {:default-tz (.getDefaultTz node-conn)})))
-                                             (update :current-time #(some-> % eval-lit (time/->instant {:default-tz (.getDefaultTz node-conn)})))
-                                             (update :snapshot-token #(some-> % eval-lit))
-                                             (update :snapshot-time #(some-> % eval-lit))
-                                             (update :user-metadata #(some-> % eval-lit))
-                                             (update :async? #(some-> % eval-lit boolean))
-                                             (->> (into {} (filter (comp some? val))))))
-                                   (assoc :await-token await-token)))))))))))
-
-(defn close-transaction [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :transaction)
-  (close-all-portals conn))
-
-(defn cmd-commit [{:keys [conn-state ^BufferAllocator allocator, tx-error-counter, tx-latency-timer] :as conn}]
-  (let [{:keys [transaction session ^Xtdb$Connection node-conn]} @conn-state
-        {:keys [failed dml-buf system-time access-mode default-tz async? user-metadata]} transaction
-        {:keys [parameters]} session]
-    (if failed
+(defn cmd-commit [{:keys [conn-state tx-error-counter tx-latency-timer] :as conn}]
+  ;; the connection owns the buffered ops + tx options; it submits (sync or async) and clears its transaction.
+  ;; commitTx returns the executed tx for a sync commit (nil for async / a read-only or empty tx) — pgwire
+  ;; surfaces it through SHOW LATEST_SUBMITTED_TX and re-throws an aborted tx's error.
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+    (if (.isTxFailed node-conn)
       (throw (pgio/err-protocol-violation "transaction failed"))
 
       (try
-        (when (= :read-write access-mode)
-          (metrics/record-callable! tx-latency-timer
-                                    (let [tx-opts (TxOpts. default-tz
-                                                           (some-> system-time (time/->instant {:default-tz default-tz}))
-                                                           (get parameters "user")
-                                                           user-metadata)]
-                                      (util/with-open [tx-ops (->> dml-buf
-                                                                   (mapcat (fn [op]
-                                                                             (or (when (instance? Sql op)
-                                                                                   (let [^Sql op op]
-                                                                                     ;; temporary: we convert to args-rel here and then back to tuples in sql->static-ops
-                                                                                     ;; to be replaced when this moves to ADBC.
-                                                                                     (seq (util/with-open [args-rel (apply vw/open-args allocator (.getArgRows op))]
-                                                                                            (sql/sql->static-ops (.getSql op) args-rel)))))
-                                                                                 [op])))
-                                                                   (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
-                                        (if async?
-                                          (with-auth-check conn
-                                            (.submitTx node-conn tx-ops tx-opts))
-
-                                          (let [^Xtdb$ExecutedTx tx (with-auth-check conn
-                                                                      (.executeTx node-conn tx-ops tx-opts))]
-                                            (when-let [error (.getError tx)]
-                                              (throw error))))))))
+        (metrics/record-callable! tx-latency-timer
+                                  (when-let [^Xtdb$CommittedTx committed (with-auth-check conn (.commitTx node-conn))]
+                                    (let [tx-id (.getTxId committed)
+                                          ^Xtdb$ExecutedTx executed (.getExecuted committed)]
+                                      ;; sync commit carries full detail; async carries only the txId
+                                      (swap! conn-state assoc :latest-submitted-tx
+                                             (if executed
+                                               {:tx-id tx-id, :system-time (.getSystemTime executed),
+                                                :committed? (.getCommitted executed), :error (.getError executed)}
+                                               {:tx-id tx-id}))
+                                      (when (and executed (.getError executed))
+                                        (throw (.getError executed))))))
         (catch Throwable t
           (metrics/inc-counter! tx-error-counter)
           (throw t))
         (finally
-          (close-transaction conn))))))
+          (end-transaction conn))))))
 
-(defn cmd-rollback [conn]
-  (close-transaction conn))
+(defn cmd-rollback [{:keys [conn-state] :as conn}]
+  (.rollbackTx ^Xtdb$Connection (:node-conn @conn-state))
+  (end-transaction conn))
 
 (defn- fallback-type [session]
   (case (get-in session [:parameters "fallback_output_format"] :json)
@@ -700,10 +665,10 @@
 (defmethod handle-msg* :msg-sync [{:keys [conn-state] :as conn} _]
   ;; Sync commands are sent by the client to commit transactions
   ;; and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)
-  (let [{:keys [implicit? failed]} (:transaction @conn-state)]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (try
-      (when implicit?
-        (if failed
+      (when (:implicit-tx? @conn-state)
+        (if (.isTxFailed node-conn)
           (cmd-rollback conn)
           (cmd-commit conn)))
       (catch Throwable t
@@ -874,7 +839,7 @@
 
     (catch Interrupted e (throw e))
     (catch Exception e
-      (when (= :read-write (get-in @conn-state [:transaction :access-mode]))
+      (when (.isTxReadWrite ^Xtdb$Connection (:node-conn @conn-state))
         (metrics/inc-counter! tx-error-counter))
 
       (throw e))))
@@ -929,26 +894,24 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator query-tracer] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session transaction ^Xtdb$Connection node-conn]} @conn-state
-        {:keys [^Clock clock], session-params :parameters} session
-        await-token (:await-token transaction (.getAwaitToken node-conn))
-
-        query-opts (QueryOpts. (or (some-> (or (:current-time stmt) (:current-time transaction))
-                                            (time/->instant))
-                                   (.instant clock))
-                              (or (:default-tz transaction) (.getDefaultTz node-conn))
-                              (:snapshot-token stmt (:snapshot-token transaction))
-                              (some-> (or (:snapshot-time stmt) (:snapshot-time transaction))
-                                      (time/->instant))
-                              query-tracer)
+(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
+  (let [{:keys [session ^Xtdb$Connection node-conn]} @conn-state
+        session-params (:parameters session)
+        ;; an open tx's await-token shadows the connection's (BEGIN ... WITH (AWAIT_TOKEN …)) for SHOW
+        await-token (.getEffectiveAwaitToken node-conn)
 
         xt-args (xtify-args conn args stmt)]
 
-    (letfn [(->cursor ^xtdb.ResultCursor [xt-args]
+    ;; the connection owns the QueryOpts (basis / tz / tracer) and the read access-mode gate — pgwire drives its
+    ;; own cursor but opens it through the connection. checked? reads through the gate (openQuery); a SHOW or an
+    ;; internal args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that
+    ;; verify-permissibility let through, so it too opens unchecked (openQuery would reject it).
+    (letfn [(->cursor ^xtdb.ResultCursor [^PreparedQuery pq xt-args checked?]
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
-                  (.openQuery prepared-query args-rel query-opts))))
+                  (if (and checked? (not (.isTxReadWrite node-conn)))
+                    (.openQuery node-conn pq args-rel)
+                    (.openUncheckedQuery node-conn pq args-rel)))))
 
             (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
@@ -969,14 +932,15 @@
         (.accept parsed
                (reify ParsedStatement$Visitor
                  (visitQuery [_ _]
-                   (util/with-close-on-catch [cursor (->cursor xt-args)]
+                   (util/with-close-on-catch [cursor (->cursor prepared-query xt-args true)]
                      (-> stmt
                          (assoc :cursor cursor,
                                 :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))
 
                  (visitShowVariable [_ ps]
                    (let [variable (.getVariable ps)]
-                     (util/with-close-on-catch [cursor (->cursor (case variable
+                     (util/with-close-on-catch [cursor (->cursor prepared-query
+                                                                 (case variable
                                                                    "await_token" [await-token]
                                                                    "latest_completed_txs" [(for [[db-name parts] (xtp/latest-completed-txs node)
                                                                                                  [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)]
@@ -1000,7 +964,8 @@
                                                                                            [(some-> lst .getTxId) (some-> lst .getSystemTime)
                                                                                             (some-> lst .getCommitted) (some-> lst .getError)
                                                                                             await-token])
-                                                                   [(get session-params variable)]))]
+                                                                   [(get session-params variable)])
+                                                                 false)]
 
                        (-> stmt
                            (assoc :cursor cursor,
@@ -1008,7 +973,7 @@
                                                (with-result-formats result-format)))))))
 
                  (visitExecute [_ ps]
-                   (util/with-open [^ResultCursor args-cursor (->cursor xt-args)]
+                   (util/with-open [^ResultCursor args-cursor (->cursor prepared-query xt-args false)]
                      ;; we've bound the args query rather than the inner query; now bind the inner query and
                      ;; pretend this was the one we were running all along
                      (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (.getName ps)])
@@ -1023,7 +988,9 @@
                          (cond
                            (instance? ParsedStatement$Query inner-parsed)
                            (with-auth-check conn
-                             (util/with-close-on-catch [inner-cursor (.openQuery inner-pq args-rel query-opts)]
+                             (util/with-close-on-catch [inner-cursor (if (.isTxReadWrite node-conn)
+                                                                       (.openUncheckedQuery node-conn inner-pq args-rel)
+                                                                       (.openQuery node-conn inner-pq args-rel))]
                                (-> inner
                                    (assoc :cursor inner-cursor
                                           :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
@@ -1082,7 +1049,10 @@
 
 (defn- verify-permissibility
   [{:keys [conn-state server]} {:keys [^ParsedStatement parsed]}]
-  (let [{:keys [access-mode]} (:transaction @conn-state)
+  ;; the connection gates access-mode too (executeDml / resolveForQuery), but pgwire keeps these checks for
+  ;; their own error codes/messages, the read-only-server rule (a server property, not connection state), and
+  ;; the pgjdbc type-query special case — so it reads the tx's resolved access-mode off the connection.
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
         dml? (instance? ParsedStatement$Dml parsed)
         query? (instance? ParsedStatement$Query parsed)]
     (when (and dml? (:read-only? server))
@@ -1090,12 +1060,12 @@
                             "DML is not allowed on the READ ONLY server"
                             {:query (.getOriginalSql parsed)})))
 
-    (when (and dml? (= :read-only access-mode))
+    (when (and dml? (.isTxReadOnly node-conn))
       (throw (err/incorrect :xtdb/dml-in-read-only-tx
                             "DML is not allowed in a READ ONLY transaction"
                             {:query (.getOriginalSql parsed)})))
 
-    (when (and query? (= :read-write access-mode)
+    (when (and query? (.isTxReadWrite node-conn)
                (not= pgjdbc-type-query (str/replace (.getOriginalSql parsed) #"  +" " ")))
       (throw (err/incorrect :xtdb/queries-in-read-write-tx
                             "Queries are unsupported in a DML transaction"
@@ -1127,15 +1097,17 @@
   (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (.evalLiteral ^SqlPlanner (:sql-planner server) token-expr args))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
-(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} session-characteristics]
-  (swap! conn-state update-in [:session :characteristics] (fnil into {}) session-characteristics)
+(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} access-mode]
+  ;; the connection holds the default access mode a subsequent bare BEGIN takes
+  (.setSessionCharacteristics ^Xtdb$Connection (:node-conn @conn-state) access-mode)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [node conn-state tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
-  (when (get-in @conn-state [:transaction :failed])
-    (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
+(defn- cmd-exec-dml [{:keys [node conn-state ^BufferAllocator allocator tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
+        query (.getOriginalSql parsed)]
+    (when (.isTxFailed node-conn)
+      (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
-  (let [query (.getOriginalSql parsed)]
     (when (or (not= (count param-oids) (count args))
               (some (fn [idx]
                       (and (zero? (nth param-oids idx))
@@ -1165,18 +1137,12 @@
         (catch Throwable e
           (log/debug e "Error planning DML statement for warnings"))))
 
-    (when-not (:transaction @conn-state)
-      (cmd-begin conn {:implicit? true, :access-mode :read-write} {}))
+    (when-not (.isTxOpen node-conn)
+      (begin-implicit conn :read-write))
 
-    (swap! conn-state update-in [:transaction :dml-buf]
-           (fnil (fn [dml-ops]
-                   (or (when-let [^Sql last-op (peek dml-ops)]
-                         (when (and (instance? Sql last-op)
-                                    (= (.getSql last-op) query))
-                           (conj (pop dml-ops)
-                                 (Sql. query (conj (or (.getArgRows last-op) []) args)))))
-                       (conj dml-ops (Sql. query [args]))))
-                 []))
+    ;; hand the op to the connection — it buffers, coalescing consecutive same-SQL ops, and submits at COMMIT.
+    ;; no-param DML passes nil args (not an empty relation), matching the connection's own DML path.
+    (.executeDml node-conn (TxOp$Sql. query (when (seq args) (vw/open-args allocator args))))
 
     ;; oid is always 0 (legacy pg); row count is 0 because we're async
     (pgio/cmd-write-msg conn pgio/msg-command-complete
@@ -1211,12 +1177,12 @@
                       {:keys [limit ^ParsedStatement parsed ^ResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
-  (let [transaction (get-in @conn-state [:transaction])]
-    (when (:failed transaction)
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+    (when (.isTxFailed node-conn)
       (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
 
-    (when-not (or transaction (instance? ParsedStatement$ShowVariable parsed))
-      (cmd-begin conn {:implicit? true :access-mode :read-only} {})))
+    (when-not (or (.isTxOpen node-conn) (instance? ParsedStatement$ShowVariable parsed))
+      (begin-implicit conn :read-only)))
 
   (try
     (let [!n-rows-out (volatile! 0)
@@ -1287,7 +1253,7 @@
       (throw (err/incorrect ::attach-db-on-secondary "Can only attach databases when connected to the primary 'xtdb' database."
                             {:db default-db}))))
 
-  (when (false? (get-in @conn-state [:transaction :implicit?]))
+  (when (and (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state)) (not (:implicit-tx? @conn-state)))
     (throw (err/incorrect ::attach-db-in-tx "Cannot attach a database in a transaction."
                           {:db-name db-name})))
 
@@ -1308,7 +1274,7 @@
       (throw (err/incorrect ::detach-db-on-secondary "Can only detach databases when connected to the primary 'xtdb' database."
                             {:db default-db}))))
 
-  (when (false? (get-in @conn-state [:transaction :implicit?]))
+  (when (and (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state)) (not (:implicit-tx? @conn-state)))
     (throw (err/incorrect ::detach-db-in-tx "Cannot detach a database in a transaction."
                           {:db-name db-name})))
 
@@ -1317,32 +1283,8 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
-(defn- ->tx-opts-map [^ParsedStatement$TxOptions tx-opts]
-  ;; pass the raw expr contexts through; cmd-begin evaluates them via the SqlPlanner and coerces
-  (cond-> {}
-    (.getAccessMode tx-opts) (assoc :access-mode (case (str (.getAccessMode tx-opts))
-                                                   "READ_ONLY" :read-only
-                                                   "READ_WRITE" :read-write))
-    (.getSystemTime tx-opts) (assoc :system-time (.getSystemTime tx-opts))
-    (.getSnapshotToken tx-opts) (assoc :snapshot-token (.getSnapshotToken tx-opts))
-    (.getSnapshotTime tx-opts) (assoc :snapshot-time (.getSnapshotTime tx-opts))
-    (.getClockTime tx-opts) (assoc :current-time (.getClockTime tx-opts))
-    (.getAwaitToken tx-opts) (assoc :await-token (.getAwaitToken tx-opts))
-    (.getDefaultTz tx-opts) (assoc :default-tz (.getDefaultTz tx-opts))
-    (.getUserMetadata tx-opts) (assoc :user-metadata (.getUserMetadata tx-opts))
-    (.getAsync tx-opts) (assoc :async? (.getAsync tx-opts))))
-
 (defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
-
-  (swap! conn-state (fn [{:keys [transaction] :as cs}]
-                      (cond-> cs
-                        transaction (update-in [:transaction :access-mode]
-                                               (fnil identity
-                                                     (cond
-                                                       (instance? ParsedStatement$Query parsed) :read-only
-                                                       (instance? ParsedStatement$Dml parsed) :read-write
-                                                       :else nil))))))
 
   (cond
     canned-response (cmd-write-canned-response conn canned-response)
@@ -1351,12 +1293,17 @@
     :else
     (.accept parsed
              (reify ParsedStatement$Visitor
-               (visitQuery [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
+               (visitQuery [_ _]
+                 ;; the read gate + basis resolution happen when bind-stmt opens the cursor through the
+                 ;; connection's openQuery (a read-write tx opens unchecked — the pgjdbc carve-out).
+                 (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
                (visitShowVariable [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
                (visitDml [_ _] (cmd-exec-dml conn portal))
 
                (visitBegin [_ stmt]
-                 (cmd-begin conn (->tx-opts-map (.getTxOptions stmt)) portal)
+                 ;; pass the portal's bound args — a BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
+                 (.beginParsedTx ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) (:args portal))
+                 (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
                (visitCommit [_ _]
@@ -1370,10 +1317,7 @@
                (visitSetTransaction [_ _] (cmd-set-transaction conn nil))
 
                (visitSetSessionCharacteristics [_ stmt]
-                 (cmd-set-session-characteristics conn (when-let [am (.getAccessMode stmt)]
-                                                         {:access-mode (case (str am)
-                                                                         "READ_ONLY" :read-only
-                                                                         "READ_WRITE" :read-write)})))
+                 (cmd-set-session-characteristics conn (.getAccessMode stmt)))
 
                (visitSetTimeZone [_ stmt] (cmd-set-time-zone conn (.getZone stmt) (:args portal)))
                (visitSetAwaitToken [_ stmt] (cmd-set-await-token conn (.getToken stmt) (:args portal)))
@@ -1437,10 +1381,13 @@
 
   (try
     (doseq [{:keys [^ParsedStatement parsed] :as stmt} (parse-sql query)]
-      (when-not (or (boolean (:transaction @conn-state))
+      ;; an explicit BEGIN opens its own tx (and the connection rejects a double-begin), so don't auto-begin
+      ;; for it; SHOW / COPY don't need a wrapping tx either.
+      (when-not (or (.isTxOpen ^Xtdb$Connection (:node-conn @conn-state))
+                    (instance? ParsedStatement$Begin parsed)
                     (instance? ParsedStatement$ShowVariable parsed)
                     (instance? ParsedStatement$CopyIn parsed))
-        (cmd-begin conn {:implicit? true} {}))
+        (begin-implicit conn nil))
 
       (try
         (let [{:keys [param-oids canned-response] :as prepared-stmt} (prep-stmt conn stmt)]
@@ -1465,16 +1412,17 @@
         (catch Interrupted e (throw e))
         (catch InterruptedException e (throw e))
         (catch Exception e
-          (when-let [{:keys [implicit?]} (:transaction @conn-state)]
-            (if implicit?
-              (cmd-rollback conn)
-              (swap! conn-state util/maybe-update :transaction assoc :failed true, :err e)))
+          (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+            (when (.isTxOpen node-conn)
+              (if (:implicit-tx? @conn-state)
+                (cmd-rollback conn)
+                (.failTx node-conn e))))
 
           (send-ex conn e))))
 
-    (let [{:keys [implicit? failed]} (:transaction @conn-state)]
-      (when implicit?
-        (if failed
+    (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+      (when (:implicit-tx? @conn-state)
+        (if (.isTxFailed node-conn)
           (cmd-rollback conn)
           (cmd-commit conn))))
 
@@ -1492,9 +1440,20 @@
                                             (throw (err/incorrect ::copy-not-in-progress "COPY IN not in progress, cannot write data")))]
     (.write write-ch (ByteBuffer/wrap data))))
 
-(defn- copy-transit-batch ^long [{:keys [conn-state] :as conn} {:keys [format, ^Path copy-file]}]
-  (let [started-tx? (when-not (:transaction @conn-state)
-                      (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
+(defn- copy-exec-op
+  "Buffer one converted COPY op on the connection (the client PutDocs/PutRel is converted to a core TxOp via
+  open-tx-op, exactly as the tx submit path does). The connection owns the op once buffered."
+  [{:keys [conn-state] :as conn} client-op allocator]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+    (when (.isTxReadOnly node-conn)
+      (throw (err/incorrect :xtdb/copy-in-read-only-tx
+                            "COPY is not allowed in a READ ONLY transaction")))
+    (.executeDml node-conn (xt-log/open-tx-op client-op allocator {:default-tz (.getDefaultTz node-conn)}))))
+
+(defn- copy-transit-batch ^long [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [table-name format, ^Path copy-file]}]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
+        started-tx? (when-not (.isTxOpen node-conn)
+                      (begin-implicit conn :read-write)
                       true)]
     (try
       (let [docs (with-open [is (io/input-stream (.toFile copy-file))]
@@ -1504,12 +1463,7 @@
                                                              :transit-msgpack :msgpack)
                                                            {:handlers serde/transit-read-handler-map}))))]
 
-        (swap! conn-state
-               (fn [{:keys [copy], :as conn-state}]
-                 (-> conn-state
-                     (update-in [:transaction :dml-buf] (fnil conj [])
-                                (PutDocs. (:table-name copy) docs nil nil))
-                     (dissoc :copy))))
+        (copy-exec-op conn (PutDocs. table-name docs nil nil) allocator)
 
         (when started-tx?
           (cmd-commit conn))
@@ -1521,41 +1475,30 @@
           (cmd-rollback conn))
         (throw e)))))
 
-(defn- copy-arrow-batches ^long [{:keys [^BufferAllocator allocator, conn-state] :as conn} {:keys [format, ^Path copy-file]}]
-  (let [!doc-count (atom 0)]
+(defn- copy-arrow-batches ^long [{:keys [^BufferAllocator allocator, conn-state] :as conn} {:keys [table-name format, ^Path copy-file]}]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
+        !doc-count (atom 0)]
     (util/with-open [^Relation$ILoader ldr (case format
                                              :arrow-stream (Relation/streamLoader allocator copy-file)
                                              :arrow-file (Relation/loader allocator copy-file))
                      rel (Relation. allocator (.getSchema ldr))]
-      (letfn [(add-batch! []
-                (swap! conn-state
-                       (fn [{:keys [copy], :as conn-state}]
-                         (-> conn-state
-                             (update-in [:transaction :dml-buf] (fnil conj [])
-                                        (PutRel. (:table-name copy) (.getAsArrowStream rel)))))))]
+      (if (.isTxOpen node-conn)
+        ;; inside an open tx: buffer every batch on it (the connection rejects a read-only tx, resolves an
+        ;; unresolved one to read-write); the user's COMMIT submits them.
+        (while (.loadNextPage ldr rel)
+          (copy-exec-op conn (PutRel. table-name (.getAsArrowStream rel)) allocator)
+          (swap! !doc-count + (.getRowCount rel)))
 
-        (if-let [{:keys [access-mode]} (:transaction @conn-state)]
-          (do
-            (when (= access-mode :read-only)
-              (throw (err/incorrect :xtdb/copy-in-read-only-tx
-                                    "COPY is not allowed in a READ ONLY transaction")))
-            (swap! conn-state update-in [:transaction :access-mode] (fnil identity :read-write))
-
-            (while (.loadNextPage ldr rel)
-              (add-batch!)
-              (swap! !doc-count + (.getRowCount rel))))
-
-          ;; in arrow-file/arrow-stream, the input is naturally batched
-          ;; therefore, if there's no active tx, we create a transaction for each record-batch.
-          (while (.loadNextPage ldr rel)
-            (cmd-begin conn {:implicit? true, :access-mode :read-write} {})
-            (try
-              (add-batch!)
-              (cmd-commit conn)
-              (swap! !doc-count + (.getRowCount rel))
-              (catch Throwable t
-                (cmd-rollback conn)
-                (throw t)))))))
+        ;; no active tx: the input is naturally batched, so we commit a transaction per record-batch.
+        (while (.loadNextPage ldr rel)
+          (begin-implicit conn :read-write)
+          (try
+            (copy-exec-op conn (PutRel. table-name (.getAsArrowStream rel)) allocator)
+            (cmd-commit conn)
+            (swap! !doc-count + (.getRowCount rel))
+            (catch Throwable t
+              (cmd-rollback conn)
+              (throw t))))))
     @!doc-count))
 
 (defmethod handle-msg* :msg-copy-done [{:keys [conn-state] :as conn} _msg]
@@ -1624,14 +1567,13 @@
 
     (catch Throwable e
       (log/debug e "error processing message: " (ex-message e))
-      (swap! conn-state
-             (fn [{:keys [transaction protocol] :as cs}]
-               (cond-> cs
-                 ;; error seen while in :extended mode, start skipping messages until sync received
-                 (= :extended protocol) (assoc :skip-until-sync? true)
-
-                 ;; mark a transaction (if open as failed), for now we will consider all errors to do this
-                 transaction (update :transaction assoc :failed true, :err e))))
+      ;; error seen while in :extended mode — start skipping messages until sync received
+      (when (= :extended (:protocol @conn-state))
+        (swap! conn-state assoc :skip-until-sync? true))
+      ;; mark an open tx failed (for now, any error does this)
+      (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+        (when (.isTxOpen node-conn)
+          (.failTx node-conn e)))
 
       (send-ex conn e))))
 
@@ -1679,9 +1621,10 @@
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
+                                                 ;; the connection owns the tx + clock + access-mode now; :session here
+                                                 ;; holds only the wire-level session parameters (populated at startup).
                                                  !conn-state (atom {:close-promise close-promise
-                                                                    :session {:access-mode :read-only
-                                                                              :clock (:clock @server-state)}})
+                                                                    :session {}})
                                                  !closing? (atom false)]
                                              (log/debug "New connection" {:cid cid})
                                              (try

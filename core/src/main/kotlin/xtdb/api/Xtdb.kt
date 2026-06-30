@@ -95,6 +95,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
 
+    // the outcome of committing a transaction: the submitted txId always, plus the executed detail when it was
+    // awaited (a sync commit). An async commit isn't awaited, so [executed] is null — only the txId is known.
+    data class CommittedTx(val txId: MessageId, val executed: ExecutedTx?)
+
     fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: Any?): ExecutedTx
 
     interface Statement : AdbcStatement {
@@ -153,6 +157,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
+
+        // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
+        // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
+        val effectiveAwaitToken: String? get() = tx?.awaitToken ?: awaitToken
 
         // the authenticated user, threaded into every write's [TxOpts] for the audit trail. Established by the
         // frontend at connect-time (pgwire's startup handshake); null until a frontend sets it.
@@ -388,7 +396,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         mapOf("sql" to sql)
                     )
                 when (stmt) {
-                    is ParsedStatement.Begin -> beginParsedTx(stmt.txOptions, sql)
+                    is ParsedStatement.Begin -> beginParsedTx(stmt.txOptions)
 
                     is ParsedStatement.Commit -> commitTx()
                     is ParsedStatement.Rollback -> rollbackTx()
@@ -465,10 +473,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // [txDefaultTz] anchors this tx's DML and reads; [sessionDefaultTz] is copied back to the connection on
         // COMMIT. SET TIME ZONE writes both (a session operator); `WITH (TIMEZONE)` writes only [txDefaultTz], so
-        // the override stays tx-scoped. The connection's defaultTz is untouched while a tx is open.
+        // the override stays tx-scoped. [awaitToken] is a tx-scoped BEGIN ... WITH (AWAIT_TOKEN) override.
         private class Transaction(
             var mode: AccessMode? = null, val readBasis: ReadBasis? = null,
-            var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId
+            var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId, val awaitToken: String? = null
         ) : AutoCloseable {
             var failed: Throwable? = null
 
@@ -480,7 +488,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // Pin the begin-time read basis: await this connection's own writes, then snapshot the data
         // (latest-completed system-times) and the clock. A READ ONLY WITH clause overrides any of the three.
         private fun pinReadBasis(
-            snapshotToken: String? = null, snapshotTime: Instant? = null, currentTime: Instant? = null
+            snapshotToken: String? = null, snapshotTime: Instant? = null, currentTime: Instant? = null,
+            awaitToken: String? = this.awaitToken
         ): ReadBasis {
             dbCat.awaitAll(awaitToken, awaitTimeout)
             return ReadBasis(snapshotToken ?: dbCat.snapshotToken(), snapshotTime, currentTime ?: clock.instant())
@@ -490,9 +499,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
         // [readBasis] pins the begin-time read snapshot (null for an explicit READ WRITE — writes don't read).
         // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
-        private fun beginTx(accessMode: AccessMode?, readBasis: ReadBasis?, tz: ZoneId = defaultTz) {
+        private fun beginTx(accessMode: AccessMode?, readBasis: ReadBasis?, tz: ZoneId = defaultTz, awaitToken: String? = null) {
             if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
-            tx = Transaction(accessMode, readBasis, txDefaultTz = tz, sessionDefaultTz = defaultTz)
+            tx = Transaction(accessMode, readBasis, txDefaultTz = tz, sessionDefaultTz = defaultTz, awaitToken = awaitToken)
         }
 
         // a bare BEGIN takes the session default access mode (SET SESSION CHARACTERISTICS); with none set it
@@ -507,6 +516,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             null -> beginTx(null, pinReadBasis(), tz)
         }
 
+        // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
+        fun setSessionCharacteristics(accessMode: ParsedStatement.AccessMode?) {
+            defaultAccessMode = accessMode
+        }
+
         @JvmOverloads
         fun beginReadOnly(tz: ZoneId = defaultTz) = beginTx(ReadOnly, pinReadBasis(), tz)
 
@@ -519,6 +533,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // until ROLLBACK (Postgres' "current transaction is aborted").
         val isTxOpen: Boolean get() = tx != null
         val isTxFailed: Boolean get() = tx?.failed != null
+        // resolved access-mode of the open tx (an unresolved bare tx is neither); the frontend's permissibility
+        // checks read these to keep their own error messages + special-cases (e.g. pgwire's pgjdbc type query).
+        val isTxReadWrite: Boolean get() = tx?.mode is ReadWrite
+        val isTxReadOnly: Boolean get() = tx?.mode is ReadOnly
 
         // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
         fun failTx(cause: Throwable) {
@@ -580,46 +598,42 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
-        // SqlPlanner. BEGIN options carry no bound params, so args is null.
-        private fun beginParsedTx(opts: ParsedStatement.TxOptions, sql: String) {
-            fun rejectOpt(): Nothing = throw Incorrect(
-                "BEGIN ... WITH option is not yet supported here",
-                "xtdb.adbc/unsupported-tx-option",
-                mapOf("sql" to sql)
-            )
-
-            // WITH (TIMEZONE) overrides the tx zone for its duration (tx-scoped — it doesn't touch the session).
-            val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, null)) } ?: defaultTz
+        // SqlPlanner with the supplied bound args (null for the ADBC path, whose BEGIN options are literals;
+        // pgwire passes its portal args, since a BEGIN option can be a parameter placeholder). Public for the
+        // frontends. WITH (TIMEZONE) overrides the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's
+        // await bound.
+        fun beginParsedTx(opts: ParsedStatement.TxOptions, args: List<*>? = null) {
+            val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, args)) } ?: defaultTz
 
             when (opts.accessMode) {
                 ParsedStatement.AccessMode.READ_WRITE -> {
-                    val systemTime = coerceInstant(opts.systemTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
-                    val userMetadata = opts.userMetadata?.let { sqlPlanner.evalLiteral(it, null) } as Map<*, *>?
-                    val async = (opts.async?.let { sqlPlanner.evalLiteral(it, null) } as Boolean?) ?: false
+                    val systemTime = coerceInstant(opts.systemTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
+                    val userMetadata = opts.userMetadata?.let { sqlPlanner.evalLiteral(it, args) } as Map<*, *>?
+                    val async = (opts.async?.let { sqlPlanner.evalLiteral(it, args) } as Boolean?) ?: false
 
                     beginWriteOnly(systemTime, userMetadata, async, tz)
                 }
 
                 ParsedStatement.AccessMode.READ_ONLY -> {
-                    // SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME override the begin-time auto-pin. AWAIT_TOKEN
-                    // (the only other READ ONLY option in the grammar) isn't wired through yet — reject it fail-closed.
-                    if (opts.awaitToken != null) rejectOpt()
+                    // SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME override the begin-time auto-pin; AWAIT_TOKEN
+                    // sets the await bound for this tx's snapshot, defaulting to the connection's own token.
+                    val awaitTok = opts.awaitToken?.let { coerceAwaitToken(sqlPlanner.evalLiteral(it, args)) } ?: awaitToken
+                    val snapshotToken = opts.snapshotToken?.let { sqlPlanner.evalLiteral(it, args) } as String?
+                    val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
+                    val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, args) }, tz)
 
-                    val snapshotToken = opts.snapshotToken?.let { sqlPlanner.evalLiteral(it, null) } as String?
-                    val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
-                    val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
-
-                    beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime), tz)
+                    beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime, awaitTok), tz, awaitTok)
                 }
 
                 null -> beginTx(tz)
             }
         }
 
-        // Returns the executed tx (committed flag + system-time + error) so a frontend can both react to an
-        // abort and surface it via SHOW LATEST_SUBMITTED_TX. null when there's nothing to commit (no tx, or a
-        // ReadOnly / still-unresolved one) and for an async submit, which isn't awaited so has no outcome yet.
-        fun commitTx(): ExecutedTx? {
+        // Returns the committed tx — its txId always, plus the executed detail (committed flag + system-time +
+        // error) for a sync commit, so a frontend can react to an abort and surface it via SHOW
+        // LATEST_SUBMITTED_TX. null when there's nothing to commit (no tx, or a ReadOnly / still-unresolved one);
+        // an async commit returns the txId with null detail (it isn't awaited, so has no outcome yet).
+        fun commitTx(): CommittedTx? {
             val tx = tx ?: return null
             this.tx = null
             defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
@@ -628,7 +642,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             val mode = tx.mode as? ReadWrite ?: return null
             val opts = TxOpts(systemTime = mode.systemTime, user = user, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
             return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops ->
-                if (mode.async) { submitTx(ops, opts); null } else executeTx(ops, opts)
+                if (mode.async) CommittedTx(submitTx(ops, opts).txId, null)
+                else executeTx(ops, opts).let { CommittedTx(it.txId, it) }
             }
         }
 
@@ -651,7 +666,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 out
             }
 
-        internal fun executeDml(op: TxOp) {
+        fun executeDml(op: TxOp) {
             // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
             if (autoCommit && tx == null) {
                 expandStaticOps(listOf(op), defaultTz).useAll { ops -> executeTx(ops, TxOpts(user = user)) }
@@ -692,10 +707,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        // QueryOpts for a user read: an open tx's pinned basis (snapshot isolation), else null fields so the
-        // planner defaults to latest data and the wall-clock now (autocommit / no open tx).
+        // QueryOpts for a user read: an open tx's pinned basis (snapshot isolation), else latest data at the
+        // connection's clock (autocommit / no open tx) — current-time is the connection's clock, never the
+        // planner's own, so a frontend-pinned clock is authoritative.
         private fun queryOpts() = tx.let { t ->
-            QueryOpts(t?.readBasis?.currentTime, t?.txDefaultTz ?: defaultTz, t?.readBasis?.snapshotToken, t?.readBasis?.snapshotTime, tracer)
+            val b = t?.readBasis
+            QueryOpts(b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz, b?.snapshotToken, b?.snapshotTime, tracer)
         }
 
         // Open a cursor on an already-prepared query: first resolves the tx's access mode and basis (rejecting
@@ -731,10 +748,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     lastSubmittedTx?.let {
                         listOf(mapOf("tx_id" to it.txId, "system_time" to it.systemTime,
                                      "committed" to it.committed, "error" to it.error,
-                                     "await_token" to awaitToken))
+                                     "await_token" to effectiveAwaitToken))
                     } ?: emptyList())
 
-                "await_token" -> showResult(variable, awaitToken)
+                "await_token" -> showResult(variable, effectiveAwaitToken)
                 else -> showResult(variable, sessionParameters[variable])
             }
 
