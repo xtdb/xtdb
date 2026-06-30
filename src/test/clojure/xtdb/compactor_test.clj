@@ -330,6 +330,38 @@
              (->> (xt/q node "SELECT foo FROM foo")
                   (into #{} (map :foo)))))))
 
+(t/deftest compaction-settles-merging-null-put-leg-5714
+  (binding [c/*page-size* 8
+            cat/*file-size-target* 16
+            c/*ignore-signal-block?* true]
+    (let [node-dir (util/->path "target/compactor/null-put-leg-5714")]
+      (util/delete-dir node-dir)
+      (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 10})]
+        ;; with a tiny file-size-target each block completes its own L1 file: a put block
+        ;; gives a Struct-put L1, a delete-only block a put-less (Null-put) L1.
+        (letfn [(put! [ids]
+                  (xt/submit-tx node [(into [:put-docs :recs] (for [i ids] {:xt/id i, :v (str "v" i)}))])
+                  (tu/flush-block! node)
+                  (c/compact-all! node #xt/duration "PT2S"))
+                (del! [ids]
+                  (xt/submit-tx node [(into [:delete-docs :recs] (vec ids))])
+                  (tu/flush-block! node)
+                  (c/compact-all! node #xt/duration "PT2S"))]
+          (put! (range 0 10))
+          (del! (range 0 10))
+          (put! (range 10 20))
+
+          ;; a Null-put L1 now coexists with Struct-put L1s, before branch-factor triggers
+          ;; the L2 merge - so the scan itself has to reconcile the Null put leg against the
+          ;; Struct ones (the read side of #5714: 'vectorFor unsupported on NullVector')
+          (t/is (= 10 (count (xt/q node "SELECT _id, v FROM recs"))))
+
+          ;; the fourth L1 reaches branch-factor and triggers the L2 merge that reconciles
+          ;; those same legs - 'cannot promote DUV leg' without the fix
+          (del! (range 10 20))
+
+          (t/is (= 0 (-> (xt/q node "SELECT count(*) c FROM recs") first :c))))))))
+
 (t/deftest test-compaction-with-erase-4017
   (binding [c/*ignore-signal-block?* true]
     (let [node-dir (util/->path "target/compactor/compaction-with-erase")]

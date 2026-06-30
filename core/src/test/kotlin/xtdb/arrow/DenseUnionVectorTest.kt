@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import xtdb.TaggedValue
+import xtdb.kw
 
 class DenseUnionVectorTest {
     private lateinit var allocator: BufferAllocator
@@ -214,6 +216,51 @@ class DenseUnionVectorTest {
 
                 assertEquals(listOf(1, 0, 1).map { it.toByte() }, duv.typeIds())
                 assertEquals(listOf(obj1, null, obj2), mono.asList)
+            }
+        }
+    }
+
+    // a put-less segment (e.g. erase-only) writes its `op` union with a Null `put` leg
+    // alongside delete/erase; three legs, so a copy goes through rowCopier0/legVectorFor
+    // rather than the single-leg `rowCopier` shortcut that bypasses it.
+    private fun putLessOpDuv() =
+        DenseUnionVector(allocator, "op",
+            listOf(NullVector("put"), NullVector("delete"), NullVector("erase")))
+
+    private fun structPutOpDuv() =
+        DenseUnionVector(allocator, "op",
+            listOf(StructVector(allocator, "put", true,
+                linkedMapOf("a" to IntVector.open(allocator, "i32", true))),
+                NullVector("delete"), NullVector("erase")))
+
+    @Test
+    fun `merging a put-less op-union into a Struct-put one reconciles the Null put leg #5714`() {
+        structPutOpDuv().use { dest ->
+            structPutOpDuv().use { withPut ->
+                withPut.vectorFor("put").writeObject(mapOf("a" to 1))
+
+                putLessOpDuv().use { putLess ->
+                    putLess.vectorFor("erase").writeNull()
+
+                    withPut.rowCopier(dest).copyRange(0, withPut.valueCount)
+                    putLess.rowCopier(dest).copyRange(0, putLess.valueCount)
+
+                    assertEquals(2, dest.valueCount)
+                    assertEquals(TaggedValue("put".kw, mapOf("a" to 1)), dest.getObject(0))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `merging a Struct-put op-union into a put-less one promotes the Null put leg #5714`() {
+        putLessOpDuv().use { dest ->
+            structPutOpDuv().use { withPut ->
+                withPut.vectorFor("put").writeObject(mapOf("a" to 7))
+                withPut.rowCopier(dest).copyRange(0, withPut.valueCount)
+
+                assertEquals(1, dest.valueCount)
+                assertEquals(TaggedValue("put".kw, mapOf("a" to 7)), dest.getObject(0))
             }
         }
     }

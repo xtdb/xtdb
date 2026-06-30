@@ -261,7 +261,18 @@ class DenseUnionVector private constructor(
         for (i in legVectors.indices) {
             val leg = legVectors[i]
             if (leg.name == name) {
-                if (leg.arrowType != arrowType) throw Unsupported("cannot promote DUV leg")
+                // a DUV leg keyed by op rather than type (e.g. `op`'s `put`) can be Struct
+                // in one segment and Null in a put-less one. null is the lattice bottom, so
+                // reconcile it instead of throwing; only two distinct non-null types are
+                // genuinely unpromotable. #5714
+                if (leg.arrowType != arrowType) {
+                    when {
+                        arrowType == NULL_TYPE -> leg.nullable = true
+                        leg.arrowType == NULL_TYPE -> legVectors[i] = leg.maybePromote(allocator, arrowType, nullable)
+                        else -> throw Unsupported("cannot promote DUV leg: '$name' (existing ${leg.arrowType}, incoming $arrowType)")
+                    }
+                    return LegVector(i.toByte(), legVectors[i])
+                }
                 leg.nullable = leg.nullable || nullable
 
                 return LegVector(i.toByte(), leg)
