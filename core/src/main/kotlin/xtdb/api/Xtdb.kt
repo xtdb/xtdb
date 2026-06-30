@@ -136,8 +136,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private var _awaitToken: String? = null
 
-        // the accumulated await-token. read-only: it only moves through the write methods (submit / execute /
-        // attach / detach), so it can't be left stale by an out-of-band write.
+        // read-only to the outside: the token advances only through the write methods (submit / execute /
+        // attach / detach), so no other code can leave it stale.
         val awaitToken: String? get() = _awaitToken
 
         // the one sanctioned external writer: pgwire's `SET AWAIT_TOKEN`.
@@ -170,8 +170,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             _awaitToken = mergeTxBasisTokens(_awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
         }
 
-        // records a write against [dbName]: advances the token and captures the last-submitted-tx, so the two
-        // always move together. A fire-and-forget submitTx knows only the tx-id; an awaited write the rest.
+        // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
         private fun SubmittedTx.record(dbName: DatabaseName): SubmittedTx = also {
             recordTx(dbName, txId)
             lastSubmittedTx = LastSubmittedTx(txId, null, null, null)
@@ -213,10 +212,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 txAwaitTimer.timed { awaitTx(txId) }
             }.record(dbName)
 
-        // attach/detach are primary-database operations: the message goes onto the primary's log and the
-        // resulting tx is awaited and recorded against the primary, independent of the connection's own db.
-        // Routing them through here keeps the await-token in step — there's no out-of-band write path that
-        // could leave it stale.
+        // attach/detach act on the primary database, not the connection's: the message goes onto the primary's
+        // log, and the resulting tx is awaited and recorded against the primary (it.name), not dbName.
         fun attachDb(dbName: DatabaseName, config: Database.Config): ExecutedTx =
             dbCat.primary.let { awaitTx(it.sendAttachDbMessage(dbName, config).msgId, it.name).record(it.name) }
 
