@@ -176,16 +176,6 @@
             (.increment query-error-counter))
           (throw e)))))
 
-  (attach-db [this db-name db-config]
-    (let [primary-db (.getPrimary db-cat)
-          msg-id (xt-log/send-attach-db! primary-db db-name db-config)]
-      (await-msg-result this primary-db msg-id)))
-
-  (detach-db [this db-name]
-    (let [primary-db (.getPrimary db-cat)
-          msg-id (xt-log/send-detach-db! primary-db db-name)]
-      (await-msg-result this primary-db msg-id)))
-
   (open-connection [_ db-name]
     (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 

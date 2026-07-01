@@ -134,7 +134,26 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var dbName: DatabaseName,
     ) : AdbcConnection {
 
-        var awaitToken: String? = null
+        private var _awaitToken: String? = null
+
+        // read-only to the outside: the token advances only through the write methods (submit / execute /
+        // attach / detach), so no other code can leave it stale.
+        val awaitToken: String? get() = _awaitToken
+
+        // the one sanctioned external writer: pgwire's `SET AWAIT_TOKEN`.
+        fun setAwaitToken(token: String?) { _awaitToken = token }
+
+        // the connection's last write, for `SHOW latest_submitted_tx`. system-time/committed/error are null
+        // for a fire-and-forget submitTx (no await); populated for an awaited execute/attach/detach.
+        data class LastSubmittedTx(
+            val txId: MessageId,
+            val systemTime: Instant?,
+            val committed: Boolean?,
+            val error: Throwable?,
+        )
+
+        var lastSubmittedTx: LastSubmittedTx? = null
+            private set
 
         // how long to wait for this connection's writes to become visible before giving up, shared by every
         // read this connection prepares or snapshots
@@ -147,8 +166,19 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             dbCat.databaseOrNull(dbName)
                 ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
 
-        fun recordTx(dbName: DatabaseName, txId: MessageId) {
-            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+        private fun recordTx(dbName: DatabaseName, txId: MessageId) {
+            _awaitToken = mergeTxBasisTokens(_awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+        }
+
+        // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
+        private fun SubmittedTx.record(dbName: DatabaseName): SubmittedTx = also {
+            recordTx(dbName, txId)
+            lastSubmittedTx = LastSubmittedTx(txId, null, null, null)
+        }
+
+        private fun ExecutedTx.record(dbName: DatabaseName): ExecutedTx = also {
+            recordTx(dbName, txId)
+            lastSubmittedTx = LastSubmittedTx(txId, systemTime, committed, error)
         }
 
         private inline fun <T> Timer?.timed(body: () -> T): T {
@@ -174,13 +204,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
 
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
-            txSubmitTimer.timed { doSubmit(ops, opts) }.also { recordTx(dbName, it.txId) }
+            txSubmitTimer.timed { doSubmit(ops, opts) }.record(dbName)
 
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
             txExecuteTimer.timed {
                 val txId = doSubmit(ops, opts).txId
                 txAwaitTimer.timed { awaitTx(txId) }
-            }.also { recordTx(dbName, it.txId) }
+            }.record(dbName)
+
+        // attach/detach act on the primary database, not the connection's: the message goes onto the primary's
+        // log, and the resulting tx is awaited and recorded against the primary (it.name), not dbName.
+        fun attachDb(dbName: DatabaseName, config: Database.Config): ExecutedTx =
+            dbCat.primary.let { awaitTx(it.sendAttachDbMessage(dbName, config).msgId, it.name).record(it.name) }
+
+        fun detachDb(dbName: DatabaseName): ExecutedTx =
+            dbCat.primary.let { awaitTx(it.sendDetachDbMessage(dbName).msgId, it.name).record(it.name) }
 
         private fun TransactionResult.toExecutedTx() =
             ExecutedTx(
@@ -189,14 +227,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 (this as? TransactionResult.Aborted)?.error
             )
 
-        private fun awaitTx(txId: MessageId): ExecutedTx {
-            db(dbName).awaitTxBlocking(txId, null)?.let { txRes ->
+        private fun awaitTx(txId: MessageId, awaitDb: DatabaseName = dbName): ExecutedTx {
+            db(awaitDb).awaitTxBlocking(txId, null)?.let { txRes ->
                 if (txRes.txKey.txId == txId) return txRes.toExecutedTx()
             }
 
             return Relation.openFromRows(allocator, listOf(mapOf("?_0" to txId)))
                 .closeOnCatch { args ->
-                    prepareSql("SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?")
+                    prepareSql("SELECT system_time, committed, error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?", awaitDb)
                         .openQuery(args, QueryOpts(null, defaultTz))
                 }
                 .use { c ->
@@ -214,12 +252,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
         }
 
-        fun prepareSql(sql: String): PreparedQuery {
+        fun prepareSql(sql: String, defaultDb: DatabaseName = dbName): PreparedQuery {
             dbCat.awaitAll(awaitToken, awaitTimeout)
             return qSrc.prepareQuery(
                 sql,
                 dbCat,
-                PrepareOpts(defaultTz = defaultTz, defaultDb = dbName, queryText = sql)
+                PrepareOpts(defaultTz = defaultTz, defaultDb = defaultDb, queryText = sql)
             )
         }
 

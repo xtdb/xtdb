@@ -3,10 +3,12 @@ package xtdb
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
+import xtdb.api.log.Log
 import xtdb.api.log.MessageId
 import xtdb.database.Database
 import xtdb.database.DatabaseName
@@ -19,10 +21,13 @@ class ConnectionTest {
 
     private var nextTxId: MessageId = 0
 
+    private lateinit var db: Database
+    private lateinit var dbCat: Database.Catalog
+
     // components mocked only to feed return values — submitTxBlocking yields the next tx id and
     // awaitTxBlocking returns it committed; the assertions observe the connection's real await-token.
     private fun connection(dbName: DatabaseName): Xtdb.Connection {
-        val db = mockk<Database>()
+        db = mockk()
         every { db.submitTxBlocking(any(), any()) } answers { Xtdb.SubmittedTx(nextTxId) }
         every { db.awaitTxBlocking(any(), any()) } answers {
             TransactionResult.Committed(mockk<TransactionKey> {
@@ -31,8 +36,9 @@ class ConnectionTest {
             })
         }
 
-        val dbCat = mockk<Database.Catalog>(relaxed = true)
+        dbCat = mockk(relaxed = true)
         every { dbCat.databaseOrNull(any()) } returns db
+        every { dbCat.primary } returns db
 
         return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), ZoneOffset.UTC, null, null, null, null, dbName)
     }
@@ -81,12 +87,18 @@ class ConnectionTest {
     }
 
     @Test
-    fun `recordTx merges a foreign db without disturbing the connection db - the attach-detach case`() {
+    fun `attachDb merges the primary db without disturbing the connection db`() {
         nextTxId = 2
         val conn = connection("secondary")
-
         conn.submitTx(emptyList())
-        conn.recordTx("xtdb", 5)
+
+        nextTxId = 5
+        every { db.name } returns "xtdb"
+        every { db.sendAttachDbMessage(any(), any()) } returns mockk<Log.MessageMetadata> {
+            every { msgId } returns nextTxId
+        }
+
+        conn.attachDb("attached", Database.Config())
 
         assertEquals(mapOf("secondary" to listOf(2L), "xtdb" to listOf(5L)), tokenOf(conn.awaitToken))
     }
@@ -97,8 +109,36 @@ class ConnectionTest {
         val conn = connection("mydb")
 
         conn.submitTx(emptyList())
-        conn.awaitToken = mapOf("mydb" to listOf(42L)).encodeTxBasisToken()
+        conn.setAwaitToken(mapOf("mydb" to listOf(42L)).encodeTxBasisToken())
 
         assertEquals(mapOf("mydb" to listOf(42L)), tokenOf(conn.awaitToken))
+    }
+
+    @Test
+    fun `executeTx populates the full last-submitted-tx record`() {
+        nextTxId = 13
+        val conn = connection("mydb")
+
+        conn.executeTx(emptyList())
+
+        val last = conn.lastSubmittedTx!!
+        assertEquals(13L, last.txId)
+        assertEquals(Instant.EPOCH, last.systemTime)
+        assertEquals(true, last.committed)
+        assertNull(last.error)
+    }
+
+    @Test
+    fun `submitTx records only the tx-id in last-submitted-tx`() {
+        nextTxId = 17
+        val conn = connection("mydb")
+
+        conn.submitTx(emptyList())
+
+        val last = conn.lastSubmittedTx!!
+        assertEquals(17L, last.txId)
+        assertNull(last.systemTime)
+        assertNull(last.committed)
+        assertNull(last.error)
     }
 }

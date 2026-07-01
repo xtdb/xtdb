@@ -189,9 +189,3 @@
 
 (defn send-flush-block-msg! [^Database db]
   (.sendFlushBlockMessage db))
-
-(defn send-attach-db! ^long [^Database primary-db, db-name, db-config]
-  (.getMsgId (.sendAttachDbMessage primary-db db-name db-config)))
-
-(defn send-detach-db! ^long [^Database primary-db, db-name]
-  (.getMsgId (.sendDetachDbMessage primary-db db-name)))
