@@ -2390,7 +2390,7 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
 
 (t/deftest test-sql->static-ops-decimals-4483
   (t/is (= [(tx-ops/map->PutDocs {:table-name 'public/foo,
-                                  :docs [{"xt/id" 1, "dec" 1.01M} {"xt/id" 2, "dec" 1.012M}],
+                                  :docs [{"_id" 1, "dec" 1.01M} {"_id" 2, "dec" 1.012M}],
                                   :valid-from nil, :valid-to nil})]
            (sql/sql->static-ops "INSERT INTO foo RECORDS ?"
                                 [[{:xt/id 1, :dec 1.01M}]
