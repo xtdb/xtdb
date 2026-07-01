@@ -42,7 +42,10 @@ dependencies {
     // Bundle the two common ones so they work out of the box; operators wanting others
     // (e.g. JsonSchema) add the converter jar to their own classpath.
     runtimeOnly(libs.kafka.connect.json)
-    runtimeOnly(libs.kafka.connect.avro.converter)
+    // Confluent artifacts declare their own kafka-clients:7.8.0-ccs. Exclude it here so the
+    // exclusion travels in the published POM and downstream consumers of xtdb-kafka don't
+    // inherit the override (the root resolutionStrategy fixes our build but not theirs).
+    runtimeOnly(libs.kafka.connect.avro.converter) { exclude(group = "org.apache.kafka", module = "kafka-clients") }
 
     implementation(libs.kotlinx.coroutines)
 
@@ -51,8 +54,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers)
     testImplementation(libs.testcontainers.kafka)
-    testImplementation(libs.kafka.avro.serializer)
-    testImplementation(libs.kafka.json.schema.serializer)
+    testImplementation(libs.kafka.avro.serializer) { exclude(group = "org.apache.kafka", module = "kafka-clients") }
+    testImplementation(libs.kafka.json.schema.serializer) { exclude(group = "org.apache.kafka", module = "kafka-clients") }
     testImplementation(libs.kafka.connect.json.schema.converter)
 }
 

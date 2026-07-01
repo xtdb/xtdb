@@ -130,6 +130,20 @@ allprojects {
         maven { url = uri("https://packages.confluent.io/maven/") }
     }
 
+    // Confluent publishes kafka-clients as 7.8.0-ccs (Confluent Platform versioning), numerically
+    // higher than Apache's 4.1.1 — so via the Confluent repo Gradle silently overrides our declared
+    // client. Pin it back across every configuration in every module. This catches our own
+    // classpaths (runtime AND test); the transitive `exclude`s in modules/kafka additionally keep
+    // the override out of the published POM, which a resolutionStrategy alone does not do.
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.apache.kafka" && requested.name == "kafka-clients") {
+                useVersion(libs.versions.kafka.get())
+                because("pin to Apache kafka-clients; Confluent's 7.8.0-ccs silently overrides it")
+            }
+        }
+    }
+
     tasks.withType<ShadowJar> {
         transform(Log4j2PluginsCacheFileTransformer())
     }
