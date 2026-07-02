@@ -397,10 +397,20 @@ class Database(
 
             if (indexerConfig.enabled && !readOnly) {
                 val listener = object : Log.SubscriptionListener<SourceMessage> {
+                    // Re-parent the promotion into this database's job. The Kafka shared consumer drives
+                    // rebalance callbacks from a detached `runBlocking` on its poll thread, so without this
+                    // the leader-transition await isn't in the database's cancel-join tree and a shutdown
+                    // that lands mid-promotion hangs. (In-memory/local logs already run us under `scope`,
+                    // so this is a no-op for them.)
                     override suspend fun onPartitionsAssigned(partitions: Collection<Int>) =
-                        partitions.singleOrNull()
-                            ?.let { db.partitions[it]?.logProcessor?.onPartitionsAssigned(listOf(it)) }
+                        withContext(scope.coroutineContext.job) {
+                            partitions.singleOrNull()
+                                ?.let { db.partitions[it]?.logProcessor?.onPartitionsAssigned(listOf(it)) }
+                        }
 
+                    // Deliberately NOT re-parented: revocation also runs as part of teardown (the unregister
+                    // path invokes it), by which point this job is already cancelled — re-parenting here
+                    // would throw before the unregister completes and wedge teardown.
                     override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
                         for (idx in partitions) db.partitions[idx]?.logProcessor?.onPartitionsRevoked(listOf(idx))
                     }

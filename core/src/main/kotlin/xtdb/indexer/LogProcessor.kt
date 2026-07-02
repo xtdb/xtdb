@@ -2,6 +2,7 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -176,6 +177,14 @@ class LogProcessor(
                 } catch (e: InterruptedException) {
                     throw e
                 } catch (e: Interrupted) {
+                    throw e
+                } catch (e: CancellationException) {
+                    // Shutdown cancelled this database's job mid-promotion — the transition runs under it
+                    // (re-parented at the Database subscription listener), so an await here was cancelled.
+                    // Rethrow rather than fall through to the notifyError catch below: a clean shutdown
+                    // must not be surfaced as an ingestion failure. The transport contains this
+                    // per-subscription so it doesn't evict a whole shared consumer — see the Kafka
+                    // SharedGroupConsumer's rebalance handler.
                     throw e
                 } catch (e: Throwable) {
                     LOG.error(e, "[$dbName] transition: failed to transition to leader")

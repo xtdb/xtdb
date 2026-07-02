@@ -160,7 +160,6 @@ interface Log<M> : AutoCloseable {
         suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<M>?
         fun onPartitionsAssignedSync(partitions: Collection<Int>): TailSpec<M>? = runBlocking { onPartitionsAssigned(partitions) }
         suspend fun onPartitionsRevoked(partitions: Collection<Int>)
-        fun onPartitionsRevokedSync(partitions: Collection<Int>) = runBlocking { onPartitionsRevoked(partitions) }
         suspend fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
         fun onPartitionsLostSync(partitions: Collection<Int>) = runBlocking { onPartitionsLost(partitions) }
     }

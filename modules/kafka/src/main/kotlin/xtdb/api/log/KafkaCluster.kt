@@ -47,6 +47,7 @@ import xtdb.util.MsgIdUtil.afterMsgIdToOffset
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.close
+import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
@@ -212,6 +213,14 @@ class KafkaCluster(
                                 val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
                                 try {
                                     sub.onPartitionAssigned(tps.single())
+                                } catch (e: CancellationException) {
+                                    // A topic's log processor aborted a leader transition because its
+                                    // database is shutting down. Swallow it here rather than let it reach
+                                    // the poll loop: this runBlocking is on the poll thread shared by every
+                                    // database on the cluster, and an exception escaping into `pollingJob`
+                                    // runs cleanupOnFailure and evicts them all. Returning frees the thread
+                                    // so this topic's queued unregister can drain and its teardown finish.
+                                    LOG.debug(e) { "onPartitionsAssigned: '$topic' assignment aborted — subscription shutting down" }
                                 } catch (e: Throwable) {
                                     LOG.error(e) { "onPartitionsAssigned($partitions): failed handling assignment for topic '$topic' ($tps)" }
                                     throw e
@@ -236,7 +245,7 @@ class KafkaCluster(
             })
         }
 
-        private fun processCommand(cmd: GroupCommand) {
+        private suspend fun processCommand(cmd: GroupCommand) {
             when (cmd) {
                 is GroupCommand.Register -> {
                     check(cmd.topic !in subscriptions) { "Topic ${cmd.topic} already registered" }
@@ -246,7 +255,7 @@ class KafkaCluster(
 
                 is GroupCommand.Unregister -> {
                     subscriptions.remove(cmd.topic)?.let { sub ->
-                        sub.listener.onPartitionsRevokedSync(listOf(0))
+                        sub.listener.onPartitionsRevoked(listOf(0))
                         sub.completion.complete(Unit)
                     }
                     applySubscriptions()
@@ -255,7 +264,7 @@ class KafkaCluster(
             }
         }
 
-        // Deliberately no `onPartitionsRevokedSync` — would trigger LogProcessor's
+        // Deliberately no `onPartitionsRevoked` — would trigger LogProcessor's
         // leader→follower transition during a Failed-state cleanup.
         private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) {
             for (topic in topics) {
