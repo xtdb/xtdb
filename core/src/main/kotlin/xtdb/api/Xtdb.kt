@@ -160,8 +160,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val sessionParameters = mutableMapOf<String, String?>()
 
         // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
-        // null leaves a bare BEGIN unresolved (resolved by its first statement).
-        private var defaultAccessMode: ParsedStatement.AccessMode? = null
+        // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
+        var defaultAccessMode: ParsedStatement.AccessMode? = null
+            private set
 
         private fun db(dbName: DatabaseName): Database =
             dbCat.databaseOrNull(dbName)
