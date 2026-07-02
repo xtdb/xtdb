@@ -1,5 +1,8 @@
 package xtdb.kafka.connectsrc
 
+import clojure.lang.ILookup
+import clojure.lang.Keyword
+import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.apache.avro.Conversions
@@ -181,6 +184,54 @@ class KafkaConnectSourceIntegrationTest {
             awaitCondition("streamed record appears") {
                 xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k3'").isNotEmpty()
             }
+        }
+    }
+
+    @Test
+    fun `metrics populate against real Kafka`() = runTest(timeout = 120.seconds) {
+        val sourceTopic = "events-${UUID.randomUUID()}"
+        createTopic(sourceTopic)
+
+        produceBytes(sourceTopic, "k1", """{"name":"Alice"}""".toByteArray())
+        produceBytes(sourceTopic, "k2", """{"name":"Bob"}""".toByteArray())
+
+        openNode("xt-log-${UUID.randomUUID()}").use { node ->
+            val metrics = (node as ILookup).valAt(Keyword.intern(null, "metrics-registry")) as MeterRegistry
+
+            attach(node, "events", """
+                log: !Kafka
+                  cluster: kafka
+                  topic: test-replica-${UUID.randomUUID()}
+                externalSource: !KafkaConnect
+                  remote: kafka
+                  topic: $sourceTopic
+                  connectConfig:
+                    key.converter: org.apache.kafka.connect.storage.StringConverter
+                    value.converter: org.apache.kafka.connect.json.JsonConverter
+                    value.converter.schemas.enable: "false"
+                  indexer: !Docs
+                    table: events
+            """.trimIndent())
+
+            awaitCondition("both records appear") {
+                xtQueryDb(node, "events", "SELECT _id FROM public.events").size == 2
+            }
+
+            fun metric(name: String) =
+                metrics.find(name).tags("db", "events", "source", sourceTopic, "source_type", "kafka-connect", "partition", "0")
+
+            assertTrue((metric("xtdb.kafka_connect_source.records.total").counter()?.count() ?: 0.0) >= 2.0,
+                "records.total should have counted both ingested records")
+            assertTrue((metric("xtdb.kafka_connect_source.commit_lag_seconds").summary()?.count() ?: 0L) >= 1L,
+                "commit_lag_seconds should have recorded at least one hand-off")
+            assertEquals(1.0, metric("xtdb.kafka_connect_source.connection_state").gauge()?.value(),
+                "connection_state should be 1 while the poll loop is active")
+            assertTrue((metric("xtdb.kafka_connect_source.last_event_time").gauge()?.value() ?: 0.0) > 0.0,
+                "last_event_time should be the record timestamp, not 0")
+            assertTrue((metric("xtdb.kafka_connect_source.current_offset").gauge()?.value() ?: -1.0) >= 1.0,
+                "current_offset should reach the last consumed offset (1)")
+            assertTrue((metric("xtdb.kafka_connect_source.records_lag").gauge()?.value() ?: -1.0) >= 0.0,
+                "records_lag should be a non-negative gauge read from the consumer")
         }
     }
 

@@ -27,7 +27,11 @@ import org.apache.kafka.connect.storage.HeaderConverter
 import org.apache.kafka.connect.storage.SimpleHeaderConverter
 import org.apache.kafka.connect.transforms.Transformation
 import org.apache.kafka.connect.transforms.predicates.Predicate
+import io.micrometer.core.instrument.Counter
+import io.micrometer.core.instrument.DistributionSummary
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Tag
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.log.KafkaCluster
@@ -42,6 +46,9 @@ import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
 import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = KafkaConnectSource::class.logger
@@ -65,6 +72,7 @@ class KafkaConnectSource internal constructor(
     private val topic: String,
     private val connectConfig: ConnectConfig,
     private val indexer: RecordIndexer,
+    private val meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
 
     @Serializable
@@ -96,8 +104,7 @@ class KafkaConnectSource internal constructor(
                     errorCode = "xtdb.kafka-connect-source/wrong-remote-type",
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
-
-            return KafkaConnectSource(dbName, cluster, topic, ConnectConfig.parse(connectConfig), indexer.open())
+            return KafkaConnectSource(dbName, cluster, topic, ConnectConfig.parse(connectConfig), indexer.open(), meterRegistry)
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -139,6 +146,56 @@ class KafkaConnectSource internal constructor(
     ) {
         LOG.info("[$dbName] Partition $partition assigned (topic=$topic)")
 
+        val tags = listOf(
+            Tag.of("db", dbName),
+            Tag.of("source", topic),
+            Tag.of("source_type", "kafka-connect"),
+            Tag.of("partition", partition.toString()),
+        )
+
+        val recordsCounter = meterRegistry?.let {
+            Counter.builder("xtdb.kafka_connect_source.records.total")
+                .description("records ingested after conversion/transforms")
+                .tags(tags)
+                .register(it)
+        }
+
+        val commitLag = meterRegistry?.let {
+            DistributionSummary.builder("xtdb.kafka_connect_source.commit_lag_seconds")
+                .description("wall-clock seconds between the Kafka record timestamp and hand-off to the indexer")
+                .baseUnit("seconds")
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .tags(tags)
+                .register(it)
+        }
+
+        // epoch seconds of the latest ingested record; 0 until the first record
+        val lastEventEpochSeconds = AtomicLong(0)
+        // 1 while the poll loop is active, 0 otherwise
+        val connectionState = AtomicInteger(0)
+        // highest offset consumed on this partition; -1 until the first record
+        val currentOffset = AtomicLong(-1)
+
+        val gauges = meterRegistry?.let { reg ->
+            listOf(
+                Gauge.builder("xtdb.kafka_connect_source.last_event_time", lastEventEpochSeconds) { it.get().toDouble() }
+                    .description("epoch seconds of the most recently ingested record")
+                    .baseUnit("seconds")
+                    .tags(tags)
+                    .register(reg),
+
+                Gauge.builder("xtdb.kafka_connect_source.connection_state", connectionState) { it.get().toDouble() }
+                    .description("1 if the poll loop is currently active, 0 otherwise")
+                    .tags(tags)
+                    .register(reg),
+
+                Gauge.builder("xtdb.kafka_connect_source.current_offset", currentOffset) { it.get().toDouble() }
+                    .description("highest offset consumed on this partition")
+                    .tags(tags)
+                    .register(reg),
+            )
+        }.orEmpty()
+
         val mergedConsumerConfig: Map<String, Any> =
             DEFAULT_CONSUMER_CONFIG + cluster.kafkaConfigMap + HARDCODED_CONSUMER_CONFIG
 
@@ -148,41 +205,73 @@ class KafkaConnectSource internal constructor(
                     SimpleHeaderConverter().also { it.configure(emptyMap<String, Any>()) }.use { headerConverter ->
                         connectConfig.openTransformChain().use { transformChain ->
                             KafkaConsumer<ByteArray?, ByteArray?>(mergedConsumerConfig).use { consumer ->
-                                val tp = TopicPartition(topic, partition)
-                                consumer.assign(listOf(tp))
-
-                                if (afterToken != null) {
-                                    val offset = KafkaConnectSourceToken.parseFrom(afterToken).offset + 1
-                                    LOG.info("[$dbName] Resuming from offset $offset on $topic-$partition")
-                                    consumer.seek(tp, offset)
-                                } else {
-                                    LOG.info("[$dbName] No token — seeking to beginning of $topic-$partition")
-                                    consumer.seekToBeginning(listOf(tp))
+                                // Read the consumer's own fetch-lag straight off `consumer.metrics()` rather than
+                                // binding the full KafkaClientMetrics: that binder also pulls in per-broker metrics
+                                // tagged with Kafka's native `node-id`, which collides with XTDB's `node-id` common
+                                // tag and breaks the whole Prometheus scrape (duplicate label). `consumer.metrics()`
+                                // is backed by Kafka's thread-safe Metrics registry, so reading it on the scrape
+                                // thread is safe.
+                                val lagGauge = meterRegistry?.let { reg ->
+                                    Gauge.builder("xtdb.kafka_connect_source.records_lag", consumer) { recordsLag(it) }
+                                        .description("consumer fetch lag in records for this partition")
+                                        .tags(tags)
+                                        .register(reg)
                                 }
 
-                                while (currentCoroutineContext().isActive) {
-                                    val records = try {
-                                        runInterruptible(Dispatchers.IO) { consumer.poll(POLL_DURATION) }
-                                    } catch (_: WakeupException) {
-                                        break
-                                    } catch (_: InterruptException) {
-                                        break
+                                try {
+                                    val tp = TopicPartition(topic, partition)
+                                    consumer.assign(listOf(tp))
+
+                                    if (afterToken != null) {
+                                        val offset = KafkaConnectSourceToken.parseFrom(afterToken).offset + 1
+                                        LOG.info("[$dbName] Resuming from offset $offset on $topic-$partition")
+                                        consumer.seek(tp, offset)
+                                    } else {
+                                        LOG.info("[$dbName] No token — seeking to beginning of $topic-$partition")
+                                        consumer.seekToBeginning(listOf(tp))
                                     }
 
-                                    if (records.isEmpty) continue
+                                    connectionState.set(1)
 
-                                    // Halt-on-failure: converter / transform exceptions propagate up. Mirrors
-                                    // Kafka Connect's `errors.tolerance=none` default. If we wanted DLQ-style
-                                    // skip-and-continue (`errors.tolerance=all`), we'd need to interleave aborted
-                                    // txs with indexer commits in offset order to keep the resume token correct.
-                                    val sinkRecords = records.records(tp).mapNotNull { rec ->
-                                        val sinkRec = buildSinkRecord(rec, keyConverter, valueConverter, headerConverter)
-                                        transformChain.apply(sinkRec)
-                                    }
+                                    while (currentCoroutineContext().isActive) {
+                                        val records = try {
+                                            runInterruptible(Dispatchers.IO) { consumer.poll(POLL_DURATION) }
+                                        } catch (_: WakeupException) {
+                                            break
+                                        } catch (_: InterruptException) {
+                                            break
+                                        }
 
-                                    if (sinkRecords.isNotEmpty()) {
-                                        indexer.indexRecords(sinkRecords, txIndexer)
+                                        if (records.isEmpty) continue
+
+                                        val partitionRecords = records.records(tp)
+
+                                        // Halt-on-failure: converter / transform exceptions propagate up. Mirrors
+                                        // Kafka Connect's `errors.tolerance=none` default. If we wanted DLQ-style
+                                        // skip-and-continue (`errors.tolerance=all`), we'd need to interleave aborted
+                                        // txs with indexer commits in offset order to keep the resume token correct.
+                                        val sinkRecords = partitionRecords.mapNotNull { rec ->
+                                            val sinkRec = buildSinkRecord(rec, keyConverter, valueConverter, headerConverter)
+                                            transformChain.apply(sinkRec)
+                                        }
+
+                                        if (sinkRecords.isNotEmpty()) {
+                                            indexer.indexRecords(sinkRecords, txIndexer)
+
+                                            recordsCounter?.increment(sinkRecords.size.toDouble())
+                                            val nowMs = Instant.now().toEpochMilli()
+                                            // Kafka uses -1 for a record with no timestamp; skip those so they
+                                            // don't skew the lag summary or zero out last_event_time.
+                                            for (rec in sinkRecords)
+                                                rec.timestamp()?.takeIf { it > 0 }?.let { commitLag?.record((nowMs - it) / 1000.0) }
+                                            sinkRecords.last().timestamp()?.takeIf { it > 0 }?.let { lastEventEpochSeconds.set(it / 1000) }
+                                        }
+
+                                        currentOffset.set(partitionRecords.last().offset())
                                     }
+                                } finally {
+                                    connectionState.set(0)
+                                    lagGauge?.let { meterRegistry?.remove(it) }
                                 }
                             }
                         }
@@ -194,6 +283,8 @@ class KafkaConnectSource internal constructor(
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
+        } finally {
+            meterRegistry?.let { reg -> (gauges + listOfNotNull(recordsCounter, commitLag)).forEach { reg.remove(it) } }
         }
     }
 
@@ -227,6 +318,12 @@ class KafkaConnectSource internal constructor(
         }
         return connectHeaders
     }
+
+    // instantaneous per-partition fetch lag; 0 until the first fetch creates the metric
+    private fun recordsLag(consumer: KafkaConsumer<*, *>): Double =
+        consumer.metrics().entries
+            .firstOrNull { it.key.name() == "records-lag" && it.key.group() == "consumer-fetch-manager-metrics" }
+            ?.value?.metricValue() as? Double ?: 0.0
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
