@@ -41,7 +41,7 @@ class ConnectionTest {
         every { dbCat.databaseOrNull(any()) } returns db
         every { dbCat.primary } returns db
 
-        return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), mockk(relaxed = true), Clock.systemUTC(), ZoneOffset.UTC, null, null, null, null, dbName)
+        return Xtdb.Connection(mockk(relaxed = true), dbCat, mockk(relaxed = true), mockk(relaxed = true), Clock.systemUTC(), null, ZoneOffset.UTC, null, null, null, null, dbName)
     }
 
     private fun tokenOf(awaitToken: String?) = awaitToken?.decodeTxBasisToken()

@@ -5,6 +5,7 @@ package xtdb.api
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import io.micrometer.tracing.Tracer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import org.apache.arrow.adbc.core.*
@@ -119,6 +120,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val qSrc: IQuerySource,
         private val sqlPlanner: SqlPlanner,
         private val clock: Clock,
+        // the query tracer, gated by the node's query-tracing config (null = off); threaded into every read's
+        // QueryOpts so the connection — not each frontend — owns query tracing.
+        private val tracer: Tracer?,
         var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
@@ -275,7 +279,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         fun openSqlQuery(sql: String): ResultCursor =
-            prepareSql(sql).openQuery(null, queryOpts())
+            openQuery(prepareSql(sql), null)
 
         fun openSnapshot(): DatabaseSnapshot {
             val db = db(dbName)
@@ -357,7 +361,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 val queryArgs = openQueryArgs()
                 val cursor = try {
-                    prepared?.openQuery(queryArgs, queryOpts()) ?: openSqlQuery(sql)
+                    prepared?.let { openQuery(it, queryArgs) } ?: openSqlQuery(sql)
                 } catch (t: Throwable) {
                     queryArgs?.close()
                     throw t
@@ -667,8 +671,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // QueryOpts for a user read: an open tx's pinned basis (snapshot isolation), else null fields so the
         // planner defaults to latest data and the wall-clock now (autocommit / no open tx).
         private fun queryOpts() = tx.let { t ->
-            QueryOpts(t?.readBasis?.currentTime, t?.txDefaultTz ?: defaultTz, t?.readBasis?.snapshotToken, t?.readBasis?.snapshotTime)
+            QueryOpts(t?.readBasis?.currentTime, t?.txDefaultTz ?: defaultTz, t?.readBasis?.snapshotToken, t?.readBasis?.snapshotTime, tracer)
         }
+
+        // Open a cursor on an already-prepared query at this connection's current basis, tz and tracer. The
+        // one place a frontend opens a read — it owns the cursor for wire serialization, but the QueryOpts
+        // (basis/tz/tracer) stay the connection's, so no callsite reconstructs them.
+        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
 
         // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
         // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
