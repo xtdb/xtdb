@@ -352,7 +352,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 if (prepared == null)
                     (parseStatements(sql).singleOrNull() as? ParsedStatement.ShowVariable)
                         ?.let { return showVariable(it.variable) }
-                resolveForQuery()
                 if (prepared == null && args != null)
                     throw Incorrect(
                         "call prepare() before executeQuery() when parameters are bound",
@@ -361,7 +360,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 val queryArgs = openQueryArgs()
                 val cursor = try {
-                    prepared?.let { openQuery(it, queryArgs) } ?: openSqlQuery(sql)
+                    prepared?.let { openQuery(it, queryArgs) } ?: openQuery(prepareSql(sql), null)
                 } catch (t: Throwable) {
                     queryArgs?.close()
                     throw t
@@ -674,10 +673,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             QueryOpts(t?.readBasis?.currentTime, t?.txDefaultTz ?: defaultTz, t?.readBasis?.snapshotToken, t?.readBasis?.snapshotTime, tracer)
         }
 
-        // Open a cursor on an already-prepared query at this connection's current basis, tz and tracer. The
-        // one place a frontend opens a read — it owns the cursor for wire serialization, but the QueryOpts
-        // (basis/tz/tracer) stay the connection's, so no callsite reconstructs them.
-        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
+        // Open a cursor on an already-prepared query: first resolves the tx's access mode and basis (rejecting
+        // a read in a write tx, resolving an unresolved tx to read-only), then opens at the connection's basis,
+        // tz and tracer. A frontend owns the cursor for wire serialization, but the gate and the QueryOpts stay
+        // the connection's — no callsite reconstructs them, nor decides the gate.
+        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor {
+            resolveForQuery()
+            return pq.openQuery(args, queryOpts())
+        }
 
         // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
         // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
