@@ -150,7 +150,7 @@ class KafkaConnectSourceIntegrationTest {
         createTopic(sourceTopic)
 
         produceBytes(sourceTopic, "k1", """{"name":"Alice","age":30}""".toByteArray())
-        produceBytes(sourceTopic, "k2", """{"_id":"explicit","name":"Bob"}""".toByteArray())
+        produceBytes(sourceTopic, "k2", """{"_id":"from-value","name":"Bob"}""".toByteArray())
 
         openNode("xt-log-${UUID.randomUUID()}").use { node ->
             attach(node, "events", """
@@ -176,9 +176,10 @@ class KafkaConnectSourceIntegrationTest {
             assertEquals(1, k1.size)
             assertEquals("Alice", k1[0]["name"])
 
-            val k2 = xtQueryDb(node, "events", "SELECT _id, name FROM public.events WHERE _id = 'explicit'")
-            assertEquals(1, k2.size)
+            val k2 = xtQueryDb(node, "events", "SELECT _id, name FROM public.events WHERE _id = 'k2'")
+            assertEquals(1, k2.size, "key-derived _id wins — the value's _id is overwritten")
             assertEquals("Bob", k2[0]["name"])
+            assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'from-value'").isEmpty())
 
             produceBytes(sourceTopic, "k3", """{"name":"Charlie"}""".toByteArray())
             awaitCondition("streamed record appears") {
@@ -411,8 +412,8 @@ class KafkaConnectSourceIntegrationTest {
         createTopic(sourceTopic)
 
         produceBytes(
-            sourceTopic, "k1",
-            """{"op":"c","payload":{"_id":"alice","name":"Alice","age":30}}""".toByteArray(),
+            sourceTopic, "alice",
+            """{"op":"c","payload":{"name":"Alice","age":30}}""".toByteArray(),
         )
 
         openNode("xt-log-${UUID.randomUUID()}").use { node ->
@@ -454,12 +455,12 @@ class KafkaConnectSourceIntegrationTest {
         val sourceTopic = "events-${UUID.randomUUID()}"
         createTopic(sourceTopic)
 
-        // Envelope-shaped: { meta, payload: { _id, name, email } }
+        // Envelope-shaped: { meta, payload: { name, email } }
         // Chain: unwrap (ExtractField -> payload) THEN mask (MaskField -> email).
         // Order matters: mask must run on the unwrapped payload, not the outer envelope.
         produceBytes(
-            sourceTopic, "k1",
-            """{"meta":{"op":"c"},"payload":{"_id":"alice","name":"Alice","email":"a@example.com"}}""".toByteArray(),
+            sourceTopic, "alice",
+            """{"meta":{"op":"c"},"payload":{"name":"Alice","email":"a@example.com"}}""".toByteArray(),
         )
 
         openNode("xt-log-${UUID.randomUUID()}").use { node ->
@@ -505,7 +506,7 @@ class KafkaConnectSourceIntegrationTest {
         //   - bob:   tombstone     — predicate.test=true on this, negate→false, mask SKIPPED,
         //                             record reaches indexer unmolested (no aborted tx, no row
         //                             since there's nothing to delete).
-        produceBytes(sourceTopic, "alice", """{"_id":"alice","email":"a@example.com"}""".toByteArray())
+        produceBytes(sourceTopic, "alice", """{"email":"a@example.com"}""".toByteArray())
         produceBytes(sourceTopic, "bob", null)
 
         openNode("xt-log-${UUID.randomUUID()}").use { node ->
@@ -614,7 +615,6 @@ class KafkaConnectSourceIntegrationTest {
             sourceTopic, "all-types",
             """
             {
-              "_id": "all-types",
               "string_val": "hello",
               "int_val": 42,
               "long_val": 9999999999,
@@ -685,7 +685,6 @@ class KafkaConnectSourceIntegrationTest {
               "${'$'}schema": "http://json-schema.org/draft-07/schema#",
               "type": "object",
               "properties": {
-                "_id":           { "type": "string" },
                 "string_val":    { "type": "string" },
                 "int_val":       { "type": "integer" },
                 "double_val":    { "type": "number" },
@@ -727,7 +726,6 @@ class KafkaConnectSourceIntegrationTest {
 
         val payloadJson = mapper.readTree("""
             {
-              "_id": "all-types",
               "string_val": "hello",
               "int_val": 42,
               "double_val": 3.14,
@@ -820,7 +818,6 @@ class KafkaConnectSourceIntegrationTest {
               "${'$'}schema": "http://json-schema.org/draft-07/schema#",
               "type": "object",
               "properties": {
-                "_id":  { "type": "string" },
                 "name": { "type": "string" }
               }
             }
@@ -829,7 +826,7 @@ class KafkaConnectSourceIntegrationTest {
         val mapper = com.fasterxml.jackson.databind.ObjectMapper()
         val jsonSchema = io.confluent.kafka.schemaregistry.json.JsonSchema(schemaStr)
         val envelope = io.confluent.kafka.schemaregistry.json.JsonSchemaUtils.toObject(
-            mapper.readTree("""{"_id":"k1","name":"Alice"}"""),
+            mapper.readTree("""{"name":"Alice"}"""),
             jsonSchema,
         )
 
@@ -881,14 +878,12 @@ class KafkaConnectSourceIntegrationTest {
             {
               "type":"record","name":"Person","namespace":"xtdb.test",
               "fields":[
-                {"name":"_id","type":"string"},
                 {"name":"name","type":"string"}
               ]
             }
         """.trimIndent())
 
         val rec = GenericData.Record(avroSchema).apply {
-            put("_id", "k1")
             put("name", "Alice")
         }
         produceAvro(sourceTopic, "k1", rec)
@@ -934,7 +929,6 @@ class KafkaConnectSourceIntegrationTest {
             {
               "type": "record", "name": "OrderEnvelope", "namespace": "xtdb.test",
               "fields": [
-                {"name": "_id", "type": "string"},
                 {"name": "header", "type": {
                   "type": "record", "name": "Header",
                   "fields": [
@@ -997,7 +991,6 @@ class KafkaConnectSourceIntegrationTest {
         }
 
         val envelope = GenericData.Record(avroSchema).apply {
-            put("_id", "nested")
             put("header", headerRec)
             put("delivery_attempts", listOf(attempt1.toEpochMilli(), attempt2.toEpochMilli()))
             put("lines_by_sku", mapOf("SKU-A" to lineRec(lineA), "SKU-B" to lineRec(lineB)))
@@ -1068,7 +1061,6 @@ class KafkaConnectSourceIntegrationTest {
               "name": "AllTypes",
               "namespace": "xtdb.test",
               "fields": [
-                {"name": "_id",          "type": "string"},
                 {"name": "bool_val",     "type": "boolean"},
                 {"name": "int_val",      "type": "int"},
                 {"name": "long_val",     "type": "long"},
@@ -1114,7 +1106,6 @@ class KafkaConnectSourceIntegrationTest {
         val nestedSchema = avroSchema.getField("nested_val").schema()
 
         val rec = GenericData.Record(avroSchema).apply {
-            put("_id", "all-types")
             put("bool_val", true)
             put("int_val", 42)
             put("long_val", 9999999999L)

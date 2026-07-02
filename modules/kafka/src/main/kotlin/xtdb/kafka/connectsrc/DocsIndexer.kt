@@ -21,6 +21,7 @@ import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
 import xtdb.table.TableRef
+import xtdb.util.asIid
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -81,22 +82,15 @@ class DocsIndexer(private val table: TableRef) : RecordIndexer {
         }
     }
 
-    private fun coordsFor(rec: SinkRecord): Map<String, Any?> =
-        mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset())
-
     private fun writeRecord(openTx: OpenTx, rec: SinkRecord) {
         val openTxTable = openTx.table(table.schemaName, table.tableName)
+
+        val id = resolveId(rec)
         val value = rec.value()
 
         if (value == null) {
-            val id = rec.key() ?: throw Incorrect(
-                "tombstone has no key — can't resolve _id",
-                "xtdb.kafka-connect-source/docs-no-id-on-tombstone",
-                mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset()),
-            )
-
             openTxTable.apply {
-                writeId(unwrapKeyForId(id))
+                writeId(id)
                 writeDefaultValidTime()
                 endDelete()
             }
@@ -119,13 +113,7 @@ class DocsIndexer(private val table: TableRef) : RecordIndexer {
                 ),
             )
 
-        val id = docMap["_id"]
-            ?: rec.key()?.let { unwrapKeyForId(it) }?.also { docMap["_id"] = it }
-            ?: throw Incorrect(
-                "no _id on doc and no record key — can't resolve _id",
-                "xtdb.kafka-connect-source/docs-no-id",
-                mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset()),
-            )
+        docMap["_id"] = id
 
         openTxTable.apply {
             writeId(id)
@@ -136,8 +124,36 @@ class DocsIndexer(private val table: TableRef) : RecordIndexer {
     }
 }
 
-// AvroConverter et al may yield a single-field Struct as the key — unwrap to the inner value.
-private fun unwrapKeyForId(key: Any): Any =
+private fun coordsFor(rec: SinkRecord): Map<String, Any?> =
+    mapOf("topic" to rec.topic(), "partition" to rec.kafkaPartition(), "offset" to rec.kafkaOffset())
+
+// Kafka's compaction, per-key ordering and tombstones all hang off the key, so it's the
+// sole source of `_id` — deriving from the value would let upsert- and delete-identity diverge.
+internal fun resolveId(rec: SinkRecord): Any {
+    val id = rec.key()?.let { unwrapKeyForId(it) } ?: throw Incorrect(
+        "record has no usable key — can't resolve _id (use the ValueToKey SMT to derive a key from the value)",
+        "xtdb.kafka-connect-source/docs-no-key",
+        coordsFor(rec),
+    )
+
+    // Probe rather than duplicate the whitelist, so the accepted key types can't drift from `asIid`.
+    try {
+        id.asIid
+    } catch (e: Incorrect) {
+        throw Incorrect(
+            "record key of type ${id.javaClass.name} can't be used as _id (use the ExtractField SMT to extract a scalar key field)",
+            "xtdb.kafka-connect-source/docs-invalid-key",
+            coordsFor(rec) + ("keyType" to id.javaClass.name),
+            e,
+        )
+    }
+
+    return id
+}
+
+// AvroConverter et al may yield a single-field Struct as the key — unwrap to the inner value,
+// which may itself be null (a nullable key field): the caller treats that as no usable key.
+private fun unwrapKeyForId(key: Any): Any? =
     if (key is Struct && key.schema()?.fields()?.size == 1)
         key.get(key.schema().fields()[0])
     else key
