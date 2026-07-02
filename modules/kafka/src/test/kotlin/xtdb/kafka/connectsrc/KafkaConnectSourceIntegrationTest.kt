@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import java.sql.SQLException
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
@@ -488,6 +490,55 @@ class KafkaConnectSourceIntegrationTest {
             // and we'd see an aborted tx for that record.
             val aborted = xtQueryDb(node, "events", "SELECT committed FROM xt.txs WHERE committed = false")
             assertTrue(aborted.isEmpty(), "no aborted txs — tombstone should bypass MaskField via the predicate, got: $aborted")
+        }
+    }
+
+    @Test
+    fun `ATTACH with an invalid connectConfig fails the statement, leaving the node healthy`() = runTest(timeout = 120.seconds) {
+        val sourceTopic = "events-${UUID.randomUUID()}"
+        createTopic(sourceTopic)
+        produceBytes(sourceTopic, "k1", """{"name":"Alice"}""".toByteArray())
+
+        openNode("xt-log-${UUID.randomUUID()}").use { node ->
+            val ex = assertThrows<SQLException> {
+                attach(node, "bad", """
+                    log: !Kafka
+                      cluster: kafka
+                      topic: bad-replica-${UUID.randomUUID()}
+                    externalSource: !KafkaConnect
+                      remote: kafka
+                      topic: $sourceTopic
+                      connectConfig:
+                        key.converter: org.apache.kafka.connect.storage.StringConverter
+                        value.converter: org.apache.kafka.connect.json.JsonConverter
+                        transfroms: mask
+                      indexer: !Docs
+                        table: events
+                """.trimIndent())
+            }
+            assertTrue(
+                ex.message!!.contains("unknown connectConfig key 'transfroms'"),
+                "the parse error should reach the SQL client, got: ${ex.message}",
+            )
+
+            attach(node, "events", """
+                log: !Kafka
+                  cluster: kafka
+                  topic: test-replica-${UUID.randomUUID()}
+                externalSource: !KafkaConnect
+                  remote: kafka
+                  topic: $sourceTopic
+                  connectConfig:
+                    key.converter: org.apache.kafka.connect.storage.StringConverter
+                    value.converter: org.apache.kafka.connect.json.JsonConverter
+                    value.converter.schemas.enable: "false"
+                  indexer: !Docs
+                    table: events
+            """.trimIndent())
+
+            awaitCondition("valid attach after the failed one still indexes") {
+                xtQueryDb(node, "events", "SELECT _id FROM public.events").isNotEmpty()
+            }
         }
     }
 

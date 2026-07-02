@@ -5,11 +5,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runInterruptible
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.TopicPartition
@@ -17,7 +19,6 @@ import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.WakeupException
 import org.apache.kafka.common.header.Headers
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.apache.kafka.connect.connector.ConnectRecord
 import org.apache.kafka.connect.data.SchemaAndValue
 import org.apache.kafka.connect.header.ConnectHeaders
 import org.apache.kafka.connect.sink.SinkRecord
@@ -58,11 +59,11 @@ private val DEFAULT_CONSUMER_CONFIG: Map<String, String> = mapOf(
     "auto.offset.reset" to "none",
 )
 
-class KafkaConnectSource(
+class KafkaConnectSource internal constructor(
     private val dbName: String,
     private val cluster: KafkaCluster,
     private val topic: String,
-    private val connectConfig: Map<String, String>,
+    private val connectConfig: ConnectConfig,
     private val indexer: RecordIndexer,
 ) : ExternalSource {
 
@@ -96,7 +97,7 @@ class KafkaConnectSource(
                     data = mapOf("alias" to remote, "actualType" to actualType),
                 )
 
-            return KafkaConnectSource(dbName, cluster, topic, connectConfig, indexer.open())
+            return KafkaConnectSource(dbName, cluster, topic, ConnectConfig.parse(connectConfig), indexer.open())
         }
 
         class Registration : ExternalSource.Registration<Factory> {
@@ -124,7 +125,7 @@ class KafkaConnectSource(
             }
 
             override fun registerSerde(builder: PolymorphicModuleBuilder<ExternalSource.Factory>) {
-                builder.subclass(Factory::class)
+                builder.subclass(Factory::class, ValidatingFactorySerializer)
             }
 
             override val serializersModule: SerializersModule = RecordIndexer.Factory.serializersModule
@@ -139,13 +140,13 @@ class KafkaConnectSource(
         LOG.info("[$dbName] Partition $partition assigned (topic=$topic)")
 
         val mergedConsumerConfig: Map<String, Any> =
-            DEFAULT_CONSUMER_CONFIG + cluster.kafkaConfigMap + filteredConsumerConfig(connectConfig) + HARDCODED_CONSUMER_CONFIG
+            DEFAULT_CONSUMER_CONFIG + cluster.kafkaConfigMap + HARDCODED_CONSUMER_CONFIG
 
         try {
-            openConverter(connectConfig, ConverterRole.KEY).use { keyConverter ->
-                openConverter(connectConfig, ConverterRole.VALUE).use { valueConverter ->
+            connectConfig.keyConverter.open().use { keyConverter ->
+                connectConfig.valueConverter.open().use { valueConverter ->
                     SimpleHeaderConverter().also { it.configure(emptyMap<String, Any>()) }.use { headerConverter ->
-                        openTransforms(connectConfig).use { transformChain ->
+                        connectConfig.openTransformChain().use { transformChain ->
                             KafkaConsumer<ByteArray?, ByteArray?>(mergedConsumerConfig).use { consumer ->
                                 val tp = TopicPartition(topic, partition)
                                 consumer.assign(listOf(tp))
@@ -234,135 +235,47 @@ class KafkaConnectSource(
     }
 }
 
-private enum class ConverterRole(val configKey: String, val isKey: Boolean) {
-    KEY("key.converter", true),
-    VALUE("value.converter", false),
+/**
+ * The generated serializer plus a `ConnectConfig.parse` on decode, so a bad `connectConfig` fails the
+ * `ATTACH DATABASE` statement (or node-config load) itself rather than the eventual leader transition.
+ *
+ * Deliberately YAML-side only: the kotlinx serde is only ever fed live operator input. The proto path
+ * ([KafkaConnectSource.Factory.Registration.fromProto] — block-catalog reload, log replay) constructs the
+ * Factory directly and MUST stay validation-free, so configs attached under older, looser rules remain
+ * readable and `XTDB_SKIP_DBS` can still park them.
+ */
+private object ValidatingFactorySerializer : KSerializer<KafkaConnectSource.Factory> {
+    private val delegate = KafkaConnectSource.Factory.serializer()
+    override val descriptor get() = delegate.descriptor
+    override fun serialize(encoder: Encoder, value: KafkaConnectSource.Factory) = delegate.serialize(encoder, value)
+    override fun deserialize(decoder: Decoder): KafkaConnectSource.Factory =
+        delegate.deserialize(decoder).also { ConnectConfig.parse(it.connectConfig) }
 }
-
-private fun openConverter(connectConfig: Map<String, String>, role: ConverterRole): Converter {
-    val className = connectConfig[role.configKey]
-        ?: throw Incorrect(
-            "missing '${role.configKey}' in connectConfig",
-            "xtdb.kafka-connect-source/missing-converter",
-            mapOf("role" to role.configKey),
-        )
-    val nested = connectConfig
-        .filterKeys { it.startsWith("${role.configKey}.") }
-        .mapKeys { (k, _) -> k.removePrefix("${role.configKey}.") }
-
-    // NOTE: different from KC. KC's `Plugins.newConverter` uses an isolated classpath for
-    // dependency isolation between plugins.
-    val cls = try {
-        Class.forName(className).asSubclass(Converter::class.java)
-    } catch (e: Exception) {
-        throw Incorrect(
-            "couldn't load ${role.configKey} class '$className': ${e.message}",
-            "xtdb.kafka-connect-source/converter-class-not-found",
-            mapOf("role" to role.configKey, "className" to className),
-            cause = e,
-        )
-    }
-    return cls.getDeclaredConstructor().newInstance().apply { configure(nested, role.isKey) }
-}
-
-private fun filteredConsumerConfig(connectConfig: Map<String, String>): Map<String, String> =
-    connectConfig.filterKeys {
-        !it.startsWith("key.converter") &&
-            !it.startsWith("value.converter") &&
-            !it.startsWith("transforms") &&
-            !it.startsWith("predicates")
-    }
 
 internal class TransformChain(
-    private val transforms: List<Pair<Transformation<SinkRecord>, Predicate<SinkRecord>?>>,
+    private val steps: List<Step>,
+    private val predicates: Collection<Predicate<SinkRecord>>,
 ) : AutoCloseable {
+    data class Step(
+        val transform: Transformation<SinkRecord>,
+        val predicate: Predicate<SinkRecord>?,
+        val negate: Boolean,
+    )
+
     fun apply(initial: SinkRecord): SinkRecord? {
         var rec: SinkRecord? = initial
-        for ((transform, predicate) in transforms) {
+        for (step in steps) {
             val current = rec ?: return null
-            if (predicate == null || predicate.test(current)) {
-                rec = transform.apply(current)
+            if (step.predicate == null || step.predicate.test(current) != step.negate) {
+                rec = step.transform.apply(current)
             }
         }
         return rec
     }
 
     override fun close() {
-        for ((transform, predicate) in transforms) {
-            runCatching { transform.close() }
-            runCatching { predicate?.close() }
-        }
+        // a predicate may be shared across steps, so close the distinct instances — not per-step
+        steps.forEach { runCatching { it.transform.close() } }
+        predicates.forEach { runCatching { it.close() } }
     }
-}
-
-@Suppress("UNCHECKED_CAST")
-private fun openTransforms(connectConfig: Map<String, String>): TransformChain {
-    val raw = connectConfig["transforms"]?.trim().orEmpty()
-    val aliases = if (raw.isEmpty()) emptyList()
-        else raw.split(",").map { it.trim() }
-    if (aliases.any { it.isEmpty() }) {
-        throw Incorrect(
-            "empty alias in 'transforms' — check for stray commas",
-            "xtdb.kafka-connect-source/empty-transform-alias",
-            mapOf("transforms" to raw),
-        )
-    }
-
-    val chain = aliases.map { alias ->
-        val typeKey = "transforms.$alias.type"
-        val type = connectConfig[typeKey]
-            ?: throw Incorrect(
-                "missing '$typeKey' for transform alias '$alias'",
-                "xtdb.kafka-connect-source/missing-transform-type",
-                mapOf("alias" to alias),
-            )
-        val predicateAlias = connectConfig["transforms.$alias.predicate"]
-        val negate = connectConfig["transforms.$alias.negate"]?.toBoolean() == true
-
-        val transformConfig = connectConfig
-            .filterKeys { it.startsWith("transforms.$alias.") }
-            .filterKeys { !it.endsWith(".type") && !it.endsWith(".predicate") && !it.endsWith(".negate") }
-            .mapKeys { (k, _) -> k.removePrefix("transforms.$alias.") }
-
-        val transform = (Class.forName(type) as Class<Transformation<SinkRecord>>)
-            .getDeclaredConstructor().newInstance()
-            .apply { configure(transformConfig) }
-
-        val predicate = predicateAlias?.let { openPredicate(connectConfig, it, negate) }
-
-        transform to predicate
-    }
-    return TransformChain(chain)
-}
-
-@Suppress("UNCHECKED_CAST")
-private fun openPredicate(
-    connectConfig: Map<String, String>,
-    alias: String,
-    negate: Boolean,
-): Predicate<SinkRecord> {
-    val type = connectConfig["predicates.$alias.type"]
-        ?: throw Incorrect(
-            "missing 'predicates.$alias.type'",
-            "xtdb.kafka-connect-source/missing-predicate-type",
-            mapOf("alias" to alias),
-        )
-    val predicateConfig = connectConfig
-        .filterKeys { it.startsWith("predicates.$alias.") && !it.endsWith(".type") }
-        .mapKeys { (k, _) -> k.removePrefix("predicates.$alias.") }
-
-    val base = (Class.forName(type) as Class<Predicate<SinkRecord>>)
-        .getDeclaredConstructor().newInstance()
-        .apply { configure(predicateConfig) }
-
-    return if (negate) NegatedPredicate(base) else base
-}
-
-private class NegatedPredicate<R : ConnectRecord<R>>(
-    private val inner: Predicate<R>,
-) : Predicate<R> {
-    override fun config() = inner.config()
-    override fun test(record: R): Boolean = !inner.test(record)
-    override fun close() = inner.close()
-    override fun configure(configs: MutableMap<String, *>?) = inner.configure(configs)
 }

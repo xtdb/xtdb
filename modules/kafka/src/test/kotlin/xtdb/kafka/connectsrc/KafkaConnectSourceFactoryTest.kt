@@ -3,7 +3,9 @@ package xtdb.kafka.connectsrc
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.database.Database
+import xtdb.error.Incorrect
 
 class KafkaConnectSourceFactoryTest {
 
@@ -66,16 +68,37 @@ class KafkaConnectSourceFactoryTest {
     }
 
     @Test
-    fun `connectConfig defaults to empty map`() {
+    fun `YAML with an invalid connectConfig fails to decode`() {
         val yaml = """
             externalSource: !KafkaConnect
-              remote: k
-              topic: t
+              remote: my-kafka
+              topic: orders
+              connectConfig:
+                key.converter: org.apache.kafka.connect.storage.StringConverter
+                value.converter: org.apache.kafka.connect.json.JsonConverter
+                transfroms: mask
               indexer: !Docs
                 table: orders
         """.trimIndent()
 
-        val factory = Database.Config.fromYaml(yaml).externalSource as KafkaConnectSource.Factory
+        assertThrows<Incorrect> { Database.Config.fromYaml(yaml) }
+    }
+
+    @Test
+    fun `proto round-trips an invalid connectConfig untouched — history is never validated`() {
+        val invalid = KafkaConnectSource.Factory(
+            remote = "my-kafka",
+            topic = "orders",
+            connectConfig = mapOf("transfroms" to "mask"),
+            indexer = DocsIndexer.Factory(table = "orders"),
+        )
+
+        assertEquals("mask", protoRoundTrip(invalid).connectConfig["transfroms"])
+    }
+
+    @Test
+    fun `connectConfig defaults to empty map`() {
+        val factory = KafkaConnectSource.Factory(remote = "k", topic = "t", indexer = DocsIndexer.Factory(table = "orders"))
 
         assertTrue(factory.connectConfig.isEmpty())
     }
@@ -86,6 +109,9 @@ class KafkaConnectSourceFactoryTest {
             externalSource: !KafkaConnect
               remote: k
               topic: t
+              connectConfig:
+                key.converter: org.apache.kafka.connect.storage.StringConverter
+                value.converter: org.apache.kafka.connect.json.JsonConverter
               indexer: !Docs
                 table: analytics.events
         """.trimIndent()
