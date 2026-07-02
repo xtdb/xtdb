@@ -124,15 +124,15 @@ value ReadBasis {
 
 value CommitOpts {
     -- Write-side options, grammar-scoped to READ WRITE (readWriteTxOption in the SQL
-    -- grammar). Their very presence implies the transaction is ReadWrite.
+    -- grammar). Their very presence implies the transaction is ReadWrite. The transaction's
+    -- effective timezone is NOT a commit-opt: it is set at BEGIN as the tx's tx_default_tz
+    -- (see Transaction), not deferred to COMMIT.
     --   system_time   — the system-time to record the transaction at.
     --   user_metadata — opaque per-transaction metadata.
     --   async         — true: commit submits without awaiting; false: execute-and-await.
-    --   tz_override    — overrides the connection defaultTz for this transaction.
     system_time: Timestamp?
     user_metadata: Bytes?
     async: Boolean
-    tz_override: ZoneId?
 }
 
 value TxOp {
@@ -195,7 +195,8 @@ entity Transaction {
     connection: Connection
     mode: Unresolved | ReadOnly | ReadWrite
     failed: Boolean
-    entered_tz: ZoneId               -- the connection's default_tz as at BEGIN; ROLLBACK restores it
+    tx_default_tz: ZoneId            -- the tz this tx's DML and reads anchor in (WITH (TIMEZONE) override, else the connection default at BEGIN)
+    session_default_tz: ZoneId       -- the connection default_tz to write back to the connection on COMMIT
 }
 
 variant Unresolved : Transaction {
@@ -256,7 +257,11 @@ rule BeginReadOnly {
     -- begin-time pin — the latest-completed snapshot (Database.snapshotToken, captured after
     -- awaiting the connection's await_token) plus the current-time; any field supplied in the
     -- WITH clause overrides the corresponding pinned default.
-    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
+    -- default_tz; session_default_tz is the connection's default_tz. WITH (TIMEZONE) is
+    -- available on any access mode (READ ONLY as well as READ WRITE), so it sets the tx's
+    -- effective tz at BEGIN — it is not a ReadWrite commit-opt.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts, tz_override)
     requires: connection.tx = null
     requires: access_mode = read_only
 
@@ -264,7 +269,8 @@ rule BeginReadOnly {
         ReadOnly.created(
             connection: connection,
             failed: false,
-            entered_tz: connection.default_tz,
+            tx_default_tz: tz_override ?? connection.default_tz,
+            session_default_tz: connection.default_tz,
             read_basis: ReadBasis(
                 snapshot_token: read_basis?.snapshot_token ?? Database.snapshotToken,
                 snapshot_time: read_basis?.snapshot_time,
@@ -281,9 +287,12 @@ rule BeginReadWrite {
     -- The commit-opts values (system_time, user_metadata, async) are obtained by evaluating
     -- their WITH-clause expressions through the SqlPlanner — it plans each option expression
     -- (e.g. SYSTEM_TIME's `TIMESTAMP '…'`) and substitutes positional params to a runtime
-    -- value. The READ ONLY read-basis options (SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME) are
-    -- evaluated likewise.
-    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    -- value. The READ ONLY read-basis options (SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME) and
+    -- the WITH (TIMEZONE) override are evaluated likewise.
+    --
+    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
+    -- default_tz; session_default_tz is the connection's default_tz.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts, tz_override)
     requires: connection.tx = null
     requires: access_mode = read_write
 
@@ -292,13 +301,13 @@ rule BeginReadWrite {
         ReadWrite.created(
             connection: connection,
             failed: false,
-            entered_tz: connection.default_tz,
+            tx_default_tz: tz_override ?? connection.default_tz,
+            session_default_tz: connection.default_tz,
             buffer: buffer,
             commit_opts: commit_opts ?? CommitOpts(
                 system_time: null,
                 user_metadata: null,
-                async: false,
-                tz_override: null
+                async: false
             )
         )
 }
@@ -309,7 +318,10 @@ rule BeginUnresolved {
     -- opens ReadOnly / ReadWrite directly; with no default set it stays Unresolved, resolved
     -- on the first statement (the common case). Either way the read basis is pinned NOW
     -- (begin-time): an Unresolved or ReadOnly tx inherits it; a ReadWrite tx discards it.
-    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    -- tx_default_tz is the WITH (TIMEZONE) override if present, else the connection's
+    -- default_tz; session_default_tz is the connection's default_tz. A bare
+    -- BEGIN WITH (TIMEZONE = ...) still carries the override into tx_default_tz.
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts, tz_override)
     requires: connection.tx = null
     requires: access_mode = none
 
@@ -319,11 +331,13 @@ rule BeginUnresolved {
             snapshot_time: null,
             clock_time: now
         )
+        let tx_tz = tz_override ?? connection.default_tz
         if connection.default_access_mode = read_only:
             ReadOnly.created(
                 connection: connection,
                 failed: false,
-                entered_tz: connection.default_tz,
+                tx_default_tz: tx_tz,
+                session_default_tz: connection.default_tz,
                 read_basis: begin_basis
             )
         else if connection.default_access_mode = read_write:
@@ -331,27 +345,28 @@ rule BeginUnresolved {
             ReadWrite.created(
                 connection: connection,
                 failed: false,
-                entered_tz: connection.default_tz,
+                tx_default_tz: tx_tz,
+                session_default_tz: connection.default_tz,
                 buffer: buffer,
                 commit_opts: CommitOpts(
                     system_time: null,
                     user_metadata: null,
-                    async: false,
-                    tz_override: null
+                    async: false
                 )
             )
         else:
             Unresolved.created(
                 connection: connection,
                 failed: false,
-                entered_tz: connection.default_tz,
+                tx_default_tz: tx_tz,
+                session_default_tz: connection.default_tz,
                 read_basis: begin_basis
             )
 }
 
 rule BeginWhileOpenRejected {
     -- At most one open transaction per connection: BEGIN while one is open is an error.
-    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts)
+    when: BeginTransaction(frontend, connection, access_mode, read_basis, commit_opts, tz_override)
     requires: connection.tx != null
 
     ensures:
@@ -395,9 +410,51 @@ rule FirstStatementResolvesReadWrite {
         connection.tx.commit_opts = CommitOpts(
             system_time: null,
             user_metadata: null,
-            async: false,
-            tz_override: null
+            async: false
         )
+}
+
+---- Rules: Timezone
+
+-- SET TIME ZONE is a session operator. This spec touches it only for its transaction
+-- scoping — the broader SET / SHOW session surface is out of frame (as with SET SESSION
+-- CHARACTERISTICS, referenced only as a source of default_access_mode). WITH (TIMEZONE)
+-- stays tx-scoped (it sets tx_default_tz at BEGIN, never session_default_tz); a mid-tx
+-- SET TIME ZONE writes both, so it persists on COMMIT and reverts on ROLLBACK.
+
+rule SetTimeZoneInTx {
+    -- Mid-transaction SET TIME ZONE writes BOTH the tx's tx_default_tz (so this tx's DML and
+    -- reads re-anchor) AND its session_default_tz (so the change is written back to the
+    -- connection on COMMIT and persists past the tx). The connection's own default_tz is left
+    -- untouched while the tx is open — that is what makes the ROLLBACK revert implicit.
+    when: SetTimeZone(frontend, connection, zone)
+    requires: connection.tx != null
+    requires: not (connection.tx.mode = ReadWrite and connection.tx.buffer.ops.count > 0)
+
+    ensures:
+        connection.tx.tx_default_tz = zone
+        connection.tx.session_default_tz = zone
+}
+
+rule SetTimeZoneInWriteTxRejected {
+    -- SET TIME ZONE is rejected once a ReadWrite tx has buffered ops: those ops captured
+    -- temporal literals under the old zone, so changing it mid-buffer would be inconsistent.
+    when: SetTimeZone(frontend, connection, zone)
+    requires: connection.tx != null
+    requires: connection.tx.mode = ReadWrite
+    requires: connection.tx.buffer.ops.count > 0
+
+    ensures:
+        StatementRejected(error_code: `xtdb/set-tz-in-write-tx`)
+}
+
+rule SetTimeZoneNoTx {
+    -- With no open transaction, SET TIME ZONE updates the connection's default_tz directly.
+    when: SetTimeZone(frontend, connection, zone)
+    requires: connection.tx = null
+
+    ensures:
+        connection.default_tz = zone
 }
 
 ---- Rules: Statement Execution
@@ -451,13 +508,13 @@ rule ManualLazyOpenDml {
         ReadWrite.created(
             connection: connection,
             failed: false,
-            entered_tz: connection.default_tz,
+            tx_default_tz: connection.default_tz,
+            session_default_tz: connection.default_tz,
             buffer: buffer,
             commit_opts: CommitOpts(
                 system_time: null,
                 user_metadata: null,
-                async: false,
-                tz_override: null
+                async: false
             )
         )
 }
@@ -478,7 +535,8 @@ rule ManualLazyOpenQuery {
         let opened = ReadOnly.created(
             connection: connection,
             failed: false,
-            entered_tz: connection.default_tz,
+            tx_default_tz: connection.default_tz,
+            session_default_tz: connection.default_tz,
             read_basis: ReadBasis(
                 snapshot_token: connection.await_token,
                 snapshot_time: null,
@@ -595,7 +653,10 @@ rule FailedTransactionRejectsStatements {
 rule CommitReadWrite {
     -- Commit of a ReadWrite transaction drains the buffer and crosses the Database
     -- boundary EVEN IF the buffer is empty: async commit submits (fire-and-forget),
-    -- sync commit executes-and-awaits. tz_override (if set) overrides default_tz.
+    -- sync commit executes-and-awaits. The submit anchors in the tx's tx_default_tz. COMMIT
+    -- also writes the tx's session_default_tz back to the connection, so a mid-tx SET TIME
+    -- ZONE persists past the tx while a WITH (TIMEZONE) override (which never touched
+    -- session_default_tz) does not.
     when: CommitTransaction(frontend, connection)
     requires: connection.tx != null
     requires: connection.tx.mode = ReadWrite
@@ -605,10 +666,12 @@ rule CommitReadWrite {
         let ops = connection.tx.buffer.ops
         let opts = {
             user: connection.user,
-            default_tz: connection.tx.commit_opts.tz_override ?? connection.default_tz,
+            default_tz: connection.tx.tx_default_tz,
             system_time: connection.tx.commit_opts.system_time,
             user_metadata: connection.tx.commit_opts.user_metadata
         }
+
+        connection.default_tz = connection.tx.session_default_tz
 
         if connection.tx.commit_opts.async:
             Database.submitTx(ops: ops, opts: opts)
@@ -626,27 +689,32 @@ rule CommitReadWrite {
 
 rule CommitNoOp {
     -- Commit of a ReadOnly or still-Unresolved transaction submits nothing — there is no
-    -- buffer to drain. The transaction simply closes.
+    -- buffer to drain. It still writes the tx's session_default_tz back to the connection
+    -- (COMMIT writes the session tz back regardless of mode, before the ReadWrite / no-op
+    -- split), so a mid-tx SET TIME ZONE persists on a read-only commit too. The transaction
+    -- then closes.
     when: CommitTransaction(frontend, connection)
     requires: connection.tx != null
     requires: connection.tx.mode = ReadOnly or connection.tx.mode = Unresolved
     requires: not connection.tx.failed
 
     ensures:
+        connection.default_tz = connection.tx.session_default_tz
         not exists connection.tx
 }
 
 rule Rollback {
     -- Rollback discards the open transaction (and its buffer, if any), submitting
     -- nothing. Valid even on a failed transaction — this is how a failed tx is cleared.
-    -- Restores the connection's default_tz to the value captured at BEGIN, discarding any
-    -- mid-transaction SET TIME ZONE (Postgres semantics — a plain SET in an aborted tx is
-    -- rolled back; COMMIT keeps the new zone).
+    -- The connection's default_tz reverts implicitly: it was never mutated while the tx was
+    -- open (a mid-tx SET TIME ZONE writes the tx's tx_default_tz / session_default_tz, not
+    -- the connection), so dropping the tx discards any mid-transaction SET TIME ZONE.
+    -- Postgres semantics — a plain SET in an aborted tx is rolled back; only COMMIT keeps
+    -- the new zone (see CommitReadWrite / CommitNoOp).
     when: RollbackTransaction(frontend, connection)
     requires: connection.tx != null
 
     ensures:
-        connection.default_tz = connection.tx.entered_tz
         not exists connection.tx
 }
 
@@ -728,9 +796,10 @@ surface TxControlAsSql {
     context conn: Connection
 
     provides:
-        BeginTransaction(frontend, conn, access_mode, read_basis, commit_opts)
+        BeginTransaction(frontend, conn, access_mode, read_basis, commit_opts, tz_override)
             when conn.tx = null
         ExecuteStatement(frontend, conn, kind, statement)
+        SetTimeZone(frontend, conn, zone)
         CommitTransaction(frontend, conn)
             when conn.tx != null
         RollbackTransaction(frontend, conn)

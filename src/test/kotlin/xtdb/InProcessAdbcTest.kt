@@ -700,9 +700,29 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `BEGIN READ WRITE WITH TIMEZONE is rejected`() {
+    fun `BEGIN WITH TIMEZONE sets the tz for the transaction and reverts after`() {
         xtdb.connect().use { conn ->
-            assertThrows(Incorrect::class.java) { conn.update("BEGIN READ WRITE WITH (TIMEZONE = 'America/New_York')") }
+            conn.update("SET TIME ZONE 'Asia/Tokyo'")
+
+            conn.update("BEGIN READ WRITE WITH (TIMEZONE = 'America/New_York')")
+            conn.update("INSERT INTO foo RECORDS {_id: 1, ts: (TIMESTAMP '2020-01-01'::timestamptz)}")
+            conn.update("COMMIT")
+
+            assertEquals(
+                listOf(mapOf("_id" to 1L, "ts" to "2020-01-01T00:00-05:00[America/New_York]")),
+                conn.select("SELECT _id, ts FROM foo").map { mapOf("_id" to it["_id"], "ts" to it["ts"].toString()) },
+                "the DML anchors its zoneless timestamptz in the tx zone, not the session's Asia/Tokyo"
+            )
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after COMMIT")
+
+            conn.update("BEGIN READ ONLY WITH (TIMEZONE = 'America/New_York')")
+            assertEquals(listOf(mapOf("timezone" to "America/New_York")), conn.select("SHOW timezone"))
+            assertEquals(
+                listOf(mapOf("ts" to "2020-01-01T00:00-05:00[America/New_York]")),
+                conn.select("SELECT TIMESTAMP '2020-01-01'::timestamptz ts").map { mapOf("ts" to it["ts"].toString()) }
+            )
+            conn.update("COMMIT")
+            assertEquals(listOf(mapOf("timezone" to "Asia/Tokyo")), conn.select("SHOW timezone"), "reverts after COMMIT")
         }
     }
 
