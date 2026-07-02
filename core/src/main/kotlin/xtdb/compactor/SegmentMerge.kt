@@ -206,15 +206,17 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
         recencyPartitioning: RecencyPartitioning,
         recencyPartition: RecencyPartition? = WEEK
     ): Results {
-        val mergedPutField = mergeFields(
-            segments.mapNotNull { seg ->
-                seg.schema
-                    .findField("op")
-                    .children
-                    .find { it.name == "put" && it.children.isNotEmpty() }
-            })
+        val putFields = segments.mapNotNull { seg ->
+            seg.schema
+                .findField("op")
+                .children
+                .find { it.name == "put" && it.children.isNotEmpty() }
+        }
 
-        val schema = dataRelSchema(mergedPutField.withName("put"))
+        // an all-put-less merge (deletes/erases only) contributes no put fields — omit the put leg
+        // rather than minting a present Null one, matching a raw L0 block. dataRelSchema drops a null
+        // putDocField from the op union. #5714
+        val schema = dataRelSchema(putFields.takeIf { it.isNotEmpty() }?.let { mergeFields(it).withName("put") })
 
         val outWriter = when (recencyPartitioning) {
             RecencyPartitioning.Partition -> outWriters.PartitionedOutWriter(schema, recencyPartition)
