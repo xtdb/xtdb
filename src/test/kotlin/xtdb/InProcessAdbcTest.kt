@@ -6,6 +6,8 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.error.Incorrect
@@ -351,6 +353,34 @@ class InProcessAdbcTest {
         xtdb.connect().use { conn ->
             conn.update("SET datestyle = 'ISO'")
             assertEquals(listOf(mapOf("datestyle" to "ISO")), conn.select("SHOW datestyle"))
+        }
+    }
+
+    @Test
+    fun `SHOW latest_submitted_tx reports this connection's own writes`() {
+        xtdb.connect().use { conn ->
+            assertEquals(
+                emptyList<Map<*, *>>(), conn.select("SHOW latest_submitted_tx"),
+                "no rows until this connection has submitted a tx"
+            )
+
+            conn.update("INSERT INTO foo RECORDS {_id: 1}")
+
+            val committed = conn.select("SHOW latest_submitted_tx").single()
+            assertEquals(0L, committed["tx_id"])
+            assertEquals(true, committed["committed"])
+            assertNull(committed["error"])
+            assertNotNull(committed["system_time"])
+            assertNotNull(committed["await_token"])
+
+            // a tx that aborts at index time is still recorded — committed=false with the error populated.
+            // This exercises writing a Throwable into the transit-typed error column.
+            runCatching { conn.update("ASSERT FALSE") }
+
+            val aborted = conn.select("SHOW latest_submitted_tx").single()
+            assertEquals(1L, aborted["tx_id"])
+            assertEquals(false, aborted["committed"])
+            assertNotNull(aborted["error"], "the aborted tx's error surfaces through the transit column")
         }
     }
 

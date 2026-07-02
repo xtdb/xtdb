@@ -663,18 +663,39 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             QueryOpts(b?.currentTime, defaultTz, b?.snapshotToken, b?.snapshotTime)
         }
 
-        // Answer a SHOW from connection state. SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any
-        // other identifier reads a session parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar
-        // `showVariable`s — classified as Query and answered by the engine from the basis, not here.) The
-        // node-level status SHOWs (latest_completed_txs, …) stay in pgwire for now.
+        // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
+        // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
+        // parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar `showVariable`s — classified as
+        // Query and answered by the engine from the basis, not here.) The node-level status SHOWs
+        // (latest_completed_txs, …) are node introspection, not connection state — they stay in pgwire for now.
         private fun showVariable(variable: String): QueryResult =
-            showResult(variable, if (variable == "await_token") awaitToken else sessionParameters[variable])
+            when (variable) {
+                // 0 rows until this connection has submitted a tx (matches the `tx_id IS NOT NULL` filter);
+                // system-time/committed/error are null for a fire-and-forget submit. error is a Throwable → transit.
+                "latest_submitted_tx" -> showResult(
+                    linkedMapOf("tx_id" to VectorType.maybe(VectorType.I64),
+                                "system_time" to VectorType.maybe(VectorType.INSTANT),
+                                "committed" to VectorType.maybe(VectorType.BOOL),
+                                "error" to VectorType.maybe(VectorType.TRANSIT),
+                                "await_token" to VectorType.maybe(VectorType.UTF8)),
+                    lastSubmittedTx?.let {
+                        listOf(mapOf("tx_id" to it.txId, "system_time" to it.systemTime,
+                                     "committed" to it.committed, "error" to it.error,
+                                     "await_token" to awaitToken))
+                    } ?: emptyList())
 
-        // A one-row, single-(nullable-utf8)-column result built directly from a value — the SHOW counterpart of
-        // the query engine's cursor, so executeQuery can return session state as an Arrow result set.
-        private fun showResult(col: String, value: String?): QueryResult {
-            val types: SequencedMap<String, VectorType> = linkedMapOf(col to VectorType.maybe(VectorType.UTF8))
-            val rel = Relation(allocator, types).closeOnCatch { it.writeRow(mapOf(col to value)); it }
+                "await_token" -> showResult(variable, awaitToken)
+                else -> showResult(variable, sessionParameters[variable])
+            }
+
+        // A one-row, single-(nullable-utf8)-column result — the common SHOW shape.
+        private fun showResult(col: String, value: String?): QueryResult =
+            showResult(linkedMapOf(col to VectorType.maybe(VectorType.UTF8)), listOf(mapOf(col to value)))
+
+        // A SHOW result of arbitrary typed columns and 0-or-more rows — the SHOW counterpart of the query
+        // engine's cursor, so executeQuery can return connection state as an Arrow result set.
+        private fun showResult(types: SequencedMap<String, VectorType>, rows: List<Map<String, Any?>>): QueryResult {
+            val rel = Relation(allocator, types).closeOnCatch { r -> rows.forEach { r.writeRow(it) }; r }
             val cursor = object : ResultCursor {
                 override val resultTypes get() = types
                 override val cursorType get() = "show"
