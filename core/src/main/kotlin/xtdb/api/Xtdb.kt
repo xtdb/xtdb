@@ -682,6 +682,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             return pq.openQuery(args, queryOpts())
         }
 
+        // Open a read WITHOUT the access-mode gate — for a frontend's driver-compatibility probe that must be
+        // permitted in any transaction (pgwire allows the pgjdbc type-metadata query inside a write tx, where
+        // the gate would otherwise reject it). Reads at the connection's current basis; inside a write tx that
+        // is latest-committed data, not the tx's buffered writes.
+        fun openUncheckedQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
+
         // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
         // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
         // parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar `showVariable`s — classified as
