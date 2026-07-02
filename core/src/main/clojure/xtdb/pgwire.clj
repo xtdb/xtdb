@@ -592,7 +592,10 @@
                                                                    (mapcat (fn [op]
                                                                              (or (when (instance? Sql op)
                                                                                    (let [^Sql op op]
-                                                                                     (seq (sql/sql->static-ops (.getSql op) (.getArgRows op)))))
+                                                                                     ;; temporary: we convert to args-rel here and then back to tuples in sql->static-ops
+                                                                                     ;; to be replaced when this moves to ADBC.
+                                                                                     (seq (util/with-open [args-rel (apply vw/open-args allocator (.getArgRows op))]
+                                                                                            (sql/sql->static-ops (.getSql op) args-rel)))))
                                                                                  [op])))
                                                                    (util/safe-mapv #(xt-log/open-tx-op % allocator {:default-tz default-tz})))]
                                         (if async?

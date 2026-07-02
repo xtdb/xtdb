@@ -16,19 +16,19 @@
             [xtdb.util :as util]
             [xtdb.xtql :as xtql]
             [xtdb.xtql.plan :as xtql.plan])
-  (:import (clojure.lang Keyword MapEntry)
+  (:import (clojure.lang MapEntry)
            (com.github.benmanes.caffeine.cache Cache Caffeine)
            (java.net URI)
            (java.time Duration LocalDate LocalTime OffsetTime ZoneOffset)
-           (java.util Collection HashMap HashSet LinkedHashMap LinkedHashSet Map SequencedSet Set UUID)
+           (java.util Collection HashMap HashSet LinkedHashSet Map SequencedSet Set UUID)
            java.util.function.Function
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
-           xtdb.query.SqlPlanner
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
+           (xtdb.arrow RelationReader VectorReader)
+           xtdb.query.SqlPlanner
            xtdb.table.TableRef
-           xtdb.util.NormalForm
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]
@@ -3579,30 +3579,14 @@
   (visitRevokeRoleStatement [_ _])
   (visitCreateTableStatement [_ _]))
 
-(defn- normalize-arg-doc-keys
-  "Id-normalizes keyword map keys in arg values to storage form (:xt/id -> :_id, :first-name -> :first_name),
-   recursively; string keys are left verbatim. Mirrors the struct writer's keyword/string rule (StructVector),
-   so a keyword :xt/id is accepted as a document id while the string \"xt/id\" is not (#4415)."
-  [arg-rows]
-  (w/postwalk (fn [x]
-                (if (map? x)
-                  (update-keys x (fn [k] (if (keyword? k) (NormalForm/normalForm ^Keyword k) k)))
-                  x))
-              arg-rows))
-
 (defn sql->static-ops
-  ([sql arg-rows] (sql->static-ops sql arg-rows {}))
+  ([sql args-rel] (sql->static-ops sql args-rel {}))
 
-  ([sql arg-rows {:keys [scope] :as opts}]
+  ([sql ^RelationReader args-rel {:keys [scope] :as opts}]
    (try
-     ;; this could probably be arg-types, save us converting to field
-     (let [arg-rows (normalize-arg-doc-keys arg-rows)
-           arg-fields (for [arg-idx (range (count (first arg-rows)))]
-                        (-> (for [arg-row arg-rows]
-                              (types/value->vec-type (nth arg-row arg-idx)))
-                            (->> (apply types/merge-types))
-                            types/vec-type->field))
-           
+     (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
+           arg-fields (mapv VectorReader/.getField (or args-rel []))
+
            {:keys [!errors !warnings] :as env} (-> (->env opts)
                                                    (assoc :arg-fields arg-fields))
            tx-ops (-> (antlr/parse-statement sql)

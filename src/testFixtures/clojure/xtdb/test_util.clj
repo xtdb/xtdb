@@ -154,8 +154,8 @@
 
      :else (throw (err/incorrect ::invalid-rel {:rows-or-cols rows-or-cols})))))
 
-(defn open-args ^xtdb.arrow.RelationReader [args]
-  (vw/open-args *allocator* args))
+(defn open-args ^xtdb.arrow.RelationReader [& args]
+  (apply vw/open-args *allocator* args))
 
 (defn ->cursor
   (^xtdb.ICursor [pages] (->cursor *allocator* pages))

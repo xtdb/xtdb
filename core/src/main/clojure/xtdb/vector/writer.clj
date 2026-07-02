@@ -5,6 +5,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn open-args ^xtdb.arrow.RelationReader [allocator & args-rows]
+  ;; LinkedHashMap keeps the relation's columns in arg order - a Clojure map
+  ;; falls back to hash order once it grows past an array-map (>8 entries).
   (let [args-maps (for [args-row args-rows]
                     (->> (map-indexed (fn [idx v]
                                         (if (map-entry? v)
