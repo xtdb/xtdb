@@ -202,14 +202,13 @@
     (cancel-query!)))
 
 (defn- parse-session-params [params]
+  ;; values are stored raw; param-specific interpretation (e.g. fallback_output_format) happens at read time.
   (->> params
        (into {} (mapcat (fn [[k v]]
                           (case k
                             "options" (parse-session-params (for [[_ k v] (re-seq #"-c ([\w_]*)=([\w_]*)" v)]
                                                               [k v]))
-                            [[k (case k
-                                  "fallback_output_format" (#{:json :json-ld :transit} (util/->kebab-case-kw v))
-                                  v)]]))))))
+                            [[k v]]))))))
 
 (def time-zone-nf-param-name "timezone")
 
@@ -218,11 +217,14 @@
    "datestyle" "DateStyle"
    "intervalstyle" "IntervalStyle"})
 
-(defn- set-session-parameter [conn parameter value]
+(defn- set-session-parameter [{:keys [conn-state] :as conn} parameter value]
   ;;https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-NAMES-VALUES
   ;;parameter names are case insensitive, choosing to lossily downcase them for now and store a mapping to a display format
   ;;for any name not typically displayed in lower case.
-  (swap! (:conn-state conn) update-in [:session :parameters] (fnil into {}) (parse-session-params {parameter value}))
+  ;; the connection owns the session-param store (its serialization env / SHOW readback); pgwire keeps only the wire echo.
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+    (doseq [[k v] (parse-session-params {parameter value})]
+      (.setSessionParameter node-conn k (some-> v str))))
   (let [param (get pg-param-nf->display-format parameter parameter)]
     (pgio/cmd-write-msg conn pgio/msg-parameter-status {:parameter param,
                                                         :value (case param
@@ -236,6 +238,13 @@
     (.setTimeZone ^Xtdb$Connection (:node-conn @conn-state) zone-id))
 
   (set-session-parameter conn time-zone-nf-param-name tz))
+
+(defn- fallback-output-format
+  "Interpret the raw fallback_output_format session param — the format used for complex-type row values and
+  error detail when the client hasn't requested a specific one. Defaults to :json."
+  [session-params]
+  (or (some-> (get session-params "fallback_output_format") util/->kebab-case-kw #{:json :json-ld :transit})
+      :json))
 
 (defn- ex->pgw-err [ex]
   (let [data (ex-data ex)]
@@ -303,7 +312,7 @@
         (if (::error-code (ex-data ex))
           (ex-data ex)
           (let [anomaly (err/->anomaly ex {})
-                format (get-in @conn-state [:session :parameters "fallback_output_format"] :json)]
+                format (fallback-output-format (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state)))]
             (-> (ex->pgw-err anomaly)
                 (assoc :detail (encode-error-detail anomaly format)))))
 
@@ -550,9 +559,9 @@
   (swap! conn-state dissoc :implicit-tx?))
 
 (defn cmd-commit [{:keys [conn-state tx-error-counter tx-latency-timer] :as conn}]
-  ;; the connection owns the buffered ops + tx options; it submits (sync or async) and clears its transaction.
-  ;; commitTx returns the executed tx for a sync commit (nil for async / a read-only or empty tx) — pgwire
-  ;; surfaces it through SHOW LATEST_SUBMITTED_TX and re-throws an aborted tx's error.
+  ;; the connection owns the buffered ops + tx options; it submits (sync or async), clears its transaction, and
+  ;; records lastSubmittedTx. commitTx returns the executed tx for a sync commit (nil for async / a read-only or
+  ;; empty tx) — pgwire re-throws an aborted tx's error so the client sees it.
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (if (.isTxFailed node-conn)
       (throw (pgio/err-protocol-violation "transaction failed"))
@@ -560,16 +569,9 @@
       (try
         (metrics/record-callable! tx-latency-timer
                                   (when-let [^Xtdb$CommittedTx committed (with-auth-check conn (.commitTx node-conn))]
-                                    (let [tx-id (.getTxId committed)
-                                          ^Xtdb$ExecutedTx executed (.getExecuted committed)]
-                                      ;; sync commit carries full detail; async carries only the txId
-                                      (swap! conn-state assoc :latest-submitted-tx
-                                             (if executed
-                                               {:tx-id tx-id, :system-time (.getSystemTime executed),
-                                                :committed? (.getCommitted executed), :error (.getError executed)}
-                                               {:tx-id tx-id}))
-                                      (when (and executed (.getError executed))
-                                        (throw (.getError executed))))))
+                                    (when-let [^Xtdb$ExecutedTx executed (.getExecuted committed)]
+                                      (when-let [error (.getError executed)]
+                                        (throw error)))))
         (catch Throwable t
           (metrics/inc-counter! tx-error-counter)
           (throw t))
@@ -580,8 +582,8 @@
   (.rollbackTx ^Xtdb$Connection (:node-conn @conn-state))
   (end-transaction conn))
 
-(defn- fallback-type [session]
-  (case (get-in session [:parameters "fallback_output_format"] :json)
+(defn- fallback-type [session-params]
+  (case (fallback-output-format session-params)
     :json PgType/PG_JSON
     :json-ld PgType/PG_JSON_LD
     :transit PgType/PG_TRANSIT))
@@ -594,7 +596,7 @@
   (type->pg-col (.getName field) (types/->type field)))
 
 (defn- cmd-send-row-description [{:keys [conn-state] :as conn} pg-cols]
-  (let [fallback (fallback-type (:session @conn-state))
+  (let [fallback (fallback-type (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state)))
         apply-defaults (fn [{:keys [^PgType pg-type col-name result-format]}]
                          (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)]
                            {:table-oid 0
@@ -859,7 +861,7 @@
     1 (repeat arg-count (first arg-format))
     arg-format))
 
-(defn- ->xtify-arg [_session {:keys [arg-format param-oids]}]
+(defn- ->xtify-arg [{:keys [arg-format param-oids]}]
   (let [arg-formats (normalize-arg-formats arg-format (count param-oids))]
     (fn xtify-arg [arg-idx arg]
       (when (some? arg)
@@ -878,8 +880,8 @@
                 (throw (err/incorrect ::invalid-arg-representation ex-msg
                                       {:arg-format arg-format, :arg-idx arg-idx}))))))))))
 
-(defn- xtify-args [{:keys [conn-state] :as _conn} args stmt]
-  (into [] (map-indexed (->xtify-arg (:session @conn-state) stmt) args)))
+(defn- xtify-args [_conn args stmt]
+  (into [] (map-indexed (->xtify-arg stmt) args)))
 
 (defn with-result-formats [pg-types result-format]
   (let [result-formats (let [type-count (count pg-types)]
@@ -895,8 +897,8 @@
           result-formats)))
 
 (defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
-  (let [{:keys [session ^Xtdb$Connection node-conn]} @conn-state
-        session-params (:parameters session)
+  (let [{:keys [^Xtdb$Connection node-conn]} @conn-state
+        session-params (.getSessionParameters node-conn)
         ;; an open tx's await-token shadows the connection's (BEGIN ... WITH (AWAIT_TOKEN …)) for SHOW
         await-token (.getEffectiveAwaitToken node-conn)
 
@@ -964,6 +966,8 @@
                                                                                            [(some-> lst .getTxId) (some-> lst .getSystemTime)
                                                                                             (some-> lst .getCommitted) (some-> lst .getError)
                                                                                             await-token])
+                                                                   ;; declared :bool (show-var-param-types) — the raw stored string is interpreted here
+                                                                   "standard_conforming_strings" [(contains? #{"on" "true" "yes" "1"} (some-> (get session-params variable) str/lower-case))]
                                                                    [(get session-params variable)])
                                                                  false)]
 
@@ -1187,8 +1191,8 @@
   (try
     (let [!n-rows-out (volatile! 0)
           !pending (volatile! [])
-          {session-params :parameters, :as session} (:session @conn-state)
-          fallback (fallback-type session)
+          session-params (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state))
+          fallback (fallback-type session-params)
           serialize-row (fn [^RelationReader rel idx]
                           (mapv (fn [{:keys [^String col-name pg-type result-format]}]
                                   (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
@@ -1621,10 +1625,8 @@
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
-                                                 ;; the connection owns the tx + clock + access-mode now; :session here
-                                                 ;; holds only the wire-level session parameters (populated at startup).
-                                                 !conn-state (atom {:close-promise close-promise
-                                                                    :session {}})
+                                                 ;; the connection owns the tx + clock + access-mode + session params now
+                                                 !conn-state (atom {:close-promise close-promise})
                                                  !closing? (atom false)]
                                              (log/debug "New connection" {:cid cid})
                                              (try

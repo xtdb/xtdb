@@ -180,6 +180,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // read view for the frontend (pgwire's serialization env / ParameterStatus echo); writes go through SET.
         val sessionParameters: Map<String, String?> get() = _sessionParameters
 
+        // the sanctioned external writer, for a frontend's SET (pgwire funnels its startup defaults + SET here).
+        fun setSessionParameter(name: String, value: String?) { _sessionParameters[name] = value }
+
         // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
         // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
         var defaultAccessMode: ParsedStatement.AccessMode? = null
@@ -402,7 +405,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     is ParsedStatement.Rollback -> rollbackTx()
 
                     is ParsedStatement.SetSessionParameter ->
-                        _sessionParameters[stmt.name] = sqlPlanner.evalLiteral(stmt.value, null)?.toString()
+                        setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
                     is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
                     is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
                     is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
