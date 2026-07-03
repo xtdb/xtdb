@@ -38,7 +38,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$CommittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -51,8 +51,8 @@
            xtdb.NodeBase
            (xtdb.query PreparedQuery SqlParser SqlPlanner
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
-                       ParsedStatement$Query ParsedStatement$Dml ParsedStatement$ShowVariable
-                       ParsedStatement$CopyIn ParsedStatement$Execute)
+                       ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
+                       ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute)
            (xtdb.tx PutDocs PutRel TxOp$Sql)))
 
 ;; references
@@ -553,30 +553,37 @@
 
 (defn- end-transaction
   "Tear down pgwire's per-tx wire state — open portals and the implicit-tx marker. The connection has
-  already discarded its own transaction (commitTx / rollbackTx)."
+  already discarded its own transaction (commitSync / commitAsync / rollbackTx)."
   [{:keys [conn-state] :as conn}]
   (close-all-portals conn)
   (swap! conn-state dissoc :implicit-tx?))
 
-(defn cmd-commit [{:keys [conn-state tx-error-counter tx-latency-timer] :as conn}]
-  ;; the connection owns the buffered ops + tx options; it submits (sync or async), clears its transaction, and
-  ;; records lastSubmittedTx. commitTx returns the executed tx for a sync commit (nil for async / a read-only or
-  ;; empty tx) — pgwire re-throws an aborted tx's error so the client sees it.
-  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
-    (if (.isTxFailed node-conn)
-      (throw (pgio/err-protocol-violation "transaction failed"))
+(defn cmd-commit
+  ([conn] (cmd-commit conn nil))
+  ([{:keys [conn-state tx-error-counter tx-latency-timer] :as conn} commit-mode]
+   ;; the connection owns the buffered ops + tx options; it submits (async) or submits-and-awaits (sync), clears
+   ;; its transaction, and records lastSubmittedTx. A commit-time COMMIT SYNC / COMMIT ASYNC wins; a bare COMMIT
+   ;; (nil mode) defers to the tx's begin-time async flag. The sync commit yields the awaited ExecutedTx, whose
+   ;; error pgwire re-throws so the client sees it.
+   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+     (if (.isTxFailed node-conn)
+       (throw (pgio/err-protocol-violation "transaction failed"))
 
-      (try
-        (metrics/record-callable! tx-latency-timer
-                                  (when-let [^Xtdb$CommittedTx committed (with-auth-check conn (.commitTx node-conn))]
-                                    (when-let [^Xtdb$ExecutedTx executed (.getExecuted committed)]
-                                      (when-let [error (.getError executed)]
-                                        (throw error)))))
-        (catch Throwable t
-          (metrics/inc-counter! tx-error-counter)
-          (throw t))
-        (finally
-          (end-transaction conn))))))
+       (try
+         (let [async? (if (nil? commit-mode)
+                        (.isTxAsync node-conn)
+                        (= commit-mode ParsedStatement$CommitMode/ASYNC))]
+           (metrics/record-callable! tx-latency-timer
+                                     (if async?
+                                       (with-auth-check conn (.commitAsync node-conn))
+                                       (when-let [^Xtdb$ExecutedTx executed (with-auth-check conn (.commitSync node-conn))]
+                                         (when-let [error (.getError executed)]
+                                           (throw error))))))
+         (catch Throwable t
+           (metrics/inc-counter! tx-error-counter)
+           (throw t))
+         (finally
+           (end-transaction conn)))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (.rollbackTx ^Xtdb$Connection (:node-conn @conn-state))
@@ -1310,8 +1317,8 @@
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
-               (visitCommit [_ _]
-                 (cmd-commit conn)
+               (visitCommit [_ ^ParsedStatement$Commit stmt]
+                 (cmd-commit conn (.getMode stmt))
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "COMMIT"}))
 
                (visitRollback [_ _]

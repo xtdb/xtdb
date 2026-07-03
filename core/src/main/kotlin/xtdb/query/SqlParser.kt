@@ -178,7 +178,12 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
         Begin(ctx, txOptions(ctx.transactionCharacteristics()))
 
     override fun visitSetTransactionStatement(ctx: Sql.SetTransactionStatementContext) = SetTransaction(ctx)
-    override fun visitCommitStatement(ctx: Sql.CommitStatementContext) = Commit(ctx)
+    override fun visitCommitStatement(ctx: Sql.CommitStatementContext) =
+        Commit(ctx, when {
+            ctx.SYNC() != null -> CommitMode.SYNC
+            ctx.ASYNC() != null -> CommitMode.ASYNC
+            else -> null
+        })
     override fun visitRollbackStatement(ctx: Sql.RollbackStatementContext) = Rollback(ctx)
 
     override fun visitSetSessionCharacteristicsStatement(ctx: Sql.SetSessionCharacteristicsStatementContext): ParsedStatement {

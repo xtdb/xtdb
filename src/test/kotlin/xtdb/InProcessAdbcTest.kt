@@ -332,6 +332,40 @@ class InProcessAdbcTest {
     }
 
     @Test
+    fun `COMMIT SYNC and COMMIT ASYNC via SQL`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE")
+            conn.update("INSERT INTO foo RECORDS {_id: 'cs1'}")
+            conn.update("COMMIT SYNC")
+            assertEquals(
+                listOf(mapOf("_id" to "cs1")),
+                conn.select("SELECT _id FROM foo WHERE _id = 'cs1'"),
+                "COMMIT SYNC commits and the row is immediately visible"
+            )
+
+            // the sync commit awaited the outcome, so SHOW reports the full detail
+            val synced = conn.select("SHOW latest_submitted_tx").single()
+            assertEquals(true, synced["committed"])
+            assertNotNull(synced["system_time"], "a sync commit records the awaited system-time")
+        }
+
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN READ WRITE")
+            conn.update("INSERT INTO foo RECORDS {_id: 'ca1'}")
+            conn.update("COMMIT ASYNC")
+            assertEquals(
+                listOf(mapOf("_id" to "ca1")),
+                conn.select("SELECT _id FROM foo WHERE _id = 'ca1'"),
+                "COMMIT ASYNC commits and the row is visible after the async tx settles"
+            )
+
+            // the async commit didn't await, so SHOW carries only the txId — no awaited detail
+            val asynced = conn.select("SHOW latest_submitted_tx").single()
+            assertNull(asynced["system_time"], "an async commit records only the txId, not the awaited detail")
+        }
+    }
+
+    @Test
     fun `READ ONLY WITH AWAIT_TOKEN is rejected`() {
         xtdb.connect().use { conn ->
             assertThrows(Incorrect::class.java) {

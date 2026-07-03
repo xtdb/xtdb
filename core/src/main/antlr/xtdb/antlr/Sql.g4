@@ -40,7 +40,7 @@ directlyExecutableStatement
     | COPY targetTable FROM STDIN opts=copyOpts # CopyInStmt
     | (START TRANSACTION | BEGIN TRANSACTION?) transactionCharacteristics? # StartTransactionStatement
     | SET TRANSACTION ISOLATION LEVEL levelOfIsolation # SetTransactionStatement
-    | COMMIT # CommitStatement
+    | COMMIT (SYNC | ASYNC)? # CommitStatement
     | ROLLBACK # RollbackStatement
     | SET SESSION CHARACTERISTICS AS sessionCharacteristic (',' sessionCharacteristic)* # SetSessionCharacteristicsStatement
     | SET ROLE ( identifier | NONE ) # SetRoleStatement
@@ -153,6 +153,7 @@ identifier
         | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
         | 'TABLE'
         | METADATA
+        | SYNC
         | setFunctionType )
         # RegularIdentifier
     | DELIMITED_IDENTIFIER # DelimitedIdentifier

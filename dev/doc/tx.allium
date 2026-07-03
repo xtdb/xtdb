@@ -17,7 +17,8 @@
 -- Both protocol frontends — pgwire and ADBC / Flight SQL — reach this ENTIRE model
 -- through one shared Connection. There are two ways a client drives a transaction:
 --
---   1. tx-control-as-SQL: BEGIN [READ ONLY | READ WRITE] [WITH (...)], COMMIT, ROLLBACK
+--   1. tx-control-as-SQL: BEGIN [READ ONLY | READ WRITE] [WITH (...)],
+--      COMMIT [SYNC | ASYNC], ROLLBACK
 --      sent as SQL, classified by the SqlParser (Begin / Commit / Rollback) and handled
 --      by the connection. This is the FULL surface — access mode, read basis and
 --      commit-opts are all expressible here. An ADBC / Flight SQL client expresses the
@@ -34,7 +35,9 @@
 -- == Boundaries ==
 --
 -- Below: db.allium's submitTx / executeTx. A ReadWrite commit drains the buffer and
---        crosses this boundary (submit when async, execute-and-await when sync).
+--        crosses this boundary (submit when async, execute-and-await when sync). The
+--        async/sync choice is the commit's own COMMIT SYNC / COMMIT ASYNC if it states one,
+--        else the transaction's begin-time async flag.
 -- Above: the Frontend (pgwire / ADBC client) that decodes the wire protocol and feeds
 --        SQL strings and programmatic calls into the Connection.
 
@@ -56,7 +59,9 @@ external entity Frontend {
 external entity Database {
     -- The db.allium submit/execute boundary. submitTx is fire-and-forget; executeTx
     -- submits then awaits the result. A ReadWrite commit drains the buffer across this
-    -- boundary. See: dev/doc/db.allium, database/Database.kt
+    -- boundary — submitting when async, executing-and-awaiting when sync, where the choice is
+    -- the commit's own COMMIT SYNC / COMMIT ASYNC if stated, else the tx's begin-time async
+    -- flag. See: dev/doc/db.allium, database/Database.kt
 }
 
 external entity SqlParser {
@@ -130,6 +135,8 @@ value CommitOpts {
     --   system_time   — the system-time to record the transaction at.
     --   user_metadata — opaque per-transaction metadata.
     --   async         — true: commit submits without awaiting; false: execute-and-await.
+    --                    The begin-time default; a COMMIT SYNC / COMMIT ASYNC (see CommitMode)
+    --                    overrides it for that one commit.
     system_time: Timestamp?
     user_metadata: Bytes?
     async: Boolean
@@ -162,6 +169,15 @@ enum SessionAccessMode {
     -- AS TRANSACTION READ ONLY / READ WRITE. When set, a bare BEGIN (access_mode = none) takes
     -- this default; absent (null), a bare BEGIN stays Unresolved.
     read_only | read_write
+}
+
+enum CommitMode {
+    -- A commit-time submit-vs-execute override carried on a SQL COMMIT [SYNC | ASYNC].
+    -- `sync` forces execute-and-await, `async` forces fire-and-forget submit. Passed as an
+    -- optional CommitTransaction parameter (null = no commit-time override, defer to the
+    -- transaction's begin-time CommitOpts.async flag). Distinct from that begin-time flag: it
+    -- lets a single COMMIT override the mode fixed at BEGIN READ WRITE WITH (ASYNC = ...).
+    sync | async
 }
 
 ---- Entities and Variants
@@ -657,7 +673,11 @@ rule CommitReadWrite {
     -- also writes the tx's session_default_tz back to the connection, so a mid-tx SET TIME
     -- ZONE persists past the tx while a WITH (TIMEZONE) override (which never touched
     -- session_default_tz) does not.
-    when: CommitTransaction(frontend, connection)
+    --
+    -- The effective async choice: a commit-time COMMIT SYNC / COMMIT ASYNC (commit_mode) wins;
+    -- otherwise the transaction's begin-time CommitOpts.async flag decides. Only the SOURCE of
+    -- the submit-vs-execute decision gains the override — the split itself is unchanged.
+    when: CommitTransaction(frontend, connection, commit_mode)
     requires: connection.tx != null
     requires: connection.tx.mode = ReadWrite
     requires: not connection.tx.failed
@@ -671,9 +691,14 @@ rule CommitReadWrite {
             user_metadata: connection.tx.commit_opts.user_metadata
         }
 
+        let async =
+            if commit_mode = async: true
+            else if commit_mode = sync: false
+            else: connection.tx.commit_opts.async
+
         connection.default_tz = connection.tx.session_default_tz
 
-        if connection.tx.commit_opts.async:
+        if async:
             Database.submitTx(ops: ops, opts: opts)
         else:
             Database.executeTx(ops: ops, opts: opts)
@@ -692,8 +717,9 @@ rule CommitNoOp {
     -- buffer to drain. It still writes the tx's session_default_tz back to the connection
     -- (COMMIT writes the session tz back regardless of mode, before the ReadWrite / no-op
     -- split), so a mid-tx SET TIME ZONE persists on a read-only commit too. The transaction
-    -- then closes.
-    when: CommitTransaction(frontend, connection)
+    -- then closes. commit_mode is irrelevant here — there is nothing to submit, so the
+    -- submit-vs-execute override has no effect.
+    when: CommitTransaction(frontend, connection, commit_mode)
     requires: connection.tx != null
     requires: connection.tx.mode = ReadOnly or connection.tx.mode = Unresolved
     requires: not connection.tx.failed
@@ -745,7 +771,7 @@ rule DisableAutoCommitCommitsOpen {
 
     ensures:
         if connection.tx != null:
-            CommitTransaction(frontend: frontend, connection: connection)
+            CommitTransaction(frontend: frontend, connection: connection, commit_mode: null)
         connection.auto_commit = true
 }
 
@@ -800,7 +826,7 @@ surface TxControlAsSql {
             when conn.tx = null
         ExecuteStatement(frontend, conn, kind, statement)
         SetTimeZone(frontend, conn, zone)
-        CommitTransaction(frontend, conn)
+        CommitTransaction(frontend, conn, commit_mode)
             when conn.tx != null
         RollbackTransaction(frontend, conn)
             when conn.tx != null

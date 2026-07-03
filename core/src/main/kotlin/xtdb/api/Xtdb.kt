@@ -95,10 +95,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
 
-    // the outcome of committing a transaction: the submitted txId always, plus the executed detail when it was
-    // awaited (a sync commit). An async commit isn't awaited, so [executed] is null — only the txId is known.
-    data class CommittedTx(val txId: MessageId, val executed: ExecutedTx?)
-
     fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: Any?): ExecutedTx
 
     interface Statement : AdbcStatement {
@@ -401,7 +397,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 when (stmt) {
                     is ParsedStatement.Begin -> beginParsedTx(stmt.txOptions)
 
-                    is ParsedStatement.Commit -> commitTx()
+                    is ParsedStatement.Commit -> when (stmt.mode) {
+                        ParsedStatement.CommitMode.SYNC -> commitSync()
+                        ParsedStatement.CommitMode.ASYNC -> commitAsync()
+                        null -> if (isTxAsync) commitAsync() else commitSync()
+                    }
                     is ParsedStatement.Rollback -> rollbackTx()
 
                     is ParsedStatement.SetSessionParameter ->
@@ -540,6 +540,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // checks read these to keep their own error messages + special-cases (e.g. pgwire's pgjdbc type query).
         val isTxReadWrite: Boolean get() = tx?.mode is ReadWrite
         val isTxReadOnly: Boolean get() = tx?.mode is ReadOnly
+        // the begin-time async flag (WITH (ASYNC)) of the open write tx; false when unset / not a write tx.
+        // A bare COMMIT (no SYNC/ASYNC) and the programmatic commit() commit through it.
+        val isTxAsync: Boolean get() = (tx?.mode as? ReadWrite)?.async ?: false
 
         // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
         fun failTx(cause: Throwable) {
@@ -632,23 +635,28 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        // Returns the committed tx — its txId always, plus the executed detail (committed flag + system-time +
-        // error) for a sync commit, so a frontend can react to an abort and surface it via SHOW
-        // LATEST_SUBMITTED_TX. null when there's nothing to commit (no tx, or a ReadOnly / still-unresolved one);
-        // an async commit returns the txId with null detail (it isn't awaited, so has no outcome yet).
-        fun commitTx(): CommittedTx? {
+        // Drain the open write tx into its expanded ops + submit opts, clearing the tx and persisting a mid-tx
+        // SET TIME ZONE. null when there's nothing to submit — no tx, or a ReadOnly / still-unresolved one (a
+        // no-op commit). The caller owns the returned ops and MUST close them (useAll). A ReadWrite tx drains
+        // even when its buffer is empty — an explicit write tx still records a transaction (advancing the token).
+        private fun drainWriteTx(): Pair<List<TxOp>, TxOpts>? {
             val tx = tx ?: return null
             this.tx = null
             defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
-            // a ReadWrite tx commits even when its buffer is empty — an explicit write tx records a transaction
-            // (and advances the await-token); a ReadOnly / still-unresolved tx is a no-op.
             val mode = tx.mode as? ReadWrite ?: return null
             val opts = TxOpts(systemTime = mode.systemTime, user = user, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
-            return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops ->
-                if (mode.async) CommittedTx(submitTx(ops, opts).txId, null)
-                else executeTx(ops, opts).let { CommittedTx(it.txId, it) }
-            }
+            return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz) to opts
         }
+
+        // Commit the open write tx asynchronously — submit without awaiting, so the result carries only the txId.
+        // Records the await-token and the (detail-less) last-submitted-tx. null when there's nothing to commit.
+        fun commitAsync(): SubmittedTx? =
+            drainWriteTx()?.let { (ops, opts) -> ops.useAll { submitTx(it, opts) } }
+
+        // Commit the open write tx synchronously — submit and await the outcome, recording its full detail
+        // (committed flag, system-time, error) as the last-submitted-tx. null when there's nothing to commit.
+        fun commitSync(): ExecutedTx? =
+            drainWriteTx()?.let { (ops, opts) -> ops.useAll { executeTx(it, opts) } }
 
         private fun expandStaticOps(ops: List<TxOp>, tz: ZoneId): List<TxOp> =
             mutableListOf<TxOp>().closeAllOnCatch { out ->
@@ -787,7 +795,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         override fun setAutoCommit(autoCommit: Boolean) {
             if (this.autoCommit == autoCommit) return
-            if (autoCommit) commitTx()
+            if (autoCommit) {
+                if (isTxAsync) commitAsync() else commitSync()
+            }
             this.autoCommit = autoCommit
         }
 
@@ -795,7 +805,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             if (autoCommit)
                 throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
 
-            commitTx()
+            if (isTxAsync) commitAsync() else commitSync()
         }
 
         // SQL ROLLBACK: discards the open tx regardless of autoCommit (unlike [rollback], which rejects rollback in

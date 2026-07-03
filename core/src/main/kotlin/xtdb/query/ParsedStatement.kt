@@ -22,6 +22,8 @@ sealed interface ParsedStatement {
 
     enum class AccessMode { READ_ONLY, READ_WRITE }
 
+    enum class CommitMode { SYNC, ASYNC }
+
     enum class CopyFormat { TRANSIT_JSON, TRANSIT_MSGPACK, ARROW_FILE, ARROW_STREAM }
 
     /** Begin-time transaction characteristics. Expression-typed options are carried un-planned. */
@@ -59,7 +61,7 @@ sealed interface ParsedStatement {
     }
 
     data class Begin(override val ast: Sql.DirectlyExecutableStatementContext, val txOptions: TxOptions) : ParsedStatement
-    data class Commit(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
+    data class Commit(override val ast: Sql.DirectlyExecutableStatementContext, val mode: CommitMode? = null) : ParsedStatement
     data class Rollback(override val ast: Sql.DirectlyExecutableStatementContext) : ParsedStatement
 
     /** SET TRANSACTION ISOLATION LEVEL — a no-op for us, kept so the protocol acknowledges it. */

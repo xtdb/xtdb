@@ -173,7 +173,9 @@ const rw = rr.Sequence("READ", "WRITE", rr.Optional(rr.Sequence("WITH", "(", rr.
 
 const begin = rr.Sequence('BEGIN', rr.Optional(rr.Choice(0, ro, rw), 'skip'))
 
-return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
+const commit = rr.Sequence('COMMIT', rr.Optional(rr.Choice(0, 'SYNC', 'ASYNC'), 'skip'))
+
+return rr.Diagram(rr.Choice(0, begin, commit, 'ROLLBACK'))
 ```
 
 * A transaction may be either `READ ONLY` or `READ WRITE`.
@@ -186,11 +188,15 @@ return rr.Diagram(rr.Choice(0, begin, 'COMMIT', 'ROLLBACK'))
     Otherwise, the system-time of the transaction will be defined by the log.
   * `ASYNC` affects whether the connection will wait for the transaction to be indexed before returning from `COMMIT`.
     If not provided, it defaults to `false` - i.e. the connection will wait for the transaction to be indexed before returning.
+    This can be overridden per-commit with `COMMIT SYNC` / `COMMIT ASYNC` (see below).
   * `TIMEZONE` sets the time zone for the duration of the transaction, affecting any time zone-aware date/time literals and functions.
     If not provided, it defaults to the time-zone of the connection.
   * `METADATA` (v2.1+) can provided to attach arbitrary metadata to the transaction.
     This is then added to the `xt.txs` table in the `user_metadata` column.
     For example, you might use this to attach upstream request IDs, correlation IDs, or other data lineage information.
+* `COMMIT` (v2.2+) optionally takes `SYNC` or `ASYNC`, choosing whether the connection waits for the transaction to be indexed before returning.
+  `COMMIT SYNC` waits for indexing; `COMMIT ASYNC` returns as soon as the transaction is submitted to the log.
+  When given, this takes precedence over the transaction's `ASYNC` option from `BEGIN`; otherwise the `BEGIN`-time setting applies, defaulting to `SYNC`.
 * N.B. `READ WRITE` is a misnomer in XTDB here - this is to align with standard SQL syntax.
   XTDB doesn't have interactive read-write transactions, so any attempt to (e.g.) `SELECT` in this transaction will error.
 * For read-only transactions, see the [query reference](/reference/main/sql/queries#begin--commit--rollback).

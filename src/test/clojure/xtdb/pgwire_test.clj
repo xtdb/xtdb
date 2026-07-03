@@ -3074,6 +3074,34 @@ ORDER BY 1,2;")
              (jdbc/execute! conn ["SELECT * FROM users"]
                             {:builder-fn xt-jdbc/builder-fn})))))
 
+(t/deftest commit-sync-async
+  (with-open [conn (jdbc-conn)]
+    ;; COMMIT ASYNC overrides even a synchronous begin
+    (jdbc/execute! conn ["BEGIN READ WRITE"])
+    (try
+      (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'commit-async-1', given_name: 'Alice'}"])
+      (jdbc/execute! conn ["COMMIT ASYNC"])
+      (catch Throwable t
+        (jdbc/execute! conn ["ROLLBACK"])
+        (throw t)))
+
+    (t/is (= [{:xt/id "commit-async-1", :given-name "Alice"}]
+             (jdbc/execute! conn ["SELECT * FROM users WHERE _id = 'commit-async-1'"]
+                            {:builder-fn xt-jdbc/builder-fn})))
+
+    ;; COMMIT SYNC overrides even an async begin
+    (jdbc/execute! conn ["BEGIN READ WRITE WITH (ASYNC = TRUE)"])
+    (try
+      (jdbc/execute! conn ["INSERT INTO users RECORDS {_id: 'commit-sync-1', given_name: 'Bob'}"])
+      (jdbc/execute! conn ["COMMIT SYNC"])
+      (catch Throwable t
+        (jdbc/execute! conn ["ROLLBACK"])
+        (throw t)))
+
+    (t/is (= [{:xt/id "commit-sync-1", :given-name "Bob"}]
+             (jdbc/execute! conn ["SELECT * FROM users WHERE _id = 'commit-sync-1'"]
+                            {:builder-fn xt-jdbc/builder-fn})))))
+
 (t/deftest test-show-variables-returns-binary-4498
   (with-open [conn (jdbc-conn {"prepareThreshold" 1})]
     (dotimes [n 3]
