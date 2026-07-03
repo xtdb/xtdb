@@ -2,20 +2,16 @@
 
 package xtdb.api
 
+import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
+import io.micrometer.tracing.Tracer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
-import io.micrometer.core.instrument.Counter
-import io.micrometer.core.instrument.Timer
-import org.apache.arrow.adbc.core.AdbcConnection
+import org.apache.arrow.adbc.core.*
 import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
-import org.apache.arrow.adbc.core.AdbcDatabase
-import org.apache.arrow.adbc.core.AdbcInfoCode
-import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.AdbcStatement.UpdateResult
-import org.apache.arrow.adbc.core.BulkIngestMode
-import org.apache.arrow.adbc.core.StandardSchemas
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.UInt4Vector
 import org.apache.arrow.vector.VectorLoader
@@ -24,6 +20,7 @@ import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.ICursor
 import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
 import xtdb.antlr.Sql
@@ -34,12 +31,8 @@ import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.Storage
-import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
-import xtdb.arrow.RelationWriter
-import xtdb.arrow.VectorType
+import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.ofType
-import xtdb.arrow.unsupported
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
@@ -50,25 +43,24 @@ import xtdb.error.Anomaly
 import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.indexer.DatabaseSnapshot
-import xtdb.query.IQuerySource
-import xtdb.query.PrepareOpts
-import xtdb.query.PreparedQuery
-import xtdb.query.QueryOpts
+import xtdb.query.*
 import xtdb.table.TableRef
+import xtdb.time.asInstant
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts
+import xtdb.util.closeAll
+import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
-import xtdb.util.useAll
-import java.util.concurrent.ExecutionException
 import xtdb.util.requiringResolve
+import xtdb.util.useAll
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.ZoneOffset
+import java.time.*
+import java.util.Date
+import java.util.SequencedMap
+import java.util.function.Consumer
 import java.util.UUID.randomUUID
+import java.util.concurrent.ExecutionException
 import kotlin.io.path.extension
 
 private fun parseSkipDbsEnv(skipDbs: String): Set<String> =
@@ -126,6 +118,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
+        private val sqlPlanner: SqlPlanner,
+        // mutable so a frontend can seed it (pgwire pushes the server clock at startup); current-time only,
+        // and only really exercised by tests pinning a fixed instant.
+        var clock: Clock,
+        // the query tracer, gated by the node's query-tracing config (null = off); threaded into every read's
+        // QueryOpts so the connection — not each frontend — owns query tracing.
+        private val tracer: Tracer?,
         var defaultTz: ZoneId,
         private val txErrorCounter: Counter?,
         private val txAwaitTimer: Timer?,
@@ -155,12 +154,28 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var lastSubmittedTx: LastSubmittedTx? = null
             private set
 
+        // the authenticated user, threaded into every write's [TxOpts] for the audit trail. Established by the
+        // frontend at connect-time (pgwire's startup handshake); null until a frontend sets it.
+        var user: String? = null
+
         // how long to wait for this connection's writes to become visible before giving up, shared by every
         // read this connection prepares or snapshots
         private val awaitTimeout: Duration = Duration.ofMinutes(1)
 
         private var autoCommit = true
         private var tx: Transaction? = null
+
+        // session parameters (SET <param> = <value>) — stored raw; param-specific interpretation (e.g.
+        // pgwire's fallback_output_format) stays with the consumer. SHOW <param> reads back from here.
+        private val _sessionParameters = mutableMapOf<String, String?>()
+
+        // read view for the frontend (pgwire's serialization env / ParameterStatus echo); writes go through SET.
+        val sessionParameters: Map<String, String?> get() = _sessionParameters
+
+        // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
+        // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
+        var defaultAccessMode: ParsedStatement.AccessMode? = null
+            private set
 
         private fun db(dbName: DatabaseName): Database =
             dbCat.databaseOrNull(dbName)
@@ -273,7 +288,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         fun openSqlQuery(sql: String): ResultCursor =
-            prepareSql(sql).openQuery(null, QueryOpts(null, defaultTz))
+            openQuery(prepareSql(sql), null)
 
         fun openSnapshot(): DatabaseSnapshot {
             val db = db(dbName)
@@ -341,6 +356,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             override fun executeQuery(): QueryResult {
                 val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
+                // SHOW is answered from connection state, ahead of the access-mode gate — it is session
+                // introspection, valid in any transaction (pgwire's verify-permissibility doesn't gate it).
+                if (prepared == null)
+                    (parseStatements(sql).singleOrNull() as? ParsedStatement.ShowVariable)
+                        ?.let { return showVariable(it.variable) }
                 if (prepared == null && args != null)
                     throw Incorrect(
                         "call prepare() before executeQuery() when parameters are bound",
@@ -349,7 +369,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 val queryArgs = openQueryArgs()
                 val cursor = try {
-                    prepared?.openQuery(queryArgs, QueryOpts()) ?: openSqlQuery(sql)
+                    prepared?.let { openQuery(it, queryArgs) } ?: openQuery(prepareSql(sql), null)
                 } catch (t: Throwable) {
                     queryArgs?.close()
                     throw t
@@ -360,8 +380,29 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             override fun executeUpdate(): UpdateResult {
                 val sql = sql ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
-                val op = TxOp.Sql(sql, openQueryArgs())
-                executeDml(op)
+
+                val stmt = parseStatements(sql).singleOrNull()
+                    ?: throw Incorrect(
+                        "executeUpdate expects exactly one SQL statement",
+                        "xtdb.adbc/expected-single-statement",
+                        mapOf("sql" to sql)
+                    )
+                when (stmt) {
+                    is ParsedStatement.Begin -> beginParsedTx(stmt.txOptions, sql)
+
+                    is ParsedStatement.Commit -> commitTx()
+                    is ParsedStatement.Rollback -> rollbackTx()
+
+                    is ParsedStatement.SetSessionParameter ->
+                        _sessionParameters[stmt.name] = sqlPlanner.evalLiteral(stmt.value, null)?.toString()
+                    is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
+                    is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
+                    is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
+                    is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op
+                    is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
+
+                    else -> executeDml(TxOp.Sql(sql, openQueryArgs()))
+                }
                 return UpdateResult(-1)
             }
 
@@ -375,6 +416,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // relation, so a prepared INSERT in a loop becomes one multi-row op.
         private class DmlBuffer(private val al: BufferAllocator) : AutoCloseable {
             private val ops = mutableListOf<TxOp>()
+
+            val isEmpty get() = ops.isEmpty()
 
             fun add(op: TxOp) {
                 if (op !is TxOp.Sql || op.args == null) {
@@ -399,46 +442,327 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // resolved on the first statement: a query makes it read-only, DML makes it read-write. In XTDB a
         // "read-write" tx is write-only — queries are rejected in a DML tx, DML in a read-only one.
-        private sealed interface AccessMode : AutoCloseable {
-            data object ReadOnly : AccessMode {
-                override fun close() {}
-            }
+        private sealed interface AccessMode : AutoCloseable
 
-            class ReadWrite(
-                val buffer: DmlBuffer,
-                val systemTime: Instant? = null,
-                val userMetadata: Map<*, *>? = null,
-                val async: Boolean = false,
-            ) : AccessMode {
-                override fun close() = buffer.close()
+        private data object ReadOnly : AccessMode {
+            override fun close() {}
+        }
+
+        private inner class ReadWrite(
+            val systemTime: Instant? = null,
+            val userMetadata: Map<*, *>? = null,
+            val async: Boolean = false,
+        ) : AccessMode {
+            val buffer = DmlBuffer(allocator)
+
+            override fun close() = buffer.close()
+        }
+
+        // The read basis pinned at BEGIN and observed by every query in the transaction — the lever for
+        // cross-query snapshot isolation. Carried by an unresolved tx and a ReadOnly one (resolving the
+        // former to the latter inherits it unchanged); a ReadWrite tx has none — writes don't read.
+        private class ReadBasis(val snapshotToken: String?, val snapshotTime: Instant?, val currentTime: Instant)
+
+        // [txDefaultTz] anchors this tx's DML and reads; [sessionDefaultTz] is copied back to the connection on
+        // COMMIT. SET TIME ZONE writes both (a session operator); `WITH (TIMEZONE)` writes only [txDefaultTz], so
+        // the override stays tx-scoped. The connection's defaultTz is untouched while a tx is open.
+        private class Transaction(
+            var mode: AccessMode? = null, val readBasis: ReadBasis? = null,
+            var txDefaultTz: ZoneId, var sessionDefaultTz: ZoneId
+        ) : AutoCloseable {
+            var failed: Throwable? = null
+
+            override fun close() {
+                mode?.close()
             }
         }
 
-        private class Transaction(var mode: AccessMode? = null, var failed: Throwable? = null) : AutoCloseable {
-            override fun close() { mode?.close() }
+        // Pin the begin-time read basis: await this connection's own writes, then snapshot the data
+        // (latest-completed system-times) and the clock. A READ ONLY WITH clause overrides any of the three.
+        private fun pinReadBasis(
+            snapshotToken: String? = null, snapshotTime: Instant? = null, currentTime: Instant? = null
+        ): ReadBasis {
+            dbCat.awaitAll(awaitToken, awaitTimeout)
+            return ReadBasis(snapshotToken ?: dbCat.snapshotToken(), snapshotTime, currentTime ?: clock.instant())
         }
 
-        private fun commitTx() {
-            val tx = tx ?: return
+        // Open an explicit transaction (SQL BEGIN). [accessMode] fixes the mode — READ ONLY rejects writes,
+        // READ WRITE buffers them; a bare BEGIN leaves it unresolved until the first statement resolves it.
+        // [readBasis] pins the begin-time read snapshot (null for an explicit READ WRITE — writes don't read).
+        // Coexists with autoCommit — an open tx captures subsequent DML (see executeDml) until COMMIT/ROLLBACK.
+        private fun beginTx(accessMode: AccessMode?, readBasis: ReadBasis?, tz: ZoneId = defaultTz) {
+            if (tx != null) throw Incorrect("transaction already started", "xtdb/tx-already-open")
+            tx = Transaction(accessMode, readBasis, txDefaultTz = tz, sessionDefaultTz = defaultTz)
+        }
+
+        // a bare BEGIN takes the session default access mode (SET SESSION CHARACTERISTICS); with none set it
+        // stays unresolved, pinning a basis anyway — a query resolving it to read-only inherits the basis, DML
+        // resolving it to read-write ignores it.
+        // @JvmOverloads: a frontend (pgwire) calls these reflectively with the shorter arities, taking the
+        // default session tz — the defaulted `tz` param alone wouldn't emit those JVM overloads.
+        @JvmOverloads
+        fun beginTx(tz: ZoneId = defaultTz) = when (defaultAccessMode) {
+            ParsedStatement.AccessMode.READ_ONLY -> beginReadOnly(tz)
+            ParsedStatement.AccessMode.READ_WRITE -> beginWriteOnly(tz = tz)
+            null -> beginTx(null, pinReadBasis(), tz)
+        }
+
+        @JvmOverloads
+        fun beginReadOnly(tz: ZoneId = defaultTz) = beginTx(ReadOnly, pinReadBasis(), tz)
+
+        @JvmOverloads
+        fun beginWriteOnly(systemTime: Instant? = null, userMetadata: Map<*, *>? = null, async: Boolean = false,
+                           tz: ZoneId = defaultTz) =
+            beginTx(ReadWrite(systemTime, userMetadata, async), null, tz)
+
+        // tx status for the frontend's ready-state + commit/abort decisions. A failed tx rejects further work
+        // until ROLLBACK (Postgres' "current transaction is aborted").
+        val isTxOpen: Boolean get() = tx != null
+        val isTxFailed: Boolean get() = tx?.failed != null
+
+        // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
+        fun failTx(cause: Throwable) {
+            tx?.let { it.failed = it.failed ?: cause }
+        }
+
+        // Coerce a planned BEGIN-option value to an Instant, mirroring xtdb.time/->instant so the connection and
+        // pgwire agree on the system-time a SQL temporal literal resolves to. SqlPlanner plans `TIMESTAMP '…'`
+        // to a java.time temporal (ZonedDateTime when zoned, else LocalDateTime); a bare string falls back to
+        // the SQL-timestamp parse. LocalDate/LocalDateTime are anchored in [tz] (the tx's zone), as pgwire does.
+        private fun coerceInstant(value: Any?, tz: ZoneId): Instant? = when (value) {
+            null -> null
+            is Instant -> value
+            is ZonedDateTime -> value.toInstant()
+            is OffsetDateTime -> value.toInstant()
+            is LocalDateTime -> value.atZone(tz).toInstant()
+            is LocalDate -> value.atStartOfDay(tz).toInstant()
+            is Date -> value.toInstant()
+            is String -> value.asInstant(tz)
+            else -> throw Incorrect(
+                "cannot coerce SYSTEM_TIME option to an instant",
+                "xtdb.adbc/invalid-system-time",
+                mapOf("value" to value, "type" to value::class.java.name)
+            )
+        }
+
+        private fun coerceZoneId(value: Any?): ZoneId = when (value) {
+            is ZoneId -> value
+            is String -> ZoneId.of(value)
+            else -> throw Incorrect(
+                "cannot coerce TIME ZONE to a zone",
+                "xtdb.adbc/invalid-time-zone",
+                mapOf("value" to value)
+            )
+        }
+
+        private fun coerceAwaitToken(value: Any?): String? = when (value) {
+            null -> null
+            is String -> value
+            else -> throw Incorrect(
+                "AWAIT_TOKEN must be a string",
+                "xtdb.adbc/invalid-await-token",
+                mapOf("value" to value)
+            )
+        }
+
+        // SET TIME ZONE — a session operator. Mid-tx it writes both the tx zone and the session zone it commits to,
+        // so it persists on COMMIT and reverts on ROLLBACK (which just drops the tx). Rejected once a write tx has
+        // buffered ops: those ops captured temporal literals under the old zone, so changing it mid-buffer would be
+        // inconsistent.
+        fun setTimeZone(zone: ZoneId) {
+            (tx?.mode as? ReadWrite)?.let {
+                if (!it.buffer.isEmpty) throw Incorrect(
+                    "Cannot SET TIME ZONE in a read-write transaction with buffered writes",
+                    "xtdb/set-tz-in-write-tx"
+                )
+            }
+            tx?.let { it.txDefaultTz = zone; it.sessionDefaultTz = zone } ?: run { defaultTz = zone }
+        }
+
+        // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
+        // SqlPlanner. BEGIN options carry no bound params, so args is null.
+        private fun beginParsedTx(opts: ParsedStatement.TxOptions, sql: String) {
+            fun rejectOpt(): Nothing = throw Incorrect(
+                "BEGIN ... WITH option is not yet supported here",
+                "xtdb.adbc/unsupported-tx-option",
+                mapOf("sql" to sql)
+            )
+
+            // WITH (TIMEZONE) overrides the tx zone for its duration (tx-scoped — it doesn't touch the session).
+            val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, null)) } ?: defaultTz
+
+            when (opts.accessMode) {
+                ParsedStatement.AccessMode.READ_WRITE -> {
+                    val systemTime = coerceInstant(opts.systemTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
+                    val userMetadata = opts.userMetadata?.let { sqlPlanner.evalLiteral(it, null) } as Map<*, *>?
+                    val async = (opts.async?.let { sqlPlanner.evalLiteral(it, null) } as Boolean?) ?: false
+
+                    beginWriteOnly(systemTime, userMetadata, async, tz)
+                }
+
+                ParsedStatement.AccessMode.READ_ONLY -> {
+                    // SNAPSHOT_TOKEN / SNAPSHOT_TIME / CLOCK_TIME override the begin-time auto-pin. AWAIT_TOKEN
+                    // (the only other READ ONLY option in the grammar) isn't wired through yet — reject it fail-closed.
+                    if (opts.awaitToken != null) rejectOpt()
+
+                    val snapshotToken = opts.snapshotToken?.let { sqlPlanner.evalLiteral(it, null) } as String?
+                    val snapshotTime = coerceInstant(opts.snapshotTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
+                    val currentTime = coerceInstant(opts.clockTime?.let { sqlPlanner.evalLiteral(it, null) }, tz)
+
+                    beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime), tz)
+                }
+
+                null -> beginTx(tz)
+            }
+        }
+
+        // Returns the executed tx (committed flag + system-time + error) so a frontend can both react to an
+        // abort and surface it via SHOW LATEST_SUBMITTED_TX. null when there's nothing to commit (no tx, or a
+        // ReadOnly / still-unresolved one) and for an async submit, which isn't awaited so has no outcome yet.
+        fun commitTx(): ExecutedTx? {
+            val tx = tx ?: return null
             this.tx = null
-            val ops = (tx.mode as? AccessMode.ReadWrite)?.buffer?.drain()
-            if (!ops.isNullOrEmpty()) ops.useAll { executeTx(it) }
+            defaultTz = tx.sessionDefaultTz   // a mid-tx SET TIME ZONE persists; a WITH (TIMEZONE) override doesn't
+            // a ReadWrite tx commits even when its buffer is empty — an explicit write tx records a transaction
+            // (and advances the await-token); a ReadOnly / still-unresolved tx is a no-op.
+            val mode = tx.mode as? ReadWrite ?: return null
+            val opts = TxOpts(systemTime = mode.systemTime, user = user, userMetadata = mode.userMetadata, defaultTz = tx.txDefaultTz)
+            return expandStaticOps(mode.buffer.drain(), tx.txDefaultTz).useAll { ops ->
+                if (mode.async) { submitTx(ops, opts); null } else executeTx(ops, opts)
+            }
         }
+
+        private fun expandStaticOps(ops: List<TxOp>, tz: ZoneId): List<TxOp> =
+            mutableListOf<TxOp>().closeAllOnCatch { out ->
+                ops.forEachIndexed { idx, op ->
+                    val expanded = try {
+                        (op as? TxOp.Sql)?.let { sqlPlanner.toStaticOps(it.sql, it.args, allocator, tz) }
+                    } catch (t: Throwable) {
+                        ops.subList(idx, ops.size).closeAll()
+                        throw t
+                    }
+
+                    if (expanded != null) {
+                        op.close()
+                        out.addAll(expanded)
+                    } else out.add(op)
+                }
+
+                out
+            }
 
         internal fun executeDml(op: TxOp) {
-            if (autoCommit) {
-                listOf(op).useAll { ops -> executeTx(ops) }
+            // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
+            if (autoCommit && tx == null) {
+                expandStaticOps(listOf(op), defaultTz).useAll { ops -> executeTx(ops, TxOpts(user = user)) }
                 return
             }
-            val tx = tx ?: Transaction().also { tx = it }
+
+            val tx = tx ?: Transaction(txDefaultTz = defaultTz, sessionDefaultTz = defaultTz).also { tx = it }
+
             when (val mode = tx.mode) {
-                is AccessMode.ReadWrite -> mode.buffer.add(op)
-                null -> AccessMode.ReadWrite(DmlBuffer(allocator)).also { tx.mode = it }.buffer.add(op)
-                is AccessMode.ReadOnly -> {
+                is ReadWrite -> mode.buffer.add(op)
+                null -> ReadWrite().also { tx.mode = it }.buffer.add(op)
+                is ReadOnly -> {
                     op.close()
                     throw Incorrect("Cannot write in a read-only transaction", "xtdb/read-only-tx")
                 }
             }
+        }
+
+        // The read counterpart of executeDml's access-mode resolution: a query resolves an unresolved tx to
+        // read-only, and is rejected in a read-write (DML) tx — in XTDB a write tx is write-only. Applied by
+        // openQuery, so every read gates through one place.
+        private fun resolveForQuery() {
+            val tx = tx
+            if (tx == null) {
+                // manual mode mirrors executeDml's lazy open: a query opens a read-only tx pinning the
+                // begin-time basis, so subsequent reads share its snapshot. Under autocommit there is no open
+                // tx — the query reads latest at the connection's current basis, unchanged.
+                if (!autoCommit) this.tx = Transaction(ReadOnly, pinReadBasis(), txDefaultTz = defaultTz, sessionDefaultTz = defaultTz)
+                return
+            }
+            when (tx.mode) {
+                is ReadWrite -> throw Incorrect(
+                    "Queries are unsupported in a DML transaction", "xtdb/queries-in-read-write-tx"
+                )
+
+                is ReadOnly -> {}
+                null -> tx.mode = ReadOnly
+            }
+        }
+
+        // QueryOpts for a user read: an open tx's pinned basis (snapshot isolation), else null fields so the
+        // planner defaults to latest data and the wall-clock now (autocommit / no open tx).
+        private fun queryOpts() = tx.let { t ->
+            QueryOpts(t?.readBasis?.currentTime, t?.txDefaultTz ?: defaultTz, t?.readBasis?.snapshotToken, t?.readBasis?.snapshotTime, tracer)
+        }
+
+        // Open a cursor on an already-prepared query: first resolves the tx's access mode and basis (rejecting
+        // a read in a write tx, resolving an unresolved tx to read-only), then opens at the connection's basis,
+        // tz and tracer. A frontend owns the cursor for wire serialization, but the gate and the QueryOpts stay
+        // the connection's — no callsite reconstructs them, nor decides the gate.
+        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor {
+            resolveForQuery()
+            return pq.openQuery(args, queryOpts())
+        }
+
+        // Open a read WITHOUT the access-mode gate — for a frontend's driver-compatibility probe that must be
+        // permitted in any transaction (pgwire allows the pgjdbc type-metadata query inside a write tx, where
+        // the gate would otherwise reject it). Reads at the connection's current basis; inside a write tx that
+        // is latest-committed data, not the tx's buffered writes.
+        fun openUncheckedQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
+
+        // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
+        // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
+        // parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar `showVariable`s — classified as
+        // Query and answered by the engine from the basis, not here.) The node-level status SHOWs
+        // (latest_completed_txs, …) are node introspection, not connection state — they stay in pgwire for now.
+        private fun showVariable(variable: String): QueryResult =
+            when (variable) {
+                // 0 rows until this connection has submitted a tx (matches the `tx_id IS NOT NULL` filter);
+                // system-time/committed/error are null for a fire-and-forget submit. error is a Throwable → transit.
+                "latest_submitted_tx" -> showResult(
+                    linkedMapOf("tx_id" to VectorType.maybe(VectorType.I64),
+                                "system_time" to VectorType.maybe(VectorType.INSTANT),
+                                "committed" to VectorType.maybe(VectorType.BOOL),
+                                "error" to VectorType.maybe(VectorType.TRANSIT),
+                                "await_token" to VectorType.maybe(VectorType.UTF8)),
+                    lastSubmittedTx?.let {
+                        listOf(mapOf("tx_id" to it.txId, "system_time" to it.systemTime,
+                                     "committed" to it.committed, "error" to it.error,
+                                     "await_token" to awaitToken))
+                    } ?: emptyList())
+
+                "await_token" -> showResult(variable, awaitToken)
+                else -> showResult(variable, sessionParameters[variable])
+            }
+
+        // A one-row, single-(nullable-utf8)-column result — the common SHOW shape.
+        private fun showResult(col: String, value: String?): QueryResult =
+            showResult(linkedMapOf(col to VectorType.maybe(VectorType.UTF8)), listOf(mapOf(col to value)))
+
+        // A SHOW result of arbitrary typed columns and 0-or-more rows — the SHOW counterpart of the query
+        // engine's cursor, so executeQuery can return connection state as an Arrow result set.
+        private fun showResult(types: SequencedMap<String, VectorType>, rows: List<Map<String, Any?>>): QueryResult {
+            val rel = Relation(allocator, types).closeOnCatch { r -> rows.forEach { r.writeRow(it) }; r }
+            val cursor = object : ResultCursor {
+                override val resultTypes get() = types
+                override val cursorType get() = "show"
+                override val childCursors get() = emptyList<ICursor>()
+
+                private var done = false
+                override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                    if (done) return false
+                    done = true
+                    c.accept(rel)
+                    return true
+                }
+
+                override fun close() = rel.close()
+            }
+            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
+            return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
 
         override fun setAutoCommit(autoCommit: Boolean) {
@@ -448,18 +772,25 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         override fun commit() {
-            if (autoCommit) throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+            if (autoCommit)
+                throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
+
             commitTx()
         }
 
-        private fun discardTx() {
+        // SQL ROLLBACK: discards the open tx regardless of autoCommit (unlike [rollback], which rejects rollback in
+        // autocommit). The explicit-tx mechanism the SQL tx-control path (and the pgwire frontend) drives.
+        fun rollbackTx() {
+            // defaultTz was never touched while the tx was open, so dropping the tx reverts any mid-tx SET TIME ZONE
             tx?.close()
             tx = null
         }
 
         override fun rollback() {
-            if (autoCommit) throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
-            discardTx()
+            if (autoCommit)
+                throw Incorrect("Cannot rollback when autoCommit is enabled", "xtdb.adbc/rollback-in-autocommit")
+
+            rollbackTx()
         }
 
         override fun bulkIngest(targetTableName: String, mode: BulkIngestMode): Statement {
@@ -768,7 +1099,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         override fun getCurrentDbSchema(): String = "public"
 
         override fun close() {
-            discardTx()
+            rollbackTx()
         }
     }
 

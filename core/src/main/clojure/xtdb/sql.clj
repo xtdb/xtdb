@@ -8,6 +8,7 @@
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
+            [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.table :as table]
             [xtdb.time :as time]
@@ -3418,11 +3419,18 @@
           (throw (err/incorrect :xtdb/missing-arg (str "missing arg: " expr) {}))))
     expr))
 
+(declare sql->static-ops)
+
 (defn ->sql-planner ^SqlPlanner []
   (reify SqlPlanner
     (evalLiteral [_ expr args]
       (-> (plan-expr expr (->env))
-          (apply-args args)))))
+          (apply-args args)))
+
+    ;; the adapter opens sql->static-ops' client ops up into core TxOps (via safe-mapv, closing partials on throw)
+    (toStaticOps [_ sql args al default-tz]
+      (when-let [client-ops (seq (sql->static-ops sql args))]
+        (util/safe-mapv #(xt-log/open-tx-op % al {:default-tz default-tz}) client-ops)))))
 
 (defprotocol PlanQuery
   (-plan-query [query opts]))

@@ -11,6 +11,7 @@
             [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
+            [xtdb.sql :as sql]
             [xtdb.time :as time]
             [xtdb.tracer]
             [xtdb.util :as util]
@@ -18,6 +19,7 @@
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
+           (java.time Clock)
            (java.util HashMap)
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
@@ -27,7 +29,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
-           (xtdb.query IQuerySource PreparedQuery QueryOpts)))
+           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlPlanner)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -82,17 +84,17 @@
            :error error}))))
 
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
-                                           ^IQuerySource q-src default-tz ^Counter tx-error-counter
+                                           ^IQuerySource q-src ^SqlPlanner sql-planner query-tracer default-tz ^Counter tx-error-counter
                                            tx-await-timer tx-submit-timer tx-execute-timer db-name]
-  (Xtdb$Connection. allocator db-cat q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
+  (Xtdb$Connection. allocator db-cat q-src sql-planner (Clock/systemDefaultZone) query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
-                 ^IQuerySource q-src
+                 ^IQuerySource q-src ^SqlPlanner sql-planner
                  ^CompositeMeterRegistry metrics-registry
                  default-tz, ^AtomicReference !await-token
                  system, close-fn,
                  query-timer, ^Counter query-error-counter, ^Counter tx-error-counter
-                 tx-await-timer tx-submit-timer tx-execute-timer]
+                 tx-await-timer tx-submit-timer tx-execute-timer query-tracer]
   Xtdb
   (getAllocator [_] allocator)
 
@@ -115,7 +117,7 @@
       (.createConnectionBuilder data-source)))
 
   (connect [_]
-    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer "xtdb"))
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer "xtdb"))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -177,7 +179,7 @@
           (throw e)))))
 
   (open-connection [_ db-name]
-    (->node-connection db-cat allocator q-src default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
   xtp/PStatus
   (latest-completed-txs [_]
@@ -264,6 +266,7 @@
                             (dissoc :base)
                             (assoc :allocator (.getAllocator base)
                                    :q-src (.getQuerySource base)
+                                   :sql-planner (sql/->sql-planner)
                                    :metrics-registry metrics-registry
                                    :default-tz (.getDefaultTz (.getConfig base))
                                    :!await-token (AtomicReference. nil))
@@ -276,7 +279,11 @@
                                    :tx-submit-timer (metrics/add-timer metrics-registry "node.tx.submit"
                                                                        {:description "Time spent in submitTx (async-path log append + ack), across all frontends."})
                                    :tx-execute-timer (metrics/add-timer metrics-registry "node.tx.execute"
-                                                                        {:description "Time spent in executeTx (sync-path log append + indexer await), across all frontends."}))))]
+                                                                        {:description "Time spent in executeTx (sync-path log append + indexer await), across all frontends."})
+                                   ;; query tracer gated by config, threaded into every connection's reads — the
+                                   ;; connection owns query tracing, so it applies across all frontends alike
+                                   :query-tracer (when (.getQueryTracing (.getTracer (.getConfig base)))
+                                                   (.getTracer base)))))]
     node))
 
 (defmethod ig/halt-key! :xtdb/node [_ node]
