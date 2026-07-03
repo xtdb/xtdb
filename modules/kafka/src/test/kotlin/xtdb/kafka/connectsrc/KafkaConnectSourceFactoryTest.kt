@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.database.Database
 import xtdb.error.Incorrect
+import xtdb.kafka.connectsrc.proto.docsIndexerConfig
+import com.google.protobuf.Any as ProtoAny
 
 class KafkaConnectSourceFactoryTest {
 
@@ -28,7 +30,7 @@ class KafkaConnectSourceFactoryTest {
                 "transforms.unwrap.type" to "org.apache.kafka.connect.transforms.ExtractField\$Value",
                 "transforms.unwrap.field" to "payload",
             ),
-            indexer = DocsIndexer.Factory(table = "orders"),
+            indexer = DocsIndexer.Factory(table = "orders", schema = "analytics"),
         )
 
         val restored = protoRoundTrip(original)
@@ -40,6 +42,7 @@ class KafkaConnectSourceFactoryTest {
         assertEquals("unwrap", restored.connectConfig["transforms"])
         val docs = restored.indexer as DocsIndexer.Factory
         assertEquals("orders", docs.table)
+        assertEquals("analytics", docs.schema)
     }
 
     @Test
@@ -103,4 +106,38 @@ class KafkaConnectSourceFactoryTest {
         assertTrue(factory.connectConfig.isEmpty())
     }
 
+    @Test
+    fun `YAML schema field decodes, defaulting to public when omitted`() {
+        fun docsFor(indexerYaml: String): DocsIndexer.Factory {
+            val yaml = """
+                externalSource: !KafkaConnect
+                  remote: k
+                  topic: t
+                  connectConfig:
+                    key.converter: org.apache.kafka.connect.storage.StringConverter
+                    value.converter: org.apache.kafka.connect.json.JsonConverter
+                  indexer: !Docs
+$indexerYaml
+            """.trimIndent()
+
+            val factory = Database.Config.fromYaml(yaml).externalSource as KafkaConnectSource.Factory
+            return factory.indexer as DocsIndexer.Factory
+        }
+
+        val qualified = docsFor("                    table: events\n                    schema: analytics")
+        assertEquals("events", qualified.table)
+        assertEquals("analytics", qualified.schema)
+
+        val unqualified = docsFor("                    table: events")
+        assertEquals("public", unqualified.schema)
+    }
+
+    @Test
+    fun `proto without a schema field grandfathers to public`() {
+        val preSchemaProto = ProtoAny.pack(docsIndexerConfig { table = "orders" }, "proto.xtdb.com")
+
+        val docs = DocsIndexer.Factory.Registration().fromProto(preSchemaProto)
+
+        assertEquals("public", docs.schema)
+    }
 }

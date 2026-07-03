@@ -41,6 +41,13 @@ class DocsIndexerTest {
     }
 
     @Test
+    fun `schema field resolves alongside the table`() {
+        val indexer = DocsIndexer.Factory(table = "events", schema = "analytics").open() as DocsIndexer
+
+        assertEquals(TableRef("analytics", "events"), indexer.table)
+    }
+
+    @Test
     fun `resolveId passes a String key through`() {
         assertEquals("k1", resolveId(recWithKey("k1")))
     }

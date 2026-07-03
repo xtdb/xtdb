@@ -22,4 +22,7 @@ message KafkaConnectSourceToken {
 
 message DocsIndexerConfig {
     string table = 1;
+
+    // unset ("") means the default schema, "public"
+    string schema = 2;
 }
