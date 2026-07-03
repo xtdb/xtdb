@@ -9,7 +9,8 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
-import xtdb.util.closeAllOnCatch
+import xtdb.util.safeMap
+import xtdb.util.safelyOpening
 import java.util.HashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.component1
@@ -30,11 +31,13 @@ class Snapshot(
 
     fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()
     val tables get() = tableSnaps.keys
+
     fun columnType(table: TableRef, column: ColumnName): VectorType? {
         val snaps = table(table)
         if (snaps.isEmpty()) return null
         return mergeTypes(snaps.map { it.columnType(column) })
     }
+
     val allColumnTypes by lazy { tableSnaps.mapValues { (_, snaps) -> snaps.mergeTypes() } }
 
     /** The frozen per-table trie-cat state for [table], for downstream `current-tries` planning. */
@@ -62,12 +65,12 @@ class Snapshot(
             }
 
         @JvmStatic
-        private fun buildTableInfo(
-            allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>>?, tableCatalog: TableCatalog
+        private fun TableCatalog.buildTableInfo(
+            allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>>?
         ): Map<TableRef, Set<ColumnName>> {
             val tableInfo = HashMap<TableRef, MutableSet<ColumnName>>()
 
-            for ((table, types) in tableCatalog.types)
+            for ((table, types) in types)
                 tableInfo.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
 
             for ((table, types) in allColumnTypes.orEmpty())
@@ -79,33 +82,34 @@ class Snapshot(
         @JvmStatic
         fun open(
             al: BufferAllocator, tableCat: TableCatalog,
-            trieCatalog: TrieCatalog, liveIndex: LiveIndex, openTx: OpenTx?,
-        ): Snapshot =
-            mutableListOf<TableSnapshot>().closeAllOnCatch { allSnaps ->
-                val trieCatSnap = trieCatalog.snapshot()
-                val byTable = HashMap<TableRef, MutableList<TableSnapshot>>()
-                val openTxTables: Map<TableRef, OpenTx.Table> =
-                    openTx?.tables?.associate { it.key to it.value }.orEmpty()
+            trieCatalog: TrieCatalog, liveIndex: LiveIndex,
+            openTxs: List<OpenTx> = emptyList(),
+        ): Snapshot = safelyOpening {
+            val trieCatSnap = trieCatalog.snapshot()
 
-                fun addSnap(tableRef: TableRef, ts: TableSnapshot) {
-                    allSnaps.add(ts)
-                    byTable.getOrPut(tableRef) { mutableListOf() }.add(ts)
-                }
+            val liveIndexSnaps = openAll {
+                liveIndex.tableRefs
+                    .mapNotNull { liveIndex.table(it) }
 
-                for (tableRef in openTxTables.keys + liveIndex.tableRefs) {
-                    liveIndex.table(tableRef)?.let { liveTable ->
-                        // Skip live-tables already covered by a published L0 — they'd duplicate the
-                        // L0's data. The watermark is monotonic, so once L0_N exists we drop the
-                        // live-table-N entry from this snapshot for good (its rows are now in L0_N).
-                        if (liveTable.blockIdx > trieCatSnap.l0MaxBlockIdx(tableRef))
-                            addSnap(tableRef, TableSnapshot.open(al, liveTable))
-                    }
-                    openTxTables[tableRef]?.let { tx -> TableSnapshot.openTx(al, tx)?.let { addSnap(tableRef, it) } }
-                }
+                    // Skip live-tables already covered by a published L0 — they'd duplicate the
+                    // L0's data. The watermark is monotonic, so once L0_N exists we drop the
+                    // live-table-N entry from this snapshot for good (its rows are now in L0_N).
+                    .filter { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
 
-                val tableInfo = buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() }, tableCat)
-
-                Snapshot(openTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
+                    .safeMap { TableSnapshot.open(al, it) }
             }
+
+            val openTxSnaps = openAll {
+                openTxs.flatMap { it.tables }
+                    .safeMap { TableSnapshot.openTx(al, it.value) }
+                    .filterNotNull()
+            }
+
+            val byTable = liveIndexSnaps.plus(openTxSnaps).groupBy { it.table }
+
+            val tableInfo = tableCat.buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() })
+
+            Snapshot(openTxs.lastOrNull()?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
+        }
     }
 }

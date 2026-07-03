@@ -4,11 +4,13 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.VectorType
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.segment.MemorySegment
+import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.safelyOpening
 import kotlin.collections.orEmpty
 
 class TableSnapshot(
+    val table: TableRef,
     val columnTypes: Map<ColumnName, VectorType>,
     val segment: MemorySegment
 ) : AutoCloseable {
@@ -30,7 +32,7 @@ class TableSnapshot(
             val wmTrie = liveTable.liveTrie.withIidReader(wmRel["_iid"])
             val seg = MemorySegment(wmTrie, wmRel)
 
-            TableSnapshot(seg.rel.logRelTypes.orEmpty(), seg)
+            TableSnapshot(liveTable.table, seg.rel.logRelTypes.orEmpty(), seg)
         }
 
         @JvmStatic
@@ -41,7 +43,7 @@ class TableSnapshot(
                 val wmTrie = tableTx.trie.withIidReader(wmRel["_iid"])
                 val seg = MemorySegment(wmTrie, wmRel)
 
-                TableSnapshot(seg.rel.logRelTypes.orEmpty(), seg)
+                TableSnapshot(tableTx.ref, seg.rel.logRelTypes.orEmpty(), seg)
             }
         }
     }

@@ -77,7 +77,7 @@ class LiveIndex private constructor(
     private fun refreshSnap0() {
         val oldSnap = sharedSnap
 
-        sharedSnap = Snapshot.open(allocator, tableCatalog, trieCatalog, this, openTx = null)
+        sharedSnap = Snapshot.open(allocator, tableCatalog, trieCatalog, this)
 
         oldSnap?.close()
     }
@@ -134,28 +134,29 @@ class LiveIndex private constructor(
         }
     }
 
-    override fun openSnapshot(): Snapshot {
-        val stamp = snapLock.readLock()
-        try {
-            return sharedSnap!!.also { it.retain() }
+    private inline fun <R> StampedLock.withReadLock(block: () -> R): R {
+        val stamp = readLock()
+        return try {
+            block()
         } finally {
-            snapLock.unlock(stamp)
+            unlock(stamp)
         }
     }
 
-    fun openSnapshot(openTx: OpenTx): Snapshot {
-        // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
-        // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
-        // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
-        // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
-        // of our trie-cat capture without breaking correctness.
-        val stamp = snapLock.readLock()
-        try {
-            return Snapshot.open(allocator, tableCatalog, trieCatalog, this, openTx)
-        } finally {
-            snapLock.unlock(stamp)
+    override fun openSnapshot() =
+        snapLock.withReadLock {
+            sharedSnap!!.also { it.retain() }
         }
-    }
+
+    fun openSnapshot(openTx: OpenTx): Snapshot =
+        snapLock.withReadLock {
+            // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
+            // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
+            // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
+            // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
+            // of our trie-cat capture without breaking correctness.
+            Snapshot.open(allocator, tableCatalog, trieCatalog, this, listOf(openTx))
+        }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
 
