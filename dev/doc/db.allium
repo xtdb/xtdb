@@ -16,21 +16,37 @@
 -- A single LiveIndex sits outside the processor as shared state.
 -- Leader mode feeds it from source processing; follower mode feeds it from replica processing.
 --
--- Leader pipelining (see live-index.allium): on a leader, resolution runs ahead
--- of the replica-log write, modelled as two cooperating processes:
---   Resolver (proc 1)       — serialises source-log / external-source messages,
---                             resolves each, writes it to the staging accumulating
---                             slot (advancing the staging area's own
---                             latest_completed_tx, the applied head), and hands it
---                             downstream. No watcher notify here.
---   Replica-writer (proc 2) — sole owner of the replica-log producer. Seals the
---                             staged batch, writes it to the replica log; on durable
---                             confirmation, promotes staging → durable live tables,
---                             advances the durable LiveIndex.latest_completed_tx,
---                             refreshes the shared snapshot, and notifies watchers.
+-- Leader pipelining (see live-index.allium) — resolver-dominion model: on a
+-- leader, resolution runs ahead of the replica-log write, modelled as two
+-- cooperating processes joined by two channels:
+--   Resolver (proc 1)  — OWNS the staging index outright (sole accessor, so staging
+--                        needs no lock). Serialises source-log / external-source
+--                        messages, resolves each (reading durable ⊕ its own staging
+--                        for read-your-writes), applies it to the accumulating slot
+--                        (advancing the staging index's own latest_completed_tx, the
+--                        applied head), and at each tx boundary decides whether to
+--                        seal+send a batch and whether to cut a block. On the
+--                        back-edge (a persist-result that a prior batch is durable)
+--                        it PROMOTES the committing batch → durable live tables ONE
+--                        TX AT A TIME in send order, advancing the durable
+--                        LiveIndex.latest_completed_tx and the apply cursor per tx,
+--                        refreshing the shared snapshot, and notifying watchers
+--                        POST-DURABLE.
+--   Replica (proc 2)   — a PURE WRITER: owns only the replica-log producer. Receives
+--                        a batch's bytes, durably appends them (plus a BlockBoundary
+--                        + uploadBlock when the batch carries a block cut), and posts
+--                        a persist-result back on the back-edge — the PER-TX replica-
+--                        log positions it appended (i-th ↔ i-th tx, send order), so
+--                        the resolver can advance the apply cursor tx-by-tx on
+--                        promote. Touches NEITHER staging NOR the durable index.
+--   Two channels       — resolver→replica carries batches; replica→resolver carries
+--                        persist-results (the per-tx replica-log positions). No CompletableDeferred. At-most-one-batch-
+--                        in-flight is enforced by the resolver (the staging index's
+--                        in_flight flag), not channel capacity. Errors propagate via
+--                        channel close-with-cause.
 -- A query MUST NEVER see a tx that isn't yet durably on the replica log: external
 -- snapshots open at the durable LiveIndex.latest_completed_tx. The applied head is
--- the staging area's own latest_completed_tx — callers choose which to read.
+-- the staging index's own latest_completed_tx — callers choose which to read.
 -- Followers/transition have no staging — they import already-durable replica
 -- messages straight into the durable live index.
 -- A single Watchers instance tracks both txId and sourceMsgId for client correlation,
@@ -53,7 +69,8 @@ use "./compaction.allium" as compaction
 given {
     database: Database
     log_processor: LogProcessor
-    replica_writer: ReplicaWriter      -- leader-only (proc 2); absent in follower/transition modes
+    staging_index: StagingIndex?       -- leader-only (resolver-owned); absent in follower/transition modes
+    replica: Replica?                  -- leader-only (proc 2, pure writer); absent in follower/transition modes
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- single instance: correlates source msg_ids and tx_ids with client futures
     block_catalog: BlockCatalog
@@ -101,8 +118,8 @@ entity LiveIndex {
     --   durable live tables. External snapshots open at this. On a leader it is
     --   advanced by promotion from staging; on a follower/transition by importTx.
     -- The APPLIED/resolution head (next external-source tx_id, system-time
-    --   smoothing) is NOT a field here: on a leader it lives in the staging area
-    --   (the staging area's own latest_completed_tx, see live-index.allium
+    --   smoothing) is NOT a field here: on a leader it lives in the staging index
+    --   (the staging index's own latest_completed_tx, see live-index.allium
     --   StagingIndex), which db.allium does not import and therefore cannot read
     --   directly. Resolution that needs the next tx key delegates id-assignment to
     --   the staging layer via beginStagedTx (below); external queries read the
@@ -193,34 +210,46 @@ variant Transition : LogProcessor {
     -- See: indexer/TransitionLogProcessor.kt
 }
 
-entity ReplicaWriter {
-    -- The leader's replica-writer (proc 2): sole owner of the replica-log
-    -- transactional producer and the staging area's write lifecycle. Exists only
-    -- on a leader (client-driven Leader or ExternalSourceLeader); followers and
-    -- the transition processor have no staging and no writer.
-    -- See: indexer/LeaderLogProcessor.kt (replica-write half), live-index.allium.
+entity StagingIndex {
+    -- The resolver-owned staging index for a leader term. Its full structure
+    -- (slots, staged tables, the applied head) lives in live-index.allium; here it
+    -- is an opaque handle so db.allium's rules can name the resolver's apply /
+    -- seal / promote operations. db.allium does not `use` live-index.allium, so it
+    -- cannot name StagingSlot directly. Exists only on a leader (Leader or
+    -- ExternalSourceLeader); absent on followers and the transition processor.
     --
-    -- A STATE STORE, not a state machine. It owns the staging area (whose
-    -- structure lives under LiveIndex in live-index.allium so the resolution
-    -- snapshots can see it) and the replica producer; it has no idle/committing
-    -- FSM. The "one batch in flight at a time" property comes from the
-    -- single-threaded proviso below, not from a modelled state.
+    -- Standing state the LeaderLogProcessor owns from construction and frees in
+    -- its two-phase close (see TransitionToFollower). NOT a field on LiveIndex —
+    -- the resolver is its sole accessor, so it needs no lock.
     --
-    -- SINGLE-THREADED (like the live-index single-writer thread): the writer
-    -- handles one event to completion before the next. So a batch is sealed,
-    -- durably written, awaited, and promoted within a single event-handling —
-    -- there is never a second batch in flight, and any txs the resolver stages
-    -- meanwhile simply coalesce into the next batch. This is the proviso that
-    -- replaces the FSM gate.
+    -- APPLIED head: the staging index's own latest_completed_tx (next tx_id,
+    -- system-time smoothing). See live-index.allium StagingIndex.
+    latest_completed_tx: TransactionKey?
+
+    -- in_flight is true exactly while a sealed batch is being written to the
+    -- replica log and promoted (between seal and the last per-tx promote on the
+    -- persist-result back-edge). The resolver checks it to enforce at-most-one-batch
+    -- in flight.
+    in_flight: Boolean
+}
+
+entity Replica {
+    -- The leader's replica (proc 2): a PURE WRITER, sole owner of the replica-log
+    -- transactional producer. Exists only on a leader (client-driven Leader or
+    -- ExternalSourceLeader); followers and the transition processor have no
+    -- replica writer. See: indexer/LeaderLogProcessor.kt (replica-write half).
+    --
+    -- It touches NEITHER the staging index NOR the durable live index. It receives
+    -- a batch's bytes on the resolver→replica channel, durably appends them (plus a
+    -- BlockBoundary + uploadBlock when the batch carries a block cut), and posts a
+    -- persist-result back on the replica→resolver back-edge channel — the per-tx
+    -- replica-log positions it appended, one per tx in send order. Promotion is the
+    -- resolver's job, done on that back-edge — not the replica's.
     --
     -- Both the client-driven leader and the external-source leader share this one
     -- writer: the resolved txs in a batch carry their own external_source_token
     -- (null for the client-driven leader, the LSN for an external source), so the
     -- writer threads whatever the batch carries.
-    --
-    -- The in-flight batch and the staging slots are reached only via opaque
-    -- live_index calls — db.allium does not `use` live-index.allium, so it cannot
-    -- name StagingSlot directly.
 
     -- Highest replica-log message id this writer has durably written.
     -- Monotonicity (advances, never decreases) is a runtime/temporal property,
@@ -626,10 +655,16 @@ rule TransitionToLeader {
         log_processor.mode = Leader
         log_processor.start(source_resume, after_replica_msg_id: replay_target)
 
-        -- Stand up the replica-writer (proc 2) for this leader term, owning the
-        -- transactional producer opened above. It is torn down on revocation
-        -- (TransitionToFollower drops staging).
-        ReplicaWriter.created(
+        -- Stand up the leader term's pipeline: the resolver-owned staging index
+        -- (applied head seeded from the durable head; see live-index BeginStagedTx)
+        -- and the pure replica writer (proc 2), owning the transactional producer
+        -- opened above. Both are torn down on revocation by the two-phase close
+        -- (TransitionToFollower).
+        StagingIndex.created(
+            latest_completed_tx: live_index.latest_completed_tx,
+            in_flight: false
+        )
+        Replica.created(
             latest_replica_msg_id: replay_target
         )
 
@@ -644,16 +679,21 @@ rule TransitionToFollower {
     requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
 
     ensures:
-        -- close() completes any in-flight commit, then stops.
-        -- Capture the leader's positions and pending block before switching.
+        -- Two-phase close (per commit ec0f3947e). Phase 1: cancelAndJoin the
+        -- leader's job tree (resolver + replica) so nothing live still touches
+        -- staging — close() completes any in-flight commit, joins both coroutines,
+        -- then stops the subscription.
         let leader = log_processor as Leader
         leader.close()
 
-        -- Drop the leader-term-scoped staging index wholesale: any staged-but-
-        -- not-yet-durable txs are discarded (they were never visible to external
-        -- queries) and will be re-read from the source log and re-resolved by the
-        -- next leader. The durable live index is untouched (live-index DropStaging).
-        live_index.dropStaging()
+        -- Phase 2: synchronously free the leader-term staging index (closing any
+        -- un-promoted slot buffers) BEFORE the allocator. Demotion IS this teardown
+        -- — there is no separate runtime drop. Any staged-but-not-yet-durable txs
+        -- are discarded (they were never visible to external queries) and will be
+        -- re-read from the source log and re-resolved by the next leader. The
+        -- durable live index is untouched (live-index CloseStagingIndex).
+        if staging_index != null:
+            CloseStagingIndex(staging_index)
 
         -- The leader's pending_block is passed to the new follower.
         -- If the leader was mid-block-flush when revoked (between BlockBoundary
@@ -704,13 +744,16 @@ rule ClientSubmitsTransactionToExternalSourceDb {
 
 ---- Rules: Leader Mode — Resolver (proc 1, source processing)
 
--- The leader subscribes to the source log. The RESOLVER resolves each message
--- and writes the result to the STAGING accumulating slot (live_index.applyToStaging),
--- advancing the staging area's own latest_completed_tx (the applied head). It does
--- NOT write to the replica log and does NOT notify watchers — those are the replica-writer's job
--- (proc 2). It then wakes the writer with StagedTxReady (a bare signal — the writer
--- seals whatever staging holds, not a specific tx). Resolution runs AHEAD of the
--- durable write: later txs resolve against staging.
+-- The leader subscribes to the source log. The RESOLVER, sole accessor of its
+-- staging index, resolves each message (reading durable ⊕ its own staging) and
+-- applies the result to the STAGING accumulating slot
+-- (live_index.applyToStaging), advancing the staging index's own
+-- latest_completed_tx (the applied head). It does NOT write to the replica log
+-- and does NOT notify watchers — those follow from the durable write (proc 2) and
+-- the resolver's own post-durable promotion. At each tx boundary it decides
+-- whether to seal+send a batch downstream (MaybeSealAndSend): only if no batch is
+-- in flight and work has accumulated. Resolution runs AHEAD of the durable write:
+-- later txs resolve against staging.
 -- At the start of each processRecords batch, the leader checks the block flush
 -- timeout via BlockFlusher.
 
@@ -721,15 +764,15 @@ rule LeaderProcessesTx {
     requires: msg.msg_id > log_processor.latest_source_msg_id
 
     ensures:
-        -- Resolve and apply to staging (advances latest_completed_tx).
+        -- Resolve and apply to the resolver-owned staging index (advances the
+        -- applied head latest_completed_tx).
         let resolved = IndexTransaction(msg)
-        live_index.applyToStaging(resolved)
+        live_index.applyToStaging(staging_index, resolved)
         log_processor.latest_source_msg_id = msg.msg_id
 
-        -- Hand downstream to the replica-writer (proc 2). No replica-log write
-        -- and no watcher notify here.
-        -- Wake the replica-writer; it seals whatever staging now holds.
-        StagedTxReady(database)
+        -- Tx-boundary decision: seal+send a batch downstream if appropriate. No
+        -- replica-log write and no watcher notify here.
+        MaybeSealAndSend(staging_index)
 }
 
 rule LeaderProcessesAttachDb {
@@ -740,11 +783,10 @@ rule LeaderProcessesAttachDb {
 
     ensures:
         let resolved = ResolveAttach(msg)
-        live_index.applyToStaging(resolved)
+        live_index.applyToStaging(staging_index, resolved)
         log_processor.latest_source_msg_id = msg.msg_id
 
-        -- Wake the replica-writer; it seals whatever staging now holds.
-        StagedTxReady(database)
+        MaybeSealAndSend(staging_index)
 }
 
 rule LeaderProcessesDetachDb {
@@ -755,75 +797,124 @@ rule LeaderProcessesDetachDb {
 
     ensures:
         let resolved = ResolveDetach(msg)
-        live_index.applyToStaging(resolved)
+        live_index.applyToStaging(staging_index, resolved)
         log_processor.latest_source_msg_id = msg.msg_id
 
-        -- Wake the replica-writer; it seals whatever staging now holds.
-        StagedTxReady(database)
+        MaybeSealAndSend(staging_index)
 }
 
----- Rules: Leader Mode — Replica-writer (proc 2, durable write + promotion)
+---- Rules: Leader Mode — Resolver seal+send and back-edge promotion
 
--- The REPLICA-WRITER (entity ReplicaWriter, proc 2) is the sole owner of the
--- replica-log transactional producer and the staging area's write lifecycle. It
--- is SINGLE-THREADED, not a state machine: each event is handled to completion
--- before the next, so a batch is sealed, durably written, awaited, and promoted
--- within one handling — there is never a second batch in flight, and txs the
--- resolver stages meanwhile coalesce into the next batch.
---
--- Both the client-driven leader and the external-source leader use this one
--- writer. The resolved txs in a batch carry their own external_source_token (null
--- for the client-driven leader, the LSN for an external source); the writer
--- threads whatever the batch carries — there is no separate external-source
--- variant of the writer.
---
--- Handoff: the resolver emits StagedTxReady as it stages txs; the writer coalesces
--- whatever has accumulated into one batch when it next handles the signal (the
--- coalescing policy — batch size / linger — is a pipelining concern below this
--- contract-level model). The spec asserts only the ordering and durability
--- invariants, not the batching mechanics.
+-- The resolver-side half of the pipeline. The resolver, at a tx boundary, seals
+-- the accumulating slot into the committing sequence (live-index SealStagingBatch)
+-- and sends the batch's bytes to the pure Replica writer (proc 2). At-most-one-
+-- batch-in-flight is enforced here by the staging index's in_flight flag, not by
+-- channel capacity. When the Replica posts a persist-result on the back-edge (the
+-- per-tx replica-log positions, via BatchPersisted), the resolver PROMOTES the
+-- committing batch → durable ONE TX AT A TIME, advancing the durable basis and the
+-- apply cursor per tx, refreshing the shared snapshot and notifying watchers
+-- POST-DURABLE — and then may seal+send the next accumulated batch.
 
-rule WriteStagedBatch {
-    -- The writer's event handler. Single-threaded, so this runs start-to-finish
-    -- per batch: seal the staged batch, write its resolved txs durably to the
-    -- replica log, await durable confirmation INLINE (the transactional commit
-    -- ack — not a separate event), promote staging → durable, notify watchers
-    -- POST-DURABLE, and finish the block if the durable live index is now full.
-    --
-    -- The triggering StagedTxReady's per-tx payload is NOT read: the writer seals
-    -- whatever the staging accumulating slot holds (possibly several txs coalesced
-    -- since the last write). resolved_batch is the ordered list of resolved txs in
-    -- the sealed slot, each carrying its own external_source_token (null for the
-    -- client-driven leader). durable_tx is the highest tx key in the batch;
-    -- durable_token is the token as of its last tx.
-    when: StagedTxReady(database)
+rule MaybeSealAndSend {
+    -- Tx-boundary decision: seal+send only when no batch is in flight and work has
+    -- accumulated. If a batch is already in flight, the newly-staged txs simply
+    -- coalesce into the accumulating slot and are sent once the in-flight batch is
+    -- promoted (see ResolverPromotesBatch).
+    when: MaybeSealAndSend(staging_index)
+
+    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
+    requires: not staging_index.in_flight
+
+    ensures:
+        -- Seal the accumulating slot into the committing sequence (double-buffer) and
+        -- take the batch's resolved txs in send order (live-index SealStagingBatch). If
+        -- the accumulating slot was empty, sealStagingBatch is a no-op (see its
+        -- requires) and nothing is sent.
+        let resolved_batch = live_index.sealStagingBatch(staging_index)
+        staging_index.in_flight = true
+
+        -- Send the batch's bytes to the pure Replica writer on the resolver→replica
+        -- channel. The Replica writes them durably and posts a persist-result back.
+        -- Each resolved tx carries its own external_source_token (null for the
+        -- client-driven leader); the batch carries a block cut only when the
+        -- resolver decided to cut one at this boundary.
+        SendBatch(replica, resolved_batch)
+}
+
+rule ReplicaWritesBatch {
+    -- The pure Replica writer (proc 2): receives a batch's bytes, durably appends
+    -- each resolved tx to the replica log via its transactional producer, then
+    -- posts a persist-result on the replica→resolver back-edge. It touches NEITHER
+    -- the staging index NOR the durable live index — promotion is the resolver's
+    -- job.
+    when: SendBatch(replica, resolved_batch)
 
     requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
 
     ensures:
-        -- Seal the accumulating slot into the committing slot (double-buffer) and
-        -- take the batch.
-        let resolved_batch = live_index.sealStagingBatch()
-        let durable_tx = resolved_batch.last.tx_key
-        let durable_token = resolved_batch.last.external_source_token
-
-        -- Write each resolved tx to the replica log via the transactional producer
-        -- and await durable confirmation inline. WriteResolvedToReplica builds the
-        -- per-tx ResolvedTxMessage (incl. the abort-error projection and the tx's
-        -- own external_source_token).
-        for resolved in resolved_batch:
+        -- Append each resolved tx to the replica log via the transactional producer,
+        -- collecting the PER-TX replica-log positions in send order: the i-th appended
+        -- msg_id corresponds to the i-th tx in the batch. WriteResolvedToReplica builds
+        -- the per-tx ResolvedTxMessage (incl. the abort-error projection and the tx's
+        -- own external_source_token) and returns its appended replica-log msg_id.
+        let replica_msg_ids = for resolved in resolved_batch:
             WriteResolvedToReplica(database, resolved)
 
-        -- Durable: promote staging → durable, advancing the durable basis and
-        -- refreshing the external snapshot (live-index PromoteStaging).
-        live_index.promoteStaging(durable_tx)
+        -- The apply cursor (the follower's resume point, latest_replica_msg_id) is NOT
+        -- advanced by the writer — it only appends. The resolver advances it per tx as
+        -- it promotes (see ResolverPromotesBatch), using these per-tx replica-log
+        -- positions: the i-th promoted tx moves the cursor to replica_msg_ids[i]. These
+        -- are replica-LOG positions, distinct from the tx-id (a source-log position).
 
-        -- Notify watchers POST-DURABLE, threading each tx's own external_source_token
-        -- so restarts can resume the external source.
-        for resolved in resolved_batch:
-            watchers.notifyTx(resolved.result, resolved.tx_key.tx_id, resolved.external_source_token)
+        -- Post the persist-result back to the resolver, carrying the per-tx replica-log
+        -- positions so the resolver can advance the apply cursor tx-by-tx on promote.
+        BatchPersisted(staging_index, resolved_batch, replica_msg_ids)
+}
 
-        replica_writer.latest_replica_msg_id = durable_tx.tx_id
+rule ResolverPromotesBatch {
+    -- The resolver handles the persist-result back-edge: the committing batch is
+    -- durable. It promotes the batch → durable ONE TX AT A TIME, in send order (via
+    -- live-index PromoteNext, which imports the tx into the durable live tables,
+    -- advances the durable basis to that tx, and refreshes the shared snapshot). For
+    -- each promoted tx it advances the apply cursor (latest_replica_msg_id, the
+    -- follower's resume point) to that tx's replica-log position — the i-th promoted
+    -- tx takes replica_msg_ids[i] — and notifies watchers POST-DURABLE. Once the batch
+    -- is drained no batch is in flight, so it finishes the block if the durable live
+    -- index is now full and seals+sends the next accumulated batch if any.
+    --
+    -- Per-tx (not wholesale) promotion + per-tx cursor advance is what makes a partial
+    -- failure safe: if importTx faults mid-batch, the imported prefix is durable, the
+    -- cursor sits at the last tx that ACTUALLY imported, and the un-imported tail stays
+    -- parked in committing (freed by CloseStagingIndex on teardown). A follower
+    -- resuming from that cursor re-applies only the tail — never double-importing the
+    -- durable prefix.
+    --
+    -- replica_msg_ids are the per-tx replica-log positions from the writer, i-th ↔ i-th
+    -- tx in send order. durable_token is the token as of the batch's last tx.
+    when: BatchPersisted(staging_index, resolved_batch, replica_msg_ids)
+
+    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
+
+    let durable_token = resolved_batch.last.external_source_token
+
+    ensures:
+        -- Promote each tx in send order, paired with its replica-log position (zip
+        -- keeps the pairing: i-th tx ↔ i-th replica msg_id, both in send order).
+        -- PromoteNext imports the tx into the durable live tables, advances the durable
+        -- basis to it, and refreshes the shared snapshot. Advance the apply cursor to
+        -- this tx's replica-log position, then notify watchers POST-DURABLE, threading
+        -- the tx's own external_source_token so restarts can resume the external source.
+        -- If PromoteNext faults partway, the cursor is left at the last tx that actually
+        -- imported (partial-failure safety).
+        for pair in zip(resolved_batch, replica_msg_ids):
+            live_index.promoteNext(staging_index)
+            log_processor.latest_replica_msg_id = pair.replica_msg_id
+            watchers.notifyTx(pair.resolved.result, pair.resolved.tx_key.tx_id, pair.resolved.external_source_token)
+
+        -- The committing sequence is now drained; no batch is in flight.
+        staging_index.in_flight = false
+
+        let durable_tx = resolved_batch.last.tx_key
 
         -- BlockBoundary closes the batch: finish the block once durable and full,
         -- by which point staging is drained (see live-index FinishBlock). An
@@ -835,12 +926,16 @@ rule WriteStagedBatch {
                 ExternalSourceFinishesBlock(durable_tx.tx_id, durable_token)
             else:
                 LeaderFinishesBlock(durable_tx.tx_id)
+
+        -- Now no batch is in flight; seal+send the next accumulated batch if any.
+        MaybeSealAndSend(staging_index)
 }
 
 rule LeaderProcessesFlushBlock {
-    -- Source-log coordination message, handled on the resolver thread. Block
-    -- finishing itself is a replica-writer (proc 2) operation: it drains staging
-    -- first (see live-index FinishBlock).
+    -- Source-log coordination message, handled on the resolver thread. The block
+    -- cut itself is a resolver decision: it drains staging (awaits the in-flight
+    -- persist and promotes), then the block is finished with staging drained (see
+    -- live-index FinishBlock).
     when: msg: FlushBlockMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
@@ -861,7 +956,7 @@ rule LeaderProcessesFlushBlock {
 rule LeaderProcessesTriesAdded {
     -- L1+ from compactor. The leader needs these in its trie catalog
     -- for correct partition info at block time, and forwards them to the replica
-    -- log (a replica-writer / proc-2 op, since it owns the producer).
+    -- log via the Replica's producer (proc 2 owns the producer).
     when: msg: TriesAddedMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
@@ -901,18 +996,18 @@ rule LeaderProcessesBlockUploaded {
 
 ---- Rules: Leader Block Finishing
 
--- The leader finishes blocks via BlockUploader, on the replica-writer (proc 2)
--- side: by the time we get here the in-flight batch has been promoted and
--- staging is drained, so the durable block never contains non-durable rows
--- (see live-index FinishBlock, which requires staging drained).
+-- The leader finishes blocks via BlockUploader: by the time we get here the
+-- resolver has drained staging (the in-flight batch promoted), so the durable
+-- block never contains non-durable rows (see live-index FinishBlock, which
+-- requires staging drained).
 -- The leader sets pending_block between writing BlockBoundary and BlockUploaded.
 -- If the leader is revoked during this window, the pending block gets passed
 -- to the follower (see TransitionToFollower).
 --
 -- Double-finish is not possible: LeaderFinishesBlock is fired by either
--- WriteStagedBatch (when live_index.is_full, post-promotion) or
+-- ResolverPromotesBatch (when live_index.is_full, post-promotion) or
 -- LeaderProcessesFlushBlock.
--- These are processed sequentially on the source log subscription thread.
+-- These are processed sequentially on the resolver thread.
 -- If a batch flush triggers a block finish, it calls
 -- nextBlock() — the live index is no longer full. If a FlushBlock message
 -- arrives later for the same block_index, its CAS (expected_block_idx ==
@@ -1013,32 +1108,34 @@ rule ExternalSourceIndexesTx {
     -- result, which is caller-side and below this spec's abstraction level.
     --
     -- Unlike the client-driven leader, tx_id here is assigned off the STAGING
-    -- head (the staging area's own latest_completed_tx), NOT a source-log
-    -- position and NOT the durable basis. db.allium does not import the staging
-    -- area, so it cannot read that head; id-assignment is delegated to the
+    -- head (the staging index's own latest_completed_tx), NOT a source-log
+    -- position and NOT the durable basis. id-assignment is delegated to the
     -- staging layer via live_index.beginStagedTx, which assigns the next tx_id
     -- (staging-head tx_id + 1), smooths system_time strictly greater than the
-    -- previous tx's, applies the resolved data to staging, and returns the
-    -- assigned TransactionKey. (See live-index.allium BeginStagedTx / deferred
-    -- below.)
+    -- previous tx's, applies the resolved data to the resolver's staging index, and
+    -- returns the assigned TransactionKey. (See live-index.allium BeginStagedTx /
+    -- deferred below.)
     --
     -- The resulting ResolvedTx carries the external_source_token all the way
     -- through watchers, so block boundaries and restarts can resume from it.
     --
-    -- This is the RESOLVER (proc 1): resolve and apply to staging, then hand
-    -- downstream. The durable replica-log write, promotion and watcher notify are
-    -- done by the replica-writer (proc 2): WriteStagedBatch.
+    -- This is the RESOLVER (proc 1): resolve and apply to its staging index, then
+    -- decide at this tx boundary whether to seal+send. The durable replica-log
+    -- write is the pure Replica writer's job (proc 2: ReplicaWritesBatch); the
+    -- promotion and post-durable watcher notify are the resolver's own, on the
+    -- back-edge (ResolverPromotesBatch).
     when: ExternalSourceIndexTx(external_source_token, system_time, writer)
     requires: log_processor.mode = ExternalSourceLeader
 
     ensures:
         -- Delegate id-assignment and the staging apply to the staging layer.
         -- beginStagedTx assigns tx_id off the staging head, smooths system_time,
-        -- applies the writer's resolved data to staging, and returns the key.
-        let tx_key = live_index.beginStagedTx(system_time, external_source_token, writer)
+        -- applies the writer's resolved data to the resolver's staging index, and
+        -- returns the key.
+        let tx_key = live_index.beginStagedTx(staging_index, system_time, external_source_token, writer)
 
-        -- Wake the replica-writer; it seals whatever staging now holds.
-        StagedTxReady(database)
+        -- Tx-boundary decision: seal+send a batch downstream if appropriate.
+        MaybeSealAndSend(staging_index)
 }
 
 rule ExternalSourceProcessesFlushBlock {
@@ -1098,9 +1195,9 @@ rule ExternalSourceFinishesBlock {
     -- Mirror of LeaderFinishesBlock for the external-source leader. The
     -- BlockBoundary and the persisted Block both carry the
     -- external_source_token so that a restart can resume the external source
-    -- from the last durably persisted position. Driven by the replica-writer
-    -- (proc 2) after the in-flight batch is promoted, so staging is drained
-    -- before the block is written.
+    -- from the last durably persisted position. Driven by the resolver
+    -- (ResolverPromotesBatch) after the in-flight batch is promoted, so staging
+    -- is drained before the block is written.
     when: ExternalSourceFinishesBlock(latest_processed_msg_id, external_source_token)
 
     let block_index = (block_catalog.current_block_index ?? -1) + 1
@@ -1399,13 +1496,32 @@ deferred IndexTransaction           -- transaction resolution (put/delete/erase 
 deferred ResolveAttach              -- attach database resolution
 deferred ResolveDetach              -- detach database resolution
 deferred WriteResolvedToReplica     -- builds the per-tx ResolvedTxMessage (incl. abort-error
-                                    -- projection and external_source_token) and appends it to
-                                    -- the replica log via the transactional producer
-deferred BeginStagedTx              -- live_index.beginStagedTx(system_time, token, writer): the
-                                    -- staging layer assigns the next external-source tx_id off the
+                                    -- projection and external_source_token), appends it to the
+                                    -- replica log via the Replica's transactional producer, and
+                                    -- returns its appended replica-log msg_id (the resolver uses
+                                    -- these per-tx positions to advance the apply cursor on promote)
+deferred BeginStagedTx              -- live_index.beginStagedTx(staging_index, system_time, token, writer):
+                                    -- the staging layer assigns the next external-source tx_id off the
                                     -- staging head (head tx_id + 1), smooths system_time strictly
                                     -- greater than the previous tx's, applies the writer's resolved
-                                    -- data to staging, and returns the assigned TransactionKey.
-                                    -- db.allium delegates here rather than reading the staging head
-                                    -- (which it cannot — it does not use live-index.allium).
+                                    -- data to the resolver's staging index, and returns the assigned
+                                    -- TransactionKey. db.allium delegates here rather than reading the
+                                    -- staging head (which it cannot — it does not use live-index.allium).
                                     -- See: live-index.allium BeginStagedTx
+deferred ApplyToStaging             -- live_index.applyToStaging(staging_index, resolved): the resolver
+                                    -- appends a resolved tx into the accumulating slot and advances the
+                                    -- staging index's applied head. See: live-index.allium CommitTransaction
+deferred SealStagingBatch           -- live_index.sealStagingBatch(staging_index): seals the accumulating
+                                    -- slot into the committing sequence (no-op if empty) and returns
+                                    -- the batch's resolved txs in send order. See: live-index.allium
+                                    -- SealStagingBatch
+deferred PromoteNext                -- live_index.promoteNext(staging_index): on the back-edge, the
+                                    -- resolver promotes the OLDEST staged tx in the committing
+                                    -- sequence — imports its rows into the durable live tables,
+                                    -- advances the durable basis to it, refreshes the shared snapshot,
+                                    -- then drops it. Called once per tx, in send order.
+                                    -- See: live-index.allium PromoteNext
+deferred CloseStagingIndex           -- live-index.allium CloseStagingIndex(staging_index): phase-2 of the
+                                    -- leader's two-phase close frees the staging index; demotion is
+                                    -- exactly this teardown (no separate runtime drop).
+                                    -- See: live-index.allium CloseStagingIndex

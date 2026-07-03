@@ -71,6 +71,10 @@ class OpenTx(
     val systemTime get() = txKey.systemTime
     val systemTimeMicros = systemTime.asMicros
 
+    // Set by the resolver's factory for resolution OpenTxs, so read-your-writes layers the in-flight
+    // staged txs (durable ⊕ staged ⊕ own). Null for external / non-resolution snapshots.
+    internal var staging: StagingIndex? = null
+
     private val tableTxs = HashMap<TableRef, Table>()
 
     internal fun table(table: TableRef): Table = tableTxs.getOrPut(table) { Table(table) }

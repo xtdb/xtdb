@@ -147,66 +147,78 @@ class LeaderLogProcessor(
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
-    // proc 1 resolves a record into a ReplicaTask and hands it to proc 2 (the replica-writer, sole
-    // owner of `replicaProducer`), then awaits the ack. RENDEZVOUS for now → fully serial, so runtime
-    // behaviour matches the single-loop persister; the seam is here for later batching/pipelining.
+    // The resolver (proc 1) owns the staging index: it resolves each tx, applies it to staging, and
+    // hands the durable replica-log write to the replica writer (proc 2, sole owner of
+    // `replicaProducer`) over `replicaCh`, awaiting confirmation on the `persistResultCh` back-edge.
+    // Once durable, the resolver promotes the tx into the live index and notifies. Under this commit
+    // the resolver awaits the back-edge per tx, so it stays fully serial and behaviour matches the
+    // single-loop persister; the pipelining increment drops that per-tx await.
     private sealed interface ReplicaTask {
-        val onApplied: CompletableDeferred<Unit>
+        // append a batch of resolved txs (source-log, ext-source, or attach/detach) to the replica log
+        data class AppendTx(val batch: List<ReplicaMessage.ResolvedTx>) : ReplicaTask
 
-        data class ResolvedTx(val resolvedTx: ReplicaMessage.ResolvedTx, val srcMsgId: MessageId?) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
-
-        data class DbOpTx(val resolvedTx: ReplicaMessage.ResolvedTx) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
-
-        data class Forward(val message: ReplicaMessage, val srcMsgId: MessageId) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
+        data class Forward(val message: ReplicaMessage, val srcMsgId: MessageId) : ReplicaTask
 
         data class FlushBlockFinish(
             val latestProcessedMsgId: MessageId, val externalSourceToken: ExternalSourceToken?
-        ) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
+        ) : ReplicaTask
 
-        data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
+        data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : ReplicaTask
 
-        data class NotifyMsg(val msgId: MessageId) : ReplicaTask {
-            override val onApplied = CompletableDeferred<Unit>()
-        }
+        data class NotifyMsg(val msgId: MessageId) : ReplicaTask
     }
 
-    private val replicaCh = Channel<ReplicaTask>(onUndeliveredElement = { it.onApplied.cancel() })
+    // Seeded from the durable head so a new leader continues tx-ids from where the previous one left
+    // off (rather than restarting from 0 and colliding with already-replicated tx-ids).
+    private val staging = StagingIndex(liveIndex.latestCompletedTx)
+
+    // resolver → replica writer: the durable-write work for a task.
+    private val replicaCh = Channel<ReplicaTask>()
+    // replica writer → resolver: the msgIds the writer appended for a task, one per appended message —
+    // a batch of txs yields one per tx, in order — rendezvous. The resolver advances the apply cursor
+    // `latestReplicaMsgId` per tx as it promotes, so a partial promote leaves the cursor at what
+    // actually imported. At most one task is in flight. Failure propagates by cancellation, not by
+    // closing this channel: the resolver and writer share a coroutineScope (see `termJob`), so when one
+    // fails the other is cancelled and its parked `send`/`receive` throws `CancellationException`; the
+    // failing loop is the one that calls `notifyError`, so it fires once.
+    private val persistResultCh = Channel<List<MessageId>>()
 
     private suspend fun handleSourceLogBatch(records: List<Log.Record<SourceMessage>>) {
         for (record in records) {
             LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
             handleSourceLogRecord(record)
         }
+        // Drain the poll batch's tail so processRecords returns with the persister quiescent (#5741).
+        drainBatch()
     }
 
     private suspend fun handleSourceLogRecord(record: Log.Record<SourceMessage>) {
         val msgId = record.msgId
 
         when (val msg = record.message) {
-            is SourceMessage.Tx, is SourceMessage.LegacyTx ->
-                dispatch(ReplicaTask.ResolvedTx(resolveTx(msgId, record, msg), msgId))
+            is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
+                // source-log txs carry their own source position, so the replicated record and the
+                // notify both stamp `msgId`. Accumulate into the batch and keep the writer fed — settle
+                // a ready ack, then send if the writer's free; the tail drains in handleSourceLogBatch.
+                val resolved = resolveTx(msgId, record, msg)
+                staging.apply(resolved.resolvedTx.copy(srcMsgId = msgId), resolved.openTx, notifyMsgId = msgId)
+                settleIfReady(finishBlockIfFull = true)
+                if (!staging.inFlight) sendAccumulated()
+            }
 
             is SourceMessage.FlushBlock -> {
+                drainBatch() // flush accumulated txs first, so the flush follows them on the log
                 val expectedBlockIdx = msg.expectedBlockIdx
                 if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                    dispatch(ReplicaTask.FlushBlockFinish(msgId, watchers.externalSourceToken))
+                    latestReplicaMsgId = sendAndSettle(ReplicaTask.FlushBlockFinish(msgId, watchers.externalSourceToken))
                 } else {
                     // see #5680
-                    dispatch(ReplicaTask.Forward(ReplicaMessage.NoOp(srcMsgId = msgId), msgId))
+                    latestReplicaMsgId = sendAndSettle(ReplicaTask.Forward(ReplicaMessage.NoOp(srcMsgId = msgId), msgId))
                 }
             }
 
             is SourceMessage.AttachDatabase -> {
+                drainBatch() // isolate the DDL tx: flush accumulated data txs first
                 val txKey = TransactionKey(msgId, record.logTimestamp)
                 val error = if (dbCatalog != null) {
                     try {
@@ -218,13 +230,18 @@ class LeaderLogProcessor(
                     }
                 } else null
 
-                val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
-                    .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
+                val openTx = openTx(txKey, null)
+                val resolvedTx = try {
+                    openTx.commitTx(error).copy(srcMsgId = msgId)
+                        .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
+                } catch (e: Throwable) { openTx.close(); throw e }
 
-                dispatch(ReplicaTask.DbOpTx(resolvedTx))
+                // attach/detach notify with the tx-id and never finish a block (asymmetry preserved).
+                persistResolvedTx(resolvedTx, openTx, notifyMsgId = resolvedTx.txId, finishBlockIfFull = false)
             }
 
             is SourceMessage.DetachDatabase -> {
+                drainBatch() // isolate the DDL tx: flush accumulated data txs first
                 val txKey = TransactionKey(msgId, record.logTimestamp)
                 val error = if (dbCatalog != null) {
                     try {
@@ -236,20 +253,24 @@ class LeaderLogProcessor(
                     }
                 } else null
 
-                val resolvedTx = openTx(txKey, null).use { it.commitTx(error).copy(srcMsgId = msgId) }
-                    .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
+                val openTx = openTx(txKey, null)
+                val resolvedTx = try {
+                    openTx.commitTx(error).copy(srcMsgId = msgId)
+                        .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
+                } catch (e: Throwable) { openTx.close(); throw e }
 
-                dispatch(ReplicaTask.DbOpTx(resolvedTx))
+                persistResolvedTx(resolvedTx, openTx, notifyMsgId = resolvedTx.txId, finishBlockIfFull = false)
             }
 
             is SourceMessage.TriesAdded -> {
+                drainBatch() // flush accumulated txs first, so TriesAdded follows them on the log
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         trieCatalog.addTries(TableRef.parse(tableName), tries, record.logTimestamp)
                     }
                 }
 
-                dispatch(
+                latestReplicaMsgId = sendAndSettle(
                     ReplicaTask.Forward(
                         TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId), msgId
                     )
@@ -257,65 +278,109 @@ class LeaderLogProcessor(
             }
 
             // TODO this one's going after 2.2
-            is SourceMessage.BlockUploaded ->
-                dispatch(ReplicaTask.NotifyMsg(msgId))
+            is SourceMessage.BlockUploaded -> {
+                drainBatch() // flush accumulated txs first, so this follows them on the log
+                sendAndSettle(ReplicaTask.NotifyMsg(msgId))
+            }
         }
     }
 
-    // Dispatch a resolved task to proc 2 and await its ack — keeps proc 1 and proc 2 in lock-step
-    // (fully serial) for now. If proc 2 fails applying this task it completes `onApplied` exceptionally,
-    // so the `await` rethrows the cause into proc 1's per-task catch (and any later `send` onto the
-    // now-closed channel throws it too).
-    private suspend fun dispatch(task: ReplicaTask) {
+    // Hand the durable-write work to the replica writer and await its confirmation — keeps the resolver
+    // and writer in lock-step (fully serial). If the writer fails, the shared coroutineScope cancels
+    // the resolver, so this `receive` (or a later `send`) throws `CancellationException` and the loop
+    // unwinds; the writer reports the root cause via `notifyError`.
+    private suspend fun sendAndSettle(task: ReplicaTask): MessageId {
         replicaCh.send(task)
-        task.onApplied.await()
+        // control tasks append a single message; its msgId is the cursor position.
+        return persistResultCh.receive().last()
     }
 
-    // proc 2: append + import + notify for a source-log/ext-source tx.
-    private suspend fun applyResolvedTx(resolvedTx: ReplicaMessage.ResolvedTx, srcMsgId: MessageId?) {
-        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
-        val txResult = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
+    // Resolver: apply the resolved tx to staging, hand the durable write to the writer, then — once
+    // it's durable — promote it into the live index and notify. The writer only appends to the replica
+    // log; the import/notify/block-finish live here, downstream of the durable write, so dropping the
+    // per-tx await later (pipelining) doesn't move them.
+    // --- the resolver's send/settle pipeline over the staging index ---
+    //
+    // Resolved txs accumulate in the staging index; the resolver seals a batch and hands it to the
+    // writer (`sendAccumulated`, fire-and-forget), then keeps resolving while the writer appends, and
+    // on the writer's ack promotes the batch into the durable index (`settle`). At most one batch is in
+    // flight. Because `processRecords` awaits the whole poll batch draining (`drainBatch`) before it
+    // returns, the persister is quiescent whenever the poll thread is back in `poll()` — so a rebalance
+    // transition's cancel-join finds nothing in flight (#5741); the resolver never runs ahead of a poll.
 
-        // Ext-source txs carry no source-log position of their own (`srcMsgId == null` on the way in)
-        // and track progress via `externalSourceToken`, so they don't advance the leader's
-        // `latestSourceMsgId` (which is driven by the source log). We do stamp the current source-log
-        // watermark onto the replicated record, though: without it a follower's `latestSourceMsgId`
-        // lags between block boundaries, and on promotion it resumes the source log from a stale point
-        // and replays an already-covered block boundary.
-        val effectiveSrcMsgId = srcMsgId ?: watchers.latestSourceMsgId
-
-        appendToReplica(resolvedTx.copy(srcMsgId = effectiveSrcMsgId))
-        liveIndex.importTx(resolvedTx)
-
-        watchers.notifyTx(txResult, effectiveSrcMsgId, resolvedTx.externalSourceToken)
-
-        if (liveIndex.isFull())
-            finishBlock(effectiveSrcMsgId, resolvedTx.externalSourceToken)
+    // Seal the accumulated txs and hand the batch to the writer; its ack is settled later.
+    private suspend fun sendAccumulated() {
+        replicaCh.send(ReplicaTask.AppendTx(staging.seal()))
     }
 
-    // proc 2: append + import + notify for an attach/detach. No isFull/finishBlock — preserving the
-    // attach/detach asymmetry against `applyResolvedTx`.
-    private suspend fun applyDbOpTx(resolvedTx: ReplicaMessage.ResolvedTx) {
-        appendToReplica(resolvedTx)
-        liveIndex.importTx(resolvedTx)
+    // Promote the in-flight batch into the live index, advancing the apply cursor and notifying per tx,
+    // and cut a block if the batch filled one. Runs on the ack — the durable index is accurate here, so
+    // the block-full check needs no stage-time row-counting. The cursor advances per tx (not once at the
+    // batch end) so a partial promote leaves it at the last imported tx — see `promoteNext`.
+    private suspend fun settle(replicaMsgIds: List<MessageId>, finishBlockIfFull: Boolean) {
+        var last: StagingIndex.Staged? = null
+        var i = 0
+        while (true) {
+            val staged = staging.promoteNext(liveIndex) ?: break
+            // i-th tx ↔ i-th appended msgId (both in send order).
+            latestReplicaMsgId = replicaMsgIds[i++]
+            val tx = staged.resolvedTx
+            val txKey = TransactionKey(tx.txId, tx.systemTime)
+            val txResult = if (tx.committed) Committed(txKey) else Aborted(txKey, tx.error)
+            watchers.notifyTx(txResult, staged.notifyMsgId, tx.externalSourceToken)
+            last = staged
+        }
 
-        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
-        val result = if (resolvedTx.committed) Committed(txKey) else Aborted(txKey, resolvedTx.error)
-        watchers.notifyTx(result, resolvedTx.txId, null)
+        if (finishBlockIfFull && liveIndex.isFull()) last?.let { l ->
+            latestReplicaMsgId =
+                sendAndSettle(ReplicaTask.FlushBlockFinish(l.notifyMsgId, l.resolvedTx.externalSourceToken))
+        }
+    }
+
+    // Await the in-flight batch's ack and settle it.
+    private suspend fun settleInFlight(finishBlockIfFull: Boolean) =
+        settle(persistResultCh.receive(), finishBlockIfFull)
+
+    // Settle the in-flight batch if its ack has already arrived (non-blocking) — keeps the writer fed
+    // while the resolver works through the rest of the poll batch.
+    private suspend fun settleIfReady(finishBlockIfFull: Boolean) {
+        if (staging.inFlight) persistResultCh.tryReceive().getOrNull()?.let { settle(it, finishBlockIfFull) }
+    }
+
+    // Flush and settle everything staged, blocking until the staging index is empty. Used before a
+    // control message that must follow the accumulated txs on the replica log, and at the end of the
+    // poll batch (so `processRecords` returns only once the persister is quiescent — see above).
+    private suspend fun drainBatch() {
+        while (staging.inFlight || staging.hasAccumulated) {
+            if (staging.inFlight) settleInFlight(finishBlockIfFull = true)
+            else sendAccumulated()
+        }
+    }
+
+    // Resolve a single tx synchronously (batch-of-one): ext-source txs and attach/detach, which sit
+    // outside the source-log poll-batch pipeline. Staging takes ownership of [openTx] at `apply` — it's
+    // closed on promote (in `settle`) or on teardown (staging.close), never by the caller once handed over.
+    private suspend fun persistResolvedTx(
+        resolvedTx: ReplicaMessage.ResolvedTx, openTx: OpenTx, notifyMsgId: MessageId, finishBlockIfFull: Boolean,
+    ) {
+        staging.apply(resolvedTx, openTx, notifyMsgId)
+        sendAccumulated()
+        settleInFlight(finishBlockIfFull)
     }
 
     private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
         val txKey = TransactionKey(
-            (liveIndex.latestCompletedTx?.txId ?: -1) + 1,
+            (staging.latestCompletedTx?.txId ?: -1) + 1,
             smoothSystemTime(task.systemTime ?: instantSource.instant())
         )
 
         var openTx = openTx(txKey, task.externalSourceToken)
 
-        @Suppress("ConvertTryFinallyToUseCall") // because openTx is a var
+        val writerResult: TxResult
+        val resolvedTx: ReplicaMessage.ResolvedTx
         try {
-            val writerResult = task.writer(openTx)
-            val resolvedTx = when (writerResult) {
+            writerResult = task.writer(openTx)
+            resolvedTx = when (writerResult) {
                 is TxResult.Committed ->
                     openTx.commitTx(error = null, writerResult.userMetadata)
 
@@ -327,12 +392,24 @@ class LeaderLogProcessor(
                     openTx.commitTx(writerResult.error, writerResult.userMetadata)
                 }
             }
-
-            dispatch(ReplicaTask.ResolvedTx(resolvedTx, srcMsgId = null))
-            task.result.complete(writerResult)
-        } finally {
+        } catch (e: Throwable) {
+            // failed before handing the openTx to staging — free it here (staging owns it after apply)
             openTx.close()
+            throw e
         }
+
+        // Ext-source txs carry no source-log position of their own and track progress via
+        // `externalSourceToken`, so they don't advance the leader's `latestSourceMsgId` (driven by
+        // the source log). We do stamp the current source-log watermark onto the replicated record
+        // and the notify: without it a follower's `latestSourceMsgId` lags between block
+        // boundaries, and on promotion it resumes the source log from a stale point and replays an
+        // already-covered block boundary.
+        val effectiveSrcMsgId = watchers.latestSourceMsgId
+        persistResolvedTx(
+            resolvedTx.copy(srcMsgId = effectiveSrcMsgId), openTx,
+            notifyMsgId = effectiveSrcMsgId, finishBlockIfFull = true
+        )
+        task.result.complete(writerResult)
     }
 
     // Hand the task to the persister and return its completion handle. The caller decides whether to
@@ -380,107 +457,120 @@ class LeaderLogProcessor(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
+    // proc 1: the resolver. Serialises source-log / ext-source / GC, resolves each, and hands the
+    // durable-write work to the writer. On a task failure it fails that task's awaiter and rethrows —
+    // which cancels the writer through the enclosing coroutineScope (see `termJob`).
+    private suspend fun resolverLoop() {
+        while (true) {
+            val task: PersisterTask = selectUnbiased {
+                sourceLogCh.onReceive { it }
+                extSourceCh.onReceive { it }
+                gcCh.onReceive { it }
+            }
+            try {
+                when (task) {
+                    is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
+                    is ExtSourceTask.IndexTx -> handleIndexTx(task)
+                    is GcTask.TriesDeleted ->
+                        latestReplicaMsgId = sendAndSettle(ReplicaTask.TriesDeleted(task.tableName, task.trieKeys))
+                }
+                task.onComplete.complete(Unit)
+            } catch (e: CancellationException) {
+                task.onComplete.cancel(e)
+                throw e
+            } catch (e: InterruptedException) {
+                task.onComplete.completeExceptionally(e)
+                throw e
+            } catch (e: Interrupted) {
+                task.onComplete.completeExceptionally(e)
+                throw e
+            } catch (e: Throwable) {
+                watchers.notifyError(e)
+                task.onComplete.completeExceptionally(e)
+                throw e
+            }
+        }
+    }
+
+    // proc 2: the replica-writer. Sole owner of `replicaProducer` — it only writes to the replica log;
+    // the resolver does the staging promote / live-index import / notify downstream of the durable
+    // write. Reports each task's applied replica position on `persistResultCh`. On its own failure it
+    // notifies and rethrows — which cancels the resolver through the enclosing coroutineScope.
+    private suspend fun writerLoop() {
+        try {
+            for (task in replicaCh) {
+                // Append + apply each task, then report the replica position it lands at on the
+                // back-edge. The writer never touches `latestReplicaMsgId`: the resolver advances that
+                // apply cursor in ack-order (after promote for a tx, on the ack for a control message),
+                // so the cursor stays a gap-free prefix even once the resolver runs ahead of it.
+                val replicaMsgIds: List<MessageId> = when (task) {
+                    is ReplicaTask.AppendTx -> appendBatchToReplica(task.batch)
+
+                    is ReplicaTask.Forward -> {
+                        val msgId = appendToReplica(task.message).msgId
+                        watchers.notifyMsg(task.srcMsgId)
+                        listOf(msgId)
+                    }
+
+                    is ReplicaTask.FlushBlockFinish -> {
+                        val msgId = finishBlock(task.latestProcessedMsgId, task.externalSourceToken)
+                        watchers.notifyMsg(task.latestProcessedMsgId)
+                        listOf(msgId)
+                    }
+
+                    is ReplicaTask.TriesDeleted -> {
+                        val msgId = appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys)).msgId
+                        trieCatalog.deleteTries(task.tableName, task.trieKeys)
+                        listOf(msgId)
+                    }
+
+                    is ReplicaTask.NotifyMsg -> {
+                        watchers.notifyMsg(task.msgId)
+                        // NotifyMsg moves only the source watermark, not the replica apply cursor;
+                        // the resolver discards this ack value.
+                        listOf(task.msgId)
+                    }
+                }
+                persistResultCh.send(replicaMsgIds)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Interrupted) {
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e)
+            throw e
+        }
+    }
+
     private val termJob: Job = scope.launch {
-        // supervisorScope so an ext-source crash doesn't kill the persister.
+        // The external source is isolated under the supervisorScope so its crash doesn't kill the
+        // persister. The persister's two halves — resolver and replica-writer — are lock-step and
+        // useless apart, so they run in a plain coroutineScope and fail together: a crash in either
+        // cancels the other. Neither closes the coordination channels (`replicaCh`/`persistResultCh`)
+        // on the way out — cancellation reaps both halves — so only the source channels are closed here.
         supervisorScope {
             launch {
-                // Close the channels with the failure cause so a subsequent `enqueue` send throws it rather
-                // than a bare ClosedSendChannelException. An awaiting caller (`executeTx`, GC, `processRecords`)
-                // sees the cause through its `await`; this close-with-cause is the safety net for fire-and-forget
-                // `submitTx`, and for any caller's next send once the persister loop has exited.
                 var cause: Throwable? = null
                 try {
-                    while (true) {
-                        val task: PersisterTask = selectUnbiased {
-                            sourceLogCh.onReceive { it }
-                            extSourceCh.onReceive { it }
-                            gcCh.onReceive { it }
-                        }
-                        try {
-                            when (task) {
-                                is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
-                                is ExtSourceTask.IndexTx -> handleIndexTx(task)
-                                is GcTask.TriesDeleted -> dispatch(ReplicaTask.TriesDeleted(task.tableName, task.trieKeys))
-                            }
-                            task.onComplete.complete(Unit)
-                        } catch (e: CancellationException) {
-                            task.onComplete.cancel(e)
-                            throw e
-                        } catch (e: InterruptedException) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Interrupted) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Throwable) {
-                            watchers.notifyError(e)
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        }
+                    coroutineScope {
+                        launch { resolverLoop() }
+                        launch { writerLoop() }
                     }
                 } catch (e: CancellationException) {
-                    // term cancellation: close the channels without an error cause
+                    // term cancellation: close the source channels without an error cause
                 } catch (t: Throwable) {
                     cause = t
                 } finally {
+                    // A subsequent `enqueue` send then throws the cause rather than a bare
+                    // ClosedSendChannelException; an awaiting caller (`executeTx`, GC, `processRecords`)
+                    // sees it through its `await`. This is also the safety net for fire-and-forget
+                    // `submitTx`, and for any caller's next send once the persister has exited.
                     sourceLogCh.close(cause)
                     extSourceCh.close(cause)
                     gcCh.close(cause)
-                }
-            }
-
-            // proc 2: the replica-writer. Sole owner of `replicaProducer` — proc 1 resolves and hands off
-            // here, then awaits the ack. On failure, close `replicaCh` with the cause so proc 1's next
-            // `send` throws it (mirroring how the persister loop closes the source channels).
-            launch {
-                var cause: Throwable? = null
-                try {
-                    for (task in replicaCh) {
-                        try {
-                            when (task) {
-                                is ReplicaTask.ResolvedTx -> applyResolvedTx(task.resolvedTx, task.srcMsgId)
-                                is ReplicaTask.DbOpTx -> applyDbOpTx(task.resolvedTx)
-                                is ReplicaTask.Forward -> {
-                                    appendToReplica(task.message)
-                                    watchers.notifyMsg(task.srcMsgId)
-                                }
-
-                                is ReplicaTask.FlushBlockFinish -> {
-                                    finishBlock(task.latestProcessedMsgId, task.externalSourceToken)
-                                    watchers.notifyMsg(task.latestProcessedMsgId)
-                                }
-
-                                is ReplicaTask.TriesDeleted -> {
-                                    appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
-                                    trieCatalog.deleteTries(task.tableName, task.trieKeys)
-                                }
-
-                                is ReplicaTask.NotifyMsg -> watchers.notifyMsg(task.msgId)
-                            }
-                            task.onApplied.complete(Unit)
-                        } catch (e: CancellationException) {
-                            task.onApplied.cancel(e)
-                            throw e
-                        } catch (e: InterruptedException) {
-                            task.onApplied.completeExceptionally(e)
-                            throw e
-                        } catch (e: Interrupted) {
-                            task.onApplied.completeExceptionally(e)
-                            throw e
-                        } catch (e: Throwable) {
-                            // Don't notifyError here: proc 1 awaits onApplied, so completing it
-                            // exceptionally surfaces the failure in the persister loop's own catch,
-                            // which is the single notifyError + source-channel teardown point.
-                            task.onApplied.completeExceptionally(e)
-                            throw e
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    // term cancellation: close the channel without an error cause
-                } catch (t: Throwable) {
-                    cause = t
-                } finally {
-                    replicaCh.close(cause)
                 }
             }
 
@@ -499,13 +589,15 @@ class LeaderLogProcessor(
     }
 
     private fun smoothSystemTime(systemTime: Instant): Instant {
-        val lct = liveIndex.latestCompletedTx?.systemTime ?: return systemTime
+        val lct = staging.latestCompletedTx?.systemTime ?: return systemTime
         val floor = fromMicros(lct.asMicros + 1)
         return if (systemTime.isBefore(floor)) floor else systemTime
     }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer)
+            // resolution reads see durable ⊕ staged ⊕ own — the resolver is staging's sole accessor.
+            .also { it.staging = staging }
 
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
@@ -532,11 +624,20 @@ class LeaderLogProcessor(
         }
     }
 
+    // Append to the replica log and return the metadata. Does NOT advance `latestReplicaMsgId` — that
+    // is the apply cursor, advanced by the caller once the message is applied locally (the writer for
+    // control / block-boundary messages, the resolver after promote for txs).
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
         replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
-            .also { latestReplicaMsgId = it.msgId }
 
-    private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
+    // Append a batch of resolved txs in one atomic transaction; returns the appended msgId per tx, in
+    // order, so the resolver can advance the apply cursor per tx as it promotes them.
+    private suspend fun appendBatchToReplica(batch: List<ReplicaMessage.ResolvedTx>): List<MessageId> =
+        replicaProducer.withTx { tx -> batch.map { tx.appendMessage(it) } }.awaitAll().map { it.msgId }
+
+    // Returns the replica msgId the block upload lands at; the writer hands it back to the resolver,
+    // which advances the apply cursor in ack-order, like every other task.
+    private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?): MessageId {
         val boundaryMsg =
             BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
 
@@ -545,7 +646,7 @@ class LeaderLogProcessor(
 
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
 
-        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
+        val uploadedMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
         pendingBlock = null
 
         // Safe to call from inside a Persister task: signal() just enqueues a cycle on the GC's
@@ -553,7 +654,13 @@ class LeaderLogProcessor(
         // until this one returns.
         blockGc.signal()
         trieGc.signal()
+
+        return uploadedMsgId
     }
+
+    // A resolved source-log tx: its serialized form plus the OpenTx holding its (queryable) writes,
+    // returned open — staging takes ownership of the OpenTx at `persistResolvedTx`.
+    private class Resolved(val resolvedTx: ReplicaMessage.ResolvedTx, val openTx: OpenTx)
 
     private fun indexSourceLogTx(
         msgId: MessageId,
@@ -563,12 +670,12 @@ class LeaderLogProcessor(
         defaultTz: ZoneId?,
         user: String?,
         userMetadata: Any?,
-    ): ReplicaMessage.ResolvedTx = tracer.withSpan(
+    ): Resolved = tracer.withSpan(
         "xtdb.transaction",
         attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
     ) {
         val userMetadataMap = userMetadata as? Map<*, *>
-        val lcTx = liveIndex.latestCompletedTx
+        val lcTx = staging.latestCompletedTx
 
         // If lc-tx's systemTime >= msgTimestamp, bump past it by 1µs; otherwise use msgTimestamp.
         // (`+1000ns` is `+1µs`.)
@@ -591,19 +698,22 @@ class LeaderLogProcessor(
             )
             LOG.warn { "specified system-time '$systemTime' older than current tx '$lcTx'" }
 
-            return@withSpan openTx(txKey, null).use { openTx ->
+            return@withSpan openTx(txKey, null).closeOnCatch { openTx ->
                 txErrorCounter?.increment()
-                openTx.commitTx(err, userMetadataMap)
+                Resolved(openTx.commitTx(err, userMetadataMap), openTx)
             }
         }
 
         val effectiveSystemTime = systemTime ?: defaultSystemTime
         val txKey = TransactionKey(msgId, effectiveSystemTime)
 
-        openTx(txKey, null).use { openTx ->
-            if (txOps == null) {
-                return@withSpan openTx.commitTx(SKIPPED_EXN, userMetadataMap)
-            }
+        // Handed to staging open (parked for resolution reads, closed on promote), so we close the
+        // OpenTx here only on the failure paths: an indexing/commit error, or an abort — whose partial
+        // writes are discarded, the abort row resolving on a fresh tx.
+        val openTx = openTx(txKey, null)
+        val result: TxResult = try {
+            if (txOps == null)
+                return@withSpan Resolved(openTx.commitTx(SKIPPED_EXN, userMetadataMap), openTx)
 
             val opts = SourceLogTxIndexer.TxOpts(
                 txKey = txKey,
@@ -613,16 +723,27 @@ class LeaderLogProcessor(
                 user = user,
             )
 
-            when (val result = sourceLogTxIndexer.ForTx(txOps, opts).indexTx(openTx)) {
-                is TxResult.Committed -> openTx.commitTx(null, userMetadataMap)
+            sourceLogTxIndexer.ForTx(txOps, opts).indexTx(openTx)
+        } catch (e: Throwable) {
+            openTx.close()
+            throw e
+        }
 
-                is TxResult.Aborted -> {
-                    LOG.debug(result.error) { "aborted tx" }
-                    // Open a fresh tx for the abort row — the original openTx may have partial writes.
-                    return@withSpan openTx(txKey, null).use { abortTx ->
-                        txErrorCounter?.increment()
-                        abortTx.commitTx(result.error, userMetadataMap)
-                    }
+        when (result) {
+            is TxResult.Committed ->
+                try {
+                    Resolved(openTx.commitTx(null, userMetadataMap), openTx)
+                } catch (e: Throwable) {
+                    openTx.close()
+                    throw e
+                }
+
+            is TxResult.Aborted -> {
+                LOG.debug(result.error) { "aborted tx" }
+                openTx.close()
+                openTx(txKey, null).closeOnCatch { abortTx ->
+                    txErrorCounter?.increment()
+                    Resolved(abortTx.commitTx(result.error, userMetadataMap), abortTx)
                 }
             }
         }
@@ -630,7 +751,7 @@ class LeaderLogProcessor(
 
     private fun resolveTx(
         msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage
-    ): ReplicaMessage.ResolvedTx {
+    ): Resolved {
         if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
             LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
@@ -708,6 +829,7 @@ class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         replicaProducer.close()
+        staging.close() // standing state the resolver owned; freed here, before the allocator
         allocator.close() // last: Arrow won't close it while a child buffer is live
     }
 }

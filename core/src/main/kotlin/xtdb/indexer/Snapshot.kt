@@ -87,12 +87,19 @@ class Snapshot(
                 val openTxTables: Map<TableRef, OpenTx.Table> =
                     openTx?.tables?.associate { it.key to it.value }.orEmpty()
 
+                // The resolver's staging index, for resolution snapshots: the in-flight committed-but-
+                // not-yet-durable txs, layered between durable and this tx's own writes. Null for
+                // external snapshots (which see durable only — strict visibility).
+                val staging = openTx?.staging
+
                 fun addSnap(tableRef: TableRef, ts: TableSnapshot) {
                     allSnaps.add(ts)
                     byTable.getOrPut(tableRef) { mutableListOf() }.add(ts)
                 }
 
-                for (tableRef in openTxTables.keys + liveIndex.tableRefs) {
+                // Precedence is list order: durable first, then staged (oldest→newest), then this tx's
+                // own writes last — so the resolving tx reads durable ⊕ staged ⊕ own, newest winning.
+                for (tableRef in openTxTables.keys + staging?.tableRefs.orEmpty() + liveIndex.tableRefs) {
                     liveIndex.table(tableRef)?.let { liveTable ->
                         // Skip live-tables already covered by a published L0 — they'd duplicate the
                         // L0's data. The watermark is monotonic, so once L0_N exists we drop the
@@ -100,6 +107,7 @@ class Snapshot(
                         if (liveTable.blockIdx > trieCatSnap.l0MaxBlockIdx(tableRef))
                             addSnap(tableRef, TableSnapshot.open(al, liveTable))
                     }
+                    staging?.table(tableRef)?.openSnapshots(al)?.forEach { addSnap(tableRef, it) }
                     openTxTables[tableRef]?.let { tx -> TableSnapshot.openTx(al, tx)?.let { addSnap(tableRef, it) } }
                 }
 
