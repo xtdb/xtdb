@@ -103,22 +103,4 @@ class KafkaConnectSourceFactoryTest {
         assertTrue(factory.connectConfig.isEmpty())
     }
 
-    @Test
-    fun `qualified table name parses to schema + table`() {
-        val yaml = """
-            externalSource: !KafkaConnect
-              remote: k
-              topic: t
-              connectConfig:
-                key.converter: org.apache.kafka.connect.storage.StringConverter
-                value.converter: org.apache.kafka.connect.json.JsonConverter
-              indexer: !Docs
-                table: analytics.events
-        """.trimIndent()
-
-        val factory = Database.Config.fromYaml(yaml).externalSource as KafkaConnectSource.Factory
-        val docs = factory.indexer as DocsIndexer.Factory
-
-        assertEquals("analytics.events", docs.table)
-    }
 }

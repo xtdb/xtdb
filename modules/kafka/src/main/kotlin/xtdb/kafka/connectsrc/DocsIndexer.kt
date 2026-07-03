@@ -30,7 +30,7 @@ import com.google.protobuf.Any as ProtoAny
 
 private const val PROTO_TAG_PREFIX = "proto.xtdb.com"
 
-class DocsIndexer(private val table: TableRef) : RecordIndexer {
+class DocsIndexer(internal val table: TableRef) : RecordIndexer {
 
     @Serializable
     @SerialName("!Docs")
@@ -39,7 +39,7 @@ class DocsIndexer(private val table: TableRef) : RecordIndexer {
     ) : RecordIndexer.Factory {
 
         override fun open(): RecordIndexer =
-            DocsIndexer(TableRef.parse(table))
+            DocsIndexer(TableRef(tableName = table))
 
         class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String

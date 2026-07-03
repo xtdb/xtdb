@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.error.Anomaly
 import xtdb.error.Incorrect
+import xtdb.table.TableRef
 import java.time.Instant
 import java.util.Date
 
@@ -31,6 +32,13 @@ class DocsIndexerTest {
 
     private val Anomaly.errorCode: Keyword?
         get() = data.valAt(Keyword.intern("xtdb.error", "code")) as? Keyword
+
+    @Test
+    fun `table field names the table only, in the public schema`() {
+        val indexer = DocsIndexer.Factory(table = "analytics/events").open() as DocsIndexer
+
+        assertEquals(TableRef("public", "analytics/events"), indexer.table)
+    }
 
     @Test
     fun `resolveId passes a String key through`() {
