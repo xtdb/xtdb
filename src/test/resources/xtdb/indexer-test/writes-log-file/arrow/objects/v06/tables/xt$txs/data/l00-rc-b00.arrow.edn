@@ -33,7 +33,7 @@
                  :system-time #xt/zdt "2020-01-02T00:00Z[UTC]",
                  :committed false,
                  :error
-                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:valid-from #xt/instant "2020-01-01T00:00:00Z", :valid-to #xt/instant "2019-01-01T00:00:00Z"}]}],
+                  #xt/error [:incorrect :xtdb.indexer/invalid-valid-times "Invalid valid times" {:table #xt/table foo, :valid-from #xt/instant "2020-01-01T00:00:00Z", :tx-key #xt/tx-key {:tx-id 1493, :system-time #xt/instant "2020-01-02T00:00:00Z"}, :valid-to #xt/instant "2019-01-01T00:00:00Z", :tx-op-idx 0}]}],
     :xt/iid #bytes "50b77d8e66e4222bf40556f635b538cf"}
    {:xt/system-from #xt/zdt "2020-01-01T00:00Z[UTC]",
     :xt/valid-from #xt/zdt "2020-01-01T00:00Z[UTC]",

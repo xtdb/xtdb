@@ -576,7 +576,7 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
   (t/is (= [{:xt/id 1,
              :committed false,
              :error #xt/error [:incorrect ::err/illegal-arg "No matching clause: [<List> <Int(64, true)>]"
-                               {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0, :arg-idx 0
+                               {:sql "UPDATE docs SET list = list || [3]", :tx-op-idx 0
                                 :tx-key #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-02T00:00:00Z"}}],
              :system-time #xt/zoned-date-time "2020-01-02T00:00Z[UTC]"}]
            (xt/q tu/*node* "SELECT * FROM xt.txs WHERE NOT committed"))))

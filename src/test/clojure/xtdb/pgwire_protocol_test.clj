@@ -343,7 +343,7 @@
                 [:msg-error-response {:error-fields
                                       {:severity "ERROR", :localized-severity "ERROR", :sql-state "08P01",
                                        :message "transaction already started"
-                                       :detail nil}}]
+                                       :detail {"category" "incorrect", "code" "xtdb/tx-already-open", "message" "transaction already started"}}}]
                 [:msg-ready {:status :idle}]]
                (test "SELECT 1 one; BEGIN"))))))
 

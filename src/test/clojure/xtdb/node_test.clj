@@ -401,7 +401,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                    ['#(from :xt/txs [{:xt/id %, :committed committed?}]) 1])))
 
     (t/is (= [{:err #xt/error [:conflict :xtdb/assert-failed "boom"
-                               {:sql "ASSERT 1 = 2, 'boom'", :tx-op-idx 0, :arg-idx 0
+                               {:sql "ASSERT 1 = 2, 'boom'", :tx-op-idx 0
                                 :tx-key #xt/tx-key {:tx-id 3, :system-time #xt/instant "2020-01-04T00:00:00Z"}}]}]
              (xt/q tu/*node* ['#(from :xt/txs [{:xt/id %, :error err}]) 3])))))
 
