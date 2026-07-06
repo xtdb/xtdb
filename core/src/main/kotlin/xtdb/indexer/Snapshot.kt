@@ -79,11 +79,16 @@ class Snapshot(
             return tableInfo
         }
 
+        // Precedence, bottom→top (later layers win): durable live tables ⊕ in-flight staged txs
+        // (oldest→newest) ⊕ the resolving tx's own writes. External snapshots pass neither and see
+        // durable only (strict visibility); a resolving tx passes the in-flight staged txs it must read
+        // behind plus itself (read-your-writes across the batch).
         @JvmStatic
         fun open(
             al: BufferAllocator, tableCat: TableCatalog,
             trieCatalog: TrieCatalog, liveIndex: LiveIndex,
-            openTxs: List<OpenTx> = emptyList(),
+            stagedTxs: List<StagedTx> = emptyList(),
+            ownTx: OpenTx? = null,
         ): Snapshot = safelyOpening {
             val trieCatSnap = trieCatalog.snapshot()
 
@@ -99,17 +104,21 @@ class Snapshot(
                     .safeMap { TableSnapshot.open(al, it) }
             }
 
-            val openTxSnaps = openAll {
-                openTxs.flatMap { it.tables }
-                    .safeMap { TableSnapshot.openTx(al, it.value) }
+            val stagedSnaps = openAll {
+                stagedTxs.flatMap { it.allTables }
+                    .safeMap { it.openSnapshot(al) }
                     .filterNotNull()
             }
 
-            val byTable = liveIndexSnaps.plus(openTxSnaps).groupBy { it.table }
+            val ownSnaps = openAll {
+                ownTx?.tables?.safeMap { TableSnapshot.openTx(al, it.value) }?.filterNotNull() ?: emptyList()
+            }
+
+            val byTable = (liveIndexSnaps + stagedSnaps + ownSnaps).groupBy { it.table }
 
             val tableInfo = tableCat.buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() })
 
-            Snapshot(openTxs.lastOrNull()?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
+            Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
         }
     }
 }

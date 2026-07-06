@@ -134,6 +134,28 @@ class LiveIndex private constructor(
         }
     }
 
+    // Promote a staged (now-durable) tx into the live tables from its owned relation slices — the
+    // leader's promote path. Distinct from `importTx(resolvedTx)`, which followers use to replay a
+    // serialized replica message; here the relations are already in hand, no IPC round-trip.
+    fun importStagedTx(stagedTx: StagedTx) {
+        val stamp = snapLock.writeLock()
+        try {
+            for (table in stagedTx.allTables) {
+                val liveTable =
+                    this@LiveIndex.tables.getOrPut(table.ref) {
+                        LiveTable(allocator, table.ref, blockIdx, rowCounter, liveTrieFactory)
+                    }
+                liveTable.importData(table.relation)
+            }
+
+            latestCompletedTx = stagedTx.txKey
+
+            refreshSnap0()
+        } finally {
+            snapLock.unlock(stamp)
+        }
+    }
+
     private inline fun <R> StampedLock.withReadLock(block: () -> R): R {
         val stamp = readLock()
         return try {
@@ -148,14 +170,14 @@ class LiveIndex private constructor(
             sharedSnap!!.also { it.retain() }
         }
 
-    fun openSnapshot(openTx: OpenTx): Snapshot =
+    fun openSnapshot(stagedTxs: List<StagedTx>, ownTx: OpenTx): Snapshot =
         snapLock.withReadLock {
             // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
             // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
             // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
             // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
             // of our trie-cat capture without breaking correctness.
-            Snapshot.open(allocator, tableCatalog, trieCatalog, this, listOf(openTx))
+            Snapshot.open(allocator, tableCatalog, trieCatalog, this, stagedTxs, ownTx)
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
