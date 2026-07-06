@@ -1,6 +1,7 @@
 package xtdb.table
 
 import clojure.lang.Symbol
+import xtdb.error.Incorrect
 
 typealias DatabaseName = String
 typealias SchemaName = String
@@ -15,11 +16,18 @@ data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: 
     val schemaAndTable get() = "$schemaName/$tableName"
 
     companion object {
+        private val PARSE_REGEX = Regex("(?:([^/]+)[./])?([^./]+)")
+
         @JvmStatic
         fun parse(str: String): TableRef {
-            val sym = Symbol.intern(str)
+            val (schema, table) = PARSE_REGEX.matchEntire(str)?.destructured
+                ?: throw Incorrect(
+                    "Invalid table reference: '$str'",
+                    errorCode = "xtdb.table/invalid-table-ref",
+                    data = mapOf("table-ref" to str)
+                )
 
-            return TableRef(sym.namespace ?: DEFAULT_SCHEMA, sym.name)
+            return TableRef(schema.ifEmpty { DEFAULT_SCHEMA }, table)
         }
     }
 }
