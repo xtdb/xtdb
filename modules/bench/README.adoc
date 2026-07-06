@@ -19,6 +19,12 @@ Products::
 IngestTsOverhead::
 `./gradlew ingest -PdocCount=100000 -PbatchSizes=10,100,1000`
 
+Kafka Connect source::
+`docker-compose up -d kafka`, then `./gradlew kafka-source -PmessageCount=10000`
++
+Pre-loads a Kafka topic with small JSON records, attaches a `!KafkaConnect` source database (source topic and replica log both on the docker-compose broker), and measures the drain rate into its `patient` table.
+The node config (registering the docker-compose broker as the `kafka` remote) defaults to `modules/bench/config/kafka-source.yaml` - override with `-PconfigFile=...`.
+
 
 TSBS IoT::
 `XTDB_LOGGING_LEVEL_BENCH_TSBS=debug ./gradlew :tsbs-iot -Pfile=/path/to/txs.transit.json`

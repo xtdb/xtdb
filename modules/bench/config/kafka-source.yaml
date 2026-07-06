@@ -1,0 +1,8 @@
+# Node config for the kafka-source bench (xtdb.bench.kafka-source).
+# Registers the docker-compose Kafka broker (`docker-compose up kafka`) as a remote,
+# so the attached source database can reference it via `remote: kafka` / `cluster: kafka`.
+# The node's own log/storage are left as the in-memory defaults - the attached source
+# database is what the bench measures.
+logClusters:
+  kafka: !Kafka
+    bootstrapServers: localhost:9092

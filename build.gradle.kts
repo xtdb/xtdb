@@ -759,7 +759,7 @@ createSltTask(
     extraArgs = listOf("--dirs")
 )
 
-fun createBench(benchName: String, properties: Map<String, String>) {
+fun createBench(benchName: String, properties: Map<String, String>, defaultArgs: Map<String, String> = emptyMap()) {
     tasks.register(benchName, JavaExec::class) {
         dependsOn(":modules:bench:assemble")
         classpath = sourceSets.dev.get().runtimeClasspath
@@ -786,6 +786,13 @@ fun createBench(benchName: String, properties: Map<String, String>) {
             if (project.hasProperty(k)) {
                 args.add(v)
                 args.add(project.properties[k] as String)
+            }
+        }
+
+        defaultArgs.forEach { (flag, value) ->
+            if (!args.contains(flag)) {
+                args.add(flag)
+                args.add(value)
             }
         }
 
@@ -851,6 +858,16 @@ createBench("patch", mapOf("docCount" to "--doc-count", "patchCount" to "--patch
 createBench("ingestTxOverhead", mapOf("docCount" to "--doc-count", "batchSizes" to "--batch-sizes"))
 
 createBench("clickbench", mapOf("limit" to "--limit", "size" to "--size"))
+
+createBench(
+    "kafka-source",
+    mapOf(
+        "messageCount" to "--message-count",
+        "bootstrapServers" to "--bootstrap-servers"
+    ),
+    // the source's `remote: kafka` needs a remote registered on the node, which only config files support
+    defaultArgs = mapOf("--config-file" to "modules/bench/config/kafka-source.yaml")
+)
 
 createBench("ts-devices", mapOf("size" to "--size"))
 
