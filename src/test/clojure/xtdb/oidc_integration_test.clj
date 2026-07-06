@@ -123,16 +123,12 @@
                                      (.build))))))))
 
 (t/deftest ^:integration test-oidc-client-credentials-token-expiry
+  ;; access-token-lifespan is 2s (see seed-container), so a token minted at T expires at T+2s.
+  ;; We drive logical time through a settable clock so the test asserts on time, not on the exact
+  ;; number of clock reads the pgwire auth path happens to make.
   (let [{:keys [client-id client-secret]} (:test *clients*)
-        mock-instant-source (tu/->mock-clock
-                             [#inst "2020-01-01T12:00:00Z" ; initial connection time
-                              #inst "2020-01-01T12:00:00Z" ; used to calculate token expiry for connection
-                              #inst "2020-01-01T12:00:01Z" ; used to validate if token expired within :msg-parse (not yet expired)
-                              #inst "2020-01-01T12:00:01Z" ; used to validate if token expired within :msg-bind (not yet expired)
-                              #inst "2020-01-01T12:00:05Z" ; used to validate if token expired within :msg-parse (expired)
-                              #inst "2020-01-01T12:00:05Z" ; used to calculate refreshed-token expiry time
-                              #inst "2020-01-01T12:00:06Z" ; used to validate if token expired within :msg-bind (refreshed)
-                              ])]
+        !now (atom #inst "2020-01-01T12:00:00Z")
+        mock-instant-source (tu/->settable-clock !now)]
     (with-open [node (xtn/start-node {:authn [:openid-connect {:issuer-url (str (.getAuthServerUrl authn-test/container) "/realms/master")
                                                                :client-id "xtdb"
                                                                :client-secret "xtdb-secret"
@@ -143,11 +139,14 @@
                                           (.password (format "%s:%s" client-id client-secret)))]
 
         (t/testing "token expiry and automatic refresh works"
+          ;; connection mints a token expiring at 12:00:02
           (with-open [conn (.build client-connection-builder)]
             (t/testing "initial connection and first revalidate"
+              (reset! !now #inst "2020-01-01T12:00:01Z") ; before expiry
               (let [result (jdbc/execute-one! conn ["SELECT 'initial' as status"])]
                 (t/is (= "initial" (:status result)))))
 
             (t/testing "after first expiry, token is refreshed"
+              (reset! !now #inst "2020-01-01T12:00:05Z") ; past expiry -> revalidate refreshes
               (let [result (jdbc/execute-one! conn ["SELECT 'after-expiry' as status"])]
                 (t/is (= "after-expiry" (:status result)))))))))))

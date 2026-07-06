@@ -113,6 +113,14 @@
          (assert (.hasNext it) "out of insts!")
          (time/->instant (.next it)))))))
 
+(defn ->settable-clock
+  "A mock clock backed by `!inst` (an atom holding an instant-coercible value).
+   Each read returns the atom's current value, so logical time is controlled by
+   `reset!`ing the atom rather than by pinning the exact number of clock reads."
+  ^java.time.InstantSource [!inst]
+  (reify InstantSource
+    (instant [_] (time/->instant @!inst))))
+
 (defn with-mock-clock [f]
   (with-opts {:log [:in-memory {:instant-src (->mock-clock)}]} f))
 
