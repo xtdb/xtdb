@@ -19,6 +19,7 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.VectorUnloader
 import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
+import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ICursor
 import xtdb.ResultCursor
@@ -36,6 +37,7 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
 import xtdb.database.DatabaseName
+import xtdb.database.DatabasePartition
 import xtdb.database.encodeTxBasisToken
 import xtdb.database.mergeTxBasisTokens
 import xtdb.error.Anomaly
@@ -292,12 +294,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
-        // A synthetic RA-plan (pgwire's SHOW) prepared against this connection — awaits like [prepareSql] so the
-        // read sees the connection's own writes.
-        fun prepareRa(plan: Any): PreparedQuery {
-            dbCat.awaitAll(awaitToken, awaitTimeout)
-            return qSrc.prepareRa(plan, dbCat, PrepareOpts(defaultTz = defaultTz, defaultDb = dbName))
-        }
+        // Prepare a pre-classified statement (pgwire's dispatch path), so queries and SHOWs prepare through one
+        // entry — SHOW bypasses the access-mode gate off [PreparedQuery.parsed] in [openQuery].
+        fun prepare(parsed: ParsedStatement): PreparedQuery =
+            when (parsed) {
+                is ParsedStatement.Query, is ParsedStatement.Execute -> prepareSql(parsed)
+                is ParsedStatement.ShowVariable -> showPreparedQuery(parsed)
+                else -> throw Incorrect("not a preparable query: ${parsed::class.simpleName}", "xtdb/not-a-query")
+            }
 
         fun openSqlQuery(sql: String): ResultCursor =
             openQuery(prepareSql(sql), null)
@@ -371,8 +375,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 // SHOW is answered from connection state, ahead of the access-mode gate — it is session
                 // introspection, valid in any transaction (pgwire's verify-permissibility doesn't gate it).
                 if (prepared == null)
-                    (parseStatements(sql).singleOrNull() as? ParsedStatement.ShowVariable)
-                        ?.let { return showVariable(it.variable) }
+                    (parseStatements(sql).singleOrNull() as? ParsedStatement.ShowVariable)?.let { stmt ->
+                        val cursor = openQuery(prepare(stmt), null)
+                        return QueryResult(-1, cursorToArrowReader(cursor, Schema(cursor.resultTypes.map { (n, t) -> t.toField(n) })))
+                    }
                 if (prepared == null && args != null)
                     throw Incorrect(
                         "call prepare() before executeQuery() when parameters are bound",
@@ -731,14 +737,19 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             QueryOpts(b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz, b?.snapshotToken, b?.snapshotTime, tracer)
         }
 
-        // Open a cursor on an already-prepared query: first resolves the tx's access mode and basis (rejecting
-        // a read in a write tx, resolving an unresolved tx to read-only), then opens at the connection's basis,
-        // tz and tracer. A frontend owns the cursor for wire serialization, but the gate and the QueryOpts stay
-        // the connection's — no callsite reconstructs them, nor decides the gate.
-        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor {
-            resolveForQuery()
-            return pq.openQuery(args, queryOpts())
-        }
+        // Open a cursor on an already-prepared query: resolves the tx's access mode and basis (rejecting a read
+        // in a write tx, resolving an unresolved tx to read-only), then opens at the connection's basis, tz and
+        // tracer. SHOW bypasses the gate — it's session introspection, valid in any tx — dispatched on the
+        // originating statement, not the pq's concrete type. A frontend owns the cursor for wire serialization,
+        // but the gate and QueryOpts stay the connection's — no callsite reconstructs them, nor decides the gate.
+        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor =
+            when (pq.parsed) {
+                is ParsedStatement.ShowVariable -> openUncheckedQuery(pq, args)
+                else -> {
+                    resolveForQuery()
+                    pq.openQuery(args, queryOpts())
+                }
+            }
 
         // Open a read WITHOUT the access-mode gate — for a frontend's driver-compatibility probe that must be
         // permitted in any transaction (pgwire allows the pgjdbc type-metadata query inside a write tx, where
@@ -746,56 +757,111 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // is latest-committed data, not the tx's buffered writes.
         fun openUncheckedQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
 
-        // Answer a SHOW from connection state. SHOW LATEST_SUBMITTED_TX reports this connection's own last write;
-        // SHOW AWAIT_TOKEN reads the connection's await-token; SHOW of any other identifier reads a session
-        // parameter. (SHOW TIME ZONE / SNAPSHOT_TOKEN / CLOCK_TIME are grammar `showVariable`s — classified as
-        // Query and answered by the engine from the basis, not here.) The node-level status SHOWs
-        // (latest_completed_txs, …) are node introspection, not connection state — they stay in pgwire for now.
-        private fun showVariable(variable: String): QueryResult =
-            when (variable) {
-                // 0 rows until this connection has submitted a tx (matches the `tx_id IS NOT NULL` filter);
-                // system-time/committed/error are null for a fire-and-forget submit. error is a Throwable → transit.
-                "latest_submitted_tx" -> showResult(
+        // A SHOW answered from connection / catalog state as a zero-param [PreparedQuery]. [rows] is a thunk so
+        // values snapshot at openQuery; [parsed] drives the gate exemption in [openQuery].
+        private class ShowPreparedQuery(
+            override val parsed: ParsedStatement.ShowVariable,
+            private val types: SequencedMap<String, VectorType>,
+            private val allocator: BufferAllocator,
+            private val rows: () -> List<Map<String, Any?>>,
+        ) : PreparedQuery {
+            override val paramCount get() = 0
+            override val columnNames get() = types.keys.toList()
+            override fun getColumnFields(paramFields: List<Field>) = types.map { (name, type) -> type.toField(name) }
+            override val warnings get() = emptyList<String>()
+
+            override fun openQuery(args: RelationReader?, opts: QueryOpts): ResultCursor {
+                // SHOW is zero-param, but by the openQuery contract the returned cursor owns the args slice and
+                // closes it (on failure it stays the caller's). args are unused otherwise.
+                val rel = Relation(allocator, types).closeOnCatch { r -> rows().forEach { r.writeRow(it) }; r }
+                return object : ResultCursor {
+                    override val resultTypes get() = types
+                    override val cursorType get() = "show"
+                    override val childCursors get() = emptyList<ICursor>()
+
+                    private var done = false
+                    override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
+                        if (done) return false
+                        done = true
+                        c.accept(rel)
+                        return true
+                    }
+
+                    override fun close() {
+                        rel.close()
+                        args?.close()
+                    }
+                }
+            }
+        }
+
+        private fun showPreparedQuery(stmt: ParsedStatement.ShowVariable): PreparedQuery {
+            fun show(types: SequencedMap<String, VectorType>, rows: () -> List<Map<String, Any?>>) =
+                ShowPreparedQuery(stmt, types, allocator, rows)
+
+            fun show1(col: String, value: () -> String?) =
+                show(linkedMapOf(col to VectorType.maybe(VectorType.UTF8))) { listOf(mapOf(col to value())) }
+
+            // awaitAll first, so node-status reflects this connection's own writes
+            fun byPartition(msgIdCol: SequencedMap<String, VectorType>, read: (Database, DatabasePartition) -> Map<String, Any?>) =
+                show(msgIdCol) {
+                    dbCat.awaitAll(awaitToken, awaitTimeout)
+                    dbCat.databaseNames.flatMap { dbName ->
+                        val db = dbCat.databaseOrNull(dbName) ?: return@flatMap emptyList()
+                        db.partitions.toSortedMap().map { (part, partition) ->
+                            mapOf("db_name" to dbName, "part" to part) + read(db, partition)
+                        }
+                    }
+                }
+
+            val msgIdCols = linkedMapOf("db_name" to VectorType.UTF8, "part" to VectorType.I32,
+                                        "msg_id" to VectorType.maybe(VectorType.I64))
+
+            return when (val variable = stmt.variable) {
+                // 0 rows until this connection's first submit; system_time/committed/error null for a fire-and-forget submit
+                "latest_submitted_tx" -> show(
                     linkedMapOf("tx_id" to VectorType.maybe(VectorType.I64),
                                 "system_time" to VectorType.maybe(VectorType.INSTANT),
                                 "committed" to VectorType.maybe(VectorType.BOOL),
                                 "error" to VectorType.maybe(VectorType.TRANSIT),
-                                "await_token" to VectorType.maybe(VectorType.UTF8)),
+                                "await_token" to VectorType.maybe(VectorType.UTF8))) {
                     lastSubmittedTx?.let {
                         listOf(mapOf("tx_id" to it.txId, "system_time" to it.systemTime,
                                      "committed" to it.committed, "error" to it.error,
                                      "await_token" to effectiveAwaitToken))
-                    } ?: emptyList())
-
-                "await_token" -> showResult(variable, effectiveAwaitToken)
-                else -> showResult(variable, sessionParameters[variable])
-            }
-
-        // A one-row, single-(nullable-utf8)-column result — the common SHOW shape.
-        private fun showResult(col: String, value: String?): QueryResult =
-            showResult(linkedMapOf(col to VectorType.maybe(VectorType.UTF8)), listOf(mapOf(col to value)))
-
-        // A SHOW result of arbitrary typed columns and 0-or-more rows — the SHOW counterpart of the query
-        // engine's cursor, so executeQuery can return connection state as an Arrow result set.
-        private fun showResult(types: SequencedMap<String, VectorType>, rows: List<Map<String, Any?>>): QueryResult {
-            val rel = Relation(allocator, types).closeOnCatch { r -> rows.forEach { r.writeRow(it) }; r }
-            val cursor = object : ResultCursor {
-                override val resultTypes get() = types
-                override val cursorType get() = "show"
-                override val childCursors get() = emptyList<ICursor>()
-
-                private var done = false
-                override fun tryAdvance(c: Consumer<in RelationReader>): Boolean {
-                    if (done) return false
-                    done = true
-                    c.accept(rel)
-                    return true
+                    } ?: emptyList()
                 }
 
-                override fun close() = rel.close()
+                "await_token" -> show1(variable) { effectiveAwaitToken }
+
+                // declared :bool — interpret the raw session-param string
+                "standard_conforming_strings" -> show(linkedMapOf(variable to VectorType.maybe(VectorType.BOOL))) {
+                    val v = sessionParameters[variable]?.lowercase()
+                    listOf(mapOf(variable to (v in setOf("on", "true", "yes", "1"))))
+                }
+
+                "latest_completed_txs" -> show(
+                    linkedMapOf("db_name" to VectorType.UTF8, "part" to VectorType.I32,
+                                "tx_id" to VectorType.maybe(VectorType.I64),
+                                "system_time" to VectorType.maybe(VectorType.INSTANT))) {
+                    dbCat.awaitAll(awaitToken, awaitTimeout)
+                    dbCat.databaseNames.flatMap { dbName ->
+                        val db = dbCat.databaseOrNull(dbName) ?: return@flatMap emptyList()
+                        db.partitions.toSortedMap().map { (part, partition) ->
+                            val txKey = partition.liveIndex.latestCompletedTx
+                            mapOf("db_name" to dbName, "part" to part,
+                                  "tx_id" to txKey?.txId, "system_time" to txKey?.systemTime)
+                        }
+                    }
+                }
+
+                // #5557 unit 5: source log's latestSubmittedMsgId is database-level for now, so the same value
+                // appears in every partition slot.
+                "latest_submitted_msg_ids" -> byPartition(msgIdCols) { db, _ -> mapOf("msg_id" to db.sourceLog.latestSubmittedMsgId) }
+                "latest_processed_msg_ids" -> byPartition(msgIdCols) { _, partition -> mapOf("msg_id" to partition.watchers.latestSourceMsgId) }
+
+                else -> show1(variable) { sessionParameters[variable] }
             }
-            val schema = Schema(cursor.resultTypes.map { (name, type) -> type.toField(name) })
-            return QueryResult(-1, cursorToArrowReader(cursor, schema))
         }
 
         override fun setAutoCommit(autoCommit: Boolean) {

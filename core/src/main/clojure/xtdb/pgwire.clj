@@ -5,7 +5,6 @@
             [cognitect.anomalies :as-alias anom]
             [cognitect.transit :as transit]
             [integrant.core :as ig]
-            [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
@@ -741,80 +740,45 @@
                   [{:canned-response canned-response}]
                   (mapv (fn [ps] {:parsed ps}) (SqlParser/parseStatements sql))))))))
 
-(defn- show-var-query [variable]
-  (case variable
-    ("latest_completed_txs" "latest_submitted_msg_ids" "latest_processed_msg_ids")
-    (-> '[:table {:param ?_0}]
-        (with-meta {:param-count 1}))
-
-    "latest_submitted_tx" (-> '[:select {:predicate (not (nil? tx_id))}
-                                [:table {:rows [{:tx_id ?_0, :system_time ?_1,
-                                                 :committed ?_2, :error ?_3,
-                                                 :await_token ?_4}]}]]
-                              (with-meta {:param-count 5}))
-
-    (-> (xt/template [:table {:rows [{~(keyword variable) ?_0}]}])
-        (with-meta {:param-count 1}))))
-
-(defn- show-var-param-types [variable]
-  (case variable
-    "latest_completed_txs" [#xt/type [:list [:struct {"db_name" :utf8, "part" :i32, "tx_id" :i64, "system_time" :instant}]]]
-    ("latest_submitted_msg_ids" "latest_processed_msg_ids") [#xt/type [:list [:struct {"db_name" :utf8
-                                                                                       "part" :i32
-                                                                                       "msg_id" :i64}]]]
-    "latest_submitted_tx" [#xt/type :i64, #xt/type :instant, #xt/type :bool, #xt/type :transit, #xt/type :utf8]
-    "await_token" [#xt/type :utf8]
-    "standard_conforming_strings" [#xt/type :bool]
-
-    [#xt/type :utf8]))
-
 (defn- conn-db-name ^String [{:keys [conn-state]}]
   (.getDbName ^Xtdb$Connection (:node-conn @conn-state)))
 
 (defn- prep-stmt [{:keys [conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
-  ;; query/execute prepare the AST; show-variable prepares a synthetic RA query; everything else passes through.
-  (letfn [(finish [^PreparedQuery pq param-types]
-            (when-let [warnings (.getWarnings pq)]
-              (doseq [warning warnings]
-                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
+  ;; queries, EXECUTE and SHOW all prepare through the connection; everything else passes through.
+  (letfn [(prepare-parsed []
+            (let [^PreparedQuery pq (with-auth-check conn
+                                      (.prepare ^Xtdb$Connection (:node-conn @conn-state) parsed))]
+              (when-let [warnings (.getWarnings pq)]
+                (doseq [warning warnings]
+                  (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
-            (let [param-oids (->> (concat param-oids (repeat 0))
-                                  (into [] (take (.getParamCount pq))))
-                  param-types (or param-types (map #(some-> (PgType/fromOid %) .getXtType) param-oids))
-                  pg-cols (if (some nil? param-types)
-                            ;; if we're unsure on some of the col-types, return all output cols as the fallback type (#4455)
-                            (for [col-name (map str (.getColumnNames pq))]
-                              {:pg-type PgType/PG_DEFAULT, :col-name col-name})
+              (let [param-oids (->> (concat param-oids (repeat 0))
+                                    (into [] (take (.getParamCount pq))))
+                    param-types (map #(some-> (PgType/fromOid %) .getXtType) param-oids)
+                    pg-cols (if (some nil? param-types)
+                              ;; if we're unsure on some of the col-types, return all output cols as the fallback type (#4455)
+                              (for [col-name (map str (.getColumnNames pq))]
+                                {:pg-type PgType/PG_DEFAULT, :col-name col-name})
 
-                            (->> (.getColumnFields pq (->> param-types
-                                                           (into [] (comp (map types/->nullable-type)
-                                                                          (map-indexed (fn [idx vt]
-                                                                                         (types/->field (str "?_" idx) vt)))))))
-                                 (mapv field->pg-col)))]
-              (assoc stmt
-                     :prepared-query pq
-                     :param-oids param-oids
-                     :prepared-pg-cols pg-cols
-                     :pg-cols pg-cols)))
-
-          (prepare-ast [^ParsedStatement ps]
-            (finish (with-auth-check conn
-                      (.prepareSql ^Xtdb$Connection (:node-conn @conn-state) ps))
-                    nil))]
+                              (->> (.getColumnFields pq (->> param-types
+                                                             (into [] (comp (map types/->nullable-type)
+                                                                            (map-indexed (fn [idx vt]
+                                                                                           (types/->field (str "?_" idx) vt)))))))
+                                   (mapv field->pg-col)))]
+                (assoc stmt
+                       :prepared-query pq
+                       :param-oids param-oids
+                       :prepared-pg-cols pg-cols
+                       :pg-cols pg-cols))))]
 
     (if (nil? parsed)                   ; :empty? / :canned-response markers carry no parsed statement
       stmt
       (try
        (.accept parsed
                (reify ParsedStatement$Visitor
-                 (visitQuery [_ ps] (prepare-ast ps))
-                 (visitExecute [_ ps] (prepare-ast ps))
-                 (visitShowVariable [_ ps]
-                   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
-                         variable (.getVariable ps)]
-                     (finish (with-auth-check conn
-                               (.prepareRa node-conn (show-var-query variable)))
-                             (show-var-param-types variable))))
+                 (visitQuery [_ _] (prepare-parsed))
+                 (visitExecute [_ _] (prepare-parsed))
+                 (visitShowVariable [_ _] (prepare-parsed))
                  (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
@@ -899,18 +863,15 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [node conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
   (let [{:keys [^Xtdb$Connection node-conn]} @conn-state
-        session-params (.getSessionParameters node-conn)
-        ;; an open tx's await-token shadows the connection's (BEGIN ... WITH (AWAIT_TOKEN …)) for SHOW
-        await-token (.getEffectiveAwaitToken node-conn)
-
         xt-args (xtify-args conn args stmt)]
 
     ;; the connection owns the QueryOpts (basis / tz / tracer) and the read access-mode gate — pgwire drives its
-    ;; own cursor but opens it through the connection. checked? reads through the gate (openQuery); a SHOW or an
-    ;; internal args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that
-    ;; verify-permissibility let through, so it too opens unchecked (openQuery would reject it).
+    ;; own cursor but opens it through the connection. checked? reads through the gate (openQuery); an internal
+    ;; args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that verify-permissibility
+    ;; let through, so it too opens unchecked (openQuery would reject it). SHOW opens checked but the connection
+    ;; gate-exempts it off its parsed statement.
     (letfn [(->cursor ^xtdb.ResultCursor [^PreparedQuery pq xt-args checked?]
               (with-auth-check conn
                 (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
@@ -930,54 +891,21 @@
                                        #_ ; FIXME: these break because of PgType not being serializable
                                        {:prepared-cols prepared-pg-cols
                                         :resolved-cols resolved-pg-cols})))
-                (with-result-formats prepared-pg-cols result-format)))]
+                (with-result-formats prepared-pg-cols result-format)))
+
+            (bind-query-portal []
+              (util/with-close-on-catch [cursor (->cursor prepared-query xt-args true)]
+                (-> stmt
+                    (assoc :cursor cursor,
+                           :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))]
 
       (if (nil? parsed)                 ; :empty? / :canned-response markers carry no parsed statement
         (-> stmt (assoc :args xt-args))
         (.accept parsed
                (reify ParsedStatement$Visitor
-                 (visitQuery [_ _]
-                   (util/with-close-on-catch [cursor (->cursor prepared-query xt-args true)]
-                     (-> stmt
-                         (assoc :cursor cursor,
-                                :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))
-
-                 (visitShowVariable [_ ps]
-                   (let [variable (.getVariable ps)]
-                     (util/with-close-on-catch [cursor (->cursor prepared-query
-                                                                 (case variable
-                                                                   "await_token" [await-token]
-                                                                   "latest_completed_txs" [(for [[db-name parts] (xtp/latest-completed-txs node)
-                                                                                                 [part-idx {:keys [tx-id system-time]}] (map vector (range) parts)]
-                                                                                             {:db_name db-name
-                                                                                              :part (int part-idx)
-                                                                                              :tx_id tx-id
-                                                                                              :system_time system-time})]
-                                                                   "latest_submitted_msg_ids" [(for [[db-name parts] (xtp/latest-submitted-msg-ids node)
-                                                                                                     [part-idx msg-id] (map vector (range) parts)]
-                                                                                                 {:db_name db-name
-                                                                                                  :part (int part-idx)
-                                                                                                  :msg_id msg-id})]
-
-                                                                   "latest_processed_msg_ids" [(for [[db-name parts] (xtp/latest-processed-msg-ids node)
-                                                                                                     [part-idx msg-id] (map vector (range) parts)]
-                                                                                                 {:db_name db-name
-                                                                                                  :part (int part-idx)
-                                                                                                  :msg_id msg-id})]
-
-                                                                   "latest_submitted_tx" (let [lst (.getLastSubmittedTx node-conn)]
-                                                                                           [(some-> lst .getTxId) (some-> lst .getSystemTime)
-                                                                                            (some-> lst .getCommitted) (some-> lst .getError)
-                                                                                            await-token])
-                                                                   ;; declared :bool (show-var-param-types) — the raw stored string is interpreted here
-                                                                   "standard_conforming_strings" [(contains? #{"on" "true" "yes" "1"} (some-> (get session-params variable) str/lower-case))]
-                                                                   [(get session-params variable)])
-                                                                 false)]
-
-                       (-> stmt
-                           (assoc :cursor cursor,
-                                  :pg-cols (-> (:pg-cols stmt)
-                                               (with-result-formats result-format)))))))
+                 ;; queries and SHOW open the same way — the connection gate-exempts SHOW off its parsed statement
+                 (visitQuery [_ _] (bind-query-portal))
+                 (visitShowVariable [_ _] (bind-query-portal))
 
                  (visitExecute [_ ps]
                    (util/with-open [^ResultCursor args-cursor (->cursor prepared-query xt-args false)]

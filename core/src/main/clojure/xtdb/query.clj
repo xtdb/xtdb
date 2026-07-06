@@ -366,6 +366,7 @@
           (reify PreparedQuery
             (getParamCount [_] (:param-count (plan-query* @!table-info)))
             (getColumnNames [_] (:col-names (plan-query* @!table-info)))
+            (getParsed [_] stmt)
 
             (getColumnFields [_ param-fields]
               (let [planned-query (plan-query* @!table-info)]
