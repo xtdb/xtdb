@@ -42,6 +42,7 @@
            [java.util.concurrent.atomic AtomicBoolean]
            (java.util.function Function)
            [java.util.stream Stream StreamSupport]
+           (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb ICursor ResultCursor ResultCursor$ErrorTrackingCursor PagesCursor)
@@ -276,18 +277,22 @@
 
     (vec (->results cursor 0))))
 
+(defn- ast-source-text [^Sql$DirectlyExecutableStatementContext ast]
+  (let [start (.getStart ast)]
+    (.getText (.getInputStream start)
+              (Interval/of (.getStartIndex start) (.getStopIndex (.getStop ast))))))
+
 (defn- ->prepare-opts-map
-  "Prepare-time opts reach the planner as a Clojure map. Kotlin callers pass a typed [PrepareOpts];
-  translate it here, at the planner's edge. Real maps (the Clojure node's path) pass straight through,
-  so callers can migrate to the typed form one at a time."
-  [opts]
-  (if (instance? PrepareOpts opts)
-    (let [^PrepareOpts opts opts]
-      (cond-> {}
-        (.getDefaultTz opts) (assoc :default-tz (.getDefaultTz opts))
-        (.getDefaultDb opts) (assoc :default-db (.getDefaultDb opts))
-        (.getCurrentTime opts) (assoc :current-time (.getCurrentTime opts))))
-    opts))
+  "Prepare-time opts reach the planner as a Clojure map; translate the typed [PrepareOpts] here, at the
+  planner's edge."
+  [^PrepareOpts opts]
+  (cond-> {}
+    (.getDefaultTz opts) (assoc :default-tz (.getDefaultTz opts))
+    (.getDefaultDb opts) (assoc :default-db (.getDefaultDb opts))
+    (.getCurrentTime opts) (assoc :current-time (.getCurrentTime opts))
+    (.getArgFields opts) (assoc :arg-fields (.getArgFields opts))
+    (.getExplain opts) (assoc :explain? true)
+    (.getExplainAnalyze opts) (assoc :explain-analyze? true)))
 
 (defprotocol PQuerySource
   (-plan-query [q-src parsed-query query-opts table-info]))
@@ -330,9 +335,11 @@
   (prepareRa [this parsed-query db-cat query-opts]
     (let [^ParsedStatement stmt (when (instance? ParsedStatement parsed-query) parsed-query)
           parsed-query (if stmt (.getAst stmt) parsed-query)
+          qtext (cond stmt (.getOriginalSql stmt)
+                      (instance? Sql$DirectlyExecutableStatementContext parsed-query) (ast-source-text parsed-query))
           {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
-                                                              (cond-> stmt (assoc :query-text (.getOriginalSql stmt)))
+                                                              (cond-> qtext (assoc :query-text qtext))
                                                               (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
       (letfn [(open-snaps []
                 ;; TODO this opens up a snapshot for *every* db in the catalog
@@ -458,7 +465,7 @@
 
   (prepareTxSql [this sql db-cat opts]
     (let [[q-tag {:keys [stmt table message user role col-names]}]
-          (parse-sql/parse-statement sql {:default-db (:default-db opts)})]
+          (parse-sql/parse-statement sql {:default-db (.getDefaultDb opts)})]
       (case q-tag
         :grant-role (SqlStatement$GrantRole. user role)
         :revoke-role (SqlStatement$RevokeRole. user role)
@@ -476,7 +483,7 @@
                                   {:query sql})))))))
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
-    (let [default-db (:default-db opts)
+    (let [default-db (.getDefaultDb opts)
           table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat default-db))]
                            (.tableInfo snap))
                          (sql/xform-table-info [default-db] default-db))

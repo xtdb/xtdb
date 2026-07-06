@@ -771,7 +771,7 @@
 (defn- conn-db-name ^String [{:keys [conn-state]}]
   (.getDbName ^Xtdb$Connection (:node-conn @conn-state)))
 
-(defn- prep-stmt [{:keys [node conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
+(defn- prep-stmt [{:keys [conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
   ;; query/execute prepare the AST; show-variable prepares a synthetic RA query; everything else passes through.
   (letfn [(finish [^PreparedQuery pq param-types]
             (when-let [warnings (.getWarnings pq)]
@@ -813,10 +813,7 @@
                    (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
                          variable (.getVariable ps)]
                      (finish (with-auth-check conn
-                               (xtp/prepare-ra node (show-var-query variable)
-                                               {:await-token (.getAwaitToken node-conn)
-                                                :default-tz (.getDefaultTz node-conn)
-                                                :default-db (.getDbName node-conn)}))
+                               (.prepareRa node-conn (show-var-query variable)))
                              (show-var-param-types variable))))
                  (visitOther [_ _] stmt)))
 

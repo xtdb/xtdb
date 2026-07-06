@@ -292,6 +292,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
+        // A synthetic RA-plan (pgwire's SHOW) prepared against this connection — awaits like [prepareSql] so the
+        // read sees the connection's own writes.
+        fun prepareRa(plan: Any): PreparedQuery {
+            dbCat.awaitAll(awaitToken, awaitTimeout)
+            return qSrc.prepareRa(plan, dbCat, PrepareOpts(defaultTz = defaultTz, defaultDb = dbName))
+        }
+
         fun openSqlQuery(sql: String): ResultCursor =
             openQuery(prepareSql(sql), null)
 

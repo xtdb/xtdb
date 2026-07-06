@@ -27,7 +27,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
-           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlParser SqlPlanner)))
+           (xtdb.query IQuerySource PrepareOpts PreparedQuery QueryOpts SqlParser SqlPlanner)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -134,9 +134,10 @@
          (some #(when (instance? clazz %) %))))
 
   (^PreparedQuery prepareSql [this ^String sql query-opts]
-    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
+    (let [{:keys [await-token tx-timeout default-tz default-db current-time]} (-> query-opts (with-query-opts-defaults this))]
       (.awaitAll db-cat await-token tx-timeout)
-      (.prepareQuery q-src (SqlParser/parseStatement sql) db-cat query-opts)))
+      (.prepareQuery q-src (SqlParser/parseStatement sql) db-cat
+                     (PrepareOpts. default-tz default-db current-time nil))))
 
   (submitTx [this db-name tx-ops tx-opts]
     (.submitTx (xtp/open-connection this db-name) tx-ops tx-opts))
@@ -226,13 +227,6 @@
   xtp/PLocalNode
   (prepare-sql [this query query-opts]
     (.prepareSql this ^String query query-opts))
-
-  (prepare-ra [this plan query-opts]
-    (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
-
-      (.awaitAll db-cat await-token tx-timeout)
-
-      (.prepareRa q-src plan db-cat query-opts)))
 
   Closeable
   (close [_]

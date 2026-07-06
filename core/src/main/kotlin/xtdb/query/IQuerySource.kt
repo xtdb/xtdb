@@ -21,10 +21,10 @@ interface IQuerySource : AutoCloseable {
         val queryState: DatabaseState
     }
 
-    fun prepareQuery(query: ParsedStatement, dbs: QueryCatalog, opts: Any?): PreparedQuery
-    fun prepareRa(plan: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
-    fun prepareTxSql(sql: String, dbs: QueryCatalog, opts: Any?): SqlStatement
-    fun preparePatchDocsQuery(table: TableRef, validFrom: Instant?, validTo: Instant?, dbs: QueryCatalog, opts: Any?): PreparedQuery
+    fun prepareQuery(query: ParsedStatement, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery
+    fun prepareRa(plan: Any, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery
+    fun prepareTxSql(sql: String, dbs: QueryCatalog, opts: PrepareOpts): SqlStatement
+    fun preparePatchDocsQuery(table: TableRef, validFrom: Instant?, validTo: Instant?, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery
 
     fun interface Factory {
         fun create(allocator: BufferAllocator, meterRegistry: MeterRegistry?, scanEmitter: Any): IQuerySource

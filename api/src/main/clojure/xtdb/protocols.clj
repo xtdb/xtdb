@@ -8,8 +8,7 @@
   (^xtdb.api.Xtdb$Connection open-connection [node db-name]))
 
 (defprotocol PLocalNode
-  (^xtdb.query.PreparedQuery prepare-sql [node query query-opts])
-  (^xtdb.query.PreparedQuery prepare-ra [node ra-plan query-opts]))
+  (^xtdb.query.PreparedQuery prepare-sql [node query query-opts]))
 
 (defprotocol PStatus
   (latest-submitted-msg-ids [node])

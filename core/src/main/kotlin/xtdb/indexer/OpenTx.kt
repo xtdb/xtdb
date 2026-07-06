@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import clojure.lang.PersistentArrayMap
 import io.micrometer.tracing.Tracer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
@@ -19,7 +18,6 @@ import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
-import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.query.PrepareOpts
 import xtdb.query.SqlStatement
@@ -185,14 +183,9 @@ class OpenTx(
         val currentTimeMicros = currentTime.asMicros
         val qOpts = xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
 
-        val prepareOpts = PersistentArrayMap.create(
-            mapOf(
-                "current-time".kw to currentTime,
-                "default-tz".kw to opts.defaultTz,
-                "default-db".kw to dbState.name,
-                "query-text".kw to sql,
-                "arg-fields".kw to args?.schema?.fields,
-            )
+        val prepareOpts = PrepareOpts(
+            defaultTz = opts.defaultTz, defaultDb = dbState.name, currentTime = currentTime,
+            argFields = args?.schema?.fields,
         )
 
         when (val stmt = nodeBase.querySource.prepareTxSql(sql, queryCatalog, prepareOpts)) {
@@ -639,12 +632,9 @@ class OpenTx(
         fun patchDocs(docs: RelationReader, validFromMicros: Long, validToMicros: Long) {
             checkNotForbidden(ref)
 
-            val prepareOpts = PersistentArrayMap.create(
-                mapOf(
-                    "current-time".kw to txKey.systemTime,
-                    "default-db".kw to dbState.name,
-                    "arg-fields".kw to docs.schema.fields,
-                )
+            val prepareOpts = PrepareOpts(
+                defaultDb = dbState.name, currentTime = txKey.systemTime,
+                argFields = docs.schema.fields,
             )
 
             // The planner (plan-patch in sql.clj) requires concrete Instant bounds — no nil support.
