@@ -3,6 +3,7 @@ package xtdb.authz
 import xtdb.query.IQuerySource
 import xtdb.query.PrepareOpts
 import xtdb.query.QueryOpts
+import xtdb.query.parseStatement
 import xtdb.table.TableRef
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -49,10 +50,10 @@ object RoleMembership {
         if (!exists) return emptyList()
 
         val now = Instant.now()
-        val prepareOpts = PrepareOpts(defaultDb = PRIMARY_DB, queryText = SCAN_SQL, currentTime = now)
+        val prepareOpts = PrepareOpts(defaultDb = PRIMARY_DB, currentTime = now)
 
         val out = ArrayList<List<String>>()
-        querySource.prepareQuery(SCAN_SQL, dbCat, prepareOpts)
+        querySource.prepareQuery(parseStatement(SCAN_SQL), dbCat, prepareOpts)
             .openQuery(null, QueryOpts(currentTime = now)).use { cursor ->
                 cursor.forEachRemaining { rel ->
                     val userRdr = rel.vectorFor("user")

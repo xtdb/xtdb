@@ -21,6 +21,5 @@ data class QueryOpts @JvmOverloads constructor(
 data class PrepareOpts @JvmOverloads constructor(
     val defaultTz: ZoneId? = null,
     val defaultDb: DatabaseName? = null,
-    val queryText: String? = null,
     val currentTime: Instant? = null,
 )

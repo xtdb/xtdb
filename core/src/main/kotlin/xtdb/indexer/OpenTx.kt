@@ -23,6 +23,7 @@ import xtdb.kw
 import xtdb.query.IQuerySource
 import xtdb.query.PrepareOpts
 import xtdb.query.SqlStatement
+import xtdb.query.parseStatement
 import xtdb.table.DEFAULT_SCHEMA
 import xtdb.table.SchemaName
 import xtdb.table.TableName
@@ -165,11 +166,11 @@ class OpenTx(
         val currentTime = opts.currentTime ?: txKey.systemTime
 
         val prepareOpts = PrepareOpts(
-            defaultTz = opts.defaultTz, defaultDb = dbState.name, queryText = sql, currentTime = currentTime,
+            defaultTz = opts.defaultTz, defaultDb = dbState.name, currentTime = currentTime,
         )
 
         return nodeBase.querySource
-            .prepareQuery(sql, queryCatalog, prepareOpts)
+            .prepareQuery(parseStatement(sql), queryCatalog, prepareOpts)
             .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
     }
 

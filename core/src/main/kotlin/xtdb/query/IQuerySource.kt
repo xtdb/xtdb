@@ -21,7 +21,8 @@ interface IQuerySource : AutoCloseable {
         val queryState: DatabaseState
     }
 
-    fun prepareQuery(query: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
+    fun prepareQuery(query: ParsedStatement, dbs: QueryCatalog, opts: Any?): PreparedQuery
+    fun prepareRa(plan: Any, dbs: QueryCatalog, opts: Any?): PreparedQuery
     fun prepareTxSql(sql: String, dbs: QueryCatalog, opts: Any?): SqlStatement
     fun preparePatchDocsQuery(table: TableRef, validFrom: Instant?, validTo: Instant?, dbs: QueryCatalog, opts: Any?): PreparedQuery
 

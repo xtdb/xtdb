@@ -1,7 +1,6 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [integrant.core :as ig]
-            [xtdb.antlr :as antlr]
             [xtdb.api :as api]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
@@ -24,12 +23,11 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
-           (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
-           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlPlanner)))
+           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlParser SqlPlanner)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -136,12 +134,9 @@
          (some #(when (instance? clazz %) %))))
 
   (^PreparedQuery prepareSql [this ^String sql query-opts]
-    (.prepareSql this (antlr/parse-statement sql) (assoc query-opts :query-text sql)))
-
-  (^PreparedQuery prepareSql [this ^Sql$DirectlyExecutableStatementContext ast query-opts]
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
       (.awaitAll db-cat await-token tx-timeout)
-      (.prepareQuery q-src ast db-cat query-opts)))
+      (.prepareQuery q-src (SqlParser/parseStatement sql) db-cat query-opts)))
 
   (submitTx [this db-name tx-ops tx-opts]
     (.submitTx (xtp/open-connection this db-name) tx-ops tx-opts))
@@ -230,21 +225,14 @@
 
   xtp/PLocalNode
   (prepare-sql [this query query-opts]
-    (cond
-      (instance? Sql$DirectlyExecutableStatementContext query)
-      (.prepareSql this ^Sql$DirectlyExecutableStatementContext query query-opts)
-
-      (string? query)
-      (.prepareSql this ^String query query-opts)
-
-      :else (throw (err/incorrect :xtdb/unsupported-query-type (format "Unsupported SQL query type: %s" (type query))))))
+    (.prepareSql this ^String query query-opts))
 
   (prepare-ra [this plan query-opts]
     (let [{:keys [await-token tx-timeout] :as query-opts} (-> query-opts (with-query-opts-defaults this))]
 
       (.awaitAll db-cat await-token tx-timeout)
 
-      (.prepareQuery q-src plan db-cat query-opts)))
+      (.prepareRa q-src plan db-cat query-opts)))
 
   Closeable
   (close [_]

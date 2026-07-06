@@ -23,7 +23,6 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ICursor
 import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
-import xtdb.antlr.Sql
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
@@ -87,7 +86,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     override fun connect(): Connection
 
     fun prepareSql(sql: String, opts: Any?): PreparedQuery
-    fun prepareSql(sql: Sql.DirectlyExecutableStatementContext, opts: Any?): PreparedQuery
 
     data class SubmittedTx(val txId: MessageId)
 
@@ -277,20 +275,20 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun prepareSql(sql: String, defaultDb: DatabaseName = dbName): PreparedQuery {
             dbCat.awaitAll(awaitToken, awaitTimeout)
             return qSrc.prepareQuery(
-                sql,
+                parseStatement(sql),
                 dbCat,
-                PrepareOpts(defaultTz = defaultTz, defaultDb = defaultDb, queryText = sql)
+                PrepareOpts(defaultTz = defaultTz, defaultDb = defaultDb)
             )
         }
 
-        // pgwire parses once for dispatch, so it prepares from the AST and supplies the original text; tz, db,
-        // await-token and await bound all come from the connection. EXPLAIN is read off the AST, not passed in.
-        fun prepareSql(ast: Sql.DirectlyExecutableStatementContext, queryText: String): PreparedQuery {
+        // pgwire (and ADBC) parse once for dispatch, so they prepare from the classified statement; its query text
+        // and EXPLAIN flag derive from the AST. tz, db, await-token and await bound come from the connection.
+        fun prepareSql(stmt: ParsedStatement): PreparedQuery {
             dbCat.awaitAll(awaitToken, awaitTimeout)
             return qSrc.prepareQuery(
-                ast,
+                stmt,
                 dbCat,
-                PrepareOpts(defaultTz = defaultTz, defaultDb = dbName, queryText = queryText)
+                PrepareOpts(defaultTz = defaultTz, defaultDb = dbName)
             )
         }
 

@@ -5,7 +5,6 @@
             [cognitect.anomalies :as-alias anom]
             [cognitect.transit :as transit]
             [integrant.core :as ig]
-            [xtdb.antlr :as antlr]
             [xtdb.api :as xt]
             [xtdb.authn :as authn]
             [xtdb.db-catalog :as db]
@@ -800,7 +799,7 @@
 
           (prepare-ast [^ParsedStatement ps]
             (finish (with-auth-check conn
-                      (.prepareSql ^Xtdb$Connection (:node-conn @conn-state) (.getAst ps) (.getOriginalSql ps)))
+                      (.prepareSql ^Xtdb$Connection (:node-conn @conn-state) ps))
                     nil))]
 
     (if (nil? parsed)                   ; :empty? / :canned-response markers carry no parsed statement
@@ -1132,8 +1131,7 @@
     (when (empty? param-oids)
       (try
         (let [^PreparedQuery pq (with-auth-check conn
-                                  (xtp/prepare-sql node
-                                                   (antlr/parse-statement query)
+                                  (xtp/prepare-sql node query
                                                    {:default-db (conn-db-name conn)}))]
 
           ;; Send any warnings to the client

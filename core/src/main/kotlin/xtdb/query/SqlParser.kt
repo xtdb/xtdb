@@ -75,7 +75,7 @@ private val multiQueryCache =
             sql.parseWithFallback { it.multiSqlStatement().directlyExecutableStatement() }
         })
 
-fun String.parseStatement() = singleQueryCache[this]
+fun String.parseStatementAst() = singleQueryCache[this]
 
 fun String.parseMultiStatement() = multiQueryCache[this]
 
@@ -242,3 +242,6 @@ private class ParsedStatementVisitor : SqlBaseVisitor<ParsedStatement>() {
  */
 fun parseStatements(sql: String): List<ParsedStatement> =
     ParsedStatementVisitor().let { v -> sql.parseMultiStatement().map { it.accept(v) } }
+
+/** Classifies a single-statement SQL string into a [ParsedStatement] without planning (the single-statement grammar rule). */
+fun parseStatement(sql: String): ParsedStatement = sql.parseStatementAst().accept(ParsedStatementVisitor())

@@ -246,7 +246,7 @@
                                                true])]
 
      (try
-       (let [^PreparedQuery pq (.prepareQuery q-src query (or (db/<-node node) Database$Catalog/EMPTY) query-opts)]
+       (let [^PreparedQuery pq (.prepareRa q-src query (or (db/<-node node) Database$Catalog/EMPTY) query-opts)]
 
          (util/with-open [^RelationReader args-rel (if args
                                                      (vw/open-args allocator args)

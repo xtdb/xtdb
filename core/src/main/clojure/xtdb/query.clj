@@ -2,7 +2,6 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [xtdb.antlr :as antlr]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
@@ -52,7 +51,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -163,15 +162,6 @@
          [db-name sys-times])
        (into {})
        (not-empty)))
-
-(defn- parse-query [query]
-  (cond
-    (vector? query) query
-    (string? query) (antlr/parse-statement query)
-    (instance? Sql$DirectlyExecutableStatementContext query) query
-
-    :else (throw (err/incorrect :unknown-query-type "Unknown query type"
-                                {:query query, :type (type query)}))))
 
 (defn- plan-query [parsed-query query-opts]
   (cond
@@ -296,7 +286,6 @@
       (cond-> {}
         (.getDefaultTz opts) (assoc :default-tz (.getDefaultTz opts))
         (.getDefaultDb opts) (assoc :default-db (.getDefaultDb opts))
-        (.getQueryText opts) (assoc :query-text (.getQueryText opts))
         (.getCurrentTime opts) (assoc :current-time (.getCurrentTime opts))))
     opts))
 
@@ -336,9 +325,14 @@
 
   IQuerySource
   (prepareQuery [this query db-cat query-opts]
-    (let [parsed-query (parse-query query)
+    (.prepareRa this query db-cat query-opts))
+
+  (prepareRa [this parsed-query db-cat query-opts]
+    (let [^ParsedStatement stmt (when (instance? ParsedStatement parsed-query) parsed-query)
+          parsed-query (if stmt (.getAst stmt) parsed-query)
           {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
+                                                              (cond-> stmt (assoc :query-text (.getOriginalSql stmt)))
                                                               (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
       (letfn [(open-snaps []
                 ;; TODO this opens up a snapshot for *every* db in the catalog
@@ -470,7 +464,7 @@
         :revoke-role (SqlStatement$RevokeRole. user role)
         :create-table (SqlStatement$CreateTable. table (or col-names []))
 
-        (let [pq (.prepareQuery this stmt db-cat opts)]
+        (let [pq (.prepareRa this stmt db-cat opts)]
           (case q-tag
             (:insert :update) (SqlStatement$Put. pq table)
             :patch (SqlStatement$Patch. pq table)
@@ -495,7 +489,7 @@
                                                                           :param ?patch_docs}]
                                                                 '[_iid doc])})
                    lp/rewrite-plan)]
-      (.prepareQuery this plan db-cat opts)))
+      (.prepareRa this plan db-cat opts)))
 
   AutoCloseable
   (close [_]
