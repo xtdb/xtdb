@@ -18,6 +18,12 @@ spec:
       labels:
         app.kubernetes.io/name: kafka
         app.kubernetes.io/component: kafka
+      annotations:
+        # The broker holds the only copy of the log on a local PVC, so the
+        # cluster autoscaler must not evict it to consolidate nodes mid-run:
+        # doing so killed the broker, reset the topics, and left in-flight
+        # consumers with out-of-range offsets (IngestionStoppedException).
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
     spec:
       containers:
         - name: kafka
