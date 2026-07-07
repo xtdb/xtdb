@@ -138,6 +138,45 @@
         (some container-failing? container-statuses)
         (some container-failing? init-statuses))))
 
+(defn- container-state-summary
+  "One-line summary of a failing container's state. `kind` labels the container group
+   (e.g. \"init\")."
+  [kind {container-name :name, :keys [state]}]
+  (let [label (str kind " " container-name)
+        {:keys [waiting terminated]} state]
+    (cond
+      terminated (->> [(str label ": terminated")
+                       (:reason terminated)
+                       (when-let [c (:exitCode terminated)] (str "(exit " c ")"))
+                       (some-> (:message terminated) str/trim)]
+                      (remove nil?)
+                      (str/join " "))
+      waiting (->> [(str label ": " (:reason waiting))
+                    (some-> (:message waiting) str/trim)]
+                   (remove nil?)
+                   (str/join " — ")))))
+
+(defn- describe-pod-failure
+  "Concise diagnostic of why a pod is failing — one line per failing (init) container,
+   plus the pod phase/reason. Returns nil if nothing looks failing.
+
+   The startup-failure case (e.g. autoscaler eviction, ImagePullBackOff) often leaves
+   no container logs at all, so this pod-status view is the only signal we get."
+  [pod]
+  (let [phase (get-in pod [:status :phase])
+        pod-reason (get-in pod [:status :reason])
+        pod-message (get-in pod [:status :message])
+        init (or (get-in pod [:status :initContainerStatuses]) [])
+        main (or (get-in pod [:status :containerStatuses]) [])
+        lines (concat (->> init (filter container-failing?) (map (partial container-state-summary "init container")))
+                      (->> main (filter container-failing?) (map (partial container-state-summary "container"))))]
+    (when (or (= "Failed" phase) (seq lines))
+      (->> (cond->> (vec lines)
+             (= "Failed" phase) (into [(->> [(str "pod phase: Failed") pod-reason (some-> pod-message str/trim)]
+                                            (remove nil?)
+                                            (str/join " — "))]))
+           (str/join "\n")))))
+
 (defn- pod-running-stable?
   "Check if a pod is running with all containers started and init containers completed."
   [pod]
@@ -208,8 +247,10 @@
              (cond
                ;; Found failing pods
                (seq failing-pods)
-               (let [pod-names (mapv #(get-in % [:metadata :name]) failing-pods)
+               (let [primary-pod-obj (first failing-pods)
+                     pod-names (mapv #(get-in % [:metadata :name]) failing-pods)
                      primary-pod (first pod-names)
+                     diagnostics (describe-pod-failure primary-pod-obj)
                      log-preview (when primary-pod
                                    (some-> (get-pod-logs namespace primary-pod :tail 60)
                                            (str/split-lines)
@@ -224,8 +265,11 @@
                    (log-stderr "Pod:" pod-name)
                    (when-let [logs (get-pod-logs namespace pod-name)]
                      (log-stderr logs)))
+                 (when diagnostics
+                   (log-stderr "Diagnosis:" diagnostics))
                  {:failed true
                   :podName primary-pod
+                  :diagnostics diagnostics
                   :logPreview log-preview
                   :cleanupTriggered cleanup-triggered?})
 

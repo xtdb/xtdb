@@ -1,0 +1,18 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: xtdb-benchmark-kafka
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: kafka
+spec:
+  # Single-replica broker with no redundancy: block all voluntary disruptions
+  # (node drains, upgrades, autoscaler consolidation) for the lifetime of a run.
+  # Teardown deletes the pod directly rather than evicting it, so this doesn't
+  # wedge clear-bench between runs.
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/component: kafka

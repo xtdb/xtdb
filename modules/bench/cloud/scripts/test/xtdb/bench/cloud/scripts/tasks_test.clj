@@ -797,6 +797,41 @@
                         :containerStatuses [{:state {:running {:startedAt "2024-01-01"}}}]}}]
       (is (not (#'k8s/pod-failing? pod))))))
 
+(deftest describe-pod-failure-test
+  (testing "init container terminated with non-zero exit"
+    (let [pod {:status {:phase "Running"
+                        :initContainerStatuses [{:name "wait-for-kafka"
+                                                 :state {:terminated {:exitCode 1 :reason "Error"}}}]
+                        :containerStatuses [{:state {:waiting {:reason "PodInitializing"}}}]}}
+          result (#'k8s/describe-pod-failure pod)]
+      (is (str/includes? result "wait-for-kafka"))
+      (is (str/includes? result "exit 1"))
+      (is (str/includes? result "init"))))
+
+  (testing "main container waiting on image pull surfaces reason and message"
+    (let [pod {:status {:phase "Pending"
+                        :containerStatuses [{:name "xtdb-node"
+                                             :state {:waiting {:reason "ImagePullBackOff"
+                                                               :message "Back-off pulling image"}}}]}}
+          result (#'k8s/describe-pod-failure pod)]
+      (is (str/includes? result "xtdb-node"))
+      (is (str/includes? result "ImagePullBackOff"))
+      (is (str/includes? result "Back-off pulling image"))))
+
+  (testing "pod Failed by node eviction with no failing container still reports phase"
+    (let [pod {:status {:phase "Failed"
+                        :reason "Evicted"
+                        :message "Pod was terminated in response to imminent node shutdown."
+                        :containerStatuses []}}
+          result (#'k8s/describe-pod-failure pod)]
+      (is (str/includes? result "Failed"))
+      (is (str/includes? result "Evicted"))))
+
+  (testing "healthy pod yields nil"
+    (let [pod {:status {:phase "Running"
+                        :containerStatuses [{:name "xtdb-node" :state {:running {:startedAt "2024-01-01"}}}]}}]
+      (is (nil? (#'k8s/describe-pod-failure pod))))))
+
 (deftest pod-running-stable-test
   (testing "stable running pod with completed init containers"
     (let [pod {:status {:phase "Running"
