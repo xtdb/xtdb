@@ -143,12 +143,24 @@ class LeaderLogProcessor(
             LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
             handleSourceLogRecord(record)
         }
+
+        // Poll-boundary drain: flush any accumulated tail so the batch task returns with the resolver
+        // quiescent — nothing in flight when the poll loop re-enters poll() and Kafka may run a
+        // rebalance/transition under runBlocking (#5741).
+        drainStaging()
     }
 
     private suspend fun handleSourceLogRecord(record: Log.Record<SourceMessage>) {
         val msgId = record.msgId
+        val msg = record.message
 
-        when (val msg = record.message) {
+        // Data txs accumulate into the staging batch and are committed together at the next drain. Every
+        // other message is a boundary that must first drain the accumulated txs: a control message's
+        // replica-log append has to land after the appends of the txs that preceded it in source order,
+        // and a block cut needs those txs durable before the block is written.
+        if (msg !is SourceMessage.Tx && msg !is SourceMessage.LegacyTx) drainStaging()
+
+        when (msg) {
             is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
                 val (resolvedTx, openTx) = resolveTx(msgId, record, msg)
                 openTx.use {
@@ -156,7 +168,6 @@ class LeaderLogProcessor(
                         it, resolvedTx.copy(srcMsgId = msgId), msgId, resolvedTx.txResult(it.txKey), null
                     )
                 }
-                drainStaging()
             }
 
             is SourceMessage.FlushBlock -> {

@@ -614,3 +614,17 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
                (xt/q node "SELECT *, _valid_from, _valid_to, _system_from, _system_to
                            FROM docs FOR ALL VALID_TIME FOR ALL SYSTEM_TIME
                            ORDER BY _system_from, _valid_from"))))))
+
+(t/deftest staged-txs-read-your-writes-across-a-batch
+  ;; Several dependent txs that land in one poll batch each resolve against the earlier ones while they
+  ;; are still staged (committed, not yet durable). Each increment must see its predecessor's write, or
+  ;; batched updates collapse to one. The batch isn't forced here — many rapid async submits make it very
+  ;; likely — so this catches a gross read-your-writes-across-staging break rather than proving its absence.
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO counter (_id, v) VALUES (1, 0)"]])
+
+  (let [n 50]
+    (dotimes [_ (dec n)]
+      (xt/submit-tx tu/*node* [[:sql "UPDATE counter SET v = v + 1 WHERE _id = 1"]]))
+    (xt/execute-tx tu/*node* [[:sql "UPDATE counter SET v = v + 1 WHERE _id = 1"]])
+
+    (t/is (= [{:v n}] (xt/q tu/*node* "SELECT c.v FROM counter c")))))
