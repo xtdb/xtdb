@@ -34,17 +34,12 @@ class DocsIndexerTest {
         get() = data.valAt(Keyword.intern("xtdb.error", "code")) as? Keyword
 
     @Test
-    fun `table field names the table only, in the public schema`() {
-        val indexer = DocsIndexer.Factory(table = "analytics/events").open() as DocsIndexer
+    fun `table field parses through TableRef`() {
+        fun tableOf(table: String) = (DocsIndexer.Factory(table = table).open() as DocsIndexer).table
 
-        assertEquals(TableRef("public", "analytics/events"), indexer.table)
-    }
-
-    @Test
-    fun `schema field resolves alongside the table`() {
-        val indexer = DocsIndexer.Factory(table = "events", schema = "analytics").open() as DocsIndexer
-
-        assertEquals(TableRef("analytics", "events"), indexer.table)
+        assertEquals(TableRef("public", "events"), tableOf("events"))
+        assertEquals(TableRef("analytics", "events"), tableOf("analytics.events"))
+        assertEquals(TableRef("analytics", "events"), tableOf("analytics/events"))
     }
 
     @Test

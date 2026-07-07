@@ -6,8 +6,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.database.Database
 import xtdb.error.Incorrect
-import xtdb.kafka.connectsrc.proto.docsIndexerConfig
-import com.google.protobuf.Any as ProtoAny
 
 class KafkaConnectSourceFactoryTest {
 
@@ -30,7 +28,7 @@ class KafkaConnectSourceFactoryTest {
                 "transforms.unwrap.type" to "org.apache.kafka.connect.transforms.ExtractField\$Value",
                 "transforms.unwrap.field" to "payload",
             ),
-            indexer = DocsIndexer.Factory(table = "orders", schema = "analytics"),
+            indexer = DocsIndexer.Factory(table = "analytics.orders"),
         )
 
         val restored = protoRoundTrip(original)
@@ -41,8 +39,7 @@ class KafkaConnectSourceFactoryTest {
         assertEquals("http://schema-registry:8081", restored.connectConfig["value.converter.schema.registry.url"])
         assertEquals("unwrap", restored.connectConfig["transforms"])
         val docs = restored.indexer as DocsIndexer.Factory
-        assertEquals("orders", docs.table)
-        assertEquals("analytics", docs.schema)
+        assertEquals("analytics.orders", docs.table)
     }
 
     @Test
@@ -107,8 +104,8 @@ class KafkaConnectSourceFactoryTest {
     }
 
     @Test
-    fun `YAML schema field decodes, defaulting to public when omitted`() {
-        fun docsFor(indexerYaml: String): DocsIndexer.Factory {
+    fun `YAML !Docs table decodes verbatim, including a qualified name`() {
+        fun tableFor(tableYaml: String): String {
             val yaml = """
                 externalSource: !KafkaConnect
                   remote: k
@@ -117,27 +114,14 @@ class KafkaConnectSourceFactoryTest {
                     key.converter: org.apache.kafka.connect.storage.StringConverter
                     value.converter: org.apache.kafka.connect.json.JsonConverter
                   indexer: !Docs
-$indexerYaml
+                    table: $tableYaml
             """.trimIndent()
 
             val factory = Database.Config.fromYaml(yaml).externalSource as KafkaConnectSource.Factory
-            return factory.indexer as DocsIndexer.Factory
+            return (factory.indexer as DocsIndexer.Factory).table
         }
 
-        val qualified = docsFor("                    table: events\n                    schema: analytics")
-        assertEquals("events", qualified.table)
-        assertEquals("analytics", qualified.schema)
-
-        val unqualified = docsFor("                    table: events")
-        assertEquals("public", unqualified.schema)
-    }
-
-    @Test
-    fun `proto without a schema field grandfathers to public`() {
-        val preSchemaProto = ProtoAny.pack(docsIndexerConfig { table = "orders" }, "proto.xtdb.com")
-
-        val docs = DocsIndexer.Factory.Registration().fromProto(preSchemaProto)
-
-        assertEquals("public", docs.schema)
+        assertEquals("events", tableFor("events"))
+        assertEquals("analytics.events", tableFor("analytics.events"))
     }
 }

@@ -20,7 +20,6 @@ import xtdb.indexer.TxIndexer.TxResult
 import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
-import xtdb.table.DEFAULT_SCHEMA
 import xtdb.table.TableRef
 import xtdb.util.asIid
 import java.math.BigDecimal
@@ -37,11 +36,10 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
     @SerialName("!Docs")
     data class Factory(
         val table: String,
-        val schema: String = DEFAULT_SCHEMA,
     ) : RecordIndexer.Factory {
 
         override fun open(): RecordIndexer =
-            DocsIndexer(TableRef(schema, table))
+            DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String
@@ -53,14 +51,13 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
                 ProtoAny.pack(
                     docsIndexerConfig {
                         table = factory.table
-                        schema = factory.schema
                     },
                     PROTO_TAG_PREFIX,
                 )
 
             override fun fromProto(msg: ProtoAny): Factory {
                 val config = msg.unpack(DocsIndexerConfig::class.java)
-                return Factory(table = config.table, schema = config.schema.ifEmpty { DEFAULT_SCHEMA })
+                return Factory(table = config.table)
             }
 
             override fun registerSerde(builder: PolymorphicModuleBuilder<RecordIndexer.Factory>) {

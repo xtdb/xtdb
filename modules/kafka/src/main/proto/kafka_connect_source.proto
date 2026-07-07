@@ -21,8 +21,6 @@ message KafkaConnectSourceToken {
 }
 
 message DocsIndexerConfig {
+    // $schema.$table, or bare $table for the default schema
     string table = 1;
-
-    // unset ("") means the default schema, "public"
-    string schema = 2;
 }
