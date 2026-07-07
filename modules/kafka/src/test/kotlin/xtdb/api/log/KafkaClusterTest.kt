@@ -495,62 +495,102 @@ class KafkaClusterTest {
     }
 
     @Test
-    fun `poll loop failure evicts all subscriptions with cause and unblocks shutdown`() =
+    fun `a failed transition evicts only its own subscription, sparing siblings (#5773)`() =
         runTest(timeout = 30.seconds) {
-            val topic1 = "test-poll-fail-${UUID.randomUUID()}"
-            val topic2 = "test-poll-fail-${UUID.randomUUID()}"
+            val topicHealthy = "test-iso-healthy-${UUID.randomUUID()}"
+            val topicThrowing = "test-iso-throwing-${UUID.randomUUID()}"
 
             val boom = RuntimeException("listener boom")
             val healthy = TrackingListener()
             val throwing = ThrowingOnAssignListener(boom)
-
-            var caughtHealthy: Throwable? = null
             var caughtThrowing: Throwable? = null
 
-            withClusterAndLogs(listOf(topic1, topic2)) { _, logs ->
+            withClusterAndLogs(listOf(topicHealthy, topicThrowing)) { _, logs ->
                 val (logHealthy, logThrowing) = logs
 
                 supervisorScope {
-                    // register the healthy subscriber first and wait for it to be assigned —
-                    // guarantees it's in the subscriptions map when the throwing one tanks the poll loop
-                    launch(CoroutineName("job-healthy")) {
-                        try {
-                            logHealthy.openGroupSubscription(healthy)
-                        } catch (e: Throwable) {
-                            caughtHealthy = e
-                        }
+                    val jobHealthy = launch(CoroutineName("job-healthy")) {
+                        logHealthy.openGroupSubscription(healthy)
                     }
-
                     while (!healthy.isAssigned) delay(100.milliseconds)
 
+                    // The throwing transition fails off the poll thread; its subscription is evicted with
+                    // the cause, but the poll loop survives — pre-#5773 a transition failure tanked the
+                    // whole shared consumer (evicting the healthy sibling too).
                     launch(CoroutineName("job-throwing")) {
-                        try {
-                            logThrowing.openGroupSubscription(throwing)
-                        } catch (e: Throwable) {
-                            caughtThrowing = e
-                        }
+                        try { logThrowing.openGroupSubscription(throwing) } catch (e: Throwable) { caughtThrowing = e }
                     }
+                    while (caughtThrowing == null) delay(100.milliseconds)
 
-                    // both subscribers should surface a failure (no hang) — the outer runTest timeout
-                    // is the regression canary for the pre-fix shutdown-hang behaviour
+                    // The healthy subscription keeps delivering AFTER its sibling failed — the isolation.
+                    logHealthy.appendMessage(txMessage(1))
+                    while (healthy.records.isEmpty()) delay(100.milliseconds)
+                    assertEquals(1, healthy.records.size)
+
+                    jobHealthy.cancelAndJoin()
                 }
             }
 
-            val exThrowing = checkNotNull(caughtThrowing) { "throwing subscriber must surface a failure, not hang" }
-
-            val exHealthy = checkNotNull(caughtHealthy) {
-                "healthy subscriber must surface a failure when the poll loop dies, not hang"
-            }
-
+            val exThrowing = checkNotNull(caughtThrowing) { "throwing subscriber must surface its failure, not hang" }
             assertTrue(
                 generateSequence(exThrowing) { it.cause }.any { it === boom },
                 "throwing subscriber must see the listener exception in its cause chain, got: $exThrowing"
             )
-            assertTrue(
-                generateSequence(exHealthy) { it.cause }.any { it === boom },
-                "healthy subscriber must see the listener exception in its cause chain, got: $exHealthy"
-            )
         }
+
+    @Test
+    fun `a parked transition does not block its own unregister (#5773)`() = runTest(timeout = 30.seconds) {
+        val topic = "test-parked-unreg-${UUID.randomUUID()}"
+
+        withClusterAndLogs(listOf(topic)) { _, logs ->
+            val log = logs[0]
+            val racingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val listener = RacingListener(racingScope)
+                val job = launch { log.openGroupSubscription(listener) }
+                listener.entered.await()   // the transition is parked, off the poll thread
+
+                // Pre-#5773 the transition ran ON the poll thread, so a parked transition wedged it and
+                // the Unregister command could never be processed — cancelAndJoin would hang here. Now the
+                // poll thread is free, so unregister completes promptly (outer runTest timeout is the canary).
+                job.cancelAndJoin()
+            } finally {
+                racingScope.cancel()
+            }
+        }
+    }
+
+    @Test
+    fun `a parked transition does not block another subscription`() = runTest(timeout = 30.seconds) {
+        val topicParked = "test-parked-a-${UUID.randomUUID()}"
+        val topicOther = "test-parked-b-${UUID.randomUUID()}"
+
+        withClusterAndLogs(listOf(topicParked, topicOther)) { _, logs ->
+            val (logParked, logOther) = logs
+            val racingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val parked = RacingListener(racingScope)
+                val other = TrackingListener()
+
+                val jobParked = launch { logParked.openGroupSubscription(parked) }
+                parked.entered.await()   // parked mid-transition, off the poll thread
+
+                // A second database registers, is assigned, and delivers — all while the first is parked.
+                val jobOther = launch { logOther.openGroupSubscription(other) }
+                while (!other.isAssigned) delay(100.milliseconds)
+
+                logOther.appendMessage(txMessage(1))
+                while (other.records.isEmpty()) delay(100.milliseconds)
+                assertEquals(1, other.records.size)
+
+                parked.release.complete(Unit)
+                jobParked.cancelAndJoin()
+                jobOther.cancelAndJoin()
+            } finally {
+                racingScope.cancel()
+            }
+        }
+    }
 
     @Test
     fun `database can resubscribe after unsubscribing`() = runTest(timeout = 60.seconds) {

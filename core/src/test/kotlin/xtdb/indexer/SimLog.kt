@@ -37,6 +37,9 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
      */
     class PlainConsumer<M>(val proc: Log.RecordProcessor<M>, var nextOffset: Int, val job: Job)
 
+    /** The consumer being promoted plus its in-flight transition handle — see [pending]. */
+    class Pending<M>(val leader: GroupConsumer<M>, val transition: Deferred<Unit>)
+
     val groupConsumers = mutableSetOf<GroupConsumer<M>>()
     val plainConsumers = mutableSetOf<PlainConsumer<M>>()
 
@@ -47,6 +50,12 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     val rebalanceTrigger = Channel<Unit>(Channel.CONFLATED)
 
     var leader: GroupConsumer<M>? = null
+
+    // An in-flight follower→leader transition (the consumer being promoted + its transition handle) —
+    // one field so the two can't drift. Launched off the serialization point (mirroring Kafka's
+    // off-poll-thread transition), installed by commitPendingLeader when it completes, and
+    // cancel-and-joined by the next rebalance — which drives the LogProcessor's own recovery (re-follow).
+    var pending: Pending<M>? = null
 
     /**
      * Unified group loop: delivers records and handles rebalances in a single coroutine.
@@ -60,6 +69,9 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
             select {
                 rebalanceTrigger.onReceive { doRebalance() }
                 wakeLeader.onReceive { deliverGroupRecords() }
+                // Install the pending leader once its off-thread transition completes (the sim's
+                // equivalent of Kafka's TransitionComplete arriving back on the poll thread).
+                pending?.let { it.transition.onAwait { commitPendingLeader() } }
             }
             yield()
         }
@@ -130,26 +142,41 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     private suspend fun doRebalance() {
         LOG.debug("$name/chooseLeader: rebalance triggered (${groupConsumers.size} consumers)")
 
+        // Tear down whatever we hold — a committed leader, or an in-flight/Prepared transition. For the
+        // pending one, cancel-and-join (bounded; drives the LogProcessor's recovery) then demote, which
+        // abandons a Prepared leader or is a no-op if recovery already re-followed. Mirrors Kafka revoke.
+        pending?.let { p ->
+            p.transition.cancelAndJoin()
+            p.leader.listener.demoteLeader(listOf(0))
+        }
         leader?.let { old ->
             LOG.debug("$name/chooseLeader: revoking old leader")
             old.listener.demoteLeader(listOf(0))
             old.tailSpec = null
-            leader = null
         }
+        pending = null
+        leader = null
 
         if (groupConsumers.isNotEmpty()) {
             val newLeader = groupConsumers.random(rand)
-            LOG.debug("$name/chooseLeader: assigning new leader")
-            newLeader.listener.launchTransition(listOf(0)).await()
-            val tailSpec = newLeader.listener.commitLeader(listOf(0))
-            newLeader.tailSpec = tailSpec
-            val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
-            newLeader.nextOffset = startOffset
-            leader = newLeader
-            wakeLeader.send(Unit)
+            LOG.debug("$name/chooseLeader: launching transition for new leader")
+            pending = Pending(newLeader, newLeader.listener.launchTransition(listOf(0)))
+            // installed by commitPendingLeader (group-loop select clause) once the transition completes
         } else {
             LOG.debug("$name/chooseLeader: no consumers, no leader elected")
         }
+    }
+
+    // Group loop (serialization point): install the pending leader once its transition has completed.
+    private fun commitPendingLeader() {
+        val newLeader = pending?.leader ?: return
+        pending = null
+        LOG.debug("$name/chooseLeader: committing new leader")
+        val tailSpec = newLeader.listener.commitLeader(listOf(0))
+        newLeader.tailSpec = tailSpec
+        newLeader.nextOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
+        leader = newLeader
+        wakeLeader.trySend(Unit)
     }
 
     companion object {
