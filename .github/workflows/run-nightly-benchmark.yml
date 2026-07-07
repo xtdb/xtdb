@@ -490,22 +490,39 @@ jobs:
           set -euo pipefail
           echo "immediate_failure=false" >> "$GITHUB_OUTPUT"
 
-          # Run the check (exits non-zero on failure)
-          result=$(./modules/bench/cloud/scripts/tasks check-immediate-failure 2>&1) || {
+          # Capture stdout (clean JSON) and stderr (progress + pod logs) separately.
+          # Merging them (2>&1) corrupts the JSON so `jq` can't read .podName, which
+          # is why past startup failures reported `pod: unknown` and captured no logs.
+          set +e
+          result=$(./modules/bench/cloud/scripts/tasks check-immediate-failure 2>"$RUNNER_TEMP/check-stderr.log")
+          rc=$?
+          set -e
+
+          echo "::group::check-immediate-failure logs"
+          cat "$RUNNER_TEMP/check-stderr.log" || true
+          echo "::endgroup::"
+
+          if [ "$rc" -ne 0 ]; then
             echo "immediate_failure=true" >> "$GITHUB_OUTPUT"
-            echo "::group::check-immediate-failure output"
+            echo "::group::check-immediate-failure result (json)"
             echo "$result"
             echo "::endgroup::"
             pod_name=$(echo "$result" | jq -r '.podName // empty' 2>/dev/null || true)
-            if [ -n "$pod_name" ]; then
-              echo "immediate_failure_pod=${pod_name}" >> "$GITHUB_OUTPUT"
-              # Save log preview to file
-              log_preview=$(echo "$result" | jq -r '.logPreview // empty' 2>/dev/null || true)
-              if [ -n "$log_preview" ]; then
-                failure_log_path="$RUNNER_TEMP/immediate-failure-${pod_name}.log"
-                echo "$log_preview" | head -n 60 > "$failure_log_path"
-                echo "immediate_failure_log_path=${failure_log_path}" >> "$GITHUB_OUTPUT"
-              fi
+            echo "immediate_failure_pod=${pod_name}" >> "$GITHUB_OUTPUT"
+            # Diagnosis (container waiting/terminated reasons) — the useful signal when
+            # the pod died before logging anything, e.g. eviction or ImagePullBackOff.
+            diagnostics=$(echo "$result" | jq -r '.diagnostics // empty' 2>/dev/null || true)
+            if [ -n "$diagnostics" ]; then
+              diag_path="$RUNNER_TEMP/immediate-failure-diagnostics.txt"
+              echo "$diagnostics" > "$diag_path"
+              echo "immediate_failure_diag_path=${diag_path}" >> "$GITHUB_OUTPUT"
+            fi
+            # Container log preview, if the container got far enough to produce any.
+            log_preview=$(echo "$result" | jq -r '.logPreview // empty' 2>/dev/null || true)
+            if [ -n "$log_preview" ]; then
+              failure_log_path="$RUNNER_TEMP/immediate-failure-${pod_name:-pod}.log"
+              echo "$log_preview" | head -n 60 > "$failure_log_path"
+              echo "immediate_failure_log_path=${failure_log_path}" >> "$GITHUB_OUTPUT"
             fi
             # Check if cleanup was already triggered
             cleanup_triggered=$(echo "$result" | jq -r '.cleanupTriggered // false' 2>/dev/null || echo "false")
@@ -514,7 +531,7 @@ jobs:
               ./modules/bench/cloud/clear-bench.sh azure || true
             fi
             exit 1
-          }
+          fi
 
           echo "No immediate benchmark pod failures detected."
 
@@ -652,17 +669,25 @@ jobs:
           elif [ "${{ steps.immediate-check.outputs.immediate_failure }}" = "true" ]; then
             POD_NAME='${{ steps.immediate-check.outputs.immediate_failure_pod }}'
             LOG_PATH='${{ steps.immediate-check.outputs.immediate_failure_log_path }}'
+            DIAG_PATH='${{ steps.immediate-check.outputs.immediate_failure_diag_path }}'
             MSG_FILE="$RUNNER_TEMP/slack-immediate-failure.txt"
             : > "$MSG_FILE"
             {
               printf '*%s Benchmark* :x: Failed during startup (pod: `%s`)\n' "${SLACK_LABEL}" "${POD_NAME:-unknown}"
               echo "${GIT_INFO}"
               echo "${IMAGE_INFO}"
+              if [ -n "$DIAG_PATH" ] && [ -f "$DIAG_PATH" ]; then
+                echo
+                echo "*Reason:*"
+                echo '```'
+                cat "$DIAG_PATH"
+                echo '```'
+              fi
               if [ -n "$LOG_PATH" ] && [ -f "$LOG_PATH" ]; then
-                echo >> "$MSG_FILE"
-                echo '```' >> "$MSG_FILE"
-                cat "$LOG_PATH" >> "$MSG_FILE"
-                echo '```' >> "$MSG_FILE"
+                echo
+                echo '```'
+                cat "$LOG_PATH"
+                echo '```'
               fi
             } >> "$MSG_FILE"
 
