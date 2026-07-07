@@ -32,18 +32,22 @@
         (.all)
         (.get))))
 
-(defn- produce! [{:keys [bootstrap-servers ^String source-topic message-count]}]
-  (let [start-ms (System/currentTimeMillis)]
+(defn- produce! [{:keys [bootstrap-servers ^String source-topic ^long message-count sample]}]
+  (let [start-ms (System/currentTimeMillis)
+        sample-step (max 1 (quot message-count 10))]
     (with-open [producer (KafkaProducer. (->props {"bootstrap.servers" bootstrap-servers
                                                    "key.serializer" (.getName StringSerializer)
                                                    "value.serializer" (.getName ByteArraySerializer)}))]
-      (dotimes [_ message-count]
+      (dotimes [i message-count]
         (when (Thread/interrupted) (throw (InterruptedException.)))
         (let [id (str (random-uuid))
-              ^String json (json/write-str {:_id id
-                                            :resource_type "patient"
-                                            :status "bench"
-                                            :last_updated (str (Instant/now))})]
+              doc {:_id id
+                   :resource_type "patient"
+                   :status "bench"
+                   :last_updated (str (Instant/now))}
+              ^String json (json/write-str doc)]
+          (when (zero? (mod i sample-step))
+            (swap! sample conj doc))
           (.send producer (ProducerRecord. source-topic id (.getBytes json)))))
       (.flush producer))
     (let [secs (/ (- (System/currentTimeMillis) start-ms) 1000.0)]
@@ -92,6 +96,20 @@ $$"
             (do (Thread/sleep 1000)
                 (recur logged-ms logged-n))))))))
 
+(defn- verify! [node {:keys [db-name ^long message-count sample]}]
+  (let [n (:n (first (xt/q node [(format "SELECT COUNT(*) n FROM %s.public.patient" db-name)])))]
+    (when-not (= message-count n)
+      (throw (ex-info "row count mismatch" {:expected message-count, :actual n}))))
+  (doseq [{:keys [_id] :as doc} @sample]
+    (let [row (first (xt/q node [(format "SELECT * FROM %s.public.patient WHERE _id = ?" db-name) _id]))]
+      (when-not (= {:xt/id _id
+                    :resource-type (:resource_type doc)
+                    :status (:status doc)
+                    :last-updated (:last_updated doc)}
+                   row)
+        (throw (ex-info "sampled doc mismatch" {:produced doc, :actual row})))))
+  (log/infof "verified: %,d rows, %d sampled docs match" message-count (count @sample)))
+
 (defn- meter-value [m]
   (condp instance? m
     Counter {:count (.count ^Counter m)}
@@ -126,6 +144,7 @@ $$"
               :source-topic source-topic
               :topics [source-topic (str source-topic "-replica")]
               :message-count message-count
+              :sample (atom [])
               :db-name "bench_kafka_src"}]
     {:title "Kafka Connect source ingestion"
      :benchmark-type :kafka-source
@@ -144,7 +163,12 @@ $$"
              {:t :call, :stage :drain
               :f (fn [{:keys [node]}]
                    (drain! node opts)
-                   (log-source-metrics))}]}))
+                   (log-source-metrics))}
+
+             ;; drain only waits for COUNT(*) >= message-count: check the count is *exact*
+             ;; and spot-check sampled docs round-tripped intact
+             {:t :call, :stage :verify
+              :f (fn [{:keys [node]}] (verify! node opts))}]}))
 
 (defmethod b/->benchmark :kafka-source [_ opts]
   (benchmark opts))
