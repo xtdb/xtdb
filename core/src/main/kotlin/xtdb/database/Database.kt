@@ -361,13 +361,17 @@ class Database(
             )
 
             if (indexerConfig.enabled && !readOnly) {
+                // Route each partition's leader-election events to that partition's own LogProcessor.
+                // One partition today (index 0); #5557 grows `db.partitions` and this fans out to N.
                 val listener = object : Log.SubscriptionListener<SourceMessage> {
-                    override suspend fun onPartitionsAssigned(partitions: Collection<Int>) =
-                        partitions.singleOrNull()
-                            ?.let { db.partitions[it]?.logProcessor?.onPartitionsAssigned(listOf(it)) }
+                    override fun launchTransition(partitions: Collection<Int>) =
+                        db.partitions.getValue(partitions.single()).logProcessor!!.launchTransition(partitions)
 
-                    override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
-                        for (idx in partitions) db.partitions[idx]?.logProcessor?.onPartitionsRevoked(listOf(idx))
+                    override fun commitLeader(partitions: Collection<Int>) =
+                        db.partitions.getValue(partitions.single()).logProcessor!!.commitLeader(partitions)
+
+                    override suspend fun demoteLeader(partitions: Collection<Int>) {
+                        for (idx in partitions) db.partitions[idx]?.logProcessor?.demoteLeader(listOf(idx))
                     }
                 }
                 scope.launch { storage.sourceLog.openGroupSubscription(listener) }

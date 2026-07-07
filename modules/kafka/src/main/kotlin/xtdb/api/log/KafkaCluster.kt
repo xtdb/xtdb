@@ -170,15 +170,23 @@ class KafkaCluster(
             // expecting a load of change here for multi-part.
 
             suspend fun onPartitionAssigned(tp: TopicPartition) {
-                listener.onPartitionsAssigned(listOf(tp.partition()))
-                    ?.let { tailSpec ->
-                        processor = tailSpec.processor
-                        consumer.seekToAfterMsgId(tp, epoch, tailSpec.afterMsgId)
-                    }
+                // Retained partitions (CooperativeStickyAssignor) fire no callback; a callback while
+                // we already lead would rewind the source tail, so only transition+commit from follower.
+                if (processor != null) return
+
+                // Phase 1: still synchronous on the poll thread (the deadlock this leaves in place is
+                // fixed in phase 2, which stops awaiting here). await() propagates the transition's own
+                // failure so a failed promotion tanks the poll loop with its cause, rather than surfacing
+                // later as a commit-without-a-prepared-leader.
+                listener.launchTransition(listOf(tp.partition())).await()
+
+                val tailSpec = listener.commitLeader(listOf(tp.partition()))
+                processor = tailSpec.processor
+                consumer.seekToAfterMsgId(tp, epoch, tailSpec.afterMsgId)
             }
 
             suspend fun onPartitionRevoked(tp: TopicPartition) {
-                listener.onPartitionsRevoked(listOf(tp.partition()))
+                listener.demoteLeader(listOf(tp.partition()))
                 processor = null
             }
 
@@ -245,18 +253,16 @@ class KafkaCluster(
                 }
 
                 is GroupCommand.Unregister -> {
-                    subscriptions.remove(cmd.topic)?.let { sub ->
-                        sub.listener.onPartitionsRevokedSync(listOf(0))
-                        sub.completion.complete(Unit)
-                    }
+                    // No demote here: the database's scope cancel tears the leader term down (#5773).
+                    subscriptions.remove(cmd.topic)?.completion?.complete(Unit)
                     applySubscriptions()
                     cmd.cont.resume(Unit)
                 }
             }
         }
 
-        // Deliberately no `onPartitionsRevokedSync` — would trigger LogProcessor's
-        // leader→follower transition during a Failed-state cleanup.
+        // Deliberately no `demoteLeader` — would trigger LogProcessor's leader→follower
+        // transition during a Failed-state cleanup.
         private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) {
             for (topic in topics) {
                 subscriptions.remove(topic)?.completion?.let { completion ->

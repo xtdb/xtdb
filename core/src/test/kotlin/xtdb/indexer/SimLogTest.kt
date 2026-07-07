@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -40,10 +41,11 @@ class SimLogTest : SimulationTestBase() {
 
                     launch {
                         log.openGroupSubscription(object : Log.SubscriptionListener<String> {
-                            override suspend fun onPartitionsAssigned(partitions: Collection<Int>) =
+                            override fun launchTransition(partitions: Collection<Int>) = CompletableDeferred(Unit)
+                            override fun commitLeader(partitions: Collection<Int>) =
                                 Log.TailSpec<String>(afterMsgId = -1L) { _ -> error("groupConsumer failure") }
 
-                            override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {}
+                            override suspend fun demoteLeader(partitions: Collection<Int>) {}
                         })
                     }
 

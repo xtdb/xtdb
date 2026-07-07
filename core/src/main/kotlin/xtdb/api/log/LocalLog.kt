@@ -334,14 +334,9 @@ class LocalLog<M>(
     }
 
     override suspend fun openGroupSubscription(listener: SubscriptionListener<M>) {
-        val spec = listener.onPartitionsAssigned(listOf(0))
-        if (spec != null) {
-            try {
-                tailAll(spec.afterMsgId, spec.processor)
-            } finally {
-                listener.onPartitionsRevoked(listOf(0))
-            }
-        }
+        listener.launchTransition(listOf(0)).await()
+        val spec = listener.commitLeader(listOf(0))
+        tailAll(spec.afterMsgId, spec.processor)
     }
 
     override fun close() {

@@ -132,7 +132,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
 
         leader?.let { old ->
             LOG.debug("$name/chooseLeader: revoking old leader")
-            old.listener.onPartitionsRevoked(listOf(0))
+            old.listener.demoteLeader(listOf(0))
             old.tailSpec = null
             leader = null
         }
@@ -140,12 +140,11 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         if (groupConsumers.isNotEmpty()) {
             val newLeader = groupConsumers.random(rand)
             LOG.debug("$name/chooseLeader: assigning new leader")
-            val tailSpec = newLeader.listener.onPartitionsAssigned(listOf(0))
+            newLeader.listener.launchTransition(listOf(0)).await()
+            val tailSpec = newLeader.listener.commitLeader(listOf(0))
             newLeader.tailSpec = tailSpec
-            if (tailSpec != null) {
-                val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
-                newLeader.nextOffset = startOffset
-            }
+            val startOffset = (MsgIdUtil.afterMsgIdToOffset(epoch, tailSpec.afterMsgId) + 1).toInt()
+            newLeader.nextOffset = startOffset
             leader = newLeader
             wakeLeader.send(Unit)
         } else {

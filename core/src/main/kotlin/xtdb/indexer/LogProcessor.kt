@@ -1,9 +1,14 @@
 package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.log.*
@@ -13,6 +18,7 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.database.ExternalSource
+import xtdb.error.Fault
 import xtdb.error.Interrupted
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
@@ -62,6 +68,20 @@ class LogProcessor(
         override suspend fun cancelAndJoin() = proc.cancelAndJoin()
         override fun close() = proc.close()
     }
+
+    // The committed-role state machine — see allium/log-processor-lifecycle.allium.
+    // `state` is written from two places: the transport's serialization point (commitLeader /
+    // demoteLeader) and the off-thread transition coroutine (cutoverToLeader → Prepared, or its catch
+    // → Following). They don't race: a revoke cancel-and-joins the transition before demoteLeader reads
+    // `state`, and the transport commits a leader only for the transition instance it still holds — so the
+    // *committed* role change still happens only at the serialization point.
+    private sealed interface State {
+        val system: SubSystem
+    }
+
+    private class Following(override val system: FollowerSystem) : State
+    private class Prepared(override val system: LeaderSystem, val resumeAfterMsgId: MessageId) : State
+    private class Leading(override val system: LeaderSystem) : State
 
     private fun openLeader(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -118,106 +138,142 @@ class LogProcessor(
     }
 
     @Volatile
-    private var sys: SubSystem =
-        openFollowerSystem(dbState.blockCatalog.boundaryReplicaMsgId ?: -1)
+    private var state: State =
+        Following(openFollowerSystem(dbState.blockCatalog.boundaryReplicaMsgId ?: -1))
 
     init {
         base.meterRegistry?.let { reg ->
-            Gauge.builder("xtdb.log.leader", this) { if (it.sys is LeaderSystem) 1.0 else 0.0 }
+            Gauge.builder("xtdb.log.leader", this) { if (it.state is Leading) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
                 .tag("db", dbState.name)
                 .register(reg)
         }
     }
 
-    override suspend fun onPartitionsAssigned(partitions: Collection<Int>): Log.TailSpec<SourceMessage>? {
-        return when (val oldSys = sys) {
-            is LeaderSystem -> {
-                LOG.info("[$dbName] partitions assigned: $partitions — already leader, no transition needed")
-                null
+    override fun launchTransition(partitions: Collection<Int>): Deferred<Unit> {
+        // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
+        // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
+        val followerSys = (state as? Following)?.system
+            ?: throw Fault("[$dbName] launchTransition while not following (${state::class.simpleName})", "xtdb/log-prepare-not-following")
+
+        // Launched on the database scope (not the caller's): the transition is a child of the db job
+        // tree, so the transport joins/cancels this handle while db teardown cancels-and-joins it
+        // before close(). See dev/doc/coroutines.adoc and allium/log-processor-lifecycle.allium.
+        return scope.async { runTransition(followerSys) }
+    }
+
+    private suspend fun runTransition(followerSys: FollowerSystem) {
+        try {
+            replicaLog.openAtomicProducer("$dbName-leader").closeOnCatch { replicaProducer ->
+                val followerProc = followerSys.proc
+
+                // NoOp to get a known msgId we can await — latestSubmittedMsgId won't do, because Kafka's
+                // endOffsets counts transaction-marker offsets that consumers never deliver.
+                val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
+
+                // The only step needing the follower alive, and the only unbounded one: as the sole
+                // replica-log consumer it must drain up to the leadership-claim point before we stop it.
+                // A failure here leaves the follower untouched — `state` still holds a live term, nothing
+                // to recover — which is why cutover, the phase that re-follows on exit, only starts here.
+                followerProc.awaitReplicaMsgId(replayTarget)
+
+                cutoverToLeader(followerSys, replicaProducer, replayTarget)
+            }
+        } catch (e: Throwable) {
+            // Cutover already restored a live `state` if it had to; here we only report. Cancellation and
+            // interruption aren't leader-prep failures, so they don't poison watchers — only a genuine one.
+            if (e !is CancellationException && e !is InterruptedException && e !is Interrupted) {
+                LOG.error(e, "[$dbName] transition: failed to prepare leader")
+                watchers.notifyError(e)
+            }
+            throw e
+        }
+    }
+
+    // The point of no return: stop the follower, finish its pending block, build the leader. Once the
+    // follower is stopped, `state` references a dead term until we publish Prepared — so any early exit
+    // (a revoke cancelling us mid-cutover) re-opens a live follower from the catch, seeded from where the
+    // follower got to, and `state` never keeps a corpse. Recovery is structural, not flag-guarded:
+    // reaching the catch *is* "the follower was stopped", and `state` is exclusively ours until Prepared
+    // (the transport writes it only at its serialization point, after joining us), so no staleness guard
+    // is needed. NonCancellable guards only the resource release — the follower's allocator must close
+    // cleanly once teardown begins, whatever the cancellation (bounded: the follower's coroutines just
+    // unwind). Watermark/pendingBlock stay readable after close (not allocator-backed).
+    private suspend fun cutoverToLeader(
+        followerSys: FollowerSystem,
+        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+        replayTarget: MessageId,
+    ) {
+        val followerProc = followerSys.proc
+        val pendingBlock = followerProc.pendingBlock
+        try {
+            LOG.debug("[$dbName] transition: closing follower system")
+            withContext(NonCancellable) {
+                followerSys.cancelAndJoin()
+                followerSys.close()
             }
 
-            is FollowerSystem -> {
-                LOG.info("[$dbName] partitions assigned: $partitions — transitioning to leader")
-
-                try {
-                    replicaLog.openAtomicProducer("${dbState.name}-leader").closeOnCatch { replicaProducer ->
-                        val followerProc = oldSys.proc
-
-                        // Send a NoOp to get a known msgId we can await —
-                        // we can't use latestSubmittedMsgId because Kafka's endOffsets
-                        // includes transaction marker offsets that consumers never deliver.
-                        val replayTarget =
-                            replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
-
-                        followerProc.awaitReplicaMsgId(replayTarget)
-                        LOG.debug("[$dbName] transition: closing follower system")
-                        oldSys.cancelAndJoin()
-                        oldSys.close()
-
-                        val pendingBlock = followerProc.pendingBlock
-
-                        openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
-                            if (pendingBlock != null) {
-                                LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                                blockUploader.uploadBlock(
-                                    replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
-                                )
-                                LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                                transition.processRecords(pendingBlock.bufferedRecords)
-                            }
-
-                            LOG.debug("[$dbName] transition: opening leader processor")
-
-                            val leaderSys = LeaderSystem(openLeader(replicaProducer, replayTarget))
-                            this.sys = leaderSys
-
-                            val resumeMsgId = watchers.latestSourceMsgId
-                            LOG.info("[$dbName] leader startup complete, resuming after $resumeMsgId")
-                            Log.TailSpec(resumeMsgId, leaderSys.proc)
-                        }
-                    }
-                } catch (e: InterruptedException) {
-                    throw e
-                } catch (e: Interrupted) {
-                    throw e
-                } catch (e: Throwable) {
-                    LOG.error(e, "[$dbName] transition: failed to transition to leader")
-                    watchers.notifyError(e)
-                    throw e
+            openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
+                if (pendingBlock != null) {
+                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+                    blockUploader.uploadBlock(
+                        replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
+                    )
+                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
+                    transition.processRecords(pendingBlock.bufferedRecords)
                 }
             }
+
+            LOG.debug("[$dbName] transition: building leader processor")
+            val resumeAfterMsgId = watchers.latestSourceMsgId
+
+            // Built, not committed: `state` moves to Prepared but no records flow as leader until
+            // commitLeader installs it at the serialization point.
+            state = Prepared(LeaderSystem(openLeader(replicaProducer, replayTarget)), resumeAfterMsgId)
+        } catch (e: Throwable) {
+            state = Following(openFollowerSystem(followerProc.latestReplicaMsgId, pendingBlock))
+            throw e
         }
     }
 
-    override suspend fun onPartitionsRevoked(partitions: Collection<Int>) {
-        when (val oldSys = sys) {
-            is LeaderSystem -> {
-                LOG.info("[$dbName] partitions revoked: $partitions — was leader, transitioning to follower")
-                // Cancel first: Kafka guarantees no concurrent processing during rebalance. The
-                // leader's watermark fields stay readable after the cancel/close — they're not
-                // allocator-backed — so we free the old term before reading them to seed the follower.
-                oldSys.cancelAndJoin()
-                oldSys.close()
-                val proc = oldSys.proc
-                this.sys = openFollowerSystem(proc.latestReplicaMsgId, proc.pendingBlock)
-            }
-
-            is FollowerSystem -> {
-                LOG.debug("[$dbName] partitions revoked: $partitions — already follower, no transition needed")
-            }
-        }
+    override fun commitLeader(partitions: Collection<Int>): Log.TailSpec<SourceMessage> {
+        val prepared = (state as? Prepared)
+            ?: throw Fault("[$dbName] commitLeader without a prepared leader (${state::class.simpleName})", "xtdb/log-commit-not-prepared")
+        state = Leading(prepared.system)
+        LOG.info("[$dbName] leader startup complete, resuming after ${prepared.resumeAfterMsgId}")
+        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.system.proc)
     }
 
-    override fun close() = sys.close()
+    override suspend fun demoteLeader(partitions: Collection<Int>) {
+        // Genuine revoke (Leading) and abandoning an uncommitted leader (Prepared) tear down the
+        // same way; an already-following listener is a no-op.
+        val leaderSys = when (val s = state) {
+            is Following -> {
+                LOG.debug("[$dbName] demote — already follower, no transition needed")
+                return
+            }
+
+            is Prepared -> s.system
+            is Leading -> s.system
+        }
+
+        LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
+        // Cancel first: the watermark fields stay readable after the cancel/close — they're not
+        // allocator-backed — so we free the old term before reading them to seed the follower.
+        leaderSys.cancelAndJoin()
+        leaderSys.close()
+        state = Following(openFollowerSystem(leaderSys.proc.latestReplicaMsgId, leaderSys.proc.pendingBlock))
+    }
+
+    override fun close() = state.system.close()
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
-     * both. No-op on follower systems — GC only runs on the leader. Bypasses the collectors'
+     * both. No-op unless leading — GC only runs on the leader. Bypasses the collectors'
      * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
      */
     fun gcAll() {
-        val proc = (sys as? LeaderSystem)?.proc ?: return
+        val proc = (state as? Leading)?.system?.proc ?: return
         proc.blockGc.awaitNoGarbageBlocking()
         proc.trieGc.awaitNoGarbageBlocking()
     }
