@@ -4,10 +4,6 @@ import io.micrometer.core.instrument.Gauge
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.job
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.log.*
@@ -52,47 +48,34 @@ class LogProcessor(
     private val replicaLog = dbStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
-    // The running term: processor + the SupervisorJob its coroutines run under, held as one
-    // atomically-swapped value so a job-less or unfreeable term is unrepresentable. `close` MUST
-    // follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
-    private sealed class SubSystem(private val job: Job, private val closeable: AutoCloseable) : AutoCloseable {
-        suspend fun cancelAndJoin() = job.cancelAndJoin()
-        override fun close() = closeable.close()
+    // `close` MUST follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
+    private sealed interface SubSystem : AutoCloseable {
+        suspend fun cancelAndJoin()
     }
 
-    private class LeaderSystem(val proc: LeaderLogProcessor, job: Job) : SubSystem(job, proc)
-    private class FollowerSystem(val proc: FollowerLogProcessor, job: Job) : SubSystem(job, proc)
+    private class LeaderSystem(val proc: LeaderLogProcessor) : SubSystem {
+        override suspend fun cancelAndJoin() = proc.cancelAndJoin()
+        override fun close() = proc.close()
+    }
 
-    // Open a fresh term: a SupervisorJob child of the database scope — so one role's failure surfaces
-    // via `notifyError` rather than cancelling the source-log subscription (its sibling) — and the
-    // subsystem built (by `build`) on a scope over that job.
-    private fun <S : SubSystem> openTerm(build: (CoroutineScope, Job) -> S): S {
-        val job = SupervisorJob(scope.coroutineContext.job)
-        return try {
-            build(CoroutineScope(scope.coroutineContext + job), job)
-        } catch (t: Throwable) {
-            job.cancel()
-            throw t
-        }
+    private class FollowerSystem(val proc: FollowerLogProcessor) : SubSystem {
+        override suspend fun cancelAndJoin() = proc.cancelAndJoin()
+        override fun close() = proc.close()
     }
 
     private fun openLeader(
-        termScope: CoroutineScope,
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         afterReplicaMsgId: MessageId,
     ): LeaderLogProcessor =
         // The leader term owns (and frees) its replica producer and ext source.
         LeaderLogProcessor(
-            allocator, base, dbStorage, crashLogger,
-            dbState, blockUploader, watchers,
-            extSource = externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
-            replicaProducer = replicaProducer,
-            skipTxs = skipTxs,
-            dbCatalog = dbCatalog,
-            partition = 0,
-            afterReplicaMsgId = afterReplicaMsgId,
+            allocator, base, dbStorage, crashLogger, dbState, blockUploader,
+            watchers,
+            externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
+            replicaProducer, skipTxs, dbCatalog,
+            partition = 0, afterReplicaMsgId,
             flushTimeout = flushTimeout,
-            scope = termScope,
+            scope = scope,
             gcDispatcher = gcDispatcher,
         )
 
@@ -102,20 +85,18 @@ class LogProcessor(
     ): TransitionLogProcessor =
         TransitionLogProcessor(
             allocator, dbStorage.bufferPool, dbState, dbState.liveIndex,
-            blockUploader, replicaProducer,
-            watchers, dbCatalog,
+            blockUploader, replicaProducer, watchers, dbCatalog,
             afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
         )
 
     private fun openFollower(
-        termScope: CoroutineScope,
         pendingBlock: PendingBlock?,
         afterReplicaMsgId: MessageId,
     ): FollowerLogProcessor =
         FollowerLogProcessor(
-            termScope, allocator, dbStorage.replicaLog, dbStorage.bufferPool, dbState, compactor,
-            watchers, dbCatalog, pendingBlock, afterReplicaMsgId,
+            allocator, dbStorage.replicaLog, dbStorage.bufferPool, dbState, compactor, watchers,
+            dbCatalog, pendingBlock, afterReplicaMsgId, scope,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
@@ -133,9 +114,7 @@ class LogProcessor(
             }
         }
 
-        return openTerm { termScope, job ->
-            FollowerSystem(openFollower(termScope, pendingBlock, latestReplicaMsgId), job)
-        }
+        return FollowerSystem(openFollower(pendingBlock, latestReplicaMsgId))
     }
 
     @Volatile
@@ -168,7 +147,8 @@ class LogProcessor(
                         // Send a NoOp to get a known msgId we can await —
                         // we can't use latestSubmittedMsgId because Kafka's endOffsets
                         // includes transaction marker offsets that consumers never deliver.
-                        val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
+                        val replayTarget =
+                            replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
 
                         followerProc.awaitReplicaMsgId(replayTarget)
                         LOG.debug("[$dbName] transition: closing follower system")
@@ -189,9 +169,7 @@ class LogProcessor(
 
                             LOG.debug("[$dbName] transition: opening leader processor")
 
-                            val leaderSys = openTerm { termScope, job ->
-                                LeaderSystem(openLeader(termScope, replicaProducer, replayTarget), job)
-                            }
+                            val leaderSys = LeaderSystem(openLeader(replicaProducer, replayTarget))
                             this.sys = leaderSys
 
                             val resumeMsgId = watchers.latestSourceMsgId

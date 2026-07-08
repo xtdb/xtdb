@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import xtdb.api.TransactionKey
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
@@ -30,8 +29,6 @@ import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
-
-private fun txKeyAt(txId: Long) = TransactionKey(txId, Instant.EPOCH)
 
 class FollowerLogProcessorTest {
 
@@ -82,8 +79,8 @@ class FollowerLogProcessorTest {
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            backgroundScope, allocator, replicaLog, bufferPool, dbState,
-            compactor, watchers, null, null, afterReplicaMsgId = -1L,
+            allocator, replicaLog, bufferPool, dbState, compactor,
+            watchers, null, null, afterReplicaMsgId = -1L, backgroundScope,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,

@@ -82,22 +82,6 @@ class LeaderLogProcessor(
 
     private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
 
-    // The GCs run under a SupervisorJob child of the leader scope, so one GC's failure cancels
-    // neither its sibling nor the persister; cancelling the leader scope reaps them all.
-    private val gcScope = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext.job))
-
-    internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
-        BlockGarbageCollector(
-            gcScope,
-            bufferPool, blockCatalog,
-            blocksToKeep = cfg.blocksToKeep,
-            enabled = cfg.enabled,
-            meterRegistry = nodeBase.meterRegistry,
-            dispatcher = gcDispatcher,
-            dbName = dbName
-        )
-    }
-
     var pendingBlock: PendingBlock? = null
         private set
 
@@ -140,6 +124,7 @@ class LeaderLogProcessor(
     // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending the send.
     private val sourceLogCh =
         Channel<SourceLogTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+
     // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
     // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
@@ -304,6 +289,30 @@ class LeaderLogProcessor(
         return task.onComplete
     }
 
+    private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
+
+    // The term handle: a supervisor child of the Database scope, owning the persister body (launched
+    // last, in the `init` below) and the GCs. A term-internal failure surfaces via `notifyError`
+    // rather than cancelling the source-log subscription — its sibling under the Database scope's own
+    // SupervisorJob — and `cancelAndJoin` reaps the whole term. See dev/doc/coroutines.adoc.
+    private val termJob = SupervisorJob(scope.coroutineContext.job)
+
+    // The GCs run under a SupervisorJob child of `termJob`, so one GC's failure cancels neither its
+    // sibling nor the persister; cancelling `termJob` reaps them all.
+    private val gcScope = scope + SupervisorJob(termJob)
+
+    internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
+        BlockGarbageCollector(
+            gcScope,
+            bufferPool, blockCatalog,
+            blocksToKeep = cfg.blocksToKeep,
+            enabled = cfg.enabled,
+            meterRegistry = nodeBase.meterRegistry,
+            dispatcher = gcDispatcher,
+            dbName = dbName
+        )
+    }
+
     internal val trieGc = nodeBase.config.garbageCollector.let { cfg ->
         // The replica-log append and the local catalog mutation are one atom — both run inside
         // a single Persister task. If they were split, this interleaving would corrupt
@@ -335,11 +344,10 @@ class LeaderLogProcessor(
         )
     }
 
-    private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
-
-    private val termJob: Job = scope.launch {
-        // supervisorScope so an ext-source crash doesn't kill the persister.
-        supervisorScope {
+    // Launched last so every field the body reaches — e.g. blockGc/trieGc via finishBlock — is
+    // initialised before the first record. Runs under `termJob`, so `cancelAndJoin` reaps it.
+    init {
+        CoroutineScope(scope.coroutineContext + termJob).launch {
             launch {
                 // Close the channels with the failure cause so a subsequent `enqueue` send throws it rather
                 // than a bare ClosedSendChannelException. An awaiting caller (`executeTx`, GC, `processRecords`)
@@ -375,7 +383,7 @@ class LeaderLogProcessor(
                             throw e
                         }
                     }
-                } catch (e: CancellationException) {
+                } catch (_: CancellationException) {
                     // term cancellation: close the channels without an error cause
                 } catch (t: Throwable) {
                     cause = t
@@ -387,13 +395,15 @@ class LeaderLogProcessor(
             }
 
             extSource?.let { source ->
-                launch {
-                    try {
-                        source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Throwable) {
-                        watchers.notifyError(e)
+                supervisorScope {
+                    launch {
+                        try {
+                            source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            watchers.notifyError(e)
+                        }
                     }
                 }
             }
@@ -606,6 +616,8 @@ class LeaderLogProcessor(
         // import work on a starved dispatcher (#5741).
         if (records.isNotEmpty()) enqueue(SourceLogTask.Batch(records)).await()
     }
+
+    suspend fun cancelAndJoin() = termJob.cancelAndJoin()
 
     override fun close() {
         extSource?.close()

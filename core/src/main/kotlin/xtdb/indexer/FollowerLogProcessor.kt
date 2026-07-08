@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -32,7 +33,6 @@ import xtdb.util.trace
 private val LOG = FollowerLogProcessor::class.logger
 
 class FollowerLogProcessor @JvmOverloads constructor(
-    scope: CoroutineScope,
     allocator: BufferAllocator,
     replicaLog: Log<ReplicaMessage>,
     private val bufferPool: BufferPool,
@@ -42,6 +42,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
     afterReplicaMsgId: MessageId,
+    scope: CoroutineScope,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
@@ -106,10 +107,11 @@ class FollowerLogProcessor @JvmOverloads constructor(
         is ReplicaState.Failed -> throw exception
     }
 
-    override val latestReplicaMsgId: MessageId get() = when (val s = replicaState.value) {
-        is ReplicaState.Active -> s.msgId
-        is ReplicaState.Failed -> s.msgId
-    }
+    override val latestReplicaMsgId: MessageId
+        get() = when (val s = replicaState.value) {
+            is ReplicaState.Active -> s.msgId
+            is ReplicaState.Failed -> s.msgId
+        }
 
     private val blockCatalog = dbState.blockCatalog
     private val tableCatalog = dbState.tableCatalog
@@ -124,16 +126,17 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    private val ReplicaMessage.stale get() =
-        when (this) {
-            is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
-            is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
-            is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-            is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-            is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
-            // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
-            is ReplicaMessage.TriesDeleted -> false
-        }
+    private val ReplicaMessage.stale
+        get() =
+            when (this) {
+                is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
+                is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
+                is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+                is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+                is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
+                // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
+                is ReplicaMessage.TriesDeleted -> false
+            }
 
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
         when (val msg = record.message) {
@@ -151,6 +154,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                                 LOG.debug(e) { "[$dbName] follower: attach database '${dbOp.dbName}' failed" }
                             }
                         }
+
                         is DbOp.Detach -> if (dbCatalog != null) {
                             try {
                                 dbCatalog.detach(dbOp.dbName)
@@ -158,6 +162,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                                 LOG.debug(e) { "[$dbName] follower: detach database '${dbOp.dbName}' failed" }
                             }
                         }
+
                         null -> {}
                     }
                 }
@@ -277,17 +282,17 @@ class FollowerLogProcessor @JvmOverloads constructor(
     }
 
     // Launched last so every field the tail touches is initialised before the first record.
-    init {
-        scope.launch {
-            try {
-                replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                notifyError(e); throw e
-            }
+    private val job = scope.launch {
+        try {
+            replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            notifyError(e); throw e
         }
     }
+
+    suspend fun cancelAndJoin() = job.cancelAndJoin()
 
     override fun close() {
         allocator.close()
