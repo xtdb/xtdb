@@ -45,7 +45,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
-) : LogProcessor.FollowerProcessor {
+) : LogProcessor.Processor<ReplicaMessage> {
 
     private val dbName = dbState.name
 
@@ -91,7 +91,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    override var pendingBlock: PendingBlock? = pendingBlock
+    var pendingBlock: PendingBlock? = pendingBlock
         private set
 
     private sealed interface ReplicaState {
@@ -266,13 +266,13 @@ class FollowerLogProcessor @JvmOverloads constructor(
         }
     }
 
-    override suspend fun awaitReplicaMsgId(target: MessageId) {
+    suspend fun awaitReplicaMsgId(target: MessageId) {
         LOG.debug("[$dbName] transition: awaiting replica watcher catch-up to $target")
         replicaState.first { it.activeOrThrow().msgId >= target }
         LOG.debug("[$dbName] transition: replica watchers caught up to $target")
     }
 
-    override fun notifyError(e: Throwable) {
+    private fun notifyError(e: Throwable) {
         replicaState.value = ReplicaState.Failed(latestReplicaMsgId, e)
     }
 

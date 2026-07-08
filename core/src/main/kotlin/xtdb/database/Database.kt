@@ -302,51 +302,16 @@ class Database(
 
             val logProcessor = if (indexerConfig.enabled) {
                 val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog, base.meterRegistry)
-                val hasExternalSource = dbConfig.externalSource != null
 
-                val procFactory = object : LogProcessor.ProcessorFactory {
-                    override fun openFollower(
-                        termScope: CoroutineScope,
-                        pendingBlock: PendingBlock?,
-                        afterReplicaMsgId: MessageId,
-                    ) = FollowerLogProcessor(
-                        termScope, allocator, storage.replicaLog, storage.bufferPool, state, compactorForDb,
-                        watchers, dbCatalog, pendingBlock, afterReplicaMsgId,
-                        hasExternalSource = hasExternalSource,
-                        meterRegistry = base.meterRegistry,
-                    )
-
-                    // The leader term owns (and frees) its replica producer and ext source.
-                    override fun openLeader(
-                        termScope: CoroutineScope,
-                        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                        afterReplicaMsgId: MessageId,
-                    ) = LeaderLogProcessor(
-                        allocator, base, storage, crashLogger,
-                        state, blockUploader, watchers,
-                        extSource = dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry),
-                        replicaProducer = replicaProducer,
-                        skipTxs = indexerConfig.skipTxs.toSet(),
-                        dbCatalog = dbCatalog,
-                        partition = 0,
-                        afterReplicaMsgId = afterReplicaMsgId,
-                        flushTimeout = indexerConfig.flushDuration,
-                        scope = termScope,
-                    )
-
-                    override fun openTransition(
-                        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                        afterReplicaMsgId: MessageId,
-                    ) = TransitionLogProcessor(
-                        allocator, storage.bufferPool, state, state.liveIndex,
-                        blockUploader, replicaProducer,
-                        watchers, dbCatalog,
-                        afterReplicaMsgId,
-                        hasExternalSource = hasExternalSource,
-                    )
-                }
-
-                LogProcessor(procFactory, storage, state, watchers, blockUploader, scope, base.meterRegistry)
+                LogProcessor(
+                    allocator, base, crashLogger,
+                    storage, state, watchers, blockUploader,
+                    compactorForDb, dbCatalog,
+                    externalSourceFactory = dbConfig.externalSource,
+                    scope = scope,
+                    skipTxs = indexerConfig.skipTxs.toSet(),
+                    flushTimeout = indexerConfig.flushDuration,
+                )
                     .also { lp ->
                         // job.cancelAndJoin joins the term *and* the source-log subscription below.
                         open { AutoCloseable { runBlocking { job.cancelAndJoin() }; lp.close() } }

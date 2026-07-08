@@ -1,7 +1,10 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.MeterRegistry
 import io.mockk.mockk
 import kotlinx.coroutines.*
+import xtdb.api.Remote
+import xtdb.api.RemoteAlias
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -148,7 +151,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val bp: MemoryStorage,
         indexerConfig: IndexerConfig,
         private val simExtSource: SimExtSource,
-    ) : LogProcessor.ProcessorFactory, AutoCloseable {
+    ) : AutoCloseable {
 
         val blockCatalog = BlockCatalog(dbName, null)
         val tableCatalog = TableCatalog(bp)
@@ -164,50 +167,23 @@ class LogProcessorSimTest : SimulationTestBase() {
             BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
-        override fun openLeader(
-            termScope: CoroutineScope,
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-            afterReplicaMsgId: MessageId,
-        ) = LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, crashLogger,
-            dbState, blockUploader, watchers,
-            extSource = simExtSource, replicaProducer = replicaProducer,
-            skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = afterReplicaMsgId,
-            scope = termScope,
-            gcDispatcher = dispatcher,
-        )
-
-        override fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-            afterReplicaMsgId: MessageId,
-        ): LogProcessor.TransitionProcessor =
-            TransitionLogProcessor(
-                allocator, bp, dbState, liveIndex,
-                blockUploader,
-                replicaProducer, watchers, null,
-                afterReplicaMsgId,
-                hasExternalSource = true,
-            )
-
-        override fun openFollower(
-            termScope: CoroutineScope,
-            pendingBlock: PendingBlock?,
-            afterReplicaMsgId: MessageId,
-        ): LogProcessor.FollowerProcessor =
-            FollowerLogProcessor(
-                termScope, allocator, replicaLog, bp, dbState,
-                mockk<Compactor.ForDatabase>(relaxed = true),
-                watchers, null, pendingBlock,
-                afterReplicaMsgId,
-                hasExternalSource = true,
-            )
-
         private var logProcessor: LogProcessor? = null
 
         fun openLogProcessor(scope: CoroutineScope) =
-            LogProcessor(this, dbStorage, dbState, watchers, blockUploader, scope)
-                .also { logProcessor = it }
+            LogProcessor(
+                allocator, nodeBase, crashLogger,
+                dbStorage, dbState, watchers, blockUploader,
+                mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
+                externalSourceFactory = object : ExternalSource.Factory {
+                    override fun open(
+                        dbName: String,
+                        remotes: Map<RemoteAlias, Remote>,
+                        meterRegistry: MeterRegistry?,
+                    ) = simExtSource
+                },
+                scope = scope,
+                gcDispatcher = dispatcher,
+            ).also { logProcessor = it }
 
         override fun close() {
             logProcessor?.close()

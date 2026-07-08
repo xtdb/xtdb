@@ -1,74 +1,56 @@
 package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
-import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
+import org.apache.arrow.memory.BufferAllocator
+import xtdb.NodeBase
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
+import xtdb.compactor.Compactor
+import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import xtdb.database.ExternalSource
 import xtdb.error.Interrupted
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
+import java.time.Duration
 
 private val LOG = LogProcessor::class.logger
 
 class LogProcessor(
-    private val procFactory: ProcessorFactory,
-    dbStorage: DatabaseStorage,
+    private val allocator: BufferAllocator,
+    private val base: NodeBase,
+    private val crashLogger: CrashLogger,
+    private val dbStorage: DatabaseStorage,
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
+    private val compactor: Compactor.ForDatabase,
+    private val dbCatalog: Database.Catalog?,
+    private val externalSourceFactory: ExternalSource.Factory?,
     private val scope: CoroutineScope,
-    meterRegistry: MeterRegistry? = null,
+    private val skipTxs: Set<MessageId> = emptySet(),
+    private val flushTimeout: Duration = Duration.ofMinutes(5),
+    private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
         val latestReplicaMsgId: MessageId
     }
 
-    interface LeaderProcessor : Processor<SourceMessage> {
-        val pendingBlock: PendingBlock?
-    }
-
-    // State, not a Service: driven synchronously through the transition, no loop of its own — so
-    // it has no term scope to cancel, just `use` it.
-    interface TransitionProcessor : Processor<ReplicaMessage>
-
-    interface FollowerProcessor : Processor<ReplicaMessage> {
-        val pendingBlock: PendingBlock?
-        suspend fun awaitReplicaMsgId(target: MessageId)
-        fun notifyError(e: Throwable)
-    }
-
     private val dbName = dbState.name
     private val replicaLog = dbStorage.replicaLog
-
-    interface ProcessorFactory {
-        fun openLeader(
-            termScope: CoroutineScope,
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-            afterReplicaMsgId: MessageId,
-        ): LeaderProcessor
-
-        fun openTransition(
-            replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-            afterReplicaMsgId: MessageId,
-        ): TransitionProcessor
-
-        fun openFollower(
-            termScope: CoroutineScope,
-            pendingBlock: PendingBlock?,
-            afterReplicaMsgId: MessageId,
-        ): FollowerProcessor
-    }
+    private val hasExternalSource = externalSourceFactory != null
 
     // The running term: processor + the SupervisorJob its coroutines run under, held as one
     // atomically-swapped value so a job-less or unfreeable term is unrepresentable. `close` MUST
@@ -78,8 +60,8 @@ class LogProcessor(
         override fun close() = closeable.close()
     }
 
-    private class LeaderSystem(val proc: LeaderProcessor, job: Job) : SubSystem(job, proc)
-    private class FollowerSystem(val proc: FollowerProcessor, job: Job) : SubSystem(job, proc)
+    private class LeaderSystem(val proc: LeaderLogProcessor, job: Job) : SubSystem(job, proc)
+    private class FollowerSystem(val proc: FollowerLogProcessor, job: Job) : SubSystem(job, proc)
 
     // Open a fresh term: a SupervisorJob child of the database scope — so one role's failure surfaces
     // via `notifyError` rather than cancelling the source-log subscription (its sibling) — and the
@@ -93,6 +75,50 @@ class LogProcessor(
             throw t
         }
     }
+
+    private fun openLeader(
+        termScope: CoroutineScope,
+        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+        afterReplicaMsgId: MessageId,
+    ): LeaderLogProcessor =
+        // The leader term owns (and frees) its replica producer and ext source.
+        LeaderLogProcessor(
+            allocator, base, dbStorage, crashLogger,
+            dbState, blockUploader, watchers,
+            extSource = externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
+            replicaProducer = replicaProducer,
+            skipTxs = skipTxs,
+            dbCatalog = dbCatalog,
+            partition = 0,
+            afterReplicaMsgId = afterReplicaMsgId,
+            flushTimeout = flushTimeout,
+            scope = termScope,
+            gcDispatcher = gcDispatcher,
+        )
+
+    private fun openTransition(
+        replicaProducer: Log.AtomicProducer<ReplicaMessage>,
+        afterReplicaMsgId: MessageId,
+    ): TransitionLogProcessor =
+        TransitionLogProcessor(
+            allocator, dbStorage.bufferPool, dbState, dbState.liveIndex,
+            blockUploader, replicaProducer,
+            watchers, dbCatalog,
+            afterReplicaMsgId,
+            hasExternalSource = hasExternalSource,
+        )
+
+    private fun openFollower(
+        termScope: CoroutineScope,
+        pendingBlock: PendingBlock?,
+        afterReplicaMsgId: MessageId,
+    ): FollowerLogProcessor =
+        FollowerLogProcessor(
+            termScope, allocator, dbStorage.replicaLog, dbStorage.bufferPool, dbState, compactor,
+            watchers, dbCatalog, pendingBlock, afterReplicaMsgId,
+            hasExternalSource = hasExternalSource,
+            meterRegistry = base.meterRegistry,
+        )
 
     private fun openFollowerSystem(
         latestReplicaMsgId: MessageId,
@@ -108,7 +134,7 @@ class LogProcessor(
         }
 
         return openTerm { termScope, job ->
-            FollowerSystem(procFactory.openFollower(termScope, pendingBlock, latestReplicaMsgId), job)
+            FollowerSystem(openFollower(termScope, pendingBlock, latestReplicaMsgId), job)
         }
     }
 
@@ -117,7 +143,7 @@ class LogProcessor(
         openFollowerSystem(dbState.blockCatalog.boundaryReplicaMsgId ?: -1)
 
     init {
-        meterRegistry?.let { reg ->
+        base.meterRegistry?.let { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.sys is LeaderSystem) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
                 .tag("db", dbState.name)
@@ -151,7 +177,7 @@ class LogProcessor(
 
                         val pendingBlock = followerProc.pendingBlock
 
-                        procFactory.openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
+                        openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
                             if (pendingBlock != null) {
                                 LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                                 blockUploader.uploadBlock(
@@ -164,7 +190,7 @@ class LogProcessor(
                             LOG.debug("[$dbName] transition: opening leader processor")
 
                             val leaderSys = openTerm { termScope, job ->
-                                LeaderSystem(procFactory.openLeader(termScope, replicaProducer, replayTarget), job)
+                                LeaderSystem(openLeader(termScope, replicaProducer, replayTarget), job)
                             }
                             this.sys = leaderSys
 
@@ -213,7 +239,7 @@ class LogProcessor(
      * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
      */
     fun gcAll() {
-        val proc = (sys as? LeaderSystem)?.proc as? LeaderLogProcessor ?: return
+        val proc = (sys as? LeaderSystem)?.proc ?: return
         proc.blockGc.awaitNoGarbageBlocking()
         proc.trieGc.awaitNoGarbageBlocking()
     }

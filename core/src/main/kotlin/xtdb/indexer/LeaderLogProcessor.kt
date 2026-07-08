@@ -60,7 +60,7 @@ class LeaderLogProcessor(
     scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : LogProcessor.LeaderProcessor, TxIndexer {
+) : LogProcessor.Processor<SourceMessage>, TxIndexer {
 
     init {
         require((dbCatalog != null) == (dbState.name == "xtdb")) {
@@ -98,7 +98,7 @@ class LeaderLogProcessor(
         )
     }
 
-    override var pendingBlock: PendingBlock? = null
+    var pendingBlock: PendingBlock? = null
         private set
 
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId

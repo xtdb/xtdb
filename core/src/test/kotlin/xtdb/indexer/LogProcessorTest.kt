@@ -53,55 +53,19 @@ class LogProcessorTest {
             liveIndex
         )
 
-    private fun procFactory(
-        allocator: BufferAllocator,
-        bufferPool: BufferPool,
-        dbState: DatabaseState,
+    private fun logProcessor(
         dbStorage: DatabaseStorage,
+        dbState: DatabaseState,
         watchers: Watchers,
-    ) =
-        object : LogProcessor.ProcessorFactory {
-            override fun openLeader(
-                termScope: CoroutineScope,
-                replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                afterReplicaMsgId: MessageId,
-            ): LogProcessor.LeaderProcessor {
-                val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-                val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
-                return LeaderLogProcessor(
-                    allocator, nodeBase, dbStorage, mockk(relaxed = true),
-                    dbState, blockUploader, watchers,
-                    extSource = null, replicaProducer = replicaProducer,
-                    skipTxs = emptySet(), dbCatalog = null,
-                    partition = 0, afterReplicaMsgId = afterReplicaMsgId,
-                    scope = termScope,
-                )
-            }
-
-            override fun openTransition(
-                replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-                afterReplicaMsgId: MessageId,
-            ): LogProcessor.TransitionProcessor =
-                TransitionLogProcessor(
-                    allocator, bufferPool, dbState, dbState.liveIndex,
-                    BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null),
-                    replicaProducer, watchers, dbCatalog = null,
-                    afterReplicaMsgId = afterReplicaMsgId,
-                    hasExternalSource = false,
-                )
-
-            override fun openFollower(
-                termScope: CoroutineScope,
-                pendingBlock: PendingBlock?,
-                afterReplicaMsgId: MessageId,
-            ): LogProcessor.FollowerProcessor =
-                FollowerLogProcessor(
-                    termScope, allocator, dbStorage.replicaLog, bufferPool, dbState,
-                    mockk(relaxed = true), watchers, null, pendingBlock,
-                    afterReplicaMsgId,
-                    hasExternalSource = false,
-                )
-        }
+        blockUploader: BlockUploader,
+        scope: CoroutineScope,
+    ) = LogProcessor(
+        allocator, nodeBase, mockk(relaxed = true),
+        dbStorage, dbState, watchers, blockUploader,
+        mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
+        externalSourceFactory = null,
+        scope = scope,
+    )
 
     @Test
     fun `fresh node starts up with epoch 0`() = runTest {
@@ -114,10 +78,7 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, watchers, blockUploader, scope
-        )
+        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -139,10 +100,7 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, watchers, blockUploader, scope
-        )
+        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -172,10 +130,7 @@ class LogProcessorTest {
         replicaProducer.close()
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, watchers, blockUploader, scope
-        )
+        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -208,10 +163,7 @@ class LogProcessorTest {
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = LogProcessor(
-            procFactory(allocator, bufferPool, dbState, dbStorage, watchers),
-            dbStorage, dbState, watchers, blockUploader, scope
-        )
+        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 

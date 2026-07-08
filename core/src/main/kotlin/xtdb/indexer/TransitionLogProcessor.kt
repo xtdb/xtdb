@@ -20,6 +20,8 @@ import xtdb.util.StringUtil.asLexHex
 
 private val LOG = TransitionLogProcessor::class.logger
 
+// State, not a Service: driven synchronously through the transition, no loop of its own — so
+// it has no term scope to cancel, just `use` it.
 class TransitionLogProcessor(
     allocator: BufferAllocator,
     private val bufferPool: BufferPool,
@@ -31,7 +33,7 @@ class TransitionLogProcessor(
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
     private val hasExternalSource: Boolean,
-) : LogProcessor.TransitionProcessor {
+) : LogProcessor.Processor<ReplicaMessage> {
 
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
