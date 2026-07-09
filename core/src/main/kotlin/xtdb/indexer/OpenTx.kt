@@ -181,6 +181,7 @@ class OpenTx @JvmOverloads constructor(
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
+    @JvmOverloads
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeMicros = currentTime.asMicros

@@ -18,8 +18,8 @@
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            (xtdb.arrow Relation)
-           (xtdb.api IndexerConfig)
-           (xtdb.indexer LiveIndex)
+           (xtdb.api IndexerConfig TransactionResult$Committed)
+           (xtdb.indexer LiveIndex StagedTx)
            (xtdb.indexer LiveTable$FinishedBlock)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf Bucketer MemoryHashTrie$Leaf)
            (xtdb.util RefCounter RowCounter)))
@@ -207,7 +207,7 @@
                 "External snapshot should not see table created in uncommitted tx"))
 
         ;; But the transaction's own snapshot SHOULD see its data (one TableSnapshot for the tx slot)
-        (with-open [tx-snap (.openSnapshot live-index live-tx)]
+        (with-open [tx-snap (.openSnapshot live-index [] live-tx)]
           (let [table-snaps (.table tx-snap table)]
             (t/is (= 1 (count table-snaps))
                   "Transaction snapshot should have one entry (just the uncommitted tx data)")
@@ -289,7 +289,7 @@
           (.endStruct doc-wtr)
           (.endPut table-tx-1))
 
-        (with-open [tx-snap (.openSnapshot live-index live-tx)]
+        (with-open [tx-snap (.openSnapshot live-index [] live-tx)]
           (let [table-snaps (.table tx-snap table)]
             (t/is (= 1 (count table-snaps)))
             (t/is (= 1 (.getRowCount (.getRelation (first table-snaps))))
@@ -356,7 +356,7 @@
           ;; `addTries` below, so it wouldn't see the L0.
           (with-open [observer-tx (tu/->open-tx allocator tu/*node* #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})]
 
-            (with-open [snap (.openSnapshot live-index observer-tx)]
+            (with-open [snap (.openSnapshot live-index [] observer-tx)]
               (t/is (= 1 (count (.table snap table)))
                     "live-table is the only source for block 0 before finishBlock")
               (t/is (= -1 (.l0MaxBlockIdx (.getTrieCatSnap snap) table))
@@ -371,7 +371,7 @@
                                                     :trie-metadata (.getTrieMetadata fb)})]
                            (Instant/now))))
 
-            (with-open [snap (.openSnapshot live-index observer-tx)]
+            (with-open [snap (.openSnapshot live-index [] observer-tx)]
               (t/is (empty? (.table snap table))
                     "live-table must be filtered — its rows now live in L0_0")
               (t/is (= 0 (.l0MaxBlockIdx (.getTrieCatSnap snap) table))
@@ -438,7 +438,7 @@
 
         ;; Transaction snapshot should see BOTH committed (iid1) and own uncommitted (iid2),
         ;; now as two separate TableSnapshot entries: live (committed) + tx (uncommitted).
-        (with-open [tx-snap (.openSnapshot live-index live-tx2)]
+        (with-open [tx-snap (.openSnapshot live-index [] live-tx2)]
           (let [table-snaps (.table tx-snap table)
                 row-counts (mapv #(.getRowCount (.getRelation %)) table-snaps)]
             (t/is (= 2 (count table-snaps))
@@ -447,3 +447,20 @@
                   "Each entry should hold one row (1 committed + 1 uncommitted)")))
 
         ))))
+
+(t/deftest staged-empty-create-table-visible-across-a-batch-5507
+  ;; A tx that CREATEs a table (columns declared, 0 rows) is read behind by a later tx while still staged
+  ;; in the same batch. openSnapshot drops the empty relation, so tableInfo has to carry the freshly-created
+  ;; table's existence directly — else SQL base-table resolution throws "Table not found" for the later tx.
+  (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
+        table #xt/table foo
+        tx-key #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}]
+    (util/with-open [staging-alloc (util/->child-allocator (.getAllocator tu/*node*) "staging")]
+      (util/with-open [staged (with-open [create-tx (tu/->open-tx tx-key)]
+                                (.executeSql create-tx "CREATE TABLE foo (_id, bar)")
+                                (.commitTx create-tx)
+                                (StagedTx/stage staging-alloc create-tx 0 (TransactionResult$Committed. tx-key) nil))
+                       observer-tx (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})
+                       snap (.openSnapshot live-index [staged] observer-tx)]
+        (t/is (.containsKey (.getTableInfo snap) table)
+              "a table CREATEd in a still-staged tx is visible to a later tx resolving behind it")))))

@@ -5,10 +5,12 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.MessageId
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorType
 import xtdb.database.ExternalSourceToken
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.segment.MemorySegment
 import xtdb.table.TableRef
+import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.util.closeAll
 import xtdb.util.closeAllOnCatch
@@ -54,6 +56,13 @@ class StagedTx private constructor(
             }
         }
 
+        /**
+         * The tx's declared columns for this table, present even at 0 rows (e.g. `CREATE TABLE`).
+         * Resolution needs these for table *existence*: [openSnapshot] drops the empty relation, so a
+         * freshly-created empty table can't be learned from the snapshot data alone.
+         */
+        val columnTypes: Map<ColumnName, VectorType> get() = relation.logRelTypes.orEmpty()
+
         override fun close() = relation.close()
     }
 
@@ -63,9 +72,10 @@ class StagedTx private constructor(
 
     companion object {
         /**
-         * Stage a committed [openTx]: take independent slices of its non-empty table relations into
-         * [al] (the staging allocator) so they outlive the OpenTx. The caller closes the OpenTx after.
+         * Stage a committed [openTx]: take independent slices of its table relations into [al] (the
+         * staging allocator) so they outlive the OpenTx. The caller closes the OpenTx after.
          */
+        @JvmStatic
         fun stage(
             al: BufferAllocator, openTx: OpenTx, notifyMsgId: MessageId,
             txResult: TransactionResult, externalSourceToken: ExternalSourceToken?,
@@ -73,8 +83,9 @@ class StagedTx private constructor(
             mutableListOf<Table>().closeAllOnCatch { staged ->
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
                 // rows, and it must register in the durable index on promotion. This matches what
-                // `serializeTableData` / `importTx` carry (all `tableTxs`, 0-row included);
-                // `Table.openSnapshot` drops 0-row slices for reads, so resolution is unaffected.
+                // `serializeTableData` / `importTx` carry (all `tableTxs`, 0-row included). `Table.openSnapshot`
+                // drops the empty relation for row-reads, but the table's existence still reaches resolution
+                // via its `columnTypes` (see `Snapshot.open`).
                 for ((ref, tableTx) in openTx.tables) {
                     val slice = tableTx.txRelation.openDirectSlice(al)
                     staged.add(Table(ref, slice, tableTx.trie.withIidReader(slice["_iid"])))

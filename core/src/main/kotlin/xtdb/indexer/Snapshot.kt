@@ -104,8 +104,10 @@ class Snapshot(
                     .safeMap { TableSnapshot.open(al, it) }
             }
 
+            val stagedTables = stagedTxs.flatMap { it.allTables }
+
             val stagedSnaps = openAll {
-                stagedTxs.flatMap { it.allTables }
+                stagedTables
                     .safeMap { it.openSnapshot(al) }
                     .filterNotNull()
             }
@@ -116,7 +118,15 @@ class Snapshot(
 
             val byTable = (liveIndexSnaps + stagedSnaps + ownSnaps).groupBy { it.table }
 
-            val tableInfo = tableCat.buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() })
+            // tableInfo drives base-table resolution — an unresolved table throws `Table not found`. It
+            // must carry every staged table's declared columns *including* 0-row ones (e.g. `CREATE TABLE`),
+            // which openSnapshot drops from `byTable` (empty relation), so a tx resolving behind a freshly
+            // created empty table in the same batch still sees it exists.
+            val colTypes = LinkedHashMap<TableRef, MutableMap<ColumnName, VectorType>>()
+            for ((table, snaps) in byTable) colTypes.getOrPut(table) { LinkedHashMap() }.putAll(snaps.mergeTypes())
+            for (t in stagedTables) colTypes.getOrPut(t.ref) { LinkedHashMap() }.putAll(t.columnTypes)
+
+            val tableInfo = tableCat.buildTableInfo(colTypes)
 
             Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
         }
