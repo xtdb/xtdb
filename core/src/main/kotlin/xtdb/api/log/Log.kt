@@ -3,6 +3,7 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
@@ -156,13 +157,25 @@ interface Log<M> : AutoCloseable {
     suspend fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>)
     suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
 
+    /**
+     * The transport's handle on a partition's leader election, driven as a three-step state
+     * machine (follower → prepared → leading). See allium/log-processor-lifecycle.allium.
+     *
+     * Each method takes the partition(s) the event is for — a single partition today, but the parameter
+     * is kept so a listener can route per-partition as Kafka's partition guards relax (#5557).
+     *
+     * [launchTransition] launches the follower→leader transition on the listener's *own* scope and
+     * returns its [Deferred] — it builds the leader term but does NOT commit the role, so it runs off the
+     * transport's thread (which joins/cancels the handle) and, because it runs under the listener's
+     * scope, is torn down by that scope's cancellation on shutdown. [commitLeader] installs the prepared
+     * leader and hands back the offset to resume from and the processor to feed; it (and [demoteLeader])
+     * are the only committers, run at the transport's serialization point. This split keeps the
+     * committed role single-writer while the unbounded catch-up runs off the poll thread.
+     */
     interface SubscriptionListener<M> {
-        suspend fun onPartitionsAssigned(partitions: Collection<Int>): TailSpec<M>?
-        fun onPartitionsAssignedSync(partitions: Collection<Int>): TailSpec<M>? = runBlocking { onPartitionsAssigned(partitions) }
-        suspend fun onPartitionsRevoked(partitions: Collection<Int>)
-        fun onPartitionsRevokedSync(partitions: Collection<Int>) = runBlocking { onPartitionsRevoked(partitions) }
-        suspend fun onPartitionsLost(partitions: Collection<Int>) = onPartitionsRevoked(partitions)
-        fun onPartitionsLostSync(partitions: Collection<Int>) = runBlocking { onPartitionsLost(partitions) }
+        fun launchTransition(partitions: Collection<Int>): Deferred<Unit>
+        fun commitLeader(partitions: Collection<Int>): TailSpec<M>
+        suspend fun demoteLeader(partitions: Collection<Int>)
     }
 
     data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)

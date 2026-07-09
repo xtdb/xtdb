@@ -6,10 +6,13 @@
 package xtdb.api.log
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.onClosed
 import kotlinx.coroutines.channels.onSuccess
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
@@ -57,6 +60,7 @@ import java.time.Instant.ofEpochMilli
 import java.util.*
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.collections.remove
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.io.path.inputStream
@@ -150,9 +154,27 @@ class KafkaCluster(
     private sealed interface GroupCommand {
         class Register(val topic: String, val subscription: SharedGroupConsumer.TopicSubscription<*>) : GroupCommand
         class Unregister(val topic: String, val cont: CancellableContinuation<Unit>) : GroupCommand
+
+        // Posted by a transition's off-thread joiner back onto the poll thread, so the committed role
+        // change (commitLeader/seek/resume, or eviction on failure) happens at the poll thread's
+        // serialization point. Carries the Transitioning state it ran for: if the subscription has since
+        // moved on (revoke, reassign) its state is no longer that instance, and the post is dropped (#5773).
+        class TransitionComplete(val tp: TopicPartition, val transitioning: Transitioning<*>) : GroupCommand
+        class TransitionFailed(val tp: TopicPartition, val transitioning: Transitioning<*>, val cause: Throwable) : GroupCommand
     }
 
-    @Suppress("UNCHECKED_CAST")
+    // The per-subscription leader-election state, held on TopicSubscription (not a side map) so the states
+    // and their data are checked by the type system rather than tracked by hand. At this level (not in the
+    // inner SharedGroupConsumer) because Kotlin forbids a nested class inside an inner class.
+    //   Following       — not leading, no transition in flight (initial, and after a demote/recovery).
+    //   Transitioning   — an off-thread follower→leader transition is running; the instance is its own
+    //                     identity token, so a stale completion for a superseded transition is dropped.
+    //   LeaderCommitted — committed leader; holds the record processor the poll loop feeds.
+    private sealed interface ListenerState<M>
+    private class Following<M> : ListenerState<M>
+    private class Transitioning<M>(val transition: Deferred<Unit>) : ListenerState<M>
+    private class LeaderCommitted<M>(val processor: Log.RecordProcessor<M>) : ListenerState<M>
+
     private inner class SharedGroupConsumer : AutoCloseable {
         private val subscriptions = mutableMapOf<String, TopicSubscription<*>>()
         private val commandCh = Channel<GroupCommand>(Channel.UNLIMITED)
@@ -164,31 +186,109 @@ class KafkaCluster(
             val codec: MessageCodec<M>,
             val epoch: Int,
             val listener: Log.SubscriptionListener<M>,
-            var processor: Log.RecordProcessor<M>?,
-            val completion: CompletableDeferred<Unit> = CompletableDeferred(),
         ) {
+            private val completion = CompletableDeferred<Unit>()
+            private var listenerState: ListenerState<M> = Following()
+
             // expecting a load of change here for multi-part.
 
-            suspend fun onPartitionAssigned(tp: TopicPartition) {
-                listener.onPartitionsAssigned(listOf(tp.partition()))
-                    ?.let { tailSpec ->
-                        processor = tailSpec.processor
-                        consumer.seekToAfterMsgId(tp, epoch, tailSpec.afterMsgId)
-                    }
+            fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
+                val tp = partitions.single()
+                when (val s = listenerState) {
+                    // Retained partitions (CooperativeStickyAssignor) fire no callback; a callback while
+                    // we already lead would rewind the source tail, so only transition from Following.
+                    is LeaderCommitted -> return
+                    is Transitioning -> s.transition.cancel()   // supersede an unexpected in-flight transition
+                    is Following -> {}
+                }
+
+                consumer.pause(listOf(tp))
+                // A freshly-assigned partition has no fetch position, and poll() throws
+                // NoOffsetForPartitionException for it (auto.offset.reset=none) even while paused — pause
+                // suppresses fetching, not position validation. Park it at the end as a placeholder: it's
+                // paused (never fetched) and re-seeked to the real offset before resume at commit.
+                consumer.seekToEnd(listOf(tp))
+
+                val transition = listener.launchTransition(listOf(tp.partition()))
+                val transitioning = Transitioning<M>(transition)
+                listenerState = transitioning
+
+                scope.launch {
+                    val outcome: GroupCommand? =
+                        try {
+                            transition.await()
+                            GroupCommand.TransitionComplete(tp, transitioning)
+                        } catch (_: CancellationException) {
+                            null   // revoked / torn down — nothing to commit
+                        } catch (e: Throwable) {
+                            GroupCommand.TransitionFailed(tp, transitioning, e)
+                        }
+
+                    // Only wake the consumer if the command was queued — a closed channel means we're
+                    // shutting down, and waking a closing consumer would race its close().
+                    if (outcome != null && commandCh.trySend(outcome).isSuccess) consumer.wakeup()
+                }
             }
 
-            suspend fun onPartitionRevoked(tp: TopicPartition) {
-                listener.onPartitionsRevoked(listOf(tp.partition()))
-                processor = null
+            suspend fun onPartitionRevoked(partitions: Collection<TopicPartition>) {
+                // Abandon any in-flight transition first — cancel-and-join is bounded (the catch-up await
+                // is cancellable) and lets the transition's own recovery settle `state`. Then demote:
+                // Prepared→abandon, Leading→teardown, Following→no-op. Back to Following either way.
+                (listenerState as? Transitioning)?.transition?.cancelAndJoin()
+                listener.demoteLeader(listOf(partitions.single().partition()))
+                listenerState = Following()
             }
 
             suspend fun processRecords(records: List<ConsumerRecord<*, ByteArray>>) {
-                processor!!.processRecords(
+                // Only a committed leader has a processor; while Following/Transitioning the partition is
+                // paused, so this guard is belt-and-braces.
+                val proc = (listenerState as? LeaderCommitted)?.processor ?: return
+
+                proc.processRecords(
                     records.mapNotNull { rec ->
                         codec.decode(rec.value())
                             ?.let { msg -> Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg) }
                     })
             }
+
+            // Poll thread, at the serialization point: install the prepared leader, seek, resume. Drops a
+            // stale completion whose state has moved on (revoke / reassign) — it is no longer this
+            // Transitioning instance.
+            fun onTransitionComplete(cmd: GroupCommand.TransitionComplete) {
+                if (listenerState !== cmd.transitioning) return
+
+                val tailSpec = listener.commitLeader(listOf(cmd.tp.partition()))
+                listenerState = LeaderCommitted(tailSpec.processor)
+                consumer.seekToAfterMsgId(cmd.tp, epoch, tailSpec.afterMsgId)   // seek before resume — #5633
+                consumer.resume(listOf(cmd.tp))
+            }
+
+            // Poll thread: a transition failed. Isolate it — evict only this subscription, leaving siblings
+            // on the shared consumer running. Its watchers were already poisoned by the transition body.
+            fun onTransitionFailed(cmd: GroupCommand.TransitionFailed) {
+                if (listenerState !== cmd.transitioning) return
+                LOG.error(cmd.cause) { "leader transition failed for ${cmd.tp} — evicting its subscription" }
+                evictSubscriptions(listOf(cmd.tp.topic()), cmd.cause)
+            }
+
+            // On unregister: complete the subscription so openGroupSubscription returns. Any in-flight
+            // transition is a child of the database scope, which is being cancelled — left to it (#5773).
+            fun cancel() {
+                if (completion.isActive) completion.complete(Unit)
+            }
+
+            // Poll thread: abandon this subscription with a failure cause (a failed transition, or poll-loop
+            // teardown). Cancel — never join, the poll thread must not block — any in-flight transition, and
+            // fail the completion so openGroupSubscription unwinds with the cause. Deliberately no
+            // demoteLeader: that would drive a leader→follower transition mid-teardown.
+            fun evict(cause: Throwable) {
+                (listenerState as? Transitioning)?.transition?.cancel()
+                if (completion.isActive) completion.completeExceptionally(cause)
+            }
+
+            // Suspend until this subscription ends — normally via cancel (unregister), or exceptionally with
+            // the eviction cause, which then propagates out of openGroupSubscription.
+            suspend fun await() = completion.await()
         }
 
 
@@ -199,41 +299,29 @@ class KafkaCluster(
                 throw InterruptException(e)
             }
 
+        private val listener = object : ConsumerRebalanceListener {
+
+            override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
+                launderInterruptedException {
+                    for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                        subscriptions[topic]?.onPartitionsAssigned(tps)
+                    }
+                }
+
+            override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
+                launderInterruptedException {
+                    runBlocking {
+                        for ((topic, tps) in partitions.groupBy { it.topic() }) {
+                            subscriptions[topic]?.onPartitionRevoked(tps)
+                        }
+                    }
+                }
+        }
 
         private fun applySubscriptions() {
             val topics = subscriptions.keys.toList()
 
-            if (topics.isEmpty()) consumer.unsubscribe()
-            else consumer.subscribe(topics, object : ConsumerRebalanceListener {
-                override fun onPartitionsAssigned(partitions: Collection<TopicPartition>) =
-                    launderInterruptedException {
-                        runBlocking {
-                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
-                                val sub = subscriptions[topic] as? TopicSubscription<Any?> ?: continue
-                                try {
-                                    sub.onPartitionAssigned(tps.single())
-                                } catch (e: Throwable) {
-                                    LOG.error(e) { "onPartitionsAssigned($partitions): failed handling assignment for topic '$topic' ($tps)" }
-                                    throw e
-                                }
-                            }
-                        }
-                    }
-
-                override fun onPartitionsRevoked(partitions: Collection<TopicPartition>) =
-                    launderInterruptedException {
-                        runBlocking {
-                            for ((topic, tps) in partitions.groupBy { it.topic() }) {
-                                try {
-                                    subscriptions[topic]?.onPartitionRevoked(tps.single())
-                                } catch (e: Throwable) {
-                                    LOG.error(e) { "onPartitionsRevoked($partitions): failed handling revocation for topic '$topic' ($tps)" }
-                                    throw e
-                                }
-                            }
-                        }
-                    }
-            })
+            if (topics.isEmpty()) consumer.unsubscribe() else consumer.subscribe(topics, listener)
         }
 
         private fun processCommand(cmd: GroupCommand) {
@@ -245,24 +333,23 @@ class KafkaCluster(
                 }
 
                 is GroupCommand.Unregister -> {
-                    subscriptions.remove(cmd.topic)?.let { sub ->
-                        sub.listener.onPartitionsRevokedSync(listOf(0))
-                        sub.completion.complete(Unit)
-                    }
+                    // No demote here: the database's scope cancel tears the leader term down (#5773) —
+                    // and the in-flight transition, if any, is a child of that scope too, so it's left to it.
+                    subscriptions.remove(cmd.topic)?.cancel()
                     applySubscriptions()
                     cmd.cont.resume(Unit)
                 }
+
+                is GroupCommand.TransitionComplete ->
+                    subscriptions[cmd.tp.topic()]?.onTransitionComplete(cmd)
+
+                is GroupCommand.TransitionFailed ->
+                    subscriptions[cmd.tp.topic()]?.onTransitionFailed(cmd)
             }
         }
 
-        // Deliberately no `onPartitionsRevokedSync` — would trigger LogProcessor's
-        // leader→follower transition during a Failed-state cleanup.
         private fun evictSubscriptions(topics: Collection<String>, cause: Throwable) {
-            for (topic in topics) {
-                subscriptions.remove(topic)?.completion?.let { completion ->
-                    if (completion.isActive) completion.completeExceptionally(cause)
-                }
-            }
+            for (topic in topics) subscriptions.remove(topic)?.evict(cause)
             applySubscriptions()
         }
 
@@ -274,10 +361,10 @@ class KafkaCluster(
             while (true) {
                 val cmd = commandCh.tryReceive().getOrNull() ?: break
                 when (cmd) {
-                    is GroupCommand.Register -> cmd.subscription.completion.let { completion ->
-                        if (completion.isActive) completion.completeExceptionally(cause)
-                    }
+                    is GroupCommand.Register -> cmd.subscription.evict(cause)
+
                     is GroupCommand.Unregister -> cmd.cont.resume(Unit)
+                    is GroupCommand.TransitionComplete, is GroupCommand.TransitionFailed -> {}
                 }
             }
             try {
@@ -314,8 +401,9 @@ class KafkaCluster(
                             onTimeout(0.milliseconds) {
                                 consumer.pollRecords()?.let { consumerRecords ->
                                     for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
-                                        val sub = subscriptions[topic]
-                                            ?: error("Received records for unsubscribed topic $topic")
+                                        val sub = checkNotNull(subscriptions[topic]) {
+                                            "Received records for unsubscribed topic $topic"
+                                        }
 
                                         sub.processRecords(recs)
                                     }
@@ -340,7 +428,7 @@ class KafkaCluster(
             epoch: Int,
             listener: Log.SubscriptionListener<M>,
         ): TopicSubscription<M> {
-            val sub = TopicSubscription(codec, epoch, listener, null)
+            val sub = TopicSubscription(codec, epoch, listener)
             commandCh.send(GroupCommand.Register(topic, sub))
             consumer.wakeup()
             return sub
@@ -640,7 +728,7 @@ class KafkaCluster(
             val sub = sharedGroupConsumer.register(topic, codec, epoch, listener)
             LOG.info { "registered group subscription for topic '$topic'" }
             try {
-                sub.completion.await()
+                sub.await()
             } finally {
                 withContext(NonCancellable) { sharedGroupConsumer.unregister(topic) }
             }
