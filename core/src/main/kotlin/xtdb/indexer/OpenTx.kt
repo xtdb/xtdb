@@ -88,7 +88,7 @@ class OpenTx @JvmOverloads constructor(
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
-    private fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
+    internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
         val txId = txKey.txId
         val systemTimeMicros = txKey.systemTime.asMicros
 
@@ -125,12 +125,8 @@ class OpenTx @JvmOverloads constructor(
     private fun serializeTableData(): Map<String, ByteArray> =
         tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
 
-    // TODO make internal
-    @JvmOverloads
-    fun commitTx(error: Throwable? = null, userMetadata: Map<*, *>? = null): ReplicaMessage.ResolvedTx {
-        writeTxRow(error, userMetadata)
-
-        return ReplicaMessage.ResolvedTx(
+    internal fun commitTx(error: Throwable? = null): ReplicaMessage.ResolvedTx =
+        ReplicaMessage.ResolvedTx(
             txKey.txId, txKey.systemTime,
             committed = error == null,
             error = error,
@@ -138,7 +134,6 @@ class OpenTx @JvmOverloads constructor(
             dbOp = null,
             externalSourceToken = externalSourceToken,
         )
-    }
 
     private val queryCatalog: IQuerySource.QueryCatalog
         get() {

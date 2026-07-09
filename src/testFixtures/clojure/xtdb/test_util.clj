@@ -36,7 +36,7 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveIndex LiveTable OpenTx)
+           (xtdb.indexer LiveTable OpenTx)
            (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.query IQuerySource PrepareOpts PreparedQuery QueryOpts)
@@ -361,9 +361,6 @@
   (^OpenTx [^BufferAllocator allocator node ^TransactionKey tx-key]
    (let [db (db/primary-db node)]
      (OpenTx. allocator (util/node-base node) (.getStorage db) (.getQueryState db) tx-key nil nil))))
-
-(defn commit-tx! [^LiveIndex live-index ^OpenTx open-tx]
-  (.importTx live-index (.commitTx open-tx)))
 
 (defn open-put-log-rel
   "Builds a log-data relation of put ops via the public log-data writer - the same relation

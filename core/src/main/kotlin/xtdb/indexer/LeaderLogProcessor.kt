@@ -194,6 +194,7 @@ class LeaderLogProcessor(
                 } else null
 
                 openTx(txKey, null).use { openTx ->
+                    openTx.writeTxRow(error, null)
                     val resolvedTx = openTx.commitTx(error).copy(srcMsgId = msgId)
                         .let { if (error == null) it.copy(dbOp = DbOp.Attach(msg.dbName, msg.config)) else it }
                     stagingIndex.stage(openTx, resolvedTx, msgId, resolvedTx.txResult(txKey), null)
@@ -214,6 +215,7 @@ class LeaderLogProcessor(
                 } else null
 
                 openTx(txKey, null).use { openTx ->
+                    openTx.writeTxRow(error, null)
                     val resolvedTx = openTx.commitTx(error).copy(srcMsgId = msgId)
                         .let { if (error == null) it.copy(dbOp = DbOp.Detach(msg.dbName)) else it }
                     stagingIndex.stage(openTx, resolvedTx, msgId, resolvedTx.txResult(txKey), null)
@@ -284,15 +286,18 @@ class LeaderLogProcessor(
         try {
             val writerResult = task.writer(openTx)
             val resolvedTx = when (writerResult) {
-                is TxResult.Committed ->
-                    openTx.commitTx(error = null, writerResult.userMetadata)
+                is TxResult.Committed -> {
+                    openTx.writeTxRow(null, writerResult.userMetadata)
+                    openTx.commitTx(null)
+                }
 
                 is TxResult.Aborted -> {
                     txErrorCounter?.increment()
                     openTx.close()
                     // fresh tx for the abort row — the original openTx may hold partial writes
                     openTx = openTx(txKey, task.externalSourceToken)
-                    openTx.commitTx(writerResult.error, writerResult.userMetadata)
+                    openTx.writeTxRow(writerResult.error, writerResult.userMetadata)
+                    openTx.commitTx(writerResult.error)
                 }
             }
 
@@ -517,7 +522,8 @@ class LeaderLogProcessor(
         if (countError) txErrorCounter?.increment()
         val openTx = openTx(txKey, null)
         return try {
-            openTx.commitTx(error, userMetadata) to openTx
+            openTx.writeTxRow(error, userMetadata)
+            openTx.commitTx(error) to openTx
         } catch (e: Throwable) {
             openTx.close(); throw e
         }
@@ -592,7 +598,8 @@ class LeaderLogProcessor(
         when (result) {
             is TxResult.Committed ->
                 try {
-                    openTx.commitTx(null, userMetadataMap) to openTx
+                    openTx.writeTxRow(null, userMetadataMap)
+                    openTx.commitTx(null) to openTx
                 } catch (e: Throwable) {
                     openTx.close(); throw e
                 }
