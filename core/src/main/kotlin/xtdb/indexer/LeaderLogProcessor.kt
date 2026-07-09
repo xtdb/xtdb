@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.Metrics.withSpan
@@ -38,6 +39,7 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
+import kotlin.time.Duration.Companion.milliseconds
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
@@ -397,11 +399,25 @@ class LeaderLogProcessor(
                 var cause: Throwable? = null
                 try {
                     while (true) {
-                        val task: PersisterTask = selectUnbiased {
+                        val task: PersisterTask? = selectUnbiased {
                             sourceLogCh.onReceive { it }
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
+
+                            // Idle: no task ready and a batch is waiting → drain it. The arm is registered
+                            // only when staging is non-empty, so an idle resolver still blocks in select
+                            // (no busy-spin); a ready onReceive wins the select over the zero timeout.
+                            if (!stagingIndex.isEmpty) {
+                                @OptIn(ExperimentalCoroutinesApi::class)
+                                onTimeout(0.milliseconds) { null }
+                            }
                         }
+
+                        if (task == null) {
+                            drainStaging()
+                            continue
+                        }
+
                         try {
                             when (task) {
                                 is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
