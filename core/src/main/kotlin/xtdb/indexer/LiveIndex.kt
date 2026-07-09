@@ -154,14 +154,14 @@ class LiveIndex private constructor(
             sharedSnap!!.also { it.retain() }
         }
 
-    fun openSnapshot(stagedTxs: List<StagedTx>, ownTx: OpenTx): Snapshot =
+    fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
         snapLock.withReadLock {
             // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
             // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
             // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
             // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
             // of our trie-cat capture without breaking correctness.
-            Snapshot.open(allocator, tableCatalog, trieCatalog, this, stagedTxs, ownTx)
+            Snapshot.open(allocator, tableCatalog, trieCatalog, this, resolvedTxs, ownTx)
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock

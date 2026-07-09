@@ -5,7 +5,6 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.ResultCursor
 import xtdb.api.TransactionKey
-import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
@@ -60,9 +59,9 @@ class OpenTx @JvmOverloads constructor(
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
     private val tracer: Tracer? = null,
-    // In-flight staged predecessors this tx must read behind (read-your-writes across the batch),
+    // In-flight resolved predecessors this tx must read behind (read-your-writes across the batch),
     // supplied by the resolver which owns the staging index. Empty for external / non-resolution txs.
-    private val stagedTxs: List<StagedTx> = emptyList(),
+    private val resolvedTxs: List<ResolvedTx> = emptyList(),
 ) : AutoCloseable {
 
     data class QueryOpts(
@@ -122,18 +121,6 @@ class OpenTx @JvmOverloads constructor(
         liveTable.endPut()
     }
 
-    private fun serializeTableData(): Map<String, ByteArray> =
-        tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
-
-    internal fun commitTx(error: Throwable? = null): ReplicaMessage.ResolvedTx =
-        ReplicaMessage.ResolvedTx(
-            txKey.txId, txKey.systemTime,
-            committed = error == null,
-            error = error,
-            tableData = serializeTableData(),
-            dbOp = null,
-            externalSourceToken = externalSourceToken,
-        )
 
     private val queryCatalog: IQuerySource.QueryCatalog
         get() {
@@ -143,7 +130,7 @@ class OpenTx @JvmOverloads constructor(
                 override val storage get() = dbStorage
                 override val queryState get() = dbState
                 override fun openSnapshot() =
-                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(stagedTxs, this@OpenTx)))
+                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))
             }
 
             return object : IQuerySource.QueryCatalog {
@@ -665,8 +652,6 @@ class OpenTx @JvmOverloads constructor(
         @JvmOverloads
         fun patchDocs(docs: RelationReader, validFrom: Instant? = null, validTo: Instant? = null) =
             patchDocs(docs, validFrom?.asMicros ?: systemTimeMicros, validTo?.asMicros ?: MAX_LONG)
-
-        internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
         override fun close() {
             txRelation.close()
