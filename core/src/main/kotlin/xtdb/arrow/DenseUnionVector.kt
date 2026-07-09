@@ -426,20 +426,12 @@ class DenseUnionVector private constructor(
 
     // as a source: the degenerate shapes below have special leg-collapsing behaviour in `rowCopier`
     // (a 1-leg or nullable-mono DUV re-legs by type name), so mirror it exactly by delegating to the
-    // copier; every other shape (e.g. the 3-leg `op` vector) takes the bulk `appendRange0` path.
+    // copier; every other shape (e.g. the 3-leg `op` vector) takes the shared bulk dispatch.
     override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
-        when {
-            legVectors.size == 1 || (legVectors.size == 2 && legVectors.count { it.arrowType == NULL_TYPE } == 1) ->
-                rowCopier(dest).copyRange(startIdx, len)
-
-            dest is DenseUnionVector -> dest.appendRange0(this, startIdx, len)
-
-            else -> {
-                check(dest is Vector) { "can only append to another Vector, got ${dest::class}" }
-                if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
-                dest.appendRange0(this, startIdx, len)
-            }
-        }
+        if (legVectors.size == 1 || (legVectors.size == 2 && legVectors.count { it.arrowType == NULL_TYPE } == 1))
+            rowCopier(dest).copyRange(startIdx, len)
+        else
+            super.appendRangeTo(dest, startIdx, len)
     }
 
     override fun rowCopier(dest: VectorWriter) =

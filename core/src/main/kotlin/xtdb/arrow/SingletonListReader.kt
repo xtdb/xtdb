@@ -38,6 +38,11 @@ class SingletonListReader(override val name: String, private val elReader: Vecto
         }
     }
 
+    // a synthetic single-row list view — no buffer-level append, so delegate to the copier
+    override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        rowCopier(dest).copyRange(startIdx, len)
+    }
+
     override fun hashCode(idx: Int, hasher: Hasher): Int {
         var hash = 0
         for (i in 0 until valueCount) {

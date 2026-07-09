@@ -120,6 +120,7 @@ interface VectorReader : ILookup, AutoCloseable {
      */
     fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
         when {
+            dest is DenseUnionVector.LegVector -> dest.appendRangeFrom(this, startIdx, len)
             dest is DenseUnionVector -> dest.appendRange0(this, startIdx, len)
             dest is Vector -> {
                 if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)

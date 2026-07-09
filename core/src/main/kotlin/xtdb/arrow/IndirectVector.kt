@@ -74,6 +74,11 @@ class IndirectVector(private val inner: VectorReader, private val sel: VectorInd
         }
     }
 
+    // an indirect "range" is really a selection, so there's no buffer-level append — delegate to the copier
+    override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        rowCopier(dest).copyRange(startIdx, len)
+    }
+
     override fun valueReader(): ValueReader {
         val inner = inner.valueReader()
         return object : ValueReader by inner {

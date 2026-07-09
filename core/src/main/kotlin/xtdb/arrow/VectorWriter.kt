@@ -71,6 +71,5 @@ interface VectorWriter : VectorReader, AutoCloseable {
 
     fun appendRows(r: VectorReader, sel: IntArray) = r.rowCopier(this).copyRows(sel)
 
-    fun appendRange(r: VectorReader, startIdx: Int, length: Int) =
-        r.rowCopier(this).copyRange(startIdx, length)
+    fun appendRange(r: VectorReader, startIdx: Int, length: Int) = r.appendRangeTo(this, startIdx, length)
 }
