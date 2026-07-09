@@ -8,6 +8,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
+import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import xtdb.util.closeOnCatch
@@ -139,6 +140,23 @@ class FixedSizeListVector private constructor(
                 endList()
             }
         }
+    }
+
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is FixedSizeListVector)
+        check(src.listSize == listSize)
+        nullable = nullable || src.nullable
+
+        validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+
+        try {
+            src.elVector.appendRangeTo(elVector, startIdx * listSize, len * listSize)
+        } catch (_: InvalidCopySourceException) {
+            elVector = elVector.maybePromote(al, src.elVector.arrowType, src.elVector.nullable)
+            src.elVector.appendRangeTo(elVector, startIdx * listSize, len * listSize)
+        }
+
+        valueCount += len
     }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

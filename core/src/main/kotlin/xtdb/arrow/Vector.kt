@@ -78,6 +78,13 @@ sealed class Vector : VectorReader, VectorWriter {
     internal abstract fun rowCopier0(src: VectorReader): RowCopier
 
     /**
+     * Appends the `[startIdx, startIdx + len)` slice of [src] directly into this vector, without
+     * constructing a [RowCopier]. [src] must already match this vector's shape (the caller promotes
+     * — see `VectorWriter.appendRange`); a [DenseUnionVector] absorbs a leg-typed source.
+     */
+    internal abstract fun appendRange0(src: VectorReader, startIdx: Int, len: Int)
+
+    /**
      * Divides this vector by [divisorVec] and writes the result into [outVec].
      * Returns null for any element where the divisor is zero (to avoid NaN).
      */

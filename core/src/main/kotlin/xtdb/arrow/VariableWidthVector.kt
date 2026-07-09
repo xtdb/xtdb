@@ -162,6 +162,37 @@ abstract class VariableWidthVector : MonoVector() {
         }
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is VariableWidthVector)
+        nullable = nullable || src.nullable
+        if (len <= 0) return
+
+        val srcValidity = src.validityBuffer
+        val srcOffset = src.offsetBuffer
+        val srcData = src.dataBuffer
+
+        val srcStartOffset = srcOffset.getInt(startIdx)
+        val srcEndOffset = srcOffset.getInt(startIdx + len)
+        val dataLen = srcEndOffset - srcStartOffset
+
+        validityBuffer?.ensureWritable(len)
+        offsetBuffer.ensureWritable(((len + 1) * Integer.BYTES).toLong())
+        dataBuffer.ensureWritable(dataLen.toLong())
+
+        validityBuffer?.writeBits(srcValidity, Slice(startIdx, len))
+
+        if (valueCount == 0) offsetBuffer.unsafeWriteInt(0)
+        val offsetDelta = lastOffset - srcStartOffset
+        repeat(len) {
+            offsetBuffer.unsafeWriteInt(srcOffset.getInt(startIdx + it + 1) + offsetDelta)
+        }
+
+        dataBuffer.unsafeWriteBytes(srcData, srcStartOffset.toLong(), dataLen.toLong())
+        lastOffset += dataLen
+
+        valueCount += len
+    }
+
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)

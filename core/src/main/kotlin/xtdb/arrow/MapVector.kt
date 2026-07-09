@@ -51,6 +51,11 @@ class MapVector(private val listVector: ListVector, private val keysSorted: Bool
         return listVector.rowCopier0(src.listVector)
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is MapVector)
+        listVector.appendRange0(src.listVector, startIdx, len)
+    }
+
     override fun getObject0(idx: Int, keyFn: IKeyFn<*>): Any {
         val startIdx = listVector.getListStartIndex(idx)
         val entryCount = listVector.getListCount(idx)

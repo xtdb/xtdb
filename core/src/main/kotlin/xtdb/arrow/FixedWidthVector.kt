@@ -214,6 +214,17 @@ sealed class FixedWidthVector : MonoVector() {
         }
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is FixedWidthVector)
+        check(src.byteWidth == byteWidth)
+        nullable = nullable || src.nullable
+
+        dataBuffer.ensureWritable((len * byteWidth).toLong())
+        validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+        dataBuffer.unsafeWriteBytes(src.dataBuffer, (startIdx * byteWidth).toLong(), (len * byteWidth).toLong())
+        valueCount += len
+    }
+
     final override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)

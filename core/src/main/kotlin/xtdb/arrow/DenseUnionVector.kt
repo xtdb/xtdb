@@ -193,6 +193,19 @@ class DenseUnionVector private constructor(
             return RowCopier { srcIdx -> writeValueThen(); innerCopier.copyRow(srcIdx) }
         }
 
+        // bulk analogue of rowCopierFrom: the whole [startIdx, startIdx+len) slice lands in this leg
+        fun appendRangeFrom(src: VectorReader, startIdx: Int, len: Int) {
+            if (!nested) {
+                val base = inner.valueCount
+                repeat(len) { i ->
+                    typeBuffer.writeByte(typeId)
+                    offsetBuffer.writeInt(base + i)
+                    this@DenseUnionVector.valueCount++
+                }
+            }
+            src.appendRangeTo(inner, startIdx, len)
+        }
+
         override fun clear() = inner.clear()
         override fun close() = reader.close()
     }
@@ -366,6 +379,68 @@ class DenseUnionVector private constructor(
 
             else -> src.rowCopier(legVectorFor(src.arrowType.toLeg(), src.arrowType, src.nullable))
         }
+
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        if (src !is DenseUnionVector) {
+            // mono source → the matching leg absorbs the whole slice
+            legVectorFor(src.arrowType.toLeg(), src.arrowType, src.nullable).appendRangeFrom(src, startIdx, len)
+            return
+        }
+
+        val pairs = src.legVectors.map { it to legVectorFor(it.name, it.arrowType, it.nullable) }
+        val destTypeIds = ByteArray(pairs.size) { pairs[it].second.typeId }
+
+        if (startIdx == 0 && len == src.valueCount) {
+            val destOffsets = IntArray(pairs.size) { pairs[it].second.inner.valueCount }
+
+            repeat(len) { srcIdx ->
+                val srcTypeId = src.typeBuffer.getByte(srcIdx).toInt()
+                if (srcTypeId < 0) {
+                    typeBuffer.writeByte(-1)
+                    offsetBuffer.writeInt(0)
+                } else {
+                    typeBuffer.writeByte(destTypeIds[srcTypeId])
+                    offsetBuffer.writeInt(src.offsetBuffer.getInt(srcIdx) + destOffsets[srcTypeId])
+                }
+            }
+
+            pairs.forEach { (srcLeg, destLeg) -> srcLeg.appendRangeTo(destLeg.inner, 0, srcLeg.valueCount) }
+
+            valueCount += len
+        } else {
+            // sub-range: source leg elements aren't contiguous per leg, so copy element-by-element
+            repeat(len) { i ->
+                val srcIdx = startIdx + i
+                val srcTypeId = src.getTypeId(srcIdx).toInt()
+                if (srcTypeId < 0) {
+                    typeBuffer.writeByte(-1)
+                    offsetBuffer.writeInt(0)
+                    valueCount++
+                } else {
+                    val (srcLeg, destLeg) = pairs[srcTypeId]
+                    destLeg.appendRangeFrom(srcLeg, src.getOffset(srcIdx), 1)
+                }
+            }
+        }
+    }
+
+    // as a source: the degenerate shapes below have special leg-collapsing behaviour in `rowCopier`
+    // (a 1-leg or nullable-mono DUV re-legs by type name), so mirror it exactly by delegating to the
+    // copier; every other shape (e.g. the 3-leg `op` vector) takes the bulk `appendRange0` path.
+    override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        when {
+            legVectors.size == 1 || (legVectors.size == 2 && legVectors.count { it.arrowType == NULL_TYPE } == 1) ->
+                rowCopier(dest).copyRange(startIdx, len)
+
+            dest is DenseUnionVector -> dest.appendRange0(this, startIdx, len)
+
+            else -> {
+                check(dest is Vector) { "can only append to another Vector, got ${dest::class}" }
+                if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
+                dest.appendRange0(this, startIdx, len)
+            }
+        }
+    }
 
     override fun rowCopier(dest: VectorWriter) =
         when {

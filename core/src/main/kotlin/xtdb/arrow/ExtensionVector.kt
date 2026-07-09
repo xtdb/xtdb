@@ -65,6 +65,12 @@ abstract class ExtensionVector : MonoVector() {
         return inner.rowCopier0(src.inner)
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is ExtensionVector)
+
+        inner.appendRange0(src.inner, startIdx, len)
+    }
+
     override fun valueReader(): ValueReader = inner.valueReader()
 
     override fun clear() = inner.clear()

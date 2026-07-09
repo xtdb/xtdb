@@ -7,6 +7,7 @@ import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.BOOL
+import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
 import org.apache.arrow.vector.BitVector as ArrowBitVector
@@ -91,6 +92,15 @@ class BitVector private constructor(
             if (srcNullable && !nullable) nullable = true
             if (src.isNull(srcIdx)) writeNull() else writeBoolean(src.getBoolean(srcIdx))
         }
+    }
+
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is BitVector)
+        nullable = nullable || src.nullable
+
+        validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+        dataBuffer.writeBits(src.dataBuffer, Slice(startIdx, len))
+        valueCount += len
     }
 
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {

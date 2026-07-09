@@ -111,6 +111,24 @@ interface VectorReader : ILookup, AutoCloseable {
 
     fun rowCopier(dest: VectorWriter): RowCopier
 
+    /**
+     * Appends the `[startIdx, startIdx + len)` slice of this reader into [dest] without constructing
+     * a [RowCopier]. Source-dispatched, mirroring [rowCopier]: a [DenseUnionVector] dest absorbs a
+     * leg-typed source; otherwise the shallow arrow types must match (the caller promotes — see
+     * `VectorWriter.appendRange`), else [InvalidCopySourceException] is thrown for the caller to
+     * promote and retry.
+     */
+    fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        when {
+            dest is DenseUnionVector -> dest.appendRange0(this, startIdx, len)
+            dest is Vector -> {
+                if (arrowType != dest.arrowType) throw InvalidCopySourceException(this, dest)
+                dest.appendRange0(this, startIdx, len)
+            }
+            else -> error("can only append to another Vector, got ${dest::class}")
+        }
+    }
+
     companion object {
         fun toString(reader: VectorReader): String = reader.run {
             val content = when {

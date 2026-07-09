@@ -203,6 +203,20 @@ class StructVector private constructor(
         }
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is StructVector)
+        nullable = nullable || src.nullable
+
+        validityBuffer?.writeBits(src.validityBuffer, Slice(startIdx, len))
+
+        for (colName in src.childWriters.keys + childWriters.keys) {
+            val srcChild = src.vectorForOrNull(colName) ?: NullVector(colName, true, src.valueCount)
+            srcChild.appendRangeTo(vectorFor(colName, srcChild.arrowType, srcChild.nullable), startIdx, len)
+        }
+
+        valueCount += len
+    }
+
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(allocator.empty)

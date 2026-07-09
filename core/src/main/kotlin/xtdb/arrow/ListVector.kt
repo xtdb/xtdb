@@ -153,6 +153,33 @@ class ListVector private constructor(
         }
     }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        check(src is ListVector)
+        nullable = nullable || src.nullable
+        if (len <= 0) return
+
+        val baseOffset = lastOffset
+        val srcElStart = src.getListStartIndex(startIdx)
+        val elCount = src.getListEndIndex(startIdx + len - 1) - srcElStart
+
+        try {
+            src.elVector.appendRangeTo(elVector, srcElStart, elCount)
+        } catch (_: InvalidCopySourceException) {
+            elVector = elVector.maybePromote(al, src.elVector.arrowType, src.elVector.nullable)
+            src.elVector.appendRangeTo(elVector, srcElStart, elCount)
+        }
+
+        repeat(len) { i ->
+            val srcIdx = startIdx + i
+            if (valueCount == 0) offsetBuffer.writeInt(0)
+            val destEnd = baseOffset + (src.getListEndIndex(srcIdx) - srcElStart)
+            offsetBuffer.writeInt(destEnd)
+            lastOffset = destEnd
+            validityBuffer?.writeBit(valueCount, if (src.isNull(srcIdx)) 0 else 1)
+            valueCount++
+        }
+    }
+
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), if (nullable) -1 else 0))
         if (nullable) validityBuffer?.unloadBuffer(buffers) else buffers.add(al.empty)

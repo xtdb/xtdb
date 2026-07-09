@@ -82,6 +82,17 @@ class NullVector(
 
     override fun rowCopier0(src: VectorReader) = RowCopier { writeNull() }
 
+    override fun appendRange0(src: VectorReader, startIdx: Int, len: Int) {
+        if (!nullable) nullable = true
+        valueCount += len
+    }
+
+    // as a source: write nulls into any dest (mirrors rowCopier above)
+    override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        if (dest is DenseUnionVector) dest.appendRange0(this, startIdx, len)
+        else repeat(len) { dest.writeNull() }
+    }
+
     override fun unloadPage(nodes: MutableList<ArrowFieldNode>, buffers: MutableList<ArrowBuf>) {
         nodes.add(ArrowFieldNode(valueCount.toLong(), valueCount.toLong()))
     }

@@ -39,6 +39,12 @@ class RelationAsStructReader(
         }
     }
 
+    override fun appendRangeTo(dest: VectorWriter, startIdx: Int, len: Int) {
+        rel.vectors.forEach { it.appendRangeTo(dest.vectorFor(it.name, it.arrowType, it.nullable), startIdx, len) }
+        // children are already `len` ahead, so each endStruct just advances the struct's validity/count
+        repeat(len) { dest.endStruct() }
+    }
+
     override fun valueReader(): ValueReader {
         val rdrs = rel.vectors.associate { it.name to it.valueReader() }
 
