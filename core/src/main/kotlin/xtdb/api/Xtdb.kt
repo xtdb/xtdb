@@ -359,7 +359,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 clearArgs()
                 args = Relation(allocator, root.schema).closeOnCatch { copy ->
                     Relation.fromRoot(allocator, root).use { src ->
-                        src.rowCopier(copy).copyRange(0, src.rowCount)
+                        copy.append(src)
                     }
                     copy
                 }
@@ -918,7 +918,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     this.docs?.close()
                     docs = Relation(allocator, root.schema).closeOnCatch { copy ->
                         Relation.fromRoot(allocator, root).use { src ->
-                            src.rowCopier(copy).copyRange(0, src.rowCount)
+                            copy.append(src)
                         }
                         copy
                     }
