@@ -224,7 +224,7 @@ class LeaderLogProcessor(
             is SourceMessage.TriesAdded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        trieCatalog.addTries(TableRef.parse(tableName), tries, record.logTimestamp)
+                        trieCatalog.addTries(TableRef.fromSchemaAndTable(tableName), tries, record.logTimestamp)
                     }
                 }
 

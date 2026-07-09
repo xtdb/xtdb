@@ -202,10 +202,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                 "block file missing for b$blockIdx"
             )
 
-            val tables = upload.tries.map { TableRef.parse(it.tableName) }.toSet()
+            val tables = upload.tries.map { TableRef.fromSchemaAndTable(it.tableName) }.toSet()
 
             for (trie in upload.tries) {
-                val table = TableRef.parse(trie.tableName)
+                val table = TableRef.fromSchemaAndTable(trie.tableName)
                 assertTrue(
                     table.dataFilePath(trie.trieKey) in storedPaths,
                     "data file missing for ${trie.tableName}/${trie.trieKey}"

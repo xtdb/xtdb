@@ -16,7 +16,7 @@ data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: 
 
     companion object {
         @JvmStatic
-        fun parse(str: String): TableRef {
+        fun fromSchemaAndTable(str: String): TableRef {
             val sym = Symbol.intern(str)
 
             return TableRef(sym.namespace ?: DEFAULT_SCHEMA, sym.name)

@@ -42,7 +42,7 @@ internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<T
             Relation.StreamLoader(al, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
                 Relation(al, loader.schema).closeOnCatch { rel ->
                     loader.loadNextPage(rel)
-                    rels[TableRef.parse(schemaAndTable)] = rel
+                    rels[TableRef.fromSchemaAndTable(schemaAndTable)] = rel
                 }
             }
         }

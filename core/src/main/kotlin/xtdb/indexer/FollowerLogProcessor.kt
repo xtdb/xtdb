@@ -123,7 +123,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private fun addTries(tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
         tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-            trieCatalog.addTries(TableRef.parse(tableName), tries, logTimestamp)
+            trieCatalog.addTries(TableRef.fromSchemaAndTable(tableName), tries, logTimestamp)
         }
     }
 
@@ -205,7 +205,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
-                trieCatalog.deleteTries(TableRef.parse(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(TableRef.fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
         }
 

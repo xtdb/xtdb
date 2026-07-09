@@ -101,7 +101,7 @@ class TransitionLogProcessor(
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         trieCatalog.addTries(
-                            TableRef.parse(tableName),
+                            TableRef.fromSchemaAndTable(tableName),
                             tries,
                             record.logTimestamp
                         )
@@ -125,7 +125,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> {
-                trieCatalog.deleteTries(TableRef.parse(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(TableRef.fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
         }
     }

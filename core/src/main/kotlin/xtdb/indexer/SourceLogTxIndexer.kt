@@ -80,7 +80,7 @@ internal class SourceLogTxIndexer(
             val validToRdr = putLeg.vectorFor("_valid_to")
 
             val legName = docsRdr.getLeg(opIdx) ?: error("put-docs leg missing for op $opIdx")
-            val table = TableRef.parse(legName)
+            val table = TableRef.fromSchemaAndTable(legName)
             checkNotForbidden(table)
 
             val tableDocsRdr = docsRdr.vectorFor(legName)
@@ -153,7 +153,7 @@ internal class SourceLogTxIndexer(
             val validFromRdr = deleteLeg.vectorFor("_valid_from")
             val validToRdr = deleteLeg.vectorFor("_valid_to")
 
-            val table = TableRef.parse(tableRdr.getObject(opIdx) as String)
+            val table = TableRef.fromSchemaAndTable(tableRdr.getObject(opIdx) as String)
             checkNotForbidden(table)
 
             val openTxTable = table(table)
@@ -186,7 +186,7 @@ internal class SourceLogTxIndexer(
             val iidsRdr = eraseLeg.vectorFor("iids")
             val iidRdr = iidsRdr.listElements
 
-            val table = TableRef.parse(tableRdr.getObject(opIdx) as String)
+            val table = TableRef.fromSchemaAndTable(tableRdr.getObject(opIdx) as String)
             checkNotForbidden(table)
 
             val liveTable = table(table)
@@ -213,7 +213,7 @@ internal class SourceLogTxIndexer(
             val validToRdr = patchLeg.vectorFor("_valid_to")
 
             val legName = docsRdr.getLeg(opIdx) ?: error("patch-docs leg missing for op $opIdx")
-            val tableRef = TableRef.parse(legName)
+            val tableRef = TableRef.fromSchemaAndTable(legName)
             val tableDocsRdr = docsRdr.vectorFor(legName)
             val docRdr = tableDocsRdr.listElements
             val ks = docRdr.keyNames ?: emptySet()
