@@ -39,7 +39,7 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
     ) : RecordIndexer.Factory {
 
         override fun open(): RecordIndexer =
-            DocsIndexer(TableRef.fromSchemaAndTable(table))
+            DocsIndexer(TableRef.parse(table))
 
         class Registration : RecordIndexer.Registration<Factory> {
             override val protoTag: String
