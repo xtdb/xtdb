@@ -12,6 +12,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
@@ -42,7 +43,7 @@ internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<T
             Relation.StreamLoader(al, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
                 Relation(al, loader.schema).closeOnCatch { rel ->
                     loader.loadNextPage(rel)
-                    rels[TableRef.fromSchemaAndTable(schemaAndTable)] = rel
+                    rels[fromSchemaAndTable(schemaAndTable)] = rel
                 }
             }
         }

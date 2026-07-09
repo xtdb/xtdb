@@ -28,6 +28,7 @@ import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.TrieKey
@@ -224,7 +225,7 @@ class LeaderLogProcessor(
             is SourceMessage.TriesAdded -> {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        trieCatalog.addTries(TableRef.fromSchemaAndTable(tableName), tries, record.logTimestamp)
+                        trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
                     }
                 }
 

@@ -12,6 +12,7 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.storage.BufferPool
 import xtdb.table.DatabaseName
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
@@ -106,7 +107,7 @@ class BlockCatalog(
     val externalSourceToken: ExternalSourceToken?
         get() = latestBlock?.takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray()
 
-    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { TableRef.fromSchemaAndTable(it) }
+    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { fromSchemaAndTable(it) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = latestBlock?.secondaryDatabasesMap.orEmpty()
 }

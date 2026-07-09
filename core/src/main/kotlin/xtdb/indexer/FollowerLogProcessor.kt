@@ -24,6 +24,7 @@ import xtdb.error.Interrupted
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAll
 import xtdb.util.debug
@@ -123,7 +124,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private fun addTries(tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
         tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-            trieCatalog.addTries(TableRef.fromSchemaAndTable(tableName), tries, logTimestamp)
+            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, logTimestamp)
         }
     }
 
@@ -205,7 +206,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
-                trieCatalog.deleteTries(TableRef.fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
         }
 

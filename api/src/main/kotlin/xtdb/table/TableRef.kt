@@ -30,12 +30,5 @@ data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: 
 
             return TableRef(schema.ifEmpty { DEFAULT_SCHEMA }, table)
         }
-
-        @JvmStatic
-        fun fromSchemaAndTable(str: String): TableRef {
-            val sym = Symbol.intern(str)
-
-            return TableRef(sym.namespace ?: DEFAULT_SCHEMA, sym.name)
-        }
     }
 }

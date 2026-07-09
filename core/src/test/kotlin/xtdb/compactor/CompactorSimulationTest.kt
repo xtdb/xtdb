@@ -36,6 +36,7 @@ import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
 import xtdb.symbol
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
@@ -112,7 +113,7 @@ class CompactorMockDriverFactory(
                     LOGGER.debug("[channel msg received] systemId=$systemId received ${trieKeys.size} tries: $trieKeys")
                     yield() // force suspension mid-message processing
                     msg.triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        val tableRef = TableRef.fromSchemaAndTable(tableName)
+                        val tableRef = fromSchemaAndTable(tableName)
                         addTriesToBufferPool(bufferPool, tableRef, tries)
                         trieCatalog.addTries(tableRef, tries, msg.msgTimestamp)
                     }
@@ -218,7 +219,7 @@ class CompactorMockDriverFactory(
             sharedFlow.emit(AppendMessage(triesAdded, logTimestamp, systemId))
             yield()
             triesAdded.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                val tableRef = TableRef.fromSchemaAndTable(tableName)
+                val tableRef = fromSchemaAndTable(tableName)
                 addTriesToBufferPool(bufferPool, tableRef, tries)
                 trieCatalog.addTries(tableRef, tries, logTimestamp)
             }

@@ -21,6 +21,7 @@ import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie
@@ -281,7 +282,7 @@ private class LocalSegment(
 
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
-    val table = TableRef.fromSchemaAndTable("foo")
+    val table = fromSchemaAndTable("foo")
     val trieKeys = listOf("l01-rc-b2c74", "l00-rc-b2c75")
 
     try {

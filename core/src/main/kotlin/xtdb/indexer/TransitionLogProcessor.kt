@@ -15,6 +15,7 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
+import xtdb.table.fromSchemaAndTable
 import xtdb.util.*
 import xtdb.util.StringUtil.asLexHex
 
@@ -101,7 +102,7 @@ class TransitionLogProcessor(
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         trieCatalog.addTries(
-                            TableRef.fromSchemaAndTable(tableName),
+                            fromSchemaAndTable(tableName),
                             tries,
                             record.logTimestamp
                         )
@@ -125,7 +126,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> {
-                trieCatalog.deleteTries(TableRef.fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
             }
         }
     }
