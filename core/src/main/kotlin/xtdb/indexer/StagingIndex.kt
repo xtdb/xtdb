@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -44,10 +46,24 @@ class StagingIndex(
      * Stage a resolved [openTx]: take independent slices of its writes into the staging allocator, hold
      * them in the accumulating slot, and advance the applied head. The caller closes [openTx] afterwards.
      */
-    fun stage(openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult, dbOp: DbOp?) {
+    fun stage(
+        openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult, dbOp: DbOp?,
+        durable: CompletableDeferred<Unit>?,
+    ) {
         // ResolvedTx.stage cleans up its own partial slices on throw; nothing else here can leak.
-        accumulating.addLast(ResolvedTx.stage(allocator, openTx, srcMsgId, txResult, dbOp))
+        accumulating.addLast(ResolvedTx.stage(allocator, openTx, srcMsgId, txResult, dbOp, durable))
         latestCompletedTx = openTx.txKey
+    }
+
+    /**
+     * Fail the durability handles of all still-accumulated (never-drained) txs — the terminal path when
+     * the resolver exits without draining them (term teardown, or an unrecoverable fault on an unrelated
+     * task). Without this an executeTx caller awaiting a staged tx's handle would hang: the resolver
+     * swallows faults and is a supervisor child, so its exit doesn't cancel the caller on its own.
+     */
+    fun failPending(cause: Throwable?) {
+        val ex = cause ?: CancellationException("leader term ended before the tx was made durable")
+        accumulating.forEach { it.failDurable(ex) }
     }
 
     /** Take the accumulated slot as an ordered batch (send order) and clear the slot. */

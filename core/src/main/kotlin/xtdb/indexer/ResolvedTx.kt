@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -32,8 +33,10 @@ import xtdb.util.safelyOpening
  * slice. So a ResolvedTx outlives its OpenTx — the resolver closes the OpenTx right after staging — and
  * its lifetime is its own (freed at [close], on promote/teardown).
  *
- * No durability handle: the single async replica-log commit is what confirms durability, and the per-tx
- * replica-log positions for the apply cursor come back from that commit — not from here.
+ * The per-tx replica-log positions for the apply cursor come back from the replica-log commit — not from
+ * here. [durable] is the awaiting *caller's* signal (an ext-source `executeTx`/`submitTx`), completed at
+ * promote; null for source-log and attach/detach txs, whose durability is observed through the batch's
+ * completion instead.
  */
 class ResolvedTx private constructor(
     val txKey: TransactionKey,
@@ -41,8 +44,15 @@ class ResolvedTx private constructor(
     val txResult: TransactionResult,
     val externalSourceToken: ExternalSourceToken?,
     private val dbOp: DbOp?,
+    private val durable: CompletableDeferred<Unit>?,
     private val tables: Map<TableRef, Table>,
 ) : AutoCloseable {
+
+    /** Signal the awaiting caller that this tx is now durable (promoted into the live index). */
+    fun markDurable() { durable?.complete(Unit) }
+
+    /** Fail the awaiting caller when the drain faults before this tx is durable, so it throws rather than hangs. */
+    fun failDurable(cause: Throwable) { durable?.completeExceptionally(cause) }
 
     /** One table's staged writes: an owned slice of the tx's relation plus its iid trie. */
     class Table(val ref: TableRef, val relation: Relation, private val trie: MemoryHashTrie) : AutoCloseable {
@@ -104,7 +114,7 @@ class ResolvedTx private constructor(
         @JvmStatic
         fun stage(
             al: BufferAllocator, openTx: OpenTx, srcMsgId: MessageId,
-            txResult: TransactionResult, dbOp: DbOp?,
+            txResult: TransactionResult, dbOp: DbOp?, durable: CompletableDeferred<Unit>?,
         ): ResolvedTx =
             mutableListOf<Table>().closeAllOnCatch { staged ->
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
@@ -117,7 +127,7 @@ class ResolvedTx private constructor(
                 }
 
                 ResolvedTx(
-                    openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, dbOp,
+                    openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, dbOp, durable,
                     staged.associateBy { it.ref }
                 )
             }

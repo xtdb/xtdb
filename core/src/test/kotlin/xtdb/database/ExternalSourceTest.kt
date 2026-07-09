@@ -4,6 +4,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -305,6 +306,108 @@ class ExternalSourceTest {
             "the fire-and-forget caller sees the original failure cause"
         )
         assertNotNull(watchers.exception, "watchers should also be in failed state")
+    }
+
+    @Test
+    fun `executeTx throws when the drain faults, rather than hanging`() = runTest {
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
+        }
+
+        val thrown = CompletableDeferred<Throwable>()
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    txIndexer.executeTx(null) { TxResult.Committed() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    thrown.complete(e)
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(liveIndex = liveIndex, extSource = extSource)
+
+        val e = thrown.await()
+        assertEquals(
+            "commit pipeline fault", e.message,
+            "executeTx surfaces the drain fault via its durability handle instead of hanging"
+        )
+    }
+
+    @Test
+    fun `submitTx's durability handle fails when the drain faults`() = runTest {
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
+        }
+
+        val thrown = CompletableDeferred<Throwable>()
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                val handle = txIndexer.submitTx(null) { TxResult.Committed() }
+                try {
+                    handle.await()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    thrown.complete(e)
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(liveIndex = liveIndex, extSource = extSource)
+
+        val e = thrown.await()
+        assertEquals(
+            "commit pipeline fault", e.message,
+            "the handle submitTx returns surfaces the drain fault"
+        )
+    }
+
+    @Test
+    fun `a burst of submitTx accumulates and all commit in send order`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val n = 8
+        val allDurable = CompletableDeferred<Unit>()
+
+        // Fires the whole burst back-to-back (each submitTx returns as soon as it's queued), collecting the
+        // durability handles, then awaits them all — a concrete 'all durable' signal, no blind delay. The
+        // txs accumulate and drain together; this asserts accumulation preserves send order and loses none.
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                val handles = (0 until n).map { txIndexer.submitTx(null) { TxResult.Committed() } }
+                handles.awaitAll()
+                allDurable.complete(Unit)
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(replicaLog = replicaLog, extSource = extSource)
+
+        allDurable.await()
+
+        val resolvedTxs = mutableListOf<ReplicaMessage.ResolvedTx>()
+        backgroundScope.launch {
+            replicaLog.tailAll(-1) { records ->
+                records.forEach { (it.message as? ReplicaMessage.ResolvedTx)?.let(resolvedTxs::add) }
+            }
+        }
+        delay(200.milliseconds)
+
+        assertEquals((0L until n).toList(), resolvedTxs.map { it.txId }, "all $n txs land, in send order")
+        assertTrue(resolvedTxs.all { it.committed }, "all $n txs committed")
     }
 
     @Test

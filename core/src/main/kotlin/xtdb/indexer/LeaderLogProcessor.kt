@@ -112,12 +112,22 @@ class LeaderLogProcessor(
     }
 
     private sealed interface ExtSourceTask : PersisterTask {
+        // Completed when the tx is promoted (durable) in drainStaging. submitTx returns this handle;
+        // executeTx awaits it. It must be completed on *every* terminal path a task can take — drained,
+        // faulted, thrown pre-staging, left un-drained at term exit, or dropped undelivered by the channel
+        // — or an awaiting executeTx hangs. onComplete no longer implies durability for ext-source txs.
+        val durable: CompletableDeferred<Unit>
+
         class IndexTx(
             val externalSourceToken: ExternalSourceToken?,
             val systemTime: Instant?,
             val writer: suspend (OpenTx) -> TxResult,
         ) : ExtSourceTask {
+            // Completed at staging, once the writer has run and the outcome is known; executeTx reads it
+            // after `durable`. Distinct from durability — the tx is resolved but not yet on the replica log.
             val result = CompletableDeferred<TxResult>()
+
+            override val durable = CompletableDeferred<Unit>()
 
             override val onComplete = CompletableDeferred<Unit>()
         }
@@ -137,7 +147,12 @@ class LeaderLogProcessor(
     // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
     // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
-        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = {
+            // Dropped before the persister received it (channel closed on term exit): fail the durability
+            // handle too, not just onComplete, so an executeTx caller awaiting `durable` doesn't hang.
+            it.onComplete.cancel()
+            it.durable.cancel()
+        })
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
@@ -167,7 +182,7 @@ class LeaderLogProcessor(
             is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
                 val (txResult, openTx) = resolveTx(msgId, record, msg)
                 openTx.use {
-                    stagingIndex.stage(it, msgId, txResult, dbOp = null)
+                    stagingIndex.stage(it, msgId, txResult, dbOp = null, durable = null)
                 }
             }
 
@@ -198,7 +213,7 @@ class LeaderLogProcessor(
                     openTx.writeTxRow(error, null)
                     val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
                     val dbOp = if (error == null) DbOp.Attach(msg.dbName, msg.config) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp)
+                    stagingIndex.stage(openTx, msgId, txResult, dbOp, durable = null)
                 }
                 drainStaging()
             }
@@ -219,7 +234,7 @@ class LeaderLogProcessor(
                     openTx.writeTxRow(error, null)
                     val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
                     val dbOp = if (error == null) DbOp.Detach(msg.dbName) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp)
+                    stagingIndex.stage(openTx, msgId, txResult, dbOp, durable = null)
                 }
                 drainStaging()
             }
@@ -269,6 +284,20 @@ class LeaderLogProcessor(
                 val last = batch.last()
                 finishBlock(last.srcMsgId, last.externalSourceToken)
             }
+
+            // Signal durability only once the whole drain is done — including any block cut. A caller
+            // (executeTx) that returns here has the guarantee the pre-batching per-tx drain gave: the tx
+            // is on the replica log, promoted, and any block it triggered is uploaded. Signalling earlier
+            // (mid-loop) lets the caller race ahead of an in-flight finishBlock, which a term teardown can
+            // then cancel mid-way, leaving a BlockBoundary with no matching BlockUploaded.
+            batch.forEach { it.markDurable() }
+        } catch (e: Throwable) {
+            // Faulted before durability was signalled (append/commit, import, or block cut) — fail the
+            // handles so an awaiting executeTx throws rather than hangs. This fails the *whole* batch,
+            // including txs already promoted earlier in the loop; harmless while executeTx callers are
+            // serial (batch-of-one). Per-tx granularity is a follow-up for pipelined callers.
+            batch.forEach { it.failDurable(e) }
+            throw e
         } finally {
             batch.closeAll()
         }
@@ -307,15 +336,26 @@ class LeaderLogProcessor(
             // follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes
             // the source log from a stale point and replays an already-covered block boundary.
             val effectiveSrcMsgId = watchers.latestSourceMsgId
-            stagingIndex.stage(openTx, effectiveSrcMsgId, txResult, dbOp = null)
-            drainStaging()
+            stagingIndex.stage(openTx, effectiveSrcMsgId, txResult, dbOp = null, durable = task.durable)
+            // No drain here: the tx accumulates and is committed at the next drain (idle, boundary, or
+            // block cut). The caller observes durability via `task.durable`, completed on promotion.
             task.result.complete(writerResult)
+        } catch (e: Throwable) {
+            // Threw before staging (writer, commit, or stage itself) — the tx never reached a batch, so no
+            // drain will complete its handles. Fail them so an awaiting executeTx throws rather than hangs.
+            // Once staged, durability is the drain's responsibility (drainStaging marks or fails it).
+            task.durable.completeExceptionally(e)
+            task.result.completeExceptionally(e)
+            throw e
         } finally {
             openTx.close()
         }
     }
 
     private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
+        // Drain first: this appends TriesDeleted directly, and replica appends must stay in
+        // resolver-processing order — appending ahead of earlier-staged txs would invert the log.
+        drainStaging()
         appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
@@ -404,39 +444,36 @@ class LeaderLogProcessor(
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
 
-                            // Idle: no task ready and a batch is waiting → drain it. The arm is registered
-                            // only when staging is non-empty, so an idle resolver still blocks in select
-                            // (no busy-spin); a ready onReceive wins the select over the zero timeout.
+                            // Idle: no task ready and a batch is waiting → drain it. Registered only when
+                            // staging is non-empty, so an idle resolver still blocks in select (no busy-spin).
+                            // A synchronously-ready onReceive is selected before the zero-delay timeout can
+                            // dispatch, so this fires only when all channels are momentarily empty.
                             if (!stagingIndex.isEmpty) {
                                 @OptIn(ExperimentalCoroutinesApi::class)
                                 onTimeout(0.milliseconds) { null }
                             }
                         }
 
-                        if (task == null) {
-                            drainStaging()
-                            continue
-                        }
-
                         try {
                             when (task) {
+                                null -> drainStaging()   // idle: flush the accumulated batch
                                 is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
                                 is ExtSourceTask.IndexTx -> handleIndexTx(task)
                                 is GcTask.TriesDeleted -> handleTriesDeleted(task)
                             }
-                            task.onComplete.complete(Unit)
+                            task?.onComplete?.complete(Unit)
                         } catch (e: CancellationException) {
-                            task.onComplete.cancel(e)
+                            task?.onComplete?.cancel(e)
                             throw e
                         } catch (e: InterruptedException) {
-                            task.onComplete.completeExceptionally(e)
+                            task?.onComplete?.completeExceptionally(e)
                             throw e
                         } catch (e: Interrupted) {
-                            task.onComplete.completeExceptionally(e)
+                            task?.onComplete?.completeExceptionally(e)
                             throw e
                         } catch (e: Throwable) {
                             watchers.notifyError(e)
-                            task.onComplete.completeExceptionally(e)
+                            task?.onComplete?.completeExceptionally(e)
                             throw e
                         }
                     }
@@ -445,6 +482,10 @@ class LeaderLogProcessor(
                 } catch (t: Throwable) {
                     cause = t
                 } finally {
+                    // Fail the handles of any txs left accumulated (never drained): the resolver swallows
+                    // the fault into `cause` and is a supervisor child, so its exit won't cancel a caller
+                    // awaiting a staged tx's `durable` — without this they'd hang.
+                    stagingIndex.failPending(cause)
                     sourceLogCh.close(cause)
                     extSourceCh.close(cause)
                     gcCh.close(cause)
@@ -476,23 +517,30 @@ class LeaderLogProcessor(
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer, stagingIndex.resolvedTxs)
 
+    private suspend fun indexExtTx(
+        externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
+        writer: suspend (OpenTx) -> TxResult,
+    ): ExtSourceTask.IndexTx =
+        ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer).also { enqueue(it) }
+
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ): TxResult =
-        ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
-            .also { enqueue(it).await() }
-            .result.await()
+    ): TxResult {
+        val task = indexExtTx(externalSourceToken, systemTime, writer)
+        task.durable.await()          // suspend until the tx is durable (promoted at the next drain)
+        return task.result.await()    // completed at staging, so already available once durable
+    }
 
     override suspend fun submitTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ) {
-        // Fire-and-forget: enqueue and return without awaiting the completion handle. The task's
-        // `result`/`onComplete` are completed by the persister but go unawaited here — an unrecoverable
-        // failure closes the channel with its cause, so the next `enqueue` (this or `executeTx`) throws it.
-        enqueue(ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer))
-    }
+    ): Deferred<Unit> =
+        // Fire-and-forget: enqueue and hand back the durability handle without awaiting it. A caller that
+        // needs durability awaits it (that's `executeTx`); a high-volume source drops it. An unrecoverable
+        // ingestion failure closes the channel with its cause, so the next enqueue (this or `executeTx`)
+        // throws it — and the handle itself is failed if the drain faults before this tx is durable.
+        indexExtTx(externalSourceToken, systemTime, writer).durable
 
     private suspend fun maybeFlushBlock() {
         if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
