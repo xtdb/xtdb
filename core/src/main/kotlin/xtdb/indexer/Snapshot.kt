@@ -11,6 +11,7 @@ import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import xtdb.util.safeMap
 import xtdb.util.safelyOpening
+import java.time.Instant
 import java.util.HashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.component1
@@ -26,7 +27,7 @@ class Snapshot(
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
     interface Source {
-        fun openSnapshot(): Snapshot
+        fun openSnapshot(minSystemTime: Instant?): Snapshot
     }
 
     fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()

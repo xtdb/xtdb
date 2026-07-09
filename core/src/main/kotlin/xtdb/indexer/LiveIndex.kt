@@ -28,6 +28,7 @@ import xtdb.util.warn
 import java.io.ByteArrayInputStream
 import java.nio.channels.Channels
 import java.time.Duration
+import java.time.Instant
 import java.util.HashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.StampedLock
@@ -134,8 +135,6 @@ class LiveIndex private constructor(
             }
 
             latestCompletedTx = txKey
-
-            refreshSnap0()
         } finally {
             snapLock.unlock(stamp)
         }
@@ -150,10 +149,23 @@ class LiveIndex private constructor(
         }
     }
 
-    override fun openSnapshot() =
+    private fun Snapshot.freshEnough(minSystemTime: Instant?) =
+        minSystemTime == null || txBasis?.systemTime?.let { !it.isBefore(minSystemTime) } == true
+
+    override fun openSnapshot(minSystemTime: Instant?): Snapshot {
         snapLock.withReadLock {
-            sharedSnap!!.also { it.retain() }
+            sharedSnap!!.let { if (it.freshEnough(minSystemTime)) return it.also { s -> s.retain() } }
         }
+
+        // cache too stale for the caller's basis — rebuild under the write lock, double-checking first
+        val stamp = snapLock.writeLock()
+        try {
+            if (!sharedSnap!!.freshEnough(minSystemTime)) refreshSnap0()
+            return sharedSnap!!.also { it.retain() }
+        } finally {
+            snapLock.unlock(stamp)
+        }
+    }
 
     fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
         snapLock.withReadLock {
@@ -183,8 +195,6 @@ class LiveIndex private constructor(
             this@LiveIndex.tables.clear()
 
             blockIdx += 1L
-
-            refreshSnap0()
         } finally {
             snapLock.unlock(stamp)
         }

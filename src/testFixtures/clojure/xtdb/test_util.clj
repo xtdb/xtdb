@@ -246,7 +246,13 @@
          query-opts (-> query-opts
                         (update :default-db (fnil identity "xtdb"))
                         (cond-> node (-> (update :await-token (fnil identity (await-token node)))
-                                         (doto (-> :await-token (as-> token (xt-log/await-node node token nil)))))))
+                                         (doto (-> :await-token (as-> token (xt-log/await-node node token nil))))
+                                         ;; this path calls prepareRa/openQuery directly, bypassing the Connection's
+                                         ;; own basis resolution; resolve the read basis here, post-await, so the
+                                         ;; lazily-rebuilt live-index snapshot is gated to the awaited data rather
+                                         ;; than served stale from the cache.
+                                         (update :snapshot-token
+                                                 (fnil identity (.snapshotToken ^Database$Catalog (or (db/<-node node) Database$Catalog/EMPTY)))))))
 
          [^IQuerySource q-src close-q-src?] (if node
                                               [(.getQuerySource (util/node-base node)) false]
@@ -257,7 +263,8 @@
      (try
        (let [^PreparedQuery pq (.prepareRa q-src query (or (db/<-node node) Database$Catalog/EMPTY)
                                            (PrepareOpts. (:default-tz query-opts) (:default-db query-opts) (:current-time query-opts) nil
-                                                         (boolean (:explain? query-opts)) (boolean (:explain-analyze? query-opts))))]
+                                                         (boolean (:explain? query-opts)) (boolean (:explain-analyze? query-opts))
+                                                         (:snapshot-token query-opts)))]
 
          (util/with-open [^RelationReader args-rel (if args
                                                      (vw/open-args allocator args)

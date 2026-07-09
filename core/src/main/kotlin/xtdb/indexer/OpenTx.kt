@@ -140,7 +140,8 @@ class OpenTx @JvmOverloads constructor(
             val queryDb = object : IQuerySource.QueryDatabase {
                 override val storage get() = dbStorage
                 override val queryState get() = dbState
-                override fun openSnapshot() =
+                // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
+                override fun openSnapshot(minBasis: List<Instant?>?) =
                     DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))
             }
 

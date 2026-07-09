@@ -113,7 +113,7 @@
       bounds)))
 
 (defn tables-with-cols [^Snapshot$Source snap-src]
-  (with-open [snap (.openSnapshot snap-src)]
+  (with-open [snap (.openSnapshot snap-src nil)]
     (update-vals (.getTableInfo snap) set)))
 
 (defn- eid-select->eid [eid-select]

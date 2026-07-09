@@ -17,9 +17,10 @@
 --     the live index, so the concurrency model below is the same regardless of
 --     which variant is in play.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
---   - Writes don't block reads: a shared, reference-counted snapshot is published
---     after each DURABLE confirmation; existing snapshots remain valid until their
---     last holder releases them
+--   - Writes don't block reads: a shared, reference-counted snapshot is a lazily-
+--     advanced cache, rebuilt on read only when a reader demands a basis it does
+--     not yet satisfy (gated by the reader's minimum basis); existing snapshots
+--     remain valid until their last holder releases them
 --
 -- Pipelining (leader only) — single-resolver model:
 --   On a leader, a SINGLE resolver coroutine drives the whole pipeline (see
@@ -61,14 +62,16 @@
 --   — opportunistically between the records of a source-log batch, or forced at drain
 --   points — by awaiting the per-tx positions and PROMOTING the batch
 --   into the durable live tables ONE TX AT A TIME, in send order: advancing the DURABLE
---   basis (LiveIndex.latest_completed_tx) and the apply cursor per tx, refreshing the
---   shared external snapshot, notifying watchers, cutting a block if the live index
---   filled, then freeing the batch and immediately sealing+launching the accumulated
---   tail if any. Because batch N+1's append is only launched after batch N settles, at
+--   basis (LiveIndex.latest_completed_tx) and the apply cursor per tx, notifying
+--   watchers, cutting a block if the live index filled, then freeing the batch and
+--   immediately sealing+launching the accumulated tail if any. It does NOT refresh the
+--   shared external snapshot here: the snapshot is a lazily-advanced cache, rebuilt on
+--   the next demanding read (see RefreshSharedSnapshot), so promotion leaves it stale.
+--   Because batch N+1's append is only launched after batch N settles, at
 --   most one producer transaction is ever open — the resolver's single `in_flight` slot
 --   makes this structural (same fencing rationale as before). Everything except the background
 --   serialize+append+commit — apply, promote/import, advance the durable head + apply
---   cursor, refresh, notify, finish blocks — stays on the resolver. Followers and the
+--   cursor, notify, finish blocks — stays on the resolver. Followers and the
 --   transition processor have no staging index: the messages they import are already
 --   durable, so they advance LiveIndex.latest_completed_tx directly.
 --
@@ -245,10 +248,12 @@ entity LiveIndex {
     -- Durable live tables: hold only promoted (durably-replicated) rows.
     tables: LiveTable with index = this
 
-    -- Current shared external snapshot. Refreshed on each durable confirmation
-    -- (promotion) and on NextBlock (see RefreshSharedSnapshot). External readers
-    -- retain this snapshot when calling OpenSnapshot(index); see
-    -- OpenExternalSnapshot. Its basis is latest_completed_tx (durable).
+    -- Current shared external snapshot: a lazily-advanced cache, NOT refreshed
+    -- eagerly. It is rebuilt (see RefreshSharedSnapshot) only when a reader
+    -- requests a basis this cache does not satisfy; promotion and NextBlock leave
+    -- it stale. External readers retain this snapshot when calling
+    -- OpenSnapshot(index, min_basis); see OpenExternalSnapshot. Its basis is
+    -- latest_completed_tx (durable) as of the last rebuild.
     shared_snap: Snapshot
 
     row_count: tables.sum(t => t.row_count)
@@ -499,8 +504,9 @@ entity LiveTableTx {
 --     observe later writes
 --   - Commits are atomic: all tx rows become visible together, or none
 --   - Multiple snapshots can be held concurrently without interference
---   - Writes don't block reads: a shared external snapshot is refreshed
---     after each commit, and existing snapshots remain valid until released
+--   - Writes don't block reads: a shared external snapshot is rebuilt lazily on
+--     read (only when a reader demands a basis it does not yet satisfy), and
+--     existing snapshots remain valid until released
 --
 -- Sharing and reference counting:
 --   - External snapshots are shared: the live index publishes a single
@@ -770,9 +776,11 @@ rule PromoteNext {
     -- the front of the in-flight batch, imports its rows into the durable live tables
     -- (advancing the durable basis to that tx and its apply cursor to that tx's replica-
     -- log position), THEN drops it from the batch — import-before-drop is what makes a
-    -- partial failure safe (see below). Refreshing the external shared snapshot and
-    -- notifying watchers happen per promoted tx, driven by the resolver in db.allium.
-    -- This is the point at which a committed tx becomes queryable. When the batch empties
+    -- partial failure safe (see below). Notifying watchers happens per promoted tx,
+    -- driven by the resolver in db.allium. This is the point at which a committed tx
+    -- becomes queryable — the durable-basis advance alone makes it so. The shared
+    -- external snapshot is NOT refreshed here: it is a lazily-advanced cache, rebuilt on
+    -- the next demanding read (see RefreshSharedSnapshot). When the batch empties
     -- the resolver frees it (removes the batch, so staging.in_flight becomes null) and
     -- immediately seals+launches the accumulated tail if any, so batches chain
     -- back-to-back (double-buffering: resolution of the next txs overlapped the
@@ -824,9 +832,10 @@ rule PromoteNext {
             live_table.rows.addAll(staged_table.rows)
 
         -- Advance the durable basis to this tx (the durable live index's own
-        -- latest_completed_tx) and refresh the external snapshot to reflect it.
+        -- latest_completed_tx). This alone makes the newly-durable tx queryable;
+        -- the shared external snapshot is rebuilt lazily on the next demanding
+        -- read (see RefreshSharedSnapshot), NOT refreshed here.
         index.latest_completed_tx = staged_tx.tx_key
-        RefreshSharedSnapshot(index)
 
         -- Collect an external-source tx's durability handle onto the resolver for settle-
         -- end completion (source-log txs carry none). NOT completed here — see
@@ -927,18 +936,26 @@ rule AbortTransaction {
 ------------------------------------------------------------
 
 rule OpenExternalSnapshot {
-    -- Called by queries outside any transaction.
+    -- Called by queries outside any transaction. min_basis is the caller's
+    -- minimum read basis (a system-time); it may be absent (null).
     --
-    -- The index publishes a single shared Snapshot whose basis is
-    -- latest_completed_tx (durable) and whose layers are the DURABLE live segments only
-    -- — no staging. It is refreshed on each durable confirmation (see
-    -- PromoteNext / RefreshSharedSnapshot). Each external opener retains
-    -- the current shared snapshot rather than building a fresh one, and
-    -- releases it on close. The underlying segments are freed when the last
-    -- holder releases.
-    when: OpenSnapshot(index)
+    -- The index holds a single shared Snapshot whose basis is latest_completed_tx
+    -- (durable) as of its last rebuild and whose layers are the DURABLE live
+    -- segments only — no staging. It is a lazily-advanced cache, NOT refreshed on
+    -- promotion or NextBlock. If the caller has no minimum basis, or the cached
+    -- snapshot's basis already satisfies it, the current cache is retained and
+    -- returned as-is; otherwise it is rebuilt to the current durable basis first
+    -- (see RefreshSharedSnapshot). The awaited/durable basis guarantees
+    -- latest_completed_tx >= min_basis by the time this runs, so a rebuild can
+    -- always reach a satisfying basis. Each external opener retains the shared
+    -- snapshot and releases it on close; the underlying segments are freed when
+    -- the last holder releases.
+    when: OpenSnapshot(index, min_basis?)
 
     ensures:
+        -- Rebuild only when the cache is too stale for the requested basis.
+        if min_basis != null and index.shared_snap.basis_tx.system_time < min_basis:
+            RefreshSharedSnapshot(index)
         let snap = index.shared_snap
         snap.ref_count = snap.ref_count + 1
         snap   -- returned to the caller; close() decrements ref_count
@@ -994,11 +1011,15 @@ rule OpenTransactionSnapshot {
 }
 
 rule RefreshSharedSnapshot {
-    -- Triggered on each durable confirmation (promotion) and on NextBlock (which
-    -- drops all live tables). The index atomically swaps its shared snapshot for
-    -- a freshly-built one reflecting the newly-durable state, and releases its
-    -- own retention on the previous shared snapshot. Readers already holding the
-    -- previous shared snapshot retain it independently.
+    -- The rebuild PRIMITIVE for the shared external snapshot. NOT triggered by
+    -- promotion or NextBlock (the cache is advanced lazily). It is invoked by
+    -- OpenExternalSnapshot when the cached snapshot is too stale for the
+    -- requested basis, and out-of-band by compaction (which mutates the
+    -- trie-catalog without advancing latest_completed_tx). The index atomically
+    -- swaps its shared snapshot for a freshly-built one reflecting the current
+    -- durable state, and releases its own retention on the previous shared
+    -- snapshot. Readers already holding the previous shared snapshot retain it
+    -- independently.
     when: RefreshSharedSnapshot(index)
 
     ensures:
@@ -1088,8 +1109,9 @@ rule NextBlock {
     -- Tables will be recreated on demand by future transactions
     ensures: index.tables = {}
 
-    -- The shared snapshot no longer reflects reality; refresh it so
-    -- subsequent external openers see an empty index.
-    ensures: RefreshSharedSnapshot(index)
+    -- The shared snapshot is NOT refreshed here. A subsequent reader whose basis
+    -- the (now stale) cache still satisfies may reuse it: its sliced segments are
+    -- independent of the cleared tables and remain valid. A reader demanding a
+    -- newer basis rebuilds the cache (see OpenExternalSnapshot).
 }
 

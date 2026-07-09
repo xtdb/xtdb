@@ -2599,8 +2599,8 @@ ORDER BY 1,2;")
 
 (t/deftest select-snapshot-token
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SELECT SNAPSHOT_TOKEN ts"]))
-          "before any transactions")
+    (t/is (= [{:ts (basis/->time-basis-str {"xtdb" [nil]})}] (jdbc/execute! conn ["SELECT SNAPSHOT_TOKEN ts"]))
+          "before any transactions, the resolved token has null components")
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
 
@@ -2643,8 +2643,9 @@ ORDER BY 1,2;")
 
 (t/deftest snapshot-time
   (with-open [conn (jdbc-conn)]
-    (t/is (= [{:ts nil}] (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2019-01-01Z' SELECT SNAPSHOT_TOKEN ts"]))
-          "before any transactions")
+    (t/is (= [{:ts (basis/->time-basis-str {"xtdb" [nil]})}]
+             (jdbc/execute! conn ["SETTING SNAPSHOT_TIME = TIMESTAMP '2019-01-01Z' SELECT SNAPSHOT_TOKEN ts"]))
+          "before any transactions, the resolved token has null components")
 
     (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :x 3}]])
 

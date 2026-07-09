@@ -9,6 +9,9 @@ import java.time.ZoneId
 data class QueryOpts @JvmOverloads constructor(
     val currentTime: Instant? = null,
     val defaultTz: ZoneId? = null,
+    // the connection's resolved read basis — a tx's pinned begin-time token, else (autocommit) latest-completed
+    // now. Gates the live snapshot so a read sees this connection's own writes, and is what SELECT SNAPSHOT_TOKEN
+    // reports. Null only for callers that resolve none (they read whatever's cached).
     val snapshotToken: String? = null,
     val snapshotTime: Instant? = null,
     val tracer: Tracer? = null,
@@ -28,4 +31,7 @@ data class PrepareOpts @JvmOverloads constructor(
     // explain a raw RA-plan prepare; for SQL the flag is read off the parse tree instead.
     val explain: Boolean = false,
     val explainAnalyze: Boolean = false,
+    // the connection's resolved read basis at prepare time — gates the snapshot that prepare-time schema
+    // (table-info) reads, so a freshly-committed table is visible when planning the statement that references it.
+    val snapshotToken: String? = null,
 )

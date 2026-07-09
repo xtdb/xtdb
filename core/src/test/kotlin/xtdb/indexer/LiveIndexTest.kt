@@ -4,6 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -134,7 +135,7 @@ class LiveIndexTest {
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
                 tx.put(table, UUID.randomUUID())
 
-                db.liveIndex.openSnapshot().use { snap ->
+                db.liveIndex.openSnapshot(null).use { snap ->
                     assertTrue(snap.table(table).isEmpty())
                 }
 
@@ -147,7 +148,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot().use { snap ->
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
                 assertEquals(1, snap.table(table).single().relation.rowCount)
             }
         }
@@ -163,7 +164,7 @@ class LiveIndexTest {
                 db.commitTx(tx1)
             }
 
-            db.liveIndex.openSnapshot().use { snapBefore ->
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snapBefore ->
                 val before = snapBefore.table(table).single()
                 assertEquals(1, before.relation.rowCount)
 
@@ -174,7 +175,7 @@ class LiveIndexTest {
 
                 assertEquals(1, before.relation.rowCount)
 
-                db.liveIndex.openSnapshot().use { snapAfter ->
+                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { snapAfter ->
                     assertEquals(2, snapAfter.table(table).single().relation.rowCount)
                 }
             }
@@ -216,7 +217,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot().use { snap ->
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
                 assertEquals(3, snap.table(table).single().relation.rowCount)
             }
         }
@@ -254,7 +255,7 @@ class LiveIndexTest {
                 db.commitTx(tx)
             }
 
-            db.liveIndex.openSnapshot().use { snap ->
+            db.liveIndex.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
                 val before = snap.table(table).single().relation.rowCount
                 db.liveIndex.finishBlock(db.bp, 0L)
                 assertEquals(before, snap.table(table).single().relation.rowCount)
@@ -299,6 +300,59 @@ class LiveIndexTest {
                     assertTrue(snap.table(table).isEmpty(), "live-table must be filtered — its rows now live in L0_0")
                     assertEquals(0L, snap.trieCatSnap.l0MaxBlockIdx(table), "L0_0 must be visible in the snap's trie-cat")
                 }
+            }
+        }
+    }
+
+    // the lazy gate: a commit no longer eagerly rebuilds the shared snapshot — only a read demanding a
+    // basis the cache doesn't yet satisfy does.
+    @Test
+    fun `snapshot not rebuilt until a newer basis is demanded`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "test-table")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(table, UUID.randomUUID())
+                db.commitTx(tx)
+            }
+
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap0 ->
+                // a second commit, with no read in between — must not eagerly rebuild the cached snapshot
+                db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx ->
+                    tx.put(table, UUID.randomUUID())
+                    db.commitTx(tx)
+                }
+
+                db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { reused ->
+                    assertSame(snap0, reused, "a basis the cache already satisfies reuses it — the commit did not rebuild the snapshot")
+                }
+
+                db.liveIndex.openSnapshot(Instant.parse("2020-01-02T00:00:00Z")).use { rebuilt ->
+                    assertNotSame(snap0, rebuilt, "a newer basis rebuilds the snapshot on demand")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `gated snapshot reflects its demanded basis`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "test-table")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.put(table, UUID.randomUUID())
+                db.commitTx(tx)
+            }
+
+            db.liveIndex.openSnapshot(Instant.parse("2020-01-01T00:00:00Z")).use { snap ->
+                assertEquals(
+                    Instant.parse("2020-01-01T00:00:00Z"), snap.txBasis?.systemTime,
+                    "snapshot basis covers the demanded tx"
+                )
+                assertEquals(
+                    1, snap.table(table).single().relation.rowCount,
+                    "the row committed at the demanded basis is visible"
+                )
             }
         }
     }

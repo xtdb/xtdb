@@ -233,7 +233,7 @@ class LogProcessorSimTest : SimulationTestBase() {
             .toSet()
 
     private fun assertSnapshotHasNoAbortedRows(node: SimNode) {
-        node.liveIndex.openSnapshot().use { snap ->
+        node.liveIndex.openSnapshot(node.liveIndex.latestCompletedTx?.systemTime).use { snap ->
             assertEquals(
                 node.liveIndex.latestCompletedTx?.txId, snap.txBasis?.txId,
                 "snapshot basis should equal liveIndex.latestCompletedTx"

@@ -361,9 +361,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         // SHOW reads session/node state and must not await — only a real query/DML awaits its basis.
                         is ParsedStatement.Query, is ParsedStatement.Execute, is ParsedStatement.Dml -> {
                             dbCat.awaitAll(awaitToken, awaitTimeout)
+                            // gate prepare-time schema (table-info) reads on the awaited basis, so a table
+                            // committed on this connection is visible when planning the statement referencing it
                             qSrc.prepareQuery(
                                 parsedStatement, dbCat,
-                                PrepareOpts(defaultTz = defaultTz, defaultDb = targetDb)
+                                PrepareOpts(defaultTz = defaultTz, defaultDb = targetDb, snapshotToken = dbCat.snapshotToken())
                             )
                         }
 
@@ -820,13 +822,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // planner's own, so a frontend-pinned clock is authoritative.
         private fun queryOpts() = tx.let { t ->
             val b = t?.readBasis
-            QueryOpts(
-                b?.currentTime ?: clock.instant(),
-                t?.txDefaultTz ?: defaultTz,
-                b?.snapshotToken,
-                b?.snapshotTime,
-                tracer
-            )
+            // Resolve the read basis: a tx's pinned begin-time token, else (autocommit) latest-completed now —
+            // the statement's prepare() already awaited this connection's writes, so latest reflects them. Read
+            // directly (not via pinReadBasis) so we don't re-await / decode the AWAIT_TOKEN here. This token both
+            // gates the live snapshot (so a read sees this connection's writes) and is what SELECT SNAPSHOT_TOKEN
+            // reports.
+            val snapshotToken = b?.snapshotToken ?: dbCat.snapshotToken()
+            QueryOpts(b?.currentTime ?: clock.instant(), t?.txDefaultTz ?: defaultTz,
+                      snapshotToken, b?.snapshotTime, tracer)
         }
 
         // A SHOW answered from connection / catalog state as a zero-param [PreparedQuery]. [rows] is a thunk so

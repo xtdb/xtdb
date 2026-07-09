@@ -337,31 +337,36 @@
           parsed-query (if stmt (.getAst stmt) parsed-query)
           qtext (cond stmt (.getOriginalSql stmt)
                       (instance? Sql$DirectlyExecutableStatementContext parsed-query) (ast-source-text parsed-query))
+          ;; the connection's read basis at prepare time — so prepare-time schema (table-info) sees tables
+          ;; committed up to what this connection has awaited. nil for basis-less callers (they get "whatever").
+          prepare-min-basis (some-> (.getSnapshotToken ^PrepareOpts query-opts) basis/<-time-basis-str)
           {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
                                                               (cond-> qtext (assoc :query-text qtext))
                                                               (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
-      (letfn [(open-snaps []
+      ;; min-basis is {db-name [system-time per partition]} — the caller's already-awaited read basis, so the
+      ;; live index can hand back its cached snapshot when it's fresh enough. nil = "don't care" (schema/prepare).
+      (letfn [(open-snaps [min-basis]
                 ;; TODO this opens up a snapshot for *every* db in the catalog
                 ;; when people have 'proper' multi-tenancy, this will be a problem
                 ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
                 (util/with-close-on-catch [!snaps (HashMap.)]
                   (doseq [db-name (.getDatabaseNames db-cat)]
-                    (.put !snaps db-name (.openSnapshot (.databaseOrNull db-cat db-name))))
+                    (.put !snaps db-name (.openSnapshot (.databaseOrNull db-cat db-name) (get min-basis db-name))))
                   (into {} !snaps)))
 
-              (->table-info []
+              (->table-info [min-basis]
                 ;; TODO this, too, gets the schema for *every* db in the catalog
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
-                                        (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat db-name))]
+                                        (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat db-name) (get min-basis db-name))]
                                           (->> (.tableInfo snap)
                                                (map (fn [[table-ref cols]] [[db-name table-ref] (set cols)])))))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]
 
-        (let [!table-info (atom (->table-info))]
+        (let [!table-info (atom (->table-info prepare-min-basis))]
 
           (reify PreparedQuery
             (getParamCount [_] (:param-count (plan-query* @!table-info)))
@@ -371,7 +376,7 @@
 
             (getColumnFields [_ param-fields]
               (let [planned-query (plan-query* @!table-info)]
-                (util/with-open [snaps (open-snaps)]
+                (util/with-open [snaps (open-snaps prepare-min-basis)]
                   (let [emitted-query (emit-query planned-query scan-emitter db-cat snaps
                                                   (->> param-fields
                                                        (into {} (map (fn [^Field f]
@@ -388,16 +393,21 @@
             (getWarnings [_] (:warnings (plan-query* @!table-info)))
 
             (openQuery [_ args opts]
-              (let [default-tz (or (.getDefaultTz opts) default-tz)]
+              (let [default-tz (or (.getDefaultTz opts) default-tz)
+                    ;; the connection's resolved read basis — gates the cached snapshot and keeps the plan's
+                    ;; schema consistent with the data it'll read. This same token, decoded and (below) capped by
+                    ;; any SETTING/SNAPSHOT_TIME, is the effective read basis; capping only lowers the bound, so
+                    ;; gating on the resolved token stays safe.
+                    min-basis (some-> (.getSnapshotToken opts) basis/<-time-basis-str)]
               ;; we own the args from here: closed on any failure below, else handed to the cursor (which
               ;; closes them on close). the caller must not close them itself.
               (util/with-close-on-catch [^RelationReader args (or args vw/empty-args)
                                          ^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
-                                         snaps (open-snaps)]
+                                         snaps (open-snaps min-basis)]
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
-                      table-info (reset! !table-info (->table-info))
+                      table-info (reset! !table-info (->table-info min-basis))
                       planned-query (plan-query* table-info)
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
@@ -487,7 +497,7 @@
 
   (preparePatchDocsQuery [this table valid-from valid-to db-cat opts]
     (let [default-db (.getDefaultDb opts)
-          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat default-db))]
+          table-info (-> (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat default-db) nil)]
                            (.tableInfo snap))
                          (sql/xform-table-info [default-db] default-db))
           plan (-> (sql/plan-patch {:table-info table-info}

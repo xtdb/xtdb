@@ -4,6 +4,7 @@ import xtdb.api.TransactionKey
 import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.closeAll
+import java.time.Instant
 
 /**
  * Database-level snapshot composed of one [Snapshot] per [xtdb.database.DatabasePartition].
@@ -18,7 +19,7 @@ import xtdb.util.closeAll
 class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
 
     interface Source {
-        fun openSnapshot(): DatabaseSnapshot
+        fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot
     }
 
     init {

@@ -51,6 +51,7 @@ import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
+import java.time.Instant
 import java.util.*
 import kotlin.concurrent.Volatile
 
@@ -80,9 +81,15 @@ class Database(
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
-    override fun openSnapshot(): DatabaseSnapshot =
-        // List position = partition index, so basis-vector slot N matches `partitions[N]`.
-        DatabaseSnapshot(partitions.entries.sortedBy { it.key }.map { it.value.openSnapshot() })
+    override fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot =
+        // Index minBasis by sorted position, matching how `currentBasis`/`snapshotToken` pack it and how
+        // `txBasis`/`validate-basis-not-before` read it back — slot N is the Nth partition in key order.
+        DatabaseSnapshot(partitions.entries.sortedBy { it.key }
+            .mapIndexed { idx, e -> e.value.openSnapshot(minBasis?.getOrNull(idx)) })
+
+    /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
+    fun currentBasis(): List<Instant?> =
+        partitions.entries.sortedBy { it.key }.map { it.value.liveIndex.latestCompletedTx?.systemTime }
 
     val blockCatalog: BlockCatalog get() = partition0.blockCatalog
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
@@ -91,7 +98,8 @@ class Database(
         val historical = tableCatalog.getTypes(table)
         // TODO (#5557 unit 7) iterate the snapshot's partitions and merge per-partition live types;
         // for now single-partition is the only allowed shape, so pick the only Snapshot.
-        val live = openSnapshot().use { it.partitions.first().allColumnTypes[table] }
+        // gate on the current basis so a just-committed table's columns are visible (getTableSchema awaits first).
+        val live = openSnapshot(currentBasis()).use { it.partitions.first().allColumnTypes[table] }
         return if (historical == null && live == null) null
         else (historical ?: emptyMap()) + (live ?: emptyMap())
     }

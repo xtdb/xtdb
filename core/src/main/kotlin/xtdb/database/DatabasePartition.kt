@@ -8,6 +8,7 @@ import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.trie.TrieCatalog
+import java.time.Instant
 
 class DatabasePartition(
     val partition: Int,
@@ -25,7 +26,7 @@ class DatabasePartition(
     val compactor: Compactor.ForDatabase
         get() = compactorOrNull ?: error("compactor not initialised")
 
-    fun openSnapshot(): Snapshot = state.liveIndex.openSnapshot()
+    fun openSnapshot(minSystemTime: Instant?): Snapshot = state.liveIndex.openSnapshot(minSystemTime)
 
     override fun close() {
         logProcessor?.close()
