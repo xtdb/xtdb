@@ -52,7 +52,7 @@ private val LOG = OpenTx::class.logger
  * read-your-writes visibility into those staged writes. [TxIndexer] owns opening, committing and closing the
  * OpenTx — a writer is handed one, it never constructs its own.
  */
-class OpenTx(
+class OpenTx @JvmOverloads constructor(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,
@@ -60,6 +60,9 @@ class OpenTx(
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
     private val tracer: Tracer? = null,
+    // In-flight staged predecessors this tx must read behind (read-your-writes across the batch),
+    // supplied by the resolver which owns the staging index. Empty for external / non-resolution txs.
+    private val stagedTxs: List<StagedTx> = emptyList(),
 ) : AutoCloseable {
 
     data class QueryOpts(
@@ -145,7 +148,7 @@ class OpenTx(
                 override val storage get() = dbStorage
                 override val queryState get() = dbState
                 override fun openSnapshot() =
-                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(this@OpenTx)))
+                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(stagedTxs, this@OpenTx)))
             }
 
             return object : IQuerySource.QueryCatalog {
@@ -178,6 +181,7 @@ class OpenTx(
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
+    @JvmOverloads
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeMicros = currentTime.asMicros
