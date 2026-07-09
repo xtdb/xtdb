@@ -87,7 +87,7 @@ class Snapshot(
         fun open(
             al: BufferAllocator, tableCat: TableCatalog,
             trieCatalog: TrieCatalog, liveIndex: LiveIndex,
-            stagedTxs: List<StagedTx> = emptyList(),
+            resolvedTxs: List<ResolvedTx> = emptyList(),
             ownTx: OpenTx? = null,
         ): Snapshot = safelyOpening {
             val trieCatSnap = trieCatalog.snapshot()
@@ -104,7 +104,7 @@ class Snapshot(
                     .safeMap { TableSnapshot.open(al, it) }
             }
 
-            val stagedTables = stagedTxs.flatMap { it.allTables }
+            val stagedTables = resolvedTxs.flatMap { it.allTables }
 
             val stagedSnaps = openAll {
                 stagedTables

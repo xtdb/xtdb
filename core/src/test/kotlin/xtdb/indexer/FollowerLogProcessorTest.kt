@@ -113,9 +113,9 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, tx40), record(1, tx42), record(2, tx43)))
 
-        verify(exactly = 0) { liveIndex.importTx(tx40) }
-        verify(exactly = 0) { liveIndex.importTx(tx42) }
-        verify { liveIndex.importTx(tx43) }
+        verify(exactly = 0) { liveIndex.commitTx(match { it.txId == tx40.txId }, any()) }
+        verify(exactly = 0) { liveIndex.commitTx(match { it.txId == tx42.txId }, any()) }
+        verify { liveIndex.commitTx(match { it.txId == tx43.txId }, any()) }
     }
 
     @Test
@@ -140,7 +140,7 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(staleRecords)
 
-        verify(exactly = 0) { liveIndex.importTx(any()) }
+        verify(exactly = 0) { liveIndex.commitTx(any(), any()) }
         assert(watchers.latestSourceMsgId == 1000L) { "latestSourceMsgId should not have changed" }
     }
 
@@ -181,7 +181,7 @@ class FollowerLogProcessorTest {
             record(1, tx1001),
         ))
 
-        verify { liveIndex.importTx(tx1001) }
+        verify { liveIndex.commitTx(match { it.txId == tx1001.txId }, any()) }
         assert(watchers.latestSourceMsgId == 1001L)
     }
 
@@ -202,7 +202,7 @@ class FollowerLogProcessorTest {
             record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, -1, emptyList())),
         ))
 
-        verify { liveIndex.importTx(extTx) }
+        verify { liveIndex.commitTx(match { it.txId == extTx.txId }, any()) }
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
         assertEquals(0L, blockCatalog.currentBlockIndex)
@@ -218,9 +218,9 @@ class FollowerLogProcessorTest {
 
         proc.processRecords(listOf(record(0, ext0), record(1, src1), record(2, ext2)))
 
-        verify { liveIndex.importTx(ext0) }
-        verify { liveIndex.importTx(src1) }
-        verify { liveIndex.importTx(ext2) }
+        verify { liveIndex.commitTx(match { it.txId == ext0.txId }, any()) }
+        verify { liveIndex.commitTx(match { it.txId == src1.txId }, any()) }
+        verify { liveIndex.commitTx(match { it.txId == ext2.txId }, any()) }
         assertEquals(1L, watchers.latestSourceMsgId,
             "latestSourceMsgId reflects only the source-log tx; ext-source txs leave it alone")
     }

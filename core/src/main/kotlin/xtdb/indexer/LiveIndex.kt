@@ -5,6 +5,7 @@ import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
+import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
@@ -31,6 +32,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.StampedLock
 
 private val LOG = LiveIndex::class.logger
+
+// Deserialize a replica-log [ReplicaMessage.ResolvedTx]'s per-table IPC bytes back into owned
+// relations, for the follower/transition path which only has the serialized form. The leader skips
+// this entirely — it commits from the relations it already holds. The caller closes the result.
+internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<TableRef, Relation> =
+    mutableMapOf<TableRef, Relation>().closeAllOnCatch { rels ->
+        for ((schemaAndTable, ipcBytes) in tableData) {
+            Relation.StreamLoader(al, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
+                Relation(al, loader.schema).closeOnCatch { rel ->
+                    loader.loadNextPage(rel)
+                    rels[TableRef.parse(schemaAndTable)] = rel
+                }
+            }
+        }
+        rels
+    }
 
 class LiveIndex private constructor(
     private val allocator: BufferAllocator,
@@ -101,54 +118,21 @@ class LiveIndex private constructor(
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
-    fun importTx(resolvedTx: ReplicaMessage.ResolvedTx) {
-        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
+    // Promote a committed tx into the live tables straight from its relations — no IPC round-trip.
+    // The leader passes its staged relation slices; a follower deserializes the replica message's
+    // table data first (see `loadTableData`). The caller owns [tables] and closes them afterwards.
+    fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) {
         val stamp = snapLock.writeLock()
         try {
-            for ((schemaAndTable, ipcBytes) in resolvedTx.tableData) {
-                val tableRef = TableRef.parse(schemaAndTable)
+            for ((ref, rel) in tables) {
                 val liveTable =
-                    this@LiveIndex.tables.getOrPut(tableRef) {
-                        LiveTable(
-                            allocator,
-                            tableRef,
-                            blockIdx,
-                            rowCounter,
-                            liveTrieFactory
-                        )
+                    this@LiveIndex.tables.getOrPut(ref) {
+                        LiveTable(allocator, ref, blockIdx, rowCounter, liveTrieFactory)
                     }
-
-                Relation.StreamLoader(allocator, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
-                    Relation(allocator, loader.schema).use { rel ->
-                        loader.loadNextPage(rel)
-                        liveTable.importData(rel)
-                    }
-                }
+                liveTable.importData(rel)
             }
 
             latestCompletedTx = txKey
-
-            refreshSnap0()
-        } finally {
-            snapLock.unlock(stamp)
-        }
-    }
-
-    // Promote a staged (now-durable) tx into the live tables from its owned relation slices — the
-    // leader's promote path. Distinct from `importTx(resolvedTx)`, which followers use to replay a
-    // serialized replica message; here the relations are already in hand, no IPC round-trip.
-    fun importStagedTx(stagedTx: StagedTx) {
-        val stamp = snapLock.writeLock()
-        try {
-            for (table in stagedTx.allTables) {
-                val liveTable =
-                    this@LiveIndex.tables.getOrPut(table.ref) {
-                        LiveTable(allocator, table.ref, blockIdx, rowCounter, liveTrieFactory)
-                    }
-                liveTable.importData(table.relation)
-            }
-
-            latestCompletedTx = stagedTx.txKey
 
             refreshSnap0()
         } finally {
@@ -170,14 +154,14 @@ class LiveIndex private constructor(
             sharedSnap!!.also { it.retain() }
         }
 
-    fun openSnapshot(stagedTxs: List<StagedTx>, ownTx: OpenTx): Snapshot =
+    fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
         snapLock.withReadLock {
             // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
             // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
             // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
             // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
             // of our trie-cat capture without breaking correctness.
-            Snapshot.open(allocator, tableCatalog, trieCatalog, this, stagedTxs, ownTx)
+            Snapshot.open(allocator, tableCatalog, trieCatalog, this, resolvedTxs, ownTx)
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock

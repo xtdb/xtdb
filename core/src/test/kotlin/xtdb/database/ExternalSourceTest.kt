@@ -235,7 +235,7 @@ class ExternalSourceTest {
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { importStagedTx(any()) } throws RuntimeException("commit pipeline fault")
+            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         }
 
         val extSource = InMemoryExternalSource()
@@ -273,7 +273,7 @@ class ExternalSourceTest {
     fun `submit surfaces an unrecoverable failure to the caller on a later submit`() = runTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
-            every { importStagedTx(any()) } throws RuntimeException("commit pipeline fault")
+            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         }
 
         val caught = CompletableDeferred<Throwable>()
