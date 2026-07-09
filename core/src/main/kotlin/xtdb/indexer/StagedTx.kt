@@ -83,7 +83,7 @@ class StagedTx private constructor(
             mutableListOf<Table>().closeAllOnCatch { staged ->
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
                 // rows, and it must register in the durable index on promotion. This matches what
-                // `serializeTableData` / `importTx` carry (all `tableTxs`, 0-row included). `Table.openSnapshot`
+                // `serializeTableData` carries (all `tableTxs`, 0-row included). `Table.openSnapshot`
                 // drops the empty relation for row-reads, but the table's existence still reaches resolution
                 // via its `columnTypes` (see `Snapshot.open`).
                 for ((ref, tableTx) in openTx.tables) {

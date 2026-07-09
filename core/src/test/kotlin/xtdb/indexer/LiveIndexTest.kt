@@ -64,7 +64,7 @@ class LiveIndexTest {
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)
-            liveIndex.importTx(openTx.commitTx())
+            liveIndex.commitTx(openTx.txKey, openTx.tables.associate { (ref, t) -> ref to t.txRelation })
         }
 
         override fun close() {

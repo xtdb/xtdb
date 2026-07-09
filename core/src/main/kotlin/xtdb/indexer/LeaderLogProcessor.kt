@@ -260,7 +260,7 @@ class LeaderLogProcessor(
 
             for ((pending, handle) in batch.zip(handles)) {
                 val stagedTx = pending.stagedTx
-                liveIndex.importStagedTx(stagedTx)
+                liveIndex.commitTx(stagedTx.txKey, stagedTx.allTables.associate { it.ref to it.relation })
                 latestReplicaMsgId = handle.await().msgId
                 watchers.notifyTx(stagedTx.txResult, stagedTx.notifyMsgId, stagedTx.externalSourceToken)
             }

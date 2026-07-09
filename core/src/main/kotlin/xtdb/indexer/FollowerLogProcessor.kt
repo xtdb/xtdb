@@ -25,6 +25,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
 import xtdb.util.StringUtil.asLexHex
+import xtdb.util.closeAll
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
@@ -141,10 +142,16 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
-                liveIndex.importTx(msg)
-
                 val systemTime = msg.systemTime
                 val txKey = TransactionKey(msg.txId, systemTime)
+
+                val tables = msg.loadTableData(allocator)
+                try {
+                    liveIndex.commitTx(txKey, tables)
+                } finally {
+                    tables.closeAll()
+                }
+
                 if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {

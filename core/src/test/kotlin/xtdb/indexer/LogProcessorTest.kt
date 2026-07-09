@@ -137,7 +137,7 @@ class LogProcessorTest {
         // wait for the follower→leader transition to complete (runs on Dispatchers.Default)
         watchers.awaitTx(1)
 
-        verify { liveIndex.importTx(any()) }
+        verify { liveIndex.commitTx(any(), any()) }
 
         // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()
@@ -169,7 +169,7 @@ class LogProcessorTest {
 
         watchers.awaitTx(1)
 
-        verify { liveIndex.importTx(any()) }
+        verify { liveIndex.commitTx(any(), any()) }
 
         // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
         scope.coroutineContext.job.cancelAndJoin()

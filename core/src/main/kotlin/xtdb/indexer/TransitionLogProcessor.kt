@@ -58,8 +58,15 @@ class TransitionLogProcessor(
         val msgId = record.msgId
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {
-                liveIndex.importTx(msg)
                 val txKey = TransactionKey(msg.txId, msg.systemTime)
+
+                val tables = msg.loadTableData(allocator)
+                try {
+                    liveIndex.commitTx(txKey, tables)
+                } finally {
+                    tables.closeAll()
+                }
+
                 if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {
