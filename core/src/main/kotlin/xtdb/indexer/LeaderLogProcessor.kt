@@ -97,6 +97,97 @@ class LeaderLogProcessor(
     // joined so nothing live still touches it; see StagingIndex.
     private val stagingIndex = StagingIndex(allocator, liveIndex.latestCompletedTx)
 
+    /**
+     * A sealed batch: the txs bound for one replica-log producer transaction, in send order, together
+     * with [append] — that producer transaction's background commit, yielding the per-tx replica-log
+     * positions. One value on purpose: the txs and the append that carries them can't drift apart.
+     */
+    private inner class InFlightBatch(
+        val txs: List<ResolvedTx>, private val append: Deferred<List<Pair<ResolvedTx, Log.MessageMetadata>>>
+    ) : AutoCloseable {
+
+        val isCompleted: Boolean get() = append.isCompleted
+
+        suspend fun settle() {
+            val metadatas = append.await()
+
+            for ((resolvedTx, metadata) in metadatas) {
+                liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
+                latestReplicaMsgId = metadata.msgId
+                watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
+            }
+
+            if (liveIndex.isFull()) {
+                val last = txs.last()
+                finishBlock(last.srcMsgId, last.externalSourceToken)
+            }
+        }
+
+        override fun close() {
+            txs.closeAll()
+        }
+    }
+
+    /**
+     * The sealed-but-not-yet-promoted batch. At most one — the single fenced producer permits only one
+     * open transaction at a time, and holding it as a nullable field makes that invariant structural
+     * rather than checked at every append site.
+     */
+    private var inFlight: InFlightBatch? = null
+
+    private val resolvedTxs get() = inFlight?.txs.orEmpty() + stagingIndex.resolvedTxs
+
+    // Seal whatever has accumulated and launch its replica-log append — each tx serializing itself into
+    // a replica message (ResolvedTx.toReplicaMessage), all appended in one fenced producer transaction —
+    // in the background, so the resolver keeps resolving while the serialize + producer commit run.
+    // At most one append is in flight, held on `inFlight`; the persister settles it (settleAppend) once
+    // it completes. No-op if a batch is already in flight (the accumulating tail rides the next kick,
+    // at settle) or there's nothing staged.
+    private fun kickAppend(): InFlightBatch? =
+        if (inFlight != null) null
+        else stagingIndex.seal()?.closeAllOnCatch { txs ->
+            InFlightBatch(
+                txs,
+                appendScope.async {
+                    replicaProducer
+                        .withTx { tx ->
+                            txs.map { it to tx.appendMessage(it.toReplicaMessage()) }
+                        }
+                        .map { it.first to it.second.await() }
+                }
+            ).also { this.inFlight = it }
+        }
+
+    // The batch is freed here only once settle returns; on a settle fault — including a teardown
+    // cancellation thrown out of its await while the append coroutine may still be serializing the
+    // slices — it stays on `inFlight`, and close() frees it after cancelAndJoin has joined the append.
+    private suspend fun settleAppend() {
+        val batch = inFlight ?: return
+        batch.settle()
+        inFlight = null
+        batch.close()
+        kickAppend()
+    }
+
+    // Opportunistically settle a *completed* append between records — promoting it and kicking
+    // the accumulated tail mid-batch — without ever suspending on one that's still going.
+    private suspend fun trySettleAppend() {
+        if (inFlight?.isCompleted == true) settleAppend()
+    }
+
+    // Fully drain: kick anything staged and settle appends until nothing is staged or in flight. The
+    // boundary callers — control messages, attach/detach, ext-source txs, GC's direct appends, the
+    // poll-boundary drain — rely on this post-condition: the replica log carries everything that
+    // preceded them in resolution order, and the fenced producer is idle for their own append.
+    private suspend fun drainStaging() {
+        while (true) {
+            kickAppend()
+            if (inFlight == null) return
+            settleAppend()
+        }
+    }
+
+
     private sealed interface PersisterTask {
         val onComplete: CompletableDeferred<Unit>
     }
@@ -136,6 +227,7 @@ class LeaderLogProcessor(
     // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
         Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
@@ -143,6 +235,8 @@ class LeaderLogProcessor(
         for (record in records) {
             LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
             handleSourceLogRecord(record)
+
+            trySettleAppend()
         }
 
         // Poll-boundary drain: flush any accumulated tail so the batch task returns with the resolver
@@ -167,6 +261,7 @@ class LeaderLogProcessor(
                 openTx.use {
                     stagingIndex.stage(it, msgId, txResult, dbOp = null)
                 }
+                kickAppend()
             }
 
             is SourceMessage.FlushBlock -> {
@@ -241,37 +336,6 @@ class LeaderLogProcessor(
         }
     }
 
-    // Seal the accumulated batch, make it durable, and promote it into the durable live index. Each tx
-    // serializes its own table data into a replica message here (ResolvedTx.toReplicaMessage) — at seal,
-    // off the resolver's resolve path — rather than eagerly when it was resolved.
-    //
-    // Seal + commit is synchronous for now (one producer transaction per batch, committed here on the
-    // resolver); the committer-coroutine offload + cross-batch accumulation come with the pipeline step.
-    // Promotion is per-tx in send order, post-durable: a mid-batch import fault leaves the cursor at the
-    // last tx that actually imported (partial-failure safety), with the un-imported tail freed below.
-    private suspend fun drainStaging() {
-        if (stagingIndex.isEmpty) return
-
-        val batch = stagingIndex.drainAccumulated()
-        try {
-            val messages = batch.map { it.toReplicaMessage() }
-            val handles = replicaProducer.withTx { tx -> messages.map { tx.appendMessage(it) } }
-
-            for ((resolvedTx, handle) in batch.zip(handles)) {
-                liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
-                latestReplicaMsgId = handle.await().msgId
-                watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
-            }
-
-            if (liveIndex.isFull()) {
-                val last = batch.last()
-                finishBlock(last.srcMsgId, last.externalSourceToken)
-            }
-        } finally {
-            batch.closeAll()
-        }
-    }
-
     private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
         val txKey = TransactionKey(
             (stagingIndex.latestCompletedTx?.txId ?: -1) + 1,
@@ -314,6 +378,9 @@ class LeaderLogProcessor(
     }
 
     private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
+        // Drain first: this appends TriesDeleted directly, and replica appends must stay in
+        // resolver-processing order — appending ahead of earlier-staged txs would invert the log.
+        drainStaging()
         appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
@@ -341,6 +408,13 @@ class LeaderLogProcessor(
     // The GCs run under a SupervisorJob child of `termJob`, so one GC's failure cancels neither its
     // sibling nor the persister; cancelling `termJob` reaps them all.
     private val gcScope = scope + SupervisorJob(termJob)
+
+    // The in-flight replica-log append runs under its own SupervisorJob child of `termJob` for the same
+    // isolation: a failed append must NOT cancel the persister out from under settleAppend — the failure
+    // is held on the batch's Deferred and rethrown at settle, inside the task-handling try, so it
+    // surfaces through notifyError — while `cancelAndJoin` on the term still reaps an append mid-flight
+    // (the fenced producer transaction aborts, so nothing partial reaches the replica log).
+    private val appendScope = scope + SupervisorJob(termJob)
 
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
@@ -458,7 +532,7 @@ class LeaderLogProcessor(
     }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer, stagingIndex.resolvedTxs)
+        OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer, resolvedTxs)
 
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
@@ -690,6 +764,7 @@ class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         replicaProducer.close()
+        inFlight?.close() // free a batch whose settle never completed (fault / teardown)
         stagingIndex.close() // free any un-promoted staged slices before the allocator
         allocator.close() // last: Arrow won't close it while a child buffer is live
     }

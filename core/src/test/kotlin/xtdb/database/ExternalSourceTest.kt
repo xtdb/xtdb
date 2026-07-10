@@ -103,13 +103,14 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
+        wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
     ): LeaderLogProcessor {
         val blockCatalog = BlockCatalog("test", null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader"))
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
 
@@ -305,6 +306,81 @@ class ExternalSourceTest {
             "the fire-and-forget caller sees the original failure cause"
         )
         assertNotNull(watchers.exception, "watchers should also be in failed state")
+    }
+
+    @Test
+    fun `executeTx throws when the drain faults, rather than hanging`() = runTest {
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
+        }
+
+        val thrown = CompletableDeferred<Throwable>()
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    txIndexer.executeTx(null) { TxResult.Committed() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    thrown.complete(e)
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(liveIndex = liveIndex, extSource = extSource)
+
+        val e = thrown.await()
+        assertEquals(
+            "commit pipeline fault", e.message,
+            "executeTx surfaces the drain fault instead of hanging"
+        )
+    }
+
+    @Test
+    fun `a replica-log commit fault in the background append surfaces through executeTx`() = runTest {
+        val failingProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
+            object : Log.AtomicProducer<ReplicaMessage> {
+                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
+                    val tx = inner.openTx()
+                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
+                        override fun commit() = throw RuntimeException("replica-log commit fault")
+                    }
+                }
+
+                override fun close() = inner.close()
+            }
+        }
+
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val thrown = CompletableDeferred<Throwable>()
+        val extSource = object : ExternalSource {
+            override suspend fun onPartitionAssigned(
+                partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer
+            ) {
+                try {
+                    txIndexer.executeTx(null) { TxResult.Committed() }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    thrown.complete(e)
+                }
+            }
+
+            override fun close() {}
+        }
+
+        leaderProc(watchers = watchers, extSource = extSource, wrapProducer = failingProducer)
+
+        val e = thrown.await()
+        assertEquals(
+            "replica-log commit fault", e.message,
+            "executeTx surfaces the background append's fault via its durability handle"
+        )
+        assertNotNull(watchers.exception, "the fault reaches watchers: the term is failed, not silently wedged")
     }
 
     @Test

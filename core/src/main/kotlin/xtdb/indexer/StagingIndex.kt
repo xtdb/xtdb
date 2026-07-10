@@ -14,9 +14,10 @@ import xtdb.util.closeAll
  *
  * As each tx resolves, the resolver holds it ([ResolvedTx], owning its row slices) in the `accumulating`
  * slot and advances the [applied head][latestCompletedTx]. Nothing is appended to a producer transaction
- * here — the append happens when the resolver seals the batch (a single fenced producer permits only
- * one open transaction at a time, so appends are queued into one transaction and committed together),
- * where each resolved tx serializes itself into a replica message via [ResolvedTx.toReplicaMessage].
+ * here — the resolver [seal]s the accumulated txs into a batch (a single fenced producer permits only
+ * one open transaction at a time, so appends are queued into one transaction and committed together)
+ * and from then on owns them itself: the batch rides the leader's in-flight slot until its background
+ * append settles and it is promoted into the durable index.
  *
  * Two heads: this [latestCompletedTx] is the APPLIED head (drives resolution — next external-source
  * tx-id and system-time smoothing), which leads [LiveIndex.latestCompletedTx] (the durable/query basis,
@@ -35,10 +36,8 @@ class StagingIndex(
 
     private val accumulating = ArrayDeque<ResolvedTx>()
 
-    /** In-flight staged predecessors for resolution layering (read-your-writes), oldest→newest. */
+    /** Staged predecessors for resolution layering (read-your-writes), oldest→newest. */
     val resolvedTxs: List<ResolvedTx> get() = accumulating.toList()
-
-    val isEmpty: Boolean get() = accumulating.isEmpty()
 
     /**
      * Stage a resolved [openTx]: take independent slices of its writes into the staging allocator, hold
@@ -50,12 +49,12 @@ class StagingIndex(
         latestCompletedTx = openTx.txKey
     }
 
-    /** Take the accumulated slot as an ordered batch (send order) and clear the slot. */
-    fun drainAccumulated(): List<ResolvedTx> {
-        val batch = accumulating.toList()
-        accumulating.clear()
-        return batch
-    }
+    /**
+     * Take the accumulated txs as an ordered batch (send order), or null if nothing is staged, clearing
+     * the slot — ownership of the txs (and freeing them) passes to the caller.
+     */
+    fun seal(): List<ResolvedTx>? =
+        accumulating.toList().takeIf { it.isNotEmpty() }.also { this.accumulating.clear() }
 
     override fun close() {
         accumulating.closeAll()

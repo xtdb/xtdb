@@ -3,6 +3,7 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.Test
 import xtdb.NodeBase
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
+import xtdb.api.log.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
@@ -36,6 +38,8 @@ import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
+import java.time.ZoneId
+import kotlin.time.Duration.Companion.seconds
 
 class LeaderLogProcessorTest {
 
@@ -69,18 +73,20 @@ class LeaderLogProcessorTest {
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+        skipTxs: Set<MessageId> = emptySet(),
+        wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader"))
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, uploadDispatcher)
 
         return LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true),
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
-            skipTxs = emptySet(), dbCatalog = null,
+            skipTxs = skipTxs, dbCatalog = null,
             partition = 0, afterReplicaMsgId = -1,
             scope = backgroundScope,
         ).also(leadersToClose::add)
@@ -113,7 +119,7 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `FlushBlock triggers block finish when CAS matches`() = runTest {
+    fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { finishBlock(any(), any()) } returns emptyMap()
@@ -238,5 +244,70 @@ class LeaderLogProcessorTest {
         val uploaded = replicaMessages[1] as ReplicaMessage.BlockUploaded
         assertEquals(0, uploaded.blockIndex)
         assertTrue(uploaded.tries.isNotEmpty(), "BlockUploaded should contain trie details")
+    }
+
+    @Test
+    fun `a slow append double-buffers the rest of the poll batch`() = runTest {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val producerBatchSizes = mutableListOf<Int>()
+
+        // Counts each producer transaction's size, and gates every append handle so the first batch's
+        // settle stalls on the gate (a slow commit-ack) without blocking any thread.
+        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
+            object : Log.AtomicProducer<ReplicaMessage> {
+                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
+                    val tx = inner.openTx()
+                    var count = 0
+                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
+                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
+                            count++
+                            val real = tx.appendMessage(message)
+                            appendStarted.complete(Unit)
+                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
+                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
+                            }
+                        }
+
+                        override fun commit() {
+                            tx.commit()
+                            producerBatchSizes += count
+                        }
+                    }
+                }
+
+                override fun close() = inner.close()
+            }
+        }
+
+        // Skipped txs each stage a real (aborted) row without needing a valid tx-ops payload.
+        val n = 5L
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            skipTxs = (0 until n).toSet(), wrapProducer = wrapProducer,
+        )
+
+        val now = Instant.now()
+        val records = (0 until n).map {
+            Log.Record(0, it, now.plusMillis(it), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+        }
+
+        val batchJob = launch { lp.processRecords(records) }
+
+        appendStarted.await()
+        gate.complete(Unit)
+        batchJob.join()
+
+        assertEquals(
+            listOf(1, 4), producerBatchSizes,
+            "record 0 kicked its append alone; 1-4 resolved behind it and rode the next producer transaction"
+        )
+
+        val resolvedTxs = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+            .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
+        assertEquals((0 until n).toList(), resolvedTxs.map { it.txId }, "all $n txs land, in send order")
     }
 }
