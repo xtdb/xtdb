@@ -100,3 +100,5 @@ Or from another database in XTDB by running:
 ```sql
 SELECT * FROM pg_test_db.public.test_table;
 ```
+
+If you have any problems, please see the [troubleshooting](/ops/external-sources/postgres/troubleshooting) guide.
