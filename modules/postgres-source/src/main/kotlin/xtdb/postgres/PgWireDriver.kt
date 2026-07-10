@@ -343,25 +343,28 @@ class PgWireDriver(
 
     private fun toRowOp(relation: PgOutputMessage.Relation, msg: PgOutputMessage): RowOp = when (msg) {
         is PgOutputMessage.Insert -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.values))
-        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues))
+        is PgOutputMessage.Update -> RowOp.Put(relation.schema, relation.table, toRowMap(relation, msg.newValues, msg.oldValues))
         is PgOutputMessage.Delete -> RowOp.Delete(relation.schema, relation.table, toRowMap(relation, msg.oldValues))
         else -> error("Unexpected op type: ${msg::class.simpleName}")
     }
 
-    private fun toRowMap(relation: PgOutputMessage.Relation, values: List<PgOutputMessage.ColumnValue>): Map<String, Any?> =
+    private fun toRowMap(relation: PgOutputMessage.Relation, values: List<PgOutputMessage.ColumnValue>, oldValues: List<PgOutputMessage.ColumnValue>? = null): Map<String, Any?> =
         relation.columns
             .mapIndexedNotNull { idx, col ->
                 values.getOrNull(idx)?.let { colValue ->
                     col.name to when (colValue) {
                         is PgOutputMessage.ColumnValue.Null -> null
                         is PgOutputMessage.ColumnValue.Unchanged ->
-                            throw xtdb.error.Incorrect(
-                                buildString {
-                                    appendLine("Received unchanged TOASTed column '${col.name}' on ${relation.schema}.${relation.table}. ")
-                                    appendLine("Set REPLICA IDENTITY FULL on the source table: ")
-                                    appendLine("ALTER TABLE \"${relation.schema}\".\"${relation.table}\" REPLICA IDENTITY FULL")
-                                }
-                            )
+                            when (val old = oldValues?.getOrNull(idx)) {
+                                is PgOutputMessage.ColumnValue.Text -> coerceText(old.value, col.typeOid)
+                                else -> throw xtdb.error.Incorrect(
+                                    buildString {
+                                        appendLine("Received unchanged TOASTed column '${col.name}' on ${relation.schema}.${relation.table}. ")
+                                        appendLine("Set REPLICA IDENTITY FULL on the source table: ")
+                                        appendLine("ALTER TABLE \"${relation.schema}\".\"${relation.table}\" REPLICA IDENTITY FULL")
+                                    }
+                                )
+                            }
 
                         is PgOutputMessage.ColumnValue.Text -> coerceText(colValue.value, col.typeOid)
                     }
