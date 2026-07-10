@@ -48,6 +48,10 @@
                      (throw (ex-info "No ingest stages found in log file"
                                      {:benchmark-type "tsbs-iot"
                                       :log-file log-file-path})))
+        "kafka-source" (when (empty? (:ingest-stages parsed-summary))
+                         (throw (ex-info "No ingest stages found in log file"
+                                         {:benchmark-type "kafka-source"
+                                          :log-file log-file-path})))
         "ingest-tx-overhead" (when (empty? (:batch-stages parsed-summary))
                                (throw (ex-info "No batch stages found in log file"
                                                {:benchmark-type "ingest-tx-overhead"
@@ -168,7 +172,7 @@
   (println "  plot-benchmark-timeseries [options] <benchmark-type>")
   (println "      Plot a benchmark timeseries chart from Azure Log Analytics.")
   (println "      Options: --scale-factor SF, --repo owner/repo, --branch branch")
-  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices, fusion, scan-perf")
+  (println "      Supported: tpch, yakbench, auctionmark, readings, clickbench, tsbs-iot, ingest-tx-overhead, kafka-source, patch, products, ts-devices, fusion, scan-perf")
   (println)
   (println "Kubernetes Commands (output JSON):")
   (println "  inspect-deployment [--namespace NS]")

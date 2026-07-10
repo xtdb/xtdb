@@ -1,6 +1,6 @@
 name: Nightly Benchmark Cleanup
 run-name: >-
-  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType == 'fusion' && 'Fusion' || inputs.benchType }}
+  Benchmark Cleanup: ${{ inputs.benchType == 'tpch' && 'TPC-H' || inputs.benchType == 'auctionmark' && 'AuctionMark' || inputs.benchType == 'readings' && 'Readings' || inputs.benchType == 'yakbench' && 'Yakbench' || inputs.benchType == 'clickbench' && 'ClickBench' || inputs.benchType == 'tsbs-iot' && 'TSBS IoT' || inputs.benchType == 'ingest-tx-overhead' && 'Ingest TX Overhead' || inputs.benchType == 'kafka-source' && 'Kafka Source' || inputs.benchType == 'patch' && 'Patch' || inputs.benchType == 'products' && 'Products' || inputs.benchType == 'ts-devices' && 'TS Devices' || inputs.benchType == 'fusion' && 'Fusion' || inputs.benchType }}
 
 on:
   workflow_dispatch:
@@ -17,6 +17,7 @@ on:
           - clickbench
           - tsbs-iot
           - ingest-tx-overhead
+          - kafka-source
           - patch
           - products
           - ts-devices
@@ -549,6 +550,7 @@ jobs:
             auctionmark) bench_friendly="AuctionMark" ;;
             readings) bench_friendly="Readings" ;;
             yakbench) bench_friendly="Yakbench" ;;
+            kafka-source) bench_friendly="Kafka Source" ;;
             patch) bench_friendly="Patch" ;;
             products) bench_friendly="Products" ;;
             ts-devices) bench_friendly="TS Devices" ;;

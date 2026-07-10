@@ -259,6 +259,20 @@
     {:rows rows-with-percent
      :total-ms total-ms}))
 
+(defn kafka-source-drain-rate
+  "Headline rows/sec for the kafka-source drain stage, when derivable from the log."
+  [summary]
+  (let [message-count (get-in summary [:benchmark-summary :parameters :message-count])
+        drain-ms (->> (:ingest-stages summary)
+                      (filter #(= "drain" (name (:stage %))))
+                      first
+                      :time-taken-ms)]
+    (when (and message-count drain-ms (pos? drain-ms))
+      (format "Drain: %,d rows in %s (%.1f rows/sec)"
+              (long message-count)
+              (util/format-duration :millis drain-ms)
+              (/ (* 1000.0 message-count) drain-ms)))))
+
 (defn fusion-stage->row
   [idx {:keys [stage time-taken-ms]}]
   {:stage-order idx
@@ -334,6 +348,13 @@
 (defmethod summary->table "ingest-tx-overhead" [summary]
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
     (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
+         "\n\n"
+         (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
+
+(defmethod summary->table "kafka-source" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
+         (some->> (kafka-source-drain-rate summary) (str "\n"))
          "\n\n"
          (rows->string [:stage :time-taken-ms :duration :percent-of-total] rows))))
 
@@ -433,6 +454,15 @@
   (let [{:keys [rows total-ms]} (ingest-tx-overhead-summary->stage-rows summary)]
     (str
      (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
+     "\n\n"
+     (util/wrap-slack-code
+      (rows->string [:stage :duration] rows)))))
+
+(defmethod summary->slack "kafka-source" [summary]
+  (let [{:keys [rows total-ms]} (clickbench-summary->stage-rows summary)]
+    (str
+     (util/totals->string total-ms (:benchmark-total-time-ms summary) "ingest")
+     (some->> (kafka-source-drain-rate summary) (str "\n"))
      "\n\n"
      (util/wrap-slack-code
       (rows->string [:stage :duration] rows)))))
