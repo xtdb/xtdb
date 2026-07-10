@@ -35,7 +35,7 @@ ENTRYPOINT ["java", \
     "--enable-native-access=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
     "-Dlog4j2.contextSelector=org.apache.logging.log4j.core.selector.BasicContextSelector", \
-    "-cp","xtdb.jar", \
+    "-cp","xtdb.jar:lib/*", \
     "clojure.main", "-m", "xtdb.main"]
 
 CMD ["-f", "config.yaml"]
