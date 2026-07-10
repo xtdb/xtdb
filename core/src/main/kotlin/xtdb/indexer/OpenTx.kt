@@ -5,6 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.ResultCursor
 import xtdb.api.TransactionKey
+import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.BOOL
 import xtdb.arrow.VectorType.Companion.I64
@@ -51,7 +52,7 @@ private val LOG = OpenTx::class.logger
  * read-your-writes visibility into those staged writes. [TxIndexer] owns opening, committing and closing the
  * OpenTx — a writer is handed one, it never constructs its own.
  */
-class OpenTx @JvmOverloads constructor(
+class OpenTx(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,
@@ -59,9 +60,6 @@ class OpenTx @JvmOverloads constructor(
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
     private val tracer: Tracer? = null,
-    // In-flight resolved predecessors this tx must read behind (read-your-writes across the batch),
-    // supplied by the resolver which owns the staging index. Empty for external / non-resolution txs.
-    private val resolvedTxs: List<ResolvedTx> = emptyList(),
 ) : AutoCloseable {
 
     data class QueryOpts(
@@ -87,7 +85,7 @@ class OpenTx @JvmOverloads constructor(
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
-    internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
+    private fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
         val txId = txKey.txId
         val systemTimeMicros = txKey.systemTime.asMicros
 
@@ -121,6 +119,23 @@ class OpenTx @JvmOverloads constructor(
         liveTable.endPut()
     }
 
+    private fun serializeTableData(): Map<String, ByteArray> =
+        tableTxs.entries.associate { (tableRef, tableTx) -> tableRef.schemaAndTable to tableTx.serializeTxData() }
+
+    // TODO make internal
+    @JvmOverloads
+    fun commitTx(error: Throwable? = null, userMetadata: Map<*, *>? = null): ReplicaMessage.ResolvedTx {
+        writeTxRow(error, userMetadata)
+
+        return ReplicaMessage.ResolvedTx(
+            txKey.txId, txKey.systemTime,
+            committed = error == null,
+            error = error,
+            tableData = serializeTableData(),
+            dbOp = null,
+            externalSourceToken = externalSourceToken,
+        )
+    }
 
     private val queryCatalog: IQuerySource.QueryCatalog
         get() {
@@ -130,7 +145,7 @@ class OpenTx @JvmOverloads constructor(
                 override val storage get() = dbStorage
                 override val queryState get() = dbState
                 override fun openSnapshot() =
-                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))
+                    DatabaseSnapshot(listOf(liveIndex.openSnapshot(this@OpenTx)))
             }
 
             return object : IQuerySource.QueryCatalog {
@@ -163,7 +178,6 @@ class OpenTx @JvmOverloads constructor(
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
-    @JvmOverloads
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeMicros = currentTime.asMicros
@@ -652,6 +666,8 @@ class OpenTx @JvmOverloads constructor(
         @JvmOverloads
         fun patchDocs(docs: RelationReader, validFrom: Instant? = null, validTo: Instant? = null) =
             patchDocs(docs, validFrom?.asMicros ?: systemTimeMicros, validTo?.asMicros ?: MAX_LONG)
+
+        internal fun serializeTxData(): ByteArray = txRelation.asArrowStream
 
         override fun close() {
             txRelation.close()

@@ -5,14 +5,12 @@ import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
-import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
-import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
@@ -33,22 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.StampedLock
 
 private val LOG = LiveIndex::class.logger
-
-// Deserialize a replica-log [ReplicaMessage.ResolvedTx]'s per-table IPC bytes back into owned
-// relations, for the follower/transition path which only has the serialized form. The leader skips
-// this entirely — it commits from the relations it already holds. The caller closes the result.
-internal fun ReplicaMessage.ResolvedTx.loadTableData(al: BufferAllocator): Map<TableRef, Relation> =
-    mutableMapOf<TableRef, Relation>().closeAllOnCatch { rels ->
-        for ((schemaAndTable, ipcBytes) in tableData) {
-            Relation.StreamLoader(al, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
-                Relation(al, loader.schema).closeOnCatch { rel ->
-                    loader.loadNextPage(rel)
-                    rels[fromSchemaAndTable(schemaAndTable)] = rel
-                }
-            }
-        }
-        rels
-    }
 
 class LiveIndex private constructor(
     private val allocator: BufferAllocator,
@@ -119,18 +101,29 @@ class LiveIndex private constructor(
     fun table(table: TableRef): LiveTable? = this@LiveIndex.tables[table]
     val tableRefs: Iterable<TableRef> get() = this@LiveIndex.tables.keys
 
-    // Promote a committed tx into the live tables straight from its relations — no IPC round-trip.
-    // The leader passes its staged relation slices; a follower deserializes the replica message's
-    // table data first (see `loadTableData`). The caller owns [tables] and closes them afterwards.
-    fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) {
+    fun importTx(resolvedTx: ReplicaMessage.ResolvedTx) {
+        val txKey = TransactionKey(resolvedTx.txId, resolvedTx.systemTime)
         val stamp = snapLock.writeLock()
         try {
-            for ((ref, rel) in tables) {
+            for ((schemaAndTable, ipcBytes) in resolvedTx.tableData) {
+                val tableRef = TableRef.parse(schemaAndTable)
                 val liveTable =
-                    this@LiveIndex.tables.getOrPut(ref) {
-                        LiveTable(allocator, ref, blockIdx, rowCounter, liveTrieFactory)
+                    this@LiveIndex.tables.getOrPut(tableRef) {
+                        LiveTable(
+                            allocator,
+                            tableRef,
+                            blockIdx,
+                            rowCounter,
+                            liveTrieFactory
+                        )
                     }
-                liveTable.importData(rel)
+
+                Relation.StreamLoader(allocator, Channels.newChannel(ByteArrayInputStream(ipcBytes))).use { loader ->
+                    Relation(allocator, loader.schema).use { rel ->
+                        loader.loadNextPage(rel)
+                        liveTable.importData(rel)
+                    }
+                }
             }
 
             latestCompletedTx = txKey
@@ -155,14 +148,14 @@ class LiveIndex private constructor(
             sharedSnap!!.also { it.retain() }
         }
 
-    fun openSnapshot(resolvedTxs: List<ResolvedTx>, ownTx: OpenTx): Snapshot =
+    fun openSnapshot(openTx: OpenTx): Snapshot =
         snapLock.withReadLock {
             // Hold the snap read-lock for the whole capture: it blocks `nextBlock` (write-lock) so live
             // tables can't be cleared mid-iteration, and it brackets the trie-cat snapshot so we can't
             // end up with a stale (no-L0_N) trie-cat alongside a live-tables view that's already been
             // reset past N. `addTries` doesn't take the snap lock — it's allowed to land on either side
             // of our trie-cat capture without breaking correctness.
-            Snapshot.open(allocator, tableCatalog, trieCatalog, this, resolvedTxs, ownTx)
+            Snapshot.open(allocator, tableCatalog, trieCatalog, this, listOf(openTx))
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock

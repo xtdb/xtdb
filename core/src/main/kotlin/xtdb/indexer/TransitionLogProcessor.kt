@@ -15,7 +15,6 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
-import xtdb.table.fromSchemaAndTable
 import xtdb.util.*
 import xtdb.util.StringUtil.asLexHex
 
@@ -59,15 +58,8 @@ class TransitionLogProcessor(
         val msgId = record.msgId
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {
+                liveIndex.importTx(msg)
                 val txKey = TransactionKey(msg.txId, msg.systemTime)
-
-                val tables = msg.loadTableData(allocator)
-                try {
-                    liveIndex.commitTx(txKey, tables)
-                } finally {
-                    tables.closeAll()
-                }
-
                 if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {
@@ -102,7 +94,7 @@ class TransitionLogProcessor(
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         trieCatalog.addTries(
-                            fromSchemaAndTable(tableName),
+                            TableRef.parse(tableName),
                             tries,
                             record.logTimestamp
                         )
@@ -126,7 +118,7 @@ class TransitionLogProcessor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> {
-                trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(TableRef.parse(msg.tableName), msg.trieKeys)
             }
         }
     }

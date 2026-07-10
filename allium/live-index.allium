@@ -21,62 +21,26 @@
 --     after each DURABLE confirmation; existing snapshots remain valid until their
 --     last holder releases them
 --
--- Pipelining (leader only) — single-resolver model:
---   NOTE: spec-ahead-of-code. The leader is currently a fully-synchronous single
---   persister; the pipelined commit described here is not yet implemented.
---
---   On a leader, a SINGLE resolver coroutine drives the whole pipeline (see
---   db.allium). It owns the STAGING INDEX outright (sole accessor, so staging needs
---   no lock — single-threaded by construction) AND owns the replica-log producer's
---   append path. As each tx resolves, the resolver applies it to the staging index's
---   `accumulating` slot (so later txs in the same stream resolve against it —
---   read-your-writes), advancing the staging index's own APPLIED head
---   (StagingIndex.latest_completed_tx), AND holds the tx's resolved replica message
---   (the ResolvedTx to be appended) in the slot in send order. It does NOT append to
---   any producer transaction at resolve time. The tx is NOT yet visible to external
---   queries: it is applied-to-staging but not yet on the replica log.
---
---   The APPENDS happen at SEAL time, not resolve time — a single Kafka transactional
---   producer permits only ONE open transaction at a time, and commit() commits
---   everything appended since the transaction opened (you cannot commit a prefix, nor
---   open a second transaction — a second producer would be fenced). So appending each
---   tx as it resolves is not realizable: while a sealed batch's producer transaction
---   is being committed, the next tx would have nowhere to append (neither the
---   committing transaction — it commits with the wrong batch — nor a new one —
---   fenced). Instead, when the resolver SEALS a batch (see SealStagingBatch) it opens
---   a FRESH producer transaction, appends the whole accumulating slot's held messages
---   in send order (the cheap, nigh-on-free step that fixes the txs' order on the
---   replica log), moves the slot into the `committing` sequence, and hands the
---   OPEN-BUT-UNCOMMITTED producer transaction to a secondary COMMITTER coroutine.
---
---   ONLY the producer-transaction commit (the durability step — the slow Kafka
---   round-trip) is offloaded to that committer coroutine, so the resolver's
---   dispatcher thread is not held during it. The committer does ONLY commit() on the
---   already-appended transaction; it does not append and touches neither staging nor
---   the durable index. When the committer signals that a batch is durable, the
---   RESOLVER PROMOTES the `committing` batch into the durable live tables — ONE TX AT
---   A TIME, in send order — advancing the DURABLE basis (LiveIndex.latest_completed_tx),
---   refreshing the shared external snapshot, and notifying watchers. Everything but
---   the commit itself — apply, append-at-seal, import, advance the durable head +
---   apply cursor, refresh, notify, finish blocks — stays on the resolver. Followers
---   and the transition processor have no staging index: the messages they import are
+-- Pipelining (leader only):
+--   On a leader, transaction RESOLUTION runs ahead of the replica-log write. A
+--   resolved, committed tx is applied to a STAGING index immediately (so later
+--   txs in the same stream resolve against it — read-your-writes), advancing the
+--   staging area's own APPLIED head (StagingIndex.latest_completed_tx). It is
+--   NOT yet visible to external queries. Only once its batch is confirmed durably
+--   written to the replica log is it PROMOTED into the durable live tables,
+--   advancing the DURABLE basis (LiveIndex.latest_completed_tx), refreshing the
+--   shared external snapshot, and notifying watchers. Followers and the
+--   transition processor have no staging index: the messages they import are
 --   already durable, so they advance LiveIndex.latest_completed_tx directly.
 --
 --   Two heads, two homes — callers choose: the durable basis is
 --   LiveIndex.latest_completed_tx (query basis); the applied/resolution head is
 --   StagingIndex.latest_completed_tx (next tx_id, smoothing).
 --
---   The staging index is NOT a field on LiveIndex. It is standing state the leader
---   (LeaderLogProcessor) owns from construction and frees in its two-phase close
---   (see CloseStagingIndex); LiveIndex stays the durable layer and stays
---   staging-agnostic. Promotion appends into the durable LiveIndex under its
---   existing write lock.
---
 -- Critical invariant: External queries see only durably-replicated transactions
 --   (LiveIndex.latest_completed_tx). A query returned to a user must never
 --   include a tx that could vanish if the leader crashed before its replica-log
---   write landed. Resolution sees durable ⊕ committing ⊕ accumulating ⊕ the tx's
---   own writes.
+--   write landed. Resolution sees durable ⊕ staging.
 
 ------------------------------------------------------------
 -- External Entities
@@ -140,14 +104,6 @@ value Put {
 value Delete { }   -- null marker in the "delete" leg
 value Erase { }    -- null marker in the "erase" leg
 
-value ResolvedTx {
-    -- A resolved tx's PENDING REPLICA MESSAGE: the message the resolver will append
-    -- onto the open producer transaction at SEAL time (not at resolve time). Held in
-    -- the accumulating slot in send order (StagingSlot.pending_messages) alongside the
-    -- StagedTx that carries the tx's row slices. See db.allium ResolvedTxMessage.
-    tx_key: TransactionKey
-}
-
 ------------------------------------------------------------
 -- Entities
 ------------------------------------------------------------
@@ -161,9 +117,8 @@ entity LiveIndex {
     --
     -- The APPLIED head (the resolution head — next external-source tx_id is
     -- head.tx_id + 1, and system-time smoothing reads it) is NOT here: on a
-    -- leader the resolver-owned staging index maintains its own latest_completed_tx
-    -- (see StagingIndex). LiveIndex is staging-agnostic — it knows only the durable
-    -- layer. Callers choose which head to read — resolution reads the staging
+    -- leader the staging area maintains its own latest_completed_tx (see
+    -- StagingIndex). Callers choose which to read — resolution reads the staging
     -- head, external queries read this durable one.
     latest_completed_tx: TransactionKey?
 
@@ -171,6 +126,12 @@ entity LiveIndex {
 
     -- Durable live tables: hold only promoted (durably-replicated) rows.
     tables: LiveTable with index = this
+
+    -- Staging index: committed-but-not-yet-durable txs. Leader-owned and
+    -- leader-term-scoped (dropped wholesale on demotion; see DropStaging).
+    -- Absent on followers and the transition processor, which only import
+    -- already-durable messages. See StagingIndex.
+    staging: StagingIndex?
 
     -- Current shared external snapshot. Refreshed on each durable confirmation
     -- (promotion) and on NextBlock (see RefreshSharedSnapshot). External readers
@@ -183,127 +144,45 @@ entity LiveIndex {
 }
 
 entity StagingIndex {
-    -- Committed-but-not-yet-durable transactions. NOT a field on LiveIndex: this
-    -- is standing state the leader (LeaderLogProcessor) owns from construction and
-    -- the RESOLVER is the sole accessor of (single-threaded by construction, so it
-    -- needs no lock). Created once per leader term and freed by the leader's
-    -- two-phase close (see CloseStagingIndex); absent on followers and the
-    -- transition processor, which only import already-durable messages.
-    --
-    -- Double-buffered: an open accumulating slot, plus a sealed committing batch.
-    -- At most one batch is ever in flight (a Kafka transactional producer allows
-    -- only one open producer transaction at a time) — the resolver enforces this via
-    -- in_flight — so this is optimal:
-    --   - accumulating: open, taking newly-resolved committed txs. Each accumulated
-    --                   tx also HOLDS its pending replica message (the ResolvedTx to
-    --                   append), in send order; nothing is appended to a producer
-    --                   transaction yet — the appends happen at seal time.
-    --   - committing:   the sealed batch whose producer transaction — opened fresh and
-    --                   appended-to at seal time — is currently being COMMITTED by the
-    --                   secondary committer coroutine, held as an ORDERED SEQUENCE of
-    --                   staged txs (oldest→newest, i.e. send order) so the resolver can
-    --                   promote it ONE TX AT A TIME once the commit lands (see
-    --                   PromoteNext); empty when no batch is in flight.
-    -- SENDS are serial but ACCUMULATION continues during a send: while the committer
-    -- commits the sealed batch's producer transaction, the resolver keeps resolving and
-    -- accumulating the NEXT slot. It cannot SEAL (and so cannot send) the next batch
-    -- until the current commit completes and the batch promotes — in_flight gates this,
-    -- matching the single open producer transaction. Run-ahead is in the accumulating
-    -- slot, not in a second producer transaction.
-    -- The accumulating slot mirrors the live tables (per-table relation + trie) so it
-    -- composes with the snapshot/segment layering as an extra segment layer; it also
-    -- records its txs' send order plus each tx's pending replica message (accumulated_txs)
-    -- so a seal appends them in order and produces the ordered committing batch.
-    --
-    -- The durable LiveIndex this staging index pipelines into. The link is one-way:
-    -- the staging index references the index, but the index does not reference the
-    -- staging index (it stays staging-agnostic).
+    -- Holds committed-but-not-yet-durable transactions, double-buffered into
+    -- exactly two slots. At most one batch is ever in flight to the replica log
+    -- (the producer is single / not concurrent-safe), so two slots is optimal:
+    --   - accumulating: open, taking newly-resolved committed txs
+    --   - committing:   sealed, its batch currently being written to the
+    --                   replica log; promoted on durable confirmation
+    -- Each slot mirrors the live tables (per-table relation + trie) so it
+    -- composes with the snapshot/segment layering as an extra segment layer.
     index: LiveIndex
 
     -- APPLIED head: the highest tx resolved and applied to staging. Drives
     -- RESOLUTION — next external-source tx_id is latest_completed_tx.tx_id + 1,
     -- and system-time smoothing reads it. Seeded from index.latest_completed_tx
-    -- (the durable head) when the staging index is created, then advanced by
+    -- (the durable head) when the staging area is created, then advanced by
     -- CommitTransaction / AbortTransaction. Always >= index.latest_completed_tx.
     latest_completed_tx: TransactionKey?
 
     accumulating: StagingSlot
-
-    -- The sealed batch whose producer transaction is being committed: an ordered
-    -- sequence of staged txs, oldest→newest (send order). Empty when no batch is in
-    -- flight. Promoted one tx at a time from the front (see PromoteNext).
-    committing: List<StagedTx>
-
-    -- in_flight is true exactly while a batch's producer transaction is open and
-    -- committing (between SealStagingBatch, which opens+appends+hands off, and the last
-    -- PromoteNext). The resolver checks it to enforce at-most-one-batch in flight —
-    -- matching the single open producer transaction a Kafka transactional producer
-    -- permits. Accumulation of the next slot continues while in_flight is true; only
-    -- sealing (the next send) is gated.
-    in_flight: committing.count > 0
+    committing: StagingSlot?   -- absent when no batch is in flight
 
     -- Derived: staging is drained when nothing is accumulated and nothing is
     -- in flight. FinishBlock requires this so a durable block never contains
     -- non-durable rows.
-    is_drained: accumulating.is_empty and committing.count = 0
+    is_drained: accumulating.is_empty and committing = null
 }
 
 entity StagingSlot {
-    -- The open accumulating slot. Mirrors the live tables structurally (per-table
-    -- relation + trie, for the read-your-writes segment layering) and additionally
-    -- records the send order of the txs applied to it, plus each tx's PENDING REPLICA
-    -- MESSAGE, so a seal appends the messages in order and produces the ordered
-    -- committing batch.
+    -- One double-buffer slot. Mirrors the live tables structurally.
     staging: StagingIndex
     tables: StagingTable with slot = this
 
-    -- The txs applied to this slot, in send order (oldest→newest). SealStagingBatch
-    -- moves these into the committing sequence.
-    accumulated_txs: List<StagedTx>
-
-    -- Each accumulated tx's pending replica message, in the SAME send order as
-    -- accumulated_txs (i-th ↔ i-th). Nothing is appended to a producer transaction at
-    -- resolve time; SealStagingBatch opens a fresh producer transaction and appends
-    -- these in order, then discards them. Held here (a parallel ordered list), not on
-    -- StagedTx, which stays durability-handle-free.
-    pending_messages: List<ResolvedTx>
-
     row_count: tables.sum(t => t.row_count)
-    is_empty: accumulated_txs.count = 0
+    is_empty: row_count = 0
 }
 
 entity StagingTable {
-    -- Per-table relation + trie within the accumulating slot. The staged counterpart
+    -- Per-table relation + trie within a staging slot. The staged counterpart
     -- of LiveTable; promoted into the matching LiveTable on durable confirmation.
     slot: StagingSlot
-    table_ref: TableRef
-    rows: Set<Row>
-
-    row_count: rows.count
-}
-
-entity StagedTx {
-    -- One resolved, committed tx held in the staging area, retaining its per-table
-    -- rows so PromoteNext can import it into the durable live tables on its own. Once
-    -- sealed into the committing sequence it is promoted (and dropped) one at a time,
-    -- in send order.
-    --
-    -- StagedTx stays DURABILITY-HANDLE-FREE: it holds only the row slices (for
-    -- read-your-writes + promote). The tx's pending replica message (the ResolvedTx to
-    -- append at seal) and — in the implementation — the append handle returned by
-    -- appendMessage (which completes at commit with the tx's replica-log position) are
-    -- held ALONGSIDE it by the resolver: the pending message in the accumulating slot's
-    -- pending_messages, the handle in the sealed batch the resolver hands the committer
-    -- (see db.allium). They are not fields on StagedTx.
-    staging: StagingIndex
-    tx_key: TransactionKey
-    tables: StagedTxTable with staged_tx = this
-}
-
-entity StagedTxTable {
-    -- One tx's rows for one table, imported into the matching durable LiveTable
-    -- when the tx is promoted (see PromoteNext).
-    staged_tx: StagedTx
     table_ref: TableRef
     rows: Set<Row>
 
@@ -321,13 +200,6 @@ entity LiveTable {
 
 entity OpenTx {
     index: LiveIndex
-
-    -- The resolver-owned staging index this tx resolves against. A resolving tx
-    -- reads durable ⊕ committing ⊕ accumulating ⊕ its own writes, so it carries
-    -- the staging index (which the resolver, its sole accessor, hands it). Always
-    -- present: open transactions exist only on a leader, where staging exists.
-    staging: StagingIndex
-
     tx_key: TransactionKey
     status: active | committed | aborted
 
@@ -400,14 +272,11 @@ entity TableSnapshot {
     -- time. This is the only layer on external snapshots.
     live_segment: MemorySegment?
 
-    -- Staging segments: slices of this table's staged rows, layered on top of
-    -- live_segment (committing below accumulating). Two sources, oldest→newest:
-    -- first, from the committing batch, each StagedTx's matching StagedTxTable in
-    -- send order (a just-sealed batch's rows live ONLY here until promoted);
-    -- then, on top, the accumulating slot's StagingTable for this table. Empty on
-    -- external snapshots (which see durable data only); populated only on
-    -- transaction snapshots so a resolving tx reads staged prior txs. See
-    -- StagingSegments.for.
+    -- Staging segments: slices of this table's StagingTable relations from each
+    -- occupied staging slot (committing below accumulating), layered on top of
+    -- live_segment. Empty on external snapshots (which see durable data only);
+    -- populated only on transaction snapshots so a resolving tx reads staged
+    -- prior txs. See StagingSegments.for.
     staging_segments: Set<MemorySegment>
 
     -- Tx segment: slice of the enclosing OpenTx.Table's txRelation paired with
@@ -428,15 +297,10 @@ default ValidTimeRange erase_valid_time = { from: MIN_TIMESTAMP, to: MAX_TIMESTA
 ------------------------------------------------------------
 
 rule StartTransaction {
-    -- Started by the resolver, which supplies its staging index so the tx can
-    -- resolve against durable ⊕ staging (read-your-writes).
-    when: StartTransaction(index, staging, tx_key)
-
-    requires: staging.index = index
+    when: StartTransaction(index, tx_key)
 
     ensures: OpenTx.created(
         index: index,
-        staging: staging,
         tx_key: tx_key,
         status: active
     )
@@ -512,33 +376,27 @@ rule LogErase {
 ------------------------------------------------------------
 
 rule CommitTransaction {
-    -- The resolver imports a committed tx into the STAGING accumulating slot and
-    -- advances the staging index's APPLIED head (StagingIndex.latest_completed_tx).
-    -- It does NOT append to any producer transaction here: it HOLDS the tx's pending
-    -- replica message in the accumulating slot (pending_messages, in send order); the
-    -- append happens later, at seal time (see SealStagingBatch). The applied-but-not-
-    -- appended tx is held out of the durable index here in staging.
-    -- It does NOT advance the DURABLE basis (LiveIndex.latest_completed_tx) and
-    -- does NOT refresh the external shared snapshot — those happen only when the
-    -- resolver promotes after the committer confirms the batch durable (see
-    -- PromoteNext).
-    -- Later txs in the same stream resolve against staging (read-your-writes),
-    -- but external queries cannot yet see it.
+    -- A committed tx is imported into the STAGING accumulating slot and advances
+    -- the staging area's APPLIED head (StagingIndex.latest_completed_tx). It does
+    -- NOT advance the DURABLE basis (LiveIndex.latest_completed_tx) and does NOT
+    -- refresh the external shared snapshot — those happen only on durable
+    -- confirmation (see PromoteStaging). Later txs in the same stream resolve
+    -- against staging (read-your-writes), but external queries cannot yet see it.
     when: CommitTransaction(tx)
 
     requires: tx.status = active
-
-    let staging = tx.staging
+    -- Staging only exists on a leader; resolution runs there.
+    requires: tx.index.staging != null
 
     ensures: tx.status = committed
-    ensures: staging.latest_completed_tx = tx.tx_key
+    ensures: tx.index.staging.latest_completed_tx = tx.tx_key
 
     -- For each touched table with tx data: import the tx rows into the
     -- (possibly new) staging table in the accumulating slot. Single path:
     -- the staging slot creates a StagingTable on demand, and tables with no tx
     -- rows are skipped entirely.
     ensures: for table_tx in tx.table_txs where table_tx.rows.count > 0:
-        let slot = staging.accumulating
+        let slot = tx.index.staging.accumulating
         let staging_table =
             let existing = slot.tables.find(st => st.table_ref = table_tx.table_ref)
             if existing != null:
@@ -550,130 +408,79 @@ rule CommitTransaction {
                     rows: {}
                 )
         staging_table.rows.addAll(table_tx.rows)
-
-    -- Record the tx in send order, retaining its per-table rows, so SealStagingBatch
-    -- can produce an ordered committing batch that PromoteNext walks one tx at a time.
-    -- Also HOLD the tx's pending replica message in the slot (same send order), to be
-    -- appended when the batch is sealed — nothing is appended to a producer
-    -- transaction yet.
-    ensures:
-        let staged_tx = StagedTx.created(
-            staging: staging,
-            tx_key: tx.tx_key
-        )
-        for table_tx in tx.table_txs where table_tx.rows.count > 0:
-            StagedTxTable.created(
-                staged_tx: staged_tx,
-                table_ref: table_tx.table_ref,
-                rows: table_tx.rows
-            )
-        staging.accumulating.accumulated_txs.add(staged_tx)
-        staging.accumulating.pending_messages.add(ResolvedTx{ tx_key: tx.tx_key })
 }
 
 rule SealStagingBatch {
-    -- At a tx boundary the RESOLVER decides to close the batch. This is where the
-    -- APPENDS happen (not at resolve time): the resolver opens a FRESH producer
-    -- transaction, appends the whole accumulating slot's held pending messages in send
-    -- order (the cheap, nigh-on-free step that fixes the txs' order on the replica log
-    -- and yields the per-tx append handles used later for the follower resume cursor),
-    -- seals the slot's txs into the committing sequence (same send order), swaps in a
-    -- fresh empty slot to take over accumulation, and hands the OPEN-BUT-UNCOMMITTED
-    -- producer transaction to the secondary committer coroutine to COMMIT (the
-    -- durability step). Double-buffering means there is only ever the open slot plus
-    -- the one committing batch; the resolver only seals when no batch is already in
-    -- flight (committing empty) and work has accumulated, so at most one batch is in
-    -- flight at a time — matching the single open producer transaction a Kafka
-    -- transactional producer permits. Accumulation of the next slot continues while
-    -- that batch commits; only the next SEAL is gated (on committing being empty
-    -- again).
-    when: SealStagingBatch(staging)
+    -- The replica-writer takes the current batch in flight: the accumulating
+    -- slot is sealed and becomes the committing slot, and a fresh empty slot
+    -- takes over accumulation. Double-buffering means there are only ever two
+    -- slots; this is invoked only when no batch is already in flight (the
+    -- replica-log producer is single, so at most one batch at a time).
+    when: SealStagingBatch(index)
 
-    requires: staging.committing.count = 0
-    requires: not staging.accumulating.is_empty
+    requires: index.staging != null
+    requires: index.staging.committing = null
+    requires: not index.staging.accumulating.is_empty
 
     ensures:
-        -- Open a fresh producer transaction and append the slot's pending messages in
-        -- send order. appendMessage returns, per tx, a handle that completes at commit
-        -- with that tx's replica-log position (the follower resume cursor); the
-        -- resolver holds those handles on the sealed batch it hands the committer.
-        let producer_tx = OpenProducerTransaction(staging)
-        for pending in staging.accumulating.pending_messages:
-            AppendMessage(producer_tx, pending)
-
-        -- Seal the accumulated txs into the committing sequence, preserving send
-        -- order so PromoteNext walks them oldest→newest.
-        staging.committing = staging.accumulating.accumulated_txs
-        staging.accumulating = StagingSlot.created(
-            staging: staging,
-            tables: {},
-            accumulated_txs: [],
-            pending_messages: []
+        index.staging.committing = index.staging.accumulating
+        index.staging.accumulating = StagingSlot.created(
+            staging: index.staging,
+            tables: {}
         )
 }
 
-rule PromoteNext {
-    -- The RESOLVER promotes once the committer confirms the batch durable, ONE TX AT A
-    -- TIME in send order. It peeks the oldest staged tx in the committing sequence,
-    -- imports its rows into the durable live tables (advancing the durable basis to
-    -- that tx), THEN drops it from committing and closes its OpenTx — import-before-drop
-    -- is what makes a partial failure safe (see below). Refreshing the external shared
-    -- snapshot and notifying watchers happen per promoted tx, driven by the resolver in
-    -- db.allium. This is the point at which a committed tx becomes queryable.
-    --
-    -- Partial-failure safety — the WHY for per-tx: if importing a tx faults partway
-    -- through the batch (e.g. OOM), the txs already promoted are durable in the live
-    -- tables and the durable basis sits at the last tx that ACTUALLY imported; the
-    -- un-imported tail stays parked in committing (freed by CloseStagingIndex, never
-    -- double-closed). A follower resuming from the apply cursor — which db.allium
-    -- advances per promoted tx to that tx's replica-log position — re-applies only the
-    -- un-imported tail and never double-imports the durable prefix. Promoting the whole
-    -- batch atomically would leave the cursor un-advanced after a mid-batch fault, so a
-    -- follower would re-import the durable prefix → duplicate rows / corrupt block.
-    when: PromoteNext(staging)
+rule PromoteStaging {
+    -- Durable confirmation: the committing slot's batch has been confirmed
+    -- durably written to the replica log. Promote its rows into the durable
+    -- live tables, advance the DURABLE basis, refresh the external shared
+    -- snapshot (now reflecting the newly-durable txs), and notify watchers.
+    -- This is the point at which committed txs become queryable.
+    -- durable_tx is the highest tx key in the promoted batch.
+    when: PromoteStaging(index, durable_tx)
 
-    requires: staging.committing.count > 0
-
-    let index = staging.index
-    let staged_tx = staging.committing.first
+    requires: index.staging != null
+    requires: index.staging.committing != null
 
     ensures:
-        -- Import this tx's rows into the (possibly new) durable live tables.
-        for staged_table in staged_tx.tables:
+        -- Move each staged table's rows into the (possibly new) durable live table.
+        for staging_table in index.staging.committing.tables where staging_table.rows.count > 0:
             let live_table =
-                let existing = index.tables.find(t => t.table_ref = staged_table.table_ref)
+                let existing = index.tables.find(t => t.table_ref = staging_table.table_ref)
                 if existing != null:
                     existing
                 else:
                     LiveTable.created(
                         index: index,
-                        table_ref: staged_table.table_ref,
+                        table_ref: staging_table.table_ref,
                         rows: {}
                     )
-            live_table.rows.addAll(staged_table.rows)
+            live_table.rows.addAll(staging_table.rows)
 
-        -- Advance the durable basis to this tx (the durable live index's own
-        -- latest_completed_tx) and refresh the external snapshot to reflect it.
-        index.latest_completed_tx = staged_tx.tx_key
+        -- The committing slot is now empty; drop it (no batch in flight).
+        index.staging.committing = null
+
+        -- Advance the durable basis (the durable live index's own
+        -- latest_completed_tx) and refresh the external snapshot to reflect the
+        -- newly-durable txs.
+        index.latest_completed_tx = durable_tx
         RefreshSharedSnapshot(index)
-
-        -- Drop this tx from the committing sequence — AFTER importing it — and
-        -- discard the staged record. When the sequence empties the derived in_flight
-        -- becomes false and the resolver may seal the next batch.
-        staging.committing = staging.committing.drop(1)
-        not exists staged_tx
+        -- Watcher notification (post-durable, not at resolution time) is driven
+        -- by the replica-writer in db.allium, which orchestrates promotion.
 }
 
 rule AbortTransaction {
     when: AbortTransaction(tx)
 
     requires: tx.status = active
+    -- Staging only exists on a leader; resolution runs there.
+    requires: tx.index.staging != null
 
     ensures: tx.status = aborted
     -- The applied head tracks "resolved up to", not "successfully committed up
     -- to" — even aborted transactions consume a tx_id and advance the staging
     -- area's marker, so the next tx_id is correct.
-    ensures: tx.staging.latest_completed_tx = tx.tx_key
+    ensures: tx.index.staging.latest_completed_tx = tx.tx_key
     -- tx rows are discarded (not staged); new tables are not created
 }
 
@@ -692,7 +499,7 @@ rule OpenExternalSnapshot {
     -- The index publishes a single shared Snapshot whose basis is
     -- latest_completed_tx (durable) and whose layers are the DURABLE live segments only
     -- — no staging. It is refreshed on each durable confirmation (see
-    -- PromoteNext / RefreshSharedSnapshot). Each external opener retains
+    -- PromoteStaging / RefreshSharedSnapshot). Each external opener retains
     -- the current shared snapshot rather than building a fresh one, and
     -- releases it on close. The underlying segments are freed when the last
     -- holder releases.
@@ -712,21 +519,21 @@ rule OpenTransactionSnapshot {
     --
     -- A resolving tx must read all prior txs whether DURABLE or merely STAGED,
     -- plus its own uncommitted writes. So each TableSnapshot layers, bottom to
-    -- top: the durable live segment ⊕ the staging segments (the committing
-    -- batch's StagedTxTables, oldest→newest, if a batch is in flight, then the
-    -- accumulating slot's StagingTable) ⊕ the tx's own segment.
+    -- top: the durable live segment ⊕ the staging segments (accumulating, and
+    -- the committing slot if a batch is in flight) ⊕ the tx's own segment.
     when: OpenSnapshot(tx)
 
     requires: tx.status = active
+    -- Resolution only runs on a leader, where staging exists.
+    requires: tx.index.staging != null
 
     ensures:
         let snap = Snapshot.created(basis_tx: tx.tx_key, ref_count: 1)
-        let staging = tx.staging
+        let staging = tx.index.staging
 
         -- One TableSnapshot per table touched by the tx: durable live segment
         -- from the existing LiveTable (if any), the staging segments for the
-        -- table (committing StagedTxTables oldest→newest, below the accumulating
-        -- slot's StagingTable), and the tx segment from this OpenTx.
+        -- table from each occupied slot, and the tx segment from this OpenTx.
         for table_tx in tx.table_txs:
             let live_seg = if table_tx.live_table != null: MemorySegment.for(table_tx.live_table) else: null
             let tx_seg = if table_tx.rows.count > 0: MemorySegment.for(table_tx) else: null
@@ -789,37 +596,32 @@ rule RefreshSharedSnapshot {
 ------------------------------------------------------------
 
 rule FinishBlock {
-    -- staging is the resolver's staging index on a leader, or null on a
-    -- follower/transition (which have no staging — they import already-durable
-    -- messages).
-    when: FinishBlock(index, staging, block_idx)
+    when: FinishBlock(index, block_idx)
 
     -- Staging MUST be drained before the block is written: all in-flight
     -- commits promoted, nothing accumulated or committing. Otherwise a durable
-    -- L0 block could contain non-durable rows. On a leader, the resolver cuts a
-    -- block at a tx boundary by first draining (awaiting the in-flight persist
-    -- and promoting), then sending a boundary-batch, so staging is drained by the
-    -- time the block is written. On followers/transition staging is null, so this
-    -- is trivially satisfied.
-    requires: staging = null or staging.is_drained
+    -- L0 block could contain non-durable rows. ("BlockBoundary closes the
+    -- batch": the replica-writer flushes and promotes the pending batch before
+    -- the boundary, leaving staging drained.) On followers/transition there is
+    -- no staging, so this is trivially satisfied.
+    requires: index.staging = null or index.staging.is_drained
 
     -- Writes current (durable) live table contents to block storage.
     -- Rows remain in memory until NextBlock.
     ensures: BlockWritten(index, block_idx)
 }
 
-rule CloseStagingIndex {
-    -- Leader → follower demotion is exactly the leader's two-phase close — there
-    -- is NO separate runtime drop. Phase 1 (cancelAndJoin the resolver + committer
-    -- job tree) ensures nothing live still touches staging; phase 2 (this) frees
-    -- the staging index synchronously, closing any un-promoted slot buffers, before
-    -- the allocator is closed. Any staged-but-not-yet-durable txs are discarded
-    -- (they were never visible to external queries) and will be re-read from the
-    -- source log and re-resolved by the next leader. The durable LiveIndex is
-    -- untouched. See db.allium TransitionToFollower; commit ec0f3947e.
-    when: CloseStagingIndex(staging)
+rule DropStaging {
+    -- Leader → follower demotion: the staging index is discarded wholesale.
+    -- The uncommitted txs it held will be re-read from the source log and
+    -- re-resolved by the next leader. The DURABLE live index is untouched —
+    -- only staged, not-yet-durable rows are lost, and those were never visible
+    -- to external queries.
+    when: DropStaging(index)
 
-    ensures: not exists staging
+    requires: index.staging != null
+
+    ensures: index.staging = null
 }
 
 rule NextBlock {

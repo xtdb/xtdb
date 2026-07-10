@@ -24,9 +24,7 @@ import xtdb.error.Interrupted
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
-import xtdb.table.fromSchemaAndTable
 import xtdb.util.StringUtil.asLexHex
-import xtdb.util.closeAll
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
@@ -124,7 +122,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private fun addTries(tries: List<TrieDetails>, logTimestamp: LogTimestamp) {
         tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-            trieCatalog.addTries(fromSchemaAndTable(tableName), tries, logTimestamp)
+            trieCatalog.addTries(TableRef.parse(tableName), tries, logTimestamp)
         }
     }
 
@@ -143,16 +141,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
+                liveIndex.importTx(msg)
+
                 val systemTime = msg.systemTime
                 val txKey = TransactionKey(msg.txId, systemTime)
-
-                val tables = msg.loadTableData(allocator)
-                try {
-                    liveIndex.commitTx(txKey, tables)
-                } finally {
-                    tables.closeAll()
-                }
-
                 if (msg.committed) {
                     when (val dbOp = msg.dbOp) {
                         is DbOp.Attach -> if (dbCatalog != null) {
@@ -206,7 +198,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
-                trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                trieCatalog.deleteTries(TableRef.parse(msg.tableName), msg.trieKeys)
             }
         }
 

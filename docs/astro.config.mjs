@@ -205,29 +205,6 @@ export default defineConfig({
                             ]
                         },
                         {
-                            label: 'External Sources',
-                            collapsed: true,
-                            items: [
-                                { label: 'Overview', link: '/ops/external-sources/overview' },
-                                {
-                                    label: 'Postgres External Source',
-                                    collapsed: true,
-                                    items: [
-                                        { label: 'Setup guide', link: '/ops/external-sources/postgres/setup' },
-                                        { label: 'Reference', link: '/ops/external-sources/postgres/reference' },
-                                    ],
-                                },
-                                {
-                                    label: 'Kafka Connect External Source',
-                                    collapsed: true,
-                                    items: [
-                                        { label: 'Setup guide', link: '/ops/external-sources/kafka-connect/setup' },
-                                        { label: 'Reference', link: '/ops/external-sources/kafka-connect/reference' },
-                                    ],
-                                },
-                            ],
-                        },
-                        {
                             label: 'Authentication',
                             collapsed: true,
                             items: [

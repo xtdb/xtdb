@@ -39,6 +39,7 @@ class DocsIndexerTest {
 
         assertEquals(TableRef("public", "events"), tableOf("events"))
         assertEquals(TableRef("analytics", "events"), tableOf("analytics.events"))
+        assertEquals(TableRef("analytics", "events"), tableOf("analytics/events"))
     }
 
     @Test

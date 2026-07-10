@@ -31,7 +31,6 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.TableRef
-import xtdb.table.fromSchemaAndTable
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
@@ -182,7 +181,7 @@ class LeaderLogProcessorTest {
             trieMetadata = trieMetadata {},
             hllDeltas = emptyMap()
         )
-        val tableRef = fromSchemaAndTable("public/foo")
+        val tableRef = TableRef.parse("public/foo")
 
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)

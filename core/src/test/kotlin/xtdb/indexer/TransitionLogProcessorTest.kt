@@ -90,7 +90,7 @@ class TransitionLogProcessorTest {
             record(1, ReplicaMessage.BlockBoundary(0, -1)),
         ))
 
-        verify { liveIndex.commitTx(match { it.txId == extTx.txId }, any()) }
+        verify { liveIndex.importTx(extTx) }
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
 

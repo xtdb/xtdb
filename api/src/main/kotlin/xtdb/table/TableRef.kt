@@ -16,8 +16,7 @@ data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: 
     val schemaAndTable get() = "$schemaName/$tableName"
 
     companion object {
-        // user-facing dotted `schema.table`, schema optional — neither part may be empty or contain `.` or `/`.
-        private val PARSE_REGEX = Regex("""(?:([^./]+)\.)?([^./]+)""")
+        private val PARSE_REGEX = Regex("(?:([^/]+)[./])?([^./]+)")
 
         @JvmStatic
         fun parse(str: String): TableRef {

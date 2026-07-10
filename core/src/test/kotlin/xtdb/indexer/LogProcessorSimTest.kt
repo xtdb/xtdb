@@ -33,7 +33,6 @@ import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
-import xtdb.table.fromSchemaAndTable
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.util.debug
@@ -203,10 +202,10 @@ class LogProcessorSimTest : SimulationTestBase() {
                 "block file missing for b$blockIdx"
             )
 
-            val tables = upload.tries.map { fromSchemaAndTable(it.tableName) }.toSet()
+            val tables = upload.tries.map { TableRef.parse(it.tableName) }.toSet()
 
             for (trie in upload.tries) {
-                val table = fromSchemaAndTable(trie.tableName)
+                val table = TableRef.parse(trie.tableName)
                 assertTrue(
                     table.dataFilePath(trie.trieKey) in storedPaths,
                     "data file missing for ${trie.tableName}/${trie.trieKey}"

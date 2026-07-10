@@ -79,16 +79,11 @@ class Snapshot(
             return tableInfo
         }
 
-        // Precedence, bottom→top (later layers win): durable live tables ⊕ in-flight staged txs
-        // (oldest→newest) ⊕ the resolving tx's own writes. External snapshots pass neither and see
-        // durable only (strict visibility); a resolving tx passes the in-flight staged txs it must read
-        // behind plus itself (read-your-writes across the batch).
         @JvmStatic
         fun open(
             al: BufferAllocator, tableCat: TableCatalog,
             trieCatalog: TrieCatalog, liveIndex: LiveIndex,
-            resolvedTxs: List<ResolvedTx> = emptyList(),
-            ownTx: OpenTx? = null,
+            openTxs: List<OpenTx> = emptyList(),
         ): Snapshot = safelyOpening {
             val trieCatSnap = trieCatalog.snapshot()
 
@@ -104,31 +99,17 @@ class Snapshot(
                     .safeMap { TableSnapshot.open(al, it) }
             }
 
-            val stagedTables = resolvedTxs.flatMap { it.allTables }
-
-            val stagedSnaps = openAll {
-                stagedTables
-                    .safeMap { it.openSnapshot(al) }
+            val openTxSnaps = openAll {
+                openTxs.flatMap { it.tables }
+                    .safeMap { TableSnapshot.openTx(al, it.value) }
                     .filterNotNull()
             }
 
-            val ownSnaps = openAll {
-                ownTx?.tables?.safeMap { TableSnapshot.openTx(al, it.value) }?.filterNotNull() ?: emptyList()
-            }
+            val byTable = liveIndexSnaps.plus(openTxSnaps).groupBy { it.table }
 
-            val byTable = (liveIndexSnaps + stagedSnaps + ownSnaps).groupBy { it.table }
+            val tableInfo = tableCat.buildTableInfo(byTable.mapValues { (_, snaps) -> snaps.mergeTypes() })
 
-            // tableInfo drives base-table resolution — an unresolved table throws `Table not found`. It
-            // must carry every staged table's declared columns *including* 0-row ones (e.g. `CREATE TABLE`),
-            // which openSnapshot drops from `byTable` (empty relation), so a tx resolving behind a freshly
-            // created empty table in the same batch still sees it exists.
-            val colTypes = LinkedHashMap<TableRef, MutableMap<ColumnName, VectorType>>()
-            for ((table, snaps) in byTable) colTypes.getOrPut(table) { LinkedHashMap() }.putAll(snaps.mergeTypes())
-            for (t in stagedTables) colTypes.getOrPut(t.ref) { LinkedHashMap() }.putAll(t.columnTypes)
-
-            val tableInfo = tableCat.buildTableInfo(colTypes)
-
-            Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
+            Snapshot(openTxs.lastOrNull()?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
         }
     }
 }
