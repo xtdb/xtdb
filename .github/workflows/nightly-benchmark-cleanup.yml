@@ -837,7 +837,8 @@ jobs:
             const queue = [
               'tpch', 'yakbench', 'readings', 'auctionmark',
               'clickbench', 'tsbs-iot', 'ingest-tx-overhead',
-              'patch', 'products', 'ts-devices', 'fusion'
+              'patch', 'products', 'ts-devices', 'fusion',
+              'kafka-source'
             ];
             const current = '${{ inputs.benchType }}';
             const idx = queue.indexOf(current);

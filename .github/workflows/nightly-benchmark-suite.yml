@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       start_from:
-        description: 'Start from this benchmark (defaults to first in queue). Queue order: tpch, yakbench, readings, auctionmark, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices, fusion'
+        description: 'Start from this benchmark (defaults to first in queue). Queue order: tpch, yakbench, readings, auctionmark, clickbench, tsbs-iot, ingest-tx-overhead, patch, products, ts-devices, fusion, kafka-source'
         required: false
         default: ''
         type: string

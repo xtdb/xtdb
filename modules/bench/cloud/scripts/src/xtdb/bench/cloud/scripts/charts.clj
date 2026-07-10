@@ -117,7 +117,7 @@
    "kafka-source" {:benchmark-name "Kafka Connect source ingestion"
                    :title "Kafka Source Benchmark Performance"
                    :filter-param "message-count"
-                   :filter-value 10000
+                   :filter-value 100000
                    :filter-is-string false}
    "patch"    {:benchmark-name "PATCH Performance Benchmark"
                :title "Patch Benchmark Performance"
