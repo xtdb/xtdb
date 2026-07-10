@@ -13,6 +13,9 @@ A [role](https://www.postgresql.org/docs/current/user-manag.html) with the follo
 
 A publication enumerating the tables to sync to XTDB, it's table set is the only filter on what gets synced.
 
+[`REPLICA IDENTITY FULL`](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY) on any table with a column that can hold a large ([TOASTable](https://www.postgresql.org/docs/current/storage-toast.html)) value — `text`, `bytea`, `jsonb`, and the like.
+Without it, an `UPDATE` that leaves such a column unchanged omits its value from the replication stream, and — since XTDB mirrors the whole row — the source can't reconstruct the row and halts (see [troubleshooting](/ops/external-sources/postgres/troubleshooting)).
+
 :::caution
 Adding non-empty tables to a publication after the initial snapshot is currently unsupported.
 Doing so will leave the table in an inconsistent state in XTDB.
