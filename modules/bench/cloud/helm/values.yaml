@@ -49,6 +49,9 @@ ingestTxOverhead:
   docCount: 100000
   batchSizes: "1000,100,10,1"
 
+kafkaSource:
+  messageCount: 10000
+
 patch:
   docCount: 500000
   patchCount: 10

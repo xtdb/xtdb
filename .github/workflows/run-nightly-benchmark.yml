@@ -96,6 +96,11 @@ on:
         required: false
         default: ''
         type: string
+      kafka_source_message_count:
+        description: 'Message count for kafka-source benchmark'
+        required: false
+        default: ''
+        type: string
       ingest_tx_overhead_batch_sizes:
         description: 'Batch sizes for ingest-tx-overhead benchmark (comma-separated)'
         required: false
@@ -360,6 +365,7 @@ jobs:
           TSBS_BURN_IN: ${{ inputs.tsbs_burn_in }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
+          KAFKA_SOURCE_MESSAGE_COUNT: ${{ inputs.kafka_source_message_count }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
@@ -450,6 +456,9 @@ jobs:
             # Escape commas for Helm --set parsing
             ESCAPED_BATCH_SIZES="${INGEST_TX_OVERHEAD_BATCH_SIZES//,/\\,}"
             HELM_ARGS+=(--set "ingestTxOverhead.batchSizes=${ESCAPED_BATCH_SIZES}")
+          fi
+          if [ -n "$KAFKA_SOURCE_MESSAGE_COUNT" ]; then
+            HELM_ARGS+=(--set "kafkaSource.messageCount=${KAFKA_SOURCE_MESSAGE_COUNT}")
           fi
           if [ -n "$PATCH_DOC_COUNT" ]; then
             HELM_ARGS+=(--set "patch.docCount=${PATCH_DOC_COUNT}")
@@ -597,6 +606,7 @@ jobs:
           READING_COUNT: ${{ inputs.reading_count }}
           INGEST_TX_OVERHEAD_DOC_COUNT: ${{ inputs.ingest_tx_overhead_doc_count }}
           INGEST_TX_OVERHEAD_BATCH_SIZES: ${{ inputs.ingest_tx_overhead_batch_sizes }}
+          KAFKA_SOURCE_MESSAGE_COUNT: ${{ inputs.kafka_source_message_count }}
           PATCH_DOC_COUNT: ${{ inputs.patch_doc_count }}
           PATCH_PATCH_COUNT: ${{ inputs.patch_patch_count }}
           PRODUCTS_LIMIT: ${{ inputs.products_limit }}
@@ -636,6 +646,7 @@ jobs:
           [ -n "$READING_COUNT" ] && CONFIG_PARTS+=("Readings: ${READING_COUNT}")
           [ -n "$INGEST_TX_OVERHEAD_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${INGEST_TX_OVERHEAD_DOC_COUNT}")
           [ -n "$INGEST_TX_OVERHEAD_BATCH_SIZES" ] && CONFIG_PARTS+=("Batch Sizes: ${INGEST_TX_OVERHEAD_BATCH_SIZES}")
+          [ -n "$KAFKA_SOURCE_MESSAGE_COUNT" ] && CONFIG_PARTS+=("Messages: ${KAFKA_SOURCE_MESSAGE_COUNT}")
           [ -n "$PATCH_DOC_COUNT" ] && CONFIG_PARTS+=("Docs: ${PATCH_DOC_COUNT}")
           [ -n "$PATCH_PATCH_COUNT" ] && CONFIG_PARTS+=("Patches: ${PATCH_PATCH_COUNT}")
           [ -n "$CLICKBENCH_SIZE" ] && CONFIG_PARTS+=("Size: ${CLICKBENCH_SIZE}")

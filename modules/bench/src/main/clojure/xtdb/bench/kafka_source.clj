@@ -60,10 +60,10 @@
     (.execute stmt
               (format "ATTACH DATABASE %s WITH $$
 log: !Kafka
-  cluster: kafka
+  cluster: kafkaCluster
   topic: %s-replica
 externalSource: !KafkaConnect
-  remote: kafka
+  remote: kafkaCluster
   topic: %s
   connectConfig:
     key.converter: org.apache.kafka.connect.storage.StringConverter
@@ -131,7 +131,7 @@ $$"
     :parse-fn parse-long
     :default 10000]
 
-   [nil "--bootstrap-servers SERVERS" "Kafka bootstrap servers - must match the `kafka` remote in the node config"
+   [nil "--bootstrap-servers SERVERS" "Kafka bootstrap servers - must match the `kafkaCluster` remote in the node config"
     :id :bootstrap-servers
     :default "localhost:9092"]
 
@@ -183,7 +183,7 @@ $$"
   (def node
     ;; the map config has no hook for remotes, so register the cluster on the Config
     (-> (xtn/->config {})
-        (.logCluster "kafka" (KafkaCluster$ClusterFactory. "localhost:9092"))
+        (.logCluster "kafkaCluster" (KafkaCluster$ClusterFactory. "localhost:9092"))
         (Xtdb/openNode)))
 
   (let [f (b/compile-benchmark (benchmark {:message-count 1000}))]

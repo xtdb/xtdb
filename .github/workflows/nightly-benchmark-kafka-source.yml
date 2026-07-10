@@ -1,0 +1,40 @@
+name: Nightly Benchmark Kafka Source
+run-name: "Kafka Source (Messages: ${{ inputs.message_count || '10000' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      message_count:
+        description: 'Message Count'
+        required: false
+        default: '10000'
+        type: string
+      run_queue:
+        description: 'Part of nightly benchmark queue (set by suite workflow)'
+        required: false
+        default: 'false'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  packages: write
+
+concurrency:
+  group: nightly-benchmark-kafka-source
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: ${{ github.event_name != 'schedule' || github.repository == 'xtdb/xtdb' }}
+    uses: ./.github/workflows/run-nightly-benchmark.yml
+    with:
+      bench_type: kafka-source
+      job_display_name: Kafka Source
+      branch: ${{ github.ref_name }}
+      timeout_minutes: 90
+      benchmark_timeout: PT2H
+      kafka_source_message_count: ${{ inputs.message_count || '10000' }}
+      run_queue: ${{ inputs.run_queue || 'false' }}
+    secrets: inherit

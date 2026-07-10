@@ -23,7 +23,8 @@ Kafka Connect source::
 `docker-compose up -d kafka`, then `./gradlew kafka-source -PmessageCount=10000`
 +
 Pre-loads a Kafka topic with small JSON records, attaches a `!KafkaConnect` source database (source topic and replica log both on the docker-compose broker), and measures the drain rate into its `patient` table.
-The node config (registering the docker-compose broker as the `kafka` remote) defaults to `modules/bench/config/kafka-source.yaml` - override with `-PconfigFile=...`.
+The node config (registering the docker-compose broker as the `kafkaCluster` remote, matching the cloud bench node configs) defaults to `modules/bench/config/kafka-source.yaml` - override with `-PconfigFile=...`.
+On the benchmark cluster, run it via the 'Nightly Benchmark Kafka Source' workflow dispatch (or `./cloud/run-bench.sh azure kafka-source`).
 
 
 TSBS IoT::
