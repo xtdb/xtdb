@@ -15,7 +15,9 @@ enum class StoreOperation {
 }
 
 class SimulatedObjectStore(
-    val calls: MutableList<StoreOperation> = mutableListOf(),
+    // Synchronized: uploadMultipartBuffers calls uploadPart from concurrent coroutines (up to
+    // MAX_CONCURRENT_PART_UPLOADS), so a plain ArrayList races on add and intermittently throws AIOOBE.
+    val calls: MutableList<StoreOperation> = Collections.synchronizedList(mutableListOf()),
     val buffers: NavigableMap<Path, ByteBuffer> = TreeMap()
 ) : ObjectStore, SupportsMultipart<ByteBuffer> {
 
