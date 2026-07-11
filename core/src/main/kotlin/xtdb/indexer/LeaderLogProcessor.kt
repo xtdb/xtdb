@@ -117,10 +117,12 @@ class LeaderLogProcessor(
                 watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
             }
 
-            if (liveIndex.isFull()) {
-                val last = txs.last()
-                finishBlock(last.srcMsgId, last.externalSourceToken)
-            }
+            // Watchers-derived rather than txs.last(): the promote loop above has just notified every
+            // tx in send order, so latestSourceMsgId equals the last tx's, and the token null-coalesces
+            // to the batch's last non-null — for a mixed source-log/ext-source batch, txs.last() could
+            // be a source-log tx whose null token would drop the CDC resume point from the boundary.
+            // Matches the FlushBlock path, which already cuts blocks from the watchers' view.
+            if (liveIndex.isFull()) finishBlock(watchers.latestSourceMsgId, watchers.externalSourceToken)
         }
 
         override fun close() {
