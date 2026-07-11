@@ -30,8 +30,11 @@
 --   read-your-writes), advancing the staging index's own APPLIED head
 --   (StagingIndex.latest_completed_tx). Nothing is serialized or appended to any
 --   producer transaction at resolve time — the accumulating slot holds only the txs'
---   row slices. The tx is NOT yet visible to external queries: it is applied-to-staging
---   but not yet on the replica log.
+--   row data: the tx's OWN relations (plus iid tries, already pointing at them),
+--   ownership transferred out of the OpenTx at commit — a reference move, not a
+--   per-vector slice, which cost real time per tx on the resolver's hot path. The tx
+--   is NOT yet visible to external queries: it is applied-to-staging but not yet on
+--   the replica log.
 --
 --   The APPENDS happen at SEAL time, not resolve time — a single Kafka transactional
 --   producer permits only ONE open transaction at a time, and commit() commits
@@ -267,7 +270,7 @@ entity StagingIndex {
     -- own single in-flight slot (see the header "Ownership split", InFlightBatch and
     -- SealStagingBatch/PromoteNext).
     --   - accumulating: open, taking newly-resolved committed txs. Holds only the txs'
-    --                   row slices, in send order; nothing is serialized or appended to
+    --                   row data, in send order; nothing is serialized or appended to
     --                   a producer transaction yet — that happens on the background
     --                   append the resolver launches at seal time.
     -- Double-buffering — an open accumulating slot here plus AT MOST ONE sealed
@@ -382,7 +385,7 @@ entity StagingSlot {
     -- relation + trie, for the read-your-writes segment layering) and additionally
     -- records the send order of the txs applied to it, so a seal serializes+appends
     -- their messages in order and produces the ordered in-flight batch. Nothing is
-    -- serialized at resolve time; the slot holds only the txs' row slices.
+    -- serialized at resolve time; the slot holds only the txs' row data.
     staging: StagingIndex
     tables: StagingTable with slot = this
 
@@ -413,7 +416,7 @@ entity StagedTx {
     -- StagedTx carries no SERIALIZED message and no replica-log position: serialization
     -- into a replica message happens at seal time, on the batch's background append; the
     -- per-tx replica-log position that append yields is read from InFlightBatch.append at
-    -- settle. It holds only the row slices (for read-your-writes + promote) plus, for an
+    -- settle. It holds only the row data (for read-your-writes + promote) plus, for an
     -- external-source tx, the caller's durability handle.
     --
     -- durability: the caller's per-tx durability handle, or null. Non-null for external-
@@ -422,7 +425,7 @@ entity StagedTx {
     -- — after the whole promote loop AND any block cut — or fails it on a path where the
     -- tx will never settle (see the header "Per-tx durability handles" and PromoteNext /
     -- CloseStagingIndex). Kept off the append (InFlightBatch.append is one handle for the
-    -- whole batch's durability; this is one per tx for the caller) and off the row slices.
+    -- whole batch's durability; this is one per tx for the caller) and off the row data.
     staging: StagingIndex
     tx_key: TransactionKey
     durability: DurabilityHandle?
@@ -657,7 +660,7 @@ rule CommitTransaction {
     -- The resolver imports a committed tx into the STAGING accumulating slot and
     -- advances the staging index's APPLIED head (StagingIndex.latest_completed_tx).
     -- It does NOT serialize or append the tx to any producer transaction here: the
-    -- accumulating slot holds only the tx's row slices, in send order. Serialization
+    -- accumulating slot holds only the tx's row data, in send order. Serialization
     -- and the append happen later, on the background append launched at seal time (see
     -- SealStagingBatch). The applied-but-not-appended tx is held out of the durable
     -- index here in staging.

@@ -97,7 +97,7 @@ class LeaderLogProcessor(
     // Resolver-owned staging area: resolved-but-not-yet-durable txs, seeded at the durable head. The
     // resolver is its sole accessor (no lock). Freed in close() (phase 2), once the resolver job is
     // joined so nothing live still touches it; see StagingIndex.
-    private val stagingIndex = StagingIndex(allocator, liveIndex.latestCompletedTx)
+    private val stagingIndex = StagingIndex(liveIndex.latestCompletedTx)
 
     /**
      * A sealed batch: the txs bound for one replica-log producer transaction, in send order, together

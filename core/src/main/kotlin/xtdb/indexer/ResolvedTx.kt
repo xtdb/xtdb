@@ -16,22 +16,22 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.util.closeAll
-import xtdb.util.closeAllOnCatch
 import xtdb.util.safelyOpening
 
 /**
  * A committed-but-not-yet-durable transaction, held in memory between the resolver committing it and the
  * replica-log producer confirming it durable. Carries the salient facts of the [OpenTx] that produced it
- * — its key, result, any db-op, source-log position and external-source token — plus independent slices
- * of its relations. Distinct from [OpenTx] on purpose: a resolved tx is no longer *open* — it can't be
+ * — its key, result, any db-op, source-log position and external-source token — plus ownership of its
+ * table relations. Distinct from [OpenTx] on purpose: a resolved tx is no longer *open* — it can't be
  * written to or queried. It exists only to be (a) read by later txs resolving behind it (read-your-writes
  * across the in-flight batch) and (b) imported into the durable live tables once its replica-log commit
  * lands.
  *
- * The relation slices are taken from the [OpenTx] at [stage] via `openDirectSlice` (which transfers the
- * buffers into the staging allocator), with a trie sharing the tx's heap `rootNode` re-pointed at the
- * slice. So a ResolvedTx outlives its OpenTx — the resolver closes the OpenTx right after staging — and
- * its lifetime is its own (freed at [close], on promote/teardown).
+ * The relations are the [OpenTx]'s own, ownership transferred out at [stage] (see `OpenTx.sealTables`) —
+ * a reference move, not a slice: re-materializing every vector in the tree cost real time per tx, and the
+ * trie already points at the relation's `_iid` vector so it moves as-is. So a ResolvedTx outlives its
+ * OpenTx — the resolver closes the (now table-less) OpenTx right after staging — and its lifetime is its
+ * own (freed at [close], on promote/teardown).
  *
  * An ext-source tx carries the [pending] deferred its submitter awaits: it is completed with this tx's
  * [txResult] once the replica-log commit settles, or failed on any path where that will never happen
@@ -49,7 +49,7 @@ class ResolvedTx private constructor(
     private val tables: Map<TableRef, Table>,
 ) : AutoCloseable {
 
-    /** One table's staged writes: an owned slice of the tx's relation plus its iid trie. */
+    /** One table's staged writes: the tx's own relation (ownership moved at [stage]) plus its iid trie. */
     class Table(val ref: TableRef, val relation: Relation, private val trie: MemoryHashTrie) : AutoCloseable {
 
         /**
@@ -103,29 +103,22 @@ class ResolvedTx private constructor(
 
     companion object {
         /**
-         * Resolve a committed [openTx]: take independent slices of its table relations into [al] (the
-         * staging allocator) so they outlive the OpenTx. The caller closes the OpenTx after.
+         * Resolve a committed [openTx]: take ownership of its table relations (a reference move — see
+         * `OpenTx.sealTables`) so they outlive the OpenTx. The caller closes the OpenTx after.
          */
         @JvmStatic
         fun stage(
-            al: BufferAllocator, openTx: OpenTx, srcMsgId: MessageId,
+            openTx: OpenTx, srcMsgId: MessageId,
             txResult: TransactionResult, dbOp: DbOp?,
             pending: CompletableDeferred<TransactionResult>?,
         ): ResolvedTx =
-            mutableListOf<Table>().closeAllOnCatch { staged ->
+            ResolvedTx(
+                openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, dbOp,
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
                 // rows, and it must register in the durable index on promotion. `Table.openSnapshot` drops
                 // the empty relation for row-reads, but the table's existence still reaches resolution via
                 // its `columnTypes` (see `Snapshot.open`), and `toReplicaMessage` serializes it for the replica.
-                for ((ref, tableTx) in openTx.tables) {
-                    val slice = tableTx.txRelation.openDirectSlice(al)
-                    staged.add(Table(ref, slice, tableTx.trie.withIidReader(slice["_iid"])))
-                }
-
-                ResolvedTx(
-                    openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, dbOp,
-                    staged.associateBy { it.ref }
-                )
-            }
+                openTx.sealTables().associateBy { it.ref }
+            )
     }
 }

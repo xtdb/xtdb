@@ -1,7 +1,6 @@
 package xtdb.indexer
 
 import kotlinx.coroutines.CompletableDeferred
-import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
@@ -13,8 +12,8 @@ import xtdb.util.closeAll
  * [LeaderLogProcessor] owns from construction and frees in its two-phase close (after the resolver
  * job is joined); the resolver is its sole accessor, so it needs no lock.
  *
- * As each tx resolves, the resolver holds it ([ResolvedTx], owning its row slices) in the `accumulating`
- * slot and advances the [applied head][latestCompletedTx]. Nothing is appended to a producer transaction
+ * As each tx resolves, the resolver holds it ([ResolvedTx], owning the tx's table relations) in the
+ * `accumulating` slot and advances the [applied head][latestCompletedTx]. Nothing is appended to a producer transaction
  * here — the resolver [seal]s the accumulated txs into a batch (a single fenced producer permits only
  * one open transaction at a time, so appends are queued into one transaction and committed together)
  * and from then on owns them itself: the batch rides the leader's in-flight slot until its background
@@ -25,11 +24,8 @@ import xtdb.util.closeAll
  * advanced by promotion) by the txs staged but not yet promoted.
  */
 class StagingIndex(
-    allocator: BufferAllocator,
     latestCompletedTx: TransactionKey?,
 ) : AutoCloseable {
-
-    private val allocator = allocator.newChildAllocator("staging-index", 0, Long.MAX_VALUE)
 
     // Resolver-confined (its sole accessor), so a plain var — no cross-thread sharing to guard.
     var latestCompletedTx: TransactionKey? = latestCompletedTx
@@ -46,12 +42,12 @@ class StagingIndex(
     val isEmpty: Boolean get() = accumulating.isEmpty()
 
     /**
-     * Stage a resolved [openTx]: take independent slices of its writes into the staging allocator, hold
-     * them in the accumulating slot, and advance the applied head. The caller closes [openTx] afterwards.
+     * Stage a resolved [openTx]: take ownership of its written tables (a reference move — see
+     * `OpenTx.sealTables`), hold them in the accumulating slot, and advance the applied head.
+     * The caller closes the (now table-less) [openTx] afterwards.
      */
     fun stage(openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult, dbOp: DbOp?, pending: CompletableDeferred<TransactionResult>?) {
-        // ResolvedTx.stage cleans up its own partial slices on throw; nothing else here can leak.
-        accumulating.addLast(ResolvedTx.stage(allocator, openTx, srcMsgId, txResult, dbOp, pending))
+        accumulating.addLast(ResolvedTx.stage(openTx, srcMsgId, txResult, dbOp, pending))
         latestCompletedTx = openTx.txKey
     }
 
@@ -68,8 +64,5 @@ class StagingIndex(
     fun seal(): List<ResolvedTx>? =
         accumulating.toList().takeIf { it.isNotEmpty() }.also { this.accumulating.clear() }
 
-    override fun close() {
-        accumulating.closeAll()
-        allocator.close()
-    }
+    override fun close() = accumulating.closeAll()
 }

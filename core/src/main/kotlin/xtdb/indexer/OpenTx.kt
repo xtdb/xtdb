@@ -87,6 +87,17 @@ class OpenTx @JvmOverloads constructor(
 
     internal val tables: Iterable<Map.Entry<TableRef, Table>> get() = tableTxs.entries
 
+    /**
+     * Transfers ownership of every table's written rows (relation + iid trie, which already points at
+     * the relation's `_iid` vector) out of this tx, so they outlive it — the resolver stages them and
+     * closes the OpenTx immediately after. Ownership is presence in the table map: sealing empties it,
+     * so [close] frees exactly the un-sealed tables — an aborted or faulted tx that never seals still
+     * frees everything, with no transferred-ness flag to guard.
+     */
+    internal fun sealTables(): List<ResolvedTx.Table> =
+        tableTxs.map { (ref, table) -> ResolvedTx.Table(ref, table.txRelation, table.trie) }
+            .also { tableTxs.clear() }
+
     internal fun writeTxRow(error: Throwable?, userMetadata: Map<*, *>?) {
         val txId = txKey.txId
         val systemTimeMicros = txKey.systemTime.asMicros
