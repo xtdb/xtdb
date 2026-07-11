@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import xtdb.api.TransactionResult
 import xtdb.database.ExternalSourceToken
 import java.time.Instant
 
@@ -25,16 +26,18 @@ interface TxIndexer {
 
     /**
      * Indexes one external-source transaction: opens an [OpenTx], runs [writer] to populate it, then commits
-     * or aborts per the returned [TxResult].
+     * or aborts per the returned [TxResult]. Returns only once the tx is durably replicated.
      *
      * [externalSourceToken] is persisted with the tx so the source can resume after it. [systemTime]
-     * default to the next monotonic time.
+     * defaults to the next monotonic time.
+     *
+     * @return the durably-replicated outcome, carrying the [xtdb.api.TransactionKey] assigned to the tx.
      */
     suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?,
         systemTime: Instant? = null,
         writer: suspend (OpenTx) -> TxResult,
-    ): TxResult
+    ): TransactionResult
 
     /**
      * Like [executeTx], but hands the transaction off and returns without waiting for its [TxResult] — for a

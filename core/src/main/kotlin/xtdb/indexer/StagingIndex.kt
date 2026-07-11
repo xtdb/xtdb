@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -43,11 +44,17 @@ class StagingIndex(
      * Stage a resolved [openTx]: take independent slices of its writes into the staging allocator, hold
      * them in the accumulating slot, and advance the applied head. The caller closes [openTx] afterwards.
      */
-    fun stage(openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult, dbOp: DbOp?) {
+    fun stage(openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult, dbOp: DbOp?, pending: CompletableDeferred<TransactionResult>?) {
         // ResolvedTx.stage cleans up its own partial slices on throw; nothing else here can leak.
-        accumulating.addLast(ResolvedTx.stage(allocator, openTx, srcMsgId, txResult, dbOp))
+        accumulating.addLast(ResolvedTx.stage(allocator, openTx, srcMsgId, txResult, dbOp, pending))
         latestCompletedTx = openTx.txKey
     }
+
+    /**
+     * Fail every pending deferred in the accumulating slot. Called on teardown paths where staged txs
+     * will never settle — the persister is exiting and nobody else will complete them.
+     */
+    fun failPending(cause: Throwable) = accumulating.forEach { it.pending?.completeExceptionally(cause) }
 
     /**
      * Take the accumulated txs as an ordered batch (send order), or null if nothing is staged, clearing

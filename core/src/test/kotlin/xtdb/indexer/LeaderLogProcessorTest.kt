@@ -3,8 +3,10 @@ package xtdb.indexer
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.NodeBase
+import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
 import xtdb.api.log.MessageId
@@ -309,5 +312,130 @@ class LeaderLogProcessorTest {
         val resolvedTxs = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
         assertEquals((0 until n).toList(), resolvedTxs.map { it.txId }, "all $n txs land, in send order")
+    }
+
+    @Test
+    fun `executeTx returns only once its tx is durable`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+
+        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
+            object : Log.AtomicProducer<ReplicaMessage> {
+                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
+                    val tx = inner.openTx()
+                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
+                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
+                            val real = tx.appendMessage(message)
+                            appendStarted.complete(Unit)
+                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
+                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
+                            }
+                        }
+                    }
+                }
+
+                override fun close() = inner.close()
+            }
+        }
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            wrapProducer = wrapProducer,
+        )
+
+        // launch the executeTx so we can observe its completion state without blocking the test
+        val txJob = backgroundScope.async { lp.executeTx(null) { TxIndexer.TxResult.Committed() } }
+
+        appendStarted.await()
+
+        assertFalse(txJob.isCompleted, "executeTx must not return before the replica-log append settles")
+
+        gate.complete(Unit)
+        val result = txJob.await()
+
+        assertTrue(result is TransactionResult.Committed, "executeTx returns Committed once durable")
+    }
+
+    @Test
+    fun `closing the leader term fails an awaiting executeTx rather than hanging`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        // Gate that is never opened — the append will stall indefinitely unless the term is cancelled.
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+
+        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
+            object : Log.AtomicProducer<ReplicaMessage> {
+                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
+                    val tx = inner.openTx()
+                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
+                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
+                            val real = tx.appendMessage(message)
+                            appendStarted.complete(Unit)
+                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
+                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
+                            }
+                        }
+                    }
+                }
+
+                override fun close() = inner.close()
+            }
+        }
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            wrapProducer = wrapProducer,
+        )
+
+        // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
+        val thrown = CompletableDeferred<Throwable>()
+        backgroundScope.launch {
+            try {
+                lp.executeTx(null) { TxIndexer.TxResult.Committed() }
+            } catch (e: CancellationException) {
+                thrown.complete(e)
+                throw e
+            } catch (e: Throwable) {
+                thrown.complete(e)
+            }
+        }
+
+        appendStarted.await()
+
+        // Cancel the leader term — the gate will never open, so without term-close propagation
+        // executeTx would hang until the runTest timeout.
+        lp.cancelAndJoin()
+
+        // If executeTx hangs, thrown never completes and runTest's timeout fires — that's the hang guard.
+        thrown.await()
+    }
+
+    @Test
+    fun `closing the leader term fails a buffered, never-received executeTx`() = runTest(timeout = 5.seconds) {
+        val writerEntered = CompletableDeferred<Unit>()
+        val writerGate = CompletableDeferred<Unit>()
+
+        val lp = leaderProc(StandardTestDispatcher(testScheduler))
+
+        // t1 parks the persister inside its writer, so t2's task sits buffered in the channel —
+        // never received, so never staged: only the exit drain can unblock its caller.
+        val t1 = backgroundScope.async {
+            lp.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
+        }
+        writerEntered.await()
+        val t2 = backgroundScope.async { lp.executeTx(null) { TxIndexer.TxResult.Committed() } }
+        testScheduler.advanceUntilIdle()
+
+        lp.cancelAndJoin()
+
+        // t1 fails via the pre-stage catch (cancelled mid-writer); t2 via the buffered-task drain.
+        // A hang on either fires runTest's timeout.
+        assertTrue(runCatching { t1.await() }.isFailure, "the in-writer executeTx must fail, not hang")
+        assertTrue(runCatching { t2.await() }.isFailure, "the buffered executeTx must fail, not hang")
     }
 }

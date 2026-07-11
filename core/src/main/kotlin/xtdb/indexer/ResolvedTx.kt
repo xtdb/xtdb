@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
@@ -32,14 +33,18 @@ import xtdb.util.safelyOpening
  * slice. So a ResolvedTx outlives its OpenTx — the resolver closes the OpenTx right after staging — and
  * its lifetime is its own (freed at [close], on promote/teardown).
  *
- * No durability handle: the single async replica-log commit is what confirms durability, and the per-tx
- * replica-log positions for the apply cursor come back from that commit — not from here.
+ * An ext-source tx carries the [pending] deferred its submitter awaits: it is completed with this tx's
+ * [txResult] once the replica-log commit settles, or failed on any path where that will never happen
+ * (writer throw, append fault, term cancellation, undelivered send).
+ * Source-log txs carry null — durability is confirmed by the replica-log commit itself, and nobody
+ * awaits durability per-tx on that path.
  */
 class ResolvedTx private constructor(
     val txKey: TransactionKey,
     val srcMsgId: MessageId,
     val txResult: TransactionResult,
     val externalSourceToken: ExternalSourceToken?,
+    val pending: CompletableDeferred<TransactionResult>?,
     private val dbOp: DbOp?,
     private val tables: Map<TableRef, Table>,
 ) : AutoCloseable {
@@ -105,6 +110,7 @@ class ResolvedTx private constructor(
         fun stage(
             al: BufferAllocator, openTx: OpenTx, srcMsgId: MessageId,
             txResult: TransactionResult, dbOp: DbOp?,
+            pending: CompletableDeferred<TransactionResult>?,
         ): ResolvedTx =
             mutableListOf<Table>().closeAllOnCatch { staged ->
                 // Every table the tx touched, including 0-row ones: `CREATE TABLE` declares columns with no
@@ -117,7 +123,7 @@ class ResolvedTx private constructor(
                 }
 
                 ResolvedTx(
-                    openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, dbOp,
+                    openTx.txKey, srcMsgId, txResult, openTx.externalSourceToken, pending, dbOp,
                     staged.associateBy { it.ref }
                 )
             }
