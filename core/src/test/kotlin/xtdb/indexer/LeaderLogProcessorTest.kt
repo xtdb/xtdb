@@ -42,6 +42,7 @@ import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 
 class LeaderLogProcessorTest {
@@ -437,5 +438,145 @@ class LeaderLogProcessorTest {
         // A hang on either fires runTest's timeout.
         assertTrue(runCatching { t1.await() }.isFailure, "the in-writer executeTx must fail, not hang")
         assertTrue(runCatching { t2.await() }.isFailure, "the buffered executeTx must fail, not hang")
+    }
+
+    @Test
+    fun `a slow append pipelines subsequent ext-source txs`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val producerBatchSizes = mutableListOf<Int>()
+
+        // Counts each producer transaction's size, and gates every append handle so the first batch's
+        // settle stalls on the gate (a slow commit-ack) without blocking any thread.
+        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
+            object : Log.AtomicProducer<ReplicaMessage> {
+                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
+                    val tx = inner.openTx()
+                    var count = 0
+                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
+                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
+                            count++
+                            val real = tx.appendMessage(message)
+                            appendStarted.complete(Unit)
+                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
+                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
+                            }
+                        }
+
+                        override fun commit() {
+                            tx.commit()
+                            producerBatchSizes += count
+                        }
+                    }
+                }
+
+                override fun close() = inner.close()
+            }
+        }
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            // Explicit null head: the relaxed default returns a mock TransactionKey whose txId is 0,
+            // which would seed the staging index at 0 and shift the ext-source txIds to 1..5.
+            liveIndex = mockk(relaxed = true) { every { latestCompletedTx } returns null },
+            wrapProducer = wrapProducer,
+        )
+
+        // tx 0: stages an ext-source tx and kicks the gated append
+        lp.submitTx(null) { TxIndexer.TxResult.Committed() }
+        appendStarted.await()
+
+        // txs 1-4: submitted while the append is in-flight; they pipeline behind it.
+        // Launched so the test body doesn't block on the cap-1 channel send.
+        repeat(4) { backgroundScope.launch { lp.submitTx(null) { TxIndexer.TxResult.Committed() } } }
+
+        testScheduler.advanceUntilIdle()
+
+        // Open the gate: the in-flight append for tx0 completes; the persister settles it via the
+        // select arm and kicks whatever has accumulated behind it.
+        gate.complete(Unit)
+
+        // Durability of tx4 confirms the full pipeline drained — every settle runs through the
+        // select arm, so a broken arm shows up here as a hang, not a wrong count.
+        watchers.awaitTx(4)
+
+        // The batch SHAPE is emergent: scheduling decides how many producer transactions carry
+        // txs 1-4 (staging crosses launch → channel → persister, unlike a source-log poll batch),
+        // so assert correctness-under-accumulation and leave the coalescing factor to the
+        // kafka-source benchmark. tx 0 always seals alone — nothing else was staged when it kicked.
+        assertEquals(1, producerBatchSizes.first(), "tx 0 kicked its append alone")
+        assertEquals(5, producerBatchSizes.sum(), "every tx reached the replica log exactly once")
+
+        val resolvedTxs = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+            .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
+        assertEquals((0 until 5L).toList(), resolvedTxs.map { it.txId }, "all 5 txs land, in send order")
+    }
+
+    @Test
+    fun `block boundaries carry the latest external-source token, not the last tx's`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+
+        // Test-controlled block fullness: false while the ext-source tx settles, flipped to true so
+        // the cut lands at the settle of a batch whose LAST tx is a token-less source-log tx.
+        val cutNow = AtomicBoolean(false)
+        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+            every { finishBlock(any(), any()) } returns emptyMap()
+            every { latestCompletedTx } returns null
+            every { isFull() } answers { cutNow.get() }
+        }
+        val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
+            every { getPartitions(any()) } returns emptyList()
+        }
+        val tableCatalog = mockk<TableCatalog>(relaxed = true) {
+            every { finishBlock(any(), any(), any()) } returns emptyMap()
+        }
+        val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
+        val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
+        val blockCatalog = BlockCatalog("test", null)
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
+        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+
+        val lp = LeaderLogProcessor(
+            allocator, nodeBase, dbStorage, mockk(relaxed = true),
+            dbState, blockUploader, watchers,
+            extSource = null, replicaProducer = replicaProducer,
+            skipTxs = setOf(10), dbCatalog = null,
+            partition = 0, afterReplicaMsgId = -1,
+            scope = backgroundScope,
+        ).also(leadersToClose::add)
+
+        val token = byteArrayOf(1, 2, 3)
+
+        // The ext-source tx carries the CDC resume token; awaiting its durability (txId 0) pins the
+        // ordering without any producer gating — no block is cut while cutNow is false.
+        lp.submitTx(token) { TxIndexer.TxResult.Committed() }
+        watchers.awaitTx(0)
+
+        cutNow.set(true)
+
+        // Source-log record with msgId 10 (skipTxs covers it, so no Arrow payload needed; and its
+        // txId must exceed the ext tx's for watchers' monotonicity check). Its settle cuts the block:
+        // the batch's last tx is this token-less source-log tx, so txs.last() would write a null
+        // token — the boundary must instead carry the ext tx's token from the watchers' view.
+        lp.processRecords(listOf(
+            Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+        ))
+
+        val boundaries = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+            .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()
+
+        assertEquals(1, boundaries.size, "exactly one BlockBoundary should be written")
+        assertArrayEquals(
+            token, boundaries.single().externalSourceToken,
+            "BlockBoundary must carry the ext-source tx's token, not the source-log tx's null token"
+        )
     }
 }

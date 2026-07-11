@@ -40,6 +40,11 @@ class StagingIndex(
     /** Staged predecessors for resolution layering (read-your-writes), oldest→newest. */
     val resolvedTxs: List<ResolvedTx> get() = accumulating.toList()
 
+    /** Rows across the accumulating slot's staged txs — derived, so it can't drift. */
+    val rowCount: Long get() = accumulating.sumOf { tx -> tx.allTables.sumOf { it.relation.rowCount.toLong() } }
+
+    val isEmpty: Boolean get() = accumulating.isEmpty()
+
     /**
      * Stage a resolved [openTx]: take independent slices of its writes into the staging allocator, hold
      * them in the accumulating slot, and advance the applied head. The caller closes [openTx] afterwards.

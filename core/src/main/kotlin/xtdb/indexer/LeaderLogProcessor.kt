@@ -92,6 +92,8 @@ class LeaderLogProcessor(
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
+    private val maxStagedRows = nodeBase.config.indexer.rowsPerBlock
+
     // Resolver-owned staging area: resolved-but-not-yet-durable txs, seeded at the durable head. The
     // resolver is its sole accessor (no lock). Freed in close() (phase 2), once the resolver job is
     // joined so nothing live still touches it; see StagingIndex.
@@ -107,6 +109,10 @@ class LeaderLogProcessor(
     ) : AutoCloseable {
 
         val isCompleted: Boolean get() = append.isCompleted
+
+        // onJoin, not onAwait: join fires on failure too, letting settleAppend's own await rethrow
+        // the fault inside the persister's try/catch, which routes it through notifyError.
+        val onJoin get() = append.onJoin
 
         suspend fun settle() {
             val metadatas = append.await()
@@ -197,7 +203,13 @@ class LeaderLogProcessor(
     }
 
 
-    private sealed interface PersisterTask {
+    // What the persister wakes up for: a task from one of the channels, or the in-flight append
+    // completing (Settle). Settle is select-driven — with ext-source handlers no longer draining,
+    // this arm is what promotes their batches even when no task is queued.
+    private sealed interface PersisterWork
+    private data object Settle : PersisterWork
+
+    private sealed interface PersisterTask : PersisterWork {
         val onComplete: CompletableDeferred<Unit>
     }
 
@@ -392,7 +404,14 @@ class LeaderLogProcessor(
                 task.result.completeExceptionally(e)
                 throw e
             }
-            drainStaging()
+            kickAppend()
+            trySettleAppend()
+            // Safety bound: never accumulate more than a block's worth of rows — a bursty source
+            // must not grow staging without limit behind one slow commit (nor leave durability to
+            // the ~5-min FlushBlock). Rows, not bytes: it's the dimension the block-sizing machinery
+            // (isFull/rowsPerBlock) already manages, and the drain it triggers is ordinary
+            // backpressure, not a failure.
+            if (stagingIndex.rowCount > maxStagedRows) drainStaging()
         } finally {
             openTx.close()
         }
@@ -492,31 +511,63 @@ class LeaderLogProcessor(
                 var cause: Throwable? = null
                 try {
                     while (true) {
-                        val task: PersisterTask = selectUnbiased {
+                        // Every stage is followed by a kick and every settle re-kicks the accumulated tail,
+                        // so staged txs always have an in-flight append ahead of them; a violation here
+                        // means a wedge, not a race.
+                        check(stagingIndex.isEmpty || inFlight != null) {
+                            "staged txs with no in-flight append — nothing will kick them"
+                        }
+
+                        val work = selectUnbiased<PersisterWork> {
+                            // onJoin, not onAwait: join fires on failure too, and settleAppend's own await
+                            // rethrows the fault inside the try below, routing it through notifyError.
+                            inFlight?.let { batch -> batch.onJoin { Settle } }
                             sourceLogCh.onReceive { it }
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
                         }
-                        try {
-                            when (task) {
-                                is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
-                                is ExtSourceTask.IndexTx -> handleIndexTx(task)
-                                is GcTask.TriesDeleted -> handleTriesDeleted(task)
+
+                        when (work) {
+                            // Mirrors the task catches below: interrupts are shutdown signals, not
+                            // ingestion faults — they mustn't poison the watchers on their way out.
+                            Settle ->
+                                try {
+                                    settleAppend()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: InterruptedException) {
+                                    throw e
+                                } catch (e: Interrupted) {
+                                    throw e
+                                } catch (e: Throwable) {
+                                    watchers.notifyError(e)
+                                    throw e
+                                }
+
+                            is PersisterTask -> {
+                                val task = work
+                                try {
+                                    when (task) {
+                                        is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
+                                        is ExtSourceTask.IndexTx -> handleIndexTx(task)
+                                        is GcTask.TriesDeleted -> handleTriesDeleted(task)
+                                    }
+                                    task.onComplete.complete(Unit)
+                                } catch (e: CancellationException) {
+                                    task.onComplete.cancel(e)
+                                    throw e
+                                } catch (e: InterruptedException) {
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                } catch (e: Interrupted) {
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                } catch (e: Throwable) {
+                                    watchers.notifyError(e)
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                }
                             }
-                            task.onComplete.complete(Unit)
-                        } catch (e: CancellationException) {
-                            task.onComplete.cancel(e)
-                            throw e
-                        } catch (e: InterruptedException) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Interrupted) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Throwable) {
-                            watchers.notifyError(e)
-                            task.onComplete.completeExceptionally(e)
-                            throw e
                         }
                     }
                 } catch (_: CancellationException) {

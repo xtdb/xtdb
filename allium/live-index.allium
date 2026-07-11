@@ -85,6 +85,49 @@
 --   the batch stays on the resolver's `in_flight` slot and is freed at the leader's
 --   close() AFTER the term join (see CloseStagingIndex), never by the staging index.
 --
+--   Kicked, not drained — the resolver's select loop (see db.allium):
+--   An external-source tx (CDC / executeTx / submitTx) does NOT drain staging
+--   synchronously. The resolver stages the tx, KICKS an append if none is in flight
+--   (SealStagingBatch), and returns to its select loop; it does NOT seal-append-commit-
+--   promote inline before handling the next task. The tx COALESCES behind the (at most
+--   one) in-flight append and settles when that append completes. Because a source-log
+--   record and an external-source tx can accumulate into the same slot before it is
+--   sealed, a sealed batch may be MIXED (source-log txs and external-source txs sealed
+--   together) — no longer one external-source tx per batch.
+--
+--   The resolver's select therefore has an arm on the in-flight batch's append join:
+--   when that background append completes (success OR failure) the resolver SETTLES it
+--   (promote each tx in send order, cut a block if the live index is full, re-kick the
+--   accumulated tail). Nothing is idle-drained: the progress property (checked before
+--   each select) is "staging non-empty ⟹ an append is in flight", holding because every
+--   stage is followed by a kick and every settle re-kicks the tail. This is a select-loop
+--   ordering property, not a single-point-in-time state assertion (staging is transiently
+--   non-empty between staging a tx and kicking its append), so it lives here as prose, not
+--   an expression-bearing invariant. There is no idle-drain arm; an empty staging with no
+--   in-flight append is a quiescent resolver, which is correct.
+--
+--   Per-tx durability handles: each staged EXTERNAL-SOURCE tx carries a nullable
+--   durability handle (StagedTx.durability, a deferred completed with the tx's result);
+--   source-log txs carry none. The handle is completed as the LAST step of SETTLE —
+--   after the whole promote loop AND any block cut — never per-tx mid-loop (completing
+--   mid-loop let a caller race ahead of the block cut and orphan a BlockBoundary under
+--   hard cancel). executeTx = submit + await the handle; submitTx = fire-and-forget.
+--   Failure paths MUST fail the handle so no caller waits forever:
+--     (a) a writer/stage throw BEFORE the tx is staged fails it at the throw site;
+--     (b) staged or in-flight txs that will never settle are failed when the RESOLVER
+--         EXITS (fault or cancellation) — the fail-pending leg — before the channels
+--         close (phase 1 of teardown, not at the phase-2 free in CloseStagingIndex);
+--     (c) an undelivered task's handle is cancelled by the channel's undelivered-element
+--         hook;
+--     (d) a submit posted AFTER resolver death throws the close cause.
+--
+--   Staging row cap: after staging an external-source tx, if the accumulating slot holds
+--   more than a block's worth of rows (rows_per_block — the same dimension the block-sizing
+--   machinery already manages via is_full), the resolver falls back to a full SYNCHRONOUS
+--   drain (seal, await, promote) rather than kicking and returning to select. This is a
+--   safety bound against a bursty source growing staging without limit behind one slow
+--   commit; the drain it triggers is ordinary backpressure, not a failure.
+--
 -- Critical invariant: External queries see only durably-replicated transactions
 --   (LiveIndex.latest_completed_tx). A query returned to a user must never
 --   include a tx that could vanish if the leader crashed before its replica-log
@@ -126,6 +169,17 @@ external entity MemorySegment
 -- (InFlightBatch.append). The resolver observes its completion and settles it
 -- (see PromoteNext).
 external entity ReplicaAppend {}
+
+-- A per-tx durability handle: a deferred completed with the tx's result once the tx
+-- has settled (been promoted into the durable live tables and its batch's block cut,
+-- if any). Carried by external-source txs only (StagedTx.durability); source-log txs
+-- carry none. executeTx awaits this handle before returning; submitTx does not (fire-
+-- and-forget). The resolver completes it as the LAST step of settle, or FAILS it on any
+-- path where the tx will never settle (a stage-time throw, resolver exit with the tx
+-- still staged/in-flight, an undelivered task, or a submit after resolver death) — see
+-- the header "Per-tx durability handles". Modelled as a Deferred<TransactionKey> in the
+-- implementation.
+external entity DurabilityHandle {}
 
 ------------------------------------------------------------
 -- Value Types
@@ -261,9 +315,40 @@ entity StagingIndex {
     -- while it is true; only sealing (the next append launch) is gated.
     in_flight_present: in_flight != null
 
+    -- Durability handles collected during the CURRENT batch's settle, oldest→newest.
+    -- PromoteNext moves each promoted external-source tx's handle here (source-log txs
+    -- contribute none) instead of completing it mid-loop; the resolver completes the whole
+    -- collection as the LAST step of settle, AFTER the promote loop AND any block cut, then
+    -- clears the list (see CompleteSettledHandles). Held on the resolver (here), not on the
+    -- InFlightBatch, so the handles outlive the batch free at end-of-promote: the batch is
+    -- gone (in_flight = null) before FinishBlock runs, but the handles must not complete
+    -- until after it. Completing mid-loop let a caller race ahead of the block cut and
+    -- orphan a BlockBoundary under hard cancel.
+    --
+    -- MODELLING ARTIFACT — no such field exists in the implementation. This spec's
+    -- PromoteNext drops each StagedTx as it promotes (freeing the batch before the cut),
+    -- so the handles need a carrier that survives to settle-end; the implementation
+    -- instead keeps them on the batch's ResolvedTxs, which live until the batch is freed
+    -- AFTER settle returns (LeaderLogProcessor.InFlightBatch.settle completes them as its
+    -- last statement). Same population, same completion point — different carrier.
+    pending_handles: List<DurabilityHandle>
+
+    -- Rows across the accumulating slot's staged txs. Derived from the staged relations,
+    -- not tracked separately, so it can't drift.
+    row_count: accumulating.accumulated_txs.sum(tables.rows.count)
+
+    -- Derived: staging has grown past a block's worth of rows (see the header "Staging row
+    -- cap"). Checked after staging an external-source tx (see ExternalSourceIndexesTx in
+    -- db.allium): when true the resolver falls back to a full SYNCHRONOUS drain instead of
+    -- kicking the append and returning to select, so a bursty source cannot grow staging
+    -- without limit behind one slow commit.
+    over_row_cap: row_count > config.rows_per_block
+
     -- Derived: staging is drained when nothing is accumulated and no batch is in
     -- flight on the resolver. FinishBlock requires this so a durable block never
-    -- contains non-durable rows.
+    -- contains non-durable rows. pending_handles is deliberately NOT part of drained —
+    -- an emptied-but-not-yet-completed handle set is a settle in progress, and the block
+    -- cut runs between the batch free and the handle completion.
     is_drained: accumulating.is_empty and in_flight = null
 }
 
@@ -325,13 +410,22 @@ entity StagedTx {
     -- sealed into the in-flight batch it is promoted (and dropped) one at a time, in
     -- send order.
     --
-    -- StagedTx stays DURABILITY-HANDLE-FREE: it holds only the row slices (for
-    -- read-your-writes + promote). Serialization into a replica message happens at seal
-    -- time, on the batch's background append (StagedTx carries no serialized message);
-    -- the per-tx replica-log position that append yields is read from InFlightBatch.append
-    -- at settle. Neither is a field on StagedTx.
+    -- StagedTx carries no SERIALIZED message and no replica-log position: serialization
+    -- into a replica message happens at seal time, on the batch's background append; the
+    -- per-tx replica-log position that append yields is read from InFlightBatch.append at
+    -- settle. It holds only the row slices (for read-your-writes + promote) plus, for an
+    -- external-source tx, the caller's durability handle.
+    --
+    -- durability: the caller's per-tx durability handle, or null. Non-null for external-
+    -- source txs (executeTx/submitTx), null for source-log txs (the source log is the
+    -- durability record for those). The resolver completes it as the LAST step of settle
+    -- — after the whole promote loop AND any block cut — or fails it on a path where the
+    -- tx will never settle (see the header "Per-tx durability handles" and PromoteNext /
+    -- CloseStagingIndex). Kept off the append (InFlightBatch.append is one handle for the
+    -- whole batch's durability; this is one per tx for the caller) and off the row slices.
     staging: StagingIndex
     tx_key: TransactionKey
+    durability: DurabilityHandle?
     tables: StagedTxTable with staged_tx = this
 }
 
@@ -453,6 +547,19 @@ entity TableSnapshot {
 }
 
 ------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- The block-sizing bound (IndexerConfig.rowsPerBlock), which the staging row cap
+    -- reuses: staging never accumulates more than a block's worth of rows — see
+    -- StagingIndex.over_row_cap and the header "Staging row cap". A safety bound against
+    -- a bursty source growing staging without limit behind one slow commit, NOT a tuning
+    -- knob of its own.
+    rows_per_block: Integer = 102_400
+}
+
+------------------------------------------------------------
 -- Defaults
 ------------------------------------------------------------
 
@@ -559,7 +666,12 @@ rule CommitTransaction {
     -- resolver promotes the batch once its background append settles (see PromoteNext).
     -- Later txs in the same stream resolve against staging (read-your-writes),
     -- but external queries cannot yet see it.
-    when: CommitTransaction(tx)
+    --
+    -- durability is the caller's per-tx durability handle for an EXTERNAL-SOURCE tx
+    -- (executeTx/submitTx), or omitted (null) for a source-log tx. It is stored on the
+    -- StagedTx and completed as the last step of settle (see PromoteNext), or failed on a
+    -- non-settling path (see the header "Per-tx durability handles").
+    when: CommitTransaction(tx, durability?)
 
     requires: tx.status = active
 
@@ -592,7 +704,8 @@ rule CommitTransaction {
     ensures:
         let staged_tx = StagedTx.created(
             staging: staging,
-            tx_key: tx.tx_key
+            tx_key: tx.tx_key,
+            durability: durability
         )
         for table_tx in tx.table_txs where table_tx.rows.count > 0:
             StagedTxTable.created(
@@ -662,6 +775,14 @@ rule PromoteNext {
     -- back-to-back (double-buffering: resolution of the next txs overlapped the
     -- just-settled append).
     --
+    -- Durability handles are NOT completed per tx here — a mid-loop completion let a
+    -- caller race ahead of the block cut and orphan a BlockBoundary under hard cancel.
+    -- Instead each promoted external-source tx's handle is COLLECTED into
+    -- staging.pending_handles (source-log txs contribute none); the resolver completes the
+    -- whole collection as the LAST step of settle — after the promote loop AND any block
+    -- cut (FinishBlock, which the resolver runs before this completion when the live
+    -- index filled). See the header "Per-tx durability handles" and CompleteSettledHandles.
+    --
     -- Partial-failure safety — the WHY for per-tx: if importing a tx faults partway
     -- through the batch (e.g. OOM), the txs already promoted are durable in the live
     -- tables and the durable basis sits at the last tx that ACTUALLY imported; the
@@ -704,14 +825,80 @@ rule PromoteNext {
         index.latest_completed_tx = staged_tx.tx_key
         RefreshSharedSnapshot(index)
 
+        -- Collect an external-source tx's durability handle onto the resolver for settle-
+        -- end completion (source-log txs carry none). NOT completed here — see
+        -- CompleteSettledHandles. Held on staging, not the batch, so it outlives the batch
+        -- free below.
+        if staged_tx.durability != null:
+            staging.pending_handles.add(staged_tx.durability)
+
         -- Drop this tx from the resolver's in-flight batch — AFTER importing it — and
         -- discard the staged record. When the batch empties, the resolver frees it
-        -- (removes it), so the derived in_flight_present becomes false and the resolver
-        -- may seal the next batch.
+        -- (removes the batch, so staging.in_flight becomes null), then cuts a block if the
+        -- live index filled and completes the collected handles (CompleteSettledHandles),
+        -- then may seal the next batch.
         batch.txs = batch.txs.drop(1)
         not exists staged_tx
         if batch.txs.count = 0:
             not exists batch
+}
+
+rule CompleteSettledHandles {
+    -- The LAST step of settle. After the promote loop has drained the in-flight batch
+    -- (freed it, so in_flight = null) AND the resolver has cut a block if the live index
+    -- filled (FinishBlock, which needs staging drained — hence it runs before this, once
+    -- the batch is freed), the resolver completes each collected durability handle with
+    -- its tx's result and clears the collection. This is where an external-source
+    -- executeTx caller finally unblocks — after, not before, the block cut, so a caller
+    -- cannot race ahead and observe a state whose BlockBoundary the resolver has not yet
+    -- written (which under hard cancel would orphan it). submitTx callers never awaited,
+    -- so completion is a no-op for them beyond releasing the deferred.
+    --
+    -- Fires only when a settle has finished: the batch is gone and handles are waiting.
+    -- The non-settling failure paths (resolver exit, undelivered task, submit after
+    -- death) FAIL these handles instead — see the header "Per-tx durability handles" and
+    -- CloseStagingIndex; they are not this rule's success path.
+    --
+    -- In the implementation this is not a separate step: InFlightBatch.settle completes
+    -- the handles inline as its last statement, after the promote loop and any block cut
+    -- (see the pending_handles MODELLING ARTIFACT note on StagingIndex).
+    when: CompleteSettledHandles(staging)
+
+    requires: staging.in_flight = null
+    requires: staging.pending_handles.count > 0
+
+    ensures:
+        for handle in staging.pending_handles:
+            HandleCompleted(handle)
+        staging.pending_handles = []
+}
+
+rule FailPendingHandles {
+    -- The FAIL-PENDING leg (header legs b/c). When the RESOLVER EXITS — a fault, or a
+    -- teardown cancellation — every durability handle whose tx will NEVER settle is
+    -- FAILED with the exit cause, so no executeTx caller waits forever. This runs at
+    -- resolver exit, in PHASE 1 of the leader's two-phase close, BEFORE the channels
+    -- close and before the phase-2 buffer free (CloseStagingIndex). Three populations
+    -- carry handles that will never settle:
+    --   - collected-but-not-yet-completed: staging.pending_handles (a settle that had
+    --     drained the batch but not reached CompleteSettledHandles);
+    --   - in-flight: the sealed batch's external-source txs (its append never settled);
+    --   - staged: the accumulating slot's external-source txs (never sealed).
+    -- Source-log txs carry no handle, so they contribute nothing. An undelivered task's
+    -- handle (leg c) is failed by the channel's undelivered-element hook rather than
+    -- here; a submit after resolver death (leg d) throws the close cause at the submit
+    -- site. See the header "Per-tx durability handles".
+    when: ResolverExited(staging, cause)
+
+    ensures:
+        for handle in staging.pending_handles:
+            HandleFailed(handle, cause)
+        if staging.in_flight != null:
+            for staged_tx in staging.in_flight.txs where staged_tx.durability != null:
+                HandleFailed(staged_tx.durability, cause)
+        for staged_tx in staging.accumulating.accumulated_txs where staged_tx.durability != null:
+            HandleFailed(staged_tx.durability, cause)
+        staging.pending_handles = []
 }
 
 rule AbortTransaction {
@@ -872,11 +1059,20 @@ rule CloseStagingIndex {
     -- discarded (they were never visible to external queries) and will be re-read from
     -- the source log and re-resolved by the next leader. The durable LiveIndex is
     -- untouched. See db.allium TransitionToFollower; commit ec0f3947e.
+    --
+    -- The FAIL-PENDING leg does NOT happen here. Any per-tx durability handles of txs
+    -- that will never settle — staged, in-flight, or collected-but-not-yet-completed —
+    -- are FAILED when the RESOLVER EXITS (fault or cancellation), in PHASE 1, before the
+    -- channels close, so no executeTx caller waits forever. By the time this phase-2 free
+    -- runs the handles are already failed; this rule only reclaims the buffers. See the
+    -- header "Per-tx durability handles" (legs b, c, d).
     when: CloseStagingIndex(staging)
 
     ensures:
         -- Free a faulted/teardown-parked in-flight batch first — the leader's
-        -- responsibility, after the term join — then the staging index itself.
+        -- responsibility, after the term join — then the staging index itself. The
+        -- pending handles were already failed at resolver exit (phase 1); nothing to
+        -- complete or fail here.
         if staging.in_flight != null:
             not exists staging.in_flight
         not exists staging
