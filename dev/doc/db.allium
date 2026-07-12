@@ -927,12 +927,10 @@ rule ResolverPromotesBatch {
     --
     -- The per-tx replica-log positions carried on resolved_batch are the append
     -- positions from the per-tx handles the resolver obtained at SEAL time, i-th ↔ i-th
-    -- tx in send order. durable_token is the token as of the batch's last tx.
+    -- tx in send order.
     when: BatchCommitted(staging_index, resolved_batch)
 
     requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
-
-    let durable_token = resolved_batch.last.external_source_token
 
     ensures:
         -- Promote each tx in send order. Each resolved tx carries its own replica-log
@@ -953,11 +951,20 @@ rule ResolverPromotesBatch {
 
         let durable_tx = resolved_batch.last.tx_key
 
+        -- The block boundary's resume token comes from the WATCHERS' view, which the
+        -- promote loop above just advanced (notifyTx null-coalesces the tracked token to
+        -- the last non-null it saw). A MIXED batch's last tx can be a source-log tx whose
+        -- token is null; reading resolved_batch.last.external_source_token would drop the
+        -- CDC resume point in that case. watchers.external_source_token holds the batch's
+        -- last NON-NULL token instead, so the boundary carries a live resume point.
+        let durable_token = watchers.external_source_token
+
         -- BlockBoundary closes the batch: finish the block once durable and full,
         -- by which point staging is drained (see live-index FinishBlock). An
         -- external-source batch carries a non-null token and finishes via
-        -- ExternalSourceFinishesBlock so it is persisted in the Block; the
-        -- client-driven leader carries null and finishes via LeaderFinishesBlock.
+        -- ExternalSourceFinishesBlock so it is persisted in the Block; a pure client-
+        -- driven batch has never seen a token (watchers' token stays null) and finishes
+        -- via LeaderFinishesBlock.
         if live_index.is_full:
             if durable_token != null:
                 ExternalSourceFinishesBlock(durable_tx.tx_id, durable_token)
@@ -1174,7 +1181,16 @@ rule ExternalSourceIndexesTx {
         -- append happens at seal.
         let tx_key = live_index.beginStagedTx(staging_index, system_time, external_source_token, writer)
 
-        -- Tx-boundary decision: seal the batch if appropriate.
+        -- Tx-boundary decision: seal the batch if appropriate. The tx coalesces behind the
+        -- (at most one) in-flight batch and settles when that commit lands — it is NOT
+        -- drained per-tx here.
+        --
+        -- Staging row cap: after staging, if the accumulating slot holds more than a
+        -- block's worth of rows (rows_per_block — the dimension the block-sizing machinery
+        -- already manages), the resolver instead falls back to a full SYNCHRONOUS drain —
+        -- seal, await the commit, promote — before taking another task, so a bursty source
+        -- cannot grow staging without limit behind one slow commit. Ordinary backpressure,
+        -- not a failure. See live-index.allium StagingIndex.over_row_cap.
         MaybeSealBatch(staging_index)
 }
 

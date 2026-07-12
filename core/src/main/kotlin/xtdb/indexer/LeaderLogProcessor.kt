@@ -92,10 +92,12 @@ class LeaderLogProcessor(
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
+    private val maxStagedRows = nodeBase.config.indexer.rowsPerBlock
+
     // Resolver-owned staging area: resolved-but-not-yet-durable txs, seeded at the durable head. The
     // resolver is its sole accessor (no lock). Freed in close() (phase 2), once the resolver job is
     // joined so nothing live still touches it; see StagingIndex.
-    private val stagingIndex = StagingIndex(allocator, liveIndex.latestCompletedTx)
+    private val stagingIndex = StagingIndex(liveIndex.latestCompletedTx)
 
     /**
      * A sealed batch: the txs bound for one replica-log producer transaction, in send order, together
@@ -108,6 +110,10 @@ class LeaderLogProcessor(
 
         val isCompleted: Boolean get() = append.isCompleted
 
+        // onJoin, not onAwait: join fires on failure too, letting settleAppend's own await rethrow
+        // the fault inside the persister's try/catch, which routes it through notifyError.
+        val onJoin get() = append.onJoin
+
         suspend fun settle() {
             val metadatas = append.await()
 
@@ -117,11 +123,20 @@ class LeaderLogProcessor(
                 watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
             }
 
-            if (liveIndex.isFull()) {
-                val last = txs.last()
-                finishBlock(last.srcMsgId, last.externalSourceToken)
-            }
+            // Watchers-derived rather than txs.last(): the promote loop above has just notified every
+            // tx in send order, so latestSourceMsgId equals the last tx's, and the token null-coalesces
+            // to the batch's last non-null — for a mixed source-log/ext-source batch, txs.last() could
+            // be a source-log tx whose null token would drop the CDC resume point from the boundary.
+            // Matches the FlushBlock path, which already cuts blocks from the watchers' view.
+            if (liveIndex.isFull()) finishBlock(watchers.latestSourceMsgId, watchers.externalSourceToken)
+
+            // Complete after the whole settle (promote loop + any block cut): signalling per-tx mid-loop
+            // lets a caller race ahead of finishBlock, and a hard cancel then can orphan a BlockBoundary
+            // with no BlockUploaded (the #5783 sim regression caught at 15/300).
+            txs.forEach { it.pending?.complete(it.txResult) }
         }
+
+        fun failPending(cause: Throwable) = txs.forEach { it.pending?.completeExceptionally(cause) }
 
         override fun close() {
             txs.closeAll()
@@ -188,7 +203,13 @@ class LeaderLogProcessor(
     }
 
 
-    private sealed interface PersisterTask {
+    // What the persister wakes up for: a task from one of the channels, or the in-flight append
+    // completing (Settle). Settle is select-driven — with ext-source handlers no longer draining,
+    // this arm is what promotes their batches even when no task is queued.
+    private sealed interface PersisterWork
+    private data object Settle : PersisterWork
+
+    private sealed interface PersisterTask : PersisterWork {
         val onComplete: CompletableDeferred<Unit>
     }
 
@@ -206,7 +227,7 @@ class LeaderLogProcessor(
             val systemTime: Instant?,
             val writer: suspend (OpenTx) -> TxResult,
         ) : ExtSourceTask {
-            val result = CompletableDeferred<TxResult>()
+            val result = CompletableDeferred<TransactionResult>()
 
             override val onComplete = CompletableDeferred<Unit>()
         }
@@ -226,7 +247,12 @@ class LeaderLogProcessor(
     // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
     // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
-        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { task ->
+            task.onComplete.cancel()
+            // Also cancel the per-tx durability handle: the task was never delivered to the persister,
+            // so settle() will never complete it — this is the only path that can.
+            if (task is ExtSourceTask.IndexTx) task.result.cancel()
+        })
 
     private val gcCh =
         Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
@@ -259,7 +285,7 @@ class LeaderLogProcessor(
             is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
                 val (txResult, openTx) = resolveTx(msgId, record, msg)
                 openTx.use {
-                    stagingIndex.stage(it, msgId, txResult, dbOp = null)
+                    stagingIndex.stage(it, msgId, txResult, dbOp = null, pending = null)
                 }
                 kickAppend()
             }
@@ -291,7 +317,7 @@ class LeaderLogProcessor(
                     openTx.writeTxRow(error, null)
                     val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
                     val dbOp = if (error == null) DbOp.Attach(msg.dbName, msg.config) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp)
+                    stagingIndex.stage(openTx, msgId, txResult, dbOp, pending = null)
                 }
                 drainStaging()
             }
@@ -312,7 +338,7 @@ class LeaderLogProcessor(
                     openTx.writeTxRow(error, null)
                     val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
                     val dbOp = if (error == null) DbOp.Detach(msg.dbName) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp)
+                    stagingIndex.stage(openTx, msgId, txResult, dbOp, pending = null)
                 }
                 drainStaging()
             }
@@ -346,32 +372,46 @@ class LeaderLogProcessor(
 
         @Suppress("ConvertTryFinallyToUseCall") // because openTx is a var
         try {
-            val writerResult = task.writer(openTx)
-            val txResult: TransactionResult = when (writerResult) {
-                is TxResult.Committed -> {
-                    openTx.writeTxRow(null, writerResult.userMetadata)
-                    Committed(txKey)
+            try {
+                val writerResult = task.writer(openTx)
+                val txResult: TransactionResult = when (writerResult) {
+                    is TxResult.Committed -> {
+                        openTx.writeTxRow(null, writerResult.userMetadata)
+                        Committed(txKey)
+                    }
+
+                    is TxResult.Aborted -> {
+                        txErrorCounter?.increment()
+                        openTx.close()
+                        // fresh tx for the abort row — the original openTx may hold partial writes
+                        openTx = openTx(txKey, task.externalSourceToken)
+                        openTx.writeTxRow(writerResult.error, writerResult.userMetadata)
+                        Aborted(txKey, writerResult.error)
+                    }
                 }
 
-                is TxResult.Aborted -> {
-                    txErrorCounter?.increment()
-                    openTx.close()
-                    // fresh tx for the abort row — the original openTx may hold partial writes
-                    openTx = openTx(txKey, task.externalSourceToken)
-                    openTx.writeTxRow(writerResult.error, writerResult.userMetadata)
-                    Aborted(txKey, writerResult.error)
-                }
+                // Ext-source txs carry no source-log position of their own and track progress via
+                // `externalSourceToken`, so they don't advance `latestSourceMsgId` (driven by the source log).
+                // We do stamp the current source-log watermark onto the replicated record: without it a
+                // follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes
+                // the source log from a stale point and replays an already-covered block boundary.
+                val effectiveSrcMsgId = watchers.latestSourceMsgId
+                stagingIndex.stage(openTx, effectiveSrcMsgId, txResult, dbOp = null, pending = task.result)
+            } catch (e: Throwable) {
+                // Writer, writeTxRow, or stage threw before the tx was handed to the in-flight batch.
+                // The persister finally won't see a staged entry for this tx, so complete the handle here —
+                // the caller awaiting task.result would otherwise hang until the term closes.
+                task.result.completeExceptionally(e)
+                throw e
             }
-
-            // Ext-source txs carry no source-log position of their own and track progress via
-            // `externalSourceToken`, so they don't advance `latestSourceMsgId` (driven by the source log).
-            // We do stamp the current source-log watermark onto the replicated record: without it a
-            // follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes
-            // the source log from a stale point and replays an already-covered block boundary.
-            val effectiveSrcMsgId = watchers.latestSourceMsgId
-            stagingIndex.stage(openTx, effectiveSrcMsgId, txResult, dbOp = null)
-            drainStaging()
-            task.result.complete(writerResult)
+            kickAppend()
+            trySettleAppend()
+            // Safety bound: never accumulate more than a block's worth of rows — a bursty source
+            // must not grow staging without limit behind one slow commit (nor leave durability to
+            // the ~5-min FlushBlock). Rows, not bytes: it's the dimension the block-sizing machinery
+            // (isFull/rowsPerBlock) already manages, and the drain it triggers is ordinary
+            // backpressure, not a failure.
+            if (stagingIndex.rowCount > maxStagedRows) drainStaging()
         } finally {
             openTx.close()
         }
@@ -471,31 +511,63 @@ class LeaderLogProcessor(
                 var cause: Throwable? = null
                 try {
                     while (true) {
-                        val task: PersisterTask = selectUnbiased {
+                        // Every stage is followed by a kick and every settle re-kicks the accumulated tail,
+                        // so staged txs always have an in-flight append ahead of them; a violation here
+                        // means a wedge, not a race.
+                        check(stagingIndex.isEmpty || inFlight != null) {
+                            "staged txs with no in-flight append — nothing will kick them"
+                        }
+
+                        val work = selectUnbiased<PersisterWork> {
+                            // onJoin, not onAwait: join fires on failure too, and settleAppend's own await
+                            // rethrows the fault inside the try below, routing it through notifyError.
+                            inFlight?.let { batch -> batch.onJoin { Settle } }
                             sourceLogCh.onReceive { it }
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
                         }
-                        try {
-                            when (task) {
-                                is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
-                                is ExtSourceTask.IndexTx -> handleIndexTx(task)
-                                is GcTask.TriesDeleted -> handleTriesDeleted(task)
+
+                        when (work) {
+                            // Mirrors the task catches below: interrupts are shutdown signals, not
+                            // ingestion faults — they mustn't poison the watchers on their way out.
+                            Settle ->
+                                try {
+                                    settleAppend()
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: InterruptedException) {
+                                    throw e
+                                } catch (e: Interrupted) {
+                                    throw e
+                                } catch (e: Throwable) {
+                                    watchers.notifyError(e)
+                                    throw e
+                                }
+
+                            is PersisterTask -> {
+                                val task = work
+                                try {
+                                    when (task) {
+                                        is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
+                                        is ExtSourceTask.IndexTx -> handleIndexTx(task)
+                                        is GcTask.TriesDeleted -> handleTriesDeleted(task)
+                                    }
+                                    task.onComplete.complete(Unit)
+                                } catch (e: CancellationException) {
+                                    task.onComplete.cancel(e)
+                                    throw e
+                                } catch (e: InterruptedException) {
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                } catch (e: Interrupted) {
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                } catch (e: Throwable) {
+                                    watchers.notifyError(e)
+                                    task.onComplete.completeExceptionally(e)
+                                    throw e
+                                }
                             }
-                            task.onComplete.complete(Unit)
-                        } catch (e: CancellationException) {
-                            task.onComplete.cancel(e)
-                            throw e
-                        } catch (e: InterruptedException) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Interrupted) {
-                            task.onComplete.completeExceptionally(e)
-                            throw e
-                        } catch (e: Throwable) {
-                            watchers.notifyError(e)
-                            task.onComplete.completeExceptionally(e)
-                            throw e
                         }
                     }
                 } catch (_: CancellationException) {
@@ -503,6 +575,22 @@ class LeaderLogProcessor(
                 } catch (t: Throwable) {
                     cause = t
                 } finally {
+                    // Fail any ext-source tx that was staged or in-flight but will never settle:
+                    // the persister is exiting and settle() will never run for them.
+                    val pendingCause = cause ?: CancellationException("leader term closed")
+                    inFlight?.failPending(pendingCause)
+                    stagingIndex.failPending(pendingCause)
+
+                    // A buffered-but-never-received task is invisible to both failPending (it was
+                    // never staged) and onUndeliveredElement (close() doesn't visit buffered
+                    // elements — only cancel() does), so a caller outside the term scope would
+                    // await it forever.
+                    while (true) {
+                        val task = extSourceCh.tryReceive().getOrNull() ?: break
+                        task.onComplete.completeExceptionally(pendingCause)
+                        if (task is ExtSourceTask.IndexTx) task.result.completeExceptionally(pendingCause)
+                    }
+
                     sourceLogCh.close(cause)
                     extSourceCh.close(cause)
                     gcCh.close(cause)
@@ -537,10 +625,13 @@ class LeaderLogProcessor(
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ): TxResult =
-        ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
-            .also { enqueue(it).await() }
-            .result.await()
+    ): TransactionResult {
+        val task = ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
+        // enqueue's send throws if the channel is closed (dead indexer) — that's the early-exit signal.
+        // We no longer await onComplete: durability is signalled via task.result, completed at settle.
+        enqueue(task)
+        return task.result.await()
+    }
 
     override suspend fun submitTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,

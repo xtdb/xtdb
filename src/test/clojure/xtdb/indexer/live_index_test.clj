@@ -135,11 +135,10 @@
   (let [live-index (.getLiveIndex (db/primary-db tu/*node*))
         table #xt/table foo
         tx-key #xt/tx-key {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"}]
-    (util/with-open [staging-alloc (util/->child-allocator (.getAllocator tu/*node*) "staging")]
-      (util/with-open [staged (with-open [create-tx (tu/->open-tx tx-key)]
-                                (.executeSql create-tx "CREATE TABLE foo (_id, bar)")
-                                (ResolvedTx/stage staging-alloc create-tx 0 (TransactionResult$Committed. tx-key) nil))
-                       observer-tx (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})
-                       snap (.openSnapshot live-index [staged] observer-tx)]
-        (t/is (.containsKey (.getTableInfo snap) table)
-              "a table CREATEd in a still-staged tx is visible to a later tx resolving behind it")))))
+    (util/with-open [staged (with-open [create-tx (tu/->open-tx tx-key)]
+                              (.executeSql create-tx "CREATE TABLE foo (_id, bar)")
+                              (ResolvedTx/stage create-tx 0 (TransactionResult$Committed. tx-key) nil nil))
+                     observer-tx (tu/->open-tx #xt/tx-key {:tx-id 1, :system-time #xt/instant "2020-01-01T00:00:01Z"})
+                     snap (.openSnapshot live-index [staged] observer-tx)]
+      (t/is (.containsKey (.getTableInfo snap) table)
+            "a table CREATEd in a still-staged tx is visible to a later tx resolving behind it"))))
