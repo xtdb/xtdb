@@ -6,6 +6,7 @@ import { remarkDefinitionList, defListHastHandlers } from 'remark-definition-lis
 import { railroadPlugin } from './src/railroad-plugin.js';
 import tailwindcss from '@tailwindcss/vite';
 import d2 from 'astro-d2';
+import starlightLlmsTxt from 'starlight-llms-txt';
 
 // https://astro.build/config
 export default defineConfig({
@@ -23,6 +24,34 @@ export default defineConfig({
 
         starlight({
             title: 'XTDB',
+
+            plugins: [
+                starlightLlmsTxt({
+                    projectName: 'XTDB',
+                    description:
+                        'XTDB is an immutable, bitemporal SQL database. Every table is versioned along two axes of time (system time and valid time), so historical and as-of queries need no application-level bookkeeping. It speaks SQL over the Postgres wire protocol and Arrow Flight SQL, and also has its own datalog-style query language, XTQL.',
+
+                    // lead with the mental-model pages, then the SQL surface an agent reasons against
+                    promote: ['index', 'about/**', 'concepts/**', 'intro/what-is-xtdb', 'reference/main'],
+
+                    // the 11 per-language driver pages are near-identical boilerplate — keep them in
+                    // llms-full.txt but at the bottom, and out of the small variant entirely
+                    demote: ['drivers/**'],
+                    exclude: ['drivers/**', 'tutorials/**', 'adbc/guides/**'],
+
+                    // focused subsets an agent can pull instead of the whole corpus
+                    customSets: [
+                        { label: 'SQL reference', paths: ['reference/main/sql/**', 'reference/main/data-types', 'reference/main/stdlib/**'] },
+                        { label: 'XTQL reference', paths: ['reference/main/xtql/**', 'xtql/**'] },
+                        { label: 'Operations & configuration', paths: ['ops/**'] },
+                        { label: 'Client drivers', paths: ['drivers/**'] },
+                    ],
+
+                    // railroad grammar diagrams render to inline SVG; strip them so the text dump
+                    // isn't drowned in path coordinates (the prose around them carries the grammar)
+                    customSelectors: ['svg.railroad-diagram'],
+                }),
+            ],
 
             social: [
                 { icon: 'github', label: 'GitHub', href: 'https://github.com/xtdb/xtdb' },
