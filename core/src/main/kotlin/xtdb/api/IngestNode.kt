@@ -33,6 +33,12 @@ class IngestNode internal constructor(
 ) : AutoCloseable {
     private val closing = AtomicBoolean(false)
 
+    /**
+     * The running [Database] for [name], if configured — lets an embedder reach the live database,
+     * e.g. to await indexing progress or flush a block.
+     */
+    fun database(name: DatabaseName): Database? = databases[name]
+
     override fun close() {
         if (closing.compareAndSet(false, true)) {
             // One cancel stops every database's job tree (Phase 1 — the single thread-parking bridge,
