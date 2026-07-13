@@ -5,13 +5,12 @@
             [xtdb.api :as xt]
             [xtdb.bench :as b]
             [xtdb.node :as xtn]
-            [xtdb.protocols :as xtp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
            [java.sql Connection]
-           [xtdb.api Xtdb]
-           [xtdb.protocols PNode]))
+           [xtdb.api Xtdb Xtdb$Statement]
+           [xtdb.arrow Relation]))
 
 (defprotocol DoIngest
   (do-ingest [this table doc-count per-batch]))
@@ -35,37 +34,25 @@
 
   Xtdb
   (do-ingest [node table ^long doc-count ^long per-batch]
-    (doseq [batch (partition-all per-batch (range doc-count))]
-      (when (Thread/interrupted) (throw (InterruptedException.)))
+    (let [al (.getAllocator node)]
+      (with-open [conn (.connect node)
+                  ^Xtdb$Statement stmt (.createStatement conn)]
+        (.setSqlQuery stmt (format "INSERT INTO %s (_id) VALUES (?)" (name table)))
+        (.prepare stmt)
 
-      (when (zero? (mod (first batch) 1000))
-        (log/trace :done (first batch)))
+        (doseq [batch (partition-all per-batch (range doc-count))]
+          (when (Thread/interrupted) (throw (InterruptedException.)))
 
-      (xt/submit-tx node
-                    [(into [:put-docs table]
-                           (map (fn [idx]
-                                  {:xt/id idx}))
-                           batch)]))))
+          (when (zero? (mod (first batch) 1000))
+            (log/trace :done (first batch)))
 
-(defprotocol DoIngestSkipPGwire
-  (do-ingest-without-pgwire [this table doc-count per-batch]))
-
-(extend-protocol DoIngestSkipPGwire
-  PNode
-  (do-ingest-without-pgwire [node table ^long doc-count ^long per-batch]
-    (doseq [batch (partition-all per-batch (range doc-count))]
-      (when (Thread/interrupted) (throw (InterruptedException.)))
-
-      (when (zero? (mod (first batch) 1000))
-        (log/trace :done (first batch)))
-
-      (xtp/submit-tx node
-                     [(into [:put-docs table]
-                            (map (fn [idx]
-                                   {:xt/id idx}))
-                            batch)]
-                     {:default-db "xtdb"}))))
-
+          (with-open [rel (Relation. al)]
+            (let [id-col (.vectorFor rel "$0" #xt.arrow/type :i64 false)]
+              (doseq [idx batch]
+                (.writeLong id-col (long idx))))
+            (.setRowCount rel (count batch))
+            (.bind stmt rel)
+            (.executeUpdate stmt)))))))
 
 (defmethod b/cli-flags :ingest-tx-overhead [_]
   [["-dc" "--doc-count DOCUMENT_COUNT" "Number of documents to ingest"
@@ -78,8 +65,8 @@
 
    ["-h" "--help"]])
 
-(defn benchmark [{:keys [seed doc-count batch-sizes ingest-fn],
-                  :or {ingest-fn do-ingest seed 0, doc-count 100000, batch-sizes #{1000 100 10 1}}}]
+(defn benchmark [{:keys [seed doc-count batch-sizes],
+                  :or {seed 0, doc-count 100000, batch-sizes #{1000 100 10 1}}}]
   (log/info {:doc-count doc-count :batch-sizes batch-sizes})
 
   {:title "Ingest batch vs individual"
@@ -89,25 +76,25 @@
                  :batch-size 1000
                  :stage :ingest-batch-1000
                  :f (fn [{:keys [node]}]
-                      (ingest-fn node :batched_1000 doc-count 1000))}
+                      (do-ingest node :batched_1000 doc-count 1000))}
 
                 {:t :call
                  :batch-size 100
                  :stage :ingest-batch-100
                  :f (fn [{:keys [node]}]
-                      (ingest-fn node :batched_100 doc-count 100))}
+                      (do-ingest node :batched_100 doc-count 100))}
 
                 {:t :call
                  :batch-size 10
                  :stage :ingest-batch-10
                  :f (fn [{:keys [node]}]
-                      (ingest-fn node :batched_10 doc-count 10))}
+                      (do-ingest node :batched_10 doc-count 10))}
 
                 {:t :call
                  :batch-size 1
                  :stage :ingest-batch-1
                  :f (fn [{:keys [node]}]
-                      (ingest-fn node :batched_1 doc-count 1))}]
+                      (do-ingest node :batched_1 doc-count 1))}]
 
                (filter (comp batch-sizes :batch-size)))})
 
@@ -116,19 +103,15 @@
   (benchmark opts))
 
 (comment
-  ;; xt-memory - going through pg-wire, new connection every submit
-  ;; xt-conn - going through pg-wire, one connection
-  ;; xt-direct - using submit-tx directly on the node
-  ;; xt-local - same as xt-memory but backed by disk
+  ;; xt-pgwire - going through pg-wire, one connection
+  ;; xt-adbc - using an in-process ADBC connection
+  ;; xt-local - same as xt-adbc but backed by disk
   ;; pg-conn - talking to real postgres
-  (let [system-type :xt-direct
-        ingest-fn (case system-type
-                    (:xt-conn :xt-memory :xt-local :pg-conn) do-ingest
-                    :xt-direct do-ingest-without-pgwire)
-        f (b/compile-benchmark (benchmark {:batch-sizes #{100} :ingest-fn ingest-fn}))]
+  (let [system-type :xt-pgwire
+        f (b/compile-benchmark (benchmark {:batch-sizes #{1000 100 10 1}, :doc-count 1000000}))]
     (with-open [^AutoCloseable
                 node (case system-type
-                       (:xt-conn :xt-memory :xt-direct) (xtn/start-node)
+                       (:xt-pgwire :xt-adbc) (xtn/start-node)
 
                        :xt-local (let [path (util/->path "/tmp/xt-tx-overhead-bench")]
                                    (util/delete-dir path)
@@ -140,11 +123,13 @@
                                                       :password "postgres"}))]
 
       (case system-type
-        (:xt-direct :xt-memory :xt-local :pg-conn)
+        (:xt-adbc :xt-local)
         (f node)
-        :xt-conn
+
+        (:xt-pgwire :pg-conn)
         (with-open [conn (jdbc/get-connection node)]
           (f conn))))
 
     #_
     (f dev/node)))
+
