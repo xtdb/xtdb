@@ -625,22 +625,20 @@ class LeaderLogProcessor(
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ): TransactionResult {
-        val task = ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
-        // enqueue's send throws if the channel is closed (dead indexer) — that's the early-exit signal.
-        // We no longer await onComplete: durability is signalled via task.result, completed at settle.
-        enqueue(task)
-        return task.result.await()
-    }
+    ): TransactionResult =
+        submitTx(externalSourceToken, systemTime, writer).await()
 
     override suspend fun submitTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
-    ) {
-        // Fire-and-forget: enqueue and return without awaiting the completion handle. The task's
-        // `result`/`onComplete` are completed by the persister but go unawaited here — an unrecoverable
-        // failure closes the channel with its cause, so the next `enqueue` (this or `executeTx`) throws it.
-        enqueue(ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer))
+    ): Deferred<TransactionResult> {
+        val task = ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
+        // enqueue's send throws if the channel is closed (dead indexer) — that's the early-exit signal.
+        // The returned handle is `task.result`, completed at settle once the tx is durably replicated; a
+        // fire-and-forget caller may discard it, and an unrecoverable failure also closes the channel with
+        // its cause, so the next `enqueue` throws it.
+        enqueue(task)
+        return task.result
     }
 
     private suspend fun maybeFlushBlock() {

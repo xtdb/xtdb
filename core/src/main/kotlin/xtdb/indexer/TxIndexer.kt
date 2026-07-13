@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.Deferred
 import xtdb.api.TransactionResult
 import xtdb.database.ExternalSourceToken
 import java.time.Instant
@@ -40,18 +41,19 @@ interface TxIndexer {
     ): TransactionResult
 
     /**
-     * Like [executeTx], but hands the transaction off and returns without waiting for its [TxResult] — for a
-     * high-volume source that only needs ingestion to stay healthy, not each individual result, so it can keep
-     * submitting while the indexer works through the backlog.
+     * Like [executeTx], but hands the transaction off and returns a durability handle without waiting on it — for a
+     * high-volume source that keeps submitting while the indexer works through the backlog, acknowledging progress
+     * out of band once transactions become durable (e.g. the Postgres source advancing its replication-slot LSN).
      *
-     * The hand-off buffer is bounded, so [submitTx] still suspends under backpressure; it just doesn't block on
-     * the result. An unrecoverable ingestion failure surfaces on a subsequent [submitTx] or [executeTx] — the call
-     * throws the failure cause — so a caller can't keep submitting into a dead indexer and have its transactions
-     * silently vanish.
+     * The returned [Deferred] completes with the tx's [TransactionResult] once it's durably replicated, in submission
+     * order. A caller that doesn't need per-tx results may discard it: the hand-off buffer is bounded (so [submitTx]
+     * still suspends under backpressure), and an unrecoverable ingestion failure also surfaces on a subsequent
+     * [submitTx]/[executeTx] — the call throws the failure cause — so transactions can't silently vanish into a dead
+     * indexer.
      */
     suspend fun submitTx(
         externalSourceToken: ExternalSourceToken?,
         systemTime: Instant? = null,
         writer: suspend (OpenTx) -> TxResult,
-    )
+    ): Deferred<TransactionResult>
 }
