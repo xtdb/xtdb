@@ -655,7 +655,7 @@
         canned-response (cmd-describe-canned-response conn canned-response)
 
         parsed
-        (.accept parsed
+        (.accept ^ParsedStatement parsed
                  (reify ParsedStatement$Visitor
                    (visitQuery [_ _] (describe* describe-target))
                    (visitShowVariable [_ _] (describe* describe-target))
@@ -1257,7 +1257,7 @@
                (visitSetAwaitToken [_ stmt] (cmd-set-await-token conn (.getToken stmt) (:args portal)))
                (visitSetSessionParameter [_ stmt]
                  (cmd-set-session-parameter conn (.getName stmt)
-                                            (.evalLiteral ^SqlPlanner (-> conn :server :sql-planner) (.getValue stmt) nil)))
+                                            (.evalLiteral ^SqlPlanner (:sql-planner (-> conn :server )) (.getValue stmt) nil)))
                (visitSetRole [_ _] nil)
 
                (visitCopyIn [_ stmt]
