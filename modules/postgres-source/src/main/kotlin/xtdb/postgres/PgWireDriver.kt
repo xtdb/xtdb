@@ -216,10 +216,17 @@ class PgWireDriver(
 
         private val relations = mutableMapOf<Int, PgOutputMessage.Relation>()
 
-        override suspend fun nextTransaction(block: suspend (PostgresDriver.Transaction) -> Unit) {
-            var currentTxOps = mutableListOf<RowOp>()
-            var emptyPolls = 0
+        // A transaction spans Begin..(Insert/Update/Delete)*..Commit across multiple `poll()` calls, so its
+        // accumulated ops and the idle hot-poll counter live on the stream, not on a single poll.
+        private var currentTxOps = mutableListOf<RowOp>()
+        private var emptyPolls = 0
 
+        // Last LSN received from the server — advances on commits and protocol keepalives alike, so it tracks
+        // the server's WAL end even while idle. Safe to acknowledge only when nothing polled is still awaiting
+        // durability (see [PostgresDriver.ChangeStream.walEnd]).
+        override val walEnd: Long get() = stream.lastReceiveLSN.asLong()
+
+        override suspend fun poll(): PostgresDriver.Transaction? {
             while (currentCoroutineContext().isActive) {
                 val msg = withContext(Dispatchers.IO) { stream.readPending() }
                 if (msg == null) {
@@ -227,7 +234,7 @@ class PgWireDriver(
                         emptyPolls = 0
                         delay(IDLE_POLL_PAUSE)
                     }
-                    continue
+                    return null
                 }
                 emptyPolls = 0
 
@@ -261,37 +268,32 @@ class PgWireDriver(
                     is PgOutputMessage.Commit -> {
                         val commitLsn = LogSequenceNumber.valueOf(parsed.endLsn)
 
-                        suspend fun acknowledgeLsn() {
-                            LOG.trace { "[$dbName] Acknowledging LSN $commitLsn" }
-                            runInterruptible(Dispatchers.IO) {
-                                stream.setFlushedLSN(commitLsn)
-                                stream.setAppliedLSN(commitLsn)
-                                stream.forceUpdateStatus()
-                            }
-                        }
-
                         if (currentTxOps.isEmpty()) {
                             LOG.trace { "[$dbName] Empty commit at $commitLsn (keepalive)" }
-                            acknowledgeLsn()
                             continue
                         }
 
                         val commitTime = pgTimestampToInstant(parsed.commitTimestamp)
                         LOG.debug { "[$dbName] Commit at $commitLsn: ${currentTxOps.size} ops, commitTime=$commitTime" }
 
-                        block(PostgresDriver.Transaction(
-                            lsn = parsed.endLsn,
-                            commitTime = commitTime,
-                            ops = currentTxOps.toList(),
-                        ))
-
-                        acknowledgeLsn()
-                        return
+                        val ops = currentTxOps
+                        currentTxOps = mutableListOf()
+                        return PostgresDriver.Transaction(parsed.endLsn, commitTime, ops.toList())
                     }
                 }
             }
 
             throw CancellationException("Streaming loop cancelled")
+        }
+
+        override suspend fun acknowledge(lsn: Long) {
+            val lsnObj = LogSequenceNumber.valueOf(lsn)
+            LOG.trace { "[$dbName] Acknowledging LSN $lsnObj" }
+            runInterruptible(Dispatchers.IO) {
+                stream.setFlushedLSN(lsnObj)
+                stream.setAppliedLSN(lsnObj)
+                stream.forceUpdateStatus()
+            }
         }
 
         // stream.close() is unreliable; closing replConn is what releases the slot.

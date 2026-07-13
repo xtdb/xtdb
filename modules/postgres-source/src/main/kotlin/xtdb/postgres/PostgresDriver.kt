@@ -40,12 +40,34 @@ interface PostgresDriver : AutoCloseable {
     /**
      * Opens a logical replication stream from the given LSN.
      *
-     * [ChangeStream.nextTransaction] blocks until a committed transaction with DML operations is available,
-     * then passes it to [block]. The LSN is acknowledged back to PostgreSQL only if [block] returns normally.
-     * If [block] throws, the LSN is not acknowledged — PG will re-send the changes on the next connection.
+     * Reading ([poll]) and acknowledging ([acknowledge]) are deliberately separate so the caller can advance the
+     * slot's confirmed-flush LSN behind durable import rather than in lockstep with reads. The underlying pgjdbc
+     * stream is not thread-safe, so a single caller must drive both.
      */
     interface ChangeStream : AutoCloseable {
-        suspend fun nextTransaction(block: suspend (Transaction) -> Unit)
+        /**
+         * Reads the next committed transaction with DML operations, or null on an idle tick (nothing currently
+         * available). Relation/begin/empty-keepalive bookkeeping is handled internally. Does not acknowledge —
+         * the caller acks via [acknowledge] once the transaction is durable.
+         */
+        suspend fun poll(): Transaction?
+
+        /**
+         * The latest server WAL position received on the stream (advances on commits and protocol keepalives), used
+         * to let Postgres recycle unrelated WAL while our slot is idle. Safe to [acknowledge] ONLY when nothing read
+         * via [poll] is still awaiting durability: this position is the physical receive LSN, always below the commit
+         * LSN of any transaction whose Commit hasn't arrived yet, and — since the caller submits a transaction the
+         * moment [poll] returns it — "nothing awaiting durability" means no already-committed change sits unimported
+         * at or below it. (Postgres also holds `restart_lsn` at the start of any in-progress transaction regardless
+         * of the confirmed-flush LSN, so an un-committed transaction is always re-sent in full.)
+         */
+        val walEnd: Long
+
+        /**
+         * Advances the slot's confirmed-flush LSN to [lsn] and sends a standby status update. [lsn] MUST NOT exceed
+         * the highest LSN the caller has durably imported — PG recycles WAL up to it.
+         */
+        suspend fun acknowledge(lsn: Long)
     }
 
     suspend fun openStream(startLsn: Long): ChangeStream

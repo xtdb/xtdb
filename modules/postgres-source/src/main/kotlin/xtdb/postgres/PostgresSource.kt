@@ -16,6 +16,7 @@ import org.postgresql.util.PSQLException
 import xtdb.indexer.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
+import xtdb.api.TransactionResult
 import xtdb.database.ExternalSource
 import xtdb.indexer.TxIndexer.TxResult
 import xtdb.database.ExternalSourceToken
@@ -259,7 +260,10 @@ class PostgresSource(
                         snapshotCompleted = false
                     }.toByteArray()
 
-                    txIndexer.executeTx(token) { openTx ->
+                    // Fire-and-forget: batches pipeline through the indexer, and the snapshot-complete marker
+                    // below is an in-order durability barrier for all of them. A batch ingest failure surfaces
+                    // on a later submit or on the marker's `executeTx`, aborting the snapshot.
+                    txIndexer.submitTx(token) { openTx ->
                         // snapshot has no upstream commit time — use the tx's system-time
                         val snapshotTx = PostgresDriver.Transaction(snapshot.slotLsn, openTx.txKey.systemTime, batch)
                         indexer.indexTx(snapshotTx, openTx)
@@ -272,6 +276,9 @@ class PostgresSource(
                     snapshotCompleted = true
                 }.toByteArray()
 
+                // `executeTx`, not `submitTx`: awaiting the marker's durability guarantees every batch before it
+                // is durable too (the indexer settles in submission order), so the snapshot-complete token is
+                // never durable ahead of the rows it marks complete.
                 LOG.debug { "[$dbName] Writing snapshot-complete marker" }
                 txIndexer.executeTx(completeToken) {
                     TxResult.Committed()
@@ -285,32 +292,77 @@ class PostgresSource(
     private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
         driver.openStream(startLsn).use { stream ->
             connectionState.set(1)
+
+            // Transactions submitted to the indexer but not yet known durable, in submission (= LSN) order. We
+            // read + submit ahead of durability so back-to-back CDC txs pipeline through the double-buffered
+            // indexer; `submitTx`'s bounded hand-off buffer suspends us under backpressure, keeping this bounded.
+            val awaitingDurability = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
+
+            // Highest LSN we've durably imported, and the highest we've confirmed to Postgres. Postgres recycles
+            // WAL up to the confirmed-flush LSN, so `confirmedFlushLsn` MUST NOT exceed `durablyImportedLsn`.
+            var durablyImportedLsn = startLsn
+            var confirmedFlushLsn = startLsn
+
+            suspend fun confirmFlushUpTo(lsn: Long) {
+                if (lsn > confirmedFlushLsn) {
+                    stream.acknowledge(lsn)
+                    confirmedFlushLsn = lsn
+                }
+            }
+
+            // Promote every awaiting tx whose durability handle has completed, in order, advancing
+            // `durablyImportedLsn`. `await()` on a completed handle returns immediately, or rethrows an ingest
+            // failure — tearing down the stream so Postgres re-sends from the confirmed-flush LSN. Metrics are
+            // recorded here, at the point the tx is durable ("successful apply"), so a replayed tx isn't double-counted.
+            suspend fun promoteDurable() {
+                while (awaitingDurability.firstOrNull()?.second?.isCompleted == true) {
+                    val (tx, handle) = awaitingDurability.removeFirst()
+                    handle.await()
+                    durablyImportedLsn = tx.lsn
+                    eventsCounter?.increment(tx.ops.size.toDouble())
+                    commitsCounter?.increment()
+                    lastEventEpochSeconds.set(tx.commitTime.epochSecond)
+                    commitLag?.record(
+                        (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
+                    )
+                }
+            }
+
+            // Everything up to `startLsn` is already durable (the recovered resume token, or the snapshot's
+            // consistent point). Postgres re-sends from its confirmed-flush LSN — which lags `startLsn` whenever a
+            // crash landed between durable import and ack — so confirm `startLsn` up front to shrink that window,
+            // and skip any tx it still re-delivers at or below it (re-importing would write a redundant
+            // system-time version).
+            stream.acknowledge(startLsn)
+
             try {
                 while (currentCoroutineContext().isActive) {
-                    stream.nextTransaction { tx ->
+                    stream.poll()?.let { tx ->
+                        if (tx.lsn <= startLsn) {
+                            LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= resume LSN)" }
+                            return@let
+                        }
+
                         val token = postgresSourceToken {
                             latestCommittedLsn = tx.lsn
                             snapshotCompleted = true
                         }.toByteArray()
 
-                        // Stays `execute`, NOT fire-and-forget `submit`: `nextTransaction` advances the
-                        // replication slot (`acknowledgeLsn`) as soon as this returns, letting Postgres recycle
-                        // WAL. Blocking until the tx is durably imported is what keeps that ack honest — handing
-                        // off early would ack before durability and lose the tx on a crash. Going async here
-                        // needs the slot ack moved behind durable import first.
-                        txIndexer.executeTx(token, systemTime = tx.commitTime) { openTx ->
+                        val handle = txIndexer.submitTx(token, systemTime = tx.commitTime) { openTx ->
                             indexer.indexTx(tx, openTx)
                             TxResult.Committed()
                         }
-
-                        // Record only on successful apply — failures will replay this tx.
-                        eventsCounter?.increment(tx.ops.size.toDouble())
-                        commitsCounter?.increment()
-                        lastEventEpochSeconds.set(tx.commitTime.epochSecond)
-                        commitLag?.record(
-                            (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
-                        )
+                        awaitingDurability.addLast(tx to handle)
                     }
+
+                    promoteDurable()
+                    // Confirm only as far as we've durably imported — except when nothing awaits durability, when
+                    // the whole received prefix (through walEnd) is durable and idle/unrelated WAL can be recycled
+                    // (see [ChangeStream.walEnd]).
+                    confirmFlushUpTo(
+                        if (awaitingDurability.isEmpty()) maxOf(durablyImportedLsn, stream.walEnd)
+                        else durablyImportedLsn
+                    )
                 }
             } finally {
                 connectionState.set(0)
