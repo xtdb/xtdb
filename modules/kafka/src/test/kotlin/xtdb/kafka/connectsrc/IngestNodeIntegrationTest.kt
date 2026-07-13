@@ -14,15 +14,18 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import xtdb.api.IngestNode
+import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.api.storage.Storage
 import xtdb.database.Database
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.time.Duration
@@ -136,4 +139,93 @@ class IngestNodeIntegrationTest {
 
         assertEquals(listOf("k1", "k2", "k3"), seenKeys.toList())
     }
+
+    private fun attach(node: Xtdb, dbName: String, yaml: String) {
+        node.getConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute("ATTACH DATABASE $dbName WITH \$\$\n$yaml\n\$\$")
+            }
+        }
+    }
+
+    private fun queryIds(node: Xtdb): Set<String> =
+        node.createConnectionBuilder().database("events").build().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT _id FROM public.events").use { rs ->
+                    buildSet { while (rs.next()) add(rs.getString("_id")) }
+                }
+            }
+        }
+
+    @Test
+    fun `read-only attach sees ingest-node data before and after a block flush`(@TempDir storageDir: Path) =
+        runTest(timeout = 180.seconds) {
+            val sourceTopic = "events-${UUID.randomUUID()}"
+            val logTopic = "xt-log-${UUID.randomUUID()}"
+            createTopic(sourceTopic)
+
+            produce(sourceTopic, "k1", """{"name":"Alice"}""".toByteArray())
+            produce(sourceTopic, "k2", """{"name":"Bob"}""".toByteArray())
+
+            val dbConfig = Database.Config(
+                log = KafkaCluster.LogFactory("kafka", logTopic),
+                storage = Storage.local(storageDir),
+                externalSource = KafkaConnectSource.Factory(
+                    remote = "kafka",
+                    topic = sourceTopic,
+                    connectConfig = mapOf(
+                        "key.converter" to "org.apache.kafka.connect.storage.StringConverter",
+                        "value.converter" to "org.apache.kafka.connect.json.JsonConverter",
+                        "value.converter.schemas.enable" to "false",
+                    ),
+                    indexer = DocsIndexer.Factory("events"),
+                ),
+            )
+
+            IngestNode.Config()
+                .remote("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+                .database("events", dbConfig)
+                .open()
+                .use { ingestNode ->
+                    Xtdb.openNode {
+                        server { port = 0 }
+                        flightSql = null
+                        logCluster("kafka", KafkaCluster.ClusterFactory(kafka.bootstrapServers))
+                    }.use { queryNode ->
+                        attach(queryNode, "events", """
+                            log: !Kafka
+                              cluster: kafka
+                              topic: $logTopic
+                            storage: !Local
+                              path: '$storageDir'
+                            mode: read-only
+                        """.trimIndent())
+
+                        awaitCondition("read-only attach sees pre-flush records") {
+                            queryIds(queryNode) == setOf("k1", "k2")
+                        }
+
+                        val ingestDb = checkNotNull(ingestNode.database("events"))
+                        ingestDb.sendFlushBlockMessage()
+                        awaitCondition("ingest node cuts the block") {
+                            ingestDb.blockCatalog.currentBlockIndex == 0L
+                        }
+
+                        val followerDb = (queryNode as Xtdb.XtdbInternal).dbCatalog["events"]
+                        awaitCondition("read-only attach processes the flushed block") {
+                            followerDb?.blockCatalog?.currentBlockIndex == 0L
+                        }
+
+                        assertEquals(
+                            setOf("k1", "k2"), queryIds(queryNode),
+                            "pre-flush records still readable from the flushed block",
+                        )
+
+                        produce(sourceTopic, "k3", """{"name":"Charlie"}""".toByteArray())
+                        awaitCondition("read-only attach sees the post-flush record") {
+                            queryIds(queryNode) == setOf("k1", "k2", "k3")
+                        }
+                    }
+                }
+        }
 }
