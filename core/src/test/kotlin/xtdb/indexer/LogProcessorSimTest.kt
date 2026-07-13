@@ -164,8 +164,6 @@ class LogProcessorSimTest : SimulationTestBase() {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
         val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
-        val blockUploader =
-            BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, uploadDispatcher = dispatcher)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
         private var logProcessor: LogProcessor? = null
@@ -173,7 +171,8 @@ class LogProcessorSimTest : SimulationTestBase() {
         fun openLogProcessor(scope: CoroutineScope) =
             LogProcessor(
                 allocator, nodeBase, crashLogger,
-                dbStorage, dbState, watchers, blockUploader,
+                dbStorage, dbState, watchers,
+                BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
                 mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
                 externalSourceFactory = object : ExternalSource.Factory {
                     override fun open(

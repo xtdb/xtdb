@@ -84,7 +84,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader"))
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, uploadDispatcher)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, uploadDispatcher)
 
         return LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true),
@@ -142,7 +142,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
@@ -213,7 +213,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
@@ -542,7 +542,7 @@ class LeaderLogProcessorTest {
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader")
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, dbStorage, mockk(relaxed = true),

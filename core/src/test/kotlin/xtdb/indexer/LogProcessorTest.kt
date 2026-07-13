@@ -74,7 +74,7 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool()
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
@@ -96,7 +96,7 @@ class LogProcessorTest {
         val bufferPool = mockBufferPool(epoch = 1)
         val dbState = dbState()
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
@@ -121,7 +121,7 @@ class LogProcessorTest {
         }
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
@@ -156,7 +156,7 @@ class LogProcessorTest {
         }
         val dbState = dbState(liveIndex = liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log

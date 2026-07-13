@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Timer
 import java.nio.ByteBuffer
 import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
@@ -41,6 +42,7 @@ class BlockUploader(
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
+    private val scope: CoroutineScope,
     private val uploadDispatcher: CoroutineDispatcher = defaultBlockUploadDispatcher,
 ) {
     private val sourceLog = dbStorage.sourceLog
@@ -79,10 +81,6 @@ class BlockUploader(
 
                 trieDetails
             }
-
-        // Publish L0 tries to source log so that all nodes (including concurrent MW nodes)
-        // see the L0 before any compaction L1C on the source log — see #5395.
-        sourceLog.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries))
 
         val allTables = finishedBlocks.keys + blockCatalog.allTables
         val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
@@ -127,7 +125,21 @@ class BlockUploader(
 
         blockUploadTimer?.let { timer?.stop(it) }
         liveIndex.nextBlock()
-        compactor.signalBlock()
+
+        // Publish L0 tries to the source log so that all nodes — including multi-writer nodes running
+        // concurrently with a single-writer leader — see the L0 before any compaction L1C on the source
+        // log (see #5395). Once we drop support for multi-writer clusters running concurrently with
+        // single-writer, this source-log post is no longer required and can be removed.
+        //
+        // Both off the persister coroutine, in one launch: uploadBlock runs on the source log's sole
+        // consumer, so appending inline self-deadlocks when the source-log buffer saturates at a block
+        // boundary — the consumer would wait on room only it can make. The launch lets uploadBlock return
+        // so the persister drains and the append's emit finds room; running signalBlock after it in the
+        // same coroutine keeps compaction's L1C strictly behind the L0 without a separate join.
+        scope.launch {
+            sourceLog.appendMessage(SourceMessage.TriesAdded(Storage.VERSION, bufferPool.epoch, addedTries))
+            compactor.signalBlock()
+        }
         LOG.debug("finished block: 'b${blockIdx.asLexHex}'.")
 
         return uploadedMsgId

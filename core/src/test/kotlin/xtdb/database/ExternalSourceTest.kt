@@ -112,7 +112,7 @@ class ExternalSourceTest {
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
         val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader"))
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null)
+        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope)
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
 
