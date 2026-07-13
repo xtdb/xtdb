@@ -19,6 +19,7 @@
   (println "XTDB has several top-level commands to choose from:")
   (println " * `node` (default, can be omitted): starts an XT node")
   (println " * `compactor`: runs a compactor-only node")
+  (println " * `ingest`: runs an ingest-only node, ingesting from configured external sources")
   (println " * `playground`: starts a 'playground', an in-memory node which accepts any database name, creating it if required")
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
@@ -115,6 +116,31 @@
 
     (util/with-open [_node ((requiring-resolve 'xtdb.node/start-compactor) (file->node-opts file))]
       (log/info "Compactor started")
+      @(shutdown-hook-promise))))
+
+(def ingest-cli-spec
+  [["-f" "--file CONFIG_FILE" "Config file to load XTDB ingest-node options from - YAML"
+    :id :file
+    :parse-fn io/file
+    :validate [if-it-exists "Config file doesn't exist"
+               #(= "yaml" (util/file-extension %)) "Config file must be .yaml"]]
+   ["-h" "--help"]])
+
+(defn- start-ingest-node [args]
+  (let [{{:keys [file]} :options} (-> (parse-args args ingest-cli-spec)
+                                      (handling-arg-errors-or-help))
+        file (or file
+                 (some-> (io/file "xtdb.yaml") if-it-exists)
+                 (some-> (io/resource "xtdb.yaml") (io/file)))]
+    (when (nil? file)
+      (binding [*out* *err*]
+        (println "Missing config file: `ingest -f <config-file.yaml>`")
+        (System/exit 2)))
+
+    (log/info "Starting in ingest-only mode...")
+
+    (util/with-open [_node ((requiring-resolve 'xtdb.node/start-ingest-node) file)]
+      (log/info "Ingest node started")
       @(shutdown-hook-promise))))
 
 (def playground-cli-spec
@@ -306,6 +332,7 @@
     (try
       (case cmd
         "compactor" (start-compactor more-args)
+        "ingest" (start-ingest-node more-args)
         "playground" (start-playground more-args)
         "node" (start-node more-args)
 
