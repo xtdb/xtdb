@@ -45,8 +45,13 @@ interface TxIndexer {
      * high-volume source that keeps submitting while the indexer works through the backlog, acknowledging progress
      * out of band once transactions become durable (e.g. the Postgres source advancing its replication-slot LSN).
      *
-     * The returned [Deferred] completes with the tx's [TransactionResult] once it's durably replicated, in submission
-     * order. A caller that doesn't need per-tx results may discard it: the hand-off buffer is bounded (so [submitTx]
+     * Transactions are sequenced in submission order: the hand-off onto the ordering queue completes before [submitTx]
+     * returns, so sequential calls can't be reordered — the tx from the first call is sequenced ahead of the second's.
+     * (Calls raced concurrently from different coroutines are ordered by whichever wins the hand-off, as you'd expect.)
+     * The returned [Deferred] completes with the tx's [TransactionResult] once it's durably replicated, in that same
+     * order.
+     *
+     * A caller that doesn't need per-tx results may discard the handle: the hand-off buffer is bounded (so [submitTx]
      * still suspends under backpressure), and an unrecoverable ingestion failure also surfaces on a subsequent
      * [submitTx]/[executeTx] — the call throws the failure cause — so transactions can't silently vanish into a dead
      * indexer.
