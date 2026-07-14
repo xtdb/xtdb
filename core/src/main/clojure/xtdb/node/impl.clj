@@ -101,6 +101,8 @@
       (.getPort ^xtdb.api.FlightSql fsql)
       -1))
 
+  (getDatabaseNames [_] (.getDatabaseNames db-cat))
+
   (createConnectionBuilder [this]
     (let [server (util/component this :xtdb.pgwire/server)
           ^DataSource data-source (or (:read-write server) (:read-only server))]

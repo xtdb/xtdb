@@ -546,7 +546,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     .withDescription("FlightSQL session middleware not configured")
                     .toRuntimeException()
 
-            val knownDbs = (node as Xtdb.XtdbInternal).dbCatalog.databaseNames
+            val knownDbs = node.databaseNames
             val errors = mutableMapOf<String, SetSessionOptionsResult.Error>()
 
             for ((name, value) in request.sessionOptions) {
@@ -724,7 +724,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, descriptor)
 
     override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) {
-        val dbNames = (node as Xtdb.XtdbInternal).dbCatalog.databaseNames
+        val dbNames = node.databaseNames
 
         singleBatchStream(FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, listener) { root ->
             val vec = root.getVector("catalog_name") as VarCharVector

@@ -75,6 +75,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     val serverReadOnlyPort: Int
     val flightSqlPort: Int
 
+    /** The names of the databases this node currently serves. */
+    val databaseNames: Collection<DatabaseName>
+
     interface CompactorNode : AutoCloseable
 
     interface XtdbInternal : Xtdb {
