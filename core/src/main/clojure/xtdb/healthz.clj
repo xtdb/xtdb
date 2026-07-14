@@ -170,33 +170,42 @@
                                               (InetAddress/getByName host)))
                 (not= ::absent port) (.port port)))))
 
+(defn open-server
+  "Starts the healthz server against `base`'s meter registry and the databases in `db-cat`.
+
+  `extra-handler-opts` are merged into each request seen by the endpoint handlers."
+  (^AutoCloseable [base db-cat config] (open-server base db-cat config {}))
+
+  (^AutoCloseable [^NodeBase base ^Database$Catalog db-cat ^HealthzConfig config extra-handler-opts]
+   (let [^InetAddress host (.getHost config)
+         initial-target-message-ids (into {}
+                                          (for [^String db-name (.getDatabaseNames db-cat)
+                                                :let [^Database db (.databaseOrNull db-cat db-name)]
+                                                :when db]
+                                            [db-name [(.getLatestSubmittedMsgId (.getSourceLog db))]]))
+
+         ^Server server (-> (handler (merge {:meter-registry (.getMeterRegistry base)
+                                             :db-cat db-cat
+                                             :initial-target-message-ids initial-target-message-ids}
+                                            extra-handler-opts))
+                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port (.getPort config), :async? true, :join? false}))]
+
+     (log/info "Healthz server started at" (str (.getURI server))
+               "- startup targets:" (pr-str initial-target-message-ids))
+
+     (reify AutoCloseable
+       (close [_]
+         (.stop server)
+         (log/info "Healthz server stopped."))))))
+
 (defmethod ig/expand-key :xtdb/healthz [k ^HealthzConfig config]
-  {k {:host (.getHost config)
-      :port (.getPort config)
+  {k {:config config
       :base (ig/ref :xtdb/base)
       :db-cat (ig/ref :xtdb/db-catalog)
       :node (ig/ref :xtdb/node)}})
 
-(defmethod ig/init-key :xtdb/healthz [_ {:keys [node, ^InetAddress host, ^long port, ^NodeBase base, ^Database$Catalog db-cat]}]
-  (let [initial-target-message-ids (into {}
-                                         (for [^String db-name (.getDatabaseNames db-cat)
-                                               :let [^Database db (.databaseOrNull db-cat db-name)]
-                                               :when db]
-                                           [db-name [(.getLatestSubmittedMsgId (.getSourceLog db))]]))
-
-        ^Server server (-> (handler {:meter-registry (.getMeterRegistry base)
-                                     :db-cat db-cat
-                                     :initial-target-message-ids initial-target-message-ids
-                                     :node node})
-                           (j/run-jetty {:host (some-> host (.getHostAddress)), :port port, :async? true, :join? false}))]
-
-    (log/info "Healthz server started at" (str (.getURI server))
-              "- startup targets:" (pr-str initial-target-message-ids))
-
-    (reify AutoCloseable
-      (close [_]
-        (.stop server)
-        (log/info "Healthz server stopped.")))))
+(defmethod ig/init-key :xtdb/healthz [_ {:keys [config base db-cat node]}]
+  (open-server base db-cat config {:node node}))
 
 (defmethod ig/halt-key! :xtdb/healthz [_ srv]
   (util/close srv))
