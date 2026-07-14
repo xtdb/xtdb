@@ -850,19 +850,22 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                                 "tx_id" to VectorType.maybe(VectorType.I64),
                                 "system_time" to VectorType.maybe(VectorType.INSTANT))) {
                     dbCat.awaitAll(awaitToken, awaitTimeout)
-                    dbCat.databaseNames.flatMap { dbName ->
-                        val db = dbCat.databaseOrNull(dbName) ?: return@flatMap emptyList()
-                        db.partitions.toSortedMap().map { (part, partition) ->
-                            val txKey = partition.liveIndex.latestCompletedTx
+                    dbCat.latestCompletedTxs().flatMap { (dbName, txs) ->
+                        txs.mapIndexed { part, txKey ->
                             mapOf("db_name" to dbName, "part" to part,
                                   "tx_id" to txKey?.txId, "system_time" to txKey?.systemTime)
                         }
                     }
                 }
 
-                // #5557 unit 5: source log's latestSubmittedMsgId is database-level for now, so the same value
-                // appears in every partition slot.
-                "latest_submitted_msg_ids" -> byPartition(msgIdCols) { db, _ -> mapOf("msg_id" to db.sourceLog.latestSubmittedMsgId) }
+                "latest_submitted_msg_ids" -> show(msgIdCols) {
+                    dbCat.awaitAll(awaitToken, awaitTimeout)
+                    dbCat.latestSubmittedMsgIds().flatMap { (dbName, msgIds) ->
+                        msgIds.mapIndexed { part, msgId ->
+                            mapOf("db_name" to dbName, "part" to part, "msg_id" to msgId)
+                        }
+                    }
+                }
                 "latest_processed_msg_ids" -> byPartition(msgIdCols) { _, partition -> mapOf("msg_id" to partition.watchers.latestSourceMsgId) }
 
                 else -> show1(variable) { sessionParameters[variable] }

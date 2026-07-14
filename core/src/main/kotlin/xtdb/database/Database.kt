@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
@@ -508,6 +509,28 @@ class Database(
                         .map { it.value.liveIndex.latestCompletedTx?.systemTime }
                 }
             }.toMap().encodeTimeBasisToken()
+
+        // each database's latest-completed tx per partition. The programmatic twin of the node's PStatus reads,
+        // surfaced through Xtdb.latestCompletedTxs and pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is
+        // positional (sorted by partition key), matching the basis-token encoding in snapshotToken.
+        fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>> =
+            databaseNames.mapNotNull { dbName ->
+                // as in snapshotToken: a concurrent detach can drop a db between databaseNames and databaseOrNull
+                databaseOrNull(dbName)?.let { db ->
+                    dbName to db.partitions.entries.sortedBy { it.key }
+                        .map { it.value.liveIndex.latestCompletedTx }
+                }
+            }.toMap()
+
+        // #5557 unit 5: the source log's latestSubmittedMsgId is database-level for now, so the same value
+        // fills every partition slot.
+        fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> =
+            databaseNames.mapNotNull { dbName ->
+                databaseOrNull(dbName)?.let { db ->
+                    val latest = db.sourceLog.latestSubmittedMsgId
+                    dbName to List(db.partitions.size) { latest }
+                }
+            }.toMap()
 
         fun attach(dbName: DatabaseName, config: Config?)
         fun detach(dbName: DatabaseName)
