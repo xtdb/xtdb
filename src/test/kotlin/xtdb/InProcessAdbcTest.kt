@@ -626,6 +626,18 @@ class InProcessAdbcTest {
     }
 
     @Test
+    fun `submitTx and executeTx are rejected while a transaction is open`() {
+        xtdb.connect().use { conn ->
+            conn.update("BEGIN")
+
+            // the autonomous helpers can't be mixed with an explicit tx - they'd fire an independent
+            // transaction, ignoring the buffered one
+            assertThrows(Incorrect::class.java) { conn.submitTx(emptyList()) }
+            assertThrows(Incorrect::class.java) { conn.executeTx(emptyList()) }
+        }
+    }
+
+    @Test
     fun `executeUpdate rejects multi-statement input`() {
         xtdb.connect().use { conn ->
             assertThrows(Incorrect::class.java) { conn.update("BEGIN; COMMIT") }

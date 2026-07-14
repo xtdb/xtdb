@@ -214,8 +214,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // unwrap ExecutionException → cause (mirrors util/rethrowing-cause), counting Anomalies on the way out
-        private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx =
-            try {
+        private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx {
+            // submitTx/executeTx are autonomous - they open, submit and (for executeTx) await their own transaction,
+            // so they can't be mixed with an explicit BEGIN. Reads are fine mid-transaction; writes are not.
+            if (isTxOpen)
+                throw Incorrect(
+                    "Cannot submit a transaction while another is in progress on this connection - commit or roll back first",
+                    "xtdb/tx-already-in-progress"
+                )
+
+            return try {
                 try {
                     db(dbName).submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
                 } catch (e: ExecutionException) {
@@ -225,6 +233,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 txErrorCounter?.increment()
                 throw e
             }
+        }
 
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
             txSubmitTimer.timed { doSubmit(ops, opts) }.record(dbName)
