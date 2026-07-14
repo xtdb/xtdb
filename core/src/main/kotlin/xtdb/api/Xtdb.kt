@@ -87,8 +87,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     override fun connect(): Connection
 
-    fun prepareSql(sql: String, opts: Any?): PreparedQuery
-
     data class SubmittedTx(val txId: MessageId)
 
     fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts): SubmittedTx

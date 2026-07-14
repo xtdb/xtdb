@@ -13,14 +13,13 @@
             [xtdb.node :as xtn]
             [xtdb.node.impl] ;;TODO probably move internal methods to main node interface
             [xtdb.object-store :as os]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
             [xtdb.util :as util])
   (:import [java.nio.file Path]
            [java.time ZoneId ZonedDateTime]
-           [xtdb.api ServerConfig Xtdb$Config]
+           [xtdb.api ServerConfig Xtdb$Config Xtdb$Connection]
            xtdb.query.QueryOpts
            xtdb.types.RegClass))
 
@@ -690,7 +689,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
-  (let [pq (xtp/prepare-sql tu/*node* "SELECT foo.*, ? FROM foo" {:default-db "xtdb"})
+  (let [pq (with-open [conn (.connect tu/*node*)]
+             (.prepareSql ^Xtdb$Connection conn "SELECT foo.*, ? FROM foo" "xtdb"))
         column-fields [#xt/field {"_id" :i64}
                        #xt/field {"a" :utf8}
                        #xt/field {"b" :i64}]
@@ -751,7 +751,9 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
     (let [ptz #xt/zone "America/New_York"
-          pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-tz ptz, :default-db "xtdb"})]
+          pq (with-open [conn (.connect tu/*node*)]
+               (.setTimeZone ^Xtdb$Connection conn ptz)
+               (.prepareSql ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x" "xtdb"))]
 
       (t/testing "and not at bind"
         (with-open [cursor (.openQuery pq nil (QueryOpts.))]
@@ -763,7 +765,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
 
   (t/testing "default-tz not supplied at prepare"
-    (let [pq (xtp/prepare-sql tu/*node* "SELECT CURRENT_TIMESTAMP x" {:default-db "xtdb"})]
+    (let [pq (with-open [conn (.connect tu/*node*)]
+               (.prepareSql ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x" "xtdb"))]
 
       (t/testing "and not at open"
         (with-open [cursor (.openQuery pq nil (QueryOpts.))]
@@ -775,7 +778,8 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
-  (let [pq (xtp/prepare-sql tu/*node* "SELECT ? v" {:param-types nil, :default-db "xtdb"})]
+  (let [pq (with-open [conn (.connect tu/*node*)]
+             (.prepareSql ^Xtdb$Connection conn "SELECT ? v" "xtdb"))]
     (t/testing "preparedQuery rebound with args matching the assumed type"
 
       (with-open [cursor (.openQuery pq (tu/open-args ["42"]) (QueryOpts.))]

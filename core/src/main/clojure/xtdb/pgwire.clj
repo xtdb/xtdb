@@ -1037,7 +1037,7 @@
   (.setSessionCharacteristics ^Xtdb$Connection (:node-conn @conn-state) access-mode)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [node conn-state ^BufferAllocator allocator tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
+(defn- cmd-exec-dml [{:keys [conn-state ^BufferAllocator allocator tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
         query (.getOriginalSql parsed)]
     (when (.isTxFailed node-conn)
@@ -1056,8 +1056,7 @@
     (when (empty? param-oids)
       (try
         (let [^PreparedQuery pq (with-auth-check conn
-                                  (xtp/prepare-sql node query
-                                                   {:default-db (conn-db-name conn)}))]
+                                  (.prepareSql node-conn parsed))]
 
           ;; Send any warnings to the client
           (when-let [warnings (.getWarnings pq)]

@@ -27,7 +27,7 @@
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database Database$Catalog DatabasePartition)
            xtdb.error.Anomaly
-           (xtdb.query IQuerySource PrepareOpts PreparedQuery QueryOpts SqlParser SqlPlanner)))
+           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlPlanner)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -39,17 +39,6 @@
 
 (defmethod ig/halt-key! :xtdb/base [_ ^NodeBase base]
   (.close base))
-
-(defn- with-query-opts-defaults
-  ([query-opts node]
-   (with-query-opts-defaults query-opts node (:default-db query-opts "xtdb")))
-
-  ([query-opts {:keys [default-tz]} db-name]
-   (-> (into {:default-tz default-tz,
-              :key-fn (serde/read-key-fn :snake-case-string)
-              :default-db db-name}
-             query-opts)
-       (update :current-time #(some-> % (time/->instant))))))
 
 (defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args default-tz], :as query-opts} {:keys [query-timer] :as metrics}]
   (util/with-close-on-catch [cursor (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
@@ -66,15 +55,20 @@
      :error (when (instance? TransactionResult$Aborted tx-res)
               (.getError ^TransactionResult$Aborted tx-res))}))
 
-(defn- await-msg-result [node ^Database db msg-id]
+(defn- await-msg-result [^Xtdb node ^Database db msg-id]
   (or (when-let [tx-res (.awaitTxBlocking db msg-id nil)]
         (when (= (.getTxId (.getTxKey tx-res)) msg-id)
           (tx-result->map tx-res)))
 
-      (with-open [res (xtp/open-sql-query node "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
-                                          {:args [msg-id]
-                                           :key-fn (serde/read-key-fn :kebab-case-keyword)
-                                           :default-db (.getName db)})]
+      ;; the tx is indexed by now (awaited above), so we read xt.txs back through a connection
+      (with-open [conn (xtp/open-connection node (.getName db))
+                  res (-> (.prepareSql ^Xtdb$Connection conn
+                                       "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
+                                       (.getName db))
+                          (then-execute-prepared-query (.getAllocator node)
+                                                       {:args [msg-id]
+                                                        :key-fn (serde/read-key-fn :kebab-case-keyword)}
+                                                       {}))]
         (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))]
           {:tx-id msg-id
            :system-time (time/->instant system-time)
@@ -133,12 +127,6 @@
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
 
-  (^PreparedQuery prepareSql [this ^String sql query-opts]
-    (let [{:keys [await-token tx-timeout default-tz default-db current-time]} (-> query-opts (with-query-opts-defaults this))]
-      (.awaitAll db-cat await-token tx-timeout)
-      (.prepareQuery q-src (SqlParser/parseStatement sql) db-cat
-                     (PrepareOpts. default-tz default-db current-time nil))))
-
   (submitTx [this db-name tx-ops tx-opts]
     (.submitTx (xtp/open-connection this db-name) tx-ops tx-opts))
 
@@ -162,17 +150,6 @@
           db (.databaseOrNull db-cat ^String (:default-db opts))]
       (metrics/record-callable! tx-await-timer
                                 (await-msg-result this db tx-id))))
-
-  (open-sql-query [this query query-opts]
-    (let [query-opts (-> query-opts (with-query-opts-defaults this))]
-      ;; We catch exceptions here to count errors outside of query execution e.g. parsing errors
-      (try
-        (-> (xtp/prepare-sql this query query-opts)
-            (then-execute-prepared-query allocator query-opts {:query-timer query-timer :query-error-counter query-error-counter}))
-        (catch Exception e
-          (when query-error-counter
-            (.increment query-error-counter))
-          (throw e)))))
 
   (open-connection [_ db-name]
     (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
@@ -223,10 +200,6 @@
      :latest-submitted-tx-ids (xtp/latest-submitted-msg-ids this)
 
      :await-token (xtp/await-token this)})
-
-  xtp/PLocalNode
-  (prepare-sql [this query query-opts]
-    (.prepareSql this ^String query query-opts))
 
   Closeable
   (close [_]

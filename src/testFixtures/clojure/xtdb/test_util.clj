@@ -411,9 +411,10 @@
   "Like xtdb.api/q, but also returns the result type."
   ([node query] (q-sql node query {}))
   ([node query opts]
-   (let [^PreparedQuery prepared-q (xtp/prepare-sql node query (merge {:default-db "xtdb"} opts))]
-     {:res (xt/q node query opts)
-      :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getColumnFields prepared-q []))})))
+   (with-open [conn (.connect ^xtdb.api.Xtdb node)]
+     (let [^PreparedQuery prepared-q (.prepareSql ^xtdb.api.Xtdb$Connection conn query (get opts :default-db "xtdb"))]
+       {:res (xt/q node query opts)
+        :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getColumnFields prepared-q []))}))))
 
 (defn with-container [^GenericContainer c, f]
   (if (.getContainerId c)

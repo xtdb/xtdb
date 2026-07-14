@@ -2,13 +2,9 @@
     xtdb.protocols)
 
 (defprotocol PNode
-  (^java.util.stream.Stream open-sql-query [node ^String query opts])
   (^long submit-tx [node tx-ops tx-opts])
   (^xtdb.api.Xtdb$ExecutedTx execute-tx [node tx-ops tx-opts])
   (^xtdb.api.Xtdb$Connection open-connection [node db-name]))
-
-(defprotocol PLocalNode
-  (^xtdb.query.PreparedQuery prepare-sql [node query query-opts]))
 
 (defprotocol PStatus
   (latest-submitted-msg-ids [node])
