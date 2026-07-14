@@ -5,16 +5,11 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.garbage-collector]
-            [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.protocols :as xtp]
-            [xtdb.query :as q]
-            [xtdb.serde :as serde]
             [xtdb.sql :as sql]
-            [xtdb.time :as time]
             [xtdb.tracer]
-            [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.util :as util])
   (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
            io.micrometer.core.instrument.Counter
            (java.io Closeable Writer)
@@ -23,11 +18,10 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
-           (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
+           (xtdb.api DataSource Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.database Database Database$Catalog)
-           xtdb.error.Anomaly
-           (xtdb.query IQuerySource PreparedQuery QueryOpts SqlPlanner)))
+           (xtdb.database Database$Catalog)
+           (xtdb.query IQuerySource SqlPlanner)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -39,41 +33,6 @@
 
 (defmethod ig/halt-key! :xtdb/base [_ ^NodeBase base]
   (.close base))
-
-(defn- then-execute-prepared-query [^PreparedQuery prepared-query, allocator {:keys [args default-tz], :as query-opts} {:keys [query-timer] :as metrics}]
-  (util/with-close-on-catch [cursor (util/with-close-on-catch [args-rel (vw/open-args allocator args)]
-                                      (.openQuery prepared-query args-rel (QueryOpts. nil default-tz)))]
-    ;;TODO metrics only currently wrapping openQueryAsync results
-    (-> (q/cursor->stream cursor query-opts metrics)
-        (metrics/wrap-query query-timer))))
-
-(defn- tx-result->map [^TransactionResult tx-res]
-  (let [^TransactionKey tx-key (.getTxKey tx-res)]
-    {:tx-id (.getTxId tx-key)
-     :system-time (.getSystemTime tx-key)
-     :committed? (instance? TransactionResult$Committed tx-res)
-     :error (when (instance? TransactionResult$Aborted tx-res)
-              (.getError ^TransactionResult$Aborted tx-res))}))
-
-(defn- await-msg-result [^Xtdb node ^Database db msg-id]
-  (or (when-let [tx-res (.awaitTxBlocking db msg-id nil)]
-        (when (= (.getTxId (.getTxKey tx-res)) msg-id)
-          (tx-result->map tx-res)))
-
-      ;; the tx is indexed by now (awaited above), so we read xt.txs back through a connection
-      (with-open [conn (xtp/open-connection node (.getName db))
-                  res (-> (.prepareSql ^Xtdb$Connection conn
-                                       "SELECT system_time, committed AS \"committed?\", error FROM xt.txs FOR ALL VALID_TIME WHERE _id = ?"
-                                       (.getName db))
-                          (then-execute-prepared-query (.getAllocator node)
-                                                       {:args [msg-id]
-                                                        :key-fn (serde/read-key-fn :kebab-case-keyword)}
-                                                       {}))]
-        (let [{:keys [system-time committed? error]} (-> (.findFirst res) (.orElse nil))]
-          {:tx-id msg-id
-           :system-time (time/->instant system-time)
-           :committed? committed?
-           :error error}))))
 
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
                                            ^IQuerySource q-src ^SqlPlanner sql-planner query-tracer default-tz ^Counter tx-error-counter
@@ -141,20 +100,6 @@
   (getDbCatalog [_] db-cat)
 
   xtp/PNode
-  (submit-tx [this tx-ops opts]
-    (try
-      (xt-log/submit-tx this tx-ops opts)
-      (catch Anomaly e
-        (when tx-error-counter
-          (.increment tx-error-counter))
-        (throw e))))
-
-  (execute-tx [this tx-ops opts]
-    (let [tx-id (xtp/submit-tx this tx-ops opts)
-          db (.databaseOrNull db-cat ^String (:default-db opts))]
-      (metrics/record-callable! tx-await-timer
-                                (await-msg-result this db tx-id))))
-
   (open-connection [_ db-name]
     (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
