@@ -243,6 +243,7 @@ export default defineConfig({
                                     collapsed: true,
                                     items: [
                                         { label: 'Setup guide', link: '/ops/external-sources/postgres/setup' },
+                                        { label: 'Troubleshooting', link: '/ops/external-sources/postgres/troubleshooting' },
                                         { label: 'Reference', link: '/ops/external-sources/postgres/reference' },
                                     ],
                                 },
