@@ -500,21 +500,17 @@ class Database(
         // a read snapshot pinned to now: each database's latest-completed system-time per partition,
         // encoded as a time-basis token, so a connection can pin a begin-time read basis.
         fun snapshotToken(): String =
-            databaseNames.mapNotNull { dbName ->
-                // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
-                // between them — skip it, as the sibling awaitAll0/syncAll0 do, rather than NPE.
-                databaseOrNull(dbName)?.let { db ->
-                    dbName to db.partitions.entries.sortedBy { it.key }
-                        .map { it.value.liveIndex.latestCompletedTx?.systemTime }
-                }
-            }.toMap().encodeTimeBasisToken()
+            latestCompletedTxs()
+                .mapValues { (_, txs) -> txs.map { it?.systemTime } }
+                .encodeTimeBasisToken()
 
         // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
         // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional (sorted by partition key),
-        // matching the basis-token encoding in snapshotToken.
+        // so it lines up with the basis-token codec.
         fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>> =
             databaseNames.mapNotNull { dbName ->
-                // as in snapshotToken: a concurrent detach can drop a db between databaseNames and databaseOrNull
+                // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
+                // between them — skip it, as the sibling awaitAll0/syncAll0 do, rather than NPE.
                 databaseOrNull(dbName)?.let { db ->
                     dbName to db.partitions.entries.sortedBy { it.key }
                         .map { it.value.liveIndex.latestCompletedTx }
