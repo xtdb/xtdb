@@ -90,3 +90,11 @@ fun nodeConfig(yamlString: String): Xtdb.Config {
     val root = resolveEnvVars(YAML_SERDE.parseToYamlNode(yamlString))
     return YAML_SERDE.decodeFromYamlNode(root)
 }
+
+/**
+ * @suppress
+ */
+fun ingestNodeConfig(yamlString: String): IngestNode.Config {
+    val root = resolveEnvVars(YAML_SERDE.parseToYamlNode(yamlString))
+    return YAML_SERDE.decodeFromYamlNode(root)
+}

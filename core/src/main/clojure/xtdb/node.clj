@@ -3,11 +3,12 @@
 
   It lives in the `com.xtdb/xtdb-core` artifact - ensure you've included this in your dependency manager of choice to use in-process nodes."
   (:require [clojure.tools.logging :as log]
+            [xtdb.error :as err]
             [xtdb.time :as time])
   (:import [java.io File]
            [java.nio.file Path]
            [java.time ZoneId]
-           [xtdb.api Xtdb Xtdb$Config]))
+           [xtdb.api IngestNode IngestNode$Config Xtdb Xtdb$Config]))
 
 (defmulti ^:no-doc apply-config!
   #_{:clj-kondo/ignore [:unused-binding]}
@@ -131,3 +132,21 @@
   For more information on the configuration options, see the relevant module pages in the [Clojure docs](https://docs.xtdb.com/drivers/clojure/codox/xtdb.api.html)"
   ^xtdb.api.Xtdb$CompactorNode [opts]
   (.openCompactor (->config opts)))
+
+(defn start-ingest-node
+  "Starts an in-process ingest-only node (see `xtdb.api.IngestNode`) with the given configuration.
+
+  Accepts various parameter types:
+  - An instance of 'xtdb.api.IngestNode$Config'.
+  - An instance of 'java.io.File' pointing to an existing '.yaml' configuration file.
+  - An instance of 'java.nio.file.Path' pointing to an existing '.yaml' configuration file.
+
+  This node *must* be closed when it is no longer needed (through `.close`, or `with-open`) so that it can clean up its resources."
+  ^xtdb.api.IngestNode [opts]
+  (cond
+    (instance? IngestNode$Config opts) (IngestNode/openIngestNode ^IngestNode$Config opts)
+    (instance? Path opts) (IngestNode/openIngestNode ^Path opts)
+    (instance? File opts) (start-ingest-node (.toPath ^File opts))
+    :else (throw (err/incorrect ::invalid-ingest-config
+                                "Ingest node config must be an IngestNode$Config or a '.yaml' config file"
+                                {:opts opts}))))

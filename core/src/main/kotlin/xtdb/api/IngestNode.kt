@@ -5,6 +5,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.cache.DiskCache
@@ -14,17 +15,21 @@ import xtdb.database.DatabaseName
 import xtdb.error.Incorrect
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID.randomUUID
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.io.path.extension
 
 /**
  * A node that does nothing but ingest from external sources — it runs a [Database] per configured
  * external source, joins leader election, and runs the source only on the database for which it's
  * elected leader. There's no query/client surface: no pgwire, no Flight SQL, no healthz.
  *
- * Intended for embedding in a custom JVM application that supplies its own indexer programmatically.
- * Because the configuration lives in code and is handed in fresh on every boot, an external source's
- * indexer factory needn't be serialisable — it never travels as persisted secondary-database config.
+ * Started either from YAML config (`xtdb.main ingest`, [readConfig]) with registered external sources,
+ * or embedded in a custom JVM application that supplies its own indexer programmatically.
+ * Because the configuration is handed in fresh on every boot, a programmatically-supplied external
+ * source's indexer factory needn't be serialisable — it never travels as persisted secondary-database config.
  */
 class IngestNode internal constructor(
     private val base: NodeBase,
@@ -50,24 +55,25 @@ class IngestNode internal constructor(
         }
     }
 
-    class Config {
-        var allocator: BufferAllocator? = null
-
-        var logClusters: Map<RemoteAlias, Remote.Factory<*>> = emptyMap()
-        var remotes: Map<RemoteAlias, Remote.Factory<*>> = emptyMap()
+    @Serializable
+    class Config(
+        var logClusters: Map<RemoteAlias, Remote.Factory<*>> = emptyMap(),
+        var remotes: Map<RemoteAlias, Remote.Factory<*>> = emptyMap(),
 
         /**
          * The databases to ingest into, keyed by name. Each carries an `externalSource` whose indexer
          * may be a programmatically-supplied, non-serialisable factory.
          */
-        var databases: Map<DatabaseName, Database.Config> = emptyMap()
+        var databases: Map<DatabaseName, Database.Config> = emptyMap(),
 
-        val memoryCache: MemoryCache.Factory = MemoryCache.Factory()
-        var diskCache: DiskCache.Factory? = null
+        val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
+        var diskCache: DiskCache.Factory? = null,
 
-        val indexer: IndexerConfig = IndexerConfig()
+        val indexer: IndexerConfig = IndexerConfig(),
 
-        var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' }
+        var nodeId: String = System.getenv("XTDB_NODE_ID") ?: randomUUID().toString().takeWhile { it != '-' },
+    ) {
+        var allocator: BufferAllocator? = null
 
         fun logClusters(clusters: Map<RemoteAlias, Remote.Factory<*>>) = apply { logClusters += clusters }
         fun logCluster(alias: RemoteAlias, cluster: Remote.Factory<*>) = apply { logClusters += alias to cluster }
@@ -143,8 +149,26 @@ class IngestNode internal constructor(
 
     companion object {
         @JvmStatic
+        fun readConfig(path: Path): Config {
+            if (path.extension != "yaml") {
+                throw IllegalArgumentException("Invalid config file type - must be '.yaml'")
+            } else if (!path.toFile().exists()) {
+                throw IllegalArgumentException("Provided config file does not exist")
+            }
+
+            return ingestNodeConfig(Files.readString(path))
+        }
+
+        @JvmStatic
         @JvmOverloads
         fun openIngestNode(config: Config = Config()) = config.open()
+
+        /**
+         * Opens an ingest node using a YAML configuration file - will throw an exception if the specified path
+         * does not exist or is not a valid `.yaml` extension file.
+         */
+        @JvmStatic
+        fun openIngestNode(path: Path) = readConfig(path).open()
 
         @JvmSynthetic
         fun openIngestNode(configure: Config.() -> Unit) = openIngestNode(Config().also(configure))
