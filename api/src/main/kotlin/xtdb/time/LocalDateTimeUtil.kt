@@ -4,6 +4,7 @@ import java.lang.Math.addExact
 import java.time.LocalDateTime
 import java.time.ZoneOffset.UTC
 
+/** @suppress */
 object LocalDateTimeUtil {
     private val LocalDateTime.epochSecond get() = toEpochSecond(UTC)
 

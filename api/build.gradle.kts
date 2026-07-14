@@ -73,6 +73,15 @@ kotlin {
 
 dokka {
     moduleName.set("xtdb-api")
+
+    dokkaSourceSets.named("main") {
+        // xtdb.util is Clojure-interop glue (requiringResolve, Transit, normalForm) - called from
+        // method bodies, never in a public signature, so hiding it leaves no dangling references.
+        perPackageOption {
+            matchingRegex.set("xtdb\\.util.*")
+            suppress.set(true)
+        }
+    }
 }
 
 protobuf {
