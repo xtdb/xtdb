@@ -1,9 +1,7 @@
 package xtdb.flight_sql
 
-import clojure.lang.IPersistentMap
-import clojure.lang.IPersistentVector
-import clojure.lang.PersistentArrayMap
-import xtdb.query.QueryOpts
+import xtdb.query.ParsedStatement
+import xtdb.query.parseStatement
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
@@ -35,12 +33,10 @@ import xtdb.arrow.Relation
 import xtdb.arrow.VectorType
 import xtdb.asBytes
 import xtdb.ResultCursor
-import xtdb.kw
 import xtdb.tx.TxOp
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.logger
-import xtdb.util.requiringResolve
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.warn
 import java.util.*
@@ -78,16 +74,7 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
     onCompleted()
 }
 
-private fun cljMap(vararg pairs: Pair<Any, Any?>): IPersistentMap = PersistentArrayMap.create(pairs.toMap())
-
-private fun isDml(sql: String, dbName: DatabaseName): Boolean {
-    val defaultDbOpts = cljMap("default-db".kw to dbName)
-    val parsed = requiringResolve("xtdb.sql.parse/parse-statement")
-        .invoke(sql, defaultDbOpts)
-
-    val opKeyword = (parsed as? IPersistentVector)?.nth(0) as? clojure.lang.Keyword
-    return opKeyword?.name in setOf("insert", "update", "delete", "erase")
-}
+private fun isDml(sql: String): Boolean = parseStatement(sql) is ParsedStatement.Dml
 
 private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
     Relation(allocator, root.schema).closeOnCatch { acc ->
@@ -375,14 +362,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             val dbName = resolveDb(ctx)
 
             // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-            if (isDml(sql, dbName)) {
+            if (isDml(sql)) {
                 throw CallStatus.INVALID_ARGUMENT
                     .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
                     .toRuntimeException()
             }
             val ticketHandle = newHandle()
-            val pq = connectionFor(ctx, dbName).prepareSql(sql)
-            val cursor = pq.openQuery(null, QueryOpts())
+            val cursor = connectionFor(ctx, dbName).openSqlQuery(sql)
             val ticket = Ticket(
                 ProtoAny.pack(
                     TicketStatementQuery.newBuilder()
@@ -455,7 +441,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ) {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
-        val dbName = resolveDb(ctx)
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
         txOrSessionConnection(ctx, txHandle).createStatement().closeOnCatch { xtdbStmt ->
             xtdbStmt.setSqlQuery(sql)
@@ -467,7 +452,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
                 )
 
-            if (!isDml(sql, dbName)) {
+            if (!isDml(sql)) {
                 resultBuilder.setDatasetSchema(
                     ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
                 )
@@ -491,7 +476,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): SchemaResult {
         val sql = cmd.query
         val dbName = resolveDb(ctx)
-        if (isDml(sql, dbName)) {
+        if (isDml(sql)) {
             throw CallStatus.INVALID_ARGUMENT
                 .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
                 .toRuntimeException()
