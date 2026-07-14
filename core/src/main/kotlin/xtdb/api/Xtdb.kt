@@ -1114,10 +1114,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        private data class ColumnInfo(val name: String, val dataType: String)
-        private data class TableInfo(val name: String, val columns: List<ColumnInfo>)
+        internal data class ColumnInfo(val name: String, val dataType: String)
+        internal data class TableInfo(val name: String, val columns: List<ColumnInfo>)
 
-        private fun querySchemas(
+        internal fun querySchemas(
             dbSchemaPattern: String?,
             tableNamePattern: String?,
             tableTypes: Array<out String>?,

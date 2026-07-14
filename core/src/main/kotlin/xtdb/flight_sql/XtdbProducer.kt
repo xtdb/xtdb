@@ -14,6 +14,7 @@ import org.apache.arrow.flight.sql.impl.FlightSql.ActionEndTransactionRequest.En
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableExistsOption
 import org.apache.arrow.flight.sql.impl.FlightSql.CommandStatementIngest.TableDefinitionOptions.TableNotExistOption
 import xtdb.database.DatabaseName
+import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.UInt4Vector
@@ -731,33 +732,20 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
 
-        if (catalogFilter != null && catalogFilter != dbName) {
-            singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
-                root.rowCount = 0
-            }
-            return
-        }
+        val schemaNames =
+            if (catalogFilter != null && catalogFilter != dbName) emptyList()
+            else connectionFor(ctx, dbName)
+                .querySchemas(schemaFilter, null, null, null, GetObjectsDepth.DB_SCHEMAS)
+                .keys.toList()
 
-        val sql = buildString {
-            append("SELECT DISTINCT table_schema FROM information_schema.tables")
-            schemaFilter?.let { append(" WHERE table_schema LIKE '${it.replace("'", "''")}'") }
-            append(" ORDER BY table_schema")
-        }
-
-        connectionFor(ctx, dbName).openSqlQuery(sql).use { cursor ->
-            singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
-                val catalogVec = root.getVector("catalog_name") as VarCharVector
-                val schemaVec = root.getVector("db_schema_name") as VarCharVector
-                var idx = 0
-                cursor.forEachRemaining { rel ->
-                    for (i in 0 until rel.rowCount) {
-                        catalogVec.setSafe(idx, dbName.toByteArray())
-                        schemaVec.setSafe(idx, rel.get("table_schema").getObject(i).toString().toByteArray())
-                        idx++
-                    }
-                }
-                root.rowCount = idx
+        singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
+            val catalogVec = root.getVector("catalog_name") as VarCharVector
+            val schemaVec = root.getVector("db_schema_name") as VarCharVector
+            schemaNames.forEachIndexed { idx, name ->
+                catalogVec.setSafe(idx, dbName.toByteArray())
+                schemaVec.setSafe(idx, name.toByteArray())
             }
+            root.rowCount = schemaNames.size
         }
     }
 
@@ -778,70 +766,44 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val tableFilter = if (command.hasTableNameFilterPattern()) command.tableNameFilterPattern else null
         val typeFilters = command.tableTypesList.takeIf { it.isNotEmpty() }
 
-        if (catalogFilter != null && catalogFilter != dbName) {
-            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
-            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
-            singleBatchStream(schema, listener) { root -> root.rowCount = 0 }
-            return
-        }
+        val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
+        else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
 
-        // XTDB only has TABLE type
-        if (typeFilters != null && "TABLE" !in typeFilters) {
-            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
-            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
-            singleBatchStream(schema, listener) { root -> root.rowCount = 0 }
-            return
-        }
+        val conn = connectionFor(ctx, dbName)
 
-        val conditions = mutableListOf<String>()
-        schemaFilter?.let { conditions.add("table_schema LIKE '${it.replace("'", "''")}'") }
-        tableFilter?.let { conditions.add("table_name LIKE '${it.replace("'", "''")}'") }
-        val where = if (conditions.isNotEmpty()) "WHERE ${conditions.joinToString(" AND ")}" else ""
+        // querySchemas owns the TABLE-type filter (XTDB only has TABLE) and the LIKE-escaped filters
+        val tables =
+            if (catalogFilter != null && catalogFilter != dbName) emptyList()
+            else conn.querySchemas(schemaFilter, tableFilter, typeFilters?.toTypedArray(), null, GetObjectsDepth.TABLES)
+                .flatMap { (dbSchemaName, ts) -> ts.map { dbSchemaName to it.name } }
 
-        val sql = "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
+        singleBatchStream(schema, listener) { root ->
+            val catalogVec = root.getVector("catalog_name") as VarCharVector
+            val schemaVec = root.getVector("db_schema_name") as VarCharVector
+            val tableVec = root.getVector("table_name") as VarCharVector
+            val typeVec = root.getVector("table_type") as VarCharVector
+            val tableSchemaVec =
+                if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
 
-        val tablesConn = connectionFor(ctx, dbName)
-        tablesConn.openSqlQuery(sql).use { cursor ->
-            val schema = if (command.includeSchema) FlightSqlProducer.Schemas.GET_TABLES_SCHEMA
-            else FlightSqlProducer.Schemas.GET_TABLES_SCHEMA_NO_SCHEMA
+            val snap = if (command.includeSchema) conn.openSnapshot() else null
+            try {
+                tables.forEachIndexed { idx, (dbSchemaName, tableName) ->
+                    catalogVec.setSafe(idx, dbName.toByteArray())
+                    schemaVec.setSafe(idx, dbSchemaName.toByteArray())
+                    tableVec.setSafe(idx, tableName.toByteArray())
+                    typeVec.setSafe(idx, "TABLE".toByteArray())
 
-            singleBatchStream(schema, listener) { root ->
-                val catalogVec = root.getVector("catalog_name") as VarCharVector
-                val schemaVec = root.getVector("db_schema_name") as VarCharVector
-                val tableVec = root.getVector("table_name") as VarCharVector
-                val typeVec = root.getVector("table_type") as VarCharVector
-                val tableSchemaVec =
-                    if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
-
-                val conn = tablesConn
-                val snap = if (command.includeSchema) conn.openSnapshot() else null
-
-                try {
-                    var idx = 0
-                    cursor.forEachRemaining { rel ->
-                        for (i in 0 until rel.rowCount) {
-                            val dbSchemaName = rel.get("table_schema").getObject(i).toString()
-                            val tableName = rel.get("table_name").getObject(i).toString()
-                            catalogVec.setSafe(idx, dbName.toByteArray())
-                            schemaVec.setSafe(idx, dbSchemaName.toByteArray())
-                            tableVec.setSafe(idx, tableName.toByteArray())
-                            typeVec.setSafe(idx, "TABLE".toByteArray())
-
-                            if (snap != null && tableSchemaVec != null) {
-                                tableSchemaVec.setSafe(
-                                    idx,
-                                    conn.getTableSchema(dbSchemaName, tableName, snap)
-                                        .serializeAsMessageInterruptibly()
-                                )
-                            }
-
-                            idx++
-                        }
+                    if (snap != null && tableSchemaVec != null) {
+                        tableSchemaVec.setSafe(
+                            idx,
+                            conn.getTableSchema(dbSchemaName, tableName, snap)
+                                .serializeAsMessageInterruptibly()
+                        )
                     }
-                    root.rowCount = idx
-                } finally {
-                    snap?.close()
                 }
+                root.rowCount = tables.size
+            } finally {
+                snap?.close()
             }
         }
     }
