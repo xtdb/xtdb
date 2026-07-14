@@ -1,7 +1,10 @@
 :root {
-    --dokka-logo-image-url: url('/shared/images/logo-text.svg');
-    --dokka-logo-height: 125px;
-    --dokka-logo-width: 50px;
+    /* The bundled wordmark is ~2.56:1 (808x315); at the header's 36px cap that's ~93px wide.
+       --dokka-logo-height/width here set the ::before box; the ::before override below sets
+       background-size: contain so the wordmark scales to fit without the default's stretch. */
+    --dokka-logo-image-url: url('../images/logo-text.svg');
+    --dokka-logo-height: 36px;
+    --dokka-logo-width: 93px;
 
     --active-section-color: #ea580c;
     --active-tab-border-color: #ea580c;
@@ -12,13 +15,7 @@
     --sidemenu-section-active-color: #7c2d12;
 }
 
-/* link custom rules styles */
-.library-name--link {
-    /* ... */
-}
-
-/* logo custom rules styles */
 .library-name--link::before {
+    background-size: contain;
     background-position: left;
-    width: 125px;
 }
