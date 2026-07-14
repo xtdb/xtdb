@@ -31,9 +31,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
 import xtdb.api.Xtdb
 import xtdb.arrow.Relation
-import xtdb.arrow.VectorType
 import xtdb.asBytes
-import xtdb.ResultCursor
 import xtdb.tx.TxOp
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
@@ -43,9 +41,6 @@ import xtdb.util.warn
 import java.util.*
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
-
-private fun resultTypesToSchema(types: SequencedMap<String, VectorType>) =
-    Schema(types.map { (name, type) -> type.toField(name) })
 
 private typealias TxHandle = ByteString
 private typealias PreparedStatementHandle = ByteString
@@ -154,7 +149,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     private data class TxConn(val sessionId: String?, val conn: Xtdb.Connection)
     private val txConns = ConcurrentHashMap<TxHandle, TxConn>()
     private val stmts = ConcurrentHashMap<PreparedStatementHandle, PreparedStatement>()
-    private val tickets = ConcurrentHashMap<TicketHandle, ResultCursor>()
+    private val tickets = ConcurrentHashMap<TicketHandle, ArrowReader>()
 
     private fun newConnection(dbName: DatabaseName): Xtdb.Connection =
         (node.connect()).also { it.setCurrentCatalog(dbName) }
@@ -220,29 +215,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     private fun execDml(op: TxOp, ctx: CallContext?, txHandle: TxHandle?) {
         txOrSessionConnection(ctx, txHandle).executeDml(op)
-    }
-
-    private fun handleGetStream(cursor: ResultCursor, listener: ServerStreamListener) {
-        try {
-            VectorSchemaRoot.create(resultTypesToSchema(cursor.resultTypes), allocator).use { vsr ->
-                val rootLoader = VectorLoader(vsr)
-                listener.start(vsr)
-
-                cursor.forEachRemaining { inRel ->
-                    inRel.openDirectSlice(allocator).use { rel ->
-                        rel.openArrowRecordBatch().use { rb ->
-                            rootLoader.load(rb)
-                            listener.putNext()
-                        }
-                    }
-                }
-
-                listener.completed()
-            }
-        } catch (t: Throwable) {
-            LOGGER.warn(t, "Error in handleGetStream")
-            throw t
-        }
     }
 
     override fun acceptPutStatement(
@@ -369,21 +341,26 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     .toRuntimeException()
             }
             val ticketHandle = newHandle()
-            val cursor = connectionFor(ctx, dbName).openSqlQuery(sql)
-            val ticket = Ticket(
-                ProtoAny.pack(
-                    TicketStatementQuery.newBuilder()
-                        .setStatementHandle(ticketHandle)
-                        .build()
-                ).toByteArray()
-            )
-            tickets[ticketHandle] = cursor
-            return FlightInfo(
-                resultTypesToSchema(cursor.resultTypes),
-                descriptor,
-                listOf(FlightEndpoint(ticket)),
-                /* bytes = */ -1, /* records = */ -1
-            )
+            val reader = connectionFor(ctx, dbName).createStatement().use { stmt ->
+                stmt.setSqlQuery(sql)
+                stmt.executeQuery().reader
+            }
+            return reader.closeOnCatch { rdr ->
+                val ticket = Ticket(
+                    ProtoAny.pack(
+                        TicketStatementQuery.newBuilder()
+                            .setStatementHandle(ticketHandle)
+                            .build()
+                    ).toByteArray()
+                )
+                tickets[ticketHandle] = rdr
+                FlightInfo(
+                    rdr.vectorSchemaRoot.schema,
+                    descriptor,
+                    listOf(FlightEndpoint(ticket)),
+                    /* bytes = */ -1, /* records = */ -1
+                )
+            }
         } catch (t: Throwable) {
             LOGGER.log(System.Logger.Level.ERROR, "Error getting flight info for statement", t)
             throw t
@@ -393,12 +370,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     override fun getStreamStatement(
         ticket: TicketStatementQuery, ctx: CallContext?, listener: ServerStreamListener
     ) {
-        val cursor = requireNotNull(tickets.remove(ticket.statementHandle)) { "unknown ticket-id" }
-        try {
-            handleGetStream(cursor, listener)
-        } finally {
-            cursor.close()
-        }
+        val reader = requireNotNull(tickets.remove(ticket.statementHandle)) { "unknown ticket-id" }
+        streamArrowReader(reader, listener)
     }
 
     override fun getFlightInfoPreparedStatement(
