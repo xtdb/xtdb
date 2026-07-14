@@ -388,14 +388,16 @@
 
             (openQuery [_ args opts]
               (let [default-tz (or (.getDefaultTz opts) default-tz)]
-              (util/with-close-on-catch [^BufferAllocator allocator (if allocator
+              ;; we own the args from here: closed on any failure below, else handed to the cursor (which
+              ;; closes them on close). the caller must not close them itself.
+              (util/with-close-on-catch [^RelationReader args (or args vw/empty-args)
+                                         ^BufferAllocator allocator (if allocator
                                                                       (util/->child-allocator allocator "BoundQuery/openCursor")
                                                                       (RootAllocator.))
                                          snaps (open-snaps)]
                 (let [query-opts (-> query-opts (assoc :default-tz default-tz))
                       table-info (reset! !table-info (->table-info))
                       planned-query (plan-query* table-info)
-                      ^RelationReader args (or args vw/empty-args)
 
                       {:keys [vec-types ->cursor] :as emitted-query} (emit-query planned-query scan-emitter db-cat snaps (->arg-types args) query-opts)
                       current-time (or (some-> (or (:current-time planned-query) (.getCurrentTime opts))
@@ -461,7 +463,6 @@
 
                     (catch Throwable t
                       (.release ref-ctr)
-                      (util/close args)
                       (throw t))))))))))))
 
   (prepareTxSql [this sql db-cat opts]

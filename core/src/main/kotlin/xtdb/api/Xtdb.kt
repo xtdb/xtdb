@@ -107,10 +107,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         val parsedStatement: ParsedStatement?
         val preparedQuery: PreparedQuery?
 
-        // open a cursor on the (prepared, if not already) query. the no-arg form reads through the connection —
-        // its access-mode gate and basis/tz/tracer; the [opts] form opens at exactly those opts, independent of
-        // the connection's tx state (for internal system reads).
+        // open a cursor on the (prepared, if not already) query, at the connection's basis/tz/tracer. [openQuery]
+        // reads through the access-mode gate; [openUncheckedQuery] skips it (a frontend's driver-compatibility
+        // probe that must run in any tx — pgwire's pgjdbc type query inside a write tx). The [opts] form opens at
+        // exactly those opts, independent of the connection's tx state (for internal system reads).
         fun openQuery(): ResultCursor
+        fun openUncheckedQuery(): ResultCursor
         fun openQuery(opts: QueryOpts): ResultCursor
 
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
@@ -402,27 +404,29 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     if (preparedQuery == null) prepare()
                 }
 
-                // SHOW is gate-exempt — the connection's openQuery dispatches it to openUncheckedQuery off the pq.
+                // Gated open at the connection's basis: resolves the tx's access mode and basis (rejecting a read
+                // in a write tx, resolving an unresolved tx to read-only). SHOW bypasses the gate — session
+                // introspection, valid in any tx. The gate and opts run before the args are opened: once handed to
+                // [PreparedQuery.openQuery] the args slice is the cursor's — freed on both success and failure — so
+                // the steps that can reject must not have opened it yet.
                 override fun openQuery(): ResultCursor {
                     ensurePrepared()
-                    val queryArgs = openQueryArgs()
-                    return try {
-                        openQuery(preparedQuery!!, queryArgs)
-                    } catch (t: Throwable) {
-                        queryArgs?.close()
-                        throw t
-                    }
+                    if (preparedQuery!!.parsed !is ParsedStatement.ShowVariable) resolveForQuery()
+                    val opts = queryOpts()
+                    return preparedQuery!!.openQuery(openQueryArgs(), opts)
+                }
+
+                // Open WITHOUT the access-mode gate — a frontend's driver-compatibility probe that must run in any
+                // tx (pgwire's pgjdbc type query inside a write tx). Reads at the connection's current basis.
+                override fun openUncheckedQuery(): ResultCursor {
+                    ensurePrepared()
+                    val opts = queryOpts()
+                    return preparedQuery!!.openQuery(openQueryArgs(), opts)
                 }
 
                 override fun openQuery(opts: QueryOpts): ResultCursor {
                     ensurePrepared()
-                    val queryArgs = openQueryArgs()
-                    return try {
-                        preparedQuery!!.openQuery(queryArgs, opts)
-                    } catch (t: Throwable) {
-                        queryArgs?.close()
-                        throw t
-                    }
+                    return preparedQuery!!.openQuery(openQueryArgs(), opts)
                 }
 
                 override fun executeQuery(): QueryResult {
@@ -805,26 +809,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
-        // Open a cursor on an already-prepared query: resolves the tx's access mode and basis (rejecting a read
-        // in a write tx, resolving an unresolved tx to read-only), then opens at the connection's basis, tz and
-        // tracer. SHOW bypasses the gate — it's session introspection, valid in any tx — dispatched on the
-        // originating statement, not the pq's concrete type. A frontend owns the cursor for wire serialization,
-        // but the gate and QueryOpts stay the connection's — no callsite reconstructs them, nor decides the gate.
-        fun openQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor =
-            when (pq.parsed) {
-                is ParsedStatement.ShowVariable -> openUncheckedQuery(pq, args)
-                else -> {
-                    resolveForQuery()
-                    pq.openQuery(args, queryOpts())
-                }
-            }
-
-        // Open a read WITHOUT the access-mode gate — for a frontend's driver-compatibility probe that must be
-        // permitted in any transaction (pgwire allows the pgjdbc type-metadata query inside a write tx, where
-        // the gate would otherwise reject it). Reads at the connection's current basis; inside a write tx that
-        // is latest-committed data, not the tx's buffered writes.
-        fun openUncheckedQuery(pq: PreparedQuery, args: RelationReader?): ResultCursor = pq.openQuery(args, queryOpts())
-
         // A SHOW answered from connection / catalog state as a zero-param [PreparedQuery]. [rows] is a thunk so
         // values snapshot at openQuery; [parsed] drives the gate exemption in [openQuery].
         private class ShowPreparedQuery(
@@ -1001,6 +985,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 override val preparedQuery: PreparedQuery? get() = null
 
                 override fun openQuery(): ResultCursor =
+                    throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
+
+                override fun openUncheckedQuery(): ResultCursor =
                     throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
 
                 override fun openQuery(opts: QueryOpts): ResultCursor =

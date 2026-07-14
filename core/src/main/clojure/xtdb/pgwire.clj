@@ -35,7 +35,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$Statement Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -138,6 +138,9 @@
 
     (doseq [portal (vals (:portals @conn-state))]
       (util/close (:cursor portal)))
+
+    (doseq [prepared-stmt (vals (:prepared-statements @conn-state))]
+      (util/close (:statement prepared-stmt)))
 
     (let [{:keys [server-state]} server]
       (swap! server-state update :connections dissoc cid))
@@ -521,6 +524,7 @@
         (doseq [portal-name (:portals stmt)]
           (close-portal conn portal-name))
 
+        (util/close (:statement stmt))
         (swap! conn-state update :prepared-statements dissoc close-name)))
 
     :portal
@@ -745,8 +749,10 @@
 (defn- prep-stmt [{:keys [conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
   ;; queries, EXECUTE and SHOW all prepare through the connection; everything else passes through.
   (letfn [(prepare-parsed []
-            (let [^PreparedQuery pq (with-auth-check conn
-                                      (.getPreparedQuery (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))))]
+            (let [^Xtdb$Statement statement
+                  (with-auth-check conn
+                    (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare)))
+                  ^PreparedQuery pq (.getPreparedQuery statement)]
               (when-let [warnings (.getWarnings pq)]
                 (doseq [warning warnings]
                   (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
@@ -765,7 +771,7 @@
                                                                                            (types/->field (str "?_" idx) vt)))))))
                                    (mapv field->pg-col)))]
                 (assoc stmt
-                       :prepared-query pq
+                       :statement statement
                        :param-oids param-oids
                        :prepared-pg-cols pg-cols
                        :pg-cols pg-cols))))]
@@ -784,11 +790,12 @@
                  (visitDml [_ _]
                    (when (empty? param-oids)
                      (try
-                       (let [^PreparedQuery pq (with-auth-check conn
-                                                 (.getPreparedQuery (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))))]
-                         (when-let [warnings (.getWarnings pq)]
-                           (doseq [warning warnings]
-                             (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
+                       (with-auth-check conn
+                         (util/with-open [^Xtdb$Statement statement
+                                          (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))]
+                           (when-let [warnings (.getWarnings (.getPreparedQuery statement))]
+                             (doseq [warning warnings]
+                               (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))))
                        (catch Throwable e
                          (log/debug e "Error planning DML statement for warnings"))))
                    stmt)
@@ -813,6 +820,8 @@
       (assert (nil? more-stmts) (format "TODO: found %d statements in parse" (inc (count more-stmts))))
 
       (let [prepared-stmt (prep-stmt conn (-> stmt (assoc :param-oids param-oids)))]
+        ;; re-parsing a name replaces its statement — close the old one so its bound-args slice isn't leaked
+        (util/close (:statement (get-in @conn-state [:prepared-statements stmt-name])))
         (swap! conn-state (fn [conn-state]
                             (-> conn-state
                                 (assoc-in [:prepared-statements stmt-name] prepared-stmt)))))
@@ -829,6 +838,8 @@
 (defn cmd-prepare [{:keys [conn-state] :as conn} statement-name inner-ps]
   ;; the grammar allows a single inner statement, already parsed by the enclosing PREPARE
   (let [prepared-stmt (prep-stmt conn {:parsed inner-ps})]
+    ;; re-PREPARE of a name replaces its statement — close the old one so its bound-args slice isn't leaked
+    (util/close (:statement (get-in @conn-state [:prepared-statements statement-name])))
     (swap! conn-state assoc-in [:prepared-statements statement-name]
            (assoc prepared-stmt
                   :statement-name statement-name))
@@ -876,21 +887,22 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^PreparedQuery prepared-query args result-format] :as stmt}]
+(defn bind-stmt [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^Xtdb$Statement statement args result-format] :as stmt}]
   (let [{:keys [^Xtdb$Connection node-conn]} @conn-state
         xt-args (xtify-args conn args stmt)]
 
-    ;; the connection owns the QueryOpts (basis / tz / tracer) and the read access-mode gate — pgwire drives its
-    ;; own cursor but opens it through the connection. checked? reads through the gate (openQuery); an internal
+    ;; the connection owns the QueryOpts (basis / tz / tracer) and the read access-mode gate — pgwire binds its
+    ;; args onto the statement and opens through it. checked? reads through the gate (openQuery); an internal
     ;; args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that verify-permissibility
     ;; let through, so it too opens unchecked (openQuery would reject it). SHOW opens checked but the connection
-    ;; gate-exempts it off its parsed statement.
-    (letfn [(->cursor ^xtdb.ResultCursor [^PreparedQuery pq xt-args checked?]
+    ;; gate-exempts it off its parsed statement. bind copies the args, so we close our own relation once opened.
+    (letfn [(->cursor ^xtdb.ResultCursor [^Xtdb$Statement statement xt-args checked?]
               (with-auth-check conn
-                (util/with-close-on-catch [args-rel (vw/open-args allocator xt-args)]
+                (util/with-open [args-rel (vw/open-args allocator xt-args)]
+                  (.bind statement args-rel)
                   (if (and checked? (not (.isTxReadWrite node-conn)))
-                    (.openQuery node-conn pq args-rel)
-                    (.openUncheckedQuery node-conn pq args-rel)))))
+                    (.openQuery statement)
+                    (.openUncheckedQuery statement)))))
 
             (->pg-cols [prepared-pg-cols ^ResultCursor cursor]
               (let [resolved-pg-cols (mapv (fn [[col-name vec-type]] (type->pg-col col-name vec-type)) (.getResultTypes cursor))]
@@ -907,7 +919,7 @@
                 (with-result-formats prepared-pg-cols result-format)))
 
             (bind-query-portal []
-              (util/with-close-on-catch [cursor (->cursor prepared-query xt-args true)]
+              (util/with-close-on-catch [cursor (->cursor statement xt-args true)]
                 (-> stmt
                     (assoc :cursor cursor,
                            :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))]
@@ -921,10 +933,10 @@
                  (visitShowVariable [_ _] (bind-query-portal))
 
                  (visitExecute [_ ps]
-                   (util/with-open [^ResultCursor args-cursor (->cursor prepared-query xt-args false)]
+                   (util/with-open [^ResultCursor args-cursor (->cursor statement xt-args false)]
                      ;; we've bound the args query rather than the inner query; now bind the inner query and
                      ;; pretend this was the one we were running all along
-                     (let [{^PreparedQuery inner-pq :prepared-query, :as inner} (get-in @conn-state [:prepared-statements (.getName ps)])
+                     (let [{^Xtdb$Statement inner-stmt :statement, :as inner} (get-in @conn-state [:prepared-statements (.getName ps)])
                            ^ParsedStatement inner-parsed (:parsed inner)
                            !args (object-array 1)]
 
@@ -932,13 +944,15 @@
                                           (fn [^RelationReader args-rel]
                                             (aset !args 0 (.openSlice args-rel allocator))))
 
-                       (let [^RelationReader args-rel (aget !args 0)]
+                       ;; bind copies the derived args onto the inner statement, so we own (and close) this slice
+                       (util/with-open [^RelationReader args-rel (aget !args 0)]
                          (cond
                            (instance? ParsedStatement$Query inner-parsed)
                            (with-auth-check conn
-                             (util/with-close-on-catch [inner-cursor (if (.isTxReadWrite node-conn)
-                                                                       (.openUncheckedQuery node-conn inner-pq args-rel)
-                                                                       (.openQuery node-conn inner-pq args-rel))]
+                             (util/with-close-on-catch [inner-cursor (do (.bind inner-stmt args-rel)
+                                                                         (if (.isTxReadWrite node-conn)
+                                                                           (.openUncheckedQuery inner-stmt)
+                                                                           (.openQuery inner-stmt)))]
                                (-> inner
                                    (assoc :cursor inner-cursor
                                           :pg-cols (-> (->pg-cols (:pg-cols inner) inner-cursor)
@@ -946,16 +960,13 @@
 
                            (instance? ParsedStatement$Dml inner-parsed)
                            (let [arg-types (.getResultTypes args-cursor)]
-                             (try
-                               (-> inner
-                                   (assoc :args (vec (for [col-name (keys arg-types)]
-                                                       (-> (.vectorForOrNull args-rel col-name)
-                                                           (.getObject 0))))
-                                          :param-oids (->> arg-types
-                                                           (mapv (fn [[_col-name ^VectorType vec-type]]
-                                                                   (PgType/.getOid (PgType/fromVectorType vec-type)))))))
-                               (finally
-                                 (util/close args-rel))))
+                             (-> inner
+                                 (assoc :args (vec (for [col-name (keys arg-types)]
+                                                     (-> (.vectorForOrNull args-rel col-name)
+                                                         (.getObject 0))))
+                                        :param-oids (->> arg-types
+                                                         (mapv (fn [[_col-name ^VectorType vec-type]]
+                                                                 (PgType/.getOid (PgType/fromVectorType vec-type))))))))
 
                            :else (throw (err/unsupported ::unsupported-execute "EXECUTE only supports a prepared query or DML statement")))))))
 
