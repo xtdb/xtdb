@@ -93,6 +93,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     override fun connect(): Connection
 
+    /** Opens an in-process connection to the named database. */
+    fun connect(dbName: DatabaseName): Connection
+
     data class SubmittedTx(val txId: MessageId)
 
     fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx

@@ -6,7 +6,6 @@
             [xtdb.error :as err]
             [xtdb.garbage-collector]
             [xtdb.metrics :as metrics]
-            [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
             [xtdb.tracer]
             [xtdb.util :as util])
@@ -71,8 +70,10 @@
         (throw (err/incorrect ::pgwire-not-enabled "Cannot create JDBC connection: pgwire server is not enabled")))
       (.createConnectionBuilder data-source)))
 
-  (connect [_]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer "xtdb"))
+  (connect [this] (.connect this "xtdb"))
+
+  (connect [_ db-name]
+    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
   (addMeterRegistry [_ reg]
     (.add metrics-registry reg))
@@ -91,17 +92,15 @@
          (some #(when (instance? clazz %) %))))
 
   (submitTx [this tx-ops tx-opts]
-    (.submitTx (xtp/open-connection this (or (.getDbName tx-opts) "xtdb")) tx-ops tx-opts))
+    (with-open [conn (.connect this (or (.getDbName tx-opts) "xtdb"))]
+      (.submitTx conn tx-ops tx-opts)))
 
   (executeTx [this tx-ops tx-opts]
-    (.executeTx (xtp/open-connection this (or (.getDbName tx-opts) "xtdb")) tx-ops tx-opts))
+    (with-open [conn (.connect this (or (.getDbName tx-opts) "xtdb"))]
+      (.executeTx conn tx-ops tx-opts)))
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)
-
-  xtp/PNode
-  (open-connection [_ db-name]
-    (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
 
   Closeable
   (close [_]
