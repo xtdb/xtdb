@@ -179,29 +179,8 @@
                                latest (-> db .getSourceLog .getLatestSubmittedMsgId)]
                            [db-name (vec (repeat (count (.getPartitions db)) latest))]))))))
 
-  (latest-processed-msg-ids [_]
-    (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [^String db-name]
-                         (let [^Database db (.databaseOrNull db-cat db-name)]
-                           [db-name (->> (.getPartitions db)
-                                         (sort-by key)
-                                         (mapv (fn [[_ part]]
-                                                 (-> ^DatabasePartition part
-                                                     .getWatchers
-                                                     .getLatestSourceMsgId))))]))))))
-
   (await-token [this]
     (basis/->tx-basis-str (xtp/latest-submitted-msg-ids this)))
-
-  (snapshot-token [this]
-    (basis/->time-basis-str (-> (xtp/latest-completed-txs this)
-                                (update-vals #(mapv :system-time %)))))
-
-  (status [this]
-    {:latest-completed-txs (xtp/latest-completed-txs this)
-     :latest-submitted-tx-ids (xtp/latest-submitted-msg-ids this)
-
-     :await-token (xtp/await-token this)})
 
   Closeable
   (close [_]

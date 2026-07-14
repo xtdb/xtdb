@@ -8,13 +8,9 @@
 
 (defprotocol PStatus
   (latest-submitted-msg-ids [node])
-  (latest-processed-msg-ids [node])
   (latest-completed-txs [node])
 
-  (await-token [node])
-  (snapshot-token [node])
-
-  (status [node] [node opts]))
+  (await-token [node]))
 
 (defprotocol ExecuteOp
   (execute-op! [tx-op conn]))
