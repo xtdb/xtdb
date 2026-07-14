@@ -690,7 +690,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
   (let [pq (with-open [conn (.connect tu/*node*)]
-             (.prepareSql ^Xtdb$Connection conn "SELECT foo.*, ? FROM foo" "xtdb"))
+             (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT foo.*, ? FROM foo")))
         column-fields [#xt/field {"_id" :i64}
                        #xt/field {"a" :utf8}
                        #xt/field {"b" :i64}]
@@ -753,7 +753,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
     (let [ptz #xt/zone "America/New_York"
           pq (with-open [conn (.connect tu/*node*)]
                (.setTimeZone ^Xtdb$Connection conn ptz)
-               (.prepareSql ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x" "xtdb"))]
+               (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")))]
 
       (t/testing "and not at bind"
         (with-open [cursor (.openQuery pq nil (QueryOpts.))]
@@ -766,7 +766,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
   (t/testing "default-tz not supplied at prepare"
     (let [pq (with-open [conn (.connect tu/*node*)]
-               (.prepareSql ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x" "xtdb"))]
+               (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")))]
 
       (t/testing "and not at open"
         (with-open [cursor (.openQuery pq nil (QueryOpts.))]
@@ -779,7 +779,7 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 
 (deftest test-default-param-types
   (let [pq (with-open [conn (.connect tu/*node*)]
-             (.prepareSql ^Xtdb$Connection conn "SELECT ? v" "xtdb"))]
+             (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT ? v")))]
     (t/testing "preparedQuery rebound with args matching the assumed type"
 
       (with-open [cursor (.openQuery pq (tu/open-args ["42"]) (QueryOpts.))]

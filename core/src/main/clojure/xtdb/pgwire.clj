@@ -545,7 +545,7 @@
     (case access-mode
       :read-only (.beginReadOnly node-conn)
       :read-write (.beginWriteOnly node-conn nil nil false)
-      (.beginTx node-conn))
+      (.begin node-conn))
     (swap! conn-state assoc :implicit-tx? true)))
 
 (defn- end-transaction
@@ -746,7 +746,7 @@
   ;; queries, EXECUTE and SHOW all prepare through the connection; everything else passes through.
   (letfn [(prepare-parsed []
             (let [^PreparedQuery pq (with-auth-check conn
-                                      (.prepare ^Xtdb$Connection (:node-conn @conn-state) parsed))]
+                                      (.getPreparedQuery (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))))]
               (when-let [warnings (.getWarnings pq)]
                 (doseq [warning warnings]
                   (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
@@ -785,7 +785,7 @@
                    (when (empty? param-oids)
                      (try
                        (let [^PreparedQuery pq (with-auth-check conn
-                                                 (.prepare ^Xtdb$Connection (:node-conn @conn-state) parsed))]
+                                                 (.getPreparedQuery (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))))]
                          (when-let [warnings (.getWarnings pq)]
                            (doseq [warning warnings]
                              (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
@@ -997,7 +997,7 @@
 
 (defn- verify-permissibility
   [{:keys [conn-state server]} {:keys [^ParsedStatement parsed]}]
-  ;; the connection gates access-mode too (executeDml / resolveForQuery), but pgwire keeps these checks for
+  ;; the connection gates access-mode too (executeTxOp / resolveForQuery), but pgwire keeps these checks for
   ;; their own error codes/messages, the read-only-server rule (a server property, not connection state), and
   ;; the pgjdbc type-query special case — so it reads the tx's resolved access-mode off the connection.
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
@@ -1070,7 +1070,7 @@
 
     ;; hand the op to the connection — it buffers, coalescing consecutive same-SQL ops, and submits at COMMIT.
     ;; no-param DML passes nil args (not an empty relation), matching the connection's own DML path.
-    (.executeDml node-conn (TxOp$Sql. query (when (seq args) (vw/open-args allocator args))))
+    (.executeTxOp node-conn (TxOp$Sql. query (when (seq args) (vw/open-args allocator args))))
 
     ;; oid is always 0 (legacy pg); row count is 0 because we're async
     (pgio/cmd-write-msg conn pgio/msg-command-complete
@@ -1230,7 +1230,7 @@
 
                (visitBegin [_ stmt]
                  ;; pass the portal's bound args — a BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
-                 (.beginParsedTx ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) (:args portal))
+                 (.begin ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) (:args portal))
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
@@ -1376,7 +1376,7 @@
     (when (.isTxReadOnly node-conn)
       (throw (err/incorrect :xtdb/copy-in-read-only-tx
                             "COPY is not allowed in a READ ONLY transaction")))
-    (.executeDml node-conn (xt-log/open-tx-op client-op allocator {:default-tz (.getDefaultTz node-conn)}))))
+    (.executeTxOp node-conn (xt-log/open-tx-op client-op allocator {:default-tz (.getDefaultTz node-conn)}))))
 
 (defn- copy-transit-batch ^long [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [table-name format, ^Path copy-file]}]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)

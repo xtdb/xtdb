@@ -421,7 +421,7 @@
   ([node query] (q-sql node query {}))
   ([node query opts]
    (with-open [conn (.connect ^xtdb.api.Xtdb node)]
-     (let [^PreparedQuery prepared-q (.prepareSql ^xtdb.api.Xtdb$Connection conn query (get opts :default-db "xtdb"))]
+     (let [^PreparedQuery prepared-q (.getPreparedQuery (.prepareStatement ^xtdb.api.Xtdb$Connection conn query))]
        {:res (xt/q node query opts)
         :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getColumnFields prepared-q []))}))))
 
