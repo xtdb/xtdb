@@ -134,14 +134,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var dbName: DatabaseName,
     ) : AdbcConnection {
 
-        private var _awaitToken: String? = null
-
-        // read-only to the outside: the token advances only through the write methods (submit / execute /
-        // attach / detach), so no other code can leave it stale.
-        val awaitToken: String? get() = _awaitToken
-
-        // the one sanctioned external writer: pgwire's `SET AWAIT_TOKEN`.
-        fun setAwaitToken(token: String?) { _awaitToken = token }
+        // advances through the write methods (submit / execute / attach / detach); also settable directly for
+        // pgwire's `SET AWAIT_TOKEN`.
+        var awaitToken: String? = null
 
         // the connection's last write, for `SHOW latest_submitted_tx`. system-time/committed/error are null
         // for a fire-and-forget submitTx (no await); populated for an awaited execute/attach/detach.
@@ -190,7 +185,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
 
         private fun recordTx(dbName: DatabaseName, txId: MessageId) {
-            _awaitToken = mergeTxBasisTokens(_awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
         }
 
         // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
@@ -428,7 +423,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     is ParsedStatement.SetSessionParameter ->
                         setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
                     is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
-                    is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
+                    is ParsedStatement.SetAwaitToken -> awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
                     is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
                     is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op
                     is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
