@@ -88,6 +88,10 @@ One caveat there: that client doesn't query `getSessionOptions`, so `getCurrentC
 
 See the [ADBC reference](/adbc/reference) for the full supported surface.
 
+## API Reference
+
+The [Kotlin/Java API documentation](/drivers/kotlin/kdoc) covers the `xtdb-api` and `xtdb-core` node and configuration APIs, along with the storage, log and source modules (S3, Azure Blob Storage, Google Cloud Storage, Kafka, Postgres).
+
 ## Examples
 
 For more examples and tests, see the [XTDB driver-examples repository](https://github.com/xtdb/driver-examples), which contains comprehensive test suites demonstrating various features and use cases.

@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets
  * Parsed pgoutput logical replication protocol messages.
  *
  * See: https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
+ *
+ * @suppress
  */
 sealed interface PgOutputMessage {
 

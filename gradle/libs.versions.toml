@@ -15,7 +15,7 @@ kafka = "4.1.1"
 kotest = "6.1.11"
 kotlin = "2.3.0"
 kotlin-coroutines = "1.10.2"
-dokka = "1.9.10"
+dokka = "2.2.0"
 clojurephant = "0.9.1"
 shadow = "8.3.6"
 freefair-javadoc = "8.13.1"
@@ -198,6 +198,7 @@ tpch = { group = "io.airlift.tpch", name = "tpch", version = "0.10" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+dokka-javadoc = { id = "org.jetbrains.dokka-javadoc", version.ref = "dokka" }
 clojurephant = { id = "dev.clojurephant.clojure", version.ref = "clojurephant" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 freefair-javadoc = { id = "io.freefair.aggregate-javadoc-legacy", version.ref = "freefair-javadoc" }

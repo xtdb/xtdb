@@ -2,6 +2,7 @@ package xtdb.postgres
 
 import java.time.Instant
 
+/** @suppress */
 sealed interface RowOp {
     val schema: String
     val table: String
@@ -15,6 +16,8 @@ sealed interface RowOp {
  *
  * The real implementation ([PgWireDriver]) talks to PostgreSQL via pgjdbc.
  * Tests can substitute a fake that yields predetermined data.
+ *
+ * @suppress
  */
 interface PostgresDriver : AutoCloseable {
 

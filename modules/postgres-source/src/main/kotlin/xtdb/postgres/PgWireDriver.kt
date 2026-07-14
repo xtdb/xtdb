@@ -44,6 +44,7 @@ private val IDLE_POLL_PAUSE = 50.milliseconds
 private fun coerceText(text: String, typeOid: Int): Any? =
     PgType.fromOid(typeOid)?.readText(text.toByteArray()) ?: text
 
+/** @suppress */
 class PgWireDriver(
     private val dbName: String,
     private val hostname: String,

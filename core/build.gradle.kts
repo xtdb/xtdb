@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.dokka)
+    alias(libs.plugins.dokka.javadoc)
     antlr
 
     alias(libs.plugins.protobuf)
@@ -144,8 +145,8 @@ protobuf {
     }
 }
 
-tasks.dokkaHtmlPartial {
-    dokkaSourceSets["main"].run {
+dokka {
+    dokkaSourceSets.named("main") {
         perPackageOption {
             matchingRegex.set(".*")
             suppress.set(true)

@@ -3,6 +3,7 @@ dist/
 
 # generated docs
 public/drivers/clojure/codox
+public/drivers/kotlin/kdoc
 
 # generated types
 .astro/

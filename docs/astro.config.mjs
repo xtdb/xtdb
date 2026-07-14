@@ -352,8 +352,8 @@ export default defineConfig({
             ignoreVisit: (url, { el, event } = {}) => {
                 // Extract pathname if url is a full URL
                 const pathname = url.startsWith('http') ? new URL(url).pathname : url;
-                // Ignore visits to codox documentation or elements marked with data-no-swup
-                return pathname.startsWith('/drivers/clojure/codox') || el?.closest('[data-no-swup]');
+                // Ignore visits to generated API docs (codox/kdoc) or elements marked with data-no-swup
+                return pathname.startsWith('/drivers/clojure/codox') || pathname.startsWith('/drivers/kotlin/kdoc') || el?.closest('[data-no-swup]');
             },
         }),
     ],
