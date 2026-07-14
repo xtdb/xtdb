@@ -16,7 +16,8 @@
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import [java.nio.file Path]
            [java.time ZoneId ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config Xtdb$Connection]
@@ -689,107 +690,121 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
   (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1 :a "one" :b 2}]
                             [:put-docs :unrelated-table {:xt/id 1 :a "a-string"}]])
 
-  (let [pq (with-open [conn (.connect tu/*node*)]
-             (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT foo.*, ? FROM foo")))
-        column-fields [#xt/field {"_id" :i64}
-                       #xt/field {"a" :utf8}
-                       #xt/field {"b" :i64}]
-        column-types {"_id" #xt/type :i64
-                      "a" #xt/type :utf8
-                      "b" #xt/type :i64}]
+  (with-open [conn (.connect tu/*node*)
+              stmt (.prepareStatement ^Xtdb$Connection conn "SELECT foo.*, ? FROM foo")]
+    (let [al (.getAllocator tu/*node*)
+          column-fields [#xt/field {"_id" :i64}
+                         #xt/field {"a" :utf8}
+                         #xt/field {"b" :i64}]
+          column-types {"_id" #xt/type :i64
+                        "a" #xt/type :utf8
+                        "b" #xt/type :i64}]
 
-    (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
-             (.getColumnFields pq [#xt/field {"?_0" :i64}]))
-          "param type is assumed to be nullable")
+      (t/is (= (conj column-fields #xt/field {"_column_2" :i64})
+               (.getFields (.executeSchema stmt [#xt/field {"?_0" :i64}])))
+            "param type is assumed to be nullable")
 
-    (with-open [cursor (.openQuery pq (tu/open-args [42]) (QueryOpts.))]
+      (with-open [args (vw/open-args al [42])]
+        (.bind stmt args)
+        (with-open [cursor (.openQuery stmt (QueryOpts.))]
 
-      (t/is (= (assoc column-types "_column_2" #xt/type :i64)
-               (into {} (.getResultTypes cursor)))
-            "now param value has been supplied we know its type is non-null")
+          (t/is (= (assoc column-types "_column_2" #xt/type :i64)
+                   (into {} (.getResultTypes cursor)))
+                "now param value has been supplied we know its type is non-null")
 
-      (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
-               (tu/<-cursor cursor))))
+          (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]
+                   (tu/<-cursor cursor)))))
 
-    (t/testing "preparedQuery rebound with different param types"
-      (with-open [cursor (.openQuery pq (tu/open-args ["fish"]) (QueryOpts.))]
+      (t/testing "rebound with different param types"
+        (with-open [args (vw/open-args al ["fish"])]
+          (.bind stmt args)
+          (with-open [cursor (.openQuery stmt (QueryOpts.))]
 
-        (t/is (= (assoc column-types "_column_2" #xt/type :utf8)
-                 (into {} (.getResultTypes cursor)))
-              "now param value has been supplied we know its type is non-null")
+            (t/is (= (assoc column-types "_column_2" #xt/type :utf8)
+                     (into {} (.getResultTypes cursor)))
+                  "now param value has been supplied we know its type is non-null")
 
-        (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
-                 (tu/<-cursor cursor)))))
+            (t/is (= [[{:xt/id 1, :a "one", :b 2, :xt/column-2 "fish"}]]
+                     (tu/<-cursor cursor))))))
 
-    (t/testing "statement invalidation"
-      (with-open [args (tu/open-args [42])]
-        (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
-                    {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
+      (t/testing "statement invalidation"
+        (with-open [args (vw/open-args al [42])]
+          (let [res [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
+                      {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
-          (t/testing "relevant schema unchanged since preparing query"
-            (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
+            (t/testing "relevant schema unchanged since preparing query"
+              (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
 
-            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) (QueryOpts.))]
-              (t/is (= res (tu/<-cursor cursor)))))
+              (.bind stmt args)
+              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+                (t/is (= res (tu/<-cursor cursor)))))
 
-          (t/testing "irrelevant schema changed since preparing query"
+            (t/testing "irrelevant schema changed since preparing query"
 
-            (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
+              (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
 
-            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) (QueryOpts.))]
-              (t/is (= res (tu/<-cursor cursor)))))
+              (.bind stmt args)
+              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+                (t/is (= res (tu/<-cursor cursor)))))
 
-          (t/testing "a -> union, but prepared query is still fine outside of pgwire"
-            (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
+            (t/testing "a -> union, but prepared query is still fine outside of pgwire"
+              (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
-            (with-open [cursor (.openQuery pq (.openSlice args tu/*allocator*) (QueryOpts.))]
-              (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
-                         {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
-                         {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]
-                       (tu/<-cursor cursor))))))))))
+              (.bind stmt args)
+              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+                (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
+                           {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
+                           {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]
+                         (tu/<-cursor cursor)))))))))))
 
 (deftest test-prepared-statements-default-tz
   (t/testing "default-tz supplied at prepare"
-    (let [ptz #xt/zone "America/New_York"
-          pq (with-open [conn (.connect tu/*node*)]
-               (.setTimeZone ^Xtdb$Connection conn ptz)
-               (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")))]
+    (let [ptz #xt/zone "America/New_York"]
+      (with-open [conn (.connect tu/*node*)]
+        (.setTimeZone ^Xtdb$Connection conn ptz)
+        (with-open [stmt (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")]
 
-      (t/testing "and not at bind"
-        (with-open [cursor (.openQuery pq nil (QueryOpts.))]
-          (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
+          (t/testing "and not at open"
+            (with-open [cursor (.openQuery stmt (QueryOpts.))]
+              (t/is (= ptz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
-      (t/testing "and and also at bind"
-        (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [cursor (.openQuery pq nil (QueryOpts. nil tz))]
-            (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))
+          (t/testing "and and also at open"
+            (let [tz #xt/zone "Asia/Bangkok"]
+              (with-open [cursor (.openQuery stmt (QueryOpts. nil tz))]
+                (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor)))))))))))))
 
   (t/testing "default-tz not supplied at prepare"
-    (let [pq (with-open [conn (.connect tu/*node*)]
-               (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")))]
+    (with-open [conn (.connect tu/*node*)
+                stmt (.prepareStatement ^Xtdb$Connection conn "SELECT CURRENT_TIMESTAMP x")]
 
       (t/testing "and not at open"
-        (with-open [cursor (.openQuery pq nil (QueryOpts.))]
+        (with-open [cursor (.openQuery stmt (QueryOpts.))]
           (t/is (= #xt/zone "Z" (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))
 
-      (t/testing "but at bind"
+      (t/testing "but at open"
         (let [tz #xt/zone "Asia/Bangkok"]
-          (with-open [cursor (.openQuery pq nil (QueryOpts. nil tz))]
+          (with-open [cursor (.openQuery stmt (QueryOpts. nil tz))]
             (t/is (= tz (.getZone ^ZonedDateTime (:x (ffirst (tu/<-cursor cursor))))))))))))
 
 (deftest test-default-param-types
-  (let [pq (with-open [conn (.connect tu/*node*)]
-             (.getPreparedQuery (.prepareStatement ^Xtdb$Connection conn "SELECT ? v")))]
-    (t/testing "preparedQuery rebound with args matching the assumed type"
+  (with-open [conn (.connect tu/*node*)
+              stmt (.prepareStatement conn "SELECT ? v")]
+    (let [al (.getAllocator tu/*node*)]
+      (t/testing "rebound with args matching the assumed type"
 
-      (with-open [cursor (.openQuery pq (tu/open-args ["42"]) (QueryOpts.))]
-        (t/is (= [[{:v "42"}]]
-                 (tu/<-cursor cursor))))
+        (with-open [args (vw/open-args al ["42"])]
+          (.bind stmt args)
+          (with-open [cursor (.openQuery stmt (QueryOpts.))]
+            (t/is (= [[{:v "42"}]]
+                     (tu/<-cursor cursor)))))
 
-      (t/testing "or can be rebound with a different type"
-        (with-open [cursor (.openQuery pq (tu/open-args [44]) (QueryOpts.))]
-          (t/is (= [[{:v 44}]]
-                   (tu/<-cursor cursor))))))))
+        (t/testing "or can be rebound with a different type"
+          (with-open [args (vw/open-args al [44])]
+            (.bind stmt args)
+
+            (with-open [cursor (.openQuery stmt (QueryOpts.))]
+              (t/is (= [[{:v 44}]]
+                       (tu/<-cursor cursor))))))))))
 
 (deftest test-schema-ee-entry-points
   ;;test is using regclass to verify that expected EE entrypoints have access

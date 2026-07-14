@@ -46,7 +46,7 @@
            xtdb.JsonSerde
            xtdb.JsonLdSerde
            xtdb.NodeBase
-           (xtdb.query PreparedQuery SqlParser SqlPlanner
+           (xtdb.query SqlParser SqlPlanner
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute)
@@ -751,24 +751,27 @@
   (letfn [(prepare-parsed []
             (let [^Xtdb$Statement statement
                   (with-auth-check conn
-                    (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare)))
-                  ^PreparedQuery pq (.getPreparedQuery statement)]
-              (when-let [warnings (.getWarnings pq)]
+                    (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare)))]
+              (when-let [warnings (.getWarnings statement)]
                 (doseq [warning warnings]
                   (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
 
               (let [param-oids (->> (concat param-oids (repeat 0))
-                                    (into [] (take (.getParamCount pq))))
+                                    (into [] (take (count (.getFields (.getParameterSchema statement))))))
                     param-types (map #(some-> (PgType/fromOid %) .getXtType) param-oids)
                     pg-cols (if (some nil? param-types)
-                              ;; if we're unsure on some of the col-types, return all output cols as the fallback type (#4455)
-                              (for [col-name (map str (.getColumnNames pq))]
+                              ;; if we're unsure on some of the col-types, return all output cols as the fallback
+                              ;; type (#4455). we take names off the plan rather than emitting: a relation-typed
+                              ;; param (e.g. XTQL `rel` args) can't emit against unknown (fromLegs) param types.
+                              (for [col-name (.getColumnNames statement)]
                                 {:pg-type PgType/PG_DEFAULT, :col-name col-name})
 
-                              (->> (.getColumnFields pq (->> param-types
-                                                             (into [] (comp (map types/->nullable-type)
-                                                                            (map-indexed (fn [idx vt]
-                                                                                           (types/->field (str "?_" idx) vt)))))))
+                              ;; all params known — resolve the output types against the client-supplied OIDs
+                              (->> (.getFields (.executeSchema statement
+                                                               (->> param-types
+                                                                    (into [] (comp (map types/->nullable-type)
+                                                                                   (map-indexed (fn [idx vt]
+                                                                                                  (types/->field (str "?_" idx) vt))))))))
                                    (mapv field->pg-col)))]
                 (assoc stmt
                        :statement statement
@@ -793,7 +796,7 @@
                        (with-auth-check conn
                          (util/with-open [^Xtdb$Statement statement
                                           (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))]
-                           (when-let [warnings (.getWarnings (.getPreparedQuery statement))]
+                           (when-let [warnings (.getWarnings statement)]
                              (doseq [warning warnings]
                                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))))
                        (catch Throwable e

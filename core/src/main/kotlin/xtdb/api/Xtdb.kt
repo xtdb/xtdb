@@ -105,7 +105,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     interface Statement : AdbcStatement {
         val parsedStatement: ParsedStatement?
-        val preparedQuery: PreparedQuery?
+
+        // planning warnings raised while preparing (empty until prepared / for a non-query statement)
+        val warnings: List<String>
+
+        // the output column names, carried by the plan — resolvable without binding params or emitting the
+        // query. A frontend that can't resolve its param types (pgwire, when a client OID is unknown — #4455)
+        // needs the names alone: it can't call [executeSchema], since emitting against unknown (fromLegs) params
+        // fails for a relation-typed parameter that the query reads columns out of.
+        val columnNames: List<String>
 
         // open a cursor on the (prepared, if not already) query, at the connection's basis/tz/tracer. [openQuery]
         // reads through the access-mode gate; [openUncheckedQuery] skips it (a frontend's driver-compatibility
@@ -114,6 +122,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun openQuery(): ResultCursor
         fun openUncheckedQuery(): ResultCursor
         fun openQuery(opts: QueryOpts): ResultCursor
+
+        // the output columns given the bound-parameter types. The no-arg [executeSchema] resolves them with
+        // unknown (fromLegs) params; this form lets a frontend that knows its param types (pgwire, from client
+        // OIDs) supply them so the output types resolve against them.
+        fun executeSchema(paramFields: List<Field>): Schema
 
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
     }
@@ -321,8 +334,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 override var parsedStatement: ParsedStatement? = initialParsed
                     private set
 
-                override var preparedQuery: PreparedQuery? = null
-                    private set
+                private var preparedQuery: PreparedQuery? = null
+
+                override val warnings get() = preparedQuery?.warnings.orEmpty()
+
+                override val columnNames
+                    get() = (preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared"))
+                        .columnNames
 
                 private var args: RelationReader? = null
 
@@ -366,9 +384,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun executeSchema(): Schema {
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+                    return executeSchema((0 until pq.paramCount).map { idx -> "?_$idx" ofType VectorType.fromLegs() })
+                }
 
-                    val paramFields = (0 until pq.paramCount).map { idx -> "?_$idx" ofType VectorType.fromLegs() }
-
+                override fun executeSchema(paramFields: List<Field>): Schema {
+                    val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
                     return Schema(pq.getColumnFields(paramFields))
                 }
 
@@ -982,7 +1002,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                             "xtdb.adbc/bulk-ingest-no-parsed-statement"
                         )
 
-                override val preparedQuery: PreparedQuery? get() = null
+                override val warnings get() = emptyList<String>()
+
+                override val columnNames: List<String>
+                    get() = throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
 
                 override fun openQuery(): ResultCursor =
                     throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
@@ -994,6 +1017,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
 
                 override fun executeQuery(): QueryResult =
+                    throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
+
+                override fun executeSchema(paramFields: List<Field>): Schema =
                     throw Incorrect("Bulk ingest does not support queries", "xtdb.adbc/bulk-ingest-no-query")
 
                 override fun prepare(): Unit =

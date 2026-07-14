@@ -365,7 +365,8 @@
 
           (reify PreparedQuery
             (getParamCount [_] (:param-count (plan-query* @!table-info)))
-            (getColumnNames [_] (:col-names (plan-query* @!table-info)))
+            ;; the plan carries these as symbols; the PreparedQuery contract is List<String>
+            (getColumnNames [_] (mapv str (:col-names (plan-query* @!table-info))))
             (getParsed [_] stmt)
 
             (getColumnFields [_ param-fields]
