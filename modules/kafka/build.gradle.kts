@@ -72,3 +72,7 @@ protobuf {
         }
     }
 }
+
+dokka {
+    modulePath.set("xtdb-kafka")
+}

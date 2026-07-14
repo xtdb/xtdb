@@ -52,3 +52,7 @@ protobuf {
         }
     }
 }
+
+dokka {
+    modulePath.set("xtdb-google-cloud")
+}

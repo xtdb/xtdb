@@ -53,3 +53,7 @@ protobuf {
         }
     }
 }
+
+dokka {
+    modulePath.set("xtdb-azure")
+}
