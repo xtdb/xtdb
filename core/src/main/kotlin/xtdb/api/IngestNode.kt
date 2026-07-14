@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.metrics.HealthzConfig
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
@@ -15,6 +16,7 @@ import xtdb.database.DatabaseName
 import xtdb.error.Incorrect
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
+import xtdb.util.requiringResolve
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID.randomUUID
@@ -24,7 +26,8 @@ import kotlin.io.path.extension
 /**
  * A node that does nothing but ingest from external sources — it runs a [Database] per configured
  * external source, joins leader election, and runs the source only on the database for which it's
- * elected leader. There's no query/client surface: no pgwire, no Flight SQL, no healthz.
+ * elected leader. There's no query/client surface: no pgwire, no Flight SQL — though it can serve
+ * the healthz endpoints ([Config.healthz]) for metrics and liveness.
  *
  * Started either from YAML config (`xtdb.main ingest`, [readConfig]) with registered external sources,
  * or embedded in a custom JVM application that supplies its own indexer programmatically.
@@ -35,6 +38,7 @@ class IngestNode internal constructor(
     private val base: NodeBase,
     private val databases: Map<DatabaseName, Database>,
     private val rootJob: Job,
+    private val healthzServer: AutoCloseable?,
 ) : AutoCloseable {
     private val closing = AtomicBoolean(false)
 
@@ -46,6 +50,9 @@ class IngestNode internal constructor(
 
     override fun close() {
         if (closing.compareAndSet(false, true)) {
+            // healthz first — it reads the databases we're about to free.
+            healthzServer?.close()
+
             // One cancel stops every database's job tree (Phase 1 — the single thread-parking bridge,
             // at node shutdown); then free the databases (each owns its LogProcessor / external source)
             // before the base, which owns the allocator they're children of.
@@ -53,6 +60,19 @@ class IngestNode internal constructor(
             databases.closeAll()
             base.close()
         }
+    }
+
+    // healthz reports on a Database.Catalog; the ingest node deliberately has no DatabaseCatalog,
+    // so it hands healthz a fixed, read-only view over the databases opened at boot.
+    private class FixedDbCatalog(private val dbs: Map<DatabaseName, Database>) : Database.Catalog {
+        override val databaseNames get() = dbs.keys
+        override fun databaseOrNull(dbName: DatabaseName) = dbs[dbName]
+
+        override fun attach(dbName: DatabaseName, config: Database.Config?): Unit =
+            error("can't attach a database to an ingest node")
+
+        override fun detach(dbName: DatabaseName): Unit =
+            error("can't detach a database from an ingest node")
     }
 
     @Serializable
@@ -68,6 +88,8 @@ class IngestNode internal constructor(
 
         val memoryCache: MemoryCache.Factory = MemoryCache.Factory(),
         var diskCache: DiskCache.Factory? = null,
+
+        var healthz: HealthzConfig? = null,
 
         val indexer: IndexerConfig = IndexerConfig(),
 
@@ -86,6 +108,8 @@ class IngestNode internal constructor(
 
         fun diskCache(diskCache: DiskCache.Factory?) = apply { this.diskCache = diskCache }
 
+        fun healthz(healthz: HealthzConfig) = apply { this.healthz = healthz }
+
         @JvmSynthetic
         fun indexer(configure: IndexerConfig.() -> Unit) = apply { indexer.configure() }
 
@@ -93,9 +117,9 @@ class IngestNode internal constructor(
 
         /**
          * The base components ([NodeBase]) are assembled from an [Xtdb.Config] with no client surface
-         * (`server`, `flightSql`, `healthz` all null). The ingest databases aren't expressed here —
-         * [open] attaches them directly, bypassing the [xtdb.database.DatabaseCatalog] and its "xtdb"
-         * primary entirely.
+         * (`server`, `flightSql`, `healthz` all null — healthz is served by the ingest node itself,
+         * not through the base config). The ingest databases aren't expressed here — [open] attaches
+         * them directly, bypassing the [xtdb.database.DatabaseCatalog] and its "xtdb" primary entirely.
          */
         private fun toBaseConfig(): Xtdb.Config =
             Xtdb.Config(
@@ -131,9 +155,14 @@ class IngestNode internal constructor(
                 val rootJob = SupervisorJob()
                 val rootScope = CoroutineScope(rootJob)
                 val openedDbs = LinkedHashMap<DatabaseName, Database>()
+                val healthzServer: AutoCloseable?
                 try {
                     for ((dbName, dbConfig) in databases)
                         openedDbs[dbName] = Database.open(base, dbName, dbConfig, base.compactor, rootScope)
+
+                    healthzServer = healthz?.let {
+                        openHealthzServer.invoke(base, FixedDbCatalog(openedDbs), it) as AutoCloseable
+                    }
                 } catch (t: Throwable) {
                     // Cancel the job tree (Phase 1) before freeing the already-opened databases
                     // (Phase 2) — closing them while their coroutines still run would free
@@ -142,12 +171,14 @@ class IngestNode internal constructor(
                     openedDbs.values.closeAll()
                     throw t
                 }
-                IngestNode(base, openedDbs, rootJob)
+                IngestNode(base, openedDbs, rootJob, healthzServer)
             }
         }
     }
 
     companion object {
+        private val openHealthzServer by lazy { requiringResolve("xtdb.healthz/open-server") }
+
         @JvmStatic
         fun readConfig(path: Path): Config {
             if (path.extension != "yaml") {

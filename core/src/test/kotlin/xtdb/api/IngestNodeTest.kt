@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import xtdb.api.metrics.HealthzConfig
 import xtdb.error.Incorrect
 import xtdb.api.log.Log
 import xtdb.api.storage.Storage
@@ -12,6 +13,11 @@ import xtdb.database.ExternalSource
 import xtdb.database.ExternalSourceToken
 import xtdb.indexer.TxIndexer
 import xtdb.indexer.TxIndexer.TxResult
+import java.net.ServerSocket
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -92,6 +98,34 @@ class IngestNodeTest {
                 assertTrue(ordersIndexed.await(30, TimeUnit.SECONDS), "orders source ran")
                 assertTrue(paymentsIndexed.await(30, TimeUnit.SECONDS), "payments source ran")
                 assertEquals(setOf("orders", "payments"), leaderFor.toSet())
+            }
+    }
+
+    @Test
+    fun `serves healthz endpoints when configured`() {
+        val indexed = CountDownLatch(1)
+        val source = CountingExternalSource.Factory(1, indexed, ConcurrentLinkedQueue())
+        val port = ServerSocket(0).use { it.localPort }
+
+        IngestNode.Config()
+            .database("orders", extDbConfig(source))
+            .healthz(HealthzConfig(port = port))
+            .open()
+            .use {
+                assertTrue(indexed.await(30, TimeUnit.SECONDS), "the source ran alongside healthz")
+
+                val client = HttpClient.newHttpClient()
+                fun get(path: String): HttpResponse<String> =
+                    client.send(
+                        HttpRequest.newBuilder(URI("http://localhost:$port$path")).build(),
+                        HttpResponse.BodyHandlers.ofString(),
+                    )
+
+                assertEquals(200, get("/healthz/alive").statusCode())
+
+                val metrics = get("/metrics")
+                assertEquals(200, metrics.statusCode())
+                assertTrue(metrics.body().isNotEmpty(), "prometheus scrape returns the node's meters")
             }
     }
 
