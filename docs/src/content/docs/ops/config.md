@@ -266,6 +266,48 @@ Defaults to `!Env XTDB_NODE_ID` otherwise is a short random string.
 
 Defaults to UTC.
 
+## Ingest-only nodes (v2.2+)
+
+An ingest-only node runs [external sources](external-sources/overview) and nothing else.
+
+It has no query surface - no Postgres wire-compatible server, no Flight SQL server, no healthz server - making it useful for moving ingestion onto dedicated compute, away from the nodes serving queries.
+
+For each configured database, the node joins that database's leader election and runs its external source when elected leader.
+
+Started with the [`ingest` CLI command](#cli-toolsflags) — e.g. `docker run xtdb/xtdb ingest -f /config/xtdb.yaml`, or `args: ["ingest", "-f", "/config/xtdb.yaml"]` in Kubernetes — it takes its own top-level config file.
+
+Each entry under `databases:` takes the same config as [`ATTACH DATABASE`](/about/dbs-in-xtdb#attachingdetaching-secondary-databases-v21) — `log`, `storage`, `externalSource`:
+
+```yaml
+remotes:
+  src_kafka: !Kafka
+    bootstrapServers: "localhost:9092"
+
+# The databases to ingest into, keyed by name.
+databases:
+  kc_orders:
+    log: !Kafka
+      cluster: src_kafka
+      topic: kc-orders-log
+    storage: !Remote
+      objectStore: !S3
+        bucket: my-bucket
+        prefix: kc-orders
+    externalSource: !KafkaConnect
+      remote: src_kafka
+      topic: orders
+      indexer: !Docs
+        table: orders
+
+# Required when any database uses a remote object store
+diskCache:
+  path: /var/cache/xtdb
+```
+
+The config also accepts [`memoryCache`](#caching), [`indexer`](#indexer) and [node ID](#node-id), with the same semantics as the regular node config.
+
+`xtdb` is reserved for the primary database and can't be used as a database name here.
+
 ## Additional Concepts
 
 ### Using `!Env`
@@ -312,6 +354,11 @@ You can run various tools by passing arguments - either directly to the CLI or v
 `compactor`
 
 : Starts a compactor-only node - useful for giving the compaction process more compute resources.
+  - `-f <file>`, `--file <file>`: specifies the configuration file to use.
+
+`ingest` (v2.2+)
+
+: Starts an [ingest-only node](#ingest-only-nodes-v22) - runs the configured external sources, with no query surface.
   - `-f <file>`, `--file <file>`: specifies the configuration file to use.
 
 `reset-compactor <db-name>`

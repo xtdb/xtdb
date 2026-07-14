@@ -22,3 +22,8 @@ Kafka Connect
 An external source is set up when you [attach the secondary database](/about/dbs-in-xtdb#attachingdetaching-secondary-databases-v21): add an `externalSource:` entry to the `ATTACH DATABASE` config, alongside its `log:` and `storage:`.
 
 See each source's setup guide for the specifics.
+
+## Ingest-only nodes
+
+External sources can also run on a dedicated ingest-only node — a node with no query surface, useful for scaling ingestion independently of the nodes serving queries.
+See [Ingest-only nodes](/ops/config#ingest-only-nodes-v22).
