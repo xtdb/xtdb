@@ -139,6 +139,24 @@
                 [:msg-ready {:status :idle}]]
                @!in-msgs)))))
 
+(deftest test-dml-planning-warning-surfaces
+  ;; DML executes by buffering (re-planned server-side); pgwire prepares it at prepare-time only to surface
+  ;; planning warnings. A NULLS ordering inside an ordered-set aggregate is ignored-with-a-warning, so a DML
+  ;; sourcing from one must still deliver a notice to the client.
+  (let [{:keys [!in-msgs] :as frontend} (->recording-frontend {})]
+    (with-open [conn (->conn frontend {"database" "xtdb"})]
+      (reset! !in-msgs [])
+
+      (pgwire/handle-msg conn {:msg-name :msg-simple-query
+                               :query (str "INSERT INTO foo SELECT PERCENTILE_CONT(0.5) WITHIN GROUP "
+                                           "(ORDER BY n NULLS FIRST) AS _id FROM (VALUES (1), (2)) AS t(n)")})
+
+      (t/is (contains? (->> @!in-msgs
+                            (keep (fn [[nm data]]
+                                    (when (= :msg-notice-response nm) (:message (:notice-fields data)))))
+                            set)
+                       "NULL ordering is ignored for percentile_cont (nulls are excluded from ordered-set aggregates)")))))
+
 (defn extended-query
   ([conn query] (extended-query conn query [] []))
   ([conn query param-oids args]

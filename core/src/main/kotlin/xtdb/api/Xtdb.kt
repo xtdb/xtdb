@@ -296,9 +296,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
-        // pgwire (and ADBC) parse once for dispatch, so they prepare from the classified statement; its query text
-        // and EXPLAIN flag derive from the AST. tz, db, await-token and await bound come from the connection.
-        fun prepareSql(stmt: ParsedStatement): PreparedQuery {
+        // Plans a pre-classified statement; its query text and EXPLAIN flag derive from the AST. tz, db,
+        // await-token and await bound come from the connection.
+        private fun prepareSql(stmt: ParsedStatement): PreparedQuery {
             dbCat.awaitAll(awaitToken, awaitTimeout)
             return qSrc.prepareQuery(
                 stmt,
@@ -307,11 +307,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             )
         }
 
-        // Prepare a pre-classified statement (pgwire's dispatch path), so queries and SHOWs prepare through one
-        // entry — SHOW bypasses the access-mode gate off [PreparedQuery.parsed] in [openQuery].
+        // Prepare a pre-classified statement (pgwire's dispatch path), so queries, DML and SHOWs prepare through
+        // one entry — SHOW bypasses the access-mode gate off [PreparedQuery.parsed] in [openQuery]. DML doesn't
+        // execute through the returned query (it buffers as a tx op, planned server-side); pgwire prepares it
+        // only to surface planning warnings.
         fun prepare(parsed: ParsedStatement): PreparedQuery =
             when (parsed) {
-                is ParsedStatement.Query, is ParsedStatement.Execute -> prepareSql(parsed)
+                is ParsedStatement.Query, is ParsedStatement.Execute, is ParsedStatement.Dml -> prepareSql(parsed)
                 is ParsedStatement.ShowVariable -> showPreparedQuery(parsed)
                 else -> throw Incorrect("not a preparable query: ${parsed::class.simpleName}", "xtdb/not-a-query")
             }

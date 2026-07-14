@@ -778,6 +778,20 @@
                  (visitQuery [_ _] (prepare-parsed))
                  (visitExecute [_ _] (prepare-parsed))
                  (visitShowVariable [_ _] (prepare-parsed))
+                 ;; DML executes by buffering (cmd-exec-dml) and is re-planned server-side, so we don't prepare
+                 ;; it for execution — only, best-effort, to surface planning warnings for interactive
+                 ;; (non-parameterized) statements. A planning failure here must not reject the statement.
+                 (visitDml [_ _]
+                   (when (empty? param-oids)
+                     (try
+                       (let [^PreparedQuery pq (with-auth-check conn
+                                                 (.prepare ^Xtdb$Connection (:node-conn @conn-state) parsed))]
+                         (when-let [warnings (.getWarnings pq)]
+                           (doseq [warning warnings]
+                             (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
+                       (catch Throwable e
+                         (log/debug e "Error planning DML statement for warnings"))))
+                   stmt)
                  (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
@@ -1050,24 +1064,6 @@
       (metrics/inc-counter! tx-error-counter)
       (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
                             {:query query, :param-oids param-oids})))
-
-    ;; Extract warnings during interactive sessions (typically non-parameterized statements)
-    (when (empty? param-oids)
-      (try
-        (let [^PreparedQuery pq (with-auth-check conn
-                                  (.prepareSql node-conn parsed))]
-
-          ;; Send any warnings to the client
-          (when-let [warnings (.getWarnings pq)]
-            (doseq [warning warnings]
-              (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning))))))
-
-        (catch IllegalArgumentException e
-          (log/debug e "Error planning DML statement for warnings"))
-        (catch RuntimeException e
-          (log/debug e "Error planning DML statement for warnings"))
-        (catch Throwable e
-          (log/debug e "Error planning DML statement for warnings"))))
 
     (when-not (.isTxOpen node-conn)
       (begin-implicit conn :read-write))
