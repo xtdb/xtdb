@@ -4,8 +4,6 @@ import dev.clojurephant.plugin.clojure.tasks.ClojureCompile
 import org.gradle.jvm.toolchain.JavaInstallationMetadata
 import org.gradle.jvm.toolchain.JavaLauncher
 import org.gradle.jvm.toolchain.JavaToolchainService
-import org.jetbrains.dokka.base.DokkaBase
-import org.jetbrains.dokka.base.DokkaBaseConfiguration
 import org.jreleaser.gradle.plugin.dsl.deploy.maven.MavenDeployer
 import org.jreleaser.gradle.plugin.tasks.JReleaserDeployTask
 import org.jreleaser.model.Active
@@ -22,12 +20,6 @@ val gitCommitProvider: Provider<String> =
         isIgnoreExitValue = true
     }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
 
-buildscript {
-    dependencies {
-        classpath("org.jetbrains.dokka:dokka-base:1.9.10")
-    }
-}
-
 plugins {
     `java-library`
     `java-test-fixtures`
@@ -37,6 +29,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.dokka)
+    // declared so :xtdb-api / :xtdb-core can apply it for their javadoc jars; not applied at root
+    alias(libs.plugins.dokka.javadoc) apply false
     alias(libs.plugins.jreleaser)
     alias(libs.plugins.ben.manes.versions)
 }
@@ -170,12 +164,13 @@ allprojects {
         if (plugins.hasPlugin("org.jetbrains.dokka")) {
             // Modules without a public Java API publish a stub (empty) javadoc jar to satisfy
             // Maven Central's requirement without paying the dokka cost on every deploy.
-            // Real dokka javadoc is still produced for :xtdb-api and :xtdb-core.
+            // Real dokka javadoc is still produced for :xtdb-api and :xtdb-core (which additionally
+            // apply the dokka-javadoc plugin for the dokkaGeneratePublicationJavadoc task).
             val modulesWithPublicJavaApi = setOf(":xtdb-api", ":xtdb-core")
             if (proj.path in modulesWithPublicJavaApi) {
                 tasks.register<Jar>("dokkaJavadocJar") {
-                    dependsOn(tasks.dokkaJavadoc)
-                    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+                    dependsOn("dokkaGeneratePublicationJavadoc")
+                    from(layout.buildDirectory.dir("dokka/javadoc"))
                     archiveClassifier.set("javadoc")
                 }
             } else {
@@ -526,8 +521,11 @@ jreleaser {
 
 project(":xtdb-core").run {
     tasks["sourcesJar"].dependsOn("generateGrammarSource")
-    tasks["dokkaJavadoc"].dependsOn("generateGrammarSource")
-    tasks["dokkaHtmlPartial"].dependsOn("generateGrammarSource")
+
+    // every dokka source-analysing task (module + publication, html + javadoc) reads the generated grammar
+    tasks.matching { it.name.startsWith("dokkaGenerate") }.configureEach {
+        dependsOn("generateGrammarSource")
+    }
 }
 
 dependencies {
@@ -555,6 +553,16 @@ dependencies {
     projectDep(":modules:bench")
     projectDep(":modules:xtdb-datasets")
     projectDep(":modules:xtdb-kafka-connect")
+
+    // Modules aggregated into the published Kotlin API docs (docs.xtdb.com/drivers/kotlin/kdoc).
+    // xtdb-kafka-connect is configured via Kafka Connect properties, not a JVM API, so it's excluded.
+    dokka(project(":xtdb-api"))
+    dokka(project(":xtdb-core"))
+    dokka(project(":modules:xtdb-aws"))
+    dokka(project(":modules:xtdb-azure"))
+    dokka(project(":modules:xtdb-google-cloud"))
+    dokka(project(":modules:xtdb-kafka"))
+    dokka(project(":modules:xtdb-postgres-source"))
 
     // testFixtures dependencies
     testFixturesImplementation(project(":xtdb-api"))
@@ -871,18 +879,15 @@ createBench(
 
 createBench("ts-devices", mapOf("size" to "--size"))
 
-tasks.dokkaHtmlMultiModule {
+dokka {
     moduleName.set("")
     moduleVersion.set("2.x-SNAPSHOT")
 
-    inputs.file("dokka/logo-styles.css")
-    inputs.file("dokka/logo-icon.svg")
+    pluginsConfiguration.html {
+        customAssets.from("dokka/logo-icon.svg")
+        customStyleSheets.from("dokka/logo-styles.css")
 
-    pluginConfiguration<DokkaBase, DokkaBaseConfiguration> {
-        customAssets = listOf(file("dokka/logo-icon.svg"))
-        customStyleSheets = listOf(file("dokka/logo-styles.css"))
-
-        footerMessage = "© ${Year.now().value} JUXT Ltd"
+        footerMessage.set("© ${Year.now().value} JUXT Ltd")
     }
 }
 

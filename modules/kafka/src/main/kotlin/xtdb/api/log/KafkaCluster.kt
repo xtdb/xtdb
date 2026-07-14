@@ -515,6 +515,7 @@ class KafkaCluster(
             )
     }
 
+    /** @suppress */
     interface AtomicProducer<M> : Log.AtomicProducer<M> {
         override fun openTx(): Tx<M>
 

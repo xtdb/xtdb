@@ -9,7 +9,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.dokka)
-    
+    alias(libs.plugins.dokka.javadoc)
+
     alias(libs.plugins.protobuf)
 }
 
@@ -70,7 +71,7 @@ kotlin {
     }
 }
 
-tasks.dokkaHtmlPartial {
+dokka {
     moduleName.set("xtdb-api")
 }
 

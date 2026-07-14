@@ -9,7 +9,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "build-api-docs": "mkdir -p public/drivers/clojure && rm -rf public/drivers/clojure/codox && cd ../ && ./gradlew build-codox"
+    "build-api-docs": "mkdir -p public/drivers/clojure public/drivers/kotlin && rm -rf public/drivers/clojure/codox public/drivers/kotlin/kdoc && cd ../ && ./gradlew build-codox :dokkaGeneratePublicationHtml && cp -r build/dokka/html docs/public/drivers/kotlin/kdoc"
   },
   "devDependencies": {
     "@astrojs/sitemap": "3.7.2",
