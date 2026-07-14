@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
@@ -497,17 +498,34 @@ class Database(
         val primary: Database get() = databaseOrNull("xtdb")!!
 
         // a read snapshot pinned to now: each database's latest-completed system-time per partition,
-        // encoded as a time-basis token. The Kotlin twin of the node's PStatus/snapshot-token, so a
-        // connection can pin a begin-time read basis without reaching into Clojure.
+        // encoded as a time-basis token, so a connection can pin a begin-time read basis.
         fun snapshotToken(): String =
+            latestCompletedTxs()
+                .mapValues { (_, txs) -> txs.map { it?.systemTime } }
+                .encodeTimeBasisToken()
+
+        // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
+        // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional (sorted by partition key),
+        // so it lines up with the basis-token codec.
+        fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>> =
             databaseNames.mapNotNull { dbName ->
                 // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
                 // between them — skip it, as the sibling awaitAll0/syncAll0 do, rather than NPE.
                 databaseOrNull(dbName)?.let { db ->
                     dbName to db.partitions.entries.sortedBy { it.key }
-                        .map { it.value.liveIndex.latestCompletedTx?.systemTime }
+                        .map { it.value.liveIndex.latestCompletedTx }
                 }
-            }.toMap().encodeTimeBasisToken()
+            }.toMap()
+
+        // #5557 unit 5: the source log's latestSubmittedMsgId is database-level for now, so the same value
+        // fills every partition slot.
+        fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> =
+            databaseNames.mapNotNull { dbName ->
+                databaseOrNull(dbName)?.let { db ->
+                    val latest = db.sourceLog.latestSubmittedMsgId
+                    dbName to List(db.partitions.size) { latest }
+                }
+            }.toMap()
 
         fun attach(dbName: DatabaseName, config: Config?)
         fun detach(dbName: DatabaseName)

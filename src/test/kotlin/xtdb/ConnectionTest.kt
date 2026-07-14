@@ -121,7 +121,7 @@ class ConnectionTest {
         val conn = connection("mydb")
 
         conn.submitTx(emptyList())
-        conn.setAwaitToken(mapOf("mydb" to listOf(42L)).encodeTxBasisToken())
+        conn.awaitToken = mapOf("mydb" to listOf(42L)).encodeTxBasisToken()
 
         assertEquals(mapOf("mydb" to listOf(42L)), tokenOf(conn.awaitToken))
     }

@@ -11,7 +11,6 @@
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.object-store :as os]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.serde.types :as st]
             [xtdb.test-util :as tu]
@@ -310,14 +309,14 @@
                                        {:default-tz #xt/zone "Europe/London"})))))
 
         (xt-log/sync-node node (Duration/ofSeconds 2))
-        (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node)))
+        (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
           (xt-log/sync-node node (Duration/ofSeconds 2))
           (t/is (= {"xtdb" [last-tx-key]}
-                   (xtp/latest-completed-txs node)))
+                   (tu/latest-completed-txs node)))
 
-          (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node))))
+          (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node))))
 
         (t/is (zero? (->> (.toList (Files/list object-dir))
                           (filter util/is-file?)
@@ -341,7 +340,7 @@
 
         (t/is (= 11000 (count tx-ops)))
 
-        (t/is (= {"xtdb" [nil]} (xtp/latest-completed-txs node)))
+        (t/is (= {"xtdb" [nil]} (tu/latest-completed-txs node)))
 
         (let [{last-tx-id :tx-id} (reduce
                                    (fn [_acc tx-ops]
@@ -351,7 +350,7 @@
               last-tx-key (serde/->TxKey last-tx-id (time/->instant #inst "2020-04-19"))]
 
           (xt-log/sync-node node (Duration/ofSeconds 15))
-          (t/is (= {"xtdb" [last-tx-key]} (xtp/latest-completed-txs node)))
+          (t/is (= {"xtdb" [last-tx-key]} (tu/latest-completed-txs node)))
           (tu/flush-block! node)
 
           (t/is (= last-tx-key (.getLatestCompletedTx block-cat)))
@@ -390,7 +389,7 @@
                                                                                              (reduce (fn [_ tx-ops]
                                                                                                        (xt/submit-tx node1 tx-ops))
                                                                                                      nil))]
-                                                          [first-half-tx-id (xtp/await-token node1)]))
+                                                          [first-half-tx-id (tu/await-token node1)]))
             
             [second-half-tx-id second-half-await-token] (util/with-open [node2 (tu/->local-node node-opts)]
                                                           (let [db (db/primary-db node2)
@@ -400,7 +399,7 @@
 
                                                             (xt-log/await-node node2 first-half-await-token (Duration/ofSeconds 10))
                                                             (t/is (= first-half-tx-id
-                                                                     (-> (xtp/latest-completed-txs node2) (get-in ["xtdb" 0 :tx-id]))))
+                                                                     (-> (tu/latest-completed-txs node2) (get-in ["xtdb" 0 :tx-id]))))
 
                                                             (let [latest-completed-tx (.getLatestCompletedTx block-cat)]
                                                               (t/is (< (:tx-id latest-completed-tx) first-half-tx-id))
@@ -422,10 +421,10 @@
                                                                                                   (reduce (fn [_ tx-ops]
                                                                                                             (xt/submit-tx node2 tx-ops))
                                                                                                           nil))
-                                                                  second-half-await-token (xtp/await-token node2)]
+                                                                  second-half-await-token (tu/await-token node2)]
 
                                                               (t/is (<= first-half-tx-id
-                                                                        (get-in (xtp/latest-completed-txs node2) ["xtdb" 0 :tx-id])
+                                                                        (get-in (tu/latest-completed-txs node2) ["xtdb" 0 :tx-id])
                                                                         second-half-tx-id))
 
                                                               (t/is (= #xt/type :utf8
@@ -440,11 +439,11 @@
                 tc (.getTableCatalog db)]
             (xt-log/await-node node3 first-half-await-token (Duration/ofSeconds 10))
             (t/is (<= first-half-tx-id
-                      (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
+                      (-> (tu/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))
                       second-half-tx-id))
 
             (xt-log/await-node node3 second-half-await-token (Duration/ofSeconds 15))
-            (t/is (= second-half-tx-id (-> (xtp/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
+            (t/is (= second-half-tx-id (-> (tu/latest-completed-txs node3) (get-in ["xtdb" 0 :tx-id]))))
 
             (Thread/sleep 250); wait for the block to finish writing to disk
             ;; we don't have an accessible hook for this, beyond awaiting the tx
@@ -512,7 +511,7 @@
                                   {:default-tz #xt/zone "Europe/London"})))
 
           (t/is (= {"xtdb" [(serde/->TxKey 0 (time/->instant #inst "2020-01-01"))]}
-                   (xtp/latest-completed-txs node)))
+                   (tu/latest-completed-txs node)))
 
           (tu/flush-block! node)
 

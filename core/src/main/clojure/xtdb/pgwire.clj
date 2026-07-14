@@ -13,7 +13,6 @@
             [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]
             [xtdb.pgwire.io :as pgio]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
             [xtdb.tx-ops :as tx-ops]
@@ -36,7 +35,7 @@
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
+           (xtdb.api Authenticator DataSource DataSource$ConnectionBuilder OAuthResult ServerConfig Xtdb Xtdb$Config Xtdb$Connection Xtdb$ExecutedTx Xtdb$SubmittedTx)
            xtdb.api.module.XtdbModule
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
@@ -384,7 +383,7 @@
                  (.databaseOrNull db-cat db-name))
                (throw (err-invalid-catalog db-name)))
         user (get startup-opts "user")
-        node-conn (let [^Xtdb$Connection node-conn (xtp/open-connection node db-name)]
+        node-conn (let [^Xtdb$Connection node-conn (.connect ^Xtdb node db-name)]
                     ;; seed the connection's clock from the server's, when set (tests pin a fixed clock there);
                     ;; otherwise the connection keeps its own. It owns the clock thereafter, pinning
                     ;; current-time off it at BEGIN.

@@ -5,13 +5,13 @@
             [clojure.test.check :as tc]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
+            [xtdb.basis :as basis]
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
-            [xtdb.protocols :as xtp]
             [xtdb.query :as q]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
@@ -30,7 +30,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
            (xtdb ICursor PagesCursor)
-           (xtdb.api TransactionKey)
+           (xtdb.api TransactionKey Xtdb Xtdb$Connection)
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorType)
@@ -225,6 +225,15 @@
                                               (.accept c rel)))))
                      (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer query-span)))})))
 
+(defn latest-completed-txs [node]
+  (-> (.latestCompletedTxs ^Xtdb node)
+      (->> (into {}))
+      (update-vals vec)))
+
+(defn await-token [node]
+  (with-open [conn ^Xtdb$Connection (.connect ^Xtdb node)]
+    (basis/->tx-basis-str (.latestSubmittedMsgIds conn))))
+
 (defn <-cursor
   ([^ICursor cursor] (<-cursor cursor #xt/key-fn :kebab-case-keyword))
   ([^ICursor cursor ^IKeyFn key-fn] (.consume cursor key-fn)))
@@ -236,7 +245,7 @@
    (let [allocator (:allocator node *allocator*)
          query-opts (-> query-opts
                         (update :default-db (fnil identity "xtdb"))
-                        (cond-> node (-> (update :await-token (fnil identity (xtp/await-token node)))
+                        (cond-> node (-> (update :await-token (fnil identity (await-token node)))
                                          (doto (-> :await-token (as-> token (xt-log/await-node node token nil)))))))
 
          [^IQuerySource q-src close-q-src?] (if node

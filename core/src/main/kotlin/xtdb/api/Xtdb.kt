@@ -78,6 +78,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     /** The names of the databases this node currently serves. */
     val databaseNames: Collection<DatabaseName>
 
+    /** Each database's latest-completed transaction, per partition. */
+    fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>>
+
     interface CompactorNode : AutoCloseable
 
     interface XtdbInternal : Xtdb {
@@ -89,6 +92,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     fun addMeterRegistry(meterRegistry: MeterRegistry)
 
     override fun connect(): Connection
+
+    /** Opens an in-process connection to the named database. */
+    fun connect(dbName: DatabaseName): Connection
 
     data class SubmittedTx(val txId: MessageId)
 
@@ -134,14 +140,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var dbName: DatabaseName,
     ) : AdbcConnection {
 
-        private var _awaitToken: String? = null
-
-        // read-only to the outside: the token advances only through the write methods (submit / execute /
-        // attach / detach), so no other code can leave it stale.
-        val awaitToken: String? get() = _awaitToken
-
-        // the one sanctioned external writer: pgwire's `SET AWAIT_TOKEN`.
-        fun setAwaitToken(token: String?) { _awaitToken = token }
+        // advances through the write methods (submit / execute / attach / detach); also settable directly for
+        // pgwire's `SET AWAIT_TOKEN`.
+        var awaitToken: String? = null
 
         // the connection's last write, for `SHOW latest_submitted_tx`. system-time/committed/error are null
         // for a fire-and-forget submitTx (no await); populated for an awaited execute/attach/detach.
@@ -158,6 +159,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
         // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
         val effectiveAwaitToken: String? get() = tx?.awaitToken ?: awaitToken
+
+        /** Each database's latest-submitted message id, per partition. */
+        fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
 
         // the authenticated user, threaded into every write's [TxOpts] for the audit trail. Established by the
         // frontend at connect-time (pgwire's startup handshake); null until a frontend sets it.
@@ -190,7 +194,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
 
         private fun recordTx(dbName: DatabaseName, txId: MessageId) {
-            _awaitToken = mergeTxBasisTokens(_awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
+            awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())
         }
 
         // advances the token and captures the last-submitted-tx in one place, so the two can't drift apart.
@@ -428,7 +432,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     is ParsedStatement.SetSessionParameter ->
                         setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
                     is ParsedStatement.SetTimeZone -> setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, null)))
-                    is ParsedStatement.SetAwaitToken -> _awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
+                    is ParsedStatement.SetAwaitToken -> awaitToken = coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
                     is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
                     is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op
                     is ParsedStatement.SetRole -> {} // accepted, no-op (as pgwire)
@@ -855,19 +859,22 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                                 "tx_id" to VectorType.maybe(VectorType.I64),
                                 "system_time" to VectorType.maybe(VectorType.INSTANT))) {
                     dbCat.awaitAll(awaitToken, awaitTimeout)
-                    dbCat.databaseNames.flatMap { dbName ->
-                        val db = dbCat.databaseOrNull(dbName) ?: return@flatMap emptyList()
-                        db.partitions.toSortedMap().map { (part, partition) ->
-                            val txKey = partition.liveIndex.latestCompletedTx
+                    dbCat.latestCompletedTxs().flatMap { (dbName, txs) ->
+                        txs.mapIndexed { part, txKey ->
                             mapOf("db_name" to dbName, "part" to part,
                                   "tx_id" to txKey?.txId, "system_time" to txKey?.systemTime)
                         }
                     }
                 }
 
-                // #5557 unit 5: source log's latestSubmittedMsgId is database-level for now, so the same value
-                // appears in every partition slot.
-                "latest_submitted_msg_ids" -> byPartition(msgIdCols) { db, _ -> mapOf("msg_id" to db.sourceLog.latestSubmittedMsgId) }
+                "latest_submitted_msg_ids" -> show(msgIdCols) {
+                    dbCat.awaitAll(awaitToken, awaitTimeout)
+                    dbCat.latestSubmittedMsgIds().flatMap { (dbName, msgIds) ->
+                        msgIds.mapIndexed { part, msgId ->
+                            mapOf("db_name" to dbName, "part" to part, "msg_id" to msgId)
+                        }
+                    }
+                }
                 "latest_processed_msg_ids" -> byPartition(msgIdCols) { _, partition -> mapOf("msg_id" to partition.watchers.latestSourceMsgId) }
 
                 else -> show1(variable) { sessionParameters[variable] }

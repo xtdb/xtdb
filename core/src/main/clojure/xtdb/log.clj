@@ -7,7 +7,6 @@
             [xtdb.node :as xtn]
             [xtdb.table :as table]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
             [xtdb.util :as util])
   (:import (java.time Duration Instant)
            (java.util HashMap List)
@@ -16,7 +15,7 @@
            (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Factory)
            (xtdb.arrow Relation Vector)
-           (xtdb.database Database DatabaseStorage Database$Catalog Database$Config)
+           (xtdb.database Database DatabaseStorage Database$Config)
            xtdb.table.TableRef
            (xtdb.tx DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
            (xtdb.util MsgIdUtil)))
@@ -151,25 +150,6 @@
 
 (defmethod xtn/apply-config! :xtdb/log [^Xtdb$Config config _ [tag opts]]
   (.log config (->log-factory tag opts)))
-
-(defn- ->TxOps [tx-ops]
-  (->> tx-ops
-       (mapv (fn [tx-op]
-               (cond-> tx-op
-                 (not (record? tx-op)) tx-ops/parse-tx-op)))))
-
-(defn submit-tx ^long
-  [{:keys [^BufferAllocator allocator, ^Database$Catalog db-cat, default-tz]} tx-ops {:keys [default-db, system-time] :as opts}]
-
-  (let [^Database db (or (.databaseOrNull db-cat default-db)
-                         (throw (err/incorrect :xtdb/unknown-db (format "Unknown database: %s" default-db)
-                                               {:db-name default-db})))
-        default-tz (:default-tz opts default-tz)]
-    (util/rethrowing-cause
-      (util/with-open [ops (util/safe-mapv #(open-tx-op % allocator opts) (->TxOps tx-ops))]
-        (.getTxId (.submitTxBlocking db ops (TxOpts. default-tz (some-> system-time time/expect-instant)
-                                                     (get-in opts [:authn :user]) (:user-metadata opts))))))))
-
 
 (defn await-tx [^Database db, ^long tx-id, ^Duration timeout]
   (.awaitTxBlocking db tx-id timeout))
