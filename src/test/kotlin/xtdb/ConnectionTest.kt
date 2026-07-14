@@ -14,6 +14,7 @@ import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.database.decodeTxBasisToken
 import xtdb.database.encodeTxBasisToken
+import xtdb.tx.TxOpts
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -85,6 +86,16 @@ class ConnectionTest {
         conn.submitTx(emptyList())
 
         assertEquals(mapOf("other" to listOf(3L)), tokenOf(conn.awaitToken))
+    }
+
+    @Test
+    fun `submitTx targets the db named in the opts, over the connection's own`() {
+        nextTxId = 5
+        val conn = connection("xtdb")
+
+        conn.submitTx(emptyList(), TxOpts(dbName = "other"))
+
+        assertEquals(mapOf("other" to listOf(5L)), tokenOf(conn.awaitToken))
     }
 
     @Test

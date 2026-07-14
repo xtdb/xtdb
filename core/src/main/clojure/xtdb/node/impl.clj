@@ -129,11 +129,11 @@
     (->> (vals (:xtdb/modules system))
          (some #(when (instance? clazz %) %))))
 
-  (submitTx [this db-name tx-ops tx-opts]
-    (.submitTx (xtp/open-connection this db-name) tx-ops tx-opts))
+  (submitTx [this tx-ops tx-opts]
+    (.submitTx (xtp/open-connection this (or (.getDbName tx-opts) "xtdb")) tx-ops tx-opts))
 
-  (executeTx [this db-name tx-ops tx-opts]
-    (.executeTx (xtp/open-connection this db-name) tx-ops tx-opts))
+  (executeTx [this tx-ops tx-opts]
+    (.executeTx (xtp/open-connection this (or (.getDbName tx-opts) "xtdb")) tx-ops tx-opts))
 
   Xtdb$XtdbInternal
   (getDbCatalog [_] db-cat)

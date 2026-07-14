@@ -92,11 +92,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     data class SubmittedTx(val txId: MessageId)
 
-    fun submitTx(dbName: DatabaseName, ops: List<TxOp>, opts: TxOpts): SubmittedTx
+    fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx
 
     data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
 
-    fun executeTx(dbName: DatabaseName, ops: List<TxOp>, opts: Any?): ExecutedTx
+    fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx
 
     interface Statement : AdbcStatement {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
@@ -225,7 +225,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             return try {
                 try {
-                    db(dbName).submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
+                    db(opts.dbName ?: dbName).submitTxBlocking(ops, opts.withFallbackTz(defaultTz))
                 } catch (e: ExecutionException) {
                     throw e.cause ?: e
                 }
@@ -236,13 +236,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
-            txSubmitTimer.timed { doSubmit(ops, opts) }.record(dbName)
+            txSubmitTimer.timed { doSubmit(ops, opts) }.record(opts.dbName ?: dbName)
 
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
             txExecuteTimer.timed {
                 val txId = doSubmit(ops, opts).txId
-                txAwaitTimer.timed { awaitTx(txId) }
-            }.record(dbName)
+                txAwaitTimer.timed { awaitTx(txId, opts.dbName ?: dbName) }
+            }.record(opts.dbName ?: dbName)
 
         // attach/detach act on the primary database, not the connection's: the message goes onto the primary's
         // log, and the resulting tx is awaited and recorded against the primary (it.name), not dbName.

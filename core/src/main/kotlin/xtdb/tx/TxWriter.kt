@@ -18,6 +18,7 @@ import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.VectorType.Companion.fromLegs
+import xtdb.database.DatabaseName
 import xtdb.error.Incorrect
 import xtdb.table.SchemaName
 import xtdb.table.TableName
@@ -196,9 +197,12 @@ private class EraseDocsWriter(ops: VectorWriter) : TxOpWriter<TxOp.EraseDocs> {
     }
 }
 
-data class TxOpts(
+data class TxOpts @JvmOverloads constructor(
     val defaultTz: ZoneId? = null, val systemTime: Instant? = null,
-    val user: String? = null, val userMetadata: Map<*, *>? = null
+    val user: String? = null, val userMetadata: Map<*, *>? = null,
+    // the database to submit to; null means the connection's own database (or the default for a node-level helper).
+    // Only meaningful for the autonomous submitTx/executeTx entries - within an open transaction the db is already fixed.
+    val dbName: DatabaseName? = null
 ) {
     fun withFallbackTz(defaultTz: ZoneId?) = if (this.defaultTz != null) this else copy(defaultTz = defaultTz)
 }
