@@ -7,7 +7,9 @@
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)
-           (xtdb.api.query Binding Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Get Expr$ListExpr Expr$LogicVar Expr$Long Expr$MapExpr Expr$Null Expr$Obj Expr$Param Expr$Pull Expr$PullMany Expr$SetExpr Expr$Subquery TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)
+           (xtdb.xtql.ast NullExpr BoolExpr LongExpr DoubleExpr ObjExpr LogicVarExpr ParamExpr
+                          CallExpr GetExpr SubqueryExpr ExistsExpr PullExpr PullManyExpr
+                          ListExpr SetExpr MapExpr AllTime At In)
            (xtdb.xtql Aggregate DocsRelation From Join LeftJoin Limit Offset OrderBy ParamRelation Pipeline QueryWithParams Return Unify Unnest Where With Without)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -101,128 +103,128 @@
      :tmp-expr-sym->expr-vec (mapv hash-map temporary-expr-symbols (map (comp :expr :r) arg-bindings))}))
 
 (extend-protocol ExprPlan
-  Expr$Null
+  NullExpr
   (plan-expr [_this] nil)
   (required-vars [_this] #{})
 
-  Expr$LogicVar
-  (plan-expr [this] (col-sym (.lv this)))
-  (required-vars [this] #{(col-sym (.lv this))})
+  LogicVarExpr
+  (plan-expr [{:keys [lv]}] (col-sym lv))
+  (required-vars [{:keys [lv]}] #{(col-sym lv)})
 
-  Expr$Param
-  (plan-expr [this] (param-sym (.v this)))
+  ParamExpr
+  (plan-expr [{:keys [v]}] (param-sym v))
   (required-vars [_this] #{})
 
-  Expr$ListExpr
-  (plan-expr [this] (into [] (map plan-expr) (.elements this)))
-  (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
+  ListExpr
+  (plan-expr [{:keys [elements]}] (into [] (map plan-expr) elements))
+  (required-vars [{:keys [elements]}] (into #{} (mapcat required-vars) elements))
 
-  Expr$SetExpr
-  (plan-expr [this] (into #{} (map plan-expr (.elements this))))
-  (required-vars [this] (into #{} (mapcat required-vars (.elements this))))
+  SetExpr
+  (plan-expr [{:keys [elements]}] (into #{} (map plan-expr elements)))
+  (required-vars [{:keys [elements]}] (into #{} (mapcat required-vars) elements))
 
-  Expr$MapExpr
-  (plan-expr [this] (into {} (map (juxt (comp keyword util/str->normal-form-str key) (comp plan-expr val)) (.elements this))))
-  (required-vars [this] (into #{} (mapcat required-vars (vals (.elements this)))))
+  MapExpr
+  (plan-expr [{:keys [elements]}] (into {} (map (juxt (comp keyword util/str->normal-form-str key) (comp plan-expr val))) elements))
+  (required-vars [{:keys [elements]}] (into #{} (mapcat required-vars) (vals elements)))
 
-  Expr$Obj
-  (plan-expr [o] (.obj o))
+  ObjExpr
+  (plan-expr [{:keys [obj]}] obj)
   (required-vars [_] #{})
 
-  Expr$Bool
-  (plan-expr [this] (.bool this))
+  BoolExpr
+  (plan-expr [{:keys [bool]}] bool)
   (required-vars [_] #{})
 
-  Expr$Long
-  (plan-expr [this] (.lng this))
+  LongExpr
+  (plan-expr [{:keys [lng]}] lng)
   (required-vars [_] #{})
 
-  Expr$Double
-  (plan-expr [this] (.dbl this))
+  DoubleExpr
+  (plan-expr [{:keys [dbl]}] dbl)
   (required-vars [_] #{})
 
-  Expr$Call
-  (plan-expr [call]
-    (let [fn (symbol (.f call))
+  CallExpr
+  (plan-expr [{:keys [f args]}]
+    (let [fn (symbol f)
           placeholder (expr-subquery-placeholder)]
       (if (aggregate-fn? fn)
         (do (swap! *agg-fns* conj {:agg-fn fn
                                    :placeholder placeholder
-                                   :sub-expr (.args call)})
+                                   :sub-expr args})
             placeholder)
 
         ;; Map = to == for SQL-like numeric coercion semantics
         (list* (case fn
                  = '==
-                 (symbol (.f call)))
-               (mapv plan-expr (.args call))))))
-  (required-vars [call]
-    (if (aggregate-fn? (symbol (.f call)))
+                 (symbol f))
+               (mapv plan-expr args)))))
+  (required-vars [{:keys [f args]}]
+    (if (aggregate-fn? (symbol f))
       #{} ;; required vars should not traverse into aggregate fns, agg-fn sub-exprs are planned independently
-      (into #{} (mapcat required-vars) (.args call))))
+      (into #{} (mapcat required-vars) args)))
 
-  Expr$Get
-  (plan-expr [this] (list '. (plan-expr (.expr this)) (keyword (.field this)))) ;;keywords are safer than symbols in the RA plan
-  (required-vars [this] (required-vars (.expr this)))
+  GetExpr
+  (plan-expr [{:keys [expr field]}] (list '. (plan-expr expr) (keyword field))) ;;keywords are safer than symbols in the RA plan
+  (required-vars [{:keys [expr]}] (required-vars expr))
 
-  Expr$Exists
-  (plan-expr [this]
+  ExistsExpr
+  (plan-expr [{:keys [query args]}]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
     (let [placeholder (expr-subquery-placeholder)
-          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
+          {:keys [ra-plan provided-vars]} (plan-query query)]
       (swap! *subqueries* conj
              (merge {:type :exists
                      :placeholder placeholder
                      :provided-vars provided-vars
                      :subquery ra-plan}
-                    (plan-arg-bindings (.args this))))
+                    (plan-arg-bindings args)))
       placeholder))
-  (required-vars [this] (expr-subquery-required-vars (.args this)))
+  (required-vars [{:keys [args]}] (expr-subquery-required-vars args))
 
-  Expr$Subquery
-  (plan-expr [this]
+  SubqueryExpr
+  (plan-expr [{:keys [query args]}]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
     (let [placeholder (expr-subquery-placeholder)
-          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
+          {:keys [ra-plan provided-vars]} (plan-query query)]
       (when-not (= (count provided-vars) 1)
         (throw (err/incorrect :xtql/invalid-scalar-subquery
                               "Scalar subquery must only return a single column"
-                              {:subquery (str (.query this)), :provided-vars provided-vars})))
+                              {:subquery (str query), :provided-vars provided-vars})))
       (swap! *subqueries* conj
              (merge {:type :scalar
                      :placeholder placeholder
                      :provided-vars provided-vars
                      :subquery [:project {:projections [{placeholder (first provided-vars)}]}
                                 ra-plan]}
-                    (plan-arg-bindings (.args this))))
+                    (plan-arg-bindings args)))
       placeholder))
-  (required-vars [this] (expr-subquery-required-vars (.args this)))
+  (required-vars [{:keys [args]}] (expr-subquery-required-vars args))
 
-  Expr$Pull
-  (plan-expr [this]
+  PullExpr
+  (plan-expr [{:keys [query args]}]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
     (let [placeholder (expr-subquery-placeholder)
-          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
+          {:keys [ra-plan provided-vars]} (plan-query query)]
       (swap! *subqueries* conj
              (merge {:type :scalar
                      :placeholder placeholder
                      :provided-vars provided-vars
                      :subquery [:project {:projections [{placeholder '*}]}
                                 ra-plan]}
-                    (plan-arg-bindings (.args this))))
+                    (plan-arg-bindings args)))
       placeholder))
-  (required-vars [this] (expr-subquery-required-vars (.args this)))
+  (required-vars [{:keys [args]}] (expr-subquery-required-vars args))
 
-  Expr$PullMany
-  (plan-expr [this]
+  PullManyExpr
+  (plan-expr [{:keys [query args]}]
     (when-not *subqueries*
       (throw (UnsupportedOperationException. "TODO subqueries not bound, subquery not allowed in expr here")))
     (let [placeholder (expr-subquery-placeholder)
           struct-col (expr-subquery-placeholder)
-          {:keys [ra-plan provided-vars]} (plan-query (.query this))]
+          {:keys [ra-plan provided-vars]} (plan-query query)]
       (swap! *subqueries* conj
              (merge {:type :scalar
                      :placeholder placeholder
@@ -230,9 +232,9 @@
                      :subquery [:group-by {:columns [{placeholder (list 'array-agg struct-col)}]}
                                 [:project {:projections [{struct-col '*}]}
                                  ra-plan]]}
-                    (plan-arg-bindings (.args this))))
+                    (plan-arg-bindings args)))
       placeholder))
-  (required-vars [this] (expr-subquery-required-vars (.args this)))
+  (required-vars [{:keys [args]}] (expr-subquery-required-vars args))
 
   nil
   (plan-expr [_] nil)
@@ -310,22 +312,18 @@
           {:ra-plan [:mega-join {:conditions []} (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
 
-(defn- plan-out-spec [^Binding bind-spec]
-  (let [col (col-sym (.getBinding bind-spec))
-        expr (.getExpr bind-spec)]
-    {:l col :r (plan-expr expr) :literal? (not (instance? Expr$LogicVar expr))}))
+(defn- plan-out-spec [{:keys [binding expr]}]
+  {:l (col-sym binding) :r (plan-expr expr) :literal? (not (instance? LogicVarExpr expr))})
 ;;TODO defining literal as not an LV seems flakey, but might be okay?
 ;;this seems like the kind of thing the AST should encode as a type/interface?
 
-(defn- plan-arg-spec [^Binding bind-spec]
+(defn- plan-arg-spec [{:keys [binding expr]}]
   ;;TODO expr here is far to permissive.
   ;;In the outer query this has to be a literal
   ;;in the subquery case it must be a col, as thats all apply supports
   ;;In reality we could support a full expr here, additionally top level query args perhaps should
   ;;use a different spec. Delaying decision here for now.
-  (let [var (col-sym (.getBinding bind-spec))
-        expr (.getExpr bind-spec)]
-    {:l var :r (plan-expr-with-subqueries expr) :required-vars (required-vars expr)}))
+  {:l (col-sym binding) :r (plan-expr-with-subqueries expr) :required-vars (required-vars expr)})
 
 (def app-time-period-sym '_valid_time)
 (def app-time-from-sym '_valid_from)
@@ -355,22 +353,22 @@
    cols))
 
 (extend-protocol PlanTemporalFilter
-  TemporalFilter$AllTime
+  AllTime
   (plan-temporal-filter [_this]
     :all-time)
 
-  TemporalFilter$At
-  (plan-temporal-filter [this]
+  At
+  (plan-temporal-filter [{:keys [at]}]
     ;;TODO could be better to have its own error, to make it clear you can't
     ;;ref logic vars in temporal opts
-    (required-vars-available? (.getAt this) #{})
-    [:at (or (plan-expr (.getAt this)) :now)])
+    (required-vars-available? at #{})
+    [:at (or (plan-expr at) :now)])
 
-  TemporalFilter$In
-  (plan-temporal-filter [this]
-    (required-vars-available? (.getFrom this) #{})
-    (required-vars-available? (.getTo this) #{})
-    [:in (or (plan-expr (.getFrom this)) 'xtdb/start-of-time) (plan-expr (.getTo this))])
+  In
+  (plan-temporal-filter [{:keys [from to]}]
+    (required-vars-available? from #{})
+    (required-vars-available? to #{})
+    [:in (or (plan-expr from) 'xtdb/start-of-time) (plan-expr to)])
 
   nil
   (plan-temporal-filter [_this]
@@ -514,9 +512,8 @@
       ;; here the provided vars are the ones from the plan + the placeholder from the subquery
       (wrap-project (into provided-vars (map :placeholder subqueries)))))
 
-(defn- plan-col-spec [^Binding col-spec provided-vars]
-  (let [col (col-sym (.getBinding col-spec))
-        spec-expr (.getExpr col-spec)
+(defn- plan-col-spec [{:keys [binding] spec-expr :expr} provided-vars]
+  (let [col (col-sym binding)
         _ (required-vars-available? spec-expr provided-vars)
         required-vars (required-vars spec-expr)
         {:keys [subqueries expr agg-fns]} (plan-expr-with-subqueries spec-expr)]
@@ -524,14 +521,13 @@
      :subqueries subqueries
      :agg-fns agg-fns
      :required-vars required-vars
-     :logic-var? (instance? Expr$LogicVar spec-expr)}))
+     :logic-var? (instance? LogicVarExpr spec-expr)}))
 
-(defn- plan-var-spec [^Binding spec]
-  (let [var (col-sym (.getBinding spec))
-        spec-expr (.getExpr spec)
+(defn- plan-var-spec [{:keys [binding] spec-expr :expr}]
+  (let [var (col-sym binding)
         {:keys [subqueries expr]} (plan-expr-with-subqueries spec-expr)]
     {:l var, :r expr, :required-vars (required-vars spec-expr)
-     :subqueries subqueries :logic-var? (instance? Expr$LogicVar spec-expr)}))
+     :subqueries subqueries :logic-var? (instance? LogicVarExpr spec-expr)}))
 
 (extend-protocol PlanQueryTail
   Where
@@ -568,10 +564,9 @@
   Return
   (plan-query-tail [{:keys [return-bindings]} {:keys [ra-plan provided-vars]}]
     (let [projections (->> return-bindings
-                           (mapv (fn [col]
-                                   (let [expr (.getExpr ^Binding col)]
-                                     (required-vars-available? expr provided-vars)
-                                     {(col-sym (.getBinding ^Binding col)) (plan-expr expr)}))))]
+                           (mapv (fn [{:keys [binding expr]}]
+                                   (required-vars-available? expr provided-vars)
+                                   {(col-sym binding) (plan-expr expr)})))]
       {:ra-plan [:project {:projections projections} ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))}))
 
@@ -798,8 +793,8 @@
                          unavailable-unnests))))))))))
 
 (defn- plan-order-spec [{:keys [expr direction nulls]}]
-  {:order-spec [(if (instance? Expr$LogicVar expr)
-                  (col-sym (.lv ^Expr$LogicVar expr))
+  {:order-spec [(if (instance? LogicVarExpr expr)
+                  (col-sym (:lv expr))
                   (throw (UnsupportedOperationException. "TODO order-by spec can only take a column as val")))
 
                 (cond-> {}
@@ -875,8 +870,8 @@
 
   Limit
   (plan-query-tail [{:keys [limit]} {:keys [ra-plan provided-vars]}]
-    (when-not (or (instance? Expr$Long limit)
-                  (instance? Expr$Param limit))
+    (when-not (or (instance? LongExpr limit)
+                  (instance? ParamExpr limit))
       (throw (err/incorrect
               :xtql/invalid-limit
               "Limit must be a non-negative integer literal or parameter"
@@ -886,8 +881,8 @@
 
   Offset
   (plan-query-tail [{:keys [offset]} {:keys [ra-plan provided-vars]}]
-    (when-not (or (instance? Expr$Long offset)
-                  (instance? Expr$Param offset))
+    (when-not (or (instance? LongExpr offset)
+                  (instance? ParamExpr offset))
       (throw (err/incorrect
               :xtql/invalid-offset
               "Offset must be a non-negative integer literal or parameter"
