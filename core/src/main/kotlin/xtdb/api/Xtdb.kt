@@ -43,7 +43,6 @@ import xtdb.database.mergeTxBasisTokens
 import xtdb.error.Anomaly
 import xtdb.error.Fault
 import xtdb.error.Incorrect
-import xtdb.indexer.DatabaseSnapshot
 import xtdb.query.*
 import xtdb.table.TableRef
 import xtdb.time.asInstant
@@ -319,12 +318,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun openSqlQuery(sql: String): ResultCursor =
             openQuery(prepareSql(sql), null)
-
-        fun openSnapshot(): DatabaseSnapshot {
-            val db = db(dbName)
-            dbCat.awaitAll(awaitToken, awaitTimeout)
-            return db.openSnapshot()
-        }
 
         override fun createStatement() = object : Statement {
             private var sql: String? = null
@@ -1066,16 +1059,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
-        override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema =
-            openSnapshot().use { snap ->
-                getTableSchema(catalog ?: dbName, TableRef(dbSchema ?: "public", tableName), snap)
-            }
+        override fun getTableSchema(catalog: String?, dbSchema: String?, tableName: String): Schema {
+            dbCat.awaitAll(awaitToken, awaitTimeout)
+            return getTableSchema(catalog ?: dbName, TableRef(dbSchema ?: "public", tableName))
+        }
 
-        fun getTableSchema(dbSchema: String, tableName: String, snap: DatabaseSnapshot): Schema =
-            getTableSchema(dbName, TableRef(dbSchema, tableName), snap)
-
-        private fun getTableSchema(catalog: DatabaseName, table: TableRef, snap: DatabaseSnapshot): Schema {
-            val types = dbCat.databaseOrNull(catalog)?.getColumnTypes(table, snap) ?: return Schema(emptyList())
+        private fun getTableSchema(catalog: DatabaseName, table: TableRef): Schema {
+            val types = dbCat.databaseOrNull(catalog)?.getColumnTypes(table) ?: return Schema(emptyList())
             return Schema(types.entries.map { (name, type) -> type.toField(name) })
         }
 

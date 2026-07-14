@@ -87,11 +87,11 @@ class Database(
     val blockCatalog: BlockCatalog get() = partition0.blockCatalog
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
-    fun getColumnTypes(table: TableRef, snap: DatabaseSnapshot): Map<ColumnName, VectorType>? {
+    internal fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? {
         val historical = tableCatalog.getTypes(table)
-        // TODO (#5557 unit 7) iterate `snap.partitions` and merge per-partition live types;
+        // TODO (#5557 unit 7) iterate the snapshot's partitions and merge per-partition live types;
         // for now single-partition is the only allowed shape, so pick the only Snapshot.
-        val live = snap.partitions.first().allColumnTypes[table]
+        val live = openSnapshot().use { it.partitions.first().allColumnTypes[table] }
         return if (historical == null && live == null) null
         else (historical ?: emptyMap()) + (live ?: emptyMap())
     }

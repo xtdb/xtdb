@@ -758,26 +758,21 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             val tableSchemaVec =
                 if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
 
-            val snap = if (command.includeSchema) conn.openSnapshot() else null
-            try {
-                tables.forEachIndexed { idx, (dbSchemaName, tableName) ->
-                    catalogVec.setSafe(idx, dbName.toByteArray())
-                    schemaVec.setSafe(idx, dbSchemaName.toByteArray())
-                    tableVec.setSafe(idx, tableName.toByteArray())
-                    typeVec.setSafe(idx, "TABLE".toByteArray())
+            tables.forEachIndexed { idx, (dbSchemaName, tableName) ->
+                catalogVec.setSafe(idx, dbName.toByteArray())
+                schemaVec.setSafe(idx, dbSchemaName.toByteArray())
+                tableVec.setSafe(idx, tableName.toByteArray())
+                typeVec.setSafe(idx, "TABLE".toByteArray())
 
-                    if (snap != null && tableSchemaVec != null) {
-                        tableSchemaVec.setSafe(
-                            idx,
-                            conn.getTableSchema(dbSchemaName, tableName, snap)
-                                .serializeAsMessageInterruptibly()
-                        )
-                    }
+                if (tableSchemaVec != null) {
+                    tableSchemaVec.setSafe(
+                        idx,
+                        conn.getTableSchema(dbName, dbSchemaName, tableName)
+                            .serializeAsMessageInterruptibly()
+                    )
                 }
-                root.rowCount = tables.size
-            } finally {
-                snap?.close()
             }
+            root.rowCount = tables.size
         }
     }
 
