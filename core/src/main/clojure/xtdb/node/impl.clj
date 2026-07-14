@@ -25,7 +25,7 @@
            xtdb.NodeBase
            (xtdb.api DataSource TransactionKey TransactionResult TransactionResult$Committed TransactionResult$Aborted Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
            xtdb.api.module.XtdbModule$Factory
-           (xtdb.database Database Database$Catalog DatabasePartition)
+           (xtdb.database Database Database$Catalog)
            xtdb.error.Anomaly
            (xtdb.query IQuerySource PreparedQuery QueryOpts SqlPlanner)))
 
@@ -103,6 +103,8 @@
 
   (getDatabaseNames [_] (.getDatabaseNames db-cat))
 
+  (latestCompletedTxs [_] (.latestCompletedTxs db-cat))
+
   (createConnectionBuilder [this]
     (let [server (util/component this :xtdb.pgwire/server)
           ^DataSource data-source (or (:read-write server) (:read-only server))]
@@ -155,32 +157,6 @@
 
   (open-connection [_ db-name]
     (->node-connection db-cat allocator q-src sql-planner query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
-
-  xtp/PStatus
-  (latest-completed-txs [_]
-    (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [^String db-name]
-                         (let [^Database db (.databaseOrNull db-cat db-name)]
-                           [db-name (->> (.getPartitions db)
-                                         (sort-by key)
-                                         (mapv (fn [[_ part]]
-                                                 (-> ^DatabasePartition part
-                                                     .getLiveIndex
-                                                     .getLatestCompletedTx))))]))))))
-
-  (latest-submitted-msg-ids [_]
-    (->> (.getDatabaseNames db-cat)
-         (into {} (map (fn [^String db-name]
-                         (let [^Database db (.databaseOrNull db-cat db-name)
-                               ;; TODO (#5557 unit 5) source log gains a per-partition
-                               ;; `latestSubmittedMsgId` once `Log<M>` is widened; until then it's
-                               ;; database-level and multi-partition is gated, so the same value
-                               ;; appears in every slot.
-                               latest (-> db .getSourceLog .getLatestSubmittedMsgId)]
-                           [db-name (vec (repeat (count (.getPartitions db)) latest))]))))))
-
-  (await-token [this]
-    (basis/->tx-basis-str (xtp/latest-submitted-msg-ids this)))
 
   Closeable
   (close [_]

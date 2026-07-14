@@ -498,8 +498,7 @@ class Database(
         val primary: Database get() = databaseOrNull("xtdb")!!
 
         // a read snapshot pinned to now: each database's latest-completed system-time per partition,
-        // encoded as a time-basis token. The Kotlin twin of the node's PStatus/snapshot-token, so a
-        // connection can pin a begin-time read basis without reaching into Clojure.
+        // encoded as a time-basis token, so a connection can pin a begin-time read basis.
         fun snapshotToken(): String =
             databaseNames.mapNotNull { dbName ->
                 // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
@@ -510,9 +509,9 @@ class Database(
                 }
             }.toMap().encodeTimeBasisToken()
 
-        // each database's latest-completed tx per partition. The programmatic twin of the node's PStatus reads,
-        // surfaced through Xtdb.latestCompletedTxs and pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is
-        // positional (sorted by partition key), matching the basis-token encoding in snapshotToken.
+        // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
+        // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional (sorted by partition key),
+        // matching the basis-token encoding in snapshotToken.
         fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>> =
             databaseNames.mapNotNull { dbName ->
                 // as in snapshotToken: a concurrent detach can drop a db between databaseNames and databaseOrNull

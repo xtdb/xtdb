@@ -78,6 +78,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     /** The names of the databases this node currently serves. */
     val databaseNames: Collection<DatabaseName>
 
+    /** Each database's latest-completed transaction, per partition. */
+    fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>>
+
     interface CompactorNode : AutoCloseable
 
     interface XtdbInternal : Xtdb {
@@ -153,6 +156,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
         // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
         val effectiveAwaitToken: String? get() = tx?.awaitToken ?: awaitToken
+
+        /** Each database's latest-submitted message id, per partition. */
+        fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
 
         // the authenticated user, threaded into every write's [TxOpts] for the audit trail. Established by the
         // frontend at connect-time (pgwire's startup handshake); null until a frontend sets it.
