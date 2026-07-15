@@ -50,7 +50,7 @@
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute)
-           (xtdb.tx PutDocs PutRel TxOp$Sql)))
+           (xtdb.tx PutDocs PutRel)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -806,7 +806,9 @@
                                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))))
                        (catch Throwable e
                          (log/debug e "Error planning DML statement for warnings"))))
-                   stmt)
+                   ;; DML executes through the Statement too (buffered via executeUpdate); the prepare above is
+                   ;; only to surface warnings and is discarded.
+                   (create-parsed))
                  ;; control statements executed through a Statement (see execute-portal) aren't preparable, so
                  ;; create rather than prepare — the args bind onto the statement at bind-stmt.
                  (visitBegin [_ _] (create-parsed))
@@ -900,7 +902,18 @@
           pg-types
           result-formats)))
 
-(defn bind-stmt [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^Xtdb$Statement statement args result-format] :as stmt}]
+(defn- validate-dml-args! [{:keys [tx-error-counter]} query param-oids args]
+  ;; the client must supply a type (OID) for every non-null param in a DML statement
+  (when (or (not= (count param-oids) (count args))
+            (some (fn [idx]
+                    (and (zero? (nth param-oids idx))
+                         (some? (nth args idx))))
+                  (range (count param-oids))))
+    (metrics/inc-counter! tx-error-counter)
+    (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
+                          {:query query, :param-oids param-oids}))))
+
+(defn bind-stmt [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [^ParsedStatement parsed ^Xtdb$Statement statement args param-oids result-format] :as stmt}]
   (let [{:keys [^Xtdb$Connection node-conn]} @conn-state
         xt-args (xtify-args conn args stmt)]
 
@@ -943,7 +956,7 @@
                            :pg-cols (->pg-cols (:pg-cols stmt) cursor)))))]
 
       (if (nil? parsed)                 ; :empty? / :canned-response markers carry no parsed statement
-        (-> stmt (assoc :args xt-args))
+        stmt
         (.accept parsed
                (reify ParsedStatement$Visitor
                  ;; queries and SHOW open the same way — the connection gate-exempts SHOW off its parsed statement
@@ -977,14 +990,11 @@
                                                        (with-result-formats result-format))))))
 
                            (instance? ParsedStatement$Dml inner-parsed)
-                           (let [arg-types (.getResultTypes args-cursor)]
-                             (-> inner
-                                 (assoc :args (vec (for [col-name (keys arg-types)]
-                                                     (-> (.vectorForOrNull args-rel col-name)
-                                                         (.getObject 0))))
-                                        :param-oids (->> arg-types
-                                                         (mapv (fn [[_col-name ^VectorType vec-type]]
-                                                                 (PgType/.getOid (PgType/fromVectorType vec-type))))))))
+                           ;; bind the derived args onto the inner statement (as the query arm does); executeUpdate
+                           ;; buffers it at execute. the args' types are resolved here, so the param-OID check
+                           ;; (which guards the direct-DML path against untyped client params) doesn't apply.
+                           (do (.bind inner-stmt args-rel)
+                               inner)
 
                            :else (throw (err/unsupported ::unsupported-execute "EXECUTE only supports a prepared query or DML statement")))))))
 
@@ -994,9 +1004,13 @@
                  (visitSetAwaitToken [_ _] (bind-parsed))
                  (visitSetTimeZone [_ _] (bind-parsed))
 
-                 (visitOther [_ _]
-                   (-> stmt
-                       (assoc :args xt-args)))))))))
+                 ;; DML binds its args onto the statement (buffered at executeUpdate); the param-OID check needs
+                 ;; the raw args, so it runs here at bind rather than at execute where they're no longer to hand.
+                 (visitDml [_ _]
+                   (validate-dml-args! conn (.getOriginalSql ^ParsedStatement$Dml parsed) param-oids xt-args)
+                   (bind-parsed))
+
+                 (visitOther [_ _] stmt)))))))
 
 (defn unnamed-portal? [portal-name]
   (= "" portal-name))
@@ -1078,27 +1092,17 @@
   (.setSessionCharacteristics ^Xtdb$Connection (:node-conn @conn-state) access-mode)
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
-(defn- cmd-exec-dml [{:keys [conn-state ^BufferAllocator allocator tx-error-counter] :as conn} {:keys [^ParsedStatement$Dml parsed args param-oids]}]
-  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
-        query (.getOriginalSql parsed)]
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [^ParsedStatement$Dml parsed ^Xtdb$Statement statement]}]
+  (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (when (.isTxFailed node-conn)
       (throw (pgio/err-protocol-violation "current transaction is aborted, commands ignored until ROLLBACK is received")))
-
-    (when (or (not= (count param-oids) (count args))
-              (some (fn [idx]
-                      (and (zero? (nth param-oids idx))
-                           (some? (nth args idx))))
-                    (range (count param-oids))))
-      (metrics/inc-counter! tx-error-counter)
-      (throw (err/incorrect ::missing-arg-types "Missing types for args - client must specify types for all non-null params in DML statements"
-                            {:query query, :param-oids param-oids})))
 
     (when-not (.isTxOpen node-conn)
       (begin-implicit conn :read-write))
 
-    ;; hand the op to the connection — it buffers, coalescing consecutive same-SQL ops, and submits at COMMIT.
-    ;; no-param DML passes nil args (not an empty relation), matching the connection's own DML path.
-    (.executeTxOp node-conn (TxOp$Sql. query (when (seq args) (vw/open-args allocator args))))
+    ;; buffered through the statement — the connection coalesces consecutive same-SQL ops and submits at COMMIT.
+    ;; args were validated and bound at bind-stmt; a no-param DML has none, matching the connection's DML path.
+    (.executeUpdate statement)
 
     ;; oid is always 0 (legacy pg); row count is 0 because we're async
     (pgio/cmd-write-msg conn pgio/msg-command-complete

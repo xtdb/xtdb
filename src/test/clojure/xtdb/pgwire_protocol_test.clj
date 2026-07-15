@@ -20,7 +20,7 @@
     (binding [*port* (:port server)]
       (f))))
 
-(t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node with-port)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node with-port)
 
 (defn bytes->str [^bytes arr]
   (String. arr StandardCharsets/UTF_8))
@@ -71,7 +71,7 @@
                                                                                   "IntervalStyle" "ISO_8601"}})
                                                 :node tu/*node*
                                                 :authn authn}
-                                       :allocator (util/->child-allocator tu/*allocator* "pgwire-test-conn")
+                                       :allocator (util/->child-allocator (.getAllocator tu/*node*) "pgwire-test-conn")
                                        :frontend frontend
                                        :cid -1
                                        :!closing? (atom false)
