@@ -4,8 +4,8 @@ import clojure.lang.Keyword
 import clojure.lang.Symbol
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import xtdb.error.Incorrect
-import xtdb.error.Unsupported
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import java.math.BigDecimal
 import java.time.*
 import java.util.*

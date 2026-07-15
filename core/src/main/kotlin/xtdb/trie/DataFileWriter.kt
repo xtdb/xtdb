@@ -5,7 +5,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
 import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.Trie.dataFilePath
 
 class DataFileWriter(

@@ -75,12 +75,36 @@ dokka {
     moduleName.set("xtdb-api")
 
     dokkaSourceSets.named("main") {
-        // xtdb.util is Clojure-interop glue (requiringResolve, Transit, normalForm) - called from
-        // method bodies, never in a public signature, so hiding it leaves no dangling references.
+        // Scope the published docs to the packages we intend to expose; everything else
+        // (xtdb.types, xtdb.time, xtdb.util interop glue, etc.) is internal by convention.
         perPackageOption {
-            matchingRegex.set("xtdb\\.util.*")
+            matchingRegex.set(".*")
             suppress.set(true)
         }
+        perPackageOption {
+            matchingRegex.set("xtdb\\.api.*")
+            suppress.set(false)
+        }
+        perPackageOption {
+            matchingRegex.set("xtdb\\.arrow.*")
+            suppress.set(false)
+        }
+        perPackageOption {
+            matchingRegex.set("xtdb\\.jdbc.*")
+            suppress.set(false)
+        }
+        // types/time are mostly internal, but a few value types (Oid, RegClass, RegProc,
+        // ZonedDateTimeRange, Interval) surface in public signatures; the rest carry `@suppress`.
+        perPackageOption {
+            matchingRegex.set("xtdb\\.types.*")
+            suppress.set(false)
+        }
+        perPackageOption {
+            matchingRegex.set("xtdb\\.time.*")
+            suppress.set(false)
+        }
+        // xtdb.time exposes the Interval value type; Time.kt is internal parsing/conversion helpers.
+        suppressedFiles.from(file("src/main/kotlin/xtdb/time/Time.kt"))
     }
 }
 

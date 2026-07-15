@@ -14,7 +14,7 @@
            (xtdb.api.storage ObjectStore$StoredObject)
            (xtdb.database Database)
            (xtdb.storage BufferPool)
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            (xtdb.trie Trie)))
 
 (defn- meta-file->trie-key

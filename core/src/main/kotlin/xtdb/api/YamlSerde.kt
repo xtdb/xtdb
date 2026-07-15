@@ -20,7 +20,7 @@ import kotlinx.serialization.modules.SerializersModule
 import xtdb.api.log.Log
 import xtdb.api.module.XtdbModule
 import xtdb.api.storage.ObjectStore
-import xtdb.database.ExternalSource
+import xtdb.api.tx.ExternalSource
 import java.net.InetAddress
 import java.nio.file.Path
 import java.nio.file.Paths

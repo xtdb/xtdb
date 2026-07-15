@@ -1,17 +1,17 @@
 package xtdb.catalog
 
 import com.google.protobuf.ByteString
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.TransactionKey
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.storage.ObjectStore
 import xtdb.block.proto.Block
 import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
 import xtdb.storage.BufferPool
-import xtdb.table.DatabaseName
-import xtdb.table.TableRef
+import xtdb.api.DatabaseName
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant

@@ -8,11 +8,11 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
-import xtdb.error.Anomaly
-import xtdb.error.Anomaly.Companion.wrapAnomaly
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Anomaly.Companion.wrapAnomaly
 import xtdb.storage.BufferPool
-import xtdb.error.Interrupted
-import xtdb.table.TableRef
+import xtdb.api.error.Interrupted
+import xtdb.api.TableRef
 import xtdb.util.asPath
 import java.nio.file.Path
 import xtdb.util.closeOnCatch
@@ -24,6 +24,7 @@ import java.io.StringWriter
 import java.nio.ByteBuffer
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit
+import xtdb.api.tx.OpenTx
 
 private val LOG = CrashLogger::class.logger
 

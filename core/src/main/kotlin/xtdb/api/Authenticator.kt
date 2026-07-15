@@ -6,9 +6,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.UseSerializers
-import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.polymorphic
-import kotlinx.serialization.modules.subclass
 import xtdb.UrlSerializer
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
@@ -19,8 +16,8 @@ import xtdb.query.IQuerySource
 import xtdb.util.requiringResolve
 import java.net.URL
 import java.security.MessageDigest
-import xtdb.error.Incorrect
-import xtdb.error.Unsupported
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
 import java.time.Instant
 import java.time.InstantSource
 

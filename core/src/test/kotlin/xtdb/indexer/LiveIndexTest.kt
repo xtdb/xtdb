@@ -23,12 +23,13 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.InstantSource
 import java.util.UUID
+import xtdb.api.tx.OpenTx
 
 class LiveIndexTest {
 

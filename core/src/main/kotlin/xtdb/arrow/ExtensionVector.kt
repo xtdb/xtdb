@@ -5,7 +5,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import org.apache.arrow.vector.ValueVector
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode
 import xtdb.util.Hasher
-import xtdb.vector.extensions.XtExtensionVector
+import xtdb.arrow.extensions.XtExtensionVector
 import java.nio.ByteBuffer
 
 abstract class ExtensionVector : MonoVector() {

@@ -5,7 +5,7 @@ package xtdb.api
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
 import xtdb.DurationSerde
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import java.time.Duration
 
 @Serializable

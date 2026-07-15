@@ -10,7 +10,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union)
            (xtdb.api ICursor)
            (xtdb.arrow IntVector RelationReader RowCopier VectorReader Vector VectorType)
-           xtdb.vector.extensions.SetType))
+           xtdb.arrow.extensions.SetType))
 
 (s/def ::ordinality-column ::lp/column)
 (s/def ::columns (s/map-of ::lp/column ::lp/column, :conform-keys true, :count 1))

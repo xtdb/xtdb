@@ -9,7 +9,7 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.Xtdb
 import xtdb.api.log.Log
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.database.decodeTxBasisToken

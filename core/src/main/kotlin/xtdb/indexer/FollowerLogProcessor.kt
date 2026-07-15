@@ -19,11 +19,12 @@ import xtdb.catalog.BlockCatalog.Companion.blockFilePath
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
-import xtdb.error.Anomaly
-import xtdb.error.Interrupted
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Interrupted
+import xtdb.types.LogTimestamp
+import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.closeAll

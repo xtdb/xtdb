@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType.Companion.UUID

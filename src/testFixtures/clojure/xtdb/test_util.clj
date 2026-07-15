@@ -36,7 +36,8 @@
            (xtdb.arrow Relation RelationReader Vector VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
-           (xtdb.indexer LiveTable OpenTx)
+           (xtdb.api.tx OpenTx)
+           (xtdb.indexer LiveTable)
            (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.api.query PrepareOpts QueryOpts)

@@ -11,7 +11,7 @@ import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.Xtdb
 import xtdb.cache.DiskCache
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.cache.MemoryCache
 import xtdb.compactor.Compactor
 import xtdb.query.IQuerySource

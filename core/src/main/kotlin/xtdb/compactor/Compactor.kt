@@ -21,7 +21,7 @@ import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.segment.BufferPoolSegment
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.*
 import xtdb.util.*
 import java.nio.channels.ClosedByInterruptException

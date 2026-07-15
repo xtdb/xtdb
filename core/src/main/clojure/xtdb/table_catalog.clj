@@ -12,7 +12,7 @@
            (xtdb.block.proto TableBlock Partition)
            (xtdb.catalog BlockCatalog)
            xtdb.storage.BufferPool
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            xtdb.trie.Trie
            (xtdb.util HyperLogLog)))
 

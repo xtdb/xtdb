@@ -9,14 +9,14 @@
            [java.time.format DateTimeParseException]
            [java.util.regex Pattern]
            com.fasterxml.jackson.core.JsonParseException
-           [xtdb.error Anomaly Busy Conflict Fault Forbidden Incorrect Interrupted NotFound Unavailable Unsupported]))
+           [xtdb.api.error Anomaly Busy Conflict Fault Forbidden Incorrect Interrupted NotFound Unavailable Unsupported]))
 
 (defprotocol ToAnomaly
   (->anomaly [ex data]))
 
 (defn incorrect
-  (^xtdb.error.Incorrect [error-code msg] (incorrect error-code msg {}))
-  (^xtdb.error.Incorrect [error-code msg data]
+  (^xtdb.api.error.Incorrect [error-code msg] (incorrect error-code msg {}))
+  (^xtdb.api.error.Incorrect [error-code msg data]
    (Incorrect. msg
                (-> data
                    (assoc ::anom/category ::anom/incorrect)
@@ -25,8 +25,8 @@
                (::cause data))))
 
 (defn conflict
-  (^xtdb.error.Conflict [error-code msg] (conflict error-code msg {}))
-  (^xtdb.error.Conflict [error-code msg data]
+  (^xtdb.api.error.Conflict [error-code msg] (conflict error-code msg {}))
+  (^xtdb.api.error.Conflict [error-code msg data]
    (Conflict. msg
               (-> data
                   (assoc ::anom/category ::anom/conflict)
@@ -35,8 +35,8 @@
               (::cause data))))
 
 (defn unsupported
-  (^xtdb.error.Unsupported [error-code msg] (unsupported error-code msg {}))
-  (^xtdb.error.Unsupported [error-code msg data]
+  (^xtdb.api.error.Unsupported [error-code msg] (unsupported error-code msg {}))
+  (^xtdb.api.error.Unsupported [error-code msg data]
    (Unsupported. msg
                  (-> data
                      (assoc ::anom/category ::anom/unsupported)
@@ -45,13 +45,13 @@
                  (::cause data))))
 
 (defn todo
-  (^xtdb.error.Unsupported [] (todo "TODO"))
-  (^xtdb.error.Unsupported [msg] (unsupported ::todo msg)))
+  (^xtdb.api.error.Unsupported [] (todo "TODO"))
+  (^xtdb.api.error.Unsupported [msg] (unsupported ::todo msg)))
 
 (defn interrupted
-  (^xtdb.error.Interrupted [] (interrupted nil ""))
-  (^xtdb.error.Interrupted [error-code msg] (interrupted error-code msg {}))
-  (^xtdb.error.Interrupted [error-code msg data]
+  (^xtdb.api.error.Interrupted [] (interrupted nil ""))
+  (^xtdb.api.error.Interrupted [error-code msg] (interrupted error-code msg {}))
+  (^xtdb.api.error.Interrupted [error-code msg data]
    (Interrupted. msg
                  (-> data
                      (assoc ::anom/category ::anom/interrupted)
@@ -60,8 +60,8 @@
                  (::cause data))))
 
 (defn fault
-  (^xtdb.error.Fault [error-code msg] (fault error-code msg {}))
-  (^xtdb.error.Fault [error-code msg data]
+  (^xtdb.api.error.Fault [error-code msg] (fault error-code msg {}))
+  (^xtdb.api.error.Fault [error-code msg data]
    (Fault. msg
            (-> data
                (assoc ::anom/category ::anom/fault)
@@ -70,8 +70,8 @@
            (::cause data))))
 
 (defn forbidden
-  (^xtdb.error.Forbidden [error-code msg] (forbidden error-code msg {}))
-  (^xtdb.error.Forbidden [error-code msg data]
+  (^xtdb.api.error.Forbidden [error-code msg] (forbidden error-code msg {}))
+  (^xtdb.api.error.Forbidden [error-code msg data]
    (Forbidden. msg
                (-> data
                    (assoc ::anom/category ::anom/forbidden)
@@ -80,8 +80,8 @@
                (::cause data))))
 
 (defn not-found
-  (^xtdb.error.NotFound [error-code msg] (not-found error-code msg {}))
-  (^xtdb.error.NotFound [error-code msg data]
+  (^xtdb.api.error.NotFound [error-code msg] (not-found error-code msg {}))
+  (^xtdb.api.error.NotFound [error-code msg data]
    (NotFound. msg
               (-> data
                   (assoc ::anom/category ::anom/not-found)
@@ -90,8 +90,8 @@
               (::cause data))))
 
 (defn busy
-  (^xtdb.error.Busy [error-code msg] (busy error-code msg {}))
-  (^xtdb.error.Busy [error-code msg data]
+  (^xtdb.api.error.Busy [error-code msg] (busy error-code msg {}))
+  (^xtdb.api.error.Busy [error-code msg data]
    (Busy. msg
           (-> data
               (assoc ::anom/category ::anom/busy)
@@ -100,8 +100,8 @@
           (::cause data))))
 
 (defn unavailable
-  (^xtdb.error.Unavailable [error-code msg] (unavailable error-code msg {}))
-  (^xtdb.error.Unavailable [error-code msg data]
+  (^xtdb.api.error.Unavailable [error-code msg] (unavailable error-code msg {}))
+  (^xtdb.api.error.Unavailable [error-code msg data]
    (Unavailable. msg
                  (-> data
                      (assoc ::anom/category ::anom/unavailable)

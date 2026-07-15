@@ -2,8 +2,6 @@
 
 package xtdb.arrow
 
-import clojure.lang.Keyword
-import org.apache.arrow.vector.PeriodDuration
 import org.apache.arrow.vector.types.DateUnit
 import org.apache.arrow.vector.types.FloatingPointPrecision.DOUBLE
 import org.apache.arrow.vector.types.FloatingPointPrecision.SINGLE
@@ -15,21 +13,16 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.error.Unsupported
-import xtdb.time.Interval
-import xtdb.time.MICRO_HZ
-import xtdb.time.NANO_HZ
-import xtdb.types.ClojureForm
-import xtdb.types.RegClass
-import xtdb.types.RegProc
-import xtdb.types.ZonedDateTimeRange
-import xtdb.util.normalForm
-import xtdb.vector.extensions.*
-import java.math.BigDecimal
-import java.net.URI
-import java.nio.ByteBuffer
-import java.time.*
-import java.util.*
+import xtdb.arrow.extensions.IntervalMDMType
+import xtdb.arrow.extensions.KeywordType
+import xtdb.arrow.extensions.OidType
+import xtdb.arrow.extensions.RegClassType
+import xtdb.arrow.extensions.RegProcType
+import xtdb.arrow.extensions.SetType
+import xtdb.arrow.extensions.TransitType
+import xtdb.arrow.extensions.TsTzRangeType
+import xtdb.arrow.extensions.UriType
+import xtdb.arrow.extensions.UuidType
 
 typealias FieldName = String
 typealias VectorTypes = Map<FieldName, VectorType>

@@ -6,10 +6,8 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.error.Anomaly
-import xtdb.types.ClojureForm
 import xtdb.util.requiringResolve
-import xtdb.vector.extensions.TransitType
+import xtdb.arrow.extensions.TransitType
 import java.io.ByteArrayInputStream
 
 private val TRANSIT_MSGPACK_READER: IFn = requiringResolve("xtdb.serde/transit-msgpack-reader")

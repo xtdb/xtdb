@@ -7,7 +7,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.log.proto.TrieMetadata
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 
 private typealias Selection = IntArray
 

@@ -8,18 +8,19 @@ import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
 import xtdb.database.DatabaseState
-import xtdb.error.Anomaly
-import xtdb.error.Anomaly.Companion.wrapAnomaly
-import xtdb.error.Fault
-import xtdb.error.Incorrect
-import xtdb.error.Unsupported
-import xtdb.indexer.TxIndexer.TxResult
-import xtdb.table.TableRef
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Anomaly.Companion.wrapAnomaly
+import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Unsupported
+import xtdb.api.tx.TxIndexer.TxResult
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.InstantMicros
 import xtdb.util.closeOnCatch
 import java.time.Instant
 import java.time.ZoneId
+import xtdb.api.tx.OpenTx
 
 private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
 

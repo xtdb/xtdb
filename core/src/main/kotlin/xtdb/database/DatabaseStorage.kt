@@ -9,7 +9,7 @@ import xtdb.api.storage.Storage
 import xtdb.metadata.PageMetadata
 import xtdb.storage.BufferPool
 import xtdb.storage.ReadOnlyBufferPool
-import xtdb.table.DatabaseName
+import xtdb.api.DatabaseName
 import xtdb.util.closeAll
 import xtdb.util.safelyOpening
 

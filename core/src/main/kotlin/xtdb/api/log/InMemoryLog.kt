@@ -15,6 +15,8 @@ import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.database.proto.inMemoryLog
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS

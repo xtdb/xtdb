@@ -8,7 +8,7 @@
            (xtdb.xtql.ast NullExpr BoolExpr LongExpr DoubleExpr ObjExpr LogicVarExpr ParamExpr
                           CallExpr GetExpr SubqueryExpr ExistsExpr PullExpr PullManyExpr
                           ListExpr SetExpr MapExpr AllTime At In)
-           (xtdb.table TableRef)))
+           (xtdb.api TableRef)))
 
 (defn check-opt-keys [valid-keys opts]
   (when-let [invalid-opt-keys (not-empty (set/difference (set (keys opts)) valid-keys))]

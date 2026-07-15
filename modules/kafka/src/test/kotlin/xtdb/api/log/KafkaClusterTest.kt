@@ -38,6 +38,7 @@ import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
 import xtdb.database.Database
+import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.util.MsgIdUtil

@@ -5,7 +5,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.vector.extensions.KeywordType
+import xtdb.arrow.extensions.KeywordType
 
 class KeywordVector(override val inner: Utf8Vector): ExtensionVector(), MetadataFlavour.Bytes {
 

@@ -3,7 +3,7 @@ package xtdb.trie
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.storage.BufferPool
 import xtdb.arrow.RelationReader
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 
 class LiveTrieWriter(
     private val al: BufferAllocator, private val bp: BufferPool,

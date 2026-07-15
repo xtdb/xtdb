@@ -3,9 +3,8 @@ package xtdb.tx
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
-import xtdb.table.SchemaName
-import xtdb.table.TableName
-import xtdb.table.TableRef
+import xtdb.api.SchemaName
+import xtdb.api.TableName
 import java.time.Instant
 
 sealed interface TxOp : AutoCloseable {

@@ -6,10 +6,10 @@ import kotlinx.serialization.Transient
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.log.Log
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.ReplicaMessage
-import xtdb.api.log.LogOffset
+import xtdb.types.LogOffset
 import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil.msgIdToEpoch

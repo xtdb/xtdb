@@ -1,8 +1,9 @@
 package xtdb.api.log
 
 import com.google.protobuf.ByteString
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
+import xtdb.types.MessageId
 import xtdb.log.proto.ReplicaLogMessage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.attachDatabase

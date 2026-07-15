@@ -2,7 +2,6 @@ package xtdb.vector.extensions
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
@@ -11,6 +10,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import xtdb.arrow.extensions.TransitVector
+import xtdb.arrow.extensions.UuidType
+import xtdb.arrow.extensions.UuidVector
 import java.util.*
 
 class XtExtensionVectorTest {
@@ -29,7 +31,7 @@ class XtExtensionVectorTest {
     @Test
     fun `test ExtensionVector TransferPair` () {
         val uuidField = Field("uuid", FieldType.notNullable(UuidType), emptyList())
-        UuidType.getNewVector("uuid", FieldType.nullable(UuidType), al).use {  uuidVector ->
+        UuidType.getNewVector("uuid", FieldType.nullable(UuidType), al).use { uuidVector ->
             val uuid1 = UUID.randomUUID()
             val uuid2 = UUID.randomUUID()
 

@@ -20,14 +20,14 @@ import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.arrow.asChannel
 import xtdb.database.*
-import xtdb.error.Anomaly
-import xtdb.error.Fault
-import xtdb.error.Incorrect
-import xtdb.error.Interrupted
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
+import xtdb.api.error.Interrupted
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
-import xtdb.indexer.TxIndexer.TxResult
-import xtdb.table.TableRef
+import xtdb.api.tx.TxIndexer.TxResult
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
@@ -38,12 +38,17 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
+import xtdb.types.MessageId
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
 private val LOG = LeaderLogProcessor::class.logger
 
-class LeaderLogProcessor(
+internal class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,

@@ -19,7 +19,7 @@ import xtdb.indexer.TrieMetadataCalculator
 import xtdb.log.proto.TrieMetadata
 import xtdb.metadata.ColumnMetadata
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.Trie.metaFilePath
 
 class MetadataFileWriter(

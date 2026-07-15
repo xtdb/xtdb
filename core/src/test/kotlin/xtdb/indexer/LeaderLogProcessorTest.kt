@@ -21,7 +21,7 @@ import xtdb.NodeBase
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
@@ -35,7 +35,6 @@ import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
@@ -44,6 +43,7 @@ import java.time.InstantSource
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
+import xtdb.api.tx.TxIndexer
 
 class LeaderLogProcessorTest {
 

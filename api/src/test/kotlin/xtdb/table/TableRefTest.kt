@@ -3,7 +3,9 @@ package xtdb.table
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.error.Incorrect
+import xtdb.api.DEFAULT_SCHEMA
+import xtdb.api.TableRef
+import xtdb.api.error.Incorrect
 
 class TableRefTest {
 

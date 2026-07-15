@@ -8,7 +8,7 @@ import xtdb.api.Authenticator.Factory.UserList
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
 import xtdb.api.Authenticator.MethodRule
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 
 class UserListAuthenticatorTest {
 

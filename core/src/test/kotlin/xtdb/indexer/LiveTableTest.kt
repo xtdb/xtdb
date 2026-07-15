@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.storage.MemoryStorage
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
 import xtdb.util.RowCounter

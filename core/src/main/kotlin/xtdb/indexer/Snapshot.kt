@@ -5,7 +5,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
+import xtdb.api.tx.OpenTx
 
 class Snapshot(
     val txBasis: TransactionKey?,

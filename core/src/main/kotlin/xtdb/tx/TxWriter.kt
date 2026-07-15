@@ -19,9 +19,9 @@ import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.database.DatabaseName
-import xtdb.error.Incorrect
-import xtdb.table.SchemaName
-import xtdb.table.TableName
+import xtdb.api.error.Incorrect
+import xtdb.api.SchemaName
+import xtdb.api.TableName
 import xtdb.util.asIid
 import java.time.Instant
 import java.time.ZoneId

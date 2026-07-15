@@ -23,8 +23,8 @@ import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.api.storage.Storage
 import xtdb.database.Database
-import xtdb.indexer.TxIndexer
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.TxIndexer.TxResult
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue

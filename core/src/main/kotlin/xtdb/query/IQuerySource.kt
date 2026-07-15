@@ -7,7 +7,7 @@ import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.indexer.DatabaseSnapshot
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import java.time.Instant
 
 interface IQuerySource : AutoCloseable {

@@ -1,14 +1,11 @@
 package xtdb
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.params.ParameterizedTest
-import org.junit.jupiter.params.provider.MethodSource
 import xtdb.SimulationTestUtils.Companion.L1TrieKeys
 import xtdb.SimulationTestUtils.Companion.addTriesToBufferPool
 import xtdb.SimulationTestUtils.Companion.buildTrieDetails
@@ -35,17 +32,15 @@ import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.asPath
-import xtdb.util.debug
 import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import java.util.UUID
-import kotlin.time.Duration.Companion.microseconds
 
 data class MockDatabase(
     val name: DatabaseName,

@@ -6,7 +6,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Listy
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.util.Hasher
-import xtdb.vector.extensions.SetType
+import xtdb.arrow.extensions.SetType
 
 class SetVector(override val inner: ListVector) : ExtensionVector(), MetadataFlavour.Set {
 

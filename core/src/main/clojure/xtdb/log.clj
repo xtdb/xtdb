@@ -16,7 +16,7 @@
            (xtdb.api.log Log Log$Factory)
            (xtdb.arrow Relation Vector)
            (xtdb.database Database DatabaseStorage Database$Config)
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            (xtdb.tx DeleteDocs EraseDocs PatchDocs PutDocs PutRel Sql SqlByteArgs TxOp$DeleteDocs TxOp$EraseDocs TxOp$PatchDocs TxOp$PutDocs TxOp$Sql TxOpts)
            (xtdb.util MsgIdUtil)))
 

@@ -21,7 +21,7 @@
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
-           (xtdb.table TableRef)))
+           (xtdb.api TableRef)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

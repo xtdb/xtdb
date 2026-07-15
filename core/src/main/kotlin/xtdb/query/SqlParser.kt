@@ -10,7 +10,7 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 import xtdb.antlr.Sql
 import xtdb.antlr.SqlBaseVisitor
 import xtdb.antlr.SqlLexer
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.query.ParsedStatement.*
 import xtdb.util.normalForm
 

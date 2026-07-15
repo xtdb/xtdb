@@ -11,7 +11,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorIndirection.Companion.Slice
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.util.Hasher
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch

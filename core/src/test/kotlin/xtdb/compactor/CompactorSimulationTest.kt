@@ -35,7 +35,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
 import xtdb.symbol
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.trie.Trie

@@ -17,7 +17,7 @@
            (xtdb.log.proto TemporalMetadata TrieMetadata)
            (xtdb.trie Trie)
            (xtdb.trie_catalog TrieCatalog)
-           (xtdb.table TableRef)))
+           (xtdb.api TableRef)))
 
 (t/use-fixtures :once tu/with-allocator)
 

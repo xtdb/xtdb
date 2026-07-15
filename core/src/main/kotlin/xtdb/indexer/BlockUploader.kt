@@ -12,7 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import xtdb.api.log.Log
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded

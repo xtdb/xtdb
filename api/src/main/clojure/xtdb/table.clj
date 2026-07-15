@@ -5,7 +5,7 @@
             [cognitect.transit :as transit]
             [xtdb.error :as err])
   (:import clojure.lang.Symbol
-           [xtdb.table TableRef]
+           [xtdb.api TableRef]
            xtdb.util.NormalForm))
 
 (defmethod print-method TableRef [^TableRef ref, ^java.io.Writer w]
@@ -21,7 +21,7 @@
 (s/def ::ref #(instance? TableRef %))
 
 (defn ->ref
-  (^xtdb.table.TableRef [schema+table]
+  (^xtdb.api.TableRef [schema+table]
    (cond
      (instance? TableRef schema+table) schema+table
      (string? schema+table) (let [[table schema] (reverse (str/split schema+table #"/" 2))]
@@ -33,7 +33,7 @@
                                  (format "Expected a table reference (symbol, string, keyword, or TableRef), got: %s"
                                          (pr-str schema+table))))))
 
-  (^xtdb.table.TableRef [schema table]
+  (^xtdb.api.TableRef [schema table]
    (TableRef. (or (some-> schema str) "public") (str table))))
 
 (defn normal-db-name
