@@ -291,9 +291,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
         }
 
-        fun openSqlQuery(sql: String): ResultCursor =
-            createStatement(sql).openQuery()
-
         fun prepareStatement(sql: String): Statement = createStatement(sql).apply { prepare() }
 
         /** @suppress */
