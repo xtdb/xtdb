@@ -18,7 +18,7 @@ import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
 import xtdb.query.IQuerySource
-import xtdb.query.PrepareOpts
+import xtdb.api.query.PrepareOpts
 import xtdb.query.SqlStatement
 import xtdb.query.parseStatement
 import xtdb.table.DEFAULT_SCHEMA
@@ -161,12 +161,12 @@ class OpenTx @JvmOverloads constructor(
         val currentTime = opts.currentTime ?: txKey.systemTime
 
         val prepareOpts = PrepareOpts(
-            defaultTz = opts.defaultTz, defaultDb = dbState.name, currentTime = currentTime,
+            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbState.name,
         )
 
         return nodeBase.querySource
             .prepareQuery(parseStatement(sql), queryCatalog, prepareOpts)
-            .openQuery(args, xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
+            .openQuery(args, xtdb.api.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
     }
 
     /**
@@ -179,10 +179,10 @@ class OpenTx @JvmOverloads constructor(
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeMicros = currentTime.asMicros
-        val qOpts = xtdb.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
+        val qOpts = xtdb.api.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
 
         val prepareOpts = PrepareOpts(
-            defaultTz = opts.defaultTz, defaultDb = dbState.name, currentTime = currentTime,
+            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbState.name,
             argFields = args?.schema?.fields,
         )
 
@@ -631,7 +631,7 @@ class OpenTx @JvmOverloads constructor(
             checkNotForbidden(ref)
 
             val prepareOpts = PrepareOpts(
-                defaultDb = dbState.name, currentTime = txKey.systemTime,
+                currentTime = txKey.systemTime, defaultDb = dbState.name,
                 argFields = docs.schema.fields,
             )
 
@@ -648,7 +648,7 @@ class OpenTx @JvmOverloads constructor(
                 listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
             )
 
-            val qOpts = xtdb.query.QueryOpts(txKey.systemTime, tracer = tracer)
+            val qOpts = xtdb.api.query.QueryOpts(txKey.systemTime, tracer = tracer)
 
             // openQuery takes ownership of the sliced args and closes them when the cursor closes —
             // no separate `.use` on the slice here, or it'd double-free.

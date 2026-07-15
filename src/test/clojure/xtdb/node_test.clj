@@ -21,7 +21,7 @@
   (:import [java.nio.file Path]
            [java.time ZoneId ZonedDateTime]
            [xtdb.api ServerConfig Xtdb$Config Xtdb$Connection]
-           xtdb.query.QueryOpts
+           xtdb.api.query.QueryOpts
            xtdb.types.RegClass))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)

@@ -2,6 +2,7 @@ package xtdb.query
 
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.query.PrepareOpts
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage

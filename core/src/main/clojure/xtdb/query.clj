@@ -48,12 +48,12 @@
            (xtdb PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api ICursor ResultCursor)
-           (xtdb.api.query IKeyFn)
+           (xtdb.api.query IKeyFn PrepareOpts)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query ErrorTrackingCursor IQuerySource IQuerySource$Factory ParsedStatement PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query ErrorTrackingCursor IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]

@@ -28,6 +28,8 @@ import xtdb.api.log.MessageId
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
+import xtdb.api.query.PrepareOpts
+import xtdb.api.query.QueryOpts
 import xtdb.api.storage.Storage
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.ofType

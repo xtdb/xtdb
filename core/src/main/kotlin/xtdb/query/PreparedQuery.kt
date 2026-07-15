@@ -2,6 +2,7 @@ package xtdb.query
 
 import org.apache.arrow.vector.types.pojo.Field
 import xtdb.api.ResultCursor
+import xtdb.api.query.QueryOpts
 import xtdb.trie.ColumnName
 import xtdb.arrow.RelationReader
 

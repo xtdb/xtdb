@@ -1,8 +1,8 @@
 package xtdb.authz
 
 import xtdb.query.IQuerySource
-import xtdb.query.PrepareOpts
-import xtdb.query.QueryOpts
+import xtdb.api.query.PrepareOpts
+import xtdb.api.query.QueryOpts
 import xtdb.query.parseStatement
 import xtdb.table.TableRef
 import java.nio.ByteBuffer
@@ -50,7 +50,7 @@ object RoleMembership {
         if (!exists) return emptyList()
 
         val now = Instant.now()
-        val prepareOpts = PrepareOpts(defaultDb = PRIMARY_DB, currentTime = now)
+        val prepareOpts = PrepareOpts(currentTime = now, defaultDb = PRIMARY_DB)
 
         val out = ArrayList<List<String>>()
         querySource.prepareQuery(parseStatement(SCAN_SQL), dbCat, prepareOpts)

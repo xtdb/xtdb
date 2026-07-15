@@ -39,7 +39,8 @@
            (xtdb.indexer LiveTable OpenTx)
            (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
-           (xtdb.query IQuerySource PrepareOpts PreparedQuery QueryOpts)
+           (xtdb.api.query PrepareOpts QueryOpts)
+           (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
            (xtdb.tx TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
@@ -262,7 +263,7 @@
 
      (try
        (let [^PreparedQuery pq (.prepareRa q-src query (or (db/<-node node) Database$Catalog/EMPTY)
-                                           (PrepareOpts. (:default-tz query-opts) (:default-db query-opts) (:current-time query-opts) nil
+                                           (PrepareOpts. (:current-time query-opts) (:default-tz query-opts) (:default-db query-opts) nil
                                                          (boolean (:explain? query-opts)) (boolean (:explain-analyze? query-opts))
                                                          (:snapshot-token query-opts)))]
 
