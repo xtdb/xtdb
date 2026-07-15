@@ -460,7 +460,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         )
 
                         is ParsedStatement.SetAwaitToken -> awaitToken =
-                            coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, null))
+                            coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))
 
                         is ParsedStatement.SetSessionCharacteristics -> defaultAccessMode = stmt.accessMode
                         is ParsedStatement.SetTransaction -> {} // isolation is always serializable — accepted, no-op

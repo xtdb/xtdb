@@ -748,7 +748,9 @@
 
 (defn- prep-stmt [{:keys [conn-state] :as conn} {:keys [param-oids ^ParsedStatement parsed] :as stmt}]
   ;; queries, EXECUTE and SHOW all prepare through the connection; everything else passes through.
-  (letfn [(prepare-parsed []
+  (letfn [(create-parsed []
+            (assoc stmt :statement (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed)))
+          (prepare-parsed []
             (let [^Xtdb$Statement statement
                   (with-auth-check conn
                     (.prepareStatement ^Xtdb$Connection (:node-conn @conn-state) parsed))]
@@ -802,10 +804,10 @@
                        (catch Throwable e
                          (log/debug e "Error planning DML statement for warnings"))))
                    stmt)
-                 ;; BEGIN executes through a Statement (see execute-portal); it isn't preparable, so create rather
-                 ;; than prepare, and the args bind onto it at bind-stmt.
-                 (visitBegin [_ _]
-                   (assoc stmt :statement (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed)))
+                 ;; control statements executed through a Statement (see execute-portal) aren't preparable, so
+                 ;; create rather than prepare — the args bind onto the statement at bind-stmt.
+                 (visitBegin [_ _] (create-parsed))
+                 (visitSetAwaitToken [_ _] (create-parsed))
                  (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
@@ -903,7 +905,12 @@
     ;; args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that verify-permissibility
     ;; let through, so it too opens unchecked (openQuery would reject it). SHOW opens checked but the connection
     ;; gate-exempts it off its parsed statement. bind copies the args, so we close our own relation once opened.
-    (letfn [(->cursor ^xtdb.api.ResultCursor [^Xtdb$Statement statement xt-args checked?]
+    (letfn [(bind-parsed []
+              (util/with-open [args-rel (some->> (seq xt-args) (vw/open-args allocator))]
+                (when args-rel (.bind statement args-rel)))
+              stmt)
+
+            (->cursor ^xtdb.api.ResultCursor [^Xtdb$Statement statement xt-args checked?]
               (with-auth-check conn
                 (util/with-open [args-rel (vw/open-args allocator xt-args)]
                   (.bind statement args-rel)
@@ -977,12 +984,10 @@
 
                            :else (throw (err/unsupported ::unsupported-execute "EXECUTE only supports a prepared query or DML statement")))))))
 
-                 ;; BEGIN binds its args onto the statement (created at prep) — the option exprs read them at
-                 ;; executeUpdate, so they live on the statement, not loose on the portal.
-                 (visitBegin [_ _]
-                   (util/with-open [args-rel (some->> (seq xt-args) (vw/open-args allocator))]
-                     (when args-rel (.bind statement args-rel)))
-                   stmt)
+                 ;; control statements bind their args onto the statement (created at prep) — the option exprs
+                 ;; read them at executeUpdate, so they live on the statement, not loose on the portal.
+                 (visitBegin [_ _] (bind-parsed))
+                 (visitSetAwaitToken [_ _] (bind-parsed))
 
                  (visitOther [_ _]
                    (-> stmt
@@ -1067,10 +1072,6 @@
     (set-time-zone conn (.evalLiteral ^SqlPlanner (:sql-planner server) zone-expr args-rel)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [^BufferAllocator allocator conn-state server] :as conn} token-expr args]
-  (util/with-open [args-rel (some->> (seq args) (vw/open-args allocator))]
-    (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (.evalLiteral ^SqlPlanner (:sql-planner server) token-expr args-rel)))
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} access-mode]
   ;; the connection holds the default access mode a subsequent bare BEGIN takes
@@ -1276,7 +1277,9 @@
                  (cmd-set-session-characteristics conn (.getAccessMode stmt)))
 
                (visitSetTimeZone [_ stmt] (cmd-set-time-zone conn (.getZone stmt) (:args portal)))
-               (visitSetAwaitToken [_ stmt] (cmd-set-await-token conn (.getToken stmt) (:args portal)))
+               (visitSetAwaitToken [_ _]
+                 (.executeUpdate ^Xtdb$Statement (:statement portal))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
                (visitSetSessionParameter [_ stmt]
                  (cmd-set-session-parameter conn (.getName stmt)
                                             (.evalLiteral ^SqlPlanner (:sql-planner (-> conn :server )) (.getValue stmt) nil)))
