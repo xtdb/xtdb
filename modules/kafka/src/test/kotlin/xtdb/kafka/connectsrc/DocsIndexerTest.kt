@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.error.Anomaly
-import xtdb.error.Incorrect
-import xtdb.table.TableRef
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Incorrect
+import xtdb.api.TableRef
 import java.time.Instant
 import java.util.Date
 

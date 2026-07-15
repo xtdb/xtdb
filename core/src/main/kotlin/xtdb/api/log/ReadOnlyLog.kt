@@ -1,6 +1,6 @@
 package xtdb.api.log
 
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 
 class ReadOnlyLog<M>(private val delegate: Log<M>) : Log<M> by delegate {
     override suspend fun appendMessage(message: M): Log.MessageMetadata =

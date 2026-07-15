@@ -4,7 +4,7 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.apache.kafka.connect.sink.SinkRecord
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.api.tx.TxIndexer
 import java.util.ServiceLoader
 import com.google.protobuf.Any as ProtoAny

@@ -14,7 +14,7 @@ import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.ipc.message.MessageSerializer.IPC_CONTINUATION_TOKEN
 import org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeRecordBatch
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import java.lang.foreign.MemorySegment
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel

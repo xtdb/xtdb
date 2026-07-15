@@ -20,8 +20,8 @@ import xtdb.api.TransactionResult
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.api.tx.ExternalSourceToken
-import xtdb.error.Fault
-import xtdb.error.Incorrect
+import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
 import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig

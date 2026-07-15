@@ -6,8 +6,7 @@ import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
 import xtdb.arrow.VectorType
-import xtdb.arrow.VectorType.Scalar
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.types.leastUpperBound
 
 class Sum(

@@ -1,6 +1,6 @@
 package xtdb.indexer
 
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.catalog.BlockCatalog
 import java.time.Duration
 import java.time.Instant

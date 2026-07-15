@@ -16,6 +16,9 @@ import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseConfig.LogCase.*
+import xtdb.types.LogOffset
+import xtdb.types.LogTimestamp
+import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.asPath
 import java.nio.file.Path

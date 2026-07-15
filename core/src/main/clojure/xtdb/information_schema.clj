@@ -23,7 +23,7 @@
            (xtdb.indexer Snapshot TableSnapshot)
            xtdb.operator.SelectionSpec
            (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            xtdb.trie.TrieCatalog))
 
 (defn name->oid [s]

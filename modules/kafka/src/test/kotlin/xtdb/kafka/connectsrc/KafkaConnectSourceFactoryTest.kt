@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.database.Database
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 
 class KafkaConnectSourceFactoryTest {
 

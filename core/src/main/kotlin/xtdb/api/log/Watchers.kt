@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.*
 import xtdb.api.TransactionResult
 import xtdb.api.TxId
 import xtdb.api.tx.ExternalSourceToken
+import xtdb.types.MessageId
 import xtdb.util.error
 import xtdb.util.logger
 

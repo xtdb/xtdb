@@ -29,7 +29,7 @@
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.query.SqlPlanner
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            xtdb.util.StringUtil))
 
 (defn- ->insertion-ordered-set [coll]

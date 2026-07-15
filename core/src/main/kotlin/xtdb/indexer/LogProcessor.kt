@@ -18,8 +18,9 @@ import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.api.tx.ExternalSource
-import xtdb.error.Fault
-import xtdb.error.Interrupted
+import xtdb.api.error.Fault
+import xtdb.api.error.Interrupted
+import xtdb.types.MessageId
 import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.error

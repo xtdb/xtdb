@@ -1,7 +1,7 @@
 package xtdb.util
 
-import xtdb.api.log.LogOffset
-import xtdb.api.log.MessageId
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 
 object MsgIdUtil {
     private const val EPOCH_LIMIT = 1L shl 16

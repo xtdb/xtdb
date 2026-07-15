@@ -10,7 +10,7 @@ import xtdb.time.Interval
 import xtdb.time.MILLI_HZ
 import xtdb.time.NANO_HZ
 import xtdb.util.Hasher
-import xtdb.vector.extensions.IntervalMDMType
+import xtdb.arrow.extensions.IntervalMDMType
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Duration

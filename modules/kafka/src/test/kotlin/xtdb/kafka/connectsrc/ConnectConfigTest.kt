@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Records how many times its instances are closed, so a test can assert the chain rolled back. */

@@ -1,7 +1,7 @@
 package xtdb.indexer
 
 import xtdb.api.TransactionKey
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.closeAll
 import java.time.Instant

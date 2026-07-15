@@ -11,7 +11,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
 import xtdb.catalog.BlockCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
-import xtdb.table.DatabaseName
+import xtdb.api.DatabaseName
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.debug
 import xtdb.util.logger

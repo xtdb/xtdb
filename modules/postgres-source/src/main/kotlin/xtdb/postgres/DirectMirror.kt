@@ -4,13 +4,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
 import xtdb.postgres.proto.DirectMirrorConfig
 import xtdb.postgres.proto.directMirrorConfig
 import xtdb.time.InstantUtil.asMicros
-import xtdb.util.asIid
-import java.nio.ByteBuffer
 import java.time.ZonedDateTime
 import com.google.protobuf.Any as ProtoAny
 

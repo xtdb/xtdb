@@ -10,7 +10,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Companion.fromLegs
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.kw
 import xtdb.util.Hasher
 import xtdb.util.safeMap

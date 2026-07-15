@@ -3,8 +3,8 @@
 package xtdb.database
 
 import com.google.protobuf.Timestamp
-import xtdb.api.log.MessageId
-import xtdb.error.Incorrect
+import xtdb.types.MessageId
+import xtdb.api.error.Incorrect
 import xtdb.proto.basis.*
 import java.time.Instant
 import kotlin.io.encoding.Base64

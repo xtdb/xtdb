@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.VectorType
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.segment.MemorySegment
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.safelyOpening
 import kotlin.collections.orEmpty

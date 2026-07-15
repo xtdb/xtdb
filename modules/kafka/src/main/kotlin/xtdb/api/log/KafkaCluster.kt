@@ -8,7 +8,6 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.onClosed
 import kotlinx.coroutines.channels.onSuccess
@@ -46,6 +45,8 @@ import xtdb.api.RemoteAlias
 import xtdb.database.proto.DatabaseConfig
 import xtdb.kafka.proto.KafkaLogConfig
 import xtdb.kafka.proto.kafkaLogConfig
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil.afterMsgIdToOffset
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
@@ -60,7 +61,6 @@ import java.time.Instant.ofEpochMilli
 import java.util.*
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.collections.remove
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 import kotlin.io.path.inputStream

@@ -31,7 +31,7 @@
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
            (xtdb.segment BufferPoolSegment MergePlanner)
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            (xtdb.trie Bucketer)
            (xtdb.util TemporalBounds TemporalDimension)))
 

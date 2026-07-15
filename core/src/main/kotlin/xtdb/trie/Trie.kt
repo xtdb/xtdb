@@ -7,14 +7,12 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.Relation
 import xtdb.arrow.UNION_TYPE
-import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.*
 import xtdb.arrow.VectorType.Companion.IID
 import xtdb.arrow.VectorType.Companion.INSTANT
-import xtdb.arrow.VectorType.Companion.asUnionFieldOf
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.schema
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath

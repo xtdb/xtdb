@@ -4,7 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import java.util.*

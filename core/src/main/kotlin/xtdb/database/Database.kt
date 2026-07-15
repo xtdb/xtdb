@@ -16,8 +16,8 @@ import xtdb.api.Xtdb
 import xtdb.api.YAML_SERDE
 import xtdb.api.log.IngestionStoppedException
 import xtdb.api.log.Log
-import xtdb.api.log.LogOffset
-import xtdb.api.log.MessageId
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
@@ -29,13 +29,13 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
-import xtdb.table.DatabaseName
-import xtdb.table.TableRef
+import xtdb.api.DatabaseName
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.tx.TxOp

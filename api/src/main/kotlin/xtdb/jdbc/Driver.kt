@@ -7,13 +7,13 @@ import java.util.*
 
 class Driver : org.postgresql.Driver() {
 
-    companion object {
+    private companion object {
         init {
             DriverManager.registerDriver(Driver())
         }
-    }
 
-    private val String.asPgUrl get() = replace(Regex("^jdbc:xtdb:"), "jdbc:postgresql:")
+        val String.asPgUrl get() = replace(Regex("^jdbc:xtdb:"), "jdbc:postgresql:")
+    }
 
     override fun acceptsURL(url: String) = super.acceptsURL(url.asPgUrl)
 

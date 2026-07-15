@@ -12,11 +12,11 @@ import xtdb.NodeBase
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.diagnostics.TeardownStall
-import xtdb.error.Conflict
-import xtdb.error.Fault
-import xtdb.error.Incorrect
-import xtdb.error.NotFound
-import xtdb.table.DatabaseName
+import xtdb.api.error.Conflict
+import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
+import xtdb.api.error.NotFound
+import xtdb.api.DatabaseName
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.debug

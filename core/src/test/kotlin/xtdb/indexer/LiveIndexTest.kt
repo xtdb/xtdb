@@ -23,7 +23,7 @@ import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
 import java.time.Instant

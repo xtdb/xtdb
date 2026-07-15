@@ -18,11 +18,20 @@ import org.apache.arrow.vector.types.pojo.DictionaryEncoding
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.arrow.extensions.IntervalMDMType
+import xtdb.arrow.extensions.KeywordType
+import xtdb.arrow.extensions.OidType
+import xtdb.arrow.extensions.RegClassType
+import xtdb.arrow.extensions.RegProcType
+import xtdb.arrow.extensions.SetType
+import xtdb.arrow.extensions.TransitType
+import xtdb.arrow.extensions.TsTzRangeType
+import xtdb.arrow.extensions.UriType
+import xtdb.arrow.extensions.UuidType
 import xtdb.trie.ColumnName
 import xtdb.util.closeAllOnCatch
 import xtdb.util.closeOnCatch
 import xtdb.util.safeMap
-import xtdb.vector.extensions.*
 import java.time.ZoneId
 import org.apache.arrow.vector.NullVector as ArrowNullVector
 

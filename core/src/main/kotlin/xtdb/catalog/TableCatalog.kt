@@ -11,7 +11,7 @@ import xtdb.block.proto.Partition
 import xtdb.block.proto.TableBlock
 import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.HLL
 import xtdb.util.combine

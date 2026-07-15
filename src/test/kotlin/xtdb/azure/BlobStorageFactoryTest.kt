@@ -8,7 +8,7 @@ import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.nodeConfig
 import xtdb.azure.BlobStorage.Companion.azureBlobStorage
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.util.asPath
 import kotlin.io.path.Path
 

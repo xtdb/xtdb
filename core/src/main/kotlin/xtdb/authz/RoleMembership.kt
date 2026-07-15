@@ -4,7 +4,7 @@ import xtdb.query.IQuerySource
 import xtdb.api.query.PrepareOpts
 import xtdb.api.query.QueryOpts
 import xtdb.query.parseStatement
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.time.Instant

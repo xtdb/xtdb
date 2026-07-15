@@ -1,6 +1,8 @@
 package xtdb.table
 
 import clojure.lang.Symbol
+import xtdb.api.DEFAULT_SCHEMA
+import xtdb.api.TableRef
 
 // Inverse of TableRef.schemaAndTable: reads our internal `schema/table` round-trip form (trie keys,
 // block-catalog table names, leg names). Internal to core on purpose — user-facing table strings go

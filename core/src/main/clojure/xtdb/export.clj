@@ -13,7 +13,7 @@
            xtdb.catalog.BlockCatalog
            (xtdb.database Database)
            xtdb.api.storage.Storage
-           xtdb.table.TableRef
+           xtdb.api.TableRef
            (xtdb.trie Trie)))
 
 (defn- export-dir-path ^java.nio.file.Path [block-idx ^Instant now]

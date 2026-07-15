@@ -10,6 +10,7 @@ import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
+import xtdb.api.error.Incorrect
 import xtdb.pgwire.PgType
 import xtdb.util.debug
 import xtdb.util.error
@@ -358,7 +359,7 @@ class PgWireDriver(
                     col.name to when (colValue) {
                         is PgOutputMessage.ColumnValue.Null -> null
                         is PgOutputMessage.ColumnValue.Unchanged ->
-                            throw xtdb.error.Incorrect(
+                            throw Incorrect(
                                 buildString {
                                     appendLine("Received unchanged TOASTed column '${col.name}' on ${relation.schema}.${relation.table}. ")
                                     appendLine("Set REPLICA IDENTITY FULL on the source table: ")

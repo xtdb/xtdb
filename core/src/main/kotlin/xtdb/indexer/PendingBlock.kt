@@ -1,9 +1,9 @@
 package xtdb.indexer
 
 import xtdb.api.log.Log
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
-import xtdb.error.Fault
+import xtdb.api.error.Fault
 import xtdb.util.StringUtil.asLexHex
 
 class PendingBlock(

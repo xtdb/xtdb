@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
+import xtdb.types.MessageId
 import xtdb.log.proto.SourceLogMessage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.attachDatabase

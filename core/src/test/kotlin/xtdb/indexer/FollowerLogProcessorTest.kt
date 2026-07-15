@@ -24,7 +24,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseState
-import xtdb.error.Fault
+import xtdb.api.error.Fault
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll

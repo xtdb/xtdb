@@ -5,7 +5,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll

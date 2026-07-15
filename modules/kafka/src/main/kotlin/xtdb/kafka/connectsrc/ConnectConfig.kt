@@ -7,7 +7,7 @@ import org.apache.kafka.connect.storage.ConverterConfig
 import org.apache.kafka.connect.storage.ConverterType
 import org.apache.kafka.connect.transforms.Transformation
 import org.apache.kafka.connect.transforms.predicates.Predicate
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.util.safelyOpening
 
 internal enum class ConverterRole(val configKey: String, val type: ConverterType) {

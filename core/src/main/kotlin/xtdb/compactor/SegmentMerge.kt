@@ -9,7 +9,6 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.arrow.MergeFields.Companion.mergeFields
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorType.Companion.asType
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.compactor.OutWriter.OutWriters
 import xtdb.compactor.OutWriter.RecencyRowCopier
@@ -20,7 +19,7 @@ import xtdb.segment.MergePlanner
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
@@ -30,7 +29,6 @@ import xtdb.trie.Trie.dataRelSchema
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
-import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.arrow.withName
 import xtdb.util.*
 import xtdb.time.LocalDateTimeUtil.asMicros

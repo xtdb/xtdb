@@ -21,6 +21,16 @@ import xtdb.arrow.VectorType.Companion.TSTZ_RANGE
 import xtdb.arrow.VectorType.Companion.UTF8
 import xtdb.arrow.VectorType.Companion.UUID
 import xtdb.arrow.VectorType.Companion.VAR_BINARY
+import xtdb.arrow.extensions.IntervalMDMType
+import xtdb.arrow.extensions.KeywordType
+import xtdb.arrow.extensions.OidType
+import xtdb.arrow.extensions.RegClassType
+import xtdb.arrow.extensions.RegProcType
+import xtdb.arrow.extensions.SetType
+import xtdb.arrow.extensions.TransitType
+import xtdb.arrow.extensions.TsTzRangeType
+import xtdb.arrow.extensions.UriType
+import xtdb.arrow.extensions.UuidType
 import xtdb.arrow.unsupported
 import xtdb.decode as jsonDecode
 import xtdb.encode as jsonEncode
@@ -37,7 +47,6 @@ import xtdb.types.ZonedDateTimeRange
 import xtdb.util.TransitFormat
 import xtdb.util.readTransit
 import xtdb.util.writeTransit
-import xtdb.vector.extensions.*
 import java.io.ByteArrayInputStream
 import java.math.BigDecimal
 import java.nio.ByteBuffer

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.Authenticator.Method.PASSWORD
 import xtdb.api.Authenticator.Method.TRUST
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 
 class SingleRootUserAuthenticatorTest {
 

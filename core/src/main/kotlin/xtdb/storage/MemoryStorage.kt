@@ -12,7 +12,7 @@ import xtdb.arrow.ArrowUtil.readArrowFooter
 import xtdb.arrow.ArrowUtil.toArrowRecordBatchView
 import xtdb.arrow.ArrowUtil.toByteArray
 import xtdb.arrow.Relation
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.trie.FileSize
 import xtdb.util.closeOnCatch
 import xtdb.util.openChildAllocator

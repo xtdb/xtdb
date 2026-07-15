@@ -5,14 +5,14 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.segment.MemorySegment
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.util.closeAll

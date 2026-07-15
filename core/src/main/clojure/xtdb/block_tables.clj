@@ -18,7 +18,7 @@
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
            (xtdb.storage BufferPool)
-           (xtdb.table TableRef)
+           (xtdb.api TableRef)
            (xtdb.time InstantUtil)
            (xtdb.trie Trie)
            (xtdb.util HyperLogLog StringUtil)))

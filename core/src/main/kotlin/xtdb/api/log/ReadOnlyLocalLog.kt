@@ -3,7 +3,9 @@ package xtdb.api.log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import xtdb.api.log.Log.*
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil
 import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.time.InstantUtil.fromMicros

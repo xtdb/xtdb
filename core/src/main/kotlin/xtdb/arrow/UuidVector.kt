@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.vector.extensions.UuidType
+import xtdb.arrow.extensions.UuidType
 import java.nio.ByteBuffer
 import java.util.*
 

@@ -35,7 +35,7 @@ import xtdb.arrow.VectorType.Companion.VAR_BINARY
 import xtdb.arrow.VectorType.Companion.listTypeOf
 import xtdb.arrow.VectorType.Companion.setTypeOf
 import xtdb.arrow.VectorType.Companion.structOf
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.time.Interval
 import xtdb.time.MICRO_HZ
 import xtdb.time.NANO_HZ

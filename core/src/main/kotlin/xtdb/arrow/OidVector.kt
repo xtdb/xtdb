@@ -5,7 +5,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.types.Oid
-import xtdb.vector.extensions.OidType
+import xtdb.arrow.extensions.OidType
 
 class OidVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val arrowType = OidType

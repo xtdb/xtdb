@@ -3,7 +3,7 @@ package xtdb.util
 
 import clojure.lang.Keyword
 import xtdb.asBytes
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import java.security.MessageDigest
 import java.util.UUID
 

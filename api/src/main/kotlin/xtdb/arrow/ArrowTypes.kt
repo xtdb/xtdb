@@ -15,7 +15,16 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.Field
-import xtdb.vector.extensions.*
+import xtdb.arrow.extensions.IntervalMDMType
+import xtdb.arrow.extensions.KeywordType
+import xtdb.arrow.extensions.OidType
+import xtdb.arrow.extensions.RegClassType
+import xtdb.arrow.extensions.RegProcType
+import xtdb.arrow.extensions.SetType
+import xtdb.arrow.extensions.TransitType
+import xtdb.arrow.extensions.TsTzRangeType
+import xtdb.arrow.extensions.UriType
+import xtdb.arrow.extensions.UuidType
 
 @JvmField
 val NULL_TYPE: ArrowType = ArrowType.Null.INSTANCE

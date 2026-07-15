@@ -37,7 +37,7 @@ import xtdb.api.RemoteAlias
 import xtdb.api.log.KafkaCluster
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.api.tx.TxIndexer
 import xtdb.kafka.connectsrc.proto.KafkaConnectSourceConfig
 import xtdb.kafka.connectsrc.proto.KafkaConnectSourceToken

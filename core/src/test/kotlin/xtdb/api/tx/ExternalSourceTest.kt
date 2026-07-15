@@ -23,11 +23,10 @@ import xtdb.catalog.TableCatalog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.compactor.Compactor
 import xtdb.database.Database
-import xtdb.database.DatabaseCatalog
 import xtdb.database.DatabasePartition
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.LeaderLogProcessor

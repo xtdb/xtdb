@@ -5,7 +5,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.types.RegProc
-import xtdb.vector.extensions.RegProcType
+import xtdb.arrow.extensions.RegProcType
 
 class RegProcVector(override val inner: IntVector) : ExtensionVector(), MetadataFlavour.Presence {
     override val arrowType = RegProcType

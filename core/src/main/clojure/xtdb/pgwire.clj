@@ -40,7 +40,7 @@
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
-           (xtdb.error Incorrect Interrupted)
+           (xtdb.api.error Incorrect Interrupted)
            xtdb.api.ResultCursor
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde

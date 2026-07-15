@@ -10,7 +10,7 @@ import kotlinx.coroutines.selects.select
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
 import xtdb.trie.Trie.dataFilePath

@@ -4,7 +4,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.VectorType.Scalar
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.vector.extensions.UriType
+import xtdb.arrow.extensions.UriType
 import java.net.URI
 
 class UriVector(override val inner: Utf8Vector) : ExtensionVector(), MetadataFlavour.Bytes {

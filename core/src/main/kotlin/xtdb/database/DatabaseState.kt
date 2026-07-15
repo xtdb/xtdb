@@ -6,7 +6,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveIndex
-import xtdb.table.DatabaseName
+import xtdb.api.DatabaseName
 import xtdb.trie.TrieCatalog
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening

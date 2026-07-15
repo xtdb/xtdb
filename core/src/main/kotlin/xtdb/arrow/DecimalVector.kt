@@ -7,7 +7,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.api.query.IKeyFn.KeyFn.KEBAB_CASE_KEYWORD
 import xtdb.arrow.agg.VectorSummer
 import xtdb.arrow.metadata.MetadataFlavour
-import xtdb.error.Unsupported
+import xtdb.api.error.Unsupported
 import xtdb.util.Hasher
 import java.math.BigDecimal
 

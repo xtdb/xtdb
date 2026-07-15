@@ -2552,7 +2552,7 @@ ORDER BY t.oid DESC LIMIT 1"
             decoded (some-> detail JsonLdSerde/decodeJsonLd)
             from-type (some-> decoded ex-data :from-type)]
         (t/is (some? detail))
-        (t/is (instance? xtdb.error.Incorrect decoded)
+        (t/is (instance? xtdb.api.error.Incorrect decoded)
               "detail decodes back to the original anomaly type")
         (t/is (instance? xtdb.arrow.VectorType from-type)
               ":from-type round-tripped to a VectorType via the json-ld opt-in")))))

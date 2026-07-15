@@ -4,7 +4,7 @@ import xtdb.compactor.Compactor
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey

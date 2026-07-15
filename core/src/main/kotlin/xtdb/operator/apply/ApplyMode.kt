@@ -8,7 +8,7 @@ import xtdb.arrow.NULL_TYPE
 import xtdb.arrow.NullVector
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorType
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.trie.ColumnName
 
 sealed interface ApplyMode {

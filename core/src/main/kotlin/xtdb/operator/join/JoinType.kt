@@ -3,7 +3,7 @@ package xtdb.operator.join
 import com.carrotsearch.hppc.IntArrayList
 import xtdb.arrow.BitVector
 import xtdb.arrow.RelationReader
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.operator.join.JoinType.OuterJoinType.*
 
 interface JoinType {

@@ -7,7 +7,7 @@ import xtdb.api.query.IKeyFn
 import xtdb.arrow.metadata.MetadataFlavour
 import xtdb.time.microsAsInstant
 import xtdb.types.ZonedDateTimeRange
-import xtdb.vector.extensions.TsTzRangeType
+import xtdb.arrow.extensions.TsTzRangeType
 import java.time.ZoneId
 import java.time.ZonedDateTime
 

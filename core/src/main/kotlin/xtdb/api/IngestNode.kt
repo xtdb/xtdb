@@ -13,7 +13,7 @@ import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.database.Database
 import xtdb.database.DatabaseName
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.requiringResolve

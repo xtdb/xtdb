@@ -10,7 +10,7 @@ import xtdb.metadata.PageMetadata
 import xtdb.segment.Segment.PageMeta
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.Trie
 import xtdb.trie.Trie.dataFilePath

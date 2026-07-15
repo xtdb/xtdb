@@ -4,7 +4,7 @@ import xtdb.block.proto.Partition
 import xtdb.catalog.BlockCatalog
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import java.time.Instant
 
 typealias FileSize = Long

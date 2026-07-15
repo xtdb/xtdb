@@ -4,7 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.util.closeAll
 import xtdb.api.tx.OpenTx
 

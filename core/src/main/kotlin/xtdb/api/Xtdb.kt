@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
-import xtdb.api.log.MessageId
+import xtdb.types.MessageId
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
@@ -40,11 +40,10 @@ import xtdb.database.DatabaseName
 import xtdb.database.DatabasePartition
 import xtdb.database.encodeTxBasisToken
 import xtdb.database.mergeTxBasisTokens
-import xtdb.error.Anomaly
-import xtdb.error.Fault
-import xtdb.error.Incorrect
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Fault
+import xtdb.api.error.Incorrect
 import xtdb.query.*
-import xtdb.table.TableRef
 import xtdb.time.asInstant
 import xtdb.tx.TxOp
 import xtdb.tx.TxOpts

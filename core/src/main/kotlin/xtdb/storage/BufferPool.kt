@@ -9,7 +9,7 @@ import xtdb.ArrowWriter
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.Relation
 import xtdb.arrow.unsupported
-import xtdb.error.Fault
+import xtdb.api.error.Fault
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.StringUtil.fromLexHex
 import xtdb.util.asPath

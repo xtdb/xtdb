@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 
 class NodeBaseTest {
 

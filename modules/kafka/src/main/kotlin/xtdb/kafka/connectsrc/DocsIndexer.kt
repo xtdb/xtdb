@@ -12,15 +12,15 @@ import org.apache.kafka.connect.data.Struct
 import org.apache.kafka.connect.data.Time as ConnectTime
 import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
-import xtdb.error.Anomaly.Companion.toAnomaly
-import xtdb.error.Incorrect
+import xtdb.api.error.Anomaly.Companion.toAnomaly
+import xtdb.api.error.Incorrect
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.util.asIid
 import java.math.BigDecimal
 import java.nio.ByteBuffer

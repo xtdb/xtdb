@@ -4,15 +4,14 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import xtdb.api.log.Log
-import xtdb.api.log.LogOffset
-import xtdb.api.log.MessageId
+import xtdb.types.LogOffset
+import xtdb.types.MessageId
 import xtdb.util.MsgIdUtil
 import kotlin.coroutines.coroutineContext
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
 import java.time.Instant
-import kotlin.coroutines.CoroutineContext
 import kotlin.random.Random
 
 private val LOG = SimLog::class.logger

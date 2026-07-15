@@ -27,7 +27,7 @@ import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.asBytes
 import xtdb.azure.proto.AzureBlobStorageConfig
 import xtdb.azure.proto.azureBlobStorageConfig
-import xtdb.error.Incorrect
+import xtdb.api.error.Incorrect
 import xtdb.multipart.IMultipartUpload
 import xtdb.multipart.SupportsMultipart
 import xtdb.util.asPath

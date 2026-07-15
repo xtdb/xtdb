@@ -9,7 +9,7 @@ import xtdb.arrow.*
 import xtdb.arrow.VectorType.Mono
 import xtdb.log.proto.TrieMetadata
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.trie.*
 import xtdb.util.HLL
 import xtdb.util.RowCounter

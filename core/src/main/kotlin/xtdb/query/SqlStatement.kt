@@ -1,6 +1,6 @@
 package xtdb.query
 
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 
 /**
  * A parsed transactional SQL statement, ready to apply.

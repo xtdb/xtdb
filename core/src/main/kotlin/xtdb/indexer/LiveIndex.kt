@@ -6,15 +6,13 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
-import xtdb.table.TableRef
+import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.BlockIndex
-import xtdb.trie.ColumnName
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.TrieCatalog
 import xtdb.util.RowCounter
