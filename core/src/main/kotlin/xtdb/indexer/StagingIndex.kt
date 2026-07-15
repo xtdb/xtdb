@@ -24,7 +24,7 @@ import xtdb.api.tx.OpenTx
  * tx-id and system-time smoothing), which leads [LiveIndex.latestCompletedTx] (the durable/query basis,
  * advanced by promotion) by the txs staged but not yet promoted.
  */
-class StagingIndex(
+internal class StagingIndex(
     latestCompletedTx: TransactionKey?,
 ) : AutoCloseable {
 

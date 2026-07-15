@@ -47,7 +47,7 @@ private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skip
 
 private val LOG = LeaderLogProcessor::class.logger
 
-class LeaderLogProcessor(
+internal class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,

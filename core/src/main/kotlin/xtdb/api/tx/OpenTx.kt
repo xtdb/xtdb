@@ -52,7 +52,14 @@ private val LOG = OpenTx::class.logger
  * read-your-writes visibility into those staged writes. [TxIndexer] owns opening, committing and closing the
  * OpenTx — a writer is handed one, it never constructs its own.
  */
-class OpenTx @JvmOverloads constructor(
+class OpenTx
+// Constructor is public only because Clojure white-box tests construct OpenTx via interop
+// (`test_util/->open-tx`), and Kotlin `internal` isn't reachable across that boundary (name-mangling).
+// It can go internal once those tests (crash_logger_test, live_index_test's staged-create-table-5507)
+// obtain their OpenTx through the public `TxIndexer.executeTx` SPI instead — an ext-src-driven ingest
+// node hands the writer a live OpenTx (spiked, works). The same migration unblocks `internal` on
+// `ResolvedTx` (+ its `stage`) and `LiveIndex.openSnapshot(resolvedTxs, ownTx)`.
+@JvmOverloads constructor(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val dbStorage: DatabaseStorage,
