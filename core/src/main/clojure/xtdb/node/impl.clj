@@ -36,7 +36,7 @@
 (defn- ->node-connection ^Xtdb$Connection [^Database$Catalog db-cat ^BufferAllocator allocator
                                            ^IQuerySource q-src ^SqlPlanner sql-planner query-tracer default-tz ^Counter tx-error-counter
                                            tx-await-timer tx-submit-timer tx-execute-timer db-name]
-  (Xtdb$Connection. allocator db-cat q-src sql-planner (Clock/systemDefaultZone) query-tracer default-tz tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer db-name))
+  (Xtdb$Connection. allocator db-cat q-src sql-planner db-name (Clock/systemDefaultZone) default-tz query-tracer tx-error-counter tx-await-timer tx-submit-timer tx-execute-timer))
 
 (defrecord Node [^BufferAllocator allocator, ^Database$Catalog db-cat
                  ^IQuerySource q-src ^SqlPlanner sql-planner
