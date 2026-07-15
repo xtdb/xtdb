@@ -214,7 +214,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     }
 
     private fun execDml(op: TxOp, ctx: CallContext?, txHandle: TxHandle?) {
-        txOrSessionConnection(ctx, txHandle).executeDml(op)
+        txOrSessionConnection(ctx, txHandle).executeTxOp(op)
     }
 
     override fun acceptPutStatement(

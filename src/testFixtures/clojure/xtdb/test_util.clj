@@ -30,7 +30,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
            (xtdb ICursor PagesCursor)
-           (xtdb.api TransactionKey Xtdb Xtdb$Connection)
+           (xtdb.api TransactionKey Xtdb)
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorType)
@@ -230,8 +230,8 @@
       (->> (into {}))
       (update-vals vec)))
 
-(defn await-token [node]
-  (with-open [conn ^Xtdb$Connection (.connect ^Xtdb node)]
+(defn await-token [^Xtdb node]
+  (with-open [conn (.connect node)]
     (basis/->tx-basis-str (.latestSubmittedMsgIds conn))))
 
 (defn <-cursor
@@ -419,11 +419,11 @@
 (defn q-sql
   "Like xtdb.api/q, but also returns the result type."
   ([node query] (q-sql node query {}))
-  ([node query opts]
-   (with-open [conn (.connect ^xtdb.api.Xtdb node)]
-     (let [^PreparedQuery prepared-q (.prepareSql ^xtdb.api.Xtdb$Connection conn query (get opts :default-db "xtdb"))]
-       {:res (xt/q node query opts)
-        :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getColumnFields prepared-q []))}))))
+  ([^Xtdb node query opts]
+   (with-open [conn (.connect node)
+               stmt (.prepareStatement conn query)]
+     {:res (xt/q node query opts)
+      :res-type (mapv (juxt #(.getName ^Field %) types/->type) (.getFields (.executeSchema stmt [])))})))
 
 (defn with-container [^GenericContainer c, f]
   (if (.getContainerId c)
