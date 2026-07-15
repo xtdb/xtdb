@@ -15,7 +15,7 @@ import xtdb.database.DatabaseName
 import xtdb.database.decodeTxBasisToken
 import xtdb.database.encodeTxBasisToken
 import xtdb.tx.TxOpts
-import java.time.Clock
+import java.time.InstantSource
 import java.time.Instant
 import java.time.ZoneOffset
 
@@ -48,7 +48,7 @@ class ConnectionTest {
             mockk(relaxed = true),
             mockk(relaxed = true),
             dbName,
-            Clock.systemUTC(),
+            InstantSource.system(),
             ZoneOffset.UTC,
             null,
             null,

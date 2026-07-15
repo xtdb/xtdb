@@ -134,9 +134,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         var dbName: DatabaseName,
 
-        // mutable so a frontend can seed it (pgwire pushes the server clock at startup); current-time only,
-        // and only really exercised by tests pinning a fixed instant.
-        var clock: Clock,
+        // mutable so a frontend can seed it (pgwire pushes the server clock at startup); read for current-time
+        // only (never its zone — that's [defaultTz]), and only really exercised by tests pinning a fixed instant.
+        var clock: InstantSource,
 
         var defaultTz: ZoneId,
         private val tracer: Tracer?,
