@@ -270,7 +270,7 @@ Defaults to UTC.
 
 An ingest-only node runs [external sources](external-sources/overview) and nothing else.
 
-It has no query surface - no Postgres wire-compatible server, no Flight SQL server, no healthz server - making it useful for moving ingestion onto dedicated compute, away from the nodes serving queries.
+It has no query surface - no Postgres wire-compatible server, no Flight SQL server - making it useful for moving ingestion onto dedicated compute, away from the nodes serving queries.
 
 For each configured database, the node joins that database's leader election and runs its external source when elected leader.
 
@@ -302,9 +302,13 @@ databases:
 # Required when any database uses a remote object store
 diskCache:
   path: /var/cache/xtdb
+
+# Serves /metrics and the liveness/readiness probes
+healthz:
+  port: 8080
 ```
 
-The config also accepts [`memoryCache`](#caching), [`indexer`](#indexer) and [node ID](#node-id), with the same semantics as the regular node config.
+The config also accepts [`memoryCache`](#caching), [`indexer`](#indexer), [`healthz`](config/monitoring#healthz-server) and [node ID](#node-id), with the same semantics as the regular node config.
 
 `xtdb` is reserved for the primary database and can't be used as a database name here.
 
