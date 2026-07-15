@@ -66,6 +66,10 @@ import kotlin.io.path.extension
 private fun parseSkipDbsEnv(skipDbs: String): Set<String> =
     skipDbs.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
+// the pg session-parameter name for the connection's time zone (pgwire's normalised `timezone`); SHOW and the
+// ParameterStatus echo read it back through [Xtdb.Connection.sessionParameters], derived from the live zone.
+private const val TIMEZONE_PARAM = "timezone"
+
 interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     val allocator: BufferAllocator
@@ -173,9 +177,16 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         private var autoCommit = true
         private var tx: Transaction? = null
 
+        // the tz a read/write actually runs under: an open tx's zone (a mid-tx SET TIME ZONE / WITH (TIMEZONE))
+        // shadows the connection's own, mirroring [effectiveAwaitToken].
+        val effectiveDefaultTz: ZoneId get() = tx?.txDefaultTz ?: defaultTz
+
         private val _sessionParameters = mutableMapOf<String, String?>()
 
-        val sessionParameters: Map<String, String?> get() = _sessionParameters
+        // `timezone` is derived from the live tz rather than a stored copy — SET TIME ZONE mutates the zone, and
+        // SHOW / the ParameterStatus echo read it back through here, so the two can't drift.
+        val sessionParameters: Map<String, String?>
+            get() = _sessionParameters + (TIMEZONE_PARAM to effectiveDefaultTz.toString())
 
         // the sanctioned external writer, for a frontend's SET (pgwire funnels its startup defaults + SET here).
         fun setSessionParameter(name: String, value: String?) {
@@ -450,14 +461,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         is ParsedStatement.SetSessionParameter ->
                             setSessionParameter(stmt.name, sqlPlanner.evalLiteral(stmt.value, null)?.toString())
 
-                        is ParsedStatement.SetTimeZone -> setTimeZone(
-                            coerceZoneId(
-                                sqlPlanner.evalLiteral(
-                                    stmt.zone,
-                                    null
-                                )
-                            )
-                        )
+                        is ParsedStatement.SetTimeZone ->
+                            setTimeZone(coerceZoneId(sqlPlanner.evalLiteral(stmt.zone, args)))
 
                         is ParsedStatement.SetAwaitToken -> awaitToken =
                             coerceAwaitToken(sqlPlanner.evalLiteral(stmt.token, args))

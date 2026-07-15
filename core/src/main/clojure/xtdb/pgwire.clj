@@ -217,6 +217,13 @@
    "datestyle" "DateStyle"
    "intervalstyle" "IntervalStyle"})
 
+(defn- send-parameter-status [conn parameter value]
+  (let [param (get pg-param-nf->display-format parameter parameter)]
+    (pgio/cmd-write-msg conn pgio/msg-parameter-status {:parameter param,
+                                                        :value (case param
+                                                                 "standard_conforming_strings" "on"
+                                                                 (str value))})))
+
 (defn- set-session-parameter [{:keys [conn-state] :as conn} parameter value]
   ;;https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-NAMES-VALUES
   ;;parameter names are case insensitive, choosing to lossily downcase them for now and store a mapping to a display format
@@ -225,19 +232,15 @@
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (doseq [[k v] (parse-session-params {parameter value})]
       (.setSessionParameter node-conn k (some-> v str))))
-  (let [param (get pg-param-nf->display-format parameter parameter)]
-    (pgio/cmd-write-msg conn pgio/msg-parameter-status {:parameter param,
-                                                        :value (case param
-                                                                 "standard_conforming_strings" "on"
-                                                                 (str value))})))
+  (send-parameter-status conn parameter value))
 
 (defn set-time-zone [{:keys [conn-state] :as conn} tz]
   ;; the connection owns the tz; mid-tx it's tx-local (session-scoped on COMMIT, reverted on ROLLBACK) — so
-  ;; go through setTimeZone rather than the raw defaultTz setter, which would miss the open tx.
+  ;; go through setTimeZone rather than the raw defaultTz setter, which would miss the open tx. SHOW / the echo
+  ;; read the zone back derived from connection state (see Connection.sessionParameters), so nothing's stored here.
   (let [^ZoneId zone-id (if (instance? ZoneId tz) tz (ZoneId/of tz))]
-    (.setTimeZone ^Xtdb$Connection (:node-conn @conn-state) zone-id))
-
-  (set-session-parameter conn time-zone-nf-param-name tz))
+    (.setTimeZone ^Xtdb$Connection (:node-conn @conn-state) zone-id)
+    (send-parameter-status conn time-zone-nf-param-name (str zone-id))))
 
 (defn- fallback-output-format
   "Interpret the raw fallback_output_format session param — the format used for complex-type row values and
@@ -808,6 +811,7 @@
                  ;; create rather than prepare — the args bind onto the statement at bind-stmt.
                  (visitBegin [_ _] (create-parsed))
                  (visitSetAwaitToken [_ _] (create-parsed))
+                 (visitSetTimeZone [_ _] (create-parsed))
                  (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
@@ -988,6 +992,7 @@
                  ;; read them at executeUpdate, so they live on the statement, not loose on the portal.
                  (visitBegin [_ _] (bind-parsed))
                  (visitSetAwaitToken [_ _] (bind-parsed))
+                 (visitSetTimeZone [_ _] (bind-parsed))
 
                  (visitOther [_ _]
                    (-> stmt
@@ -1066,11 +1071,6 @@
   ;; no-op - can only set transaction isolation, and that
   ;; doesn't mean anything to us because we're always serializable
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
-
-(defn cmd-set-time-zone [{:keys [^BufferAllocator allocator server] :as conn} zone-expr args]
-  (util/with-open [args-rel (some->> (seq args) (vw/open-args allocator))]
-    (set-time-zone conn (.evalLiteral ^SqlPlanner (:sql-planner server) zone-expr args-rel)))
-  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} access-mode]
@@ -1276,7 +1276,12 @@
                (visitSetSessionCharacteristics [_ stmt]
                  (cmd-set-session-characteristics conn (.getAccessMode stmt)))
 
-               (visitSetTimeZone [_ stmt] (cmd-set-time-zone conn (.getZone stmt) (:args portal)))
+               (visitSetTimeZone [_ _]
+                 (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
+                   (.executeUpdate ^Xtdb$Statement (:statement portal))
+                   ;; echo the zone the connection now holds (derived from its live state), not the raw SET value
+                   (send-parameter-status conn time-zone-nf-param-name (get (.getSessionParameters node-conn) time-zone-nf-param-name)))
+                 (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
                (visitSetAwaitToken [_ _]
                  (.executeUpdate ^Xtdb$Statement (:statement portal))
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
