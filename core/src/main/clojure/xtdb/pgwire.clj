@@ -751,7 +751,7 @@
   (letfn [(prepare-parsed []
             (let [^Xtdb$Statement statement
                   (with-auth-check conn
-                    (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare)))]
+                    (.prepareStatement ^Xtdb$Connection (:node-conn @conn-state) parsed))]
               (when-let [warnings (.getWarnings statement)]
                 (doseq [warning warnings]
                   (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))
@@ -795,7 +795,7 @@
                      (try
                        (with-auth-check conn
                          (util/with-open [^Xtdb$Statement statement
-                                          (doto (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed) (.prepare))]
+                                          (.prepareStatement ^Xtdb$Connection (:node-conn @conn-state) parsed)]
                            (when-let [warnings (.getWarnings statement)]
                              (doseq [warning warnings]
                                (pgio/cmd-send-notice conn (notice-warning (sql/error-string warning)))))))

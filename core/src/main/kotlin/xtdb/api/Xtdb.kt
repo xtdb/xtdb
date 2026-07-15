@@ -320,12 +320,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun prepareStatement(sql: String): Statement = createStatement(sql).apply { prepare() }
 
-        fun createStatement(sql: String): Statement = openStatement(parseStatement(sql))
-
         // for a frontend that has already classified the statement (pgwire), so it prepares through the same
         // Statement path without re-parsing.
         /** @suppress */
-        fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
+        fun prepareStatement(parsed: ParsedStatement): Statement = openStatement(parsed).apply { prepare() }
+
+        fun createStatement(sql: String): Statement = openStatement(parseStatement(sql))
 
         override fun createStatement(): Statement = openStatement(null)
 
