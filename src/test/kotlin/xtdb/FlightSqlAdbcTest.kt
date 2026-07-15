@@ -56,6 +56,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
+import xtdb.database.Database
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import java.time.ZonedDateTime
@@ -208,6 +209,56 @@ class FlightSqlAdbcTest {
 
         val tableNames = rows.map { it["table_name"] }
         assertTrue("tables_test" in tableNames, "Expected 'tables_test' in $tableNames")
+    }
+
+    private fun attachNewDbWithWidgets() {
+        xtdb.connect().use { it.attachDb("new_db", Database.Config()) }
+        xtdb.connect("new_db").use { c ->
+            c.createStatement().use { it.setSqlQuery("INSERT INTO widgets (_id, w) VALUES (1, 2)"); it.executeUpdate() }
+        }
+    }
+
+    @Test
+    fun `getSchemas and getTables span catalogs`() {
+        insertData("INSERT INTO tables_test (_id) VALUES (1)")
+        attachNewDbWithWidgets()
+
+        val schemaRows = fsqlClient.getSchemas(null, null, *emptyCallOpts).readRows()
+        assertTrue(
+            schemaRows.any { it["catalog_name"] == "new_db" && it["db_schema_name"] == "public" },
+            "new_db's schemas appear over the wire: $schemaRows"
+        )
+
+        val widgetRows = fsqlClient.getTables(null, null, null, null, false, *emptyCallOpts)
+            .readRows().filter { it["table_name"] == "widgets" }
+        assertEquals(
+            listOf("new_db"), widgetRows.map { it["catalog_name"] },
+            "widgets is reported under new_db, not the connection's own catalog"
+        )
+
+        val newDbOnly = fsqlClient.getTables("new_db", null, null, null, false, *emptyCallOpts).readRows()
+        assertEquals(
+            setOf("new_db"), newDbOnly.map { it["catalog_name"] }.toSet(),
+            "an exact catalog filter restricts to that catalog"
+        )
+        assertTrue(newDbOnly.none { it["table_name"] == "tables_test" })
+    }
+
+    @Test
+    fun `getTables includeSchema resolves a table in another catalog`() {
+        attachNewDbWithWidgets()
+
+        val info = fsqlClient.getTables("new_db", null, "widgets", null, true, *emptyCallOpts)
+        fsqlClient.getStream(info.endpoints.first().ticket, *emptyCallOpts).use { stream ->
+            assertTrue(stream.next())
+            val root = stream.root
+            val schemaVec = root.getVector("table_schema") as VarBinaryVector
+            val rowIdx = (0 until root.rowCount).first {
+                (root.getVector("table_name").getObject(it) as? Text)?.toString() == "widgets"
+            }
+            val bytes = schemaVec.getObject(rowIdx) ?: error("table_schema bytes were null")
+            assertEquals(setOf("_id", "w"), bytes.deserialiseArrowSchema().fields.map { it.name }.toSet())
+        }
     }
 
     @Test

@@ -683,7 +683,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, descriptor)
 
     override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) {
-        val dbNames = node.databaseNames
+        // through the shared catalogNames (no filter) so all three metadata handlers enumerate catalogs one way
+        val dbNames = connectionFor(ctx, resolveDb(ctx)).catalogNames(null, exact = true)
 
         singleBatchStream(FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, listener) { root ->
             val vec = root.getVector("catalog_name") as VarCharVector
@@ -705,20 +706,21 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
 
-        val schemaNames =
-            if (catalogFilter != null && catalogFilter != dbName) emptyList()
-            else connectionFor(ctx, dbName)
-                .querySchemas(dbName, schemaFilter, null, null, null, GetObjectsDepth.DB_SCHEMAS)
-                .keys.toList()
+        val conn = connectionFor(ctx, dbName)
+        // FlightSQL's catalog is an exact filter (absent = every catalog); each row keeps its own catalog.
+        val rows = conn.catalogNames(catalogFilter, exact = true).flatMap { catalog ->
+            conn.querySchemas(catalog, schemaFilter, null, null, null, GetObjectsDepth.DB_SCHEMAS)
+                .keys.map { catalog to it }
+        }
 
         singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
             val catalogVec = root.getVector("catalog_name") as VarCharVector
             val schemaVec = root.getVector("db_schema_name") as VarCharVector
-            schemaNames.forEachIndexed { idx, name ->
-                catalogVec.setSafe(idx, dbName.toByteArray())
+            rows.forEachIndexed { idx, (catalog, name) ->
+                catalogVec.setSafe(idx, catalog.toByteArray())
                 schemaVec.setSafe(idx, name.toByteArray())
             }
-            root.rowCount = schemaNames.size
+            root.rowCount = rows.size
         }
     }
 
@@ -744,11 +746,12 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
         val conn = connectionFor(ctx, dbName)
 
-        // querySchemas owns the TABLE-type filter (XTDB only has TABLE) and the LIKE-escaped filters
-        val tables =
-            if (catalogFilter != null && catalogFilter != dbName) emptyList()
-            else conn.querySchemas(dbName, schemaFilter, tableFilter, typeFilters?.toTypedArray(), null, GetObjectsDepth.TABLES)
-                .flatMap { (dbSchemaName, ts) -> ts.map { dbSchemaName to it.name } }
+        // querySchemas owns the TABLE-type filter (XTDB only has TABLE) and the LIKE-escaped filters.
+        // FlightSQL's catalog is an exact filter (absent = every catalog); each row keeps its own catalog.
+        val rows = conn.catalogNames(catalogFilter, exact = true).flatMap { catalog ->
+            conn.querySchemas(catalog, schemaFilter, tableFilter, typeFilters?.toTypedArray(), null, GetObjectsDepth.TABLES)
+                .flatMap { (dbSchemaName, ts) -> ts.map { Triple(catalog, dbSchemaName, it.name) } }
+        }
 
         singleBatchStream(schema, listener) { root ->
             val catalogVec = root.getVector("catalog_name") as VarCharVector
@@ -758,8 +761,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             val tableSchemaVec =
                 if (command.includeSchema) root.getVector("table_schema") as VarBinaryVector else null
 
-            tables.forEachIndexed { idx, (dbSchemaName, tableName) ->
-                catalogVec.setSafe(idx, dbName.toByteArray())
+            rows.forEachIndexed { idx, (catalog, dbSchemaName, tableName) ->
+                catalogVec.setSafe(idx, catalog.toByteArray())
                 schemaVec.setSafe(idx, dbSchemaName.toByteArray())
                 tableVec.setSafe(idx, tableName.toByteArray())
                 typeVec.setSafe(idx, "TABLE".toByteArray())
@@ -767,12 +770,12 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 if (tableSchemaVec != null) {
                     tableSchemaVec.setSafe(
                         idx,
-                        conn.getTableSchema(dbName, dbSchemaName, tableName)
+                        conn.getTableSchema(catalog, dbSchemaName, tableName)
                             .serializeAsMessageInterruptibly()
                     )
                 }
             }
-            root.rowCount = tables.size
+            root.rowCount = rows.size
         }
     }
 
