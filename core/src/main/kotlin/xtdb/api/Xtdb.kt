@@ -327,6 +327,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         fun createStatement(sql: String): Statement = openStatement(parseStatement(sql))
 
+        // for a frontend that has already classified the statement (pgwire) — creates without preparing, so a
+        // non-preparable control statement (BEGIN/COMMIT/SET) executes through the same Statement path.
+        /** @suppress */
+        fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
+
         override fun createStatement(): Statement = openStatement(null)
 
         // [targetDb] is the connection's own db bar the internal cross-db tx-result read (awaitTx), which
@@ -462,7 +467,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     val stmt = parsedStatement ?: throw Incorrect("SQL query not set", "xtdb.adbc/no-sql")
 
                     when (stmt) {
-                        is ParsedStatement.Begin -> begin(stmt.txOptions)
+                        is ParsedStatement.Begin -> begin(stmt.txOptions, args)
 
                         is ParsedStatement.Commit -> when (stmt.mode) {
                             ParsedStatement.CommitMode.SYNC -> commitSync()
@@ -694,12 +699,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun begin() = begin(ParsedStatement.TxOptions())
 
         // Begin an explicit tx from parsed WITH options, evaluating each option expression via the injected
-        // SqlPlanner with the supplied bound args (null for the ADBC path, whose BEGIN options are literals;
-        // pgwire passes its portal args, since a BEGIN option can be a parameter placeholder). Public for the
-        // frontends. WITH (TIMEZONE) overrides the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's
-        // await bound.
-        /** @suppress */
-        fun begin(opts: ParsedStatement.TxOptions, args: RelationReader? = null) {
+        // SqlPlanner with the statement's bound args (null when unbound, e.g. the ADBC path, whose BEGIN options
+        // are literals; a bound arg lets a placeholder like AWAIT_TOKEN = $1 resolve). WITH (TIMEZONE) overrides
+        // the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's await bound.
+        private fun begin(opts: ParsedStatement.TxOptions, args: RelationReader? = null) {
             val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, args)) } ?: defaultTz
 
             when (opts.accessMode) {

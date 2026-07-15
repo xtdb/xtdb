@@ -802,6 +802,10 @@
                        (catch Throwable e
                          (log/debug e "Error planning DML statement for warnings"))))
                    stmt)
+                 ;; BEGIN executes through a Statement (see execute-portal); it isn't preparable, so create rather
+                 ;; than prepare, and the args bind onto it at bind-stmt.
+                 (visitBegin [_ _]
+                   (assoc stmt :statement (.createStatement ^Xtdb$Connection (:node-conn @conn-state) parsed)))
                  (visitOther [_ _] stmt)))
 
       (catch IllegalArgumentException e
@@ -972,6 +976,13 @@
                                                                  (PgType/.getOid (PgType/fromVectorType vec-type))))))))
 
                            :else (throw (err/unsupported ::unsupported-execute "EXECUTE only supports a prepared query or DML statement")))))))
+
+                 ;; BEGIN binds its args onto the statement (created at prep) — the option exprs read them at
+                 ;; executeUpdate, so they live on the statement, not loose on the portal.
+                 (visitBegin [_ _]
+                   (util/with-open [args-rel (some->> (seq xt-args) (vw/open-args allocator))]
+                     (when args-rel (.bind statement args-rel)))
+                   stmt)
 
                  (visitOther [_ _]
                    (-> stmt
@@ -1227,7 +1238,7 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
-(defn execute-portal [{:keys [^BufferAllocator allocator conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
+(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
   (cond
@@ -1244,10 +1255,10 @@
                (visitShowVariable [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
                (visitDml [_ _] (cmd-exec-dml conn portal))
 
-               (visitBegin [_ stmt]
-                 ;; pass the portal's bound args — a BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
-                 (util/with-open [args-rel (some->> (seq (:args portal)) (vw/open-args allocator))]
-                   (.begin ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) args-rel))
+               (visitBegin [_ _]
+                 ;; BEGIN runs through the Statement (as ADBC does): created at prepare, args bound at bind, so a
+                 ;; BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
+                 (.executeUpdate ^Xtdb$Statement (:statement portal))
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
