@@ -1194,12 +1194,12 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             tableTypes: Array<out String>?,
             columnNamePattern: String?
         ): ArrowReader {
-            val catalogs = dbCat.databaseNames
-                .filter { catalogPattern == null || catalogPattern == "%" || it == catalogPattern }
+            // ADBC's catalogPattern is a SQL LIKE pattern; the shared lister evaluates it via the EE.
+            val catalogs = catalogNames(catalogPattern, exact = false)
 
             // build the payload as nested maps/lists matching GET_OBJECTS_SCHEMA; the typed vector tree comes
-            // from the schema and writeObject fills present keys (omitted keys pad null). only the connection's
-            // current database gets schema detail.
+            // from the schema and writeObject fills present keys (omitted keys pad null). every matching catalog
+            // is expanded to the requested depth, per the ADBC getObjects contract.
             fun tableObj(table: TableInfo): Map<String, Any?> = buildMap {
                 put("table_name", table.name)
                 put("table_type", "TABLE")
@@ -1223,12 +1223,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 for (catalog in catalogs) {
                     catalogNameVec.writeObject(catalog)
 
-                    if (depth == GetObjectsDepth.CATALOGS || catalog != dbName) {
-                        // at CATALOGS depth, or for databases other than the current one, omit schema detail
+                    if (depth == GetObjectsDepth.CATALOGS || dbCat.databaseOrNull(catalog) == null) {
                         dbSchemasVec.writeNull()
                     } else {
                         val schemas =
-                            querySchemas(dbSchemaPattern, tableNamePattern, tableTypes, columnNamePattern, depth)
+                            querySchemas(catalog, dbSchemaPattern, tableNamePattern, tableTypes, columnNamePattern, depth)
                         dbSchemasVec.writeObject(schemas.map { (name, tables) -> schemaObj(name, tables) })
                     }
 
@@ -1237,10 +1236,38 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
+        // The single catalog (database) enumeration all metadata callers share. Names come from the database
+        // registry; a null or exact filter is applied in-memory, and only a SQL LIKE pattern falls to
+        // pg_catalog.pg_database so the expression engine evaluates it — keeping the common cases off the query
+        // path, which would otherwise materialise a snapshot per database just to return names. The two agree:
+        // pg_database is a view of the same registry.
+        internal fun catalogNames(filter: String?, exact: Boolean): List<String> = when {
+            filter == null -> dbCat.databaseNames.sorted()
+            exact -> if (filter in dbCat.databaseNames) listOf(filter) else emptyList()
+            else -> catalogNamesLike(filter)
+        }
+
+        // A LIKE pattern needs the expression engine, so this one goes through pg_catalog.pg_database — bound
+        // (safe for any pattern) and unchecked (metadata isn't gated by the connection's tx access-mode).
+        private fun catalogNamesLike(pattern: String): List<String> =
+            createStatement("SELECT datname FROM pg_catalog.pg_database WHERE datname LIKE ? ORDER BY datname")
+                .use { stmt ->
+                    stmt.prepare()
+                    Relation.openFromRows(allocator, listOf(mapOf("?_0" to pattern))).use { stmt.bind(it) }
+                    buildList {
+                        stmt.openUncheckedQuery().use { cursor ->
+                            cursor.forEachRemaining { rel ->
+                                for (i in 0 until rel.rowCount) add(rel["datname"].getObject(i).toString())
+                            }
+                        }
+                    }
+                }
+
         internal data class ColumnInfo(val name: String, val dataType: String)
         internal data class TableInfo(val name: String, val columns: List<ColumnInfo>)
 
         internal fun querySchemas(
+            catalog: DatabaseName,
             dbSchemaPattern: String?,
             tableNamePattern: String?,
             tableTypes: Array<out String>?,
@@ -1249,6 +1276,15 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         ): Map<String, List<TableInfo>> {
             // XTDB only has table_type='TABLE' currently
             if (tableTypes != null && "TABLE" !in tableTypes) return emptyMap()
+
+            // A catalog listed a moment ago may have been detached since; skip it rather than letting the
+            // per-catalog prepare throw and abort a cross-catalog caller (getObjects, the FlightSQL handlers).
+            if (dbCat.databaseOrNull(catalog) == null) return emptyMap()
+
+            // resolve information_schema against `catalog`, not the connection's own database — openStatement's
+            // targetDb scopes it (information_schema is per-database); openUncheckedQuery so metadata reads
+            // aren't gated by the connection's transaction access-mode.
+            fun runOnCatalog(sql: String) = openStatement(parseStatement(sql), catalog).openUncheckedQuery()
 
             val conditions = mutableListOf<String>()
             dbSchemaPattern?.let { conditions.add("table_schema LIKE '${it.replace("'", "''")}'") }
@@ -1259,7 +1295,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             if (depth == GetObjectsDepth.DB_SCHEMAS) {
                 val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
                 val result = linkedMapOf<String, List<TableInfo>>()
-                openSqlQuery(sql).use { cursor ->
+                runOnCatalog(sql).use { cursor ->
                     cursor.forEachRemaining { rel ->
                         for (i in 0 until rel.rowCount) {
                             result[rel["table_schema"].getObject(i).toString()] = emptyList()
@@ -1283,7 +1319,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             if (needColumns) {
                 val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
-                openSqlQuery(sql).use { cursor ->
+                runOnCatalog(sql).use { cursor ->
                     cursor.forEachRemaining { rel ->
                         for (i in 0 until rel.rowCount) {
                             val schema = rel["table_schema"].getObject(i).toString()
@@ -1300,7 +1336,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         .add(TableInfo(key.second, cols))
                 }
             } else {
-                openSqlQuery(sql).use { cursor ->
+                runOnCatalog(sql).use { cursor ->
                     cursor.forEachRemaining { rel ->
                         for (i in 0 until rel.rowCount) {
                             val schema = rel["table_schema"].getObject(i).toString()

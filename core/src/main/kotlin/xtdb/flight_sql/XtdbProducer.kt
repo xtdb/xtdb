@@ -708,7 +708,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val schemaNames =
             if (catalogFilter != null && catalogFilter != dbName) emptyList()
             else connectionFor(ctx, dbName)
-                .querySchemas(schemaFilter, null, null, null, GetObjectsDepth.DB_SCHEMAS)
+                .querySchemas(dbName, schemaFilter, null, null, null, GetObjectsDepth.DB_SCHEMAS)
                 .keys.toList()
 
         singleBatchStream(FlightSqlProducer.Schemas.GET_SCHEMAS_SCHEMA, listener) { root ->
@@ -747,7 +747,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         // querySchemas owns the TABLE-type filter (XTDB only has TABLE) and the LIKE-escaped filters
         val tables =
             if (catalogFilter != null && catalogFilter != dbName) emptyList()
-            else conn.querySchemas(schemaFilter, tableFilter, typeFilters?.toTypedArray(), null, GetObjectsDepth.TABLES)
+            else conn.querySchemas(dbName, schemaFilter, tableFilter, typeFilters?.toTypedArray(), null, GetObjectsDepth.TABLES)
                 .flatMap { (dbSchemaName, ts) -> ts.map { dbSchemaName to it.name } }
 
         singleBatchStream(schema, listener) { root ->

@@ -1,8 +1,11 @@
 package xtdb
 
+import org.apache.arrow.adbc.core.AdbcConnection.GetObjectsDepth
 import org.apache.arrow.adbc.core.AdbcStatement
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -18,6 +21,7 @@ import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.ofType
+import xtdb.database.Database
 import xtdb.database.encodeTimeBasisToken
 import java.time.Instant
 import java.util.UUID
@@ -849,6 +853,94 @@ class InProcessAdbcTest {
                 listOf(mapOf("_id" to 2L)), conn.select("SELECT _id FROM foo ORDER BY _id"),
                 "DELETE isn't statically expandable — it submits the raw Sql op, expanded at index time"
             )
+        }
+    }
+
+    // -- getObjects / getTableSchema across catalogs (databases) --
+
+    private fun Any?.asList() = this as List<*>
+    private fun Any?.asMap() = this as Map<*, *>
+
+    private fun VectorSchemaRoot.publicTables(catalog: String): Set<String> {
+        val row = (0 until rowCount).first { getVector("catalog_name").getObject(it).toString() == catalog }
+        val schemas = (getVector("catalog_db_schemas") as ListVector).getObject(row).asList()
+        val public = schemas.first { it.asMap()["db_schema_name"].toString() == "public" }.asMap()
+        return public["db_schema_tables"].asList().map { it.asMap()["table_name"].toString() }.toSet()
+    }
+
+    @Test
+    fun `getObjects expands every catalog, not just the connected one`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+        xtdb.connect().use { it.attachDb("new_db", Database.Config()) }
+        xtdb.connect("new_db").use { it.update("INSERT INTO bar RECORDS {_id: 2}") }
+
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.ALL, null, null, null, null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                val root = rdr.vectorSchemaRoot
+
+                val catalogs = (0 until root.rowCount)
+                    .map { root.getVector("catalog_name").getObject(it).toString() }.toSet()
+                assertEquals(setOf("new_db", "xtdb"), catalogs, "every catalog is listed")
+
+                assertTrue("foo" in root.publicTables("xtdb"))
+                assertTrue("bar" in root.publicTables("new_db"),
+                    "a catalog other than the connection's own is expanded with its own tables")
+                assertTrue("bar" !in root.publicTables("xtdb"))
+                assertTrue("foo" !in root.publicTables("new_db"))
+            }
+        }
+    }
+
+    @Test
+    fun `getObjects catalogPattern filters catalogs via SQL LIKE`() {
+        xtdb.connect().use { it.attachDb("new_db", Database.Config()) }
+
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.CATALOGS, "new%", null, null, null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                val root = rdr.vectorSchemaRoot
+                val catalogs = (0 until root.rowCount)
+                    .map { root.getVector("catalog_name").getObject(it).toString() }.toSet()
+                assertEquals(setOf("new_db"), catalogs, "LIKE 'new%' matches new_db, not xtdb")
+            }
+        }
+    }
+
+    @Test
+    fun `getObjects is not gated by the connection's transaction access-mode`() {
+        xtdb.connect().use { conn ->
+            conn.beginWriteOnly()
+            conn.getObjects(GetObjectsDepth.CATALOGS, null, null, null, null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                val root = rdr.vectorSchemaRoot
+                assertEquals(setOf("xtdb"), (0 until root.rowCount)
+                    .map { root.getVector("catalog_name").getObject(it).toString() }.toSet())
+            }
+        }
+    }
+
+    @Test
+    fun `getObjects tolerates a catalogPattern that isn't a valid SQL string literal`() {
+        // a newline can't appear in a raw SQL string literal; the pattern is bound as a parameter, so this
+        // returns no match rather than throwing a parse error
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.CATALOGS, "no\nsuch", null, null, null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                assertEquals(0, rdr.vectorSchemaRoot.rowCount)
+            }
+        }
+    }
+
+    @Test
+    fun `getTableSchema resolves a table in another catalog`() {
+        xtdb.connect().use { it.attachDb("new_db", Database.Config()) }
+        xtdb.connect("new_db").use { it.update("INSERT INTO bar RECORDS {_id: 2, b: 'x'}") }
+
+        xtdb.connect().use { conn ->
+            val schema = conn.getTableSchema("new_db", "public", "bar")
+            assertEquals(setOf("_id", "b"), schema.fields.map { it.name }.toSet(),
+                "resolves against the named catalog, not the connection's own db")
         }
     }
 }
