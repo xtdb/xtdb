@@ -699,7 +699,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // frontends. WITH (TIMEZONE) overrides the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's
         // await bound.
         /** @suppress */
-        fun begin(opts: ParsedStatement.TxOptions, args: List<*>? = null) {
+        fun begin(opts: ParsedStatement.TxOptions, args: RelationReader? = null) {
             val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, args)) } ?: defaultTz
 
             when (opts.accessMode) {

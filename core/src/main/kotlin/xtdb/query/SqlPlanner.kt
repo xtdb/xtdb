@@ -9,11 +9,11 @@ import java.time.ZoneId
 interface SqlPlanner {
     /**
      * Evaluate a standalone SQL expression (a transaction-option or SET value) to its runtime value,
-     * substituting positional params (?_0, ?_1, …) from [args].
+     * substituting positional params (?_0, ?_1, …) from the columns of [args].
      *
      * [expr] is the parsed expression context — a `Sql.ExprContext` or `Sql.LiteralContext`.
      */
-    fun evalLiteral(expr: ParserRuleContext, args: List<*>?): Any?
+    fun evalLiteral(expr: ParserRuleContext, args: RelationReader?): Any?
 
     /**
      * Eager-expand a DML statement into core [TxOp]s (e.g. INSERT/PATCH RECORDS → PutDocs/PatchDocs),

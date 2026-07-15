@@ -3412,11 +3412,11 @@
   ([sql] (plan-expr sql {}))
   ([sql opts] (-plan-expr sql opts)))
 
-(defn- apply-args [expr args]
+(defn- apply-args [expr ^RelationReader args]
   (if (symbol? expr)
-    (let [args-map (zipmap (map (fn [idx] (symbol (str "?_" idx))) (range)) args)]
-      (or (args-map expr)
-          (throw (err/incorrect :xtdb/missing-arg (str "missing arg: " expr) {}))))
+    (if-let [col (some-> args (.vectorForOrNull (str expr)))]
+      (.getObject col 0)
+      (throw (err/incorrect :xtdb/missing-arg (str "missing arg: " expr) {})))
     expr))
 
 (declare sql->static-ops)

@@ -1051,12 +1051,14 @@
   ;; doesn't mean anything to us because we're always serializable
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn cmd-set-time-zone [{:keys [server] :as conn} zone-expr args]
-  (set-time-zone conn (.evalLiteral ^SqlPlanner (:sql-planner server) zone-expr args))
+(defn cmd-set-time-zone [{:keys [^BufferAllocator allocator server] :as conn} zone-expr args]
+  (util/with-open [args-rel (some->> (seq args) (vw/open-args allocator))]
+    (set-time-zone conn (.evalLiteral ^SqlPlanner (:sql-planner server) zone-expr args-rel)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-await-token [{:keys [conn-state server] :as conn} token-expr args]
-  (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (.evalLiteral ^SqlPlanner (:sql-planner server) token-expr args))
+(defn cmd-set-await-token [{:keys [^BufferAllocator allocator conn-state server] :as conn} token-expr args]
+  (util/with-open [args-rel (some->> (seq args) (vw/open-args allocator))]
+    (.setAwaitToken ^Xtdb$Connection (:node-conn @conn-state) (.evalLiteral ^SqlPlanner (:sql-planner server) token-expr args-rel)))
   (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "SET AWAIT_TOKEN"}))
 
 (defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} access-mode]
@@ -1225,7 +1227,7 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
-(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
+(defn execute-portal [{:keys [^BufferAllocator allocator conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
   (cond
@@ -1244,7 +1246,8 @@
 
                (visitBegin [_ stmt]
                  ;; pass the portal's bound args — a BEGIN option can be a parameter placeholder (e.g. AWAIT_TOKEN = $1)
-                 (.begin ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) (:args portal))
+                 (util/with-open [args-rel (some->> (seq (:args portal)) (vw/open-args allocator))]
+                   (.begin ^Xtdb$Connection (:node-conn @conn-state) (.getTxOptions stmt) args-rel))
                  (swap! conn-state assoc :implicit-tx? false)
                  (pgio/cmd-write-msg conn pgio/msg-command-complete {:command "BEGIN"}))
 
