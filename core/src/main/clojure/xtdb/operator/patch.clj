@@ -7,7 +7,7 @@
             [xtdb.types :as types])
   (:import java.util.Map
            org.apache.arrow.memory.BufferAllocator
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            [xtdb.arrow Relation RelationReader]
            xtdb.operator.PatchGapsCursor))
 

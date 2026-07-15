@@ -56,3 +56,7 @@ protobuf {
         }
     }
 }
+
+dokka {
+    modulePath.set("xtdb-postgres-source")
+}

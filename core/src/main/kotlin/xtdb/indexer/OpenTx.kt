@@ -3,7 +3,7 @@ package xtdb.indexer
 import io.micrometer.tracing.Tracer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
-import xtdb.ResultCursor
+import xtdb.api.ResultCursor
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
 import xtdb.arrow.VectorType.Companion.BOOL

@@ -8,7 +8,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow IntVector RelationReader RowCopier VectorReader Vector VectorType)
            xtdb.vector.extensions.SetType))
 

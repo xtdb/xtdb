@@ -2,7 +2,7 @@ package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.FieldName
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader

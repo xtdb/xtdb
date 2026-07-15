@@ -4,6 +4,7 @@ import java.lang.Math.addExact
 import java.time.Instant
 import java.time.temporal.ChronoUnit.MICROS
 
+/** @suppress */
 object InstantUtil {
 
     @JvmStatic

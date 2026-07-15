@@ -16,7 +16,7 @@
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow MonoVector RelationReader Vector VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)

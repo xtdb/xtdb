@@ -7,7 +7,7 @@
   (:import (org.apache.arrow.vector.types.pojo Field)
            (xtdb.arrow VectorType)
            (xtdb.operator ProjectCursor ProjectionSpec ProjectionSpec$Identity ProjectionSpec$LocalRowNumber ProjectionSpec$Rename ProjectionSpec$RowNumber ProjectionSpec$Star)
-           (xtdb ICursor)))
+           (xtdb.api ICursor)))
 
 (s/def ::append-columns? boolean?)
 

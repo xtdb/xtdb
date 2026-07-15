@@ -4,7 +4,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import [xtdb ICursor ICursor$Factory]
+  (:import [xtdb.api ICursor ICursor$Factory]
            [xtdb.operator LetCursorFactory]))
 
 (s/def ::binding-sym simple-symbol?)

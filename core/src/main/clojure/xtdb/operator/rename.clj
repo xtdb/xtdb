@@ -6,7 +6,7 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util LinkedList Map)
            (xtdb.arrow RelationReader VectorReader)
-           xtdb.ICursor))
+           xtdb.api.ICursor))
 
 (s/def ::prefix ::lp/relation)
 (s/def ::columns (s/map-of ::lp/column ::lp/column :conform-keys true))

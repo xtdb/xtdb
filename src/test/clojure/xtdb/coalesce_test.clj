@@ -3,7 +3,7 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import xtdb.ICursor))
+  (:import xtdb.api.ICursor))
 
 (t/use-fixtures :each tu/with-allocator)
 

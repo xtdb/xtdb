@@ -16,12 +16,11 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
 import xtdb.arrow.ArrowUnloader.Mode.STREAM
 import xtdb.arrow.Vector.Companion.openVector
-import xtdb.trie.ColumnName
 import xtdb.util.*
 import java.io.ByteArrayOutputStream
 import java.nio.channels.*

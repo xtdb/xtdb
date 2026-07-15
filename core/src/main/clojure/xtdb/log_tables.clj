@@ -9,7 +9,7 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util Map)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.api.log Log Log$Record SourceMessage SourceMessage$Tx
                          SourceMessage$FlushBlock SourceMessage$TriesAdded
                          SourceMessage$AttachDatabase SourceMessage$DetachDatabase

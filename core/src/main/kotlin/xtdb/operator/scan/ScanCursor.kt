@@ -4,7 +4,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.bitemporal.PolygonCalculator
 import xtdb.operator.SelectionSpec

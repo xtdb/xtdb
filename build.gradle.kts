@@ -884,7 +884,7 @@ dokka {
     moduleVersion.set("2.x-SNAPSHOT")
 
     pluginsConfiguration.html {
-        customAssets.from("dokka/logo-icon.svg")
+        customAssets.from("dokka/logo-icon.svg", "dokka/logo-text.svg")
         customStyleSheets.from("dokka/logo-styles.css")
 
         footerMessage.set("© ${Year.now().value} JUXT Ltd")

@@ -21,8 +21,6 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.ICursor
-import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
@@ -104,6 +102,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx
 
     interface Statement : AdbcStatement {
+        /** @suppress */
         val parsedStatement: ParsedStatement?
 
         // planning warnings raised while preparing (empty until prepared / for a non-query statement)
@@ -121,6 +120,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // exactly those opts, independent of the connection's tx state (for internal system reads).
         fun openQuery(): ResultCursor
         fun openUncheckedQuery(): ResultCursor
+        /** @suppress */
         fun openQuery(opts: QueryOpts): ResultCursor
 
         // the output columns given the bound-parameter types. The no-arg [executeSchema] resolves them with
@@ -211,6 +211,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
         // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
+        /** @suppress */
         var defaultAccessMode: ParsedStatement.AccessMode? = null
             private set
 
@@ -323,6 +324,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // for a frontend that has already classified the statement (pgwire), so it prepares through the same
         // Statement path without re-parsing.
+        /** @suppress */
         fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
 
         override fun createStatement(): Statement = openStatement(null)
@@ -600,6 +602,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
+        /** @suppress */
         fun setSessionCharacteristics(accessMode: ParsedStatement.AccessMode?) {
             defaultAccessMode = accessMode
         }
@@ -695,6 +698,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // pgwire passes its portal args, since a BEGIN option can be a parameter placeholder). Public for the
         // frontends. WITH (TIMEZONE) overrides the tx zone (tx-scoped); WITH (AWAIT_TOKEN) sets a READ ONLY tx's
         // await bound.
+        /** @suppress */
         fun begin(opts: ParsedStatement.TxOptions, args: List<*>? = null) {
             val tz = opts.defaultTz?.let { coerceZoneId(sqlPlanner.evalLiteral(it, args)) } ?: defaultTz
 

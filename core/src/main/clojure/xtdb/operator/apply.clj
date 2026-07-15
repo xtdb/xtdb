@@ -5,7 +5,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.vector.reader :as vr])
-  (:import (xtdb ICursor)
+  (:import (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
            (xtdb.operator.apply ApplyCursor ApplyMode$AntiJoin ApplyMode$CrossJoin ApplyMode$LeftJoin ApplyMode$MarkJoin ApplyMode$SemiJoin ApplyMode$SingleJoin DependentCursorFactory)))
 

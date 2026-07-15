@@ -7,7 +7,7 @@
   (:import (java.util Map)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
            (xtdb.operator.distinct DistinctRelationMap DistinctRelationMap$ComparatorFactory)))
 

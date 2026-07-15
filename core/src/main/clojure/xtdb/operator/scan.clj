@@ -24,7 +24,8 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.arrow.RelationReader
            (xtdb.bloom BloomUtils)
-           (xtdb ICursor Bytes)
+           (xtdb Bytes)
+           (xtdb.api ICursor)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)

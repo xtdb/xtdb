@@ -29,8 +29,8 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb ICursor PagesCursor)
-           (xtdb.api TransactionKey Xtdb)
+           (xtdb PagesCursor)
+           (xtdb.api ICursor TransactionKey Xtdb)
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorType)
@@ -166,9 +166,9 @@
   (apply vw/open-args *allocator* args))
 
 (defn ->cursor
-  (^xtdb.ICursor [pages] (->cursor *allocator* pages))
-  (^xtdb.ICursor [^BufferAllocator allocator, pages] (->cursor allocator nil pages))
-  (^xtdb.ICursor [^BufferAllocator allocator, schema pages] (PagesCursor. allocator schema pages)))
+  (^xtdb.api.ICursor [pages] (->cursor *allocator* pages))
+  (^xtdb.api.ICursor [^BufferAllocator allocator, pages] (->cursor allocator nil pages))
+  (^xtdb.api.ICursor [^BufferAllocator allocator, schema pages] (PagesCursor. allocator schema pages)))
 
 (defmethod lp/ra-expr ::pages [_]
   (s/cat :op #{::pages}
