@@ -24,6 +24,7 @@ import java.io.StringWriter
 import java.nio.ByteBuffer
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit
+import xtdb.api.tx.OpenTx
 
 private val LOG = CrashLogger::class.logger
 

@@ -13,13 +13,14 @@ import xtdb.error.Anomaly.Companion.wrapAnomaly
 import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.error.Unsupported
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.table.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.InstantMicros
 import xtdb.util.closeOnCatch
 import java.time.Instant
 import java.time.ZoneId
+import xtdb.api.tx.OpenTx
 
 private val FORBIDDEN_SCHEMAS = setOf("xt", "information_schema", "pg_catalog")
 

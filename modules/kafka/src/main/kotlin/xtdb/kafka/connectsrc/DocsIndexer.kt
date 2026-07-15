@@ -14,9 +14,9 @@ import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
 import xtdb.error.Anomaly.Companion.toAnomaly
 import xtdb.error.Incorrect
-import xtdb.indexer.OpenTx
-import xtdb.indexer.TxIndexer
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.kafka.connectsrc.proto.DocsIndexerConfig
 import xtdb.kafka.connectsrc.proto.docsIndexerConfig
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceToken

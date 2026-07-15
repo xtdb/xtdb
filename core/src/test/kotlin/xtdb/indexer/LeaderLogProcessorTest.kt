@@ -44,6 +44,7 @@ import java.time.InstantSource
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
+import xtdb.api.tx.TxIndexer
 
 class LeaderLogProcessorTest {
 

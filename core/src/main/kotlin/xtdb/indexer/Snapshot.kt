@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
+import xtdb.api.tx.OpenTx
 
 class Snapshot(
     val txBasis: TransactionKey?,

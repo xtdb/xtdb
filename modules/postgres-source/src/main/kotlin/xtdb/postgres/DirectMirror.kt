@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import xtdb.error.Incorrect
-import xtdb.indexer.OpenTx
+import xtdb.api.tx.OpenTx
 import xtdb.postgres.proto.DirectMirrorConfig
 import xtdb.postgres.proto.directMirrorConfig
 import xtdb.time.InstantUtil.asMicros

@@ -26,7 +26,7 @@ import xtdb.error.Incorrect
 import xtdb.error.Interrupted
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.table.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
@@ -38,6 +38,10 @@ import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
 import java.nio.ByteBuffer
 import java.time.*
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
 
 private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 

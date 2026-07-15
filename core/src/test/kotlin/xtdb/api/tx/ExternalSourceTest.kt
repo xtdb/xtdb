@@ -1,4 +1,4 @@
-package xtdb.database
+package xtdb.api.tx
 
 import io.mockk.every
 import io.mockk.mockk
@@ -20,14 +20,18 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
+import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.compactor.Compactor
+import xtdb.database.Database
+import xtdb.database.DatabaseCatalog
+import xtdb.database.DatabasePartition
+import xtdb.database.DatabaseState
+import xtdb.database.DatabaseStorage
 import xtdb.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
-import xtdb.indexer.TxIndexer
-import xtdb.indexer.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import xtdb.util.closeAll
@@ -70,7 +74,7 @@ class ExternalSourceTest {
     /**
      * Simple in-memory ExternalSource for testing.
      * Send signals to [channel]; each signal submits a tx via [index] (by default the blocking
-     * [xtdb.indexer.TxIndexer.executeTx]; pass a `submit`-based [index] to drive the fire-and-forget path).
+     * [xtdb.api.tx.TxIndexer.executeTx]; pass a `submit`-based [index] to drive the fire-and-forget path).
      */
     class InMemoryExternalSource(
         val channel: Channel<ExternalSourceToken?> = Channel(100),

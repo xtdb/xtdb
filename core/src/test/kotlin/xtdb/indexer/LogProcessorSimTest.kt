@@ -26,11 +26,11 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.database.ExternalSource
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.error.Incorrect
 import xtdb.indexer.SimLog.Companion.launchSimLog
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.table.TableRef
 import xtdb.table.fromSchemaAndTable
@@ -41,6 +41,7 @@ import xtdb.util.logger
 import java.nio.ByteBuffer
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
+import xtdb.api.tx.TxIndexer
 
 private val LOG = LogProcessorSimTest::class.logger
 

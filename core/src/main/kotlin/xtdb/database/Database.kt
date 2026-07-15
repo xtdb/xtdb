@@ -54,6 +54,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.*
 import kotlin.concurrent.Volatile
+import xtdb.api.tx.ExternalSource
 
 private val LOG = Database::class.logger
 

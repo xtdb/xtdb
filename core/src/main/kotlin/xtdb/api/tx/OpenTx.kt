@@ -1,4 +1,4 @@
-package xtdb.indexer
+package xtdb.api.tx
 
 import io.micrometer.tracing.Tracer
 import org.apache.arrow.memory.BufferAllocator
@@ -14,9 +14,10 @@ import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.database.ExternalSourceToken
 import xtdb.error.Conflict
 import xtdb.error.Incorrect
+import xtdb.indexer.DatabaseSnapshot
+import xtdb.indexer.ResolvedTx
 import xtdb.query.IQuerySource
 import xtdb.api.query.PrepareOpts
 import xtdb.query.SqlStatement

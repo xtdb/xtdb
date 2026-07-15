@@ -13,13 +13,13 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
-import xtdb.indexer.TxIndexer
+import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.TransactionResult
-import xtdb.database.ExternalSource
-import xtdb.indexer.TxIndexer.TxResult
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.TxIndexer.TxResult
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.error.Fault
 import xtdb.error.Incorrect
 import xtdb.postgres.proto.PostgresSourceConfig

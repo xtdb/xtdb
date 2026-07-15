@@ -1,7 +1,7 @@
 package xtdb.catalog
 
 import com.google.protobuf.ByteString
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.api.log.MessageId
 import xtdb.api.storage.ObjectStore

@@ -29,6 +29,7 @@ import java.nio.ByteBuffer
 import java.time.Instant
 import java.time.InstantSource
 import java.util.UUID
+import xtdb.api.tx.OpenTx
 
 class LiveIndexTest {
 

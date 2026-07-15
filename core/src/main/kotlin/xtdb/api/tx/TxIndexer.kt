@@ -1,8 +1,7 @@
-package xtdb.indexer
+package xtdb.api.tx
 
 import kotlinx.coroutines.Deferred
 import xtdb.api.TransactionResult
-import xtdb.database.ExternalSourceToken
 import java.time.Instant
 
 /**

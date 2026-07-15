@@ -6,7 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
-import xtdb.indexer.OpenTx
+import xtdb.api.tx.OpenTx
 import com.google.protobuf.Any as ProtoAny
 
 /**

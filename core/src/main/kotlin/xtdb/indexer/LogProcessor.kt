@@ -17,7 +17,7 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
-import xtdb.database.ExternalSource
+import xtdb.api.tx.ExternalSource
 import xtdb.error.Fault
 import xtdb.error.Interrupted
 import xtdb.util.closeOnCatch

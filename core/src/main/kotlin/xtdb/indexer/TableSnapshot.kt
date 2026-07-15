@@ -8,6 +8,7 @@ import xtdb.table.TableRef
 import xtdb.trie.ColumnName
 import xtdb.util.safelyOpening
 import kotlin.collections.orEmpty
+import xtdb.api.tx.OpenTx
 
 class TableSnapshot(
     val table: TableRef,

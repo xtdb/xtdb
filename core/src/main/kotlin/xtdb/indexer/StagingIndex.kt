@@ -6,6 +6,7 @@ import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
 import xtdb.api.log.MessageId
 import xtdb.util.closeAll
+import xtdb.api.tx.OpenTx
 
 /**
  * The leader's staging area for resolved-but-not-yet-durable transactions. Standing state the

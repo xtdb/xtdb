@@ -35,10 +35,10 @@ import io.micrometer.core.instrument.Tag
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.log.KafkaCluster
-import xtdb.database.ExternalSource
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.error.Incorrect
-import xtdb.indexer.TxIndexer
+import xtdb.api.tx.TxIndexer
 import xtdb.kafka.connectsrc.proto.KafkaConnectSourceConfig
 import xtdb.kafka.connectsrc.proto.KafkaConnectSourceToken
 import xtdb.kafka.connectsrc.proto.kafkaConnectSourceConfig

@@ -1,7 +1,7 @@
 package xtdb.api.log
 
 import com.google.protobuf.ByteString
-import xtdb.database.ExternalSourceToken
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.database.Database
 import xtdb.database.DatabaseName
 import xtdb.log.proto.SourceLogMessage

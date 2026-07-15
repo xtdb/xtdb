@@ -32,6 +32,7 @@ import java.time.Instant
 import java.util.HashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.StampedLock
+import xtdb.api.tx.OpenTx
 
 private val LOG = LiveIndex::class.logger
 

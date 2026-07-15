@@ -9,10 +9,10 @@ import xtdb.error.Incorrect
 import xtdb.api.log.Log
 import xtdb.api.storage.Storage
 import xtdb.database.Database
-import xtdb.database.ExternalSource
-import xtdb.database.ExternalSourceToken
-import xtdb.indexer.TxIndexer
-import xtdb.indexer.TxIndexer.TxResult
+import xtdb.api.tx.ExternalSource
+import xtdb.api.tx.ExternalSourceToken
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.TxIndexer.TxResult
 import java.net.ServerSocket
 import java.net.URI
 import java.net.http.HttpClient

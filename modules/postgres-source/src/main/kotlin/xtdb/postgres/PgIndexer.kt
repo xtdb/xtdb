@@ -4,7 +4,7 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import xtdb.error.Unsupported
-import xtdb.indexer.OpenTx
+import xtdb.api.tx.OpenTx
 import java.util.ServiceLoader
 import com.google.protobuf.Any as ProtoAny
 
