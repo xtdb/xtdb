@@ -262,6 +262,39 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `getSchemas db_schema_filter_pattern excludes non-matching schemas`() {
+        insertData("INSERT INTO foo (_id) VALUES (1)")
+        insertData("INSERT INTO reporting.bar (_id) VALUES (1)")
+
+        val schemaNames = fsqlClient.getSchemas(null, "reporting", *emptyCallOpts).readRows()
+            .map { it["db_schema_name"] }.toSet()
+        assertEquals(setOf("reporting"), schemaNames)
+    }
+
+    @Test
+    fun `getTables filters by db_schema and table_name patterns`() {
+        insertData("INSERT INTO foo (_id) VALUES (1)")
+        insertData("INSERT INTO reporting.bar (_id) VALUES (1)")
+
+        val bySchema = fsqlClient.getTables(null, "reporting", null, null, false, *emptyCallOpts)
+            .readRows().map { it["table_name"] }.toSet()
+        assertEquals(setOf("bar"), bySchema)
+
+        val byName = fsqlClient.getTables(null, null, "foo", null, false, *emptyCallOpts)
+            .readRows().map { it["table_name"] }.toSet()
+        assertEquals(setOf("foo"), byName)
+    }
+
+    @Test
+    fun `getTables with an empty catalog string matches no catalog`() {
+        insertData("INSERT INTO foo (_id) VALUES (1)")
+
+        // FlightSQL: an empty catalog string selects objects "without a catalog"; XTDB has none.
+        val rows = fsqlClient.getTables("", null, null, null, false, *emptyCallOpts).readRows()
+        assertTrue(rows.isEmpty(), "empty catalog matches nothing: $rows")
+    }
+
+    @Test
     fun `test FlightSQL getSqlInfo`() {
         val rows = fsqlClient.getSqlInfo(intArrayOf(), *emptyCallOpts).readRows()
         assertTrue(rows.isNotEmpty(), "Expected at least one info row")

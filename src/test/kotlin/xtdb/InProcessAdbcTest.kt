@@ -861,11 +861,24 @@ class InProcessAdbcTest {
     private fun Any?.asList() = this as List<*>
     private fun Any?.asMap() = this as Map<*, *>
 
-    private fun VectorSchemaRoot.publicTables(catalog: String): Set<String> {
+    private fun VectorSchemaRoot.dbSchemasOf(catalog: String): List<Map<*, *>> {
         val row = (0 until rowCount).first { getVector("catalog_name").getObject(it).toString() == catalog }
-        val schemas = (getVector("catalog_db_schemas") as ListVector).getObject(row).asList()
-        val public = schemas.first { it.asMap()["db_schema_name"].toString() == "public" }.asMap()
-        return public["db_schema_tables"].asList().map { it.asMap()["table_name"].toString() }.toSet()
+        return (getVector("catalog_db_schemas") as ListVector).getObject(row).asList().map { it.asMap() }
+    }
+
+    private fun VectorSchemaRoot.schemaNames(catalog: String): Set<String> =
+        dbSchemasOf(catalog).map { it["db_schema_name"].toString() }.toSet()
+
+    private fun VectorSchemaRoot.tablesOf(catalog: String, schema: String): Set<String> =
+        dbSchemasOf(catalog).first { it["db_schema_name"].toString() == schema }["db_schema_tables"]
+            .asList().map { it.asMap()["table_name"].toString() }.toSet()
+
+    private fun VectorSchemaRoot.publicTables(catalog: String) = tablesOf(catalog, "public")
+
+    private fun VectorSchemaRoot.columnsOf(catalog: String, schema: String, table: String): Set<String> {
+        val tables = dbSchemasOf(catalog).first { it["db_schema_name"].toString() == schema }["db_schema_tables"].asList()
+        return tables.first { it.asMap()["table_name"].toString() == table }.asMap()["table_columns"]
+            .asList().map { it.asMap()["column_name"].toString() }.toSet()
     }
 
     @Test
@@ -941,6 +954,46 @@ class InProcessAdbcTest {
             val schema = conn.getTableSchema("new_db", "public", "bar")
             assertEquals(setOf("_id", "b"), schema.fields.map { it.name }.toSet(),
                 "resolves against the named catalog, not the connection's own db")
+        }
+    }
+
+    @Test
+    fun `getObjects dbSchemaPattern filters schemas via SQL LIKE`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+        insertData("INSERT INTO reporting.bar RECORDS {_id: 1}")
+
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.TABLES, null, "reporting", null, null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                val root = rdr.vectorSchemaRoot
+                assertEquals(setOf("reporting"), root.schemaNames("xtdb"))
+                assertEquals(setOf("bar"), root.tablesOf("xtdb", "reporting"))
+            }
+        }
+    }
+
+    @Test
+    fun `getObjects tableNamePattern filters tables via SQL LIKE`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1}")
+        insertData("INSERT INTO bar RECORDS {_id: 1}")
+
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.TABLES, null, null, "foo", null, null).use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                assertEquals(setOf("foo"), rdr.vectorSchemaRoot.tablesOf("xtdb", "public"))
+            }
+        }
+    }
+
+    @Test
+    fun `getObjects columnNamePattern filters columns via SQL LIKE`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, name: 'a', age: 2}")
+
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.ALL, null, null, "foo", null, "name").use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                assertEquals(setOf("name"), rdr.vectorSchemaRoot.columnsOf("xtdb", "public", "foo"))
+            }
         }
     }
 }
