@@ -10,7 +10,7 @@
             [xtdb.vector.reader :as vr])
   (:import (java.util Map)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.block.proto Block TableBlock)
            (xtdb.catalog BlockCatalog)

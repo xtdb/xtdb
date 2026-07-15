@@ -1,6 +1,6 @@
 package xtdb.operator.join
 
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.operator.join.ComparatorFactory.Companion.build
 import xtdb.arrow.FieldName

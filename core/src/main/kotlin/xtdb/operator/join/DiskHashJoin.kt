@@ -1,7 +1,7 @@
 package xtdb.operator.join
 
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector.Companion.openVector

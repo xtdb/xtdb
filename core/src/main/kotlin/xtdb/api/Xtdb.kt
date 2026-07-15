@@ -21,8 +21,6 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.ICursor
-import xtdb.ResultCursor
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log

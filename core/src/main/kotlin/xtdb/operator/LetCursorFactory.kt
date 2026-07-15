@@ -3,7 +3,7 @@ package xtdb.operator
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.util.closeAll

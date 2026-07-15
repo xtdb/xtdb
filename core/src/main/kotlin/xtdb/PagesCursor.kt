@@ -2,6 +2,7 @@ package xtdb
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.api.ICursor
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.util.closeOnCatch

@@ -3,7 +3,7 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp])
-  (:import (xtdb ICursor)
+  (:import (xtdb.api ICursor)
            (xtdb.operator SelectCursor)))
 
 (defmethod lp/ra-expr :select [_]

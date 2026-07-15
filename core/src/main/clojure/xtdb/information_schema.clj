@@ -14,7 +14,7 @@
            [java.time Duration]
            [java.util Map]
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            xtdb.api.Authenticator$Factory
            xtdb.api.query.IKeyFn
            xtdb.authz.RoleMembership

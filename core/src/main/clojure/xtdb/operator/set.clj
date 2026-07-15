@@ -6,7 +6,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util])
   (:import java.util.stream.IntStream
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow RelationReader)
            (xtdb.operator.join BuildSide ComparatorFactory ProbeSide)))
 

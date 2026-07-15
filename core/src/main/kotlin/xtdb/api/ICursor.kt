@@ -1,19 +1,18 @@
-package xtdb
+package xtdb.api
 
-import io.micrometer.tracing.Tracer
 import io.micrometer.tracing.Span
-import org.apache.arrow.memory.BufferAllocator
+import io.micrometer.tracing.Tracer
 import xtdb.api.query.IKeyFn
-import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.RelationReader
 import xtdb.time.InstantUtil.asMicros
 import java.lang.AutoCloseable
 import java.time.Duration
-import java.time.Instant
 import java.time.InstantSource
-import java.util.*
+import java.util.Comparator
+import java.util.Spliterator
+import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
-import java.util.stream.StreamSupport.stream
+import java.util.stream.StreamSupport
 
 interface ICursor : Spliterator<RelationReader>, AutoCloseable {
     interface Factory {
@@ -43,11 +42,14 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
 
     override fun close() = Unit
 
-    fun consume() = consume(SNAKE_CASE_STRING)
+    fun consume() = consume(IKeyFn.KeyFn.SNAKE_CASE_STRING)
 
     fun <K> consume(keyFn: IKeyFn<K>): List<List<Map<K, *>>> =
-        stream(this, false).map { it.toMaps(keyFn) }.toList()
+        StreamSupport.stream(this, false).map { it.toMaps(keyFn) }.toList()
 
+    /**
+     * @suppress
+     */
     companion object {
 
         private class TracingCursor(
@@ -105,7 +107,7 @@ interface ICursor : Spliterator<RelationReader>, AutoCloseable {
                     s.tag("cursor.page_count", pageCount.toString())
                     s.tag("cursor.row_count", rowCount.toString())
                     attrs?.forEach { (k, v) -> s.tag(k, v.toString()) }
-                    s.end(endTime.asMicros, java.util.concurrent.TimeUnit.MICROSECONDS)
+                    s.end(endTime.asMicros, TimeUnit.MICROSECONDS)
                 }
             }
 

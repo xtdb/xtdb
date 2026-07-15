@@ -1,7 +1,7 @@
 package xtdb.operator.apply
 
 import com.carrotsearch.hppc.IntArrayList
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.BOOL_TYPE
 import xtdb.arrow.FieldName
 import xtdb.arrow.NULL_TYPE
@@ -10,7 +10,6 @@ import xtdb.arrow.RelationWriter
 import xtdb.arrow.VectorType
 import xtdb.error.Incorrect
 import xtdb.trie.ColumnName
-import xtdb.arrow.VectorType.Companion.BOOL
 
 sealed interface ApplyMode {
     fun accept(

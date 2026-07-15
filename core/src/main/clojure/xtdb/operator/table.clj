@@ -13,7 +13,7 @@
            (java.util ArrayList HashMap HashSet List Set)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow ListExpression Relation RelationReader RelationWriter Vector VectorType VectorWriter)))
 
 (s/def ::output-cols (s/coll-of ::lp/column :kind vector?))

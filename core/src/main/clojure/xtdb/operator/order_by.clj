@@ -12,7 +12,7 @@
            java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.arrow ArrowUnloader$Mode Relation Relation$Loader RelationReader RowCopier Vector)
-           xtdb.ICursor))
+           xtdb.api.ICursor))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})

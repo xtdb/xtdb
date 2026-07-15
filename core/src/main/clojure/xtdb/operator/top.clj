@@ -4,7 +4,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types])
   (:import java.util.stream.IntStream
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            xtdb.arrow.RelationReader))
 
 (s/def ::skip (s/nilable (s/or :literal nat-int?, :param ::lp/param)))

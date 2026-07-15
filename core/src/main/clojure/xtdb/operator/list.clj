@@ -6,7 +6,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow ListExpression RelationReader Vector VectorType)))
 
 (s/def ::columns (s/map-of ::lp/column any?, :count 1))

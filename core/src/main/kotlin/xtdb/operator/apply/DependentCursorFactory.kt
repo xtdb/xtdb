@@ -1,6 +1,6 @@
 package xtdb.operator.apply
 
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 
 interface DependentCursorFactory {

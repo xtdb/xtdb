@@ -1,7 +1,7 @@
 package xtdb.operator
 
 import org.apache.arrow.memory.util.ArrowBufPointer
-import xtdb.ICursor
+import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
 import xtdb.arrow.RelationWriter
 import xtdb.arrow.RowCopier

@@ -45,14 +45,15 @@
            (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
-           (xtdb ICursor ResultCursor ResultCursor$ErrorTrackingCursor PagesCursor)
+           (xtdb PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
+           (xtdb.api ICursor ResultCursor)
            (xtdb.api.query IKeyFn)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query ErrorTrackingCursor IQuerySource IQuerySource$Factory ParsedStatement PrepareOpts PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -72,7 +73,7 @@
     (trySplit [_] (.trySplit cursor))
     (close [_] (.close cursor))))
 
-(defn- wrap-dynvars ^xtdb.ResultCursor [^ResultCursor cursor
+(defn- wrap-dynvars ^xtdb.api.ResultCursor [^ResultCursor cursor
                                          current-time, snapshot-token, default-tz
                                          ^RefCounter ref-ctr]
   (reify ResultCursor
@@ -98,7 +99,7 @@
     (trySplit [_] (.trySplit cursor))
     (close [_] (.close cursor))))
 
-(defn- wrap-closeables ^xtdb.ResultCursor [^ResultCursor cursor, ^RefCounter ref-ctr, closeables]
+(defn- wrap-closeables ^xtdb.api.ResultCursor [^ResultCursor cursor, ^RefCounter ref-ctr, closeables]
   (let [!closed? (AtomicBoolean. false)]
     (reify ResultCursor
       (getResultTypes [_] (.getResultTypes cursor))
@@ -562,7 +563,7 @@
   (^java.util.stream.Stream [^ResultCursor cursor {:keys [key-fn]} {:keys [query-error-counter]}]
    (let [key-fn (cache-key-fn key-fn)]
      (-> (StreamSupport/stream (cond-> cursor
-                                 query-error-counter (ResultCursor$ErrorTrackingCursor. query-error-counter))
+                                 query-error-counter (ErrorTrackingCursor. query-error-counter))
                                false)
          ^Stream (.onClose (fn []
                              (util/close cursor)))

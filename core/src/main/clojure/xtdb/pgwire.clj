@@ -41,7 +41,7 @@
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
            (xtdb.error Incorrect Interrupted)
-           xtdb.ResultCursor
+           xtdb.api.ResultCursor
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde
            xtdb.JsonLdSerde
@@ -899,7 +899,7 @@
     ;; args-eval opens unchecked. A user query in a write tx is the pgjdbc carve-out that verify-permissibility
     ;; let through, so it too opens unchecked (openQuery would reject it). SHOW opens checked but the connection
     ;; gate-exempts it off its parsed statement. bind copies the args, so we close our own relation once opened.
-    (letfn [(->cursor ^xtdb.ResultCursor [^Xtdb$Statement statement xt-args checked?]
+    (letfn [(->cursor ^xtdb.api.ResultCursor [^Xtdb$Statement statement xt-args checked?]
               (with-auth-check conn
                 (util/with-open [args-rel (vw/open-args allocator xt-args)]
                   (.bind statement args-rel)

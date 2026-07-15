@@ -3,7 +3,7 @@
             [xtdb.vector.writer :as vw])
   (:import org.apache.arrow.memory.BufferAllocator
            (xtdb.arrow Relation RelationReader)
-           xtdb.ICursor))
+           xtdb.api.ICursor))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full page to return rows.
 ;; Then, we coalesce small pages together into pages of at least 100, to share the per-page costs.
@@ -73,8 +73,8 @@
     (.close cursor)))
 
 (defn ->coalescing-cursor
-  (^xtdb.ICursor [cursor allocator] (->coalescing-cursor cursor allocator {}))
+  (^xtdb.api.ICursor [cursor allocator] (->coalescing-cursor cursor allocator {}))
 
-  (^xtdb.ICursor [cursor allocator {:keys [pass-through ideal-min-page-size]
+  (^xtdb.api.ICursor [cursor allocator {:keys [pass-through ideal-min-page-size]
                                     :or {pass-through 100, ideal-min-page-size 100}}]
    (CoalescingCursor. cursor allocator pass-through ideal-min-page-size 0)))

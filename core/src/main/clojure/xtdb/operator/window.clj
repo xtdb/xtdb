@@ -14,7 +14,7 @@
            (java.io Closeable)
            (java.util LinkedList List Map Spliterator)
            (org.apache.arrow.memory BufferAllocator)
-           (xtdb ICursor)
+           (xtdb.api ICursor)
            (xtdb.arrow IntVector LongVector RelationReader Relation Vector VectorReader)
            (xtdb.arrow.agg GroupMapper)))
 
