@@ -996,4 +996,18 @@ class InProcessAdbcTest {
             }
         }
     }
+
+    @Test
+    fun `getObjects tolerates schema table column patterns that aren't valid SQL string literals`() {
+        insertData("INSERT INTO foo RECORDS {_id: 1, name: 'a'}")
+
+        // a newline can't appear in a raw SQL string literal; the patterns are bound as parameters, so these
+        // match nothing rather than throwing a parse error — cf. the catalogPattern case above
+        xtdb.connect().use { conn ->
+            conn.getObjects(GetObjectsDepth.ALL, null, "n\no", "n\no", null, "n\no").use { rdr ->
+                assertTrue(rdr.loadNextBatch())
+                assertEquals(emptySet<String>(), rdr.vectorSchemaRoot.schemaNames("xtdb"))
+            }
+        }
+    }
 }

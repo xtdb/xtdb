@@ -1231,52 +1231,54 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
             // resolve information_schema against `catalog`, not the connection's own database — openStatement's
             // targetDb scopes it (information_schema is per-database); openUncheckedQuery so metadata reads
-            // aren't gated by the connection's transaction access-mode.
-            fun runOnCatalog(sql: String) = openStatement(parseStatement(sql), catalog).openUncheckedQuery()
+            // aren't gated by the connection's transaction access-mode. Filter patterns bind to the `?`s in
+            // `sql` positionally, in `params` order — never interpolated, so any pattern is safe (a raw literal
+            // would choke the lexer on e.g. a newline). Each condition and its param below are appended in lockstep.
+            fun runOnCatalog(sql: String, params: List<String>, onRow: (RelationReader) -> Unit) =
+                openStatement(parseStatement(sql), catalog).use { stmt ->
+                    if (params.isNotEmpty()) {
+                        stmt.prepare()
+                        Relation.openFromRows(allocator, listOf(params.withIndex().associate { (i, p) -> "?_$i" to p }))
+                            .use { stmt.bind(it) }
+                    }
+                    stmt.openUncheckedQuery().use { cursor -> cursor.forEachRemaining { onRow(it) } }
+                }
 
             val conditions = mutableListOf<String>()
-            dbSchemaPattern?.let { conditions.add("table_schema LIKE '${it.replace("'", "''")}'") }
-            tableNamePattern?.let { conditions.add("table_name LIKE '${it.replace("'", "''")}'") }
+            val params = mutableListOf<String>()
+            dbSchemaPattern?.let { conditions += "table_schema LIKE ?"; params += it }
+            tableNamePattern?.let { conditions += "table_name LIKE ?"; params += it }
 
-            val where = if (conditions.isNotEmpty()) "WHERE ${conditions.joinToString(" AND ")}" else ""
+            fun whereOf(conds: List<String>) = if (conds.isEmpty()) "" else "WHERE ${conds.joinToString(" AND ")}"
 
             if (depth == GetObjectsDepth.DB_SCHEMAS) {
-                val sql = "SELECT DISTINCT table_schema FROM information_schema.tables $where ORDER BY table_schema"
+                val sql = "SELECT DISTINCT table_schema FROM information_schema.tables ${whereOf(conditions)} ORDER BY table_schema"
                 val result = linkedMapOf<String, List<TableInfo>>()
-                runOnCatalog(sql).use { cursor ->
-                    cursor.forEachRemaining { rel ->
-                        for (i in 0 until rel.rowCount) {
-                            result[rel["table_schema"].getObject(i).toString()] = emptyList()
-                        }
+                runOnCatalog(sql, params) { rel ->
+                    for (i in 0 until rel.rowCount) {
+                        result[rel["table_schema"].getObject(i).toString()] = emptyList()
                     }
                 }
                 return result
             }
 
-            val needColumns = depth == GetObjectsDepth.ALL
-            val sql = if (needColumns) {
-                val colConditions = conditions.toMutableList()
-                columnNamePattern?.let { colConditions.add("column_name LIKE '${it.replace("'", "''")}'") }
-                val colWhere = if (colConditions.isNotEmpty()) "WHERE ${colConditions.joinToString(" AND ")}" else ""
-                "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns $colWhere ORDER BY table_schema, table_name, ordinal_position"
-            } else {
-                "SELECT DISTINCT table_schema, table_name FROM information_schema.tables $where ORDER BY table_schema, table_name"
-            }
-
             val result = linkedMapOf<String, MutableList<TableInfo>>()
 
-            if (needColumns) {
+            if (depth == GetObjectsDepth.ALL) {
+                val colConditions = conditions + listOfNotNull(columnNamePattern?.let { "column_name LIKE ?" })
+                val colParams = params + listOfNotNull(columnNamePattern)
+                val sql = "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns ${whereOf(colConditions)} ORDER BY table_schema, table_name, ordinal_position"
+
+                // information_schema.columns is one row per column; gather each table's columns, then fold into TableInfos
                 val tableColumns = linkedMapOf<Pair<String, String>, MutableList<ColumnInfo>>()
-                runOnCatalog(sql).use { cursor ->
-                    cursor.forEachRemaining { rel ->
-                        for (i in 0 until rel.rowCount) {
-                            val schema = rel["table_schema"].getObject(i).toString()
-                            val table = rel["table_name"].getObject(i).toString()
-                            val column = rel["column_name"].getObject(i).toString()
-                            val dataType = rel["data_type"].getObject(i).toString()
-                            tableColumns.getOrPut(schema to table) { mutableListOf() }
-                                .add(ColumnInfo(column, dataType))
-                        }
+                runOnCatalog(sql, colParams) { rel ->
+                    for (i in 0 until rel.rowCount) {
+                        val schema = rel["table_schema"].getObject(i).toString()
+                        val table = rel["table_name"].getObject(i).toString()
+                        val column = rel["column_name"].getObject(i).toString()
+                        val dataType = rel["data_type"].getObject(i).toString()
+                        tableColumns.getOrPut(schema to table) { mutableListOf() }
+                            .add(ColumnInfo(column, dataType))
                     }
                 }
                 for ((key, cols) in tableColumns) {
@@ -1284,14 +1286,13 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                         .add(TableInfo(key.second, cols))
                 }
             } else {
-                runOnCatalog(sql).use { cursor ->
-                    cursor.forEachRemaining { rel ->
-                        for (i in 0 until rel.rowCount) {
-                            val schema = rel["table_schema"].getObject(i).toString()
-                            val table = rel["table_name"].getObject(i).toString()
-                            result.getOrPut(schema) { mutableListOf() }
-                                .add(TableInfo(table, emptyList()))
-                        }
+                val sql = "SELECT DISTINCT table_schema, table_name FROM information_schema.tables ${whereOf(conditions)} ORDER BY table_schema, table_name"
+                runOnCatalog(sql, params) { rel ->
+                    for (i in 0 until rel.rowCount) {
+                        val schema = rel["table_schema"].getObject(i).toString()
+                        val table = rel["table_name"].getObject(i).toString()
+                        result.getOrPut(schema) { mutableListOf() }
+                            .add(TableInfo(table, emptyList()))
                     }
                 }
             }
