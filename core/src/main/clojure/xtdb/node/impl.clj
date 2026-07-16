@@ -17,7 +17,8 @@
            [java.util.concurrent.atomic AtomicReference]
            (org.apache.arrow.memory BufferAllocator)
            xtdb.NodeBase
-           (xtdb.api DataSource Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection Xtdb$XtdbInternal)
+           xtdb.XtdbInternal
+           (xtdb.api DataSource Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database$Catalog)
            (xtdb.query IQuerySource SqlPlanner)))
@@ -99,7 +100,7 @@
     (with-open [conn (.connect this (or (.getDbName tx-opts) "xtdb"))]
       (.executeTx conn tx-ops tx-opts)))
 
-  Xtdb$XtdbInternal
+  XtdbInternal
   (getDbCatalog [_] db-cat)
 
   Closeable

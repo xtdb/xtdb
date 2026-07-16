@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.kafka.ConfluentKafkaContainer
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.api.log.Log.*
 import xtdb.api.storage.Storage
@@ -827,7 +828,7 @@ class KafkaClusterTest {
                     stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
                 }
             }
-            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            val cat = (node as XtdbInternal).dbCatalog
             cat.primary.sendFlushBlockMessage()
             cat.syncAll(Duration.ofSeconds(10))
             node.connection.use { conn ->
@@ -853,7 +854,7 @@ class KafkaClusterTest {
             storage(Storage.local(storageDir))
             compactor { threads(0) }
         }.use { node ->
-            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            val primary = (node as XtdbInternal).dbCatalog.primary
             val deadline = System.currentTimeMillis() + 30_000
             while (primary.ingestionError == null && System.currentTimeMillis() < deadline) {
                 Thread.sleep(100)
@@ -994,7 +995,7 @@ class KafkaClusterTest {
                     }
                 }
             }
-            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            val primary = (node as XtdbInternal).dbCatalog.primary
             assertEquals(null, primary.ingestionError, "node must replay cleanly from the truncated prefix")
         }
     }
@@ -1031,7 +1032,7 @@ class KafkaClusterTest {
                     }
                 }
             }
-            val primary = (node as Xtdb.XtdbInternal).dbCatalog.primary
+            val primary = (node as XtdbInternal).dbCatalog.primary
             assertEquals(
                 null, primary.ingestionError,
                 "a fresh node must not error when the topic's earliest offset is past 0"

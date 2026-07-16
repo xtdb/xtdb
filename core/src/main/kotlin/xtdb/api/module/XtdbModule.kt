@@ -14,6 +14,7 @@ interface XtdbModule : AutoCloseable {
         fun openModule(xtdb: Xtdb): XtdbModule
 
         companion object {
+            /** @suppress */
             val serializersModule = SerializersModule {
                 polymorphic(Factory::class) {
                     for (reg in ServiceLoader.load(Registration::class.java))

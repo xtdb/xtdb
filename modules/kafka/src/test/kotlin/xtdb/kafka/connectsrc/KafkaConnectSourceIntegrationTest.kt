@@ -28,6 +28,7 @@ import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import java.math.BigDecimal
@@ -393,7 +394,7 @@ class KafkaConnectSourceIntegrationTest {
             produceBytes(sourceTopic, null, """{"name":"no-id"}""".toByteArray())
             produceBytes(sourceTopic, "second", """{"name":"Second"}""".toByteArray())
 
-            val cat = (node as Xtdb.XtdbInternal).dbCatalog
+            val cat = (node as XtdbInternal).dbCatalog
             awaitCondition("source halts with an ingestion error") {
                 cat["events"]?.ingestionError != null
             }

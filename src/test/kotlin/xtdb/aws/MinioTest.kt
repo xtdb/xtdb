@@ -14,13 +14,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.containers.MinIOContainer
 import software.amazon.awssdk.regions.Region.AWS_ISO_GLOBAL
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.api.log.Log
 import xtdb.api.storage.Storage
 import xtdb.cache.DiskCache
-import xtdb.database.Database
 import xtdb.symbol
-import xtdb.util.asPath
 import java.nio.file.Path
 import java.util.*
 import kotlin.io.path.Path
@@ -99,7 +98,7 @@ class MinioTest : S3Test() {
                 exec("INSERT INTO foo RECORDS {_id: 1}")
             }
 
-            (node as Xtdb.XtdbInternal).dbCatalog.let { cat ->
+            (node as XtdbInternal).dbCatalog.let { cat ->
                 cat.primary.sendFlushBlockMessage()
                 cat["foo"]!!.sendFlushBlockMessage()
                 cat.syncAll(2.seconds.toJavaDuration())
@@ -120,7 +119,7 @@ class MinioTest : S3Test() {
             storage(xtdbStorage)
             compactor { threads(0) }
         }.use { node ->
-            val dbCatalog = (node as Xtdb.XtdbInternal).dbCatalog
+            val dbCatalog = (node as XtdbInternal).dbCatalog
 
             assertEquals(setOf("xtdb", "foo"), dbCatalog.databaseNames.toSet())
 
@@ -163,7 +162,7 @@ class MinioTest : S3Test() {
                     }
                 }
 
-                val cat = (node as Xtdb.XtdbInternal).dbCatalog
+                val cat = (node as XtdbInternal).dbCatalog
                 assertEquals(setOf("xtdb", "foo"), cat.databaseNames.toSet())
                 assertNull(cat["foo"]?.ingestionError)
             }

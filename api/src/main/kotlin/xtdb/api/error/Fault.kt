@@ -7,8 +7,8 @@ import clojure.lang.PersistentHashMap
 class Fault(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly(message, ensureCategory(data, FAULT), cause) {
-    companion object {
-        internal val FAULT = Keyword.intern("cognitect.anomalies", "fault")
+    internal companion object {
+        val FAULT: Keyword = Keyword.intern("cognitect.anomalies", "fault")
     }
 
     constructor(

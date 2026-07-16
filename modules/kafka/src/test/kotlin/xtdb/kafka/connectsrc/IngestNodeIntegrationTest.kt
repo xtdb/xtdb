@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
+import xtdb.XtdbInternal
 import xtdb.api.IngestNode
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
@@ -211,7 +212,7 @@ class IngestNodeIntegrationTest {
                             ingestDb.blockCatalog.currentBlockIndex == 0L
                         }
 
-                        val followerDb = (queryNode as Xtdb.XtdbInternal).dbCatalog["events"]
+                        val followerDb = (queryNode as XtdbInternal).dbCatalog["events"]
                         awaitCondition("read-only attach processes the flushed block") {
                             followerDb?.blockCatalog?.currentBlockIndex == 0L
                         }

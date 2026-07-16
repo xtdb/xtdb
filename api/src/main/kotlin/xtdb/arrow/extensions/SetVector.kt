@@ -7,7 +7,7 @@ import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.util.CallBack
 
-fun toListFieldType (fieldType: FieldType): FieldType {
+private fun toListFieldType(fieldType: FieldType): FieldType {
     return if (fieldType.isNullable) {
         FieldType.nullable(ArrowType.List.INSTANCE)
     } else {

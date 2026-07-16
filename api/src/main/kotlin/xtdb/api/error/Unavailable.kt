@@ -8,8 +8,8 @@ class Unavailable(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly(message, ensureCategory(data, UNAVAILABLE), cause) {
 
-    companion object {
-        internal val UNAVAILABLE = Keyword.intern("cognitect.anomalies", "unavailable")
+    internal companion object {
+        val UNAVAILABLE: Keyword = Keyword.intern("cognitect.anomalies", "unavailable")
     }
 
     constructor(

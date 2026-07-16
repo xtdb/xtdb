@@ -21,19 +21,23 @@ import xtdb.api.error.Unsupported
 import java.time.Instant
 import java.time.InstantSource
 
+/** @suppress */
 interface AuthResult {
     val userId: String
 }
 
+/** @suppress */
 interface OAuthResult : AuthResult {
     val expiresAt: Instant
     fun withExpiry(expiresAt: Instant): OAuthResult
 }
 
+/** @suppress */
 data class SimpleResult(
     override val userId: String
 ) : AuthResult
 
+/** @suppress */
 data class OAuthPasswordResult(
     override val userId: String,
     override var expiresAt: Instant,
@@ -43,6 +47,7 @@ data class OAuthPasswordResult(
     override fun withExpiry(expiresAt: Instant) = copy(expiresAt = expiresAt)
 }
 
+/** @suppress */
 data class OAuthClientCredentialsResult(
     override val userId: String,
     override var expiresAt: Instant,

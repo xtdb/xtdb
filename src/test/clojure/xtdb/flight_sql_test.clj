@@ -8,7 +8,8 @@
            (org.apache.arrow.flight.sql FlightSqlClient)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
-           (xtdb.api Xtdb Xtdb$XtdbInternal)
+           xtdb.api.Xtdb
+           xtdb.XtdbInternal
            xtdb.arrow.Relation))
 
 (def ^:private ^:dynamic ^FlightSqlClient *client* nil)
@@ -198,7 +199,7 @@
         (t/is (false? (.loadNextBatch rdr)))))))
 
 (t/deftest test-adbc-multi-db
-  (let [db-cat (.getDbCatalog ^Xtdb$XtdbInternal tu/*node*)]
+  (let [db-cat (.getDbCatalog ^XtdbInternal tu/*node*)]
     (.attach db-cat "other-db" nil)
 
     (with-open [conn (.connect ^Xtdb tu/*node*)]
@@ -234,7 +235,7 @@
             (t/is (false? (.loadNextBatch rdr)))))))))
 
 (t/deftest test-flightsql-multi-db
-  (let [db-cat (.getDbCatalog ^Xtdb$XtdbInternal tu/*node*)
+  (let [db-cat (.getDbCatalog ^XtdbInternal tu/*node*)
         other-db-opts (db-call-opts "other-db")]
     (.attach db-cat "other-db" nil)
     (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)

@@ -379,7 +379,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL set then get catalog round-trips within a session`() {
-        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        val dbCat = (xtdb as XtdbInternal).dbCatalog
         dbCat.attach("other-db", null)
 
         cookieAwareClient().use { client ->
@@ -407,7 +407,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL catalog session option routes queries to that database`() {
-        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        val dbCat = (xtdb as XtdbInternal).dbCatalog
         dbCat.attach("other-db", null)
 
         cookieAwareClient().use { client ->
@@ -537,7 +537,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL empty catalog erases the session option back to default`() {
-        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        val dbCat = (xtdb as XtdbInternal).dbCatalog
         dbCat.attach("other-db", null)
 
         cookieAwareClient().use { client ->
@@ -583,7 +583,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL two sessions keep independent catalog and data`() {
-        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        val dbCat = (xtdb as XtdbInternal).dbCatalog
         dbCat.attach("other-db", null)
 
         cookieAwareClient().use { sessionA ->
@@ -619,7 +619,7 @@ class FlightSqlAdbcTest {
 
     @Test
     fun `test FlightSQL x-xtdb-database header beats the session catalog option`() {
-        val dbCat = (xtdb as Xtdb.XtdbInternal).dbCatalog
+        val dbCat = (xtdb as XtdbInternal).dbCatalog
         dbCat.attach("other-db", null)
 
         cookieAwareClient().use { client ->

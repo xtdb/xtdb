@@ -10,6 +10,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.postgres.proto.PostgresSourceToken
 import java.nio.file.Files
@@ -125,7 +126,7 @@ class PostgresSourcePermissionsTest : PostgresSourceTestBase() {
     /** Polls until the source streams (snapshot complete) or surfaces an ingestion error; returns null
      *  on a clean stream, otherwise the Postgres error message (or a timeout note). */
     private suspend fun streamsCleanlyOrError(node: Xtdb, timeout: Duration = 30.seconds): String? {
-        val cat = (node as Xtdb.XtdbInternal).dbCatalog
+        val cat = (node as XtdbInternal).dbCatalog
         val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
         while (System.currentTimeMillis() < deadline) {
             cat["cdc"]?.ingestionError?.let { return it.message ?: it.toString() }

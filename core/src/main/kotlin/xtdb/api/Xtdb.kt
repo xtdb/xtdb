@@ -85,10 +85,6 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     interface CompactorNode : AutoCloseable
 
-    interface XtdbInternal : Xtdb {
-        val dbCatalog: Database.Catalog
-    }
-
     fun <T : XtdbModule> module(type: Class<T>): T?
 
     fun addMeterRegistry(meterRegistry: MeterRegistry)
@@ -163,6 +159,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
         // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
+        /** @suppress */
         val effectiveAwaitToken: String? get() = tx?.awaitToken ?: awaitToken
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
@@ -178,6 +175,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // the tz a read/write actually runs under: an open tx's zone (a mid-tx SET TIME ZONE / WITH (TIMEZONE))
         // shadows the connection's own, mirroring [effectiveAwaitToken].
+        /** @suppress */
         val effectiveDefaultTz: ZoneId get() = tx?.txDefaultTz ?: defaultTz
 
         private val _sessionParameters = mutableMapOf<String, String?>()
@@ -593,19 +591,27 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // tx status for the frontend's ready-state + commit/abort decisions. A failed tx rejects further work
         // until ROLLBACK (Postgres' "current transaction is aborted").
+        /** @suppress */
         val isTxOpen: Boolean get() = tx != null
+
+        /** @suppress */
         val isTxFailed: Boolean get() = tx?.failed != null
 
         // resolved access-mode of the open tx (an unresolved bare tx is neither); the frontend's permissibility
         // checks read these to keep their own error messages + special-cases (e.g. pgwire's pgjdbc type query).
+        /** @suppress */
         val isTxReadWrite: Boolean get() = tx?.mode is ReadWrite
+
+        /** @suppress */
         val isTxReadOnly: Boolean get() = tx?.mode is ReadOnly
 
         // the begin-time async flag (WITH (ASYNC)) of the open write tx; false when unset / not a write tx.
         // A bare COMMIT (no SYNC/ASYNC) and the programmatic commit() commit through it.
+        /** @suppress */
         val isTxAsync: Boolean get() = (tx?.mode as? ReadWrite)?.async ?: false
 
         // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
+        /** @suppress */
         fun failTx(cause: Throwable) {
             tx?.let { it.failed = it.failed ?: cause }
         }

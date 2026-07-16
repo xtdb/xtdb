@@ -7,6 +7,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import java.nio.file.Files
 import kotlin.time.Duration
@@ -55,7 +56,7 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
     }
 
     private fun cdcIngestionError(node: Xtdb) =
-        (node as Xtdb.XtdbInternal).dbCatalog["cdc"]?.ingestionError
+        (node as XtdbInternal).dbCatalog["cdc"]?.ingestionError
 
     private fun qRows(node: Xtdb, table: String): List<Pair<Int, String?>> =
         xtQuery(node, database = "cdc", sql = "SELECT _id, name FROM public.$table ORDER BY _id")

@@ -85,8 +85,10 @@ dokka {
             matchingRegex.set("xtdb\\.api.*")
             suppress.set(false)
         }
+        // xtdb.arrow holds the VectorType lattice; xtdb.arrow.extensions (internal Arrow codec
+        // machinery) is matched only by this exact regex, so it stays suppressed by the catch-all.
         perPackageOption {
-            matchingRegex.set("xtdb\\.arrow.*")
+            matchingRegex.set("xtdb\\.arrow")
             suppress.set(false)
         }
         perPackageOption {

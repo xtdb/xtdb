@@ -59,6 +59,7 @@ object PathSerde : KSerializer<Path> {
     override fun deserialize(decoder: Decoder): Path = Paths.get(decoder.decodeString())
 }
 
+/** @suppress */
 object InetAddressSerde : KSerializer<InetAddress?> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("InetAddress", PrimitiveKind.STRING)
 

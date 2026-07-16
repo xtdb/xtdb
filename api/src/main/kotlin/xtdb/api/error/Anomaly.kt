@@ -22,9 +22,11 @@ sealed class Anomaly(
     /**
      * Return a fresh anomaly of the same category with [ctx] merged into the existing data,
      * preserving this instance as the cause. An empty [ctx] returns this instance unchanged.
+     * @suppress
      */
     abstract fun mergeCtx(ctx: Map<String, *>): Anomaly
 
+    /** @suppress */
     companion object {
         internal val CATEGORY = Keyword.intern("cognitect.anomalies", "category")
         internal val ERROR_CODE = Keyword.intern("xtdb.error", "code")

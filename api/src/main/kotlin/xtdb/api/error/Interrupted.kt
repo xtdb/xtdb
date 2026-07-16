@@ -7,8 +7,9 @@ import clojure.lang.PersistentHashMap
 class Interrupted(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly(message, ensureCategory(data, INTERRUPTED), cause){
-    companion object {
-        internal val INTERRUPTED = Keyword.intern("cognitect.anomalies", "interrupted")
+
+    internal companion object {
+        val INTERRUPTED: Keyword = Keyword.intern("cognitect.anomalies", "interrupted")
     }
 
     constructor(

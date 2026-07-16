@@ -30,6 +30,8 @@ import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
 /**
  * A read-only version of LocalLog that watches the log file for new messages
  * written by another process (the primary cluster).
+ *
+ * @suppress
  */
 class ReadOnlyLocalLog<M>(
     private val rootPath: Path,

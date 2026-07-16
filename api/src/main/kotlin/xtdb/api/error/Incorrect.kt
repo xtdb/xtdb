@@ -8,8 +8,8 @@ class Incorrect(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly.Caller(message, ensureCategory(data, INCORRECT), cause) {
 
-    companion object {
-        internal val INCORRECT = Keyword.intern("cognitect.anomalies/incorrect")
+    internal companion object {
+        val INCORRECT: Keyword = Keyword.intern("cognitect.anomalies/incorrect")
     }
 
     constructor(

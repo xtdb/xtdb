@@ -8,8 +8,8 @@ class Conflict(
     message: String?, data: IPersistentMap = PersistentHashMap.EMPTY, cause: Throwable? = null
 ) : Anomaly.Caller(message, ensureCategory(data, CONFLICT), cause) {
 
-    companion object {
-        internal val CONFLICT = Keyword.intern("cognitect.anomalies", "conflict")
+    internal companion object {
+        val CONFLICT: Keyword = Keyword.intern("cognitect.anomalies", "conflict")
     }
 
     constructor(

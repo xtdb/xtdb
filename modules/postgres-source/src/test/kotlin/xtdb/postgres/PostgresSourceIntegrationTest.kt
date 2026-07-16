@@ -3,7 +3,6 @@ package xtdb.postgres
 import clojure.lang.ILookup
 import clojure.lang.Keyword
 import io.micrometer.core.instrument.MeterRegistry
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.*
@@ -16,6 +15,7 @@ import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.api.log.KafkaCluster
 import xtdb.time.Interval
@@ -30,7 +30,6 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.util.UUID
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 @Tag("integration")
@@ -213,7 +212,7 @@ class PostgresSourceIntegrationTest {
      *  Reflects the *last tx the source committed* — useful for asserting the source's
      *  progress against the snapshotCompleted flag. */
     private fun latestPostgresToken(node: Xtdb, db: String = "cdc"): PostgresSourceToken {
-        val bytes = (node as Xtdb.XtdbInternal).dbCatalog[db]?.watchers?.externalSourceToken
+        val bytes = (node as XtdbInternal).dbCatalog[db]?.watchers?.externalSourceToken
             ?: fail("db '$db' has not applied any source tx yet — no token to read")
         return PostgresSourceToken.parseFrom(bytes)
     }
@@ -301,7 +300,7 @@ class PostgresSourceIntegrationTest {
 
                 // Flush a block so the cdc block catalog persists latestCompletedTx (high txId)
                 // and latestProcessedMsgId (low source-log offset) to durable storage.
-                val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+                val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
                 cdc.sendFlushBlockMessage()
                 awaitCondition("block persisted for cdc", timeout = 30.seconds) {
                     cdc.blockCatalog.currentBlockIndex != null
@@ -438,7 +437,7 @@ class PostgresSourceIntegrationTest {
 
                 dedicatedPg.stop()
 
-                val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+                val cdc = (node as XtdbInternal).dbCatalog
                 awaitCondition("cdc surfaces ingestionError when PG dies during snapshot", timeout = 30.seconds) {
                     cdc["cdc"]?.ingestionError != null
                 }
@@ -483,7 +482,7 @@ class PostgresSourceIntegrationTest {
 
                 dedicatedPg.stop()
 
-                val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+                val cdc = (node as XtdbInternal).dbCatalog
                 awaitCondition("cdc surfaces ingestionError when PG dies mid-stream", timeout = 60.seconds) {
                     cdc["cdc"]?.ingestionError != null
                 }
@@ -514,7 +513,7 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic).use { node ->
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
-            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            val cdc = (node as XtdbInternal).dbCatalog
             awaitCondition("cdc surfaces ingestionError for missing publication", timeout = 30.seconds) {
                 cdc["cdc"]?.ingestionError != null
             }
@@ -539,7 +538,7 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic, pgPassword = "wrong-password").use { node ->
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
-            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            val cdc = (node as XtdbInternal).dbCatalog
             awaitCondition("cdc surfaces ingestionError on auth failure", timeout = 30.seconds) {
                 cdc["cdc"]?.ingestionError != null
             }
@@ -1022,7 +1021,7 @@ class PostgresSourceIntegrationTest {
 
             pgExecute("INSERT INTO pg_vf_bad (_id, name, _valid_from) VALUES (1, 'Alice', TIMESTAMP '2020-01-01 00:00:00')")
 
-            val cdc = (node as Xtdb.XtdbInternal).dbCatalog
+            val cdc = (node as XtdbInternal).dbCatalog
             awaitCondition("cdc surfaces ingestionError for non-TIMESTAMPTZ _valid_from", timeout = 30.seconds) {
                 cdc["cdc"]?.ingestionError != null
             }
@@ -1069,7 +1068,7 @@ class PostgresSourceIntegrationTest {
 
                 // wait until the snapshot is done and streaming is live, so the insert below streams
                 awaitCondition("streaming live", timeout = 60.seconds) {
-                    (node as Xtdb.XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
+                    (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
                         ?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
                 }
 

@@ -11,6 +11,7 @@ const val DEFAULT_SCHEMA: SchemaName = "public"
 
 data class TableRef(val schemaName: SchemaName = DEFAULT_SCHEMA, val tableName: TableName) {
 
+    /** @suppress */
     val sym: Symbol get() = Symbol.intern(schemaName, tableName)
 
     val schemaAndTable get() = "$schemaName/$tableName"

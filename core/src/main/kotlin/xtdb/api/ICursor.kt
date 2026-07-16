@@ -4,6 +4,7 @@ import io.micrometer.tracing.Span
 import io.micrometer.tracing.Tracer
 import xtdb.api.query.IKeyFn
 import xtdb.arrow.RelationReader
+import xtdb.query.ExplainAnalyze
 import xtdb.time.InstantUtil.asMicros
 import java.lang.AutoCloseable
 import java.time.Duration
@@ -15,20 +16,15 @@ import java.util.function.Consumer
 import java.util.stream.StreamSupport
 
 interface ICursor : Spliterator<RelationReader>, AutoCloseable {
+    /** @suppress */
     interface Factory {
         fun open(): ICursor
     }
 
-    sealed interface ExplainAnalyze {
-        val rowCount: Long
-        val pageCount: Int
-        val timeToFirstPage: Duration?
-        val totalTime: Duration
-        val pushdowns: Map<String, Any>?
-        val cursorAttributes: Map<String, Any>?
-    }
-
+    /** @suppress */
     val cursorType: String
+
+    /** @suppress */
     val childCursors: List<ICursor>
     val explainAnalyze: ExplainAnalyze? get() = null
 

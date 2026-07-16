@@ -109,7 +109,7 @@ private fun KafkaConfigMap.openConsumer() =
         ByteArrayDeserializer()
     )
 
-fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
+private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     val desc =
         try {
             describeTopics(listOf(topic)).allTopicNames().get()[topic]
@@ -524,22 +524,6 @@ class KafkaCluster(
                 offsets: Map<TopicPartition, OffsetAndMetadata>,
                 groupMetadata: ConsumerGroupMetadata,
             )
-        }
-
-        companion object {
-            inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
-                openTx().use { tx ->
-                    try {
-                        block(tx).also { tx.commit() }
-                    } catch (e: Throwable) {
-                        try {
-                            tx.abort()
-                        } catch (abortEx: Throwable) {
-                            e.addSuppressed(abortEx)
-                        }
-                        throw e
-                    }
-                }
         }
     }
 

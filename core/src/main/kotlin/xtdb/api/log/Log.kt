@@ -45,6 +45,7 @@ interface Log<M> : AutoCloseable {
         companion object {
             private val otherLogs = ServiceLoader.load(Registration::class.java).associateBy { it.protoTag }
 
+            /** @suppress */
             val serializersModule = SerializersModule {
                 polymorphic(Factory::class) {
                     subclass(InMemoryLog.Factory::class)
@@ -71,8 +72,6 @@ interface Log<M> : AutoCloseable {
     fun interface RecordProcessor<in M> {
         suspend fun processRecords(records: List<Record<M>>)
     }
-
-    fun interface Subscription : AutoCloseable
 
     companion object {
         @JvmStatic
@@ -131,6 +130,7 @@ interface Log<M> : AutoCloseable {
             fun abort()
         }
 
+        /** @suppress */
         companion object {
             inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
                 openTx().use { tx ->

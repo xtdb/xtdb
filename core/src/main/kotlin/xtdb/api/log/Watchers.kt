@@ -10,6 +10,7 @@ import xtdb.util.logger
 
 private val LOG = Watchers::class.logger
 
+/** @suppress */
 class Watchers(latestTxId: TxId, latestSourceMsgId: MessageId, externalSourceToken: ExternalSourceToken? = null) {
 
     private sealed interface State {

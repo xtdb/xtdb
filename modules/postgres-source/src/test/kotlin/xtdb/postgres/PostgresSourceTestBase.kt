@@ -3,6 +3,7 @@ package xtdb.postgres
 import kotlinx.coroutines.runInterruptible
 import org.junit.jupiter.api.fail
 import org.testcontainers.postgresql.PostgreSQLContainer
+import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.api.log.Log.Companion.localLog
 import xtdb.api.storage.Storage
@@ -121,7 +122,7 @@ abstract class PostgresSourceTestBase {
     }
 
     protected suspend fun flushBlock(node: Xtdb) {
-        val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]!!
+        val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
         val before = cdc.blockCatalog.currentBlockIndex
         cdc.sendFlushBlockMessage()
         // wait for *this* flush's block, not just any block — matters when flushing repeatedly
@@ -143,7 +144,7 @@ abstract class PostgresSourceTestBase {
         // cdc may be momentarily absent right after a restart (it re-attaches from the replayed log),
         // so resolve it inside the poll rather than up front
         awaitCondition("cdc snapshot complete, streaming live", timeout = 30.seconds) {
-            val cdc = (node as Xtdb.XtdbInternal).dbCatalog["cdc"]
+            val cdc = (node as XtdbInternal).dbCatalog["cdc"]
             cdc?.watchers?.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
         }
 
