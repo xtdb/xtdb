@@ -35,10 +35,10 @@ interface MessageCodec<M> {
 interface Log<M> : AutoCloseable {
 
     interface Factory {
-        fun openSourceLog(remotes: Map<RemoteAlias, Remote>): Log<SourceMessage>
-        fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>): Log<SourceMessage>
-        fun openReplicaLog(remotes: Map<RemoteAlias, Remote>): Log<ReplicaMessage>
-        fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>): Log<ReplicaMessage>
+        fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int = 1): Log<SourceMessage>
+        fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int = 1): Log<SourceMessage>
+        fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int = 1): Log<ReplicaMessage>
+        fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int = 1): Log<ReplicaMessage>
 
         fun writeTo(dbConfig: DatabaseConfig.Builder)
 
@@ -96,12 +96,11 @@ interface Log<M> : AutoCloseable {
      * so that if we're starting up a new node it catches up to the latest offset,
      * then it's the latest-submitted-offset of _this_ node.
      */
-    val latestSubmittedOffset: LogOffset
+    fun latestSubmittedOffset(partition: Int = 0): LogOffset
 
     val epoch: Int
 
-    val latestSubmittedMsgId: MessageId
-        get() = offsetToMsgId(epoch, latestSubmittedOffset)
+    fun latestSubmittedMsgId(partition: Int = 0): MessageId = offsetToMsgId(epoch, latestSubmittedOffset(partition))
 
     class MessageMetadata(
         val epoch: Int,
@@ -111,15 +110,16 @@ interface Log<M> : AutoCloseable {
         val msgId: MessageId get() = offsetToMsgId(epoch, logOffset)
     }
 
-    suspend fun appendMessage(message: M): MessageMetadata
+    suspend fun appendMessage(message: M, partition: Int = 0): MessageMetadata
 
-    fun appendMessageBlocking(message: M): MessageMetadata = runBlocking { appendMessage(message) }
+    fun appendMessageBlocking(message: M, partition: Int = 0): MessageMetadata =
+        runBlocking { appendMessage(message, partition) }
 
     /**
      * @param transactionalId uniquely identifies this producer for Kafka's transaction coordinator.
      *   Must be stable across restarts for transaction recovery.
      */
-    fun openAtomicProducer(transactionalId: String): AtomicProducer<M>
+    fun openAtomicProducer(transactionalId: String, partition: Int): AtomicProducer<M>
 
     interface AtomicProducer<M> : AutoCloseable {
         fun openTx(): Tx<M>
@@ -148,24 +148,21 @@ interface Log<M> : AutoCloseable {
         }
     }
 
-    fun readLastMessage(): M?
+    fun readLastMessage(partition: Int = 0): M?
 
     /**
      * Reads records in the range [fromMsgId, toMsgId) (start-inclusive, end-exclusive).
      * Returns a lazy sequence of decoded records in offset order.
      * If toMsgId exceeds the latest submitted offset, reads up to the latest available record.
      */
-    fun readRecords(fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
+    fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
 
-    suspend fun tailAll(afterMsgId: MessageId, processor: RecordProcessor<M>)
+    suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>)
     suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
 
     /**
-     * The transport's handle on a partition's leader election, driven as a three-step state
+     * The transport's handle on one partition's leader election, driven as a three-step state
      * machine (follower → prepared → leading). See allium/log-processor-lifecycle.allium.
-     *
-     * Each method takes the partition(s) the event is for — a single partition today, but the parameter
-     * is kept so a listener can route per-partition as Kafka's partition guards relax (#5557).
      *
      * [launchTransition] launches the follower→leader transition on the listener's *own* scope and
      * returns its [Deferred] — it builds the leader term but does NOT commit the role, so it runs off the
@@ -176,9 +173,9 @@ interface Log<M> : AutoCloseable {
      * committed role single-writer while the unbounded catch-up runs off the poll thread.
      */
     interface SubscriptionListener<M> {
-        fun launchTransition(partitions: Collection<Int>): Deferred<Unit>
-        fun commitLeader(partitions: Collection<Int>): TailSpec<M>
-        suspend fun demoteLeader(partitions: Collection<Int>)
+        fun launchTransition(partition: Int): Deferred<Unit>
+        fun commitLeader(partition: Int): TailSpec<M>
+        suspend fun demoteLeader(partition: Int)
     }
 
     data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)

@@ -151,7 +151,7 @@ class LogProcessor(
         }
     }
 
-    override fun launchTransition(partitions: Collection<Int>): Deferred<Unit> {
+    override fun launchTransition(partition: Int): Deferred<Unit> {
         // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
         // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
         val followerSys = (state as? Following)?.system
@@ -165,7 +165,7 @@ class LogProcessor(
 
     private suspend fun runTransition(followerSys: FollowerSystem) {
         try {
-            replicaLog.openAtomicProducer("$dbName-leader").closeOnCatch { replicaProducer ->
+            replicaLog.openAtomicProducer("$dbName-leader", partition = 0).closeOnCatch { replicaProducer ->
                 val followerProc = followerSys.proc
 
                 // NoOp to get a known msgId we can await — latestSubmittedMsgId won't do, because Kafka's
@@ -237,7 +237,7 @@ class LogProcessor(
         }
     }
 
-    override fun commitLeader(partitions: Collection<Int>): Log.TailSpec<SourceMessage> {
+    override fun commitLeader(partition: Int): Log.TailSpec<SourceMessage> {
         val prepared = (state as? Prepared)
             ?: throw Fault("[$dbName] commitLeader without a prepared leader (${state::class.simpleName})", "xtdb/log-commit-not-prepared")
         state = Leading(prepared.system)
@@ -245,7 +245,7 @@ class LogProcessor(
         return Log.TailSpec(prepared.resumeAfterMsgId, prepared.system.proc)
     }
 
-    override suspend fun demoteLeader(partitions: Collection<Int>) {
+    override suspend fun demoteLeader(partition: Int) {
         // Genuine revoke (Leading) and abandoning an uncommitted leader (Prepared) tear down the
         // same way; an already-following listener is a no-op.
         val leaderSys = when (val s = state) {

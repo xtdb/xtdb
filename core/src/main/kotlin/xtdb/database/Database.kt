@@ -229,7 +229,7 @@ class Database(
             val processedOffset = msgIdToOffset(latestProcessedMsgId)
             val processedEpoch = msgIdToEpoch(latestProcessedMsgId)
             val logEpoch = log.epoch
-            val latestSubmittedOffset = log.latestSubmittedOffset
+            val latestSubmittedOffset = log.latestSubmittedOffset()
 
             when {
                 processedEpoch != logEpoch -> logNewEpoch()
@@ -250,6 +250,17 @@ class Database(
         ): Database = safelyOpening {
             val indexerConfig = base.config.indexer
             val readOnly = dbConfig.isReadOnly
+
+            // Attach-time gate: the type signatures admit N throughout, but per-partition BufferPool
+            // layout (unit 6), TableCatalog wrappers + UNION-at-scan (unit 7) and xt.txs_$partition
+            // naming (unit 8) haven't landed. Lifting this gate is unit 9.
+            if (dbConfig.partitions > 1)
+                throw Incorrect(
+                    "multi-partition external-source databases are not yet enabled " +
+                            "(config declared partitions=${dbConfig.partitions})",
+                    "xtdb/multi-partition-not-yet-enabled",
+                    mapOf("db-name" to dbName, "partitions" to dbConfig.partitions)
+                )
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
             val storage = open { DatabaseStorage.open(allocator, base, dbName, dbConfig) }
@@ -340,13 +351,13 @@ class Database(
                         (state.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
                     },
                     gauge("node.tx.latestSubmittedMsgId") {
-                        storage.sourceLog.latestSubmittedMsgId.toDouble()
+                        storage.sourceLog.latestSubmittedMsgId().toDouble()
                     },
                     gauge("node.tx.latestProcessedMsgId") {
                         watchers.latestSourceMsgId.toDouble()
                     },
                     gauge("node.tx.lag.MsgId") {
-                        maxOf(storage.sourceLog.latestSubmittedMsgId - watchers.latestSourceMsgId, 0).toDouble()
+                        maxOf(storage.sourceLog.latestSubmittedMsgId() - watchers.latestSourceMsgId, 0).toDouble()
                     },
                 )
             } ?: emptyList()
@@ -371,17 +382,15 @@ class Database(
             )
 
             if (indexerConfig.enabled && !readOnly) {
-                // Route each partition's leader-election events to that partition's own LogProcessor.
-                // One partition today (index 0); #5557 grows `db.partitions` and this fans out to N.
                 val listener = object : Log.SubscriptionListener<SourceMessage> {
-                    override fun launchTransition(partitions: Collection<Int>) =
-                        db.partitions.getValue(partitions.single()).logProcessor!!.launchTransition(partitions)
+                    override fun launchTransition(partition: Int) =
+                        db.partitions.getValue(partition).logProcessor!!.launchTransition(partition)
 
-                    override fun commitLeader(partitions: Collection<Int>) =
-                        db.partitions.getValue(partitions.single()).logProcessor!!.commitLeader(partitions)
+                    override fun commitLeader(partition: Int) =
+                        db.partitions.getValue(partition).logProcessor!!.commitLeader(partition)
 
-                    override suspend fun demoteLeader(partitions: Collection<Int>) {
-                        for (idx in partitions) db.partitions[idx]?.logProcessor?.demoteLeader(listOf(idx))
+                    override suspend fun demoteLeader(partition: Int) {
+                        db.partitions[partition]?.logProcessor?.demoteLeader(partition)
                     }
                 }
                 scope.launch { storage.sourceLog.openGroupSubscription(listener) }
@@ -420,12 +429,18 @@ class Database(
         val mode: Mode = Mode.READ_WRITE,
         val externalSource: ExternalSource.Factory? = null,
         val critical: Boolean = false,
+        val partitions: Int = 1,
     ) {
+        init {
+            require(partitions >= 1) { "partitions must be >= 1, got $partitions" }
+        }
+
         fun log(log: Log.Factory) = copy(log = log)
         fun storage(storage: Storage.Factory) = copy(storage = storage)
         fun mode(mode: Mode) = copy(mode = mode)
         fun externalSource(externalSource: ExternalSource.Factory?) = copy(externalSource = externalSource)
         fun critical(critical: Boolean) = copy(critical = critical)
+        fun partitions(partitions: Int) = copy(partitions = partitions)
 
         val isReadOnly: Boolean get() = mode == Mode.READ_ONLY
 
@@ -437,6 +452,7 @@ class Database(
                     dbConfig.mode = mode.toProto()
                     externalSource?.let { dbConfig.externalSource = ExternalSource.Factory.toProto(it) }
                     dbConfig.critical = critical
+                    dbConfig.partitions = partitions
                 }.build()
 
         companion object {
@@ -452,12 +468,14 @@ class Database(
                     .externalSource(dbConfig.externalSource.takeIf { dbConfig.hasExternalSource() }
                         ?.let { ExternalSource.Factory.fromProto(it) })
                     .critical(dbConfig.critical)
+                    // Pre-#5557 records don't carry the field; proto's default of 0 becomes 1.
+                    .partitions(dbConfig.partitions.coerceAtLeast(1))
         }
     }
 
     interface Catalog : ILookup, Seqable, Iterable<Database>, IQuerySource.QueryCatalog {
         companion object {
-            private suspend fun Database.sync() = watchers.awaitSource(sourceLog.latestSubmittedMsgId)
+            private suspend fun Database.sync() = watchers.awaitSource(sourceLog.latestSubmittedMsgId())
 
             private suspend fun Catalog.awaitAll0(token: String) = coroutineScope {
                 val basis = token.decodeTxBasisToken()
@@ -526,13 +544,10 @@ class Database(
                 }
             }.toMap()
 
-        // #5557 unit 5: the source log's latestSubmittedMsgId is database-level for now, so the same value
-        // fills every partition slot.
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> =
             databaseNames.mapNotNull { dbName ->
                 databaseOrNull(dbName)?.let { db ->
-                    val latest = db.sourceLog.latestSubmittedMsgId
-                    dbName to List(db.partitions.size) { latest }
+                    dbName to db.partitions.keys.sorted().map { db.sourceLog.latestSubmittedMsgId(it) }
                 }
             }.toMap()
 

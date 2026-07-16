@@ -241,7 +241,7 @@
                               (case lower-op :>= v, :> (inc v))))
           to-msg-id (long (let [v (long upper-val)]
                             (case upper-op :<= (inc v), :< v)))
-          record-seq (.readRecords log from-msg-id to-msg-id)
+          record-seq (.readRecords log 0 from-msg-id to-msg-id)
           record-iter (.iterator record-seq)
           decode-tx-ops? (and source? (contains? col-names "tx_ops"))]
 

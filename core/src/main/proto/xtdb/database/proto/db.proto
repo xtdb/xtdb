@@ -50,5 +50,9 @@ message DatabaseConfig {
     DatabaseMode mode = 7;
     google.protobuf.Any external_source = 8;
     bool critical = 9;
+
+    // Number of source-log partitions this database consumes from. Immutable post-attach.
+    // fromProto coerces 0 -> 1 on read to handle pre-#5557 records with no field. See #5557.
+    int32 partitions = 10;
 }
 

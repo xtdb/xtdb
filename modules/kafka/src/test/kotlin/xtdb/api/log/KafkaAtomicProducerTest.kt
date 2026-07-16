@@ -63,9 +63,9 @@ class KafkaAtomicProducerTest {
             .open().use { cluster ->
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
-                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        val tailJob = launch { log.tailAll(0, -1, subscriber) }
                         try {
-                            log.openAtomicProducer("tx-producer-1").use { producer ->
+                            log.openAtomicProducer("tx-producer-1", 0).use { producer ->
                                 producer.withTx { tx ->
                                     tx.appendMessage(txMessage(1))
                                     tx.appendMessage(txMessage(2))
@@ -107,9 +107,9 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        val tailJob = launch { log.tailAll(0, -1, subscriber) }
                         try {
-                            log.openAtomicProducer("tx-producer-1").use { producer ->
+                            log.openAtomicProducer("tx-producer-1", 0).use { producer ->
                                 // Abort this transaction
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
@@ -157,9 +157,9 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        val tailJob = launch { log.tailAll(0, -1, subscriber) }
                         try {
-                            log.openAtomicProducer("tx-producer-1").use { producer ->
+                            log.openAtomicProducer("tx-producer-1", 0).use { producer ->
                                 producer.withTx { tx -> tx.appendMessage(txMessage(1)) }
                                 producer.withTx { tx ->
                                     tx.appendMessage(txMessage(2))
@@ -197,9 +197,9 @@ class KafkaAtomicProducerTest {
                 KafkaCluster.LogFactory("my-cluster", topicName)
                     .openSourceLog(mapOf("my-cluster" to cluster))
                     .use { log ->
-                        val tailJob = launch { log.tailAll(-1, subscriber) }
+                        val tailJob = launch { log.tailAll(0, -1, subscriber) }
                         try {
-                            log.openAtomicProducer("tx-producer-1").use { producer ->
+                            log.openAtomicProducer("tx-producer-1", 0).use { producer ->
                                 producer.openTx().use { tx ->
                                     tx.appendMessage(txMessage(1))
 
@@ -264,9 +264,9 @@ class KafkaAtomicProducerTest {
                 .open().use { cluster ->
                     KafkaCluster.LogFactory("my-cluster", outputTopic)
                         .openSourceLog(mapOf("my-cluster" to cluster)).use { log ->
-                            val tailJob = launch { log.tailAll(-1, subscriber) }
+                            val tailJob = launch { log.tailAll(0, -1, subscriber) }
                             try {
-                                (log.openAtomicProducer("tx-producer-1") as KafkaCluster.AtomicProducer).use { producer ->
+                                (log.openAtomicProducer("tx-producer-1", 0) as KafkaCluster.AtomicProducer).use { producer ->
                                     producer.openTx().use { tx ->
                                         tx.appendMessage(txMessage(1))
                                         tx.sendOffsetsToTransaction(offsets, groupMetadata)

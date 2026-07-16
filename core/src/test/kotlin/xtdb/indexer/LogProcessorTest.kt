@@ -125,7 +125,7 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
-        val replicaProducer = replicaLog.openAtomicProducer("setup")
+        val replicaProducer = replicaLog.openAtomicProducer("setup", 0)
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
         replicaProducer.close()
 

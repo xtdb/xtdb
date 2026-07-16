@@ -62,7 +62,7 @@ class FollowerLogProcessorTest {
         // The processor self-launches its replica tail; park it so it idles while the test drives
         // processRecords directly — a relaxed mock would return immediately and tear the proc down.
         replicaLog = mockk(relaxed = true)
-        coEvery { replicaLog.tailAll(any(), any()) } coAnswers { awaitCancellation() }
+        coEvery { replicaLog.tailAll(any(), any(), any()) } coAnswers { awaitCancellation() }
 
         every { bufferPool.epoch } returns 1
     }

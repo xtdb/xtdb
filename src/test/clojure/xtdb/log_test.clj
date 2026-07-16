@@ -318,15 +318,16 @@
   (let [source-log (InMemoryLog. (InstantSource/system) 0)
         replica-log (InMemoryLog. (InstantSource/system) 0)
         log-factory (reify Log$Factory
-                      (openSourceLog [_ _] source-log)
-                      (openReadOnlySourceLog [_ _] (ReadOnlyLog. source-log))
-                      (openReplicaLog [_ _] replica-log)
-                      (openReadOnlyReplicaLog [_ _] (ReadOnlyLog. replica-log))
+                      (openSourceLog [_ _ _] source-log)
+                      (openReadOnlySourceLog [_ _ _] (ReadOnlyLog. source-log))
+                      (openReplicaLog [_ _ _] replica-log)
+                      (openReadOnlyReplicaLog [_ _ _] (ReadOnlyLog. replica-log))
                       (writeTo [_ _]))]
 
     (.appendMessageBlocking replica-log
                             (ReplicaMessage$ResolvedTx. 0 (Instant/now)
-                                                        true nil {} nil nil nil))
+                                                        true nil {} nil nil nil)
+                            0)
 
     (with-open [node (xtn/start-node (doto (Xtdb$Config.)
                                        (.log log-factory)
@@ -345,21 +346,22 @@
   (let [source-log (InMemoryLog. (InstantSource/system) 0)
         replica-log (InMemoryLog. (InstantSource/system) 0)
         log-factory (reify Log$Factory
-                      (openSourceLog [_ _] source-log)
-                      (openReadOnlySourceLog [_ _] (ReadOnlyLog. source-log))
-                      (openReplicaLog [_ _] replica-log)
-                      (openReadOnlyReplicaLog [_ _] (ReadOnlyLog. replica-log))
+                      (openSourceLog [_ _ _] source-log)
+                      (openReadOnlySourceLog [_ _ _] (ReadOnlyLog. source-log))
+                      (openReplicaLog [_ _ _] replica-log)
+                      (openReadOnlyReplicaLog [_ _ _] (ReadOnlyLog. replica-log))
                       (writeTo [_ _]))]
 
     (.appendMessageBlocking replica-log
                             (ReplicaMessage$ResolvedTx. 0 (Instant/now)
-                                                        true nil {} nil nil nil))
+                                                        true nil {} nil nil nil)
+                            0)
 
     ;; offset 0 mirrors replay's txId — leader skips it
-    (.appendMessageBlocking source-log (SourceMessage$DetachDatabase. "missing-db-0"))
+    (.appendMessageBlocking source-log (SourceMessage$DetachDatabase. "missing-db-0") 0)
 
     ;; offset 1 — what we're awaiting
-    (.appendMessageBlocking source-log (SourceMessage$DetachDatabase. "missing-db-1"))
+    (.appendMessageBlocking source-log (SourceMessage$DetachDatabase. "missing-db-1") 0)
 
     (with-open [node (xtn/start-node (doto (Xtdb$Config.) (.log log-factory)))]
       (let [primary (.databaseOrNull (db/<-node node) "xtdb")]

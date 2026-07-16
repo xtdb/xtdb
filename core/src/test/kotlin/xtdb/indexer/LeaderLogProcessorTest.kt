@@ -83,7 +83,7 @@ class LeaderLogProcessorTest {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader"))
+        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, uploadDispatcher)
 
         return LeaderLogProcessor(
@@ -119,7 +119,7 @@ class LeaderLogProcessorTest {
         watchers.awaitSource(0)
 
         verify { trieCatalog.addTries(any(), any(), any()) }
-        assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have received a message")
+        assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have received a message")
     }
 
     @Test
@@ -141,7 +141,7 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -163,7 +163,7 @@ class LeaderLogProcessorTest {
         verify { liveIndex.finishBlock(any(), eq(0)) }
         verify { liveIndex.nextBlock() }
         verify { compactor.signalBlock() }
-        assertTrue(replicaLog.latestSubmittedOffset >= 0, "replica log should have block messages")
+        assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have block messages")
     }
 
     @Test
@@ -212,7 +212,7 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -232,7 +232,7 @@ class LeaderLogProcessorTest {
         watchers.awaitSource(0)
 
         val replicaMessages = mutableListOf<ReplicaMessage>()
-        backgroundScope.launch { replicaLog.tailAll(-1) { records ->
+        backgroundScope.launch { replicaLog.tailAll(0, -1) { records ->
             replicaMessages.addAll(records.map { it.message })
         } }
 
@@ -310,7 +310,7 @@ class LeaderLogProcessorTest {
             "record 0 kicked its append alone; 1-4 resolved behind it and rode the next producer transaction"
         )
 
-        val resolvedTxs = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+        val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
         assertEquals((0 until n).toList(), resolvedTxs.map { it.txId }, "all $n txs land, in send order")
     }
@@ -510,7 +510,7 @@ class LeaderLogProcessorTest {
         assertEquals(1, producerBatchSizes.first(), "tx 0 kicked its append alone")
         assertEquals(5, producerBatchSizes.sum(), "every tx reached the replica log exactly once")
 
-        val resolvedTxs = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+        val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
         assertEquals((0 until 5L).toList(), resolvedTxs.map { it.txId }, "all 5 txs land, in send order")
     }
@@ -541,7 +541,7 @@ class LeaderLogProcessorTest {
 
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader")
+        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
 
         val lp = LeaderLogProcessor(
@@ -570,7 +570,7 @@ class LeaderLogProcessorTest {
             Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
         ))
 
-        val boundaries = replicaLog.readRecords(0, replicaLog.latestSubmittedMsgId + 1)
+        val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()
 
         assertEquals(1, boundaries.size, "exactly one BlockBoundary should be written")

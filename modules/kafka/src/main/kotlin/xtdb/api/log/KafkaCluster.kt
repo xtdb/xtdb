@@ -209,7 +209,7 @@ class KafkaCluster(
                 // paused (never fetched) and re-seeked to the real offset before resume at commit.
                 consumer.seekToEnd(listOf(tp))
 
-                val transition = listener.launchTransition(listOf(tp.partition()))
+                val transition = listener.launchTransition(tp.partition())
                 val transitioning = Transitioning<M>(transition)
                 listenerState = transitioning
 
@@ -235,7 +235,7 @@ class KafkaCluster(
                 // is cancellable) and lets the transition's own recovery settle `state`. Then demote:
                 // Prepared→abandon, Leading→teardown, Following→no-op. Back to Following either way.
                 (listenerState as? Transitioning)?.transition?.cancelAndJoin()
-                listener.demoteLeader(listOf(partitions.single().partition()))
+                listener.demoteLeader(partitions.single().partition())
                 listenerState = Following()
             }
 
@@ -257,7 +257,7 @@ class KafkaCluster(
             fun onTransitionComplete(cmd: GroupCommand.TransitionComplete) {
                 if (listenerState !== cmd.transitioning) return
 
-                val tailSpec = listener.commitLeader(listOf(cmd.tp.partition()))
+                val tailSpec = listener.commitLeader(cmd.tp.partition())
                 listenerState = LeaderCommitted(tailSpec.processor)
                 consumer.seekToAfterMsgId(cmd.tp, epoch, tailSpec.afterMsgId)   // seek before resume — #5633
                 consumer.resume(listOf(cmd.tp))
@@ -540,9 +540,9 @@ class KafkaCluster(
             }
 
         private val latestSubmittedOffset0 = AtomicLong(readLatestSubmittedMessage(kafkaConfigMap))
-        override val latestSubmittedOffset get() = latestSubmittedOffset0.get()
+        override fun latestSubmittedOffset(partition: Int) = latestSubmittedOffset0.get()
 
-        override suspend fun appendMessage(message: M): Log.MessageMetadata =
+        override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
             CompletableDeferred<Log.MessageMetadata>()
                 .also { res ->
                     producer.send(
@@ -561,7 +561,7 @@ class KafkaCluster(
                 }
                 .await()
 
-        override fun readLastMessage(): M? =
+        override fun readLastMessage(partition: Int): M? =
             kafkaConfigMap.openConsumer().use { c ->
                 val tp = TopicPartition(topic, 0)
                 val lastOffset = c.endOffsets(listOf(tp))[tp]?.minus(1)?.takeIf { it >= 0 } ?: return null
@@ -572,7 +572,7 @@ class KafkaCluster(
                 records.firstOrNull()?.let { record -> codec.decode(record.value()) }
             }
 
-        override fun readRecords(fromMsgId: MessageId, toMsgId: MessageId) = sequence {
+        override fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId) = sequence {
             if (msgIdToEpoch(fromMsgId) != epoch || msgIdToEpoch(toMsgId) != epoch) return@sequence
             val fromOffset = msgIdToOffset(fromMsgId)
             val toOffset = msgIdToOffset(toMsgId)
@@ -598,7 +598,7 @@ class KafkaCluster(
             }
         }
 
-        override fun openAtomicProducer(transactionalId: String) = object : AtomicProducer<M> {
+        override fun openAtomicProducer(transactionalId: String, partition: Int) = object : AtomicProducer<M> {
             private val prefixedTxId = listOfNotNull(transactionalIdPrefix, transactionalId).joinToString("-")
 
             init {
@@ -696,7 +696,7 @@ class KafkaCluster(
                 throw InterruptedException().initCause(e)
             }
 
-        override suspend fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
+        override suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: Log.RecordProcessor<M>) = coroutineScope {
             kafkaConfigMap.openConsumer().use { c ->
                 val tp = TopicPartition(topic, 0)
                 c.assign(listOf(tp))
@@ -738,7 +738,7 @@ class KafkaCluster(
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
 
-        override fun openSourceLog(remotes: Map<RemoteAlias, Remote>): Log<SourceMessage> {
+        override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int): Log<SourceMessage> {
             val clusterAlias = this.cluster
             val cluster = requireNotNull(remotes[clusterAlias] as? KafkaCluster) {
                 "missing Kafka cluster: '$clusterAlias'"
@@ -753,10 +753,10 @@ class KafkaCluster(
             return cluster.KafkaLog(SourceMessage.Codec, topic, epoch)
         }
 
-        override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>) =
-            ReadOnlyLog(openSourceLog(remotes))
+        override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
+            ReadOnlyLog(openSourceLog(remotes, partitions))
 
-        override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>): Log<ReplicaMessage> {
+        override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int): Log<ReplicaMessage> {
             val clusterAlias = this.replicaCluster
             val cluster = requireNotNull(remotes[clusterAlias] as? KafkaCluster) {
                 "missing Kafka cluster: '$clusterAlias'"
@@ -771,8 +771,8 @@ class KafkaCluster(
             return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch)
         }
 
-        override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>) =
-            ReadOnlyLog(openReplicaLog(remotes))
+        override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
+            ReadOnlyLog(openReplicaLog(remotes, partitions))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {

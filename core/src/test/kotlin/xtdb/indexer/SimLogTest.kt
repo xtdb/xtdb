@@ -22,7 +22,7 @@ class SimLogTest : SimulationTestBase() {
                 SimLog<String>("test", rand).use { log ->
                     launchSimLog(log)
 
-                    launch { log.tailAll(afterMsgId = -1) { _ -> error("plainConsumer failure") } }
+                    launch { log.tailAll(partition = 0, afterMsgId = -1) { _ -> error("plainConsumer failure") } }
 
                     log.appendMessage("trigger")
                 }
@@ -41,11 +41,11 @@ class SimLogTest : SimulationTestBase() {
 
                     launch {
                         log.openGroupSubscription(object : Log.SubscriptionListener<String> {
-                            override fun launchTransition(partitions: Collection<Int>) = CompletableDeferred(Unit)
-                            override fun commitLeader(partitions: Collection<Int>) =
+                            override fun launchTransition(partition: Int) = CompletableDeferred(Unit)
+                            override fun commitLeader(partition: Int) =
                                 Log.TailSpec<String>(afterMsgId = -1L) { _ -> error("groupConsumer failure") }
 
-                            override suspend fun demoteLeader(partitions: Collection<Int>) {}
+                            override suspend fun demoteLeader(partition: Int) {}
                         })
                     }
 

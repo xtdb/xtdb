@@ -318,7 +318,7 @@ class PostgresSourceIntegrationTest {
                 }
 
                 val txId = cdc.blockCatalog.latestCompletedTx!!.txId
-                val sourceOffset = cdc.sourceLog.latestSubmittedOffset
+                val sourceOffset = cdc.sourceLog.latestSubmittedOffset()
                 assertTrue(
                     txId > sourceOffset,
                     "test precondition: txId ($txId) should exceed source-log offset ($sourceOffset)"

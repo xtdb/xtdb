@@ -203,9 +203,9 @@ ATTACH DATABASE new_db WITH $$
 (t/deftest dodgy-yaml
   (with-open [node (xtn/start-node)]
     (t/is (= {:sql-state "08P01"
-              :message "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, storage" ,
+              :message "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, partitions, storage" ,
               :detail #xt/error [:incorrect :xtdb/invalid-database-config
-                                 "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, storage"
+                                 "Invalid database config in `ATTACH DATABASE`: Unknown property 'somethingElse'. Known properties are: critical, externalSource, log, mode, partitions, storage"
                                  {:sql "ATTACH DATABASE new_db WITH $$ somethingElse: $$"}]},
 
              (pgw-test/reading-ex

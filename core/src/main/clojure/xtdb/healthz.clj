@@ -139,7 +139,7 @@
                                                    (try
                                                      (doseq [^Database db dbs]
                                                        (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))]
-                                                         (.appendMessageBlocking (.getSourceLog db) flush-msg)))
+                                                         (.appendMessageBlocking (.getSourceLog db) flush-msg 0)))
                                                      {:status 200,
                                                       :body (format "Block flush message sent to %d database(s)." (count dbs))}
                                                      (catch Exception e
@@ -182,7 +182,7 @@
                                           (for [^String db-name (.getDatabaseNames db-cat)
                                                 :let [^Database db (.databaseOrNull db-cat db-name)]
                                                 :when db]
-                                            [db-name [(.getLatestSubmittedMsgId (.getSourceLog db))]]))
+                                            [db-name [(.latestSubmittedMsgId (.getSourceLog db) 0)]]))
 
          ^Server server (-> (handler (merge {:meter-registry (.getMeterRegistry base)
                                              :db-cat db-cat

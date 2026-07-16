@@ -1,5 +1,5 @@
 {:block-idx 0,
- :latest-processed-msg-id 118,
+ :latest-processed-msg-id 120,
  :table-names #{"xt/txs" "xt/role_membership"},
  :secondary-dbs
  {"new_db"
