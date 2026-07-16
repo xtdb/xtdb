@@ -20,6 +20,7 @@ import xtdb.indexer.DatabaseSnapshot
 import xtdb.indexer.ResolvedTx
 import xtdb.query.IQuerySource
 import xtdb.api.query.PrepareOpts
+import xtdb.api.query.QueryOpts
 import xtdb.query.SqlStatement
 import xtdb.query.parseStatement
 import xtdb.api.DEFAULT_SCHEMA
@@ -38,7 +39,6 @@ import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.time.Instant
-import java.time.ZoneId
 import org.apache.arrow.vector.types.pojo.ArrowType.Struct.INSTANCE as STRUCT_TYPE
 import kotlin.Long.Companion.MAX_VALUE as MAX_LONG
 import kotlin.Long.Companion.MIN_VALUE as MIN_LONG
@@ -71,11 +71,6 @@ class OpenTx
     // supplied by the resolver which owns the staging index. Empty for external / non-resolution txs.
     private val resolvedTxs: List<ResolvedTx> = emptyList(),
 ) : AutoCloseable {
-
-    data class QueryOpts(
-        val currentTime: Instant? = null,
-        val defaultTz: ZoneId? = null,
-    )
 
     val systemTime get() = txKey.systemTime
     val systemTimeMicros = systemTime.asMicros
@@ -174,7 +169,7 @@ class OpenTx
 
         return nodeBase.querySource
             .prepareQuery(parseStatement(sql), queryCatalog, prepareOpts)
-            .openQuery(args, xtdb.api.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer))
+            .openQuery(args, opts.copy(currentTime = currentTime, tracer = opts.tracer ?: tracer))
     }
 
     /**
@@ -187,7 +182,7 @@ class OpenTx
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {
         val currentTime = opts.currentTime ?: txKey.systemTime
         val currentTimeMicros = currentTime.asMicros
-        val qOpts = xtdb.api.query.QueryOpts(currentTime, opts.defaultTz, tracer = tracer)
+        val qOpts = opts.copy(currentTime = currentTime, tracer = opts.tracer ?: tracer)
 
         val prepareOpts = PrepareOpts(
             currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbState.name,
@@ -656,7 +651,7 @@ class OpenTx
                 listOf(SingletonListReader("?patch_docs", RelationAsStructReader("patch_doc", docs)))
             )
 
-            val qOpts = xtdb.api.query.QueryOpts(txKey.systemTime, tracer = tracer)
+            val qOpts = QueryOpts(txKey.systemTime, tracer = tracer)
 
             // openQuery takes ownership of the sliced args and closes them when the cursor closes —
             // no separate `.use` on the slice here, or it'd double-free.

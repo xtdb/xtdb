@@ -13,6 +13,7 @@ import xtdb.api.error.Anomaly.Companion.wrapAnomaly
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.api.error.Unsupported
+import xtdb.api.query.QueryOpts
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
@@ -283,7 +284,7 @@ internal class SourceLogTxIndexer(
             val sqlLeg = txOpsRdr.vectorFor("sql")
             val queryRdr = sqlLeg.vectorFor("query")
             val argsRdr = sqlLeg.vectorFor("args")
-            val qOpts = OpenTx.QueryOpts(opts.currentTime, opts.defaultTz)
+            val qOpts = QueryOpts(opts.currentTime, opts.defaultTz)
 
             val queryStr = queryRdr.getObject(opIdx) as String
 
