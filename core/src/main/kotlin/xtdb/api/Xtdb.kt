@@ -1,4 +1,5 @@
 @file:UseSerializers(ZoneIdSerde::class)
+@file:OptIn(xtdb.InternalApi::class)
 
 package xtdb.api
 
@@ -21,6 +22,7 @@ import org.apache.arrow.vector.complex.DenseUnionVector
 import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.InternalApi
 import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
@@ -104,6 +106,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     interface Statement : AdbcStatement {
         /** @suppress */
+        @InternalApi
         val parsedStatement: ParsedStatement?
 
         val warnings: List<String>
@@ -113,6 +116,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun openQuery(): ResultCursor
 
         /** @suppress */
+        @InternalApi
         fun openUncheckedQuery(): ResultCursor
 
         fun openQuery(opts: QueryOpts): ResultCursor
@@ -160,6 +164,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // the await-token a frontend should observe: an open tx's bound (from BEGIN ... WITH (AWAIT_TOKEN …))
         // shadows the connection's own, for SHOW AWAIT_TOKEN / LATEST_SUBMITTED_TX inside that tx.
         /** @suppress */
+        @InternalApi
         val effectiveAwaitToken: String? get() = tx?.awaitToken ?: awaitToken
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> = dbCat.latestSubmittedMsgIds()
@@ -176,6 +181,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // the tz a read/write actually runs under: an open tx's zone (a mid-tx SET TIME ZONE / WITH (TIMEZONE))
         // shadows the connection's own, mirroring [effectiveAwaitToken].
         /** @suppress */
+        @InternalApi
         val effectiveDefaultTz: ZoneId get() = tx?.txDefaultTz ?: defaultTz
 
         private val _sessionParameters = mutableMapOf<String, String?>()
@@ -193,6 +199,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // the default access mode for a subsequently-opened bare BEGIN, set by SET SESSION CHARACTERISTICS;
         // null leaves a bare BEGIN unresolved (resolved by its first statement). Readable for the frontend.
         /** @suppress */
+        @InternalApi
         var defaultAccessMode: ParsedStatement.AccessMode? = null
             private set
 
@@ -291,6 +298,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun prepareStatement(sql: String): Statement = createStatement(sql).apply { prepare() }
 
         /** @suppress */
+        @InternalApi
         fun prepareStatement(parsed: ParsedStatement): Statement = openStatement(parsed).apply { prepare() }
 
         fun createStatement(sql: String): Statement = openStatement(parseStatement(sql))
@@ -298,6 +306,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // for a frontend that has already classified the statement (pgwire) — creates without preparing, so a
         // non-preparable control statement (BEGIN/COMMIT/SET) executes through the same Statement path.
         /** @suppress */
+        @InternalApi
         fun createStatement(parsed: ParsedStatement): Statement = openStatement(parsed)
 
         override fun createStatement(): Statement = openStatement(null)
@@ -575,6 +584,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         // the default access mode a bare BEGIN (explicit or implicit) takes; set by SET SESSION CHARACTERISTICS.
         /** @suppress */
+        @InternalApi
         fun setSessionCharacteristics(accessMode: ParsedStatement.AccessMode?) {
             defaultAccessMode = accessMode
         }
@@ -592,26 +602,32 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         // tx status for the frontend's ready-state + commit/abort decisions. A failed tx rejects further work
         // until ROLLBACK (Postgres' "current transaction is aborted").
         /** @suppress */
+        @InternalApi
         val isTxOpen: Boolean get() = tx != null
 
         /** @suppress */
+        @InternalApi
         val isTxFailed: Boolean get() = tx?.failed != null
 
         // resolved access-mode of the open tx (an unresolved bare tx is neither); the frontend's permissibility
         // checks read these to keep their own error messages + special-cases (e.g. pgwire's pgjdbc type query).
         /** @suppress */
+        @InternalApi
         val isTxReadWrite: Boolean get() = tx?.mode is ReadWrite
 
         /** @suppress */
+        @InternalApi
         val isTxReadOnly: Boolean get() = tx?.mode is ReadOnly
 
         // the begin-time async flag (WITH (ASYNC)) of the open write tx; false when unset / not a write tx.
         // A bare COMMIT (no SYNC/ASYNC) and the programmatic commit() commit through it.
         /** @suppress */
+        @InternalApi
         val isTxAsync: Boolean get() = (tx?.mode as? ReadWrite)?.async ?: false
 
         // mark the open tx failed (first error wins), driven by the frontend when a statement throws mid-tx.
         /** @suppress */
+        @InternalApi
         fun failTx(cause: Throwable) {
             tx?.let { it.failed = it.failed ?: cause }
         }

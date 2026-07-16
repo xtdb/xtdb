@@ -1,3 +1,5 @@
+@file:OptIn(xtdb.InternalApi::class)
+
 package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator

@@ -1,3 +1,5 @@
+@file:OptIn(xtdb.InternalApi::class)
+
 package xtdb.indexer
 
 import io.micrometer.core.instrument.Counter
