@@ -249,6 +249,12 @@ class PgWireDriver(
                         LOG.debug { "[$dbName] Relation: ${parsed.schema}.${parsed.table} (id=${parsed.relationId}, ${parsed.columns.size} columns)" }
                     }
 
+                    is PgOutputMessage.Type -> {
+                        // user-defined type announcement (e.g. an enum), no row data — values
+                        // arrive as text, so nothing to track.
+                        LOG.trace { "[$dbName] Type: ${parsed.namespace}.${parsed.name} (oid=${parsed.typeOid})" }
+                    }
+
                     is PgOutputMessage.Begin -> {
                         LOG.trace { "[$dbName] Begin tx (finalLsn=${LogSequenceNumber.valueOf(parsed.finalLsn)})" }
                         currentTxOps = mutableListOf()

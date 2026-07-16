@@ -35,6 +35,14 @@ sealed interface PgOutputMessage {
         }
     }
 
+    /**
+     * A user-defined type's OID→name mapping, announced before any [Relation] whose columns
+     * reference it (e.g. an `enum` column). pgoutput ships every value in text format regardless,
+     * so the decoder never needs this mapping — but Postgres emits the message, so we parse and
+     * ignore it rather than failing on an unknown message type.
+     */
+    data class Type(val typeOid: Int, val namespace: String, val name: String) : PgOutputMessage
+
     data class Begin(val finalLsn: Long, val commitTimestamp: Long, val xid: Int) : PgOutputMessage
     data class Commit(val commitLsn: Long, val endLsn: Long, val commitTimestamp: Long) : PgOutputMessage
     data class Insert(val relationId: Int, val values: List<ColumnValue>) : PgOutputMessage
@@ -61,6 +69,7 @@ sealed interface PgOutputMessage {
         fun parse(buf: ByteBuffer): PgOutputMessage =
             when (val type = buf.get().toInt().toChar()) {
                 'R' -> parseRelation(buf)
+                'Y' -> parseType(buf)
                 'B' -> parseBegin(buf)
                 'C' -> parseCommit(buf)
                 'I' -> parseInsert(buf)
@@ -85,6 +94,14 @@ sealed interface PgOutputMessage {
                 Relation.Column(name, typeOid)
             }
             return Relation(relationId, schema, table, replicaIdentity, columns)
+        }
+
+        // Type message: Int32 type OID, then the type's namespace and name as cstrings.
+        private fun parseType(buf: ByteBuffer): Type {
+            val typeOid = buf.getInt()
+            val namespace = buf.readCString()
+            val name = buf.readCString()
+            return Type(typeOid, namespace, name)
         }
 
         private fun parseBegin(buf: ByteBuffer): Begin {

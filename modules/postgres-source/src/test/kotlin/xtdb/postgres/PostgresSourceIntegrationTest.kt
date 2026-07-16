@@ -831,6 +831,47 @@ class PostgresSourceIntegrationTest {
         }
     }
 
+    @Test
+    fun `user-defined enum columns replicate across snapshot and streaming`() = runTest(timeout = 120.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        // A user-defined type makes pgoutput emit a Type ('Y') message ahead of the Relation that
+        // references it; the source loop used to die on that message. Enums are the common case.
+        pgExecute(
+            "DROP TABLE IF EXISTS pg_moods",
+            "DROP TYPE IF EXISTS mood",
+            "CREATE TYPE mood AS ENUM ('happy', 'sad', 'meh')",
+            "CREATE TABLE pg_moods (_id INT PRIMARY KEY, feeling mood, note TEXT)",
+            "INSERT INTO pg_moods VALUES (1, 'happy', 'snapshot row')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_moods",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, publicationName = pubName)
+
+            awaitCondition("snapshot enum row ingested", timeout = 30.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 1").isNotEmpty()
+                }.getOrDefault(false)
+            }
+            assertEquals(
+                "happy",
+                xtQueryDb(node, "cdc", "SELECT feeling FROM public.pg_moods WHERE _id = 1").single()["feeling"]
+            )
+
+            pgExecute("INSERT INTO pg_moods VALUES (2, 'sad', 'streamed row')")
+
+            awaitCondition("streaming enum row ingested", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 2").isNotEmpty()
+            }
+            assertEquals(
+                "sad",
+                xtQueryDb(node, "cdc", "SELECT feeling FROM public.pg_moods WHERE _id = 2").single()["feeling"]
+            )
+        }
+    }
+
     private fun assertTypedRow(
         row: Map<String, Any?>,
         expectedSpan: Interval,
