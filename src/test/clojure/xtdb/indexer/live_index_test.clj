@@ -124,8 +124,8 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/flush-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 42)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 43)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 62)
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 63)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
 
 (t/deftest staged-empty-create-table-visible-across-a-batch-5507

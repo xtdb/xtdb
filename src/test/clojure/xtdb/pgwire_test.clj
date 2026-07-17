@@ -2580,6 +2580,7 @@ ORDER BY 1,2;")
 
     (t/is (= [["public" "bar"]
               ["public" "foo"]
+              ["xt" "role_membership"]
               ["xt" "txs"]]
            (map (juxt :Schema :Name)
                 (q conn [display-tables-query]))))))
@@ -2594,6 +2595,7 @@ ORDER BY 1,2;")
        (send "\\d\n")
        (t/is (= [["Schema" "Name" "Type" "Owner"]
                  ["public" "foo" "table" "xtdb"]
+                 ["xt" "role_membership" "table" "xtdb"]
                  ["xt" "txs" "table" "xtdb"]]
                 (read)))))))
 

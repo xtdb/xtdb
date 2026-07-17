@@ -356,6 +356,8 @@
         (xt/execute-tx node [[:put-docs :foo {:xt/id 2}]])
         (tu/flush-block! node)
 
+        ;; in-memory, the seeded-but-dataless xt/role_membership has no trie, so the trie catalog
+        ;; doesn't track it yet (unlike after a restart, below, where it's reconstructed from its block)
         (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b00" "l00-rc-b01"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
@@ -363,7 +365,7 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :compactor-threads 0})]
       (let [cat (.getTrieCatalog (db/primary-db node))]
-        (t/is (= #{#xt/table foo, #xt/table xt/txs} (.getTables cat)))
+        (t/is (= #{#xt/table xt/role_membership, #xt/table foo, #xt/table xt/txs} (.getTables cat)))
         (t/is (= #{"l00-rc-b01" "l00-rc-b00"}
                  (->> (cat/current-tries (cat/trie-state cat #xt/table foo))
                       (into #{} (map :trie-key)))))))

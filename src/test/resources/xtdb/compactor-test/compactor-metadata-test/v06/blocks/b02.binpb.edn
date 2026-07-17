@@ -2,5 +2,5 @@
  :latest-completed-tx
  {:tx-id 2196, :system-time #xt/instant "2020-01-02T00:00:00Z"},
  :latest-processed-msg-id 4383,
- :table-names #{"xt/txs" "public/foo"},
+ :table-names #{"xt/txs" "xt/role_membership" "public/foo"},
  :secondary-dbs {}}

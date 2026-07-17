@@ -49,6 +49,17 @@ class TableCatalog(
     val types: Map<TableRef, Map<ColumnName, VectorType>>
         get() = state.tables.mapValues { (_, meta) -> meta.vecTypes }
 
+    /**
+     * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty
+     * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
+     * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
+     */
+    fun seedTable(table: TableRef, colNames: List<ColumnName>) {
+        if (state.tables.containsKey(table)) return
+        val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
+        state = State(state.blockIdx, state.tables + (table to meta))
+    }
+
     fun refresh(blockCatalog: BlockCatalog) {
         val blockIndex = blockCatalog.currentBlockIndex ?: return
 
