@@ -7,6 +7,7 @@ import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveIndex
 import xtdb.api.DatabaseName
+import xtdb.api.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
@@ -45,6 +46,12 @@ data class DatabaseState(
 
             val tableCatalog = TableCatalog(bufferPool).also {
                 it.refresh(blockCatalog)
+                // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
+                // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
+                // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
+                // that already has these tables, the loaded types win (no-op seed).
+                it.seedTable(TableRef("xt", "txs"), listOf("_id", "system_time", "committed", "user_metadata", "error"))
+                it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 
             val trieCatalog = trieCatalogFactory.open(bufferPool, blockCatalog)

@@ -27,7 +27,10 @@
                     [xtdb xt/txs committed :bool]
                     [xtdb xt/txs error [:? :transit]]
                     [xtdb xt/txs system_time :instant]
-                    [xtdb xt/txs user_metadata [:? :struct {}]]}
+                    [xtdb xt/txs user_metadata [:? :struct {}]]
+                    ;; seeded but unused - declared columns read as the lattice bottom `Nothing`
+                    [xtdb xt/role_membership user :nothing]
+                    [xtdb xt/role_membership role :nothing]}
                  (for [table '[public/baseball public/beanie xt/txs]
                        [col data-type] '[[_system_from :instant]
                                          [_system_to [:? :instant]]
@@ -56,6 +59,10 @@
               :table-name "txs",
               :table-type "BASE TABLE"}
              {:table-catalog "xtdb",
+              :table-schema "xt",
+              :table-name "role_membership",
+              :table-type "BASE TABLE"}
+             {:table-catalog "xtdb",
               :table-schema "public",
               :table-name "baseball",
               :table-type "BASE TABLE"}}
@@ -63,6 +70,35 @@
                       "SELECT table_catalog, table_schema, table_name, table_type
                        FROM information_schema.tables
                        WHERE table_schema = 'public' OR table_schema = 'xt'")))))
+
+(deftest system-tables-seeded-on-fresh-node
+  (let [xt-tables (into #{} (map :table-name)
+                       (xt/q tu/*node* "SELECT table_name FROM information_schema.tables WHERE table_schema = 'xt'"))]
+    (t/is (contains? xt-tables "txs")
+          "xt.txs is seeded into the catalog at startup, resolvable before any transaction")
+    (t/is (contains? xt-tables "role_membership")
+          "xt.role_membership is seeded too"))
+
+  (t/is (= [] (xt/q tu/*node* "SELECT _id, committed, system_time FROM xt.txs"))
+        "xt.txs declared columns resolve and the empty table returns no rows")
+  (t/is (= [] (xt/q tu/*node* "SELECT \"user\", role FROM xt.role_membership"))
+        "xt.role_membership declared columns resolve"))
+
+(deftest seed-columns-match-write-path
+  ;; the seeded column set must equal what a real transaction writes: if `writeTxRow` gains a column
+  ;; the seed doesn't declare, a fresh node is missing it until the first tx - the very inconsistency
+  ;; the seed exists to prevent. Temporal columns are injected for display, so exclude them.
+  (letfn [(txs-data-cols []
+            (into #{} (comp (map :column-name)
+                            (remove #{"_system_from" "_system_to" "_valid_from" "_valid_to"}))
+                  (xt/q tu/*node* "SELECT column_name FROM information_schema.columns
+                                   WHERE table_schema = 'xt' AND table_name = 'txs'")))]
+    (let [seeded (txs-data-cols)]
+      (t/is (= #{"_id" "system_time" "committed" "user_metadata" "error"} seeded)
+            "fresh-node xt.txs exposes exactly the seeded data columns")
+      (xt/submit-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
+      (t/is (= seeded (txs-data-cols))
+            "a real transaction writes exactly the seeded columns - no drift between seed and writeTxRow"))))
 
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
@@ -114,6 +150,9 @@
   (t/is (= #{{:schemaname "xt",
               :tableowner "xtdb",
               :tablename "txs"}
+             {:schemaname "xt",
+              :tableowner "xtdb",
+              :tablename "role_membership"}
              {:schemaname "public",
               :tableowner "xtdb",
               :tablename "baseball"}
@@ -264,6 +303,7 @@
                            [:put-docs :baseball {:xt/id :baz, :col1 123 :col2 456}]])
 
   (t/is (= #{{:table-name "txs", :table-schema "xt"}
+             {:table-name "role_membership", :table-schema "xt"}
              {:table-name "beanie", :table-schema "public"}
              {:table-name "baseball", :table-schema "public"}}
            (set (xt/q tu/*node*
@@ -292,7 +332,8 @@
   ;;lack of xtid
   (t/is (= #{{:table-name "baseball" :table-schema "public"}
              {:table-name "beanie" :table-schema "public"}
-             {:table-name "txs" :table-schema "xt"}}
+             {:table-name "txs" :table-schema "xt"}
+             {:table-name "role_membership" :table-schema "xt"}}
            (set (xt/q tu/*node*
                       "SELECT table_name, null AS unknown_col, table_schema
                        FROM information_schema.tables
