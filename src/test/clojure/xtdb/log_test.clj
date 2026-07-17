@@ -93,23 +93,9 @@
                           [:put-docs :foo {:xt/id "b", :b 2}]
                           [:put-docs :bar {:xt/id 3, :c 3}]]))
 
-(t/deftest can-write-sql-to-arrow-ipc-streaming-format
-  (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-sql.arrow.edn")
-                         [[:sql "INSERT INTO foo (_id) VALUES (0)"]
-
-                          [:sql "INSERT INTO foo (_id, foo, bar) VALUES (?, ?, ?)"
-                           [1 nil 3.3]
-                           [2 "hello" 12]]
-
-                          [:sql "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE _id = ?"
-                           [1]]
-
-                          [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE _id = ?"
-                           [1]]]))
-
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/can-write-opts.arrow.edn")
-                         [[:sql "INSERT INTO foo (_id) VALUES (0)"]]
+                         [[:put-docs :foo {:xt/id 0}]]
 
                          {:system-time (time/->instant #inst "2021")
                           :default-tz #xt/zone "Europe/London"
@@ -117,7 +103,7 @@
 
 (t/deftest test-tx-metadata
   (test-serialize-tx-ops (io/resource "xtdb/tx-log-test/tx-metadata.arrow.edn")
-                         ["INSERT INTO transfers (_id, src, dest, value) VALUES (0, 'the bank', 'jms', 'a gajillion dollars')"]
+                         [[:put-docs :transfers {:xt/id 0, :src "the bank", :dest "jms", :value "a gajillion dollars"}]]
                          {:user-metadata {:source "mobile-app"
                                           :tags ["high-value" "priority"]
                                           :correlation-id "abc123"}

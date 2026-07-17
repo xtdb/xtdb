@@ -1,6 +1,9 @@
 package xtdb.tx
 
+import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.error.Incorrect
+import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
 import xtdb.arrow.VectorReader
 import xtdb.api.SchemaName
@@ -18,6 +21,21 @@ sealed interface TxOp : AutoCloseable {
     ) : TxOp {
         override fun openSlice(al: BufferAllocator): TxOp = copy(docs = docs.openSlice(al))
         override fun close() = docs.close()
+
+        companion object {
+            private val XT_ID = Keyword.intern("xt", "id")
+
+            @JvmStatic
+            fun openFromRows(
+                al: BufferAllocator, schema: SchemaName, table: TableName,
+                docs: List<Map<*, *>>, validFrom: Instant?, validTo: Instant?
+            ): PutDocs {
+                for (doc in docs)
+                    if (doc[XT_ID] == null && doc["_id"] == null)
+                        throw Incorrect("missing '_id'", "missing-id", mapOf("doc" to doc))
+                return PutDocs(schema, table, validFrom, validTo, Relation.openFromRows(al, docs))
+            }
+        }
     }
 
     data class PatchDocs(
@@ -27,6 +45,14 @@ sealed interface TxOp : AutoCloseable {
     ) : TxOp {
         override fun openSlice(al: BufferAllocator): TxOp = copy(patches = patches.openSlice(al))
         override fun close() = patches.close()
+
+        companion object {
+            @JvmStatic
+            fun openFromRows(
+                al: BufferAllocator, schema: SchemaName, table: TableName,
+                docs: List<Map<*, *>>, validFrom: Instant?, validTo: Instant?
+            ): PatchDocs = PatchDocs(schema, table, validFrom, validTo, Relation.openFromRows(al, docs))
+        }
     }
 
     data class DeleteDocs(

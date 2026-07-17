@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import [xtdb.tx Sql SqlByteArgs PutDocs PutRel PatchDocs DeleteDocs EraseDocs]
+  (:import [xtdb.tx Sql PutDocs PatchDocs DeleteDocs EraseDocs]
            xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
@@ -31,13 +31,9 @@
   ([sql] (Sql. sql))
   ([sql arg-rows] (Sql. sql arg-rows)))
 
-(defn ->SqlByteArgs [sql arg-bytes] (SqlByteArgs. sql arg-bytes))
-
 (defn ->PutDocs
   ([table-name docs] (PutDocs. table-name docs))
   ([table-name docs valid-from valid-to] (PutDocs. table-name docs valid-from valid-to)))
-
-(defn ->PutRel [table-name rel-bytes] (PutRel. table-name rel-bytes))
 
 (defn ->PatchDocs
   ([table-name docs] (PatchDocs. table-name docs))

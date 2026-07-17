@@ -9,7 +9,6 @@
             [xtdb.db-catalog :as db]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.log :as xt-log]
             [xtdb.metrics :as metrics]
             [xtdb.node :as xtn]
             [xtdb.pgwire.io :as pgio]
@@ -50,7 +49,7 @@
                        ParsedStatement ParsedStatement$Visitor ParsedStatement$Begin
                        ParsedStatement$Commit ParsedStatement$CommitMode ParsedStatement$Query ParsedStatement$Dml
                        ParsedStatement$ShowVariable ParsedStatement$CopyIn ParsedStatement$Execute)
-           (xtdb.tx PutDocs PutRel)))
+           (xtdb.tx TxOp$PutDocs)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -1409,14 +1408,13 @@
     (.write write-ch (ByteBuffer/wrap data))))
 
 (defn- copy-exec-op
-  "Buffer one converted COPY op on the connection (the client PutDocs/PutRel is converted to a core TxOp via
-  open-tx-op, exactly as the tx submit path does). The connection owns the op once buffered."
-  [{:keys [conn-state] :as conn} client-op allocator]
+  "Buffer one core COPY TxOp on the connection. The connection owns the op once buffered."
+  [{:keys [conn-state]} tx-op]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
     (when (.isTxReadOnly node-conn)
       (throw (err/incorrect :xtdb/copy-in-read-only-tx
                             "COPY is not allowed in a READ ONLY transaction")))
-    (.executeTxOp node-conn (xt-log/open-tx-op client-op allocator {:default-tz (.getDefaultTz node-conn)}))))
+    (.executeTxOp node-conn tx-op)))
 
 (defn- copy-transit-batch ^long [{:keys [conn-state ^BufferAllocator allocator] :as conn} {:keys [table-name format, ^Path copy-file]}]
   (let [^Xtdb$Connection node-conn (:node-conn @conn-state)
@@ -1431,7 +1429,8 @@
                                                              :transit-msgpack :msgpack)
                                                            {:handlers serde/transit-read-handler-map}))))]
 
-        (copy-exec-op conn (PutDocs. table-name docs nil nil) allocator)
+        (copy-exec-op conn (TxOp$PutDocs/openFromRows allocator (or (namespace table-name) "public") (name table-name)
+                                                      docs nil nil))
 
         (when started-tx?
           (cmd-commit conn))
@@ -1454,14 +1453,16 @@
         ;; inside an open tx: buffer every batch on it (the connection rejects a read-only tx, resolves an
         ;; unresolved one to read-write); the user's COMMIT submits them.
         (while (.loadNextPage ldr rel)
-          (copy-exec-op conn (PutRel. table-name (.getAsArrowStream rel)) allocator)
+          (copy-exec-op conn (TxOp$PutDocs. (or (namespace table-name) "public") (name table-name)
+                                            nil nil (.openDirectSlice rel allocator)))
           (swap! !doc-count + (.getRowCount rel)))
 
         ;; no active tx: the input is naturally batched, so we commit a transaction per record-batch.
         (while (.loadNextPage ldr rel)
           (begin-implicit conn :read-write)
           (try
-            (copy-exec-op conn (PutRel. table-name (.getAsArrowStream rel)) allocator)
+            (copy-exec-op conn (TxOp$PutDocs. (or (namespace table-name) "public") (name table-name)
+                                            nil nil (.openDirectSlice rel allocator)))
             (cmd-commit conn)
             (swap! !doc-count + (.getRowCount rel))
             (catch Throwable t

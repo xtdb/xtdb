@@ -8,11 +8,9 @@
             [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.information-schema :as info-schema]
-            [xtdb.log :as xt-log]
             [xtdb.logical-plan :as lp]
             [xtdb.table :as table]
             [xtdb.time :as time]
-            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql]
@@ -26,6 +24,7 @@
            (org.antlr.v4.runtime ParserRuleContext)
            (org.apache.arrow.vector.types.pojo Field)
            (org.apache.commons.codec.binary Hex)
+           (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
            xtdb.query.SqlPlanner
@@ -3427,10 +3426,19 @@
       (-> (plan-expr expr (->env))
           (apply-args args)))
 
-    ;; the adapter opens sql->static-ops' client ops up into core TxOps (via safe-mapv, closing partials on throw)
+    ;; materialises sql->static-ops' neutral ops into core TxOps (via safe-mapv, closing partials on throw)
     (toStaticOps [_ sql args al default-tz]
-      (when-let [client-ops (seq (sql->static-ops sql args))]
-        (util/safe-mapv #(xt-log/open-tx-op % al {:default-tz default-tz}) client-ops)))))
+      (when-let [static-ops (seq (sql->static-ops sql args))]
+        (let [opts {:default-tz default-tz}]
+          (util/safe-mapv
+           (fn [{:keys [op table-name docs valid-from valid-to]}]
+             (let [schema (or (namespace table-name) "public"), table (name table-name)
+                   vf (some-> valid-from (time/->instant opts))
+                   vt (some-> valid-to (time/->instant opts))]
+               (case op
+                 :put-docs (TxOp$PutDocs/openFromRows al schema table docs vf vt)
+                 :patch-docs (TxOp$PatchDocs/openFromRows al schema table docs vf vt))))
+           static-ops))))))
 
 (defprotocol PlanQuery
   (-plan-query [query opts]))
@@ -3521,8 +3529,9 @@
                              #(get % "_valid_to")))
 
              (into [] (map (fn [[[vf vt] rows]]
-                             (tx-ops/->PutDocs table (mapv #(dissoc % "_valid_from" "_valid_to") rows)
-                                               vf vt))))))))
+                             {:op :put-docs, :table-name table,
+                              :docs (mapv #(dissoc % "_valid_from" "_valid_to") rows),
+                              :valid-from vf, :valid-to vt})))))))
 
   (visitInsertFromSubquery [_ _])
 
@@ -3566,8 +3575,9 @@
              (group-by (fn [[_ vf vt]] [vf vt]))
 
              (into [] (map (fn [[[vf vt] row-triples]]
-                             (tx-ops/->PatchDocs table (mapv first row-triples)
-                                                 vf vt))))))))
+                             {:op :patch-docs, :table-name table,
+                              :docs (mapv first row-triples),
+                              :valid-from vf, :valid-to vt})))))))
 
   (visitPatchRecords [_ ctx]
     (let [{:keys [rows]} (-> (.recordsValueConstructor ctx)

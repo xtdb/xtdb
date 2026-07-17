@@ -2,8 +2,20 @@
  #xt/schema ({"tx-ops"
               [:list
                [:union
-                {"sql"
-                 [:struct {"query" :utf8, "args" [:? :varbinary]}]}]]}
+                {"put-docs"
+                 [:struct
+                  {"iids" [:list [:fixed-size-binary 16]],
+                   "documents"
+                   [:union
+                    {"public/transfers"
+                     [:list
+                      [:struct
+                       {"_id" :i64,
+                        "src" :utf8,
+                        "dest" :utf8,
+                        "value" :utf8}]]}],
+                   "_valid_from" [:? :instant],
+                   "_valid_to" [:? :instant]}]}]]}
              {"system-time" [:? :instant]}
              {"default-tz" :utf8}
              {"user" [:? :utf8]}
@@ -20,7 +32,12 @@
     :correlation-id "abc123"},
    :default-tz "Europe/London",
    :tx-ops
-   [#xt/tagged [:sql
-                {:query
-                 "INSERT INTO transfers (_id, src, dest, value) VALUES (0, 'the bank', 'jms', 'a gajillion dollars')"}]],
+   [#xt/tagged [:put-docs
+                {:iids [#bytes "a4e167a76a05add8a8654c169b07b044"],
+                 :documents
+                 #xt/tagged [:public/transfers
+                             [{:xt/id 0,
+                               :src "the bank",
+                               :dest "jms",
+                               :value "a gajillion dollars"}]]}]],
    :user "jms"}]}

@@ -43,7 +43,7 @@
            (xtdb.api.query PrepareOpts QueryOpts)
            (xtdb.query IQuerySource PreparedQuery)
            xtdb.storage.BufferPool
-           (xtdb.tx TxOpts TxWriter)
+           (xtdb.tx PatchDocs PutDocs TxOp$PatchDocs TxOp$PutDocs TxOpts TxWriter)
            xtdb.types.ZonedDateTimeRange
            (xtdb.util RefCounter RowCounter TemporalBounds TemporalDimension)))
 
@@ -368,7 +368,18 @@
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
                                {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
-  (util/with-open [ops (util/safe-mapv #(xt-log/open-tx-op % allocator opts) tx-ops)]
+  (util/with-open [ops (util/safe-mapv
+                        (fn [op]
+                          (if (instance? PutDocs op)
+                            (let [^PutDocs op op, tn (.getTableName op)]
+                              (TxOp$PutDocs/openFromRows allocator (or (namespace tn) "public") (name tn) (.getDocs op)
+                                                         (some-> (.getValidFrom op) (time/->instant opts))
+                                                         (some-> (.getValidTo op) (time/->instant opts))))
+                            (let [^PatchDocs op op, tn (.getTableName op)]
+                              (TxOp$PatchDocs/openFromRows allocator (or (namespace tn) "public") (name tn) (.getDocs op)
+                                                           (some-> (.getValidFrom op) (time/->instant opts))
+                                                           (some-> (.getValidTo op) (time/->instant opts))))))
+                        tx-ops)]
     (TxWriter/serializeTxOps ops allocator (TxOpts. default-tz (time/->instant system-time) user user-metadata))))
 
 (defn ->open-tx
