@@ -58,6 +58,18 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
     command: start-dev
 
+  postgres:
+    image: postgres:16
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    command: ["postgres", "-c", "wal_level=logical"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   metabase:
     image: metabase/metabase:v0.57.7
     ports:
@@ -70,3 +82,4 @@ services:
 
 volumes:
   metabase-data:
+  postgres-data:
