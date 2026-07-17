@@ -2290,10 +2290,10 @@ ORDER BY t.oid DESC LIMIT 1"
 
         (t/testing "pg_user lists the configured users; only the xtdb user is the superuser"
           (with-open [conn (jdbc-conn {"user" "alice", "password" "alice-pw"})]
-            (t/is (= [{:username "alice", :usesuper false}
-                      {:username "bob", :usesuper false}
-                      {:username "xtdb", :usesuper true}]
-                     (q conn ["SELECT username, usesuper FROM pg_user ORDER BY username"])))))))))
+            (t/is (= [{:usename "alice", :usesuper false}
+                      {:usename "bob", :usesuper false}
+                      {:usename "xtdb", :usesuper true}]
+                     (q conn ["SELECT usename, usesuper FROM pg_user ORDER BY usename"])))))))))
 
 (t/deftest test-keywordize-nested-values-3910
   (with-open [conn (jdbc-conn)]

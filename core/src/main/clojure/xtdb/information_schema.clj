@@ -59,27 +59,51 @@
     (-> '{information_schema/tables {table_catalog :utf8, table_schema :utf8, table_name :utf8, table_type :utf8}
           information_schema/columns {table_catalog :utf8, table_schema :utf8, table_name :utf8, column_name :utf8, data_type :utf8,
                                       udt_schema :utf8, udt_name :utf8,
-                                      ordinal_position :i32, column_default [:? :utf8], is_nullable :utf8, is_identity :utf8}
-          information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}}
+                                      ordinal_position :i32, column_default [:? :utf8], is_nullable :utf8, is_identity :utf8,
+                                      is_generated :utf8, generation_expression [:? :utf8],
+                                      character_maximum_length [:? :i32], character_octet_length [:? :i32],
+                                      numeric_precision [:? :i32], numeric_scale [:? :i32], datetime_precision [:? :i32],
+                                      collation_name [:? :utf8]}
+          information_schema/schemata {catalog_name :utf8, schema_name :utf8, schema_owner :utf8}
+
+          ;; empty views - tools probe these during schema sync; we don't model constraints yet
+          information_schema/table_constraints {constraint_catalog [:? :utf8], constraint_schema [:? :utf8], constraint_name [:? :utf8],
+                                                table_catalog [:? :utf8], table_schema [:? :utf8], table_name [:? :utf8],
+                                                constraint_type [:? :utf8], is_deferrable [:? :utf8], initially_deferred [:? :utf8]}
+          information_schema/key_column_usage {constraint_catalog [:? :utf8], constraint_schema [:? :utf8], constraint_name [:? :utf8],
+                                               table_catalog [:? :utf8], table_schema [:? :utf8], table_name [:? :utf8],
+                                               column_name [:? :utf8], ordinal_position [:? :i32], position_in_unique_constraint [:? :i32]}
+          information_schema/constraint_column_usage {table_catalog [:? :utf8], table_schema [:? :utf8], table_name [:? :utf8],
+                                                      column_name [:? :utf8], constraint_catalog [:? :utf8],
+                                                      constraint_schema [:? :utf8], constraint_name [:? :utf8]}}
         (update-vals map->vec-types)))
 
   (def ^:private pg-catalog-tables
+    ;; unpopulated columns (declared `[:? …]`) always read as null - tools probe the full catalog
+    ;; surface, and modelling it lets column-not-found be a hard error like on user tables.
     (-> '{pg_catalog/pg_tables {schemaname :utf8, tablename :utf8, tableowner :utf8, tablespace :null}
           pg_catalog/pg_type {oid :i32, typname :utf8, typnamespace :i32, typowner :i32
                               typcategory :utf8, typtype :utf8, typbasetype :i32, typnotnull :bool, typtypmod :i32
                               typsend :utf8, typreceive :utf8, typinput :utf8, typoutput :utf8
-                              typrelid :i32, typelem :i32, typarray :i32}
-          pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relkind :utf8, relam :i32, relchecks :i32
+                              typrelid :i32, typelem :i32, typarray :i32
+                              typlen [:? :i32], typbyval [:? :bool], typalign [:? :utf8], typstorage [:? :utf8]
+                              typcollation [:? :i32], typdefault [:? :utf8], typndims [:? :i32], typdelim [:? :utf8]
+                              typispreferred [:? :bool], typisdefined [:? :bool]}
+          pg_catalog/pg_class {oid :i32, relname :utf8, relnamespace :i32, relowner :i32, relkind :utf8, relam :i32, relchecks :i32
                                relhasindex :bool, relhasrules :bool, relhastriggers :bool, relrowsecurity :bool
                                relforcerowsecurity :bool, relispartition :bool, reltablespace :i32, reloftype :i32
-                               relpersistence :utf8, relreplident :utf8, reltoastrelid :i32}
+                               relpersistence :utf8, relreplident :utf8, reltoastrelid :i32
+                               reltype [:? :i32], reltuples [:? :f64], relpages [:? :i32], relallvisible [:? :i32]
+                               relnatts [:? :i32], relhassubclass [:? :bool], relpartbound [:? :utf8]}
           pg_catalog/pg_description {objoid :i32, classoid :i32, objsubid :i16, description :utf8}
           pg_catalog/pg_views {schemaname :utf8, viewname :utf8, viewowner :utf8}
           pg_catalog/pg_matviews {schemaname :utf8, matviewname :utf8, matviewowner :utf8}
           pg_catalog/pg_attribute {attrelid :i32, attname :utf8, atttypid :i32
                                    attlen :i32, attnum :i32
                                    attisdropped :bool, attnotnull :bool
-                                   atttypmod :i32, attidentity :utf8, attgenerated :utf8}
+                                   atttypmod :i32, attidentity :utf8, attgenerated :utf8
+                                   attstorage [:? :utf8], attalign [:? :utf8], atthasdef [:? :bool], attcollation [:? :i32]
+                                   attislocal [:? :bool], attinhcount [:? :i32], atthasmissing [:? :bool], attndims [:? :i32]}
           pg_catalog/pg_namespace {oid :i32, nspname :utf8, nspowner :i32, nspacl :null}
           pg_catalog/pg_proc {oid :i32, proname :utf8, pronamespace :i32}
           pg_catalog/pg_database {oid :i32, datname :utf8, datallowconn :bool, datistemplate :bool}
@@ -95,10 +119,21 @@
                                rngcollation :i32, rngsubopc :i32, rngcanonical :utf8, rngsubdiff :utf8}
           pg_catalog/pg_am {oid :i32, amname :utf8, amhandler :utf8, amtype :utf8}
 
-          pg_catalog/pg_user {username :utf8, usesuper :bool, passwd [:? :utf8]}
+          pg_catalog/pg_user {usename :utf8, usesuper :bool, passwd [:? :utf8]}
 
           pg_catalog/pg_roles {oid :i32, rolname :utf8, rolsuper :bool, rolcanlogin :bool}
-          pg_catalog/pg_auth_members {roleid :i32, member :i32, grantor [:? :i32], admin_option :bool}}
+          pg_catalog/pg_auth_members {roleid :i32, member :i32, grantor [:? :i32], admin_option :bool}
+
+          ;; empty tables - tools probe these during schema sync; we don't model their contents yet
+          pg_catalog/pg_enum {oid :i32, enumtypid :i32, enumsortorder :f64, enumlabel :utf8}
+          pg_catalog/pg_constraint {oid :i32, conname :utf8, connamespace :i32, contype :utf8
+                                    condeferrable :bool, condeferred :bool, convalidated :bool
+                                    conrelid :i32, contypid :i32, conindid :i32, conparentid :i32, confrelid :i32
+                                    confupdtype :utf8, confdeltype :utf8, confmatchtype :utf8
+                                    conislocal :bool, coninhcount :i32, connoinherit :bool
+                                    conkey [:? :list :i32], confkey [:? :list :i32]}
+          pg_catalog/pg_extension {oid :i32, extname :utf8, extowner :i32, extnamespace :i32
+                                   extrelocatable :bool, extversion :utf8, extconfig [:? :list :i32], extcondition [:? :list :utf8]}}
         (update-vals map->vec-types)))
 
   (def ^:private xt-derived-tables
@@ -206,6 +241,7 @@
     {:oid (name->oid (table/ref->schema+table table))
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
      :relnamespace (name->oid (.getSchemaName table))
+     :relowner (name->oid "xtdb")
      :relkind "r"
      :relam (int 2)
      :relchecks (int 0)
@@ -273,7 +309,8 @@
      :ordinal-position (int idx)
      :column-default nil
      :is-nullable (if (types/nullable-vec-type? vec-type) "YES" "NO")
-     :is-identity "NO"}))
+     :is-identity "NO"
+     :is-generated "NEVER"}))
 
 (defn pg-attribute [col-rows]
   (for [{:keys [idx table name ^VectorType vec-type]} col-rows
@@ -343,7 +380,7 @@
   ;; `passwd` is NULL — Postgres redacts stored credentials from pg_user too, and the
   ;; authenticator holds the hashes in config, not here.
   (for [username (.knownUsers authn)]
-    {:username username, :usesuper (.isSuperuser authn username), :passwd nil}))
+    {:usename username, :usesuper (.isSuperuser authn username), :passwd nil}))
 
 (defn pg-roles [^Authenticator$Factory authn ^IQuerySource query-source ^IQuerySource$QueryCatalog db-cat]
   ;; Users (which can log in) and granted roles (which can't) share pg_roles, as in Postgres. A
@@ -490,6 +527,9 @@
                                      information_schema/tables (tables db-name schema-info)
                                      information_schema/columns (columns db-name (schema-info->col-rows schema-info))
                                      information_schema/schemata (schemas db-name)
+                                     information_schema/table_constraints nil
+                                     information_schema/key_column_usage nil
+                                     information_schema/constraint_column_usage nil
                                      pg_catalog/pg_tables (pg-tables schema-info)
                                      pg_catalog/pg_type (pg-type)
                                      pg_catalog/pg_class (pg-class schema-info)
@@ -504,6 +544,9 @@
                                      pg_catalog/pg_settings (pg-settings)
                                      pg_catalog/pg_range (pg-range)
                                      pg_catalog/pg_am (pg-am)
+                                     pg_catalog/pg_enum nil
+                                     pg_catalog/pg_constraint nil
+                                     pg_catalog/pg_extension nil
                                      pg_catalog/pg_user (pg-user authn)
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
                                      pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
