@@ -359,11 +359,11 @@
 
 (deftest test-pg-user
   (t/testing "pg_user is a read-only view with the single xtdb root user"
-    (t/is (= [{:username "xtdb", :usesuper true}]
-             (xt/q tu/*node* "SELECT username, usesuper FROM pg_user")))
+    (t/is (= [{:usename "xtdb", :usesuper true}]
+             (xt/q tu/*node* "SELECT usename, usesuper FROM pg_user")))
 
-    (t/is (= [{:username "xtdb", :usesuper true, :passwd-null true}]
-             (xt/q tu/*node* "SELECT username, usesuper, passwd IS NULL AS passwd_null FROM pg_user"))
+    (t/is (= [{:usename "xtdb", :usesuper true, :passwd-null true}]
+             (xt/q tu/*node* "SELECT usename, usesuper, passwd IS NULL AS passwd_null FROM pg_user"))
           "passwd is always NULL — credentials live in the authn config, not the table")))
 
 ;; required for Postgrex
