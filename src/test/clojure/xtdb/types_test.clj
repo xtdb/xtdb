@@ -1,9 +1,14 @@
 (ns xtdb.types-test
   (:require [clojure.test :as t]
+            [xtdb.serde.types :as st]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]))
 
 (t/use-fixtures :each tu/with-allocator)
+
+(t/deftest nullable-composite-type-spec-5804
+  (t/is (= [:? :list :i32] (st/render-type (st/->type [:? :list :i32]))))
+  (t/is (= [:? :set :utf8] (st/render-type (st/->type [:? :set :utf8])))))
 
 (t/deftest test-merge-col-types
   (t/is (= :utf8 (types/merge-col-types :utf8 :utf8)))
