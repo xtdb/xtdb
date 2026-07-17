@@ -366,6 +366,14 @@
              (xt/q tu/*node* "SELECT usename, usesuper, passwd IS NULL AS passwd_null FROM pg_user"))
           "passwd is always NULL — credentials live in the authn config, not the table")))
 
+(deftest unknown-internal-table-column-strict
+  (t/is (= [] (xt/q tu/*node* "SELECT * FROM information_schema.no_such_table"))
+        "SELECT * on an unmodelled internal table warns and returns empty - the table-level tolerance stays (#4467)")
+
+  (t/is (thrown-with-msg? Exception #"Column not found"
+                          (xt/q tu/*node* "SELECT some_col FROM information_schema.no_such_table"))
+        "a named column on an unmodelled internal table is now a hard error, not a silent null (#5804)"))
+
 ;; required for Postgrex
 (deftest test-pg-range-3737
   (let [types (set
