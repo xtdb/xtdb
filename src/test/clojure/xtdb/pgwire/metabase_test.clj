@@ -123,6 +123,40 @@
                       AND (\"fk_ns\".\"nspname\" = 'public')
                     ORDER BY \"fk-table-schema\" ASC, \"fk-table-name\" ASC")))))
 
+(t/deftest metabase-enum-discovery-test
+  (t/is (some? (xt/q tu/*node*
+                     "SELECT nspname, typname
+                      FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                      WHERE t.oid IN (SELECT DISTINCT enumtypid FROM pg_enum e)"))
+        "enum discovery probe plans - bare columns across a pg_type/pg_namespace join aren't ambiguous (#5804)"))
+
+(t/deftest metabase-get-tables-test
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (t/is (seq (xt/q tu/*node*
+                   "SELECT n.nspname AS \"schema\", c.relname AS \"name\", c.relkind AS \"type\",
+                           d.description AS \"description\", stat.n_live_tup AS \"estimated-row-count\"
+                    FROM pg_catalog.pg_class c
+                    JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+                    LEFT JOIN pg_catalog.pg_description d ON d.objoid = c.oid AND d.objsubid = 0
+                    LEFT JOIN pg_catalog.pg_stat_user_tables stat ON stat.relname = c.relname AND stat.schemaname = n.nspname
+                    WHERE n.nspname = 'public'"))
+        "table discovery over pg_class / pg_namespace / pg_description / pg_stat_user_tables"))
+
+(t/deftest metabase-user-exists-test
+  (t/is (= [{:x 1}]
+           (xt/q tu/*node* "SELECT 1 AS x FROM pg_user WHERE usename = 'xtdb'"))
+        "user-existence probe reads pg_user.usename (real Postgres column name)"))
+
+(t/deftest metabase-table-privileges-test
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (t/is (seq (xt/q tu/*node*
+                   "SELECT t.schemaname, t.objectname,
+                           has_table_privilege(CAST(t.schemaname || '.' || t.objectname AS TEXT), 'SELECT') AS select
+                    FROM (SELECT schemaname, tablename AS objectname FROM pg_catalog.pg_tables
+                          UNION SELECT schemaname, viewname AS objectname FROM pg_catalog.pg_views
+                          UNION SELECT schemaname, matviewname AS objectname FROM pg_catalog.pg_matviews) t"))
+        "table-privileges probe over pg_tables/pg_views/pg_matviews with has_*_privilege"))
+
 (t/deftest transit-error-column-case-expression-test
   (t/testing "CASE expression on transit error column doesn't throw InvalidWriteObjectException"
     (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
