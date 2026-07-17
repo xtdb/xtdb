@@ -1,5 +1,6 @@
 (ns xtdb.serde.types
-  (:require [clojure.pprint :as pp])
+  (:require [clojure.pprint :as pp]
+            [xtdb.error :as err])
   (:import (java.io Writer)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType Schema)
@@ -431,25 +432,22 @@
 
     (set? type-spec) (VectorType/fromLegs (into #{} (map ->type) type-spec))
 
-    :else (let [[first-elem & more-opts] type-spec
-                [nullable? more-opts] (if (= :? first-elem)
-                                        [true more-opts]
-                                        [false (cons first-elem more-opts)])
-                [arrow-type-head & more-opts] more-opts]
-            (case arrow-type-head
-              :null VectorType$Null/INSTANCE
-              :struct (-> (VectorType/structOf (->> (first more-opts)
-                                                    (into {} (map (fn [[k v]]
-                                                                    [(str k) (->type v)])))))
-                          (VectorType/maybe nullable?))
+    (vector? type-spec) (if (= :? (first type-spec))
+                          (VectorType/maybe (->type (subvec type-spec 1)))
+                          (let [[arrow-type-head & more-opts] type-spec]
+                            (case arrow-type-head
+                              :null VectorType$Null/INSTANCE
+                              :struct (VectorType/structOf (->> (first more-opts)
+                                                                (into {} (map (fn [[k v]]
+                                                                                [(str k) (->type v)])))))
 
-              :tstz-range (-> VectorType/TSTZ_RANGE
-                              (VectorType/maybe nullable?))
+                              :tstz-range VectorType/TSTZ_RANGE
 
-              (:set :list :fixed-size-list)
-              (-> (VectorType/listy (->arrow-type arrow-type-head) (->type (first more-opts)))
-                  (VectorType/maybe nullable?))
+                              (:set :list :fixed-size-list)
+                              (VectorType/listy (->arrow-type arrow-type-head) (->type (first more-opts)))
 
-              (-> (VectorType/scalar (->arrow-type (cons arrow-type-head more-opts)))
-                  (VectorType/maybe nullable?))))))
+                              (VectorType/scalar (->arrow-type (cons arrow-type-head more-opts))))))
+
+    :else (throw (err/incorrect :invalid-type "Invalid type"
+                                {:type-spec type-spec}))))
 

@@ -10,7 +10,7 @@
            [java.time.temporal Temporal]
            [java.util List Map Set]
            [org.apache.arrow.memory BufferAllocator]
-           [xtdb.arrow ArrowTypes MergeTypes ValueTypes Vector VectorType VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
+           [xtdb.arrow MergeTypes ValueTypes Vector VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
 
 ;; Simple types
 ;; TODO: Ensure all arrow types are covered here
