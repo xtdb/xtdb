@@ -26,6 +26,8 @@ import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
+import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
+import xtdb.arrow.Relation
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -105,6 +107,22 @@ class LiveIndexTest {
                     val tableSnaps = snap.table(table)
                     assertEquals(2, tableSnaps.size)
                     assertEquals(listOf(1, 1), tableSnaps.map { it.relation.rowCount })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `openQuery matches positional params by position, ignoring arg column names`() {
+        TestDb().use { db ->
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                // arg columns are not named `?_0`/`?_1`; OpenTx must bind them to the `?` placeholders by
+                // position. openQuery takes ownership of args and frees them when the cursor closes.
+                val args = Relation.openFromRows(allocator, listOf(mapOf("x" to 10L, "y" to 20L)))
+                tx.openQuery("SELECT ? AS a, ? AS b", args).use { cursor ->
+                    val rows = mutableListOf<Map<*, *>>()
+                    cursor.forEachRemaining { rel -> rows.addAll(rel.toMaps(SNAKE_CASE_STRING)) }
+                    assertEquals(listOf(mapOf("a" to 10L, "b" to 20L)), rows)
                 }
             }
         }

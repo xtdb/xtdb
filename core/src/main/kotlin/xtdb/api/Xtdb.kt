@@ -369,8 +369,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun getParameterSchema(): Schema {
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
+                    // Positional `?` placeholders → empty field names, per ADBC AdbcStatementGetParameterSchema:
+                    // "If the parameter does not have a name … the name of the corresponding field in the schema
+                    // will be an empty string." Order is conveyed by ordinal position.
                     return Schema(
-                        (0 until pq.paramCount).map { idx -> "\$$idx" ofType VectorType.fromLegs() }
+                        (0 until pq.paramCount).map { "" ofType VectorType.fromLegs() }
                     )
                 }
 
@@ -400,12 +403,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 }
 
                 private fun openQueryArgs(): RelationReader? =
-                    args?.openSlice(allocator)?.closeOnCatch { sliced ->
-                        RelationReader.from(
-                            sliced.vectors.mapIndexed { idx, v -> v.withName("?_$idx") },
-                            sliced.rowCount
-                        )
-                    }
+                    args?.openSlice(allocator)?.closeOnCatch { it.withPositionalParamNames() }
 
                 private fun ensurePrepared(): PreparedQuery {
                     if (preparedQuery == null && args != null)

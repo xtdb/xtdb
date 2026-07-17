@@ -5,6 +5,7 @@ import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.BulkIngestMode
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -299,6 +300,41 @@ class AdbcTest {
                     stmt.setSqlQuery("SELECT ? AS p")
                     stmt.prepare()
                     stmt.executeSchema().fields.map { it.name } shouldBe listOf("p")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `parameterSchema reports positional placeholders as empty-named NullType fields, per ADBC spec`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT ?, ?, ?")
+                    stmt.prepare()
+                    // unnamed positional params → empty name; undeterminable type → NA (NullType).
+                    stmt.parameterSchema.fields.map { it.name } shouldBe listOf("", "", "")
+                    stmt.parameterSchema.fields.map { it.type } shouldBe List(3) { ArrowType.Null.INSTANCE }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `positional params bind by ordinal position, ignoring arg column names`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                // arg columns are named neither `?_N` nor the projection aliases — the `?` placeholders
+                // are matched to them by ordinal position, per ADBC, and the names are discarded
+                Relation.openFromRows(allocator, listOf(mapOf("x" to 10L, "y" to 20L))).use { args ->
+                    conn.createStatement().use { stmt ->
+                        stmt.setSqlQuery("SELECT ? AS a, ? AS b")
+                        stmt.prepare()
+                        (stmt as Xtdb.Statement).bind(args)
+                        stmt.executeQuery().use { res ->
+                            res.consumeAsMaps() shouldBe listOf(mapOf("a" to 10L, "b" to 20L))
+                        }
+                    }
                 }
             }
         }

@@ -24,3 +24,13 @@ interface SqlPlanner {
      */
     fun toStaticOps(sql: String, args: RelationReader?, al: BufferAllocator, defaultTz: ZoneId?): List<TxOp>?
 }
+
+/**
+ * Rename [this]'s columns to the positional SQL-parameter convention (`?_0`, `?_1`, …) by ordinal position,
+ * discarding whatever the caller named them: SQL parameters are matched by position, not name.
+ *
+ * The result is a renaming view over the same vectors — closing it closes them — so it can be handed straight
+ * to a cursor that takes ownership of its args (as `openQuery` does), with no copy.
+ */
+fun RelationReader.withPositionalParamNames(): RelationReader =
+    RelationReader.from(vectors.mapIndexed { idx, v -> v.withName("?_$idx") }, rowCount)
