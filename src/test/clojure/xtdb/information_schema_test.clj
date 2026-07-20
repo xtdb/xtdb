@@ -382,6 +382,18 @@
              (xt/q tu/*node* "SELECT usename, usesuper, passwd IS NULL AS passwd_null FROM pg_user"))
           "passwd is always NULL — credentials live in the authn config, not the table")))
 
+(deftest unknown-internal-table-strict
+  ;; #5804: internal-schema tables resolve strictly, exactly like user tables - an unmodelled one is a
+  ;; hard error, not a warning that silently resolves to the empty `xt.not_found` sentinel. Both the
+  ;; qualified-internal-schema and `pg_`-prefixed paths (the two former tolerances) now error.
+  (t/is (thrown-with-msg? Exception #"Table not found"
+                          (xt/q tu/*node* "SELECT * FROM information_schema.no_such_table"))
+        "an unmodelled information_schema table errors, even for SELECT *")
+
+  (t/is (thrown-with-msg? Exception #"Table not found"
+                          (xt/q tu/*node* "SELECT some_col FROM pg_catalog.pg_not_a_table"))
+        "an unmodelled pg_ table errors too - no more silent empty probe"))
+
 ;; required for Postgrex
 (deftest test-pg-range-3737
   (let [types (set

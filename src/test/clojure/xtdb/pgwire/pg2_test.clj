@@ -242,12 +242,12 @@
 (deftest error-propagation
   (let [warns (atom [])]
     (with-open [conn (pg-conn {:fn-notice (fn [notice] (swap! warns conj (:message notice)))})]
-      ;; a probe of an unimplemented system-schema table stays a warning (tools tolerate it), one of
-      ;; the few query warnings left now that table/column-not-found on user tables are errors (#4467)
-      (pg/execute conn "SELECT * FROM information_schema.no_such_table")
+      ;; a NULLS ordering ignored on an ordered-set function stays a warning (not an error) and
+      ;; propagates as a notice, now that unresolved internal-schema tables/columns are errors (#4467, #5804)
+      (pg/execute conn "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n NULLS FIRST) AS pc FROM (VALUES (1), (2)) AS t(n)")
       ;; the fn-notice runs in a separate executor pool
       (Thread/sleep 100)
-      (t/is (= #{"Table not found: information_schema.no_such_table"}
+      (t/is (= #{"NULL ordering is ignored for percentile_cont (nulls are excluded from ordered-set aggregates)"}
                (set @warns))))))
 
 (deftest test-time

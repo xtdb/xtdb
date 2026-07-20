@@ -23,6 +23,7 @@ import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.DriverManager
+import java.sql.SQLException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -201,7 +202,17 @@ class PostgresSourceIntegrationTest {
         val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
 
         while (System.currentTimeMillis() < deadline) {
-            if (check()) return
+            // A poll often queries a cdc table before its snapshot has created it. XT now resolves
+            // internal/external-source tables strictly, so that's a hard "Table not found" - which here
+            // just means "not ready yet", so we keep polling. (#5733: the cdc db is a DirectMirror and
+            // rejects client txs, so we can't pre-create the table to avoid this; when that lands, the
+            // poll can query a pre-created empty table and this narrow catch can go.) Anything else propagates.
+            val ready = try {
+                check()
+            } catch (e: SQLException) {
+                if (e.message?.contains("Table not found") == true) false else throw e
+            }
+            if (ready) return
             runInterruptible { Thread.sleep(200) }
         }
 

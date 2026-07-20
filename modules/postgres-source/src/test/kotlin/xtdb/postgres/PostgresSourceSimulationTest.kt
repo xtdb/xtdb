@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import java.nio.file.Files
+import java.sql.SQLException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -70,7 +71,14 @@ class PostgresSourceSimulationTest : PostgresSourceTestBase() {
         val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
         while (true) {
             cdcIngestionError(node)?.let { fail("cdc ingestion stopped for $table: ${it.message}") }
-            val actual = runCatching { qRows(node, table) }.getOrNull()
+            val actual = try {
+                qRows(node, table)
+            } catch (e: Exception) {
+                // a never-created cdc table now resolves strictly to "Table not found"; for convergence
+                // that's an empty table, not a miss (#5804; #5733 would let us pre-create it). Other
+                // transient failures mid-pipeline just mean "not settled yet" - keep polling (null).
+                if ((e as? SQLException)?.message?.contains("Table not found") == true) emptyList() else null
+            }
             when {
                 actual == expected -> return
                 System.currentTimeMillis() > deadline ->
