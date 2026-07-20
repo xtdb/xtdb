@@ -1,7 +1,15 @@
 ---
 import Default from '@astrojs/starlight/components/Head.astro';
+
+// Point at `docs-live` (the deploy branch) in production so the raw source tracks the live
+// site; `main` in dev so a locally-edited page still resolves to something sensible.
+const ref = import.meta.env.PROD ? 'docs-live' : 'main';
+const filePath = Astro.locals.starlightRoute?.entry?.filePath;
+const mdSource = filePath && `https://raw.githubusercontent.com/xtdb/xtdb/${ref}/docs/${filePath}`;
 ---
 <Default {...Astro.props} />
+
+{mdSource && <link rel="alternate" type="text/markdown" href={mdSource} title="Markdown source" />}
 
 <script>
     {/** NOTE: Included here not in https://starlight.astro.build/reference/configuration/#head

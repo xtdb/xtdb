@@ -58,6 +58,8 @@ export default defineConfig({
                 { icon: 'discord', label: 'Discord', href: 'https://github.com/orgs/xtdb/discussions/4385' },
             ],
 
+            editLink: { baseUrl: 'https://github.com/xtdb/xtdb/edit/main/docs/' },
+
             favicon: '/shared/favicon.svg',
 
             logo: {
