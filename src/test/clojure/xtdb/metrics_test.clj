@@ -32,10 +32,10 @@
     (t/is (thrown? Exception (jdbc/execute! conn ["SELECT 1/0"]))
           "runtime error via pgwire")
 
-    ;; producing some warnings - a probe of an unimplemented system-schema table stays a warning
-    ;; (tools tolerate it), where unknown user tables/columns are now errors (#4467)
-    (xt/q node "SELECT * FROM information_schema.no_such_table")
-    (jdbc/execute! conn ["SELECT * FROM information_schema.no_such_table"])
+    ;; producing some warnings - a NULLS ordering ignored on an ordered-set function warns (one via
+    ;; the node, one via pgwire), now that unresolved internal-schema tables/columns are errors (#4467, #5804)
+    (xt/q node "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n NULLS FIRST) AS pc FROM (VALUES (1), (2)) AS t(n)")
+    (jdbc/execute! conn ["SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n NULLS FIRST) AS pc FROM (VALUES (1), (2)) AS t(n)"])
 
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.error")))))
     (t/is (= 2.0 (.count ^Counter (.counter (.find registry "query.warning")))))))

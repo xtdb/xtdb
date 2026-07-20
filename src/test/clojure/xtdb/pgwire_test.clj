@@ -2054,12 +2054,13 @@ ORDER BY t.oid DESC LIMIT 1"
 
 (deftest error-propagation
   (with-open [conn (jdbc-conn)]
-    ;; a probe of an unimplemented system-schema table stays a warning (tools tolerate it) - one of the
-    ;; few remaining query warnings now that table/column-not-found on user tables are errors (#4467)
-    (with-open [stmt (.prepareStatement conn "SELECT * FROM information_schema.no_such_table")]
+    ;; a NULLS ordering ignored on an ordered-set function stays a warning (not an error) and
+    ;; propagates to the client as a SQLWarning - one of the few remaining query warnings now that
+    ;; unresolved internal-schema tables/columns are errors (#4467, #5804)
+    (with-open [stmt (.prepareStatement conn "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n NULLS FIRST) AS pc FROM (VALUES (1), (2)) AS t(n)")]
       (.execute stmt)
 
-      (t/is (= #{"Table not found: information_schema.no_such_table"}
+      (t/is (= #{"NULL ordering is ignored for percentile_cont (nulls are excluded from ordered-set aggregates)"}
                (set (map #(.getMessage ^SQLWarning %) (stmt->warnings stmt))))))))
 
 (deftest test-ignore-returning-keys-3668

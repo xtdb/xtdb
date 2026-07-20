@@ -113,25 +113,8 @@
   PlanError
   (error-string [_] (format "Table not found: %s" (str/join "." (filter some? table-chain)))))
 
-(def ^:private internal-schemas #{"xt" "pg_catalog" "information_schema"})
-
-(defn- system-table-chain?
-  "An unknown table in an internal schema stays a warning rather than an error (#4467): a data-backed
-   `xt` table like `xt.txs` is empty - hence absent from the catalog - on a fresh node, and tools probe
-   optional `pg_catalog`/`information_schema` tables; both tolerate an empty result, whereas an unknown
-   user table is a typo. Covers a qualified internal-schema reference (schema is the second-to-last
-   chain element), and a `pg_*` table name: Postgres reserves the `pg_` prefix for system catalogs,
-   so an unresolved `pg_*` probe is tooling, not a user typo - whether it arrives unqualified
-   (`pg_class`) or schema-injected by the DML path (`public.pg_class`), hence we check the table name."
-  [table-chain]
-  (or (and (>= (count table-chain) 2)
-           (contains? internal-schemas
-                      (str (nth table-chain (- (count table-chain) 2)))))
-      (str/starts-with? (str (peek table-chain)) "pg_")))
-
 (defn- table-not-found! [env table-chain]
-  ((if (system-table-chain? table-chain) add-warning! add-err!)
-   env (->BaseTableNotFound table-chain)))
+  (add-err! env (->BaseTableNotFound table-chain)))
 
 (defrecord AmbiguousTableReference [table-chain table-chains]
   PlanError
@@ -350,12 +333,7 @@
                (or (nil? chain-db) (= chain-db (symbol db-name))))
       (for [col (if col-name
                   (when (or (contains? cols col-name) (types/temporal-col-name? col-name)
-                            (temporal-period-column? col-name)
-                            ;; tolerate any column on an internal-schema table: tools probe optional
-                            ;; pg_catalog/information_schema columns, and unimplemented system tables
-                            ;; resolve to the `xt.not_found` sentinel (schema `xt`). Only user tables
-                            ;; error on a typo'd / undeclared column (#4467).
-                            (contains? internal-schemas (.getSchemaName table-ref)))
+                            (temporal-period-column? col-name))
                     [col-name])
                   (available-cols this))
             :when (not (contains? excl-cols col))]
@@ -729,9 +707,9 @@
 
               (let [{:keys [for-valid-time clamp-valid-time?]}
                     (<-table-time-period-specification (.queryValidTimePeriodSpecification ctx))]
-                ;; `table` is nil only on the warning path (an unresolved internal-schema / `pg_*`
-                ;; table - see `system-table-chain?`); user tables have already erred. We scan the
-                ;; empty `xt.not_found` sentinel so those probes return no rows rather than blowing up.
+                ;; `table` is nil when the base table wasn't found - `table-not-found!` has already
+                ;; erred. We still resolve to the empty `xt.not_found` sentinel so plan-building
+                ;; completes (collecting any further column errors) rather than NPEing on a nil ref.
                 (->BaseTable env resolved-db resolved-ref
                              for-valid-time clamp-valid-time?
                              (<-table-time-period-specification (.querySystemTimePeriodSpecification ctx))
