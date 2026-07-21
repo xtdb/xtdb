@@ -24,6 +24,7 @@ import xtdb.api.query.PrepareOpts
 import xtdb.api.query.QueryOpts
 import xtdb.query.SqlStatement
 import xtdb.query.parseStatement
+import xtdb.query.withPositionalParamNames
 import xtdb.api.DEFAULT_SCHEMA
 import xtdb.api.SchemaName
 import xtdb.api.TableName
@@ -159,8 +160,10 @@ class OpenTx
     /**
      * Run SQL against the database's live index, with visibility into writes made earlier in this transaction.
      *
-     * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader].
-     * Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
+     * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader],
+     * matched to the query's `?` placeholders by ordinal position. The columns must be supplied unnamed or
+     * named `$1..$N` in order (see [withPositionalParamNames]); mis-ordered names are rejected rather than
+     * silently rebound. Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
      */
     fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
@@ -171,12 +174,13 @@ class OpenTx
 
         return nodeBase.querySource
             .prepareQuery(parseStatement(sql), queryCatalog, prepareOpts)
-            .openQuery(args, opts.copy(currentTime = currentTime, tracer = opts.tracer ?: tracer))
+            .openQuery(args?.withPositionalParamNames(), opts.copy(currentTime = currentTime, tracer = opts.tracer ?: tracer))
     }
 
     /**
      * Execute a DML/DDL SQL statement against this tx, with visibility into writes made earlier in the same
-     * writer call. Positional `?` parameters come from [args], like [openQuery].
+     * writer call. Positional `?` parameters come from [args], supplied and matched by ordinal position like
+     * [openQuery] — unnamed or named `$1..$N` in order.
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
@@ -200,6 +204,7 @@ class OpenTx
             is SqlStatement.DmlQuery -> {
                 val query = stmt.query
                 checkArgCount(args, query.paramCount)
+                val pArgs = args?.withPositionalParamNames()
 
                 when (stmt) {
                     is SqlStatement.Assert -> {
@@ -208,7 +213,7 @@ class OpenTx
                         fun fail(): Nothing =
                             throw Conflict(msg, "xtdb/assert-failed", emptyMap<String, Any?>())
 
-                        query.openQuery(args, qOpts).use { cursor ->
+                        query.openQuery(pArgs, qOpts).use { cursor ->
                             if (!cursor.tryAdvance { rel -> if (rel.rowCount == 0) fail() }) fail()
                         }
                     }
@@ -216,7 +221,7 @@ class OpenTx
                     is SqlStatement.Put -> {
                         checkNotForbidden(stmt.table)
 
-                        query.openQuery(args, qOpts).use { cursor ->
+                        query.openQuery(pArgs, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 // defer table() until a row is actually written: a 0-row result (no-match
                                 // UPDATE/DELETE, INSERT ... WHERE false) must not register a table — only CREATE TABLE does
@@ -249,7 +254,7 @@ class OpenTx
                     is SqlStatement.Patch -> {
                         checkNotForbidden(stmt.table)
 
-                        query.openQuery(args, qOpts).use { cursor ->
+                        query.openQuery(pArgs, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
                                     table(stmt.table).writePuts(rel, currentTimeMicros, MAX_LONG)
@@ -260,7 +265,7 @@ class OpenTx
                     is SqlStatement.Delete -> {
                         checkNotForbidden(stmt.table)
 
-                        query.openQuery(args, qOpts).use { cursor ->
+                        query.openQuery(pArgs, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
                                     table(stmt.table).writeDeletes(rel, currentTimeMicros, MAX_LONG)
@@ -271,7 +276,7 @@ class OpenTx
                     is SqlStatement.Erase -> {
                         checkNotForbidden(stmt.table)
 
-                        query.openQuery(args, qOpts).use { cursor ->
+                        query.openQuery(pArgs, qOpts).use { cursor ->
                             cursor.forEachRemaining { rel ->
                                 if (rel.rowCount > 0)
                                     table(stmt.table).writeErases(rel.vectorFor("_iid"))

@@ -5,6 +5,12 @@ import org.apache.arrow.adbc.core.AdbcStatement.QueryResult
 import org.apache.arrow.adbc.core.BulkIngestMode
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
+import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -299,6 +305,86 @@ class AdbcTest {
                     stmt.setSqlQuery("SELECT ? AS p")
                     stmt.prepare()
                     stmt.executeSchema().fields.map { it.name } shouldBe listOf("p")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `parameterSchema reports positional placeholders as empty-named NullType fields, per ADBC spec`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.setSqlQuery("SELECT ?, ?, ?")
+                    stmt.prepare()
+                    // unnamed positional params → empty name; undeterminable type → NA (NullType).
+                    stmt.parameterSchema.fields.map { it.name } shouldBe listOf("", "", "")
+                    stmt.parameterSchema.fields.map { it.type } shouldBe List(3) { ArrowType.Null.INSTANCE }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `$ N-named params bind by ordinal position`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                Relation.openFromRows(allocator, listOf(mapOf("\$1" to 10L, "\$2" to 20L))).use { args ->
+                    conn.createStatement().use { stmt ->
+                        stmt.setSqlQuery("SELECT ? AS a, ? AS b")
+                        stmt.prepare()
+                        (stmt as Xtdb.Statement).bind(args)
+                        stmt.executeQuery().use { res ->
+                            res.consumeAsMaps() shouldBe listOf(mapOf("a" to 10L, "b" to 20L))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `bind rejects arg columns whose names aren't the positional convention`() {
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                Relation.openFromRows(allocator, listOf(mapOf("x" to 10L, "y" to 20L))).use { args ->
+                    conn.createStatement().use { stmt ->
+                        stmt.setSqlQuery("SELECT ? AS a, ? AS b")
+                        stmt.prepare()
+                        (stmt as Xtdb.Statement).bind(args)
+                        assertThrows(Incorrect::class.java) { stmt.executeQuery() }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `bind(VectorSchemaRoot) with unnamed params doesn't collapse them`() {
+        // regression: a spec-compliant client binds a VSR whose param columns are all empty-named. The VSR
+        // tolerates that; our name-keyed Relation would collapse N empty columns to one unless bind renames
+        // them positionally first.
+        AdbcDriverFactory().getDriver(allocator).open(emptyMap()).use { db ->
+            db.connect().use { conn ->
+                val schema = Schema(
+                    listOf(
+                        Field("", FieldType.nullable(ArrowType.Int(64, true)), null),
+                        Field("", FieldType.nullable(ArrowType.Int(64, true)), null),
+                    )
+                )
+                VectorSchemaRoot.create(schema, allocator).use { vsr ->
+                    (vsr.getVector(0) as BigIntVector).apply { allocateNew(); setSafe(0, 10L) }
+                    (vsr.getVector(1) as BigIntVector).apply { allocateNew(); setSafe(0, 20L) }
+                    vsr.setRowCount(1)
+
+                    conn.createStatement().use { stmt ->
+                        stmt.setSqlQuery("SELECT ? AS a, ? AS b")
+                        stmt.prepare()
+                        (stmt as Xtdb.Statement).bind(vsr)
+                        stmt.executeQuery().use { res ->
+                            res.consumeAsMaps() shouldBe listOf(mapOf("a" to 10L, "b" to 20L))
+                        }
+                    }
                 }
             }
         }

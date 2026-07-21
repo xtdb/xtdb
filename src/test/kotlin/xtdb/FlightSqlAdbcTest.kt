@@ -45,6 +45,7 @@ import org.apache.arrow.vector.complex.ListVector
 import org.apache.arrow.vector.ipc.ReadChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.Types
+import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
@@ -172,6 +173,18 @@ class FlightSqlAdbcTest {
 
                 assertFalse(rdr.loadNextBatch())
             }
+        }
+    }
+
+    @Test
+    fun `test ADBC parameterSchema reports positional placeholders as empty-named NullType fields`() {
+        conn.createStatement().use { stmt ->
+            stmt.setSqlQuery("SELECT ?, ?, ?")
+            stmt.prepare()
+            // per ADBC: unnamed positional params → empty name; undeterminable type → NA (NullType).
+            // asserted on the wire path because both round-trip through IPC schema serialisation.
+            assertEquals(listOf("", "", ""), stmt.parameterSchema.fields.map { it.name })
+            assertEquals(List(3) { ArrowType.Null.INSTANCE }, stmt.parameterSchema.fields.map { it.type })
         }
     }
 

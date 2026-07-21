@@ -103,7 +103,7 @@ class InProcessAdbcTest {
     }
 
     @Test
-    fun `getParameterSchema reports columns in $ N convention`() {
+    fun `getParameterSchema reports unnamed positional params as empty strings`() {
         insertData("CREATE TABLE foo (_id, name)")
 
         xtdb.connect().use { conn ->
@@ -113,8 +113,8 @@ class InProcessAdbcTest {
 
                 val paramSchema = stmt.parameterSchema
                 assertEquals(2, paramSchema.fields.size, "expected 2 parameter slots")
-                assertEquals("\$0", paramSchema.fields[0].name)
-                assertEquals("\$1", paramSchema.fields[1].name)
+                assertEquals("", paramSchema.fields[0].name)
+                assertEquals("", paramSchema.fields[1].name)
                 assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[0].type)
                 assertEquals(ArrowType.Null.INSTANCE, paramSchema.fields[1].type)
             }
