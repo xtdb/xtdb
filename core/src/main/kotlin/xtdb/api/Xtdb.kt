@@ -389,11 +389,19 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun bind(root: VectorSchemaRoot) {
                     clearArgs()
-                    args = Relation(allocator, root.schema).closeOnCatch { copy ->
-                        Relation.fromRoot(allocator, root).use { src ->
-                            copy.append(src)
-                        }
-                        copy
+                    // A VSR tolerates duplicate/empty field names, but our Relation keys columns by name —
+                    // so an all-unnamed multi-param bind (what a spec-compliant ADBC client sends against the
+                    // empty parameterSchema) would collapse to a single column. Rename the ordered vectors to
+                    // the canonical $1..$N positional form before they reach the name-keyed Relation; ADBC binds
+                    // by ordinal, so the VSR's own names don't carry meaning. Copy (not slice) into a relation on
+                    // our allocator, since the VSR's vectors don't share our allocator root.
+                    // Set the name on the Vector itself (not a RenamedVector wrapper, whose `.field` delegates
+                    // to the inner vector and would report the original name back through `.schema`).
+                    RelationReader.from(
+                        root.fieldVectors.mapIndexed { i, fv -> Vector.fromArrow(fv).also { it.name = "\$${i + 1}" } },
+                        root.rowCount,
+                    ).use { renamed ->
+                        args = Relation(allocator, renamed.schema).closeOnCatch { copy -> copy.append(renamed); copy }
                     }
                 }
 

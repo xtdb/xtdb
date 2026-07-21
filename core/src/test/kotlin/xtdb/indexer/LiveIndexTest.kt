@@ -2,6 +2,7 @@
 
 package xtdb.indexer
 
+import clojure.lang.Keyword
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
@@ -28,6 +30,7 @@ import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
 import java.time.Instant
@@ -39,6 +42,9 @@ class LiveIndexTest {
 
     private lateinit var nodeBase: NodeBase
     private lateinit var allocator: BufferAllocator
+
+    private val errorCodeKey = Keyword.intern("xtdb.error", "code")
+    private fun Incorrect.errorCode() = data.valAt(errorCodeKey) as Keyword?
 
     @BeforeEach
     fun setUp() {
@@ -113,16 +119,28 @@ class LiveIndexTest {
     }
 
     @Test
-    fun `openQuery matches positional params by position, ignoring arg column names`() {
+    fun `openQuery binds $ N-named args to the placeholders by position`() {
         TestDb().use { db ->
             db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
-                // arg columns are not named `?_0`/`?_1`; OpenTx must bind them to the `?` placeholders by
-                // position. openQuery takes ownership of args and frees them when the cursor closes.
-                val args = Relation.openFromRows(allocator, listOf(mapOf("x" to 10L, "y" to 20L)))
+                // openQuery takes ownership of args and frees them when the cursor closes.
+                val args = Relation.openFromRows(allocator, listOf(mapOf("\$1" to 10L, "\$2" to 20L)))
                 tx.openQuery("SELECT ? AS a, ? AS b", args).use { cursor ->
                     val rows = mutableListOf<Map<*, *>>()
                     cursor.forEachRemaining { rel -> rows.addAll(rel.toMaps(SNAKE_CASE_STRING)) }
                     assertEquals(listOf(mapOf("a" to 10L, "b" to 20L)), rows)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `openQuery rejects arg columns whose names aren't the positional convention`() {
+        TestDb().use { db ->
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                // names that look meaningful but would be silently rebound by position are rejected
+                Relation.openFromRows(allocator, listOf(mapOf("x" to 10L, "y" to 20L))).use { args ->
+                    val e = assertThrows<Incorrect> { tx.openQuery("SELECT ? AS a, ? AS b", args) }
+                    assertEquals(Keyword.intern("xtdb", "invalid-param-names"), e.errorCode())
                 }
             }
         }

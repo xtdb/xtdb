@@ -88,15 +88,15 @@
 
 (t/deftest test-prepared-stmts
   (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" empty-call-opts)
-              param-root (VectorSchemaRoot/create (Schema. [#xt/field {"_id" :utf8} #xt/field {"name" :utf8}]) tu/*allocator*)]
+              param-root (VectorSchemaRoot/create (Schema. [#xt/field {"$1" :utf8} #xt/field {"$2" :utf8}]) tu/*allocator*)]
     (.setParameters ps param-root)
 
-    (populate-root param-root [{:_id "jms", :name "James"}
-                               {:_id "mat", :name "Matt"}])
+    (populate-root param-root [{:$1 "jms", :$2 "James"}
+                               {:$1 "mat", :$2 "Matt"}])
     (.executeUpdate ps empty-call-opts)
 
-    (populate-root param-root [{:_id "hak", :name "Håkan"}
-                               {:_id "wot", :name "Dan"}])
+    (populate-root param-root [{:$1 "hak", :$2 "Håkan"}
+                               {:$1 "wot", :$2 "Dan"}])
     (.executeUpdate ps empty-call-opts))
 
   (with-open [ps (.prepare *client* "SELECT users.name FROM users WHERE users._id >= ?" empty-call-opts)
@@ -123,17 +123,17 @@
     (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)
     (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
       (with-open [ps (.prepare *client* "INSERT INTO users (_id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
-                  param-root (VectorSchemaRoot/create (Schema. [#xt/field {"_id" :utf8} #xt/field {"name" :utf8}]) tu/*allocator*)]
+                  param-root (VectorSchemaRoot/create (Schema. [#xt/field {"$1" :utf8} #xt/field {"$2" :utf8}]) tu/*allocator*)]
         (.setParameters ps param-root)
 
-        (populate-root param-root [{:_id "jms", :name "James"}
-                                   {:_id "mat", :name "Matt"}])
+        (populate-root param-root [{:$1 "jms", :$2 "James"}
+                                   {:$1 "mat", :$2 "Matt"}])
         (.executeUpdate ps empty-call-opts)
 
         (t/is (= #{} (q)))
 
-        (populate-root param-root [{:_id "hak", :name "Håkan"}
-                                   {:_id "wot", :name "Dan"}])
+        (populate-root param-root [{:$1 "hak", :$2 "Håkan"}
+                                   {:$1 "wot", :$2 "Dan"}])
         (.executeUpdate ps empty-call-opts)
 
         (t/is (= #{} (q))))

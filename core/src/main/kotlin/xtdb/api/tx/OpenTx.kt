@@ -161,8 +161,9 @@ class OpenTx
      * Run SQL against the database's live index, with visibility into writes made earlier in this transaction.
      *
      * Positional `?` parameters are supplied through [args] as a single-row [xtdb.arrow.RelationReader],
-     * matched to the query's `?` placeholders by ordinal position — the columns' names are ignored.
-     * Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
+     * matched to the query's `?` placeholders by ordinal position. The columns must be supplied unnamed or
+     * named `$1..$N` in order (see [withPositionalParamNames]); mis-ordered names are rejected rather than
+     * silently rebound. Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
      */
     fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
@@ -178,7 +179,8 @@ class OpenTx
 
     /**
      * Execute a DML/DDL SQL statement against this tx, with visibility into writes made earlier in the same
-     * writer call. Positional `?` parameters come from [args], matched by ordinal position, like [openQuery].
+     * writer call. Positional `?` parameters come from [args], supplied and matched by ordinal position like
+     * [openQuery] — unnamed or named `$1..$N` in order.
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
      */
