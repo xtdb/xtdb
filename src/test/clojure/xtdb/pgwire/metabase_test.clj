@@ -102,26 +102,30 @@
                     ORDER BY \"table-schema\" ASC, \"table-name\" ASC, \"database-position\" ASC")))))
 
 (t/deftest metabase-describe-fks-test
-  (t/testing "Metabase query to describe foreign key relationships (pg_constraint not yet supported)"
-    (t/is (= []
-             (xt/q tu/*node*
-                   "SELECT \"fk_ns\".\"nspname\" AS \"fk-table-schema\",
-                           \"fk_table\".\"relname\" AS \"fk-table-name\",
-                           \"fk_column\".\"attname\" AS \"fk-column-name\",
-                           \"pk_ns\".\"nspname\" AS \"pk-table-schema\",
-                           \"pk_table\".\"relname\" AS \"pk-table-name\",
-                           \"pk_column\".\"attname\" AS \"pk-column-name\"
-                    FROM \"pg_constraint\" AS \"c\"
-                    INNER JOIN \"pg_class\" AS \"fk_table\" ON \"c\".\"conrelid\" = \"fk_table\".\"oid\"
-                    INNER JOIN \"pg_namespace\" AS \"fk_ns\" ON \"c\".\"connamespace\" = \"fk_ns\".\"oid\"
-                    INNER JOIN \"pg_attribute\" AS \"fk_column\" ON \"c\".\"conrelid\" = \"fk_column\".\"attrelid\"
-                    INNER JOIN \"pg_class\" AS \"pk_table\" ON \"c\".\"confrelid\" = \"pk_table\".\"oid\"
-                    INNER JOIN \"pg_namespace\" AS \"pk_ns\" ON \"pk_table\".\"relnamespace\" = \"pk_ns\".\"oid\"
-                    INNER JOIN \"pg_attribute\" AS \"pk_column\" ON \"c\".\"confrelid\" = \"pk_column\".\"attrelid\"
-                    WHERE fk_ns.nspname !~ '^information_schema|catalog_history|pg_'
-                      AND (\"c\".\"contype\" = 'f'::char)
-                      AND (\"fk_ns\".\"nspname\" = 'public')
-                    ORDER BY \"fk-table-schema\" ASC, \"fk-table-name\" ASC")))))
+  ;; Metabase's describe-fks-sql - empty because we model no FK constraints, but the ANY(c.conkey)
+  ;; correlated-array probes must plan (#5810 - conkey/confkey resolve inside ANY(...))
+  (t/is (= []
+           (xt/q tu/*node*
+                 "SELECT \"fk_ns\".\"nspname\" AS \"fk-table-schema\",
+                         \"fk_table\".\"relname\" AS \"fk-table-name\",
+                         \"fk_column\".\"attname\" AS \"fk-column-name\",
+                         \"pk_ns\".\"nspname\" AS \"pk-table-schema\",
+                         \"pk_table\".\"relname\" AS \"pk-table-name\",
+                         \"pk_column\".\"attname\" AS \"pk-column-name\"
+                  FROM \"pg_constraint\" AS \"c\"
+                  INNER JOIN \"pg_class\" AS \"fk_table\" ON \"c\".\"conrelid\" = \"fk_table\".\"oid\"
+                  INNER JOIN \"pg_namespace\" AS \"fk_ns\" ON \"c\".\"connamespace\" = \"fk_ns\".\"oid\"
+                  INNER JOIN \"pg_attribute\" AS \"fk_column\" ON \"c\".\"conrelid\" = \"fk_column\".\"attrelid\"
+                  INNER JOIN \"pg_class\" AS \"pk_table\" ON \"c\".\"confrelid\" = \"pk_table\".\"oid\"
+                  INNER JOIN \"pg_namespace\" AS \"pk_ns\" ON \"pk_table\".\"relnamespace\" = \"pk_ns\".\"oid\"
+                  INNER JOIN \"pg_attribute\" AS \"pk_column\" ON \"c\".\"confrelid\" = \"pk_column\".\"attrelid\"
+                  WHERE fk_ns.nspname !~ '^information_schema|catalog_history|pg_'
+                    AND (\"c\".\"contype\" = 'f'::char)
+                    AND (\"fk_column\".\"attnum\" = ANY(\"c\".\"conkey\"))
+                    AND (\"pk_column\".\"attnum\" = ANY(\"c\".\"confkey\"))
+                    AND (\"fk_ns\".\"nspname\" = 'public')
+                  ORDER BY \"fk-table-schema\" ASC, \"fk-table-name\" ASC"))
+        "describe-fks-sql plans with ANY(conkey)/ANY(confkey) correlated-array conditions (#5810)"))
 
 (t/deftest transit-error-column-case-expression-test
   (t/testing "CASE expression on transit error column doesn't throw InvalidWriteObjectException"

@@ -3331,6 +3331,51 @@ UNION ALL
   (t/is (= [{:result false}]
            (xt/q tu/*node* "SELECT 10 = ANY(SELECT col1 FROM docs) AS result"))))
 
+(t/deftest test-any-correlated-array-column-4895
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1 :col1 [8 9]}
+                             {:xt/id 2 :col1 [6 7]}
+                             {:xt/id 3 :col1 [8 6]}]])
+
+  (t/is (= [{:xt/id 1} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE 8 = ANY(col1) ORDER BY _id"))
+        "correlated column resolves inside ANY (#4895, #5810)")
+
+  (t/is (= [{:xt/id 2} {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE 6 = ANY(col1) ORDER BY _id")))
+
+  (t/is (= []
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE 10 = ANY(col1)")))
+
+  (t/is (= [{:xt/id 2}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE 8 <> ALL(col1) ORDER BY _id"))
+        "ALL over a correlated array column"))
+
+(t/deftest test-any-correlated-array-with-nulls-4895
+  ;; Postgres three-valued logic: a hit is TRUE even alongside a NULL element, but a
+  ;; miss in the presence of a NULL element (or a NULL array) is UNKNOWN, not FALSE.
+  (xt/execute-tx tu/*node* [[:put-docs :docs
+                             {:xt/id 1 :col1 [8 nil]}
+                             {:xt/id 2 :col1 [6 nil]}
+                             {:xt/id 3 :col1 nil}]])
+
+  ;; an UNKNOWN result reads back as an absent `:r` key - XTDB omits null-valued columns
+  (t/is (= [{:xt/id 1, :r true}
+            {:xt/id 2}
+            {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id, 8 = ANY(col1) AS r FROM docs ORDER BY _id"))
+        "ANY: hit wins over a NULL element; miss-with-NULL and NULL-array are UNKNOWN")
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* "SELECT _id FROM docs WHERE 8 = ANY(col1) ORDER BY _id"))
+        "WHERE keeps only the TRUE row - UNKNOWN rows are filtered out")
+
+  (t/is (= [{:xt/id 1, :r false}
+            {:xt/id 2}
+            {:xt/id 3}]
+           (xt/q tu/*node* "SELECT _id, 8 <> ALL(col1) AS r FROM docs ORDER BY _id"))
+        "ALL: a NULL element makes the all-distinct check UNKNOWN unless a concrete hit forces FALSE"))
+
 (t/deftest update-interval-with-months-5070
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1, :i #xt/interval "P12MT1S"}]])
   (t/is (= [{:xt/id 1, :i #xt/interval "P12MT1S"}] (xt/q tu/*node* "FROM docs")))

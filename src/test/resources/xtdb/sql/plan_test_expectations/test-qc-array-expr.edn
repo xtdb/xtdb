@@ -7,4 +7,4 @@
    [:rename
     {:prefix foo.1}
     [:scan {:db-name "xtdb", :table #xt/table foo, :columns [a]}]]
-   [:table {:column {_qc_expr_3 (current-schemas true)}}]]]]
+   [:table {:column {_qc_expr_3 (coalesce (current-schemas true) [nil])}}]]]]

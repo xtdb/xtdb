@@ -2152,24 +2152,33 @@
                             qc-pt2))
       (= :all (:quantifier qc-pt2)) (list 'not)))
 
-  (visitQuantifiedComparisonExpr [{{:keys [!id-count]} :env, :keys [qc-pt2, ^Map !subqs], :as this} ctx]
-    (let [sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
+  (visitQuantifiedComparisonExpr [{:keys [env scope qc-pt2, ^Map !subqs], :as this} ctx]
+    (let [{:keys [!id-count]} env
+          sq-sym (-> (->col-sym (str "_sq_" (swap! !id-count inc)))
                      (vary-meta assoc :sq-out-sym? true))
 
-          ;; HACK: removing the scope. will unblock #3539,
-          ;; but I wasn't sure of the semantics in the general case
-          expr (.accept (.expr ctx) (assoc this :scope nil))
+          ;; resolve the array-valued operand against a subquery scope, so a correlated column
+          ;; (`8 = ANY(col1)`) resolves to a param the dependent join binds per outer row - the
+          ;; same mechanism the subquery arms use. A literal/param array captures no refs.
+          !qc-sq-refs (HashMap.)
+          expr (.accept (.expr ctx) (assoc this :scope (->SubqueryScope env scope !qc-sq-refs)))
 
           expr-sym (->col-sym (str "_qc_expr_" (swap! !id-count inc)))
-          query-plan (->QueryExpr [:table {:column {expr-sym expr}}]
+
+          ;; the array is unnested into the haystack rows, so a NULL array and an empty array
+          ;; both collapse to zero rows - yet SQL wants `x = ANY(NULL)` to be UNKNOWN and
+          ;; `x = ANY(ARRAY[])` to be FALSE. Coalescing a NULL array to `[NULL]` gives the null
+          ;; case a single null row (→ UNKNOWN via the mark-join), leaving the empty case at zero.
+          query-plan (->QueryExpr [:table {:column {expr-sym (list 'coalesce expr [nil])}}]
                                   [expr-sym])]
 
       (.put !subqs sq-sym (into {:sq-type :quantified-comparison
-                                 :query-plan query-plan}
+                                 :query-plan query-plan
+                                 :sq-refs (into {} !qc-sq-refs)}
                                 qc-pt2))
 
       (cond-> sq-sym
-        (= :all (:quantifier qc-pt2)) (-> (list 'not)))))
+        (= :all (:quantifier qc-pt2)) (->> (list 'not)))))
 
   (visitInPredicate [{:keys [!subqs] :as this} ctx]
     (let [^ParserRuleContext
