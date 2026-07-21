@@ -188,3 +188,31 @@
                           UNION SELECT schemaname, viewname AS objectname FROM pg_catalog.pg_views
                           UNION SELECT schemaname, matviewname AS objectname FROM pg_catalog.pg_matviews) t"))
         "table-privileges probe over pg_tables/pg_views/pg_matviews with has_*_privilege"))
+
+(t/deftest metabase-describe-indexes-test
+  ;; Metabase's describe-indexes-sql - empty (we have no indexes), but must plan over pg_index.
+  ;; Exercises _pg_expandarray, the 3-arg pg_get_indexdef, and pg_get_expr against pg_index.
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (t/is (= [] (xt/q tu/*node*
+                    "SELECT tmp.table_schema, tmp.table_name,
+                            TRIM(BOTH '\"' FROM pg_catalog.pg_get_indexdef(tmp.ci_oid, tmp.pos, false)) AS field_name
+                     FROM (SELECT n.nspname AS table_schema, ct.relname AS table_name, ci.oid AS ci_oid,
+                                  (information_schema._pg_expandarray(i.indkey)).n AS pos
+                           FROM pg_catalog.pg_class ct
+                           JOIN pg_catalog.pg_namespace n ON ct.relnamespace = n.oid
+                           JOIN pg_catalog.pg_index i ON ct.oid = i.indrelid
+                           JOIN pg_catalog.pg_class ci ON ci.oid = i.indexrelid
+                           WHERE pg_catalog.pg_get_expr(i.indpred, i.indrelid) IS NULL
+                             AND n.nspname !~ '^information_schema|catalog_history|pg_') tmp
+                     WHERE tmp.pos = 1"))))
+
+(t/deftest metabase-index-primary-key-test
+  ;; the pg_index columns a driver's primary-key probe reads - the shape that surfaced the
+  ;; missing pg_catalog.pg_index table (indisprimary/indnkeyatts/indexrelid/indrelid)
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
+  (t/is (= [] (xt/q tu/*node*
+                    "SELECT i.indisprimary, i.indnkeyatts, i.indexrelid, i.indrelid
+                     FROM pg_catalog.pg_index i
+                     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+                     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                     WHERE n.nspname = 'public' AND i.indisprimary"))))

@@ -134,7 +134,13 @@
                                     conkey [:? :list :i32], confkey [:? :list :i32]}
           pg_catalog/pg_extension {oid :i32, extname :utf8, extowner :i32, extnamespace :i32
                                    extrelocatable :bool, extversion :utf8, extconfig [:? :list :i32], extcondition [:? :list :utf8]}
-          pg_catalog/pg_attrdef {oid :i32, adrelid :i32, adnum :i32, adbin [:? :utf8]}}
+          pg_catalog/pg_attrdef {oid :i32, adrelid :i32, adnum :i32, adbin [:? :utf8]}
+          pg_catalog/pg_index {indexrelid :i32, indrelid :i32, indnatts :i32, indnkeyatts :i32
+                               indisunique :bool, indnullsnotdistinct :bool, indisprimary :bool, indisexclusion :bool
+                               indimmediate :bool, indisclustered :bool, indisvalid :bool, indcheckxmin :bool
+                               indisready :bool, indislive :bool, indisreplident :bool
+                               indkey [:? :list :i32], indcollation [:? :list :i32], indclass [:? :list :i32]
+                               indoption [:? :list :i32], indexprs [:? :utf8], indpred [:? :utf8]}}
         (update-vals map->vec-types)))
 
   (def ^:private xt-derived-tables
@@ -549,6 +555,7 @@
                                      pg_catalog/pg_constraint nil
                                      pg_catalog/pg_extension nil
                                      pg_catalog/pg_attrdef nil
+                                     pg_catalog/pg_index nil
                                      pg_catalog/pg_user (pg-user authn)
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
                                      pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
