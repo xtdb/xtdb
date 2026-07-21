@@ -24,6 +24,7 @@ import software.amazon.awssdk.services.s3.model.*
 import xtdb.api.PathSerde
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
+import xtdb.api.error.Incorrect
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.ObjectStore.Companion.throwMissingKey
 import xtdb.api.storage.ObjectStore.StoredObject
@@ -293,9 +294,14 @@ class S3(
         var region: String? = null,
         val bucket: String,
         @Serializable(PathSerde::class) var prefix: Path? = null,
+        @Deprecated(
+            message = "Inline 'credentials' is deprecated - configure credentials via 'remote' instead",
+            level = DeprecationLevel.WARNING
+        )
         var credentials: BasicCredentials? = null,
         var endpoint: String? = null,
         var pathStyleAccessEnabled: Boolean = false,
+        var remote: RemoteAlias? = null,
         @Transient var s3Configurator: S3Configurator = S3Configurator.Default,
         @Transient var coroutineContext: CoroutineContext = Dispatchers.IO
     ) : ObjectStore.Factory {
@@ -304,8 +310,15 @@ class S3(
         fun region(region: String) = apply { this.region = region }
         fun region(region: Region) = apply { this.region = region.id() }
 
+        @Deprecated(
+            message = "Use remote(...) instead of inline credentials",
+            replaceWith = ReplaceWith("remote(alias)"),
+            level = DeprecationLevel.WARNING
+        )
         fun credentials(accessKey: String, secretKey: String) =
             apply { credentials = BasicCredentials(accessKey, secretKey) }
+
+        fun remote(alias: RemoteAlias) = apply { this.remote = alias }
 
         fun endpoint(endpoint: String) = apply { this.endpoint = endpoint }
 
@@ -318,12 +331,40 @@ class S3(
 
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
+        private fun resolveCredentials(remotes: Map<RemoteAlias, Remote>): BasicCredentials? {
+            val alias = remote ?: return credentials
+
+            if (credentials != null)
+                throw Incorrect(
+                    "S3 has both 'remote' and inline credentials — use only one",
+                    errorCode = "xtdb.aws/conflicting-config",
+                    data = mapOf("alias" to alias),
+                )
+
+            val raw = remotes[alias]
+                ?: throw Incorrect(
+                    "no remote configured with alias '$alias'",
+                    errorCode = "xtdb.aws/missing-remote",
+                    data = mapOf("alias" to alias),
+                )
+
+            val s3 = raw as? S3Remote
+                ?: throw Incorrect(
+                    "remote '$alias' is not an !S3 remote",
+                    errorCode = "xtdb.aws/wrong-remote-type",
+                    data = mapOf("alias" to alias),
+                )
+
+            return BasicCredentials(s3.accessKey, s3.secretKey)
+        }
+
         override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): S3 {
+            val creds = resolveCredentials(remotes)
             val client =
                 S3AsyncClient.builder()
                     .apply {
                         region?.let { this.region(Region.of(it)) }
-                        credentials?.let { (accessKey, secretKey) ->
+                        creds?.let { (accessKey, secretKey) ->
                             AwsBasicCredentials.create(accessKey, secretKey)
                                 .let { StaticCredentialsProvider.create(it) }
                                 .also { credentialsProvider(it) }
@@ -347,11 +388,17 @@ class S3(
                 this@Factory.region?.let { this.region = it }
                 this@Factory.endpoint?.let { this.endpoint = it }
                 this.pathStyleAccessEnabled = this@Factory.pathStyleAccessEnabled
-                
-                this@Factory.credentials?.let { creds ->
-                    this.credentials = s3Credentials {
-                        this.accessKey = creds.accessKey
-                        this.secretKey = creds.secretKey
+
+                // Credentials are only emitted on the inline-auth path; the alias path
+                // keeps them node-local so they never land on the source log.
+                if (this@Factory.remote != null) {
+                    this.remote = this@Factory.remote!!
+                } else {
+                    this@Factory.credentials?.let { creds ->
+                        this.credentials = s3Credentials {
+                            this.accessKey = creds.accessKey
+                            this.secretKey = creds.secretKey
+                        }
                     }
                 }
             }, "proto.xtdb.com")
@@ -374,7 +421,8 @@ class S3(
                         BasicCredentials(config.credentials.accessKey, config.credentials.secretKey)
                     else null,
                     endpoint = config.endpoint.takeIf { it.isNotEmpty() },
-                    pathStyleAccessEnabled = config.pathStyleAccessEnabled
+                    pathStyleAccessEnabled = config.pathStyleAccessEnabled,
+                    remote = config.remote.takeIf { it.isNotEmpty() },
                 )
             }
 

@@ -275,6 +275,23 @@ If you are using an S3 compatible object storage you might need to pass the envi
 XTDB uses AWS SDK for Authentication, relying on the default AWS credential provider chain.
 See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html) for setup instructions.
 
+Alternatively, you can authenticate with an explicit **access key** / **secret key** (v2.2+).
+Declare an `!S3` [remote](/ops/config#remotes) holding the credential, then reference it from the object store with `remote:`:
+
+```yaml
+remotes:
+  my-aws: !S3
+    accessKey: !Env AWS_ACCESS_KEY_ID
+    secretKey: !Env AWS_SECRET_ACCESS_KEY
+
+storage: !Remote
+  objectStore: !S3
+    bucket: my-s3-bucket
+    remote: my-aws
+```
+
+The remote lives in node-local config and is referenced by alias, so the keys are never serialised onto the source log.
+
 ### Configuration
 
 To use the S3 module, include the following in your node configuration:
@@ -295,10 +312,14 @@ storage: !Remote
     ## (Can be set as an !Env value)
     # prefix: my-xtdb-node
 
-    ## Basic credentials for AWS.
+    ## Explicit credentials for AWS.
     ## If not provided, will default to AWS's standard credential resolution.
     ## see: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html
-    # credentials:
+    ## To supply keys explicitly, declare an !S3 remote and reference it with `remote:`
+    ## (see Authentication above). The inline `credentials:` block below is deprecated
+    ## because it serialises the keys onto the source log.
+    # remote: my-aws
+    # credentials:            ## deprecated — use `remote:` instead
     #   accessKey: "..."
     #   secretKey: "..."
 

@@ -11,6 +11,9 @@ message S3ObjectStoreConfig {
     S3Credentials credentials = 4;
     string endpoint = 5;
     bool path_style_access_enabled = 6;
+    // Credentials that would otherwise sit in `credentials` are instead provided
+    // via `remote` (node-local, non-serialized) so they never land on the log.
+    string remote = 7;
 }
 
 message S3Credentials {
