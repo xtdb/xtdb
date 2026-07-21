@@ -30,6 +30,8 @@ import org.apache.arrow.vector.ipc.ArrowReader
 import org.apache.arrow.vector.types.pojo.Schema
 import org.apache.arrow.adbc.core.BulkIngestMode
 import xtdb.api.Xtdb
+import xtdb.api.error.*
+import xtdb.api.error.Anomaly.Companion.toAnomaly
 import xtdb.arrow.Relation
 import xtdb.asBytes
 import xtdb.tx.TxOp
@@ -71,6 +73,41 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
 }
 
 private fun isDml(sql: String): Boolean = parseStatement(sql) is ParsedStatement.Dml
+
+/**
+ * Translate a throwable into a [FlightRuntimeException] carrying the XTDB anomaly's
+ * message and a status code mapped from its category, so the client sees the real
+ * error rather than gRPC's generic "error servicing your request".
+ *
+ * A throwable we've already shaped into a Flight status (e.g. the DML-via-query
+ * guard) passes through untouched. Mirrors the pgwire `ex->pgw-err` mapping.
+ */
+private fun Throwable.asFlightException(): FlightRuntimeException =
+    this as? FlightRuntimeException ?: toAnomaly().let { anom ->
+        val status = when (anom) {
+            is Incorrect, is Conflict -> CallStatus.INVALID_ARGUMENT
+            is Unsupported -> CallStatus.UNIMPLEMENTED
+            is Forbidden -> CallStatus.UNAUTHORIZED
+            is NotFound -> CallStatus.NOT_FOUND
+            is Interrupted -> CallStatus.CANCELLED
+            is Busy -> CallStatus.RESOURCE_EXHAUSTED
+            is Unavailable -> CallStatus.UNAVAILABLE
+            is Fault -> CallStatus.INTERNAL
+        }
+        status.withDescription(anom.message ?: anom.toString()).withCause(anom).toRuntimeException()
+    }
+
+/** Run [block], rethrowing any error as a [FlightRuntimeException] (see [asFlightException]). */
+private inline fun <R> flightCall(block: () -> R): R =
+    try { block() } catch (t: Throwable) { throw t.asFlightException() }
+
+/** Run [block], signalling any error to this listener as a [FlightRuntimeException]. */
+private inline fun StreamListener<*>.reportingErrors(block: () -> Unit) =
+    try { block() } catch (t: Throwable) { onError(t.asFlightException()) }
+
+/** Run [block], signalling any error to this stream as a [FlightRuntimeException]. */
+private inline fun ServerStreamListener.reportingErrors(block: () -> Unit) =
+    try { block() } catch (t: Throwable) { error(t.asFlightException()) }
 
 private fun FlightStream.toRelation(allocator: BufferAllocator): Relation =
     Relation(allocator, root.schema).closeOnCatch { acc ->
@@ -223,7 +260,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream?,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        try {
+        ackStream.reportingErrors {
             execDml(
                 TxOp.Sql(cmd.query),
                 ctx,
@@ -231,8 +268,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             )
 
             ackStream.sendDoPutUpdateRes(allocator)
-        } catch (t: Throwable) {
-            ackStream.onError(t)
         }
     }
 
@@ -242,7 +277,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        try {
+        ackStream.reportingErrors {
             if (cmd.hasTableDefinitionOptions()) {
                 val tdo = cmd.tableDefinitionOptions
                 val ifExists = tdo.ifExists
@@ -284,8 +319,6 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                 }
 
             ackStream.sendDoPutUpdateRes(allocator)
-        } catch (t: Throwable) {
-            ackStream.onError(t)
         }
     }
 
@@ -295,15 +328,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
-        try {
+        ackStream.reportingErrors {
+            val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
             flightStream.next()
             ps.queryResult?.close()
             ps.xtdbStmt.bind(flightStream.root)
             ps.queryResult = ps.xtdbStmt.executeQuery()
             ackStream.onCompleted()
-        } catch (t: Throwable) {
-            ackStream.onError(t)
         }
     }
 
@@ -313,15 +344,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         flightStream: FlightStream,
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
-        val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
-        try {
+        ackStream.reportingErrors {
+            val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
             flightStream.toRelation(node.allocator).use { acc ->
                 ps.xtdbStmt.bind(acc)
                 ps.xtdbStmt.executeUpdate()
             }
             ackStream.sendDoPutUpdateRes(allocator)
-        } catch (t: Throwable) {
-            ackStream.onError(t)
         }
     }
 
@@ -329,54 +358,49 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         cmd: CommandStatementQuery,
         ctx: CallContext?,
         descriptor: FlightDescriptor
-    ): FlightInfo {
-        try {
-            val sql = cmd.queryBytes.toStringUtf8()
-            val dbName = resolveDb(ctx)
+    ): FlightInfo = flightCall {
+        val sql = cmd.queryBytes.toStringUtf8()
+        val dbName = resolveDb(ctx)
 
-            // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-            if (isDml(sql)) {
-                throw CallStatus.INVALID_ARGUMENT
-                    .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
-                    .toRuntimeException()
-            }
-            val ticketHandle = newHandle()
-            val reader = connectionFor(ctx, dbName).createStatement().use { stmt ->
-                stmt.setSqlQuery(sql)
-                stmt.executeQuery().reader
-            }
-            return reader.closeOnCatch { rdr ->
-                val ticket = Ticket(
-                    ProtoAny.pack(
-                        TicketStatementQuery.newBuilder()
-                            .setStatementHandle(ticketHandle)
-                            .build()
-                    ).toByteArray()
-                )
-                tickets[ticketHandle] = rdr
-                FlightInfo(
-                    rdr.vectorSchemaRoot.schema,
-                    descriptor,
-                    listOf(FlightEndpoint(ticket)),
-                    /* bytes = */ -1, /* records = */ -1
-                )
-            }
-        } catch (t: Throwable) {
-            LOGGER.log(System.Logger.Level.ERROR, "Error getting flight info for statement", t)
-            throw t
+        // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
+        if (isDml(sql)) {
+            throw CallStatus.INVALID_ARGUMENT
+                .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
+                .toRuntimeException()
+        }
+        val ticketHandle = newHandle()
+        val reader = connectionFor(ctx, dbName).createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            stmt.executeQuery().reader
+        }
+        reader.closeOnCatch { rdr ->
+            val ticket = Ticket(
+                ProtoAny.pack(
+                    TicketStatementQuery.newBuilder()
+                        .setStatementHandle(ticketHandle)
+                        .build()
+                ).toByteArray()
+            )
+            tickets[ticketHandle] = rdr
+            FlightInfo(
+                rdr.vectorSchemaRoot.schema,
+                descriptor,
+                listOf(FlightEndpoint(ticket)),
+                /* bytes = */ -1, /* records = */ -1
+            )
         }
     }
 
     override fun getStreamStatement(
         ticket: TicketStatementQuery, ctx: CallContext?, listener: ServerStreamListener
-    ) {
+    ) = listener.reportingErrors {
         val reader = requireNotNull(tickets.remove(ticket.statementHandle)) { "unknown ticket-id" }
         streamArrowReader(reader, listener)
     }
 
     override fun getFlightInfoPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
-    ): FlightInfo {
+    ): FlightInfo = flightCall {
         val psId = cmd.preparedStatementHandle
         val ps = requireNotNull(stmts[psId]) { "invalid ps-id" }
 
@@ -390,7 +414,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             ).toByteArray()
         )
 
-        return FlightInfo(
+        FlightInfo(
             queryResult.schema,
             descriptor,
             listOf(FlightEndpoint(ticket)),
@@ -401,7 +425,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     override fun getStreamPreparedStatement(
         ticket: CommandPreparedStatementQuery, ctx: CallContext?, listener: ServerStreamListener
-    ) {
+    ) = listener.reportingErrors {
         val ps = requireNotNull(stmts[ticket.preparedStatementHandle]) { "invalid ps-id" }
         val queryResult = checkNotNull(ps.queryResult) { "no cursor open for ps-id" }
         ps.queryResult = null
@@ -412,7 +436,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         req: ActionCreatePreparedStatementRequest,
         ctx: CallContext?,
         listener: StreamListener<Result>
-    ) {
+    ) = listener.reportingErrors {
         val psId = newHandle()
         val sql = req.queryBytes.toStringUtf8()
         val txHandle = if (req.hasTransactionId()) req.transactionId else null
@@ -440,14 +464,14 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     override fun getSchemaPreparedStatement(
         cmd: CommandPreparedStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
-    ): SchemaResult {
+    ): SchemaResult = flightCall {
         val ps = requireNotNull(stmts[cmd.preparedStatementHandle]) { "invalid ps-id" }
-        return SchemaResult(ps.xtdbStmt.executeSchema())
+        SchemaResult(ps.xtdbStmt.executeSchema())
     }
 
     override fun getSchemaStatement(
         cmd: CommandStatementQuery, ctx: CallContext?, descriptor: FlightDescriptor
-    ): SchemaResult {
+    ): SchemaResult = flightCall {
         val sql = cmd.query
         val dbName = resolveDb(ctx)
         if (isDml(sql)) {
@@ -458,7 +482,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
             stmt.prepare()
-            return SchemaResult(stmt.executeSchema())
+            SchemaResult(stmt.executeSchema())
         }
     }
 
@@ -480,17 +504,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         request: GetSessionOptionsRequest,
         ctx: CallContext?,
         listener: StreamListener<GetSessionOptionsResult>
-    ) {
-        try {
-            val opts = mapOf(
-                "catalog" to SessionOptionValueFactory.makeSessionOptionValue(resolveDb(ctx)),
-                "schema" to SessionOptionValueFactory.makeSessionOptionValue("public"),
-            )
-            listener.onNext(GetSessionOptionsResult(opts))
-            listener.onCompleted()
-        } catch (t: Throwable) {
-            listener.onError(t)
-        }
+    ) = listener.reportingErrors {
+        val opts = mapOf(
+            "catalog" to SessionOptionValueFactory.makeSessionOptionValue(resolveDb(ctx)),
+            "schema" to SessionOptionValueFactory.makeSessionOptionValue("public"),
+        )
+        listener.onNext(GetSessionOptionsResult(opts))
+        listener.onCompleted()
     }
 
     override fun setSessionOptions(
@@ -540,7 +560,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             listener.onNext(SetSessionOptionsResult(errors))
             listener.onCompleted()
         } catch (t: Throwable) {
-            listener.onError(t)
+            listener.onError(t.asFlightException())
         }
     }
 
@@ -577,7 +597,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             listener.onNext(CloseSessionResult(CloseSessionResult.Status.CLOSED))
             listener.onCompleted()
         } catch (t: Throwable) {
-            listener.onError(t)
+            listener.onError(t.asFlightException())
         }
     }
 
@@ -610,7 +630,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         request: CommandGetTableTypes, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_TABLE_TYPES_SCHEMA, descriptor)
 
-    override fun getStreamTableTypes(ctx: CallContext?, listener: ServerStreamListener) {
+    override fun getStreamTableTypes(ctx: CallContext?, listener: ServerStreamListener) = listener.reportingErrors {
         streamArrowReader(connectionFor(ctx, resolveDb(ctx)).getTableTypes(), listener)
     }
 
@@ -682,7 +702,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         request: CommandGetCatalogs, ctx: CallContext?, descriptor: FlightDescriptor
     ): FlightInfo = metadataFlightInfo(request, FlightSqlProducer.Schemas.GET_CATALOGS_SCHEMA, descriptor)
 
-    override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) {
+    override fun getStreamCatalogs(ctx: CallContext?, listener: ServerStreamListener) = listener.reportingErrors {
         // through the shared catalogNames (no filter) so all three metadata handlers enumerate catalogs one way
         val dbNames = connectionFor(ctx, resolveDb(ctx)).catalogNames(null, exact = true)
 
@@ -701,7 +721,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     override fun getStreamSchemas(
         command: CommandGetDbSchemas, ctx: CallContext?, listener: ServerStreamListener
-    ) {
+    ) = listener.reportingErrors {
         val dbName = resolveDb(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
@@ -734,7 +754,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
 
     override fun getStreamTables(
         command: CommandGetTables, ctx: CallContext?, listener: ServerStreamListener
-    ) {
+    ) = listener.reportingErrors {
         val dbName = resolveDb(ctx)
         val catalogFilter = if (command.hasCatalog()) command.catalog else null
         val schemaFilter = if (command.hasDbSchemaFilterPattern()) command.dbSchemaFilterPattern else null
@@ -793,7 +813,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         req: ActionBeginTransactionRequest,
         ctx: CallContext?,
         listener: StreamListener<ActionBeginTransactionResult>
-    ) {
+    ) = listener.reportingErrors {
         val txHandle = newHandle()
         val conn = (node.connect()).also { it.setCurrentCatalog(resolveDb(ctx)) }
         conn.setAutoCommit(false)
@@ -827,7 +847,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
             if (req.action == EndTransaction.END_TRANSACTION_COMMIT) conn.commit() else conn.rollback()
             listener.onCompleted()
         } catch (t: Throwable) {
-            listener.onError(t)
+            listener.onError(t.asFlightException())
         } finally {
             conn.close()
         }

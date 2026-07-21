@@ -171,6 +171,25 @@
     (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
     (t/is (re-find #"executeUpdate" (.getMessage ex)))))
 
+(t/deftest test-anomaly-propagates-through-query-5812
+  (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
+                          (.execute *client* "SELECT DATE 'not-a-date'" empty-call-opts)))]
+    (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
+    (t/is (re-find #"Cannot parse date" (.getMessage ex)))))
+
+(t/deftest test-anomaly-propagates-through-prepare-5812
+  (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
+                          (.prepare *client* "SELECT DATE 'not-a-date'" empty-call-opts)))]
+    (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
+    (t/is (re-find #"Cannot parse date" (.getMessage ex)))))
+
+(t/deftest test-dml-anomaly-propagates-through-update-5812
+  (.executeUpdate *client* "CREATE TABLE users (_id, name)" empty-call-opts)
+  (let [ex (t/is (thrown? org.apache.arrow.flight.FlightRuntimeException
+                          (.executeUpdate *client* "INSERT INTO users (_id, name) VALUES ('jms', DATE 'not-a-date')" empty-call-opts)))]
+    (t/is (= org.apache.arrow.flight.FlightStatusCode/INVALID_ARGUMENT (.code (.status ex))))
+    (t/is (re-find #"Cannot parse date" (.getMessage ex)))))
+
 (t/deftest test-adbc
   (with-open [stmt (.createStatement *adbc-conn*)]
     (.setSqlQuery stmt "
