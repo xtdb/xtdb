@@ -8,6 +8,8 @@ plugins {
     // GleifPgIndexer.Factory is @Serializable so it can travel as persisted
     // secondary-database config (its Registration round-trips via protobuf Struct).
     alias(libs.plugins.kotlin.serialization)
+    // publishes a stub javadoc jar to satisfy Maven Central (no public Java API here)
+    alias(libs.plugins.dokka)
 }
 
 java.toolchain.languageVersion.set(JavaLanguageVersion.of(21))
