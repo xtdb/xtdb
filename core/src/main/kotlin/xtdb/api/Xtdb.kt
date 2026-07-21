@@ -770,7 +770,10 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun executeTxOp(op: TxOp) {
             // auto-execute only when no explicit tx is open; an open tx (from beginTx) buffers even under autoCommit.
             if (autoCommit && tx == null) {
+                // an aborted autocommit tx surfaces its error here — otherwise a failed DML would
+                // silently vanish for connection/ADBC/Flight callers (pgwire checks the result itself).
                 expandStaticOps(listOf(op), defaultTz).useAll { ops -> executeTx(ops, TxOpts(user = user)) }
+                    .error?.let { throw it }
                 return
             }
 
@@ -963,7 +966,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             if (autoCommit)
                 throw Incorrect("Cannot commit when autoCommit is enabled", "xtdb.adbc/commit-in-autocommit")
 
-            if (isTxAsync) commitAsync() else commitSync()
+            // a sync commit surfaces an aborted tx's error; async commit can't (the result isn't awaited).
+            if (isTxAsync) commitAsync() else commitSync()?.error?.let { throw it }
         }
 
         fun rollbackTx() {
