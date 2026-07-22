@@ -7,6 +7,7 @@ import org.apache.arrow.vector.types.pojo.FieldType
 import org.apache.arrow.vector.types.pojo.Schema
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -61,6 +62,23 @@ class RemoteStorageTest : StorageTest() {
         memoryCache.close()
     }
 
+
+    @Test
+    fun `openArrowWriter seeds the disk cache under the pool-scoped key`(al: BufferAllocator) {
+        val key = Path.of("aw")
+        Relation(al, "a" ofType I32).use { relation ->
+            remoteBufferPool.openArrowWriter(key, relation).use { writer ->
+                val v = relation["a"]
+                for (i in 0 until 10) v.writeInt(i)
+                writer.writePage()
+                writer.end()
+            }
+        }
+
+        // only the disk cache can serve the read once the store forgets the object
+        (remoteBufferPool.objectStore as SimulatedObjectStore).buffers.clear()
+        assertNotNull(remoteBufferPool.getFooter(key))
+    }
 
     @Test
     fun arrowIpcTest(al: BufferAllocator) = runTest {

@@ -178,7 +178,7 @@ internal class RemoteBufferPool(
                             objectStore.uploadArrowFile(key, tmpPath)
                             networkWrite?.increment(size.toDouble())
 
-                            diskCache.put(key, tmpPath)
+                            diskCache.put(cacheRootPath.resolve(key), tmpPath)
                             return size
                         }
 
