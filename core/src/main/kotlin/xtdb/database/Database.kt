@@ -272,7 +272,8 @@ class Database(
             val bufferPool = open {
                 val bp = dbConfig.storage.open(
                     allocator, base.memoryCache, base.diskCache,
-                    dbName, base.meterRegistry, Storage.VERSION,
+                    dbName, 0, dbConfig.partitions,
+                    base.meterRegistry, Storage.VERSION,
                     base.remotes,
                 )
                 if (readOnly) ReadOnlyBufferPool(bp) else bp

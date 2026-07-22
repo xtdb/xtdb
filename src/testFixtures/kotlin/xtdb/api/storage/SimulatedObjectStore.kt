@@ -7,6 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.CompletableFuture.completedFuture
 import java.util.concurrent.CompletableFuture.failedFuture
 
@@ -18,7 +19,9 @@ class SimulatedObjectStore(
     // Synchronized: uploadMultipartBuffers calls uploadPart from concurrent coroutines (up to
     // MAX_CONCURRENT_PART_UPLOADS), so a plain ArrayList races on add and intermittently throws AIOOBE.
     val calls: MutableList<StoreOperation> = Collections.synchronizedList(mutableListOf()),
-    val buffers: NavigableMap<Path, ByteBuffer> = TreeMap()
+    // Concurrent: one store may back several partitions' BufferPools (via PrefixedObjectStore),
+    // which put from concurrent threads — a plain TreeMap corrupts under concurrent mutation.
+    val buffers: NavigableMap<Path, ByteBuffer> = ConcurrentSkipListMap()
 ) : ObjectStore, SupportsMultipart<ByteBuffer> {
 
     private fun copyByteBuffer(buffer: ByteBuffer) =

@@ -45,6 +45,28 @@ object Storage {
             if (epoch > 0) append("_e${epoch.asLexHex}")
         })
 
+    internal fun validatePartition(partition: Int, totalPartitions: Int) {
+        require(totalPartitions >= 1) { "totalPartitions must be >= 1, got $totalPartitions" }
+        require(partition in 0 until totalPartitions) {
+            "partition must be in 0..<$totalPartitions, got $partition"
+        }
+    }
+
+    /**
+     * At `totalPartitions == 1` this is byte-identical to the single-partition layout, so existing
+     * object stores and local directories keep working without a key-space migration — load-bearing
+     * for rolling upgrades, since blob stores have no `mv` primitive and re-keying a database would
+     * mean a full copy-and-delete sweep. Only at N > 1 does the `parts/<partition>/` grouping appear.
+     * Partition counts are immutable post-attach, so a store is one shape or the other for its whole
+     * lifetime and the two never collide.
+     */
+    @JvmStatic
+    fun storageRoot(version: StorageVersion, epoch: Int, partition: Int, totalPartitions: Int): Path {
+        validatePartition(partition, totalPartitions)
+        val root = storageRoot(version, epoch)
+        return if (totalPartitions == 1) root else Path.of("parts", partition.toString()).resolve(root)
+    }
+
     /**
      * Represents a factory interface for creating storage instances.
      * The default implementation is [InMemoryStorageFactory] which stores data in memory
@@ -58,6 +80,7 @@ object Storage {
         fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
             dbName: DatabaseName,
+            partition: Int = 0, totalPartitions: Int = 1,
             meterRegistry: MeterRegistry? = null,
             storageVersion: StorageVersion = VERSION,
             remotes: Map<RemoteAlias, Remote> = emptyMap(),
@@ -91,9 +114,15 @@ object Storage {
     data class InMemoryStorageFactory(override var epoch: Int = 0) : Factory {
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            dbName: DatabaseName, partition: Int, totalPartitions: Int,
+            meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
             remotes: Map<RemoteAlias, Remote>,
-        ): BufferPool = MemoryStorage(allocator, epoch)
+        ): BufferPool {
+            // each open() is its own store, so partitions are isolated by construction — only the
+            // index needs validating
+            validatePartition(partition, totalPartitions)
+            return MemoryStorage(allocator, epoch)
+        }
     }
 
     @JvmStatic
@@ -118,12 +147,14 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            dbName: DatabaseName, partition: Int, totalPartitions: Int,
+            meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
             remotes: Map<RemoteAlias, Remote>,
         ): BufferPool {
-            val rootPath = path.resolve(storageRoot(storageVersion, epoch)).also { it.createDirectories() }
+            val rootPath = path.resolve(storageRoot(storageVersion, epoch, partition, totalPartitions))
+                .also { it.createDirectories() }
 
-            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, rootPath)
+            return LocalStorage(allocator, memoryCache, meterRegistry, epoch, dbName, partition, rootPath)
         }
     }
 
@@ -146,13 +177,15 @@ object Storage {
 
         override fun open(
             allocator: BufferAllocator, memoryCache: MemoryCache, diskCache: DiskCache?,
-            dbName: DatabaseName, meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
+            dbName: DatabaseName, partition: Int, totalPartitions: Int,
+            meterRegistry: MeterRegistry?, storageVersion: StorageVersion,
             remotes: Map<RemoteAlias, Remote>,
         ): BufferPool {
             requireNotNull(diskCache) { "diskCache is required for remote storage" }
 
-            return objectStore.openObjectStore(storageRoot(storageVersion, epoch), remotes).closeOnCatch { objectStore ->
-                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName)
+            val objStoreRoot = storageRoot(storageVersion, epoch, partition, totalPartitions)
+            return objectStore.openObjectStore(objStoreRoot, remotes).closeOnCatch { objectStore ->
+                RemoteBufferPool(allocator, objectStore, memoryCache, diskCache, meterRegistry, epoch, dbName, partition)
             }
         }
     }
