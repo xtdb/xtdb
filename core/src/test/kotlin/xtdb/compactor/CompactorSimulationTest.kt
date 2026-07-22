@@ -28,6 +28,7 @@ import xtdb.compactor.Compactor.Driver.Factory
 import xtdb.compactor.Compactor.Job
 import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.compactor.TemporalSplitting.*
+import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -55,7 +56,7 @@ class MockDb(
     val bufferPool: BufferPool,
     val compactor: Compactor,
 ) {
-    val dbStorage: DatabaseStorage get() = DatabaseStorage(null, null, bufferPool, null)
+    val dbStorage: DatabaseStorage get() = DatabaseStorage(DatabaseLogs(null, null), bufferPool, null)
     val dbState: DatabaseState get() = DatabaseState(name, null, null, trieCatalog, null)
 }
 

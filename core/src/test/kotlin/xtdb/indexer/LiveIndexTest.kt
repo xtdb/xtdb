@@ -23,6 +23,7 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
+import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.log.proto.TrieDetails
@@ -66,8 +67,10 @@ class LiveIndexTest {
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName)
         private val dbState = DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
         private val dbStorage = DatabaseStorage(
-            InMemoryLog<SourceMessage>(InstantSource.system(), 0),
-            InMemoryLog<ReplicaMessage>(InstantSource.system(), 0),
+            DatabaseLogs(
+                InMemoryLog<SourceMessage>(InstantSource.system(), 0),
+                InMemoryLog<ReplicaMessage>(InstantSource.system(), 0),
+            ),
             bp, null
         )
 
