@@ -34,6 +34,7 @@ import xtdb.indexer.*
 import xtdb.metadata.PageMetadata
 import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
+import xtdb.storage.ReadOnlyBufferPool
 import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
@@ -61,7 +62,7 @@ private val LOG = Database::class.logger
 class Database(
     val allocator: BufferAllocator,
     val config: Config,
-    override val storage: DatabaseStorage,
+    val logs: DatabaseLogs,
     val isIndexing: Boolean,
     val partitions: Map<Int, DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
@@ -78,6 +79,7 @@ class Database(
     private val partition0: DatabasePartition get() = partitions.getValue(0)
 
     val name: DatabaseName get() = partition0.state.name
+    override val storage: DatabaseStorage get() = partition0.storage
     override val queryState: DatabaseState get() = partition0.state
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
@@ -107,10 +109,10 @@ class Database(
     val trieCatalog: TrieCatalog get() = partition0.trieCatalog
     val liveIndex: LiveIndex get() = partition0.liveIndex
 
-    val sourceLog: Log<SourceMessage> get() = storage.sourceLog
-    val replicaLog: Log<ReplicaMessage> get() = storage.replicaLog
-    val bufferPool: BufferPool get() = storage.bufferPool
-    val metadataManager: PageMetadata.Factory get() = storage.metadataManager
+    val sourceLog: Log<SourceMessage> get() = logs.sourceLog
+    val replicaLog: Log<ReplicaMessage> get() = logs.replicaLog
+    val bufferPool: BufferPool get() = partition0.bufferPool
+    val metadataManager: PageMetadata.Factory get() = partition0.metadataManager
 
     val compactor: Compactor.ForDatabase get() = partition0.compactor
 
@@ -149,7 +151,7 @@ class Database(
         // Phase 2: the job tree has already been cancel-joined (by `cancelAndJoin` above, or by the
         // owner cancelling the catalog root). Free state, children before the database allocator.
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        (partitions.values + listOf(storage, allocator)).closeAll()
+        (partitions.values + listOf(logs, allocator)).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -263,12 +265,27 @@ class Database(
                 )
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
-            val storage = open { DatabaseStorage.open(allocator, base, dbName, dbConfig) }
+
+            // buffer pool + metadata manager open before the logs, preserving the pre-split failure
+            // order: a storage misconfig must surface before any log/broker interaction (opening a
+            // Kafka log can create topics and consumer-group state as a side effect).
+            val bufferPool = open {
+                val bp = dbConfig.storage.open(
+                    allocator, base.memoryCache, base.diskCache,
+                    dbName, base.meterRegistry, Storage.VERSION,
+                    base.remotes,
+                )
+                if (readOnly) ReadOnlyBufferPool(bp) else bp
+            }
+            val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
+            val logs = open { DatabaseLogs.open(base, dbConfig) }
+
+            val storage = DatabaseStorage(logs, bufferPool, metadataManager)
             val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(
                 blockCatalog.latestProcessedMsgId ?: -1,
-                offsetToMsgId(storage.sourceLog.epoch, -1)
+                offsetToMsgId(logs.sourceLog.epoch, -1)
             )
             // tx-id and source-msg-id can diverge under ext-source — seed them independently:
             // tx-id from the live-index's last committed tx, source-msg-id from the persisted
@@ -277,7 +294,7 @@ class Database(
 
             // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
             // the indexer — see /ops/backup-and-restore/out-of-sync-log.
-            validateOffsets(dbName, storage.sourceLog, blockCatalog.latestProcessedMsgId)
+            validateOffsets(dbName, logs.sourceLog, blockCatalog.latestProcessedMsgId)
 
             val watchers = Watchers(
                 latestTxId = txId,
@@ -351,19 +368,20 @@ class Database(
                         (state.liveIndex.latestCompletedTx?.txId ?: -1).toDouble()
                     },
                     gauge("node.tx.latestSubmittedMsgId") {
-                        storage.sourceLog.latestSubmittedMsgId().toDouble()
+                        logs.sourceLog.latestSubmittedMsgId().toDouble()
                     },
                     gauge("node.tx.latestProcessedMsgId") {
                         watchers.latestSourceMsgId.toDouble()
                     },
                     gauge("node.tx.lag.MsgId") {
-                        maxOf(storage.sourceLog.latestSubmittedMsgId() - watchers.latestSourceMsgId, 0).toDouble()
+                        maxOf(logs.sourceLog.latestSubmittedMsgId() - watchers.latestSourceMsgId, 0).toDouble()
                     },
                 )
             } ?: emptyList()
 
             val partition = DatabasePartition(
                 partition = 0,
+                storage = storage,
                 state = state,
                 watchers = watchers,
                 compactorOrNull = compactorForDb,
@@ -373,7 +391,7 @@ class Database(
             val db = Database(
                 allocator = allocator,
                 config = dbConfig,
-                storage = storage,
+                logs = logs,
                 isIndexing = indexerConfig.enabled,
                 partitions = mapOf(0 to partition),
                 meterRegistry = meterRegistry,
@@ -393,7 +411,7 @@ class Database(
                         db.partitions[partition]?.logProcessor?.demoteLeader(partition)
                     }
                 }
-                scope.launch { storage.sourceLog.openGroupSubscription(listener) }
+                scope.launch { logs.sourceLog.openGroupSubscription(listener) }
             }
 
             db

@@ -24,6 +24,7 @@ import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
 import xtdb.api.tx.ExternalSource
@@ -165,7 +166,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
-        val dbStorage = DatabaseStorage(srcLog, replicaLog, bp, null)
+        val dbStorage = DatabaseStorage(DatabaseLogs(srcLog, replicaLog), bp, null)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")
 
         private var logProcessor: LogProcessor? = null
