@@ -253,9 +253,9 @@ class Database(
             val indexerConfig = base.config.indexer
             val readOnly = dbConfig.isReadOnly
 
-            // Attach-time gate: the type signatures admit N throughout, but per-partition BufferPool
-            // layout (unit 6), TableCatalog wrappers + UNION-at-scan (unit 7) and xt.txs_$partition
-            // naming (unit 8) haven't landed. Lifting this gate is unit 9.
+            // Attach-time gate: the type signatures admit N throughout, but TableCatalog wrappers +
+            // UNION-at-scan (unit 7) and xt.txs_$partition naming (unit 8) haven't landed. Lifting
+            // this gate is unit 9.
             if (dbConfig.partitions > 1)
                 throw Incorrect(
                     "multi-partition external-source databases are not yet enabled " +
@@ -272,7 +272,8 @@ class Database(
             val bufferPool = open {
                 val bp = dbConfig.storage.open(
                     allocator, base.memoryCache, base.diskCache,
-                    dbName, base.meterRegistry, Storage.VERSION,
+                    dbName, 0, dbConfig.partitions,
+                    base.meterRegistry, Storage.VERSION,
                     base.remotes,
                 )
                 if (readOnly) ReadOnlyBufferPool(bp) else bp

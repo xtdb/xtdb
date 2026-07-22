@@ -3,7 +3,9 @@ package xtdb.storage
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import xtdb.api.error.Incorrect
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.arrow.IntVector
 import xtdb.arrow.Relation
@@ -13,6 +15,16 @@ import java.nio.ByteBuffer
 
 abstract class StorageTest {
     abstract fun storage(): BufferPool
+
+    /**
+     * A pool for one partition of a multi-partition database.
+     *
+     * Only the factory-level validation below is asserted for every backend. MemoryStorage returns an
+     * independent store per call, so cross-partition isolation is true by construction for it rather
+     * than by path-scoping; backends whose partition pools share one underlying store assert that in
+     * [PartitionedStorageTest].
+     */
+    abstract fun openPartitionedStorage(partition: Int, totalPartitions: Int): BufferPool
 
     @Test
     fun listObjectTests_3545() {
@@ -36,8 +48,8 @@ abstract class StorageTest {
         )
     }
 
-    private fun BufferPool.writeBlock(blockIndex: Long) {
-        putObject("blocks/b${blockIndex.asLexHex}.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
+    protected fun BufferPool.writeBlock(blockIndex: Long, size: Int = 10) {
+        putObject("blocks/b${blockIndex.asLexHex}.binpb".asPath, ByteBuffer.wrap(ByteArray(size)))
     }
 
     @Test
@@ -91,5 +103,12 @@ abstract class StorageTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun rejectsInvalidPartitionIndex() {
+        assertThrows(Incorrect::class.java) { openPartitionedStorage(2, 2) }
+        assertThrows(Incorrect::class.java) { openPartitionedStorage(-1, 1) }
+        assertThrows(Incorrect::class.java) { openPartitionedStorage(0, 0) }
     }
 }
