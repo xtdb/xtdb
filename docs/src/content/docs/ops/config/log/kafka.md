@@ -163,6 +163,10 @@ log: !Kafka
   # Whether or not to automatically create the topics, if they do not already exist.
   # Applies to both the source and replica topics.
   # autoCreateTopic: true
+
+  # Declares that the consumer group backing leader election has been recreated (v2.2+).
+  # Raise it — never lower it — when that happens; see 'Recreating the consumer group' below.
+  # termEpoch: 0
 ```
 
 ### SASL Authenticated Kafka Example
@@ -211,6 +215,33 @@ Once elected, a leader writes to its database's replica log via a Kafka transact
 
 If a new leader is elected and opens a producer with the same transactional ID, Kafka's transaction coordinator fences the previous one — any in-flight writes from the outgoing leader raise `ProducerFencedException` and fail cleanly.
 This guarantees at most one node is ever writing to the replica log for a given database, even across unclean handovers.
+
+### Recreating the consumer group (v2.2+)
+
+Alongside the producer fence, each leader stamps every replica-log message with a **leader term**, and readers discard any message below the highest term they've seen.
+A term pairs the consumer group's `generationId` — which orders elections — with `termEpoch`, which orders one incarnation of the group against the next.
+
+`generationId` restarts at 1 whenever the group is recreated, and Kafka recreates it more readily than you might expect: the coordinator deletes any consumer group that is empty and has no committed offsets, and XTDB commits none (the source-log position lives in the replica log instead).
+A cluster stopped for longer than the broker's `offsets.retention.check.interval.ms` — ten minutes by default — therefore comes back to a fresh group at generation 1, below the terms already on the replica log.
+
+Raise `termEpoch` on the log config whenever that happens, and whenever you change `groupId` or otherwise recreate the group deliberately:
+
+``` yaml
+log: !Kafka
+  cluster: kafkaCluster
+  topic: "xtdb-log"
+  termEpoch: 1
+```
+
+A node whose term is already fenced refuses to lead rather than indexing into a log every reader ignores, and its error names the current epoch:
+
+```
+leader term 0.1 is already fenced by 0.9 on the replica log — the leader-election
+counter has regressed (a recreated Kafka consumer group, or a restarted local log),
+so bump the log's termEpoch above 0
+```
+
+Raise `termEpoch`, never lower it: a lower value puts the new leader back below the terms on the log.
 
 ### Sharing a Kafka cluster across deployments
 

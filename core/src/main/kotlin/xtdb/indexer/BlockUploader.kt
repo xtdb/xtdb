@@ -58,7 +58,8 @@ class BlockUploader(
     }
 
     suspend fun uploadBlock(
-        replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
+        replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, termId: Long,
+        boundary: BlockBoundary,
     ): MessageId {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
@@ -103,7 +104,7 @@ class BlockUploader(
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock,
-            externalSourceToken
+            externalSourceToken, termId
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
@@ -116,7 +117,8 @@ class BlockUploader(
                 BlockUploaded(
                     Storage.VERSION, bufferPool.epoch,
                     blockIdx, latestProcessedMsgId,
-                    addedTries, externalSourceToken
+                    addedTries, externalSourceToken,
+                    termId = termId,
                 )
             )
         }.getCompleted().msgId

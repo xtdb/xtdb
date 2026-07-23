@@ -85,7 +85,7 @@ class ResolvedTx private constructor(
      * resolver's hot path. The leader imports from the slices directly ([LiveIndex.commitTx]); these
      * bytes exist only for the replica log.
      */
-    fun toReplicaMessage(): ReplicaMessage.ResolvedTx {
+    fun toReplicaMessage(termId: Long): ReplicaMessage.ResolvedTx {
         val (committed, error) = when (txResult) {
             is TransactionResult.Committed -> true to null
             is TransactionResult.Aborted -> false to txResult.error
@@ -97,6 +97,7 @@ class ResolvedTx private constructor(
             dbOp = dbOp,
             externalSourceToken = externalSourceToken,
             srcMsgId = srcMsgId,
+            termId = termId,
         )
     }
 

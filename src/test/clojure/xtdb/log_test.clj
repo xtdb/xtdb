@@ -322,7 +322,7 @@
 
     (.appendMessageBlocking replica-log
                             (ReplicaMessage$ResolvedTx. 0 (Instant/now)
-                                                        true nil {} nil nil nil)
+                                                        true nil {} nil nil nil 0)
                             0)
 
     (with-open [node (xtn/start-node (doto (Xtdb$Config.)
@@ -350,7 +350,7 @@
 
     (.appendMessageBlocking replica-log
                             (ReplicaMessage$ResolvedTx. 0 (Instant/now)
-                                                        true nil {} nil nil nil)
+                                                        true nil {} nil nil nil 0)
                             0)
 
     ;; offset 0 mirrors replay's txId — leader skips it

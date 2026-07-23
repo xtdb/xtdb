@@ -254,6 +254,30 @@ rule LaunchTransition {
         -- skipped if we switched to leader without draining them first.
         FollowerCaughtUp(follower_term: listener.follower_term, target: target)
 
+        -- Step 3a: refuse the claim if the replica log has already moved past the
+        -- term this transition is claiming. A leader term pairs an operator-declared
+        -- term_epoch with the transport's own election counter (a consumer-group
+        -- generationId, or an in-process counter for the local logs), packed so that
+        -- the epoch dominates the ordering. Step 2's no-op claim carries this
+        -- transition's term and step 3 reads it back, so by here the claimed term is
+        -- expected to BE the highest the follower has seen; a strictly higher one is
+        -- therefore another leader's, and every reader would discard what this leader
+        -- wrote -- so it must not take leadership. In practice a higher term means
+        -- the election counter regressed underneath us: the coordinator deletes a
+        -- consumer group once it is empty with no committed offsets (we commit none),
+        -- and a local log's counter dies with its process. term_epoch is the
+        -- operator-declared value that keeps post-reset terms above pre-reset ones,
+        -- and the refusal names it. Refusing costs liveness only, never safety, so it
+        -- is sound to decide from whatever the follower happens to have read.
+        --
+        -- Ordering: after step 3, because it depends on the claim having been read
+        -- back, and before step 4, because the follower must still be alive to answer
+        -- -- failing here takes the rule's existing failure path, which re-opens a
+        -- live follower (RecoverFollowerOnTransitionCancelled), and the follower is
+        -- still alive at this point precisely because step 4 has not run yet. That is
+        -- why the check goes here rather than later.
+        ClaimedTermUnfenced(follower_term: listener.follower_term, target: target)
+
         -- Step 4: stop the follower (cancel + close its term).
         FollowerStopped(follower_term: listener.follower_term)
 

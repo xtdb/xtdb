@@ -185,6 +185,7 @@ class KafkaCluster(
         inner class TopicSubscription<M>(
             val codec: MessageCodec<M>,
             val epoch: Int,
+            val termEpoch: Int,
             val listener: Log.SubscriptionListener<M>,
         ) {
             private val completion = CompletableDeferred<Unit>()
@@ -210,7 +211,10 @@ class KafkaCluster(
                 // paused (never fetched) and re-seeked to the real offset before resume at commit.
                 consumer.seekToEnd(listOf(tp))
 
-                val transition = listener.launchTransition(tp.partition())
+                // The consumer group's generation orders elections, but only within this incarnation of
+                // the group — see LeaderTerm for why `termEpoch` has to carry across a reset (#5817).
+                val term = LeaderTerm.of(termEpoch, consumer.groupMetadata().generationId().toLong())
+                val transition = listener.launchTransition(tp.partition(), term)
                 val transitioning = Transitioning<M>(transition)
                 listenerState = transitioning
 
@@ -427,9 +431,10 @@ class KafkaCluster(
             topic: String,
             codec: MessageCodec<M>,
             epoch: Int,
+            termEpoch: Int,
             listener: Log.SubscriptionListener<M>,
         ): TopicSubscription<M> {
-            val sub = TopicSubscription(codec, epoch, listener)
+            val sub = TopicSubscription(codec, epoch, termEpoch, listener)
             commandCh.send(GroupCommand.Register(topic, sub))
             consumer.wakeup()
             return sub
@@ -532,6 +537,7 @@ class KafkaCluster(
         private val codec: MessageCodec<M>,
         private val topic: String,
         override val epoch: Int,
+        private val termEpoch: Int,
     ) : Log<M> {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -711,7 +717,7 @@ class KafkaCluster(
         }
 
         override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
-            val sub = sharedGroupConsumer.register(topic, codec, epoch, listener)
+            val sub = sharedGroupConsumer.register(topic, codec, epoch, termEpoch, listener)
             LOG.info { "registered group subscription for topic '$topic'" }
             try {
                 sub.await()
@@ -732,12 +738,20 @@ class KafkaCluster(
         var replicaTopic: String = "$topic-replica",
         var autoCreateTopic: Boolean = true,
         var epoch: Int = 0,
+        /**
+         * Declares that the leader-election counter behind this log has been reset, so that terms
+         * from before the reset still order below terms from after it. Bump it — never lower it —
+         * whenever that happens; a node that finds its own term already fenced on the replica log
+         * refuses to lead and names this setting. See [LeaderTerm].
+         */
+        var termEpoch: Int = 0,
     ) : Log.Factory {
 
         fun replicaCluster(replicaCluster: RemoteAlias) = apply { this.replicaCluster = replicaCluster }
         fun replicaTopic(replicaTopic: String) = apply { this.replicaTopic = replicaTopic }
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun termEpoch(termEpoch: Int) = apply { this.termEpoch = termEpoch }
 
         override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int): Log<SourceMessage> {
             val clusterAlias = this.cluster
@@ -751,7 +765,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch)
+            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch, termEpoch)
         }
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
@@ -769,7 +783,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(replicaTopic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch)
+            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch, termEpoch)
         }
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
@@ -779,6 +793,7 @@ class KafkaCluster(
             dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {
                 this.topic = this@LogFactory.topic
                 this.epoch = this@LogFactory.epoch
+                this.termEpoch = this@LogFactory.termEpoch
                 this.logClusterAlias = cluster
                 this.replicaClusterAlias = replicaCluster
                 this.replicaTopic = this@LogFactory.replicaTopic
@@ -796,6 +811,7 @@ class KafkaCluster(
             msg.unpack(KafkaLogConfig::class.java).let {
                 LogFactory(it.logClusterAlias, it.topic).apply {
                     epoch = it.epoch
+                    termEpoch = it.termEpoch
                     if (it.hasReplicaClusterAlias()) replicaCluster = it.replicaClusterAlias
                     if (it.hasReplicaTopic()) replicaTopic = it.replicaTopic
                 }

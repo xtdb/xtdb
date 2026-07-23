@@ -72,7 +72,7 @@ class TransitionLogProcessorTest {
             record(1, ReplicaMessage.BlockBoundary(0, txId)),
         ))
 
-        coVerify { blockUploader.uploadBlock(replicaProducer, 1, any()) }
+        coVerify { blockUploader.uploadBlock(replicaProducer, 1, any(), any()) }
 
         proc.close()
     }

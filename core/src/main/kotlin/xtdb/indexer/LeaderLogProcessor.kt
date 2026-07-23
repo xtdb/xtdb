@@ -46,6 +46,7 @@ internal class LeaderLogProcessor(
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
+    private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     scope: CoroutineScope,
@@ -103,7 +104,7 @@ internal class LeaderLogProcessor(
         val txs = txResolver.seal() ?: return
 
         inFlight = appendScope.async {
-            txs.zip(driver.appendToReplica(txs.asSequence().map { it.toReplicaMessage() }))
+            txs.zip(driver.appendToReplica(txs.asSequence().map { it.toReplicaMessage(leaderTerm) }))
         }
     }
 
@@ -234,7 +235,7 @@ internal class LeaderLogProcessor(
                     finishBlock(msgId, watchers.externalSourceToken)
                 } else {
                     // see #5680
-                    appendToReplica(ReplicaMessage.NoOp(srcMsgId = msgId))
+                    appendToReplica(ReplicaMessage.NoOp(srcMsgId = msgId, termId = leaderTerm))
                 }
                 watchers.notifyMsg(msgId)
             }
@@ -284,7 +285,7 @@ internal class LeaderLogProcessor(
                     }
                 }
 
-                appendToReplica(TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId))
+                appendToReplica(TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId, termId = leaderTerm))
 
                 watchers.notifyMsg(msgId)
             }
@@ -317,7 +318,7 @@ internal class LeaderLogProcessor(
         // Drain first: this appends TriesDeleted directly, and replica appends must stay in
         // resolver-processing order — appending ahead of earlier-staged txs would invert the log.
         drainStaging()
-        appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys))
+        appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
@@ -545,14 +546,14 @@ internal class LeaderLogProcessor(
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
         val boundaryMsg =
-            BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken)
+            BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken, termId = leaderTerm)
 
         val boundaryMsgId = appendToReplica(boundaryMsg).msgId
         LOG.debug("[$dbName] block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
 
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
 
-        latestReplicaMsgId = driver.uploadBlock(boundaryMsgId, boundaryMsg)
+        latestReplicaMsgId = driver.uploadBlock(boundaryMsgId, leaderTerm, boundaryMsg)
         pendingBlock = null
 
         // Safe to call from inside a Persister task: signal() just enqueues a cycle on the GC's

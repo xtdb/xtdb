@@ -3,6 +3,7 @@ package xtdb.indexer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
+import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
@@ -48,6 +49,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     val wakeLeader = Channel<Unit>(Channel.CONFLATED)
     val wakePlainConsumers = Channel<Unit>(Channel.CONFLATED)
     val rebalanceTrigger = Channel<Unit>(Channel.CONFLATED)
+    private val termCounter = java.util.concurrent.atomic.AtomicLong(0)
 
     var leader: GroupConsumer<M>? = null
 
@@ -160,7 +162,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         if (groupConsumers.isNotEmpty()) {
             val newLeader = groupConsumers.random(rand)
             LOG.debug("$name/chooseLeader: launching transition for new leader")
-            pending = Pending(newLeader, newLeader.listener.launchTransition(0))
+            pending = Pending(newLeader, newLeader.listener.launchTransition(0, LeaderTerm.of(0, termCounter.incrementAndGet())))
             // installed by commitPendingLeader (group-loop select clause) once the transition completes
         } else {
             LOG.debug("$name/chooseLeader: no consumers, no leader elected")

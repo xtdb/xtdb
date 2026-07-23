@@ -71,8 +71,12 @@ internal interface LeaderDriver : AutoCloseable {
     /**
      * Snapshot the live index into block files, append the [BlockBoundary]'s matching `BlockUploaded`,
      * and roll the index. Returns the `BlockUploaded`'s replica-log position.
+     *
+     * [termId] is the *appending* term, which is not always [boundary]'s: a transition finishes the
+     * previous leader's pending block, and the `BlockUploaded` must carry the new term or followers
+     * that have already advanced would fence it and never complete the block.
      */
-    suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary): MessageId
+    suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId
 
     /** Ask the source log to cut a block, on the flush-timeout path. Returns the message's position. */
     suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId
@@ -115,8 +119,8 @@ internal class RealLeaderDriver(
     override suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) =
         liveIndex.commitTx(txKey, tables)
 
-    override suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary): MessageId =
-        blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundary)
+    override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId =
+        blockUploader.uploadBlock(replicaProducer, boundaryMsgId, termId, boundary)
 
     override suspend fun requestFlushBlock(expectedBlockIdx: Long): MessageId =
         sourceLog.appendMessage(SourceMessage.FlushBlock(expectedBlockIdx)).msgId

@@ -47,4 +47,8 @@ message Block {
 
     // opaque token tracking how far the leader consumed an external source (e.g. CDC offset)
     bytes external_source_token = 7;
+
+    // the leader term that produced this block's boundary; followers seed their
+    // read-side term fence from it. Default 0 for blocks written before this field. See #5817.
+    int64 term_id = 8;
 }

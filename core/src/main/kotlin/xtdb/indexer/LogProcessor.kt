@@ -88,6 +88,7 @@ class LogProcessor(
     private fun openLeader(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         afterReplicaMsgId: MessageId,
+        termId: Long,
     ): LeaderLogProcessor =
         // The leader term owns (and frees) its driver — and through it the replica producer — and its
         // ext source.
@@ -98,6 +99,7 @@ class LogProcessor(
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             skipTxs, dbCatalog,
             afterReplicaMsgId,
+            leaderTerm = termId,
             flushTimeout = flushTimeout,
             scope = scope,
             gcDispatcher = gcDispatcher,
@@ -106,12 +108,14 @@ class LogProcessor(
     private fun openTransition(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         afterReplicaMsgId: MessageId,
+        termId: Long,
     ): TransitionLogProcessor =
         TransitionLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, partitionState.liveIndex,
             blockUploader, replicaProducer, watchers, dbCatalog,
             afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
+            termId = termId,
         )
 
     private fun openFollower(
@@ -154,7 +158,7 @@ class LogProcessor(
         }
     }
 
-    override fun launchTransition(partition: Int): Deferred<Unit> {
+    override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
         // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
         // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
         val followerSys = (state as? Following)?.system
@@ -163,25 +167,19 @@ class LogProcessor(
         // Launched on the database scope (not the caller's): the transition is a child of the db job
         // tree, so the transport joins/cancels this handle while db teardown cancels-and-joins it
         // before close(). See dev/doc/coroutines.adoc and allium/log-processor-lifecycle.allium.
-        return scope.async { runTransition(followerSys) }
+        return scope.async { runTransition(followerSys, termId) }
     }
 
-    private suspend fun runTransition(followerSys: FollowerSystem) {
+    private suspend fun runTransition(followerSys: FollowerSystem, termId: Long) {
         try {
             replicaLog.openAtomicProducer("$dbName-leader").closeOnCatch { replicaProducer ->
                 val followerProc = followerSys.proc
-
-                // NoOp to get a known msgId we can await — latestSubmittedMsgId won't do, because Kafka's
-                // endOffsets counts transaction-marker offsets that consumers never deliver.
-                val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp()) }.await().msgId
-
-                // The only step needing the follower alive, and the only unbounded one: as the sole
-                // replica-log consumer it must drain up to the leadership-claim point before we stop it.
-                // A failure here leaves the follower untouched — `state` still holds a live term, nothing
-                // to recover — which is why cutover, the phase that re-follows on exit, only starts here.
+                val replayTarget = replicaProducer.withTx { it.appendMessage(ReplicaMessage.NoOp(termId = termId)) }.await().msgId
                 followerProc.awaitReplicaMsgId(replayTarget)
-
-                cutoverToLeader(followerSys, replicaProducer, replayTarget)
+                // Our own claim is now read back, so the follower's max term is the log's — anything
+                // above it fences us, and leading would index nothing. Refuse loudly instead (#5817).
+                followerProc.checkTermUnfenced(termId)
+                cutoverToLeader(followerSys, replicaProducer, replayTarget, termId)
             }
         } catch (e: Throwable) {
             // Cutover already restored a live `state` if it had to; here we only report. Cancellation and
@@ -207,6 +205,7 @@ class LogProcessor(
         followerSys: FollowerSystem,
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         replayTarget: MessageId,
+        termId: Long,
     ) {
         val followerProc = followerSys.proc
         val pendingBlock = followerProc.pendingBlock
@@ -217,11 +216,11 @@ class LogProcessor(
                 followerSys.close()
             }
 
-            openTransition(replicaProducer, followerProc.latestReplicaMsgId).use { transition ->
+            openTransition(replicaProducer, followerProc.latestReplicaMsgId, termId).use { transition ->
                 if (pendingBlock != null) {
                     LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                     blockUploader.uploadBlock(
-                        replicaProducer, pendingBlock.boundaryMsgId, pendingBlock.boundaryMessage,
+                        replicaProducer, pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
                     )
                     LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
                     transition.processRecords(pendingBlock.bufferedRecords)
@@ -233,7 +232,7 @@ class LogProcessor(
 
             // Built, not committed: `state` moves to Prepared but no records flow as leader until
             // commitLeader installs it at the serialization point.
-            state = Prepared(LeaderSystem(openLeader(replicaProducer, replayTarget)), resumeAfterMsgId)
+            state = Prepared(LeaderSystem(openLeader(replicaProducer, replayTarget, termId)), resumeAfterMsgId)
         } catch (e: Throwable) {
             state = Following(openFollowerSystem(followerProc.latestReplicaMsgId, pendingBlock))
             throw e

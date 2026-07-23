@@ -30,6 +30,9 @@ import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
+import xtdb.api.log.LeaderTerm
+import xtdb.api.error.Incorrect
+import org.junit.jupiter.api.assertDoesNotThrow
 
 class FollowerLogProcessorTest {
 
@@ -117,6 +120,80 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.commitTx(match { it.txId == tx40.txId }, any()) }
         verify(exactly = 0) { liveIndex.commitTx(match { it.txId == tx42.txId }, any()) }
         verify { liveIndex.commitTx(match { it.txId == tx43.txId }, any()) }
+    }
+
+    @Test
+    fun `discards records below the max leader term, still advancing the consume position`() = runTest {
+        val proc = makeProcessor()
+
+        val hiTerm = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
+        // a lower-term write from a superseded leader — must be fenced out
+        val loTerm = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(0, 1))
+
+        proc.processRecords(listOf(record(0, hiTerm), record(1, loTerm)))
+
+        verify { liveIndex.commitTx(match { it.txId == 1L }, any()) }
+        verify(exactly = 0) { liveIndex.commitTx(match { it.txId == 2L }, any()) }
+
+        // the fenced record is not applied, but the consume position still advances past it
+        assertEquals(1L, proc.latestReplicaMsgId)
+    }
+
+    @Test
+    fun `legacy records with no term are not fenced after a newer term`() = runTest {
+        val proc = makeProcessor()
+
+        // a new-code leader advances the term to 2...
+        val newTerm = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 2))
+        // ...then a not-yet-upgraded (no-term) leader writes — must NOT be fenced (mixed-version window)
+        val legacy = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.NONE)
+
+        proc.processRecords(listOf(record(0, newTerm), record(1, legacy)))
+
+        verify { liveIndex.commitTx(match { it.txId == 1L }, any()) }
+        verify { liveIndex.commitTx(match { it.txId == 2L }, any()) }
+    }
+
+    @Test
+    fun `a higher term epoch outranks a higher election counter`() = runTest {
+        val proc = makeProcessor()
+
+        val oldLeader = ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap(), srcMsgId = 1, termId = LeaderTerm.of(0, 9))
+        // the election counter was reset under the new leader, so its own is lower — the epoch is
+        // what keeps it above the leader it supersedes
+        val newLeader = ReplicaMessage.ResolvedTx(2, Instant.now(), true, null, emptyMap(), srcMsgId = 2, termId = LeaderTerm.of(1, 1))
+        val zombie = ReplicaMessage.ResolvedTx(3, Instant.now(), true, null, emptyMap(), srcMsgId = 3, termId = LeaderTerm.of(0, 9))
+
+        proc.processRecords(listOf(record(0, oldLeader), record(1, newLeader), record(2, zombie)))
+
+        verify { liveIndex.commitTx(match { it.txId == 1L }, any()) }
+        verify { liveIndex.commitTx(match { it.txId == 2L }, any()) }
+        verify(exactly = 0) { liveIndex.commitTx(match { it.txId == 3L }, any()) }
+    }
+
+    @Test
+    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
+        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
+        // local log's process restarting — while the last block was cut at 9
+        blockCatalog = BlockCatalog(block { blockIndex = 0; termId = LeaderTerm.of(0, 9) })
+        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val proc = makeProcessor()
+
+        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
+        assertDoesNotThrow("bumping the term epoch clears the regression") {
+            proc.checkTermUnfenced(LeaderTerm.of(1, 1))
+        }
+    }
+
+    @Test
+    fun `refuses a leader term the replica log has moved past`() = runTest {
+        val proc = makeProcessor()
+
+        proc.processRecords(listOf(record(0, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))))
+
+        // the transition checks its own claim once it's been read back, so the max *is* the claim
+        assertDoesNotThrow { proc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
+        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
     }
 
     @Test

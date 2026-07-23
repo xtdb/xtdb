@@ -188,8 +188,8 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
     /** Records the boundary each block was actually uploaded for — see [assertBlockCutsAgree]. */
     private inner class RecordingDriver(private val inner: LeaderDriver) : LeaderDriver by inner {
-        override suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary) =
-            inner.uploadBlock(boundaryMsgId, boundary)
+        override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary) =
+            inner.uploadBlock(boundaryMsgId, termId, boundary)
                 .also { blockUploads += boundary.blockIndex to boundaryMsgId }
     }
 
@@ -308,10 +308,10 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
         val a = openLeader("A", rowsPerBlock = 2, scope = scope) { inner ->
             object : LeaderDriver by inner {
-                override suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary): MessageId {
+                override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId {
                     atUpload.complete(Unit)
                     release.await()
-                    return inner.uploadBlock(boundaryMsgId, boundary)
+                    return inner.uploadBlock(boundaryMsgId, termId, boundary)
                 }
             }
         }

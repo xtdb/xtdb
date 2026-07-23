@@ -229,7 +229,7 @@ class LocalLogTest {
         val committed = mutableListOf<Int>()
         val demoted = mutableListOf<Int>()
 
-        override fun launchTransition(partition: Int): Deferred<Unit> {
+        override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
             transitioned.add(partition)
             return CompletableDeferred(Unit)
         }

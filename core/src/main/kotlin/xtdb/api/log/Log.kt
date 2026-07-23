@@ -173,7 +173,7 @@ interface Log<M> : AutoCloseable {
      * committed role single-writer while the unbounded catch-up runs off the poll thread.
      */
     interface SubscriptionListener<M> {
-        fun launchTransition(partition: Int): Deferred<Unit>
+        fun launchTransition(partition: Int, termId: Long): Deferred<Unit>
         fun commitLeader(partition: Int): TailSpec<M>
         suspend fun demoteLeader(partition: Int)
     }
