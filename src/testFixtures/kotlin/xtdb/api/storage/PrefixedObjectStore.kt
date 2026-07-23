@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture
  * Closing is a no-op: the delegate is shared, owned by whoever created it, and outlives any one pool.
  */
 class PrefixedObjectStore(
-    private val prefix: Path, private val delegate: SimulatedObjectStore,
+    private val prefix: Path, private val delegate: InMemoryBucket,
 ) : SupportsMultipart<ByteBuffer> {
 
     private fun StoredObject.relativized() = StoredObject(prefix.relativize(key), size)

@@ -15,9 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
+import xtdb.api.storage.InMemoryBucket
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.PrefixedObjectStore
-import xtdb.api.storage.SimulatedObjectStore
 import xtdb.api.storage.Storage.remote
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
@@ -37,13 +37,13 @@ class RemoteStorageTest : StorageTest() {
     override fun storage(): BufferPool = remoteBufferPool
 
     private lateinit var memoryCache: MemoryCache
-    private lateinit var sharedBucket: SimulatedObjectStore
+    private lateinit var sharedBucket: InMemoryBucket
     private lateinit var remoteBufferPool: RemoteBufferPool
 
     // hands every open a prefixing view onto the one shared bucket, the way the cloud stores resolve
     // their prefix over a single durable bucket — so assertions read the pool's real key-space off
     // `sharedBucket` rather than downcasting the pool's client
-    class PrefixingObjectStoreFactory(val bucket: SimulatedObjectStore) : ObjectStore.Factory {
+    class PrefixingObjectStoreFactory(val bucket: InMemoryBucket) : ObjectStore.Factory {
         override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): ObjectStore =
             PrefixedObjectStore(storageRoot, bucket)
 
@@ -54,7 +54,7 @@ class RemoteStorageTest : StorageTest() {
     @BeforeEach
     fun setUp(@TempDir localDiskCachePath: Path, al: BufferAllocator) {
         memoryCache = MemoryCache.Factory().open(al)
-        sharedBucket = SimulatedObjectStore()
+        sharedBucket = InMemoryBucket()
         remoteBufferPool =
             remote(PrefixingObjectStoreFactory(sharedBucket))
                 .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build(), "xtdb") as RemoteBufferPool
