@@ -23,6 +23,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.compactor.Compactor
 import xtdb.database.Database
+import xtdb.database.DatabaseLogs
 import xtdb.database.DatabasePartition
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -112,7 +113,7 @@ class ExternalSourceTest {
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        val dbStorage = DatabaseStorage(sourceLog, replicaLog, bufferPool, null)
+        val dbStorage = DatabaseStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope)
@@ -394,13 +395,14 @@ class ExternalSourceTest {
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
         val partition = DatabasePartition(
             partition = 0,
+            storage = DatabaseStorage(DatabaseLogs(null, null), null, null),
             state = DatabaseState("cdc", null, null, null, null),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         )
         val db = Database(
             allocator = allocator,
             config = config,
-            storage = DatabaseStorage(null, null, null, null),
+            logs = DatabaseLogs(null, null),
             isIndexing = false,
             partitions = mapOf(0 to partition),
             meterRegistry = null,

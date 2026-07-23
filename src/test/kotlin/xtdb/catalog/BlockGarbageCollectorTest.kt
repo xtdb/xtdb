@@ -96,6 +96,40 @@ class BlockGarbageCollectorTest {
         }
     }
 
+    @Test
+    fun `garbageCollectBlocks only touches its own partition`(@TempDir tempDir: Path, al: BufferAllocator) = runTest {
+        MemoryCache.Factory().open(al).use { memoryCache ->
+            Storage.local(tempDir).open(al, memoryCache, null, "xtdb", 0, 2).use { p0 ->
+                Storage.local(tempDir).open(al, memoryCache, null, "xtdb", 1, 2).use { p1 ->
+                    val blocksPath = "blocks".asPath
+                    val tableBlockPath = "public/foo".tablePath.resolve(blocksPath)
+
+                    for (pool in listOf(p0, p1)) {
+                        (1L..10L).forEach { index ->
+                            writeBlock(pool, index, listOf("public/foo"), listOf(blocksPath, tableBlockPath))
+                        }
+                    }
+
+                    val gc = BlockGarbageCollector(
+                        backgroundScope,
+                        p0, BlockCatalog("xtdb", p0.latestBlock),
+                        blocksToKeep = 3,
+                        enabled = false,
+                        dbName = "xtdb",
+                    )
+
+                    gc.garbageCollectBlocks()
+
+                    assertBlockCount(p0, blocksPath, 3)
+                    assertBlockCount(p0, tableBlockPath, 3)
+
+                    assertBlockCount(p1, blocksPath, 10)
+                    assertBlockCount(p1, tableBlockPath, 10)
+                }
+            }
+        }
+    }
+
     /*
     TODO: Fix this test - race condition with ListAllObjects
     @Test

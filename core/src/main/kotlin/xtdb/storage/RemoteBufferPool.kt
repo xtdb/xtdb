@@ -41,6 +41,7 @@ internal class RemoteBufferPool(
     meterRegistry: MeterRegistry? = null,
     override val epoch: StorageEpoch,
     dbName: DatabaseName,
+    partition: Int,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
@@ -53,10 +54,10 @@ internal class RemoteBufferPool(
     private val networkWrite: Counter? = meterRegistry?.counter("buffer-pool.network.write")
     private val networkRead: Counter? = meterRegistry?.counter("buffer-pool.network.read")
 
-    // we partition the caches by dbName as they're shared between multiple databases
-    // the caches themselves has no knowledge of this
-    // '0' for partition 0, in advance of multi-partition support
-    private val cacheRootPath = dbName.asPath.resolve("0")
+    // we scope the cache keys by dbName/partition as the caches are shared between multiple
+    // databases (and, at N>1, multiple partitions of the same database)
+    // the caches themselves have no knowledge of this
+    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
 
     companion object {
         internal var minMultipartPartSize = 5 * 1024 * 1024

@@ -35,6 +35,7 @@ internal class LocalStorage(
     meterRegistry: MeterRegistry? = null,
     override val epoch: StorageEpoch,
     dbName: DatabaseName,
+    partition: Int,
     val rootPath: Path,
 ) : BufferPool, IEvictBufferTest, Closeable {
 
@@ -44,10 +45,10 @@ internal class LocalStorage(
     private val recordBatchRequests: Counter? = meterRegistry?.counter("record-batch-requests")
     private val memCacheMisses: Counter? = meterRegistry?.counter("memory-cache-misses")
 
-    // we partition the cache by dbName as it's shared between multiple databases
+    // we scope the cache keys by dbName/partition as the cache is shared between multiple
+    // databases (and, at N>1, multiple partitions of the same database)
     // the cache itself has no knowledge of this
-    // '0' for partition 0, in advance of multi-partition support
-    private val cacheRootPath = dbName.asPath.resolve("0")
+    private val cacheRootPath = dbName.asPath.resolve(partition.toString())
 
     companion object {
         private fun Path.createTempUploadFile(): Path {

@@ -16,7 +16,9 @@ import org.junit.jupiter.api.io.TempDir
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
 import xtdb.api.storage.ObjectStore
+import xtdb.api.storage.PrefixedObjectStore
 import xtdb.api.storage.SimulatedObjectStore
+import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.remote
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
@@ -27,6 +29,8 @@ import xtdb.arrow.schema
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
 import xtdb.test.AllocatorResolver
+import xtdb.util.asPath
+import java.nio.ByteBuffer
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
 import com.google.protobuf.Any as ProtoAny
@@ -35,8 +39,11 @@ import com.google.protobuf.Any as ProtoAny
 class RemoteStorageTest : StorageTest() {
     override fun storage(): BufferPool = remoteBufferPool
 
+    private lateinit var allocator: BufferAllocator
     private lateinit var memoryCache: MemoryCache
+    private lateinit var diskCache: DiskCache
     private lateinit var remoteBufferPool: RemoteBufferPool
+    private lateinit var sharedObjectStore: SimulatedObjectStore
 
     object SimulatedObjectStoreFactory : ObjectStore.Factory {
         override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): ObjectStore = SimulatedObjectStore()
@@ -45,12 +52,33 @@ class RemoteStorageTest : StorageTest() {
             get() = ProtoAny.newBuilder().build()
     }
 
+    // one backing store for all opens, each scoped by its storageRoot — the shape the partitioned
+    // tests need (the default factory above would give every partition its own store, making
+    // cross-partition isolation vacuous)
+    class SharedObjectStoreFactory(val store: SimulatedObjectStore) : ObjectStore.Factory {
+        override fun openObjectStore(storageRoot: Path, remotes: Map<RemoteAlias, Remote>): ObjectStore =
+            PrefixedObjectStore(storageRoot, store)
+
+        override val configProto: ProtoAny
+            get() = ProtoAny.newBuilder().build()
+    }
+
+    // distinct dbName so the partitioned pools don't alias remoteBufferPool's namespace in the
+    // shared memory/disk caches — they're different backing stores that would otherwise share
+    // cache keys
+    override fun openPartitionedStorage(partition: Int, totalPartitions: Int): BufferPool =
+        remote(SharedObjectStoreFactory(sharedObjectStore))
+            .open(allocator, memoryCache, diskCache, "parted-db", partition, totalPartitions)
+
     @BeforeEach
     fun setUp(@TempDir localDiskCachePath: Path, al: BufferAllocator) {
+        allocator = al
         memoryCache = MemoryCache.Factory().open(al)
+        diskCache = DiskCache.Factory(localDiskCachePath).build()
+        sharedObjectStore = SimulatedObjectStore()
         remoteBufferPool =
             remote(SimulatedObjectStoreFactory)
-                .open(al, memoryCache, DiskCache.Factory(localDiskCachePath).build(), "xtdb") as RemoteBufferPool
+                .open(al, memoryCache, diskCache, "xtdb") as RemoteBufferPool
 
         // Mocking small value for MIN_MULTIPART_PART_SIZE
         RemoteBufferPool.minMultipartPartSize = 320
@@ -60,6 +88,39 @@ class RemoteStorageTest : StorageTest() {
     fun tearDown() {
         remoteBufferPool.close()
         memoryCache.close()
+    }
+
+    @Test
+    fun `partitioned pools scope object keys under parts-N`() {
+        openPartitionedStorage(0, 2).use { p0 ->
+            openPartitionedStorage(1, 2).use { p1 ->
+                p0.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
+                p1.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
+            }
+        }
+
+        val versionRoot = Storage.storageRoot(Storage.VERSION, 0)
+        assertEquals(
+            listOf(
+                "parts/0".asPath.resolve(versionRoot).resolve("blocks/b00.binpb"),
+                "parts/1".asPath.resolve(versionRoot).resolve("blocks/b00.binpb"),
+            ),
+            sharedObjectStore.buffers.keys.toList(),
+            "raw object-store keys carry the partition marker"
+        )
+    }
+
+    @Test
+    fun `single-partition pool keeps the unmarked key-space`() {
+        remote(SharedObjectStoreFactory(sharedObjectStore))
+            .open(allocator, memoryCache, diskCache, "xtdb")
+            .use { bp -> bp.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10))) }
+
+        assertEquals(
+            listOf(Storage.storageRoot(Storage.VERSION, 0).resolve("blocks/b00.binpb")),
+            sharedObjectStore.buffers.keys.toList(),
+            "no partition marker at partitions = 1"
+        )
     }
 
 
@@ -78,6 +139,25 @@ class RemoteStorageTest : StorageTest() {
         // only the disk cache can serve the read once the store forgets the object
         (remoteBufferPool.objectStore as SimulatedObjectStore).buffers.clear()
         assertNotNull(remoteBufferPool.getFooter(key))
+    }
+
+    @Test
+    fun `openArrowWriter seeds the disk cache under the pool-scoped key (partitioned pool)`(al: BufferAllocator) {
+        openPartitionedStorage(0, 2).use { bp ->
+            val key = "aw".asPath
+            Relation(al, "a" ofType I32).use { relation ->
+                bp.openArrowWriter(key, relation).use { writer ->
+                    val v = relation["a"]
+                    for (i in 0 until 10) v.writeInt(i)
+                    writer.writePage()
+                    writer.end()
+                }
+            }
+
+            // only the disk cache can serve the read once the store forgets the object
+            sharedObjectStore.buffers.clear()
+            assertNotNull(bp.getFooter(key))
+        }
     }
 
     @Test

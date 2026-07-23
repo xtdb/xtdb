@@ -5,6 +5,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.api.storage.Storage
@@ -13,6 +14,7 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Files.createTempDirectory
+import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.readBytes
 
@@ -21,7 +23,15 @@ class LocalStorageTest : StorageTest() {
     private lateinit var memoryCache: MemoryCache
     private lateinit var localBufferPool: BufferPool
 
+    @TempDir
+    lateinit var partitionedPath: Path
+
     override fun storage(): BufferPool = localBufferPool
+
+    // distinct dbName so the partitioned pools don't alias localBufferPool's namespace in the
+    // shared memoryCache — they're different stores that would otherwise share cache keys
+    override fun openPartitionedStorage(partition: Int, totalPartitions: Int): BufferPool =
+        Storage.local(partitionedPath).open(allocator, memoryCache, null, "parted-db", partition, totalPartitions)
 
     @BeforeEach
     fun setUp() {
@@ -38,6 +48,32 @@ class LocalStorageTest : StorageTest() {
         localBufferPool.close()
         memoryCache.close()
         allocator.close()
+    }
+
+    @Test
+    fun `partitioned pools nest under a parts-N marker on disk`() {
+        openPartitionedStorage(0, 2).use { p0 ->
+            openPartitionedStorage(1, 2).use { p1 ->
+                p0.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
+                p1.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
+            }
+        }
+
+        val versionRoot = Storage.storageRoot(Storage.VERSION, 0)
+        assertTrue(partitionedPath.resolve("parts/0").resolve(versionRoot).resolve("blocks/b00.binpb").exists())
+        assertTrue(partitionedPath.resolve("parts/1").resolve(versionRoot).resolve("blocks/b00.binpb").exists())
+    }
+
+    @Test
+    fun `single-partition pool keeps the unmarked on-disk layout`() {
+        openPartitionedStorage(0, 1).use { bp ->
+            bp.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
+        }
+
+        assertTrue(
+            partitionedPath.resolve(Storage.storageRoot(Storage.VERSION, 0))
+                .resolve("blocks/b00.binpb").exists()
+        )
     }
 
     @Test

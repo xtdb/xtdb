@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
 import xtdb.SimulationTestUtils.Companion.L0TrieKeys
 import xtdb.SimulationTestUtils.Companion.L3TrieKeys
+import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
@@ -115,7 +116,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val trieCatalog = createTrieCatalog()
             val blockCatalog = BlockCatalog("xtdb", sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
-            val dbStorage = DatabaseStorage(null, null, sharedBufferPool, null)
+            val dbStorage = DatabaseStorage(DatabaseLogs(null, null), sharedBufferPool, null)
             val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, dbStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
