@@ -2,7 +2,6 @@ package xtdb.api.storage
 
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.multipart.IMultipartUpload
-import xtdb.multipart.SupportsMultipart
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.util.*
@@ -14,12 +13,18 @@ enum class StoreOperation {
     PUT, UPLOAD, COMPLETE, ABORT
 }
 
-class SimulatedObjectStore(
+/**
+ * The durable-bucket half of the remote-storage test doubles: a keyed blob map plus an operation
+ * journal. Deliberately NOT an [ObjectStore] — that is the client role, played by [PrefixedObjectStore]
+ * over this. Keeping the bucket off the client interface makes "wire a pool straight to the bucket,
+ * skipping the prefix" a compile error rather than a silent vacuous pass.
+ */
+class InMemoryBucket(
     // Synchronized: uploadMultipartBuffers calls uploadPart from concurrent coroutines (up to
     // MAX_CONCURRENT_PART_UPLOADS), so a plain ArrayList races on add and intermittently throws AIOOBE.
     val calls: MutableList<StoreOperation> = Collections.synchronizedList(mutableListOf()),
     val buffers: NavigableMap<Path, ByteBuffer> = TreeMap()
-) : ObjectStore, SupportsMultipart<ByteBuffer> {
+) {
 
     private fun copyByteBuffer(buffer: ByteBuffer) =
         ByteBuffer.allocate(buffer.remaining()).put(buffer.duplicate()).flip()
@@ -31,10 +36,10 @@ class SimulatedObjectStore(
         return buffer.flip()
     }
 
-    override fun getObject(k: Path): CompletableFuture<ByteBuffer> =
+    fun getObject(k: Path): CompletableFuture<ByteBuffer> =
         completedFuture(buffers[k])
 
-    override fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
+    fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
         buffers[k]?.let { buffer ->
             val bytes = ByteArray(buffer.remaining())
             buffer.duplicate().get(bytes)
@@ -42,36 +47,36 @@ class SimulatedObjectStore(
             completedFuture(outPath)
         } ?: failedFuture(IllegalStateException("Object $k doesn't exist"))
 
-    override fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit> {
+    fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit> {
         buffers[k] = buf
         calls.add(StoreOperation.PUT)
         return completedFuture(Unit)
     }
 
-    override fun listAllObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
+    fun listAllObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun listAllObjects(dir: Path): List<StoredObject> =
+    fun listAllObjects(dir: Path): List<StoredObject> =
         buffers.tailMap(dir).entries
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun listAfter(dir: Path, afterKey: Path): List<StoredObject> =
+    fun listAfter(dir: Path, afterKey: Path): List<StoredObject> =
         buffers.tailMap(afterKey, false).entries
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> {
+    fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> {
         val srcBuffer = buffers[src] ?: return failedFuture(IllegalStateException("Object $src doesn't exist"))
         buffers[dest] = copyByteBuffer(srcBuffer)
         return completedFuture(Unit)
     }
 
-    override fun deleteIfExists(k: Path): CompletableFuture<Unit> {
+    fun deleteIfExists(k: Path): CompletableFuture<Unit> {
         buffers.remove(k)
         return completedFuture(Unit)
     }
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
+    fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
         val upload = object : IMultipartUpload<ByteBuffer> {
             override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<ByteBuffer> {
                 calls.add(StoreOperation.UPLOAD)

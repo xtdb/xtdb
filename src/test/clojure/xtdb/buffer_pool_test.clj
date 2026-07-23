@@ -16,7 +16,7 @@
            (java.nio.file Path)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
-           (xtdb.api.storage PrefixedObjectStore SimulatedObjectStore StoreOperation)
+           (xtdb.api.storage PrefixedObjectStore InMemoryBucket StoreOperation)
            xtdb.arrow.Relation
            (xtdb.cache DiskCache MemoryCache)
            (xtdb.storage BufferPool BufferPoolKt RemoteBufferPool)))
@@ -86,14 +86,14 @@
         ;; Will fetch from object store again
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (ByteBuffer/wrap (.getByteArray bp k)))))))))
 
-(defn prefixing-obj-store-factory [^SimulatedObjectStore bucket]
+(defn prefixing-obj-store-factory [^InMemoryBucket bucket]
   (reify ObjectStore$Factory
     (openObjectStore [_ storage-root _remotes]
       (PrefixedObjectStore. storage-root bucket))))
 
 (t/deftest below-min-size-put-test
   (with-caches {}
-    (let [^SimulatedObjectStore bucket (SimulatedObjectStore.)]
+    (let [^InMemoryBucket bucket (InMemoryBucket.)]
       (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory bucket))
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION {}))]
         (t/testing "if <= min part size, putObject is used"
@@ -117,7 +117,7 @@
 
 (t/deftest local-disk-cache-max-size
   (with-caches {:mem-bytes 12, :disk-bytes 10}
-    (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (SimulatedObjectStore.)))
+    (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (InMemoryBucket.)))
                        (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" nil Storage/VERSION {}))]
       (t/testing "staying below max size - all elements available"
         (insert-utf8-to-local-cache bp (util/->path "a") 4)
@@ -149,7 +149,7 @@
         (deleteIfExists [_ _k] (throw (UnsupportedOperationException. "foo")))))))
 
 (t/deftest local-disk-cache-with-previous-values
-  (let [obj-store-factory (prefixing-obj-store-factory (SimulatedObjectStore.))
+  (let [obj-store-factory (prefixing-obj-store-factory (InMemoryBucket.))
         path-a (util/->path "a")
         path-b (util/->path "b")]
     (with-caches {:mem-bytes 64, :disk-bytes 64}
@@ -297,7 +297,7 @@
 (t/deftest network-counter-test
   (let [registry (SimpleMeterRegistry.)]
     (with-caches {}
-      (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (SimulatedObjectStore.)))
+      (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory (InMemoryBucket.)))
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" registry Storage/VERSION {}))]
         (let [k1 (util/->path "a")
               k2 (util/->path "b")
