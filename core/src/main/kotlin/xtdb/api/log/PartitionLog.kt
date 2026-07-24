@@ -13,9 +13,6 @@ import xtdb.types.MessageId
 class PartitionLog<M>(private val log: Log<M>, val partition: Int) {
     suspend fun appendMessage(message: M): Log.MessageMetadata = log.appendMessage(message, partition)
 
-    fun openAtomicProducer(transactionalId: String): Log.AtomicProducer<M> =
-        log.openAtomicProducer(transactionalId, partition)
-
     suspend fun tailAll(afterMsgId: MessageId, processor: Log.RecordProcessor<M>) =
         log.tailAll(partition, afterMsgId, processor)
 }

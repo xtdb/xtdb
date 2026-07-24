@@ -135,16 +135,18 @@ internal class LeaderLogProcessor(
     private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
 
     // Serialize each ResolvedTx (the costly Arrow-IPC step, kept off the resolver) and append it, in
-    // order, through the driver. Increment A keeps the atomic producer behind that seam so Kafka's
-    // transaction still fences a zombie at commit — belt-and-braces behind the term fence. An append
-    // failure propagates and tears the term down. Never closes a borrowed tx — the resolver owns it.
+    // order, through the driver. Plain (non-transactional) appends: the sole fence on a zombie leader is
+    // now the term check on consume-back — a higher-term record read back means we've been superseded and
+    // resign (see applyRecord) — replacing the Kafka transactional producer that fenced at commit (#5817).
+    // An append failure propagates and tears the term down. Never frees a borrowed ResolvedTx — the
+    // resolver owns it.
     private suspend fun appendPump() {
         for (item in awaitingAppend) {
             val msg = when (item) {
                 is TxItem -> item.resolvedTx.toReplicaMessage(leaderTerm)
                 is ControlItem -> item.message
             }
-            driver.appendToReplica(sequenceOf(msg))
+            driver.appendToReplica(msg)
         }
     }
 
@@ -247,8 +249,11 @@ internal class LeaderLogProcessor(
         rowsSinceBlock = 0
     }
 
-    // Hand a freshly-resolved tx to the append pump, advancing the resolve-side watermark and row gauge,
-    // and cut a block if this tx filled one.
+    // Hand a freshly-resolved tx to the append pump, and cut a block if this tx filled one.
+    //
+    // [srcMsgId] is the source-log position this tx sits at. A source-log tx advances it; an ext-source tx
+    // passes the current one back, because it has no source-log position of its own — which is exactly what
+    // gets stamped on its replica record.
     private suspend fun appendTx(resolvedTx: ResolvedTx, srcMsgId: MessageId) {
         lastResolvedSrcMsgId = srcMsgId
         rowsSinceBlock += resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
@@ -371,59 +376,91 @@ internal class LeaderLogProcessor(
 
     private sealed interface PersisterTask {
         val onComplete: CompletableDeferred<Unit>
+
+        /**
+         * Fail this task's awaiting caller, because the term is going away without finishing it.
+         *
+         * The *kind* of failure — cancellation vs the term's real cause — depends on who awaits the handle,
+         * so it belongs here, on the task, rather than being re-decided at each teardown site. Callers just
+         * abandon whatever they hold.
+         */
+        fun abandon(cause: Throwable)
     }
 
     private sealed interface ExtSourceTask : PersisterTask {
         class IndexTx(val msg: ExtSourceMessage) : ExtSourceTask {
             override val onComplete = CompletableDeferred<Unit>()
+
+            // The real cause: this is an ext-source caller's own tx, awaiting its own result, and it isn't
+            // on the transport's poll thread — so it both wants and can safely see why the term died.
+            override fun abandon(cause: Throwable) {
+                onComplete.completeExceptionally(cause)
+                msg.pending.completeExceptionally(cause)
+            }
         }
     }
 
     private sealed interface GcTask : PersisterTask {
         data class TriesDeleted(val tableName: TableRef, val trieKeys: Set<TrieKey>) : GcTask {
             override val onComplete = CompletableDeferred<Unit>()
+
+            override fun abandon(cause: Throwable) {
+                onComplete.completeExceptionally(cause)
+            }
         }
     }
 
+    // Undelivered — a cancelled send, or a cancelled channel — is a term-teardown failure like any other,
+    // so it goes through the task's own `abandon` rather than a second, hand-rolled policy here.
+    private fun <T : PersisterTask> persisterChannel(capacity: Int) =
+        Channel<T>(capacity, onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) })
+
     // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works
     // the current one. `executeTx` still blocks on the result regardless of capacity.
-    private val extSourceCh =
-        Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { task ->
-            task.onComplete.cancel()
-            if (task is ExtSourceTask.IndexTx) task.msg.pending.cancel()
-        })
+    private val extSourceCh = persisterChannel<ExtSourceTask>(capacity = 1)
 
-    private val gcCh = Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
+    private val gcCh = persisterChannel<GcTask>(Channel.UNLIMITED)
 
-    // A source batch paused mid-way by a block cut: its remaining records and completion handle, resumed
-    // once the block uploads. At most one — the poll thread awaits each batch's onComplete before sending
-    // the next, so only one source batch is ever in flight. A nullable field makes that structural.
-    private class PartialBatch(
-        val records: List<Log.Record<SourceMessage>>, val startIdx: Int,
-        val onComplete: CompletableDeferred<Unit>,
-    )
+    /**
+     * Shut this channel down and fail everyone still waiting on it: senders (via the close cause) and
+     * whatever is still queued (via each task's [PersisterTask.abandon]).
+     *
+     * Close and drain are bundled because both are needed and the order matters — `close` alone doesn't
+     * visit buffered elements (only `cancel` does), so a queued task's caller would wait forever; and
+     * closing *first* means no send can slip into a buffer we've already drained.
+     *
+     * Only safe on the persister's own exit path: it is the sole receiver, so nothing competes with these
+     * `tryReceive`s.
+     */
+    private fun <T : PersisterTask> Channel<T>.shutdown(cause: Throwable) {
+        close(cause)
+        while (true) (tryReceive().getOrNull() ?: break).abandon(cause)
+    }
 
-    private var partialBatch: PartialBatch? = null
+    // A source batch paused mid-way by a block cut: the task, and where to pick it up again. At most one —
+    // the poll thread awaits each batch before sending the next, so only one is ever in flight; a nullable
+    // field makes that structural. Holds the *task*, so its failure policy stays the task's own.
+    private class PausedBatch(val task: SourceBatch, val nextIdx: Int)
 
-    // Poked when a stashed [partialBatch] becomes resumable (the block finished uploading). Conflated: at
-    // most one resume is pending, and the select clause is gated on `partialBatch != null && !blockInProgress`.
+    private var pausedBatch: PausedBatch? = null
+
+    // Poked when a stashed [pausedBatch] becomes resumable (the block finished uploading). Conflated: at
+    // most one resume is pending, and the select clause is gated on `pausedBatch != null && !blockInProgress`.
     private val resumeCh = Channel<Unit>(Channel.CONFLATED)
 
-    // Process a source batch from `startIdx`, stopping if a block cut pauses us — stashing the remainder
-    // on [partialBatch] so the loop resumes it after the upload. Completes onComplete only when fully drained.
-    private suspend fun runSourceBatch(
-        records: List<Log.Record<SourceMessage>>, startIdx: Int, onComplete: CompletableDeferred<Unit>,
-    ) {
+    // Process a source batch from `startIdx`, stopping if a block cut pauses us — stashing the remainder on
+    // [pausedBatch] so the loop resumes it after the upload. Completes the task only when fully drained.
+    private suspend fun runSourceBatch(task: SourceBatch, startIdx: Int) {
         var i = startIdx
-        while (i < records.size) {
-            handleSourceLogRecord(records[i])
+        while (i < task.records.size) {
+            handleSourceLogRecord(task.records[i])
             i++
             if (blockInProgress) {
-                partialBatch = PartialBatch(records, i, onComplete)
+                pausedBatch = PausedBatch(task, i)
                 return
             }
         }
-        onComplete.complete(Unit)
+        task.onComplete.complete(Unit)
     }
 
     private sealed interface Work
@@ -500,21 +537,23 @@ internal class LeaderLogProcessor(
                 } finally {
                     val pendingCause = cause ?: CancellationException("leader term closed")
 
-                    // Fail everything that was staged / paused / buffered but will never be applied.
+                    // Nothing may be left awaiting the persister once it has gone: whatever is staged,
+                    // paused, or still queued gets failed here. Each task's own `abandon` picks the failure
+                    // *kind*, so this is a flat sweep with no per-caller special-casing.
+                    //
+                    // Miss anything and the symptom is a hang, not an error — and for a source-log batch
+                    // that hang is on the transport's poll thread (inside `processRecords`), which is also
+                    // the sole servicer of the transport's unregister. So it wedges the whole subscription
+                    // teardown and blows DatabaseCatalog.close's bound (#5711 / #5817).
                     txResolver.failPending(pendingCause)
-                    partialBatch?.onComplete?.let { if (!it.isCompleted) it.completeExceptionally(pendingCause) }
+                    pausedBatch?.task?.abandon(pendingCause)
 
-                    // A buffered-but-never-received ext task is invisible to both failPending and
-                    // onUndeliveredElement (close visits neither), so complete it here.
-                    while (true) {
-                        val task = extSourceCh.tryReceive().getOrNull() ?: break
-                        task.onComplete.completeExceptionally(pendingCause)
-                        if (task is ExtSourceTask.IndexTx) task.msg.pending.completeExceptionally(pendingCause)
-                    }
-
-                    driver.sourceBatches.shutdown(cause)
-                    extSourceCh.close(cause)
-                    gcCh.close(cause)
+                    // The source-log pipe lives on the driver; its shutdown applies the same close-and-drain,
+                    // and owns the must-be-a-cancellation rule (SourceBatch.abandon) because the poll thread
+                    // both awaits and sends there.
+                    driver.sourceBatches.shutdown(pendingCause)
+                    extSourceCh.shutdown(pendingCause)
+                    gcCh.shutdown(pendingCause)
                 }
             }
 
@@ -539,7 +578,7 @@ internal class LeaderLogProcessor(
             val work = selectUnbiased<Work> {
                 replicaMsgs.onReceive { Apply(it) }
                 if (!blockInProgress) {
-                    if (partialBatch != null) resumeCh.onReceive { Resume }
+                    if (pausedBatch != null) resumeCh.onReceive { Resume }
                     driver.sourceBatches.onBatch { SourceWork(it) }
                     extSourceCh.onReceive { RunTask(it) }
                     gcCh.onReceive { RunTask(it) }
@@ -565,16 +604,14 @@ internal class LeaderLogProcessor(
                     }
 
                 is Resume -> {
-                    val pb = partialBatch ?: continue
-                    partialBatch = null
-                    runTaskGuarded(pb.onComplete) { runSourceBatch(pb.records, pb.startIdx, pb.onComplete) }
+                    val pb = pausedBatch ?: continue
+                    pausedBatch = null
+                    runTaskGuarded(pb.task.onComplete) { runSourceBatch(pb.task, pb.nextIdx) }
                 }
 
                 // The batch completes its own onComplete (deferred, if a block cut pauses it).
                 is SourceWork ->
-                    runTaskGuarded(work.batch.onComplete) {
-                        runSourceBatch(work.batch.records, 0, work.batch.onComplete)
-                    }
+                    runTaskGuarded(work.batch.onComplete) { runSourceBatch(work.batch, 0) }
 
                 is RunTask -> {
                     val task = work.task

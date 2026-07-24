@@ -229,41 +229,6 @@ class LocalLog<M> @JvmOverloads constructor(
             .await()
     }
 
-    override fun openAtomicProducer(transactionalId: String, partition: Int) = object : AtomicProducer<M> {
-        override fun openTx() = object : AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<MessageMetadata>>>()
-            private var isOpen = true
-
-            override fun appendMessage(message: M): CompletableDeferred<MessageMetadata> {
-                check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<MessageMetadata>()
-                    .also { buffer.add(message to it) }
-            }
-
-            override fun commit() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@LocalLog.appendMessage(message, partition))
-                    }
-                }
-            }
-
-            override fun abort() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                buffer.clear()
-            }
-
-            override fun close() {
-                if (isOpen) abort()
-            }
-        }
-
-        override fun close() {}
-    }
-
     override fun readLastMessage(partition: Int): M? {
         val ps = state(partition)
         if (ps.latestSubmittedOffset < 0) return null

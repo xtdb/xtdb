@@ -5,12 +5,11 @@
   (:import [xtdb.api.log KafkaCluster$ClusterFactory KafkaCluster$LogFactory]))
 
 (defmethod log/->log-cluster-factory ::cluster
-  [_ {:keys [bootstrap-servers poll-duration properties-map properties-file transactional-id-prefix group-id]}]
+  [_ {:keys [bootstrap-servers poll-duration properties-map properties-file group-id]}]
   (cond-> (KafkaCluster$ClusterFactory. bootstrap-servers)
     poll-duration (.pollDuration (time/->duration poll-duration))
     properties-map (.propertiesMap properties-map)
     properties-file (.propertiesFile (util/->path properties-file))
-    transactional-id-prefix (.transactionalIdPrefix transactional-id-prefix)
     group-id (.groupId group-id)))
 
 (defmethod log/->log-factory ::kafka [_ {:keys [cluster topic replica-cluster replica-topic epoch] :as opts}]

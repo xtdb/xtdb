@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.UseSerializers
@@ -114,39 +113,6 @@ interface Log<M> : AutoCloseable {
 
     fun appendMessageBlocking(message: M, partition: Int = 0): MessageMetadata =
         runBlocking { appendMessage(message, partition) }
-
-    /**
-     * @param transactionalId uniquely identifies this producer for Kafka's transaction coordinator.
-     *   Must be stable across restarts for transaction recovery.
-     */
-    fun openAtomicProducer(transactionalId: String, partition: Int): AtomicProducer<M>
-
-    interface AtomicProducer<M> : AutoCloseable {
-        fun openTx(): Tx<M>
-
-        interface Tx<M> : AutoCloseable {
-            fun appendMessage(message: M): CompletableDeferred<MessageMetadata>
-            fun commit()
-            fun abort()
-        }
-
-        /** @suppress */
-        companion object {
-            inline fun <M, R> AtomicProducer<M>.withTx(block: (Tx<M>) -> R): R =
-                openTx().use { tx ->
-                    try {
-                        block(tx).also { tx.commit() }
-                    } catch (e: Throwable) {
-                        try {
-                            tx.abort()
-                        } catch (abortEx: Throwable) {
-                            e.addSuppressed(abortEx)
-                        }
-                        throw e
-                    }
-                }
-        }
-    }
 
     fun readLastMessage(partition: Int = 0): M?
 

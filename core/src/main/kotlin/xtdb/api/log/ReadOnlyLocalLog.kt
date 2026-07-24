@@ -115,9 +115,6 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
     override suspend fun appendMessage(message: M, partition: Int): MessageMetadata =
         throw Incorrect("Cannot append to read-only database log")
 
-    override fun openAtomicProducer(transactionalId: String, partition: Int) =
-        throw Incorrect("Cannot open atomic producer on read-only database log")
-
     override fun readLastMessage(partition: Int): M? {
         val latest = latestSubmittedOffset(partition)
         if (latest < 0) return null

@@ -203,41 +203,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
         appendSync(message)
 
-    override fun openAtomicProducer(transactionalId: String, partition: Int) = object : Log.AtomicProducer<M> {
-        override fun openTx() = object : Log.AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<Log.MessageMetadata>>>()
-            private var isOpen = true
-
-            override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
-                check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<Log.MessageMetadata>()
-                    .also { buffer.add(message to it) }
-            }
-
-            override fun commit() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                LOG.debug("$name/atomicProducer($transactionalId): committing ${buffer.size} message(s)")
-                for ((message, res) in buffer) {
-                    res.complete(appendSync(message))
-                }
-            }
-
-            override fun abort() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                LOG.debug("$name/atomicProducer($transactionalId): aborting ${buffer.size} message(s)")
-                buffer.clear()
-            }
-
-            override fun close() {
-                if (isOpen) abort()
-            }
-        }
-
-        override fun close() {}
-    }
-
     override fun readLastMessage(partition: Int): M? = topic.lastOrNull()?.message
 
     override fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Log.Record<M>> {

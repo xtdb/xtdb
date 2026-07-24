@@ -91,9 +91,10 @@ Leadership is elected via Kafka consumer-group rebalancing — the standard Kafk
 Every indexer subscribes to the source-log topic; whichever node gets assigned the partition is the leader.
 When the current leader stops heartbeating (crash, network partition, long GC pause) or a new node joins, Kafka triggers a rebalance and the partition assignment moves.
 
-Leaders are *fenced* via Kafka's transactional-producer API.
-Each replica-log producer is opened with a fixed transactional ID (e.g. `"${dbName}-leader"`, plus an operator-configurable prefix so multiple deployments can share a Kafka cluster).
-When a new leader opens a producer with the same transactional ID, Kafka fences the old one — any further writes from the outgoing leader raise `ProducerFencedException`, so at most one node is ever writing to the replica log.
+Leaders are *fenced* by term (a Raft-ReadIndex-style check), not by Kafka transactions.
+Each record a leader writes to the replica log is stamped with its *term* — the Kafka consumer-group generation, which strictly increases every rebalance.
+A leader applies and acknowledges a write only after it has read that write back from the replica log at its own term, with no higher-term record ahead of it; a superseded leader reads a higher-term record back, recognises it, and resigns without acknowledging its unconfirmed writes.
+So at most one leader's writes are ever confirmed for a database, without relying on Kafka's transactional producer.
 
 === Three LogProcessor states
 

@@ -22,12 +22,10 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -144,7 +142,6 @@ class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
     val schemaRegistryUrl: String? = null,
-    val transactionalIdPrefix: String? = null,
     private val groupId: String = "xtdb",
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Remote {
@@ -486,7 +483,6 @@ class KafkaCluster(
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
         var schemaRegistryUrl: String? = null,
-        var transactionalIdPrefix: String? = null,
         var groupId: String = "xtdb",
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Remote.Factory<KafkaCluster> {
@@ -495,8 +491,6 @@ class KafkaCluster(
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
         fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
-        fun transactionalIdPrefix(transactionalIdPrefix: String?) =
-            apply { this.transactionalIdPrefix = transactionalIdPrefix }
 
         fun groupId(groupId: String) = apply { this.groupId = groupId }
 
@@ -512,25 +506,7 @@ class KafkaCluster(
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
         override fun open(): KafkaCluster =
-            KafkaCluster(
-                configMap, pollDuration, schemaRegistryUrl,
-                // normalise empty/blank prefix to null so `ENV XTDB_TRANSACTIONAL_ID_PREFIX=""`
-                // from the Docker image produces `xtdb-leader` rather than `-xtdb-leader`.
-                transactionalIdPrefix?.ifBlank { null },
-                groupId, coroutineContext
-            )
-    }
-
-    /** @suppress */
-    interface AtomicProducer<M> : Log.AtomicProducer<M> {
-        override fun openTx(): Tx<M>
-
-        interface Tx<M> : Log.AtomicProducer.Tx<M> {
-            fun sendOffsetsToTransaction(
-                offsets: Map<TopicPartition, OffsetAndMetadata>,
-                groupMetadata: ConsumerGroupMetadata,
-            )
-        }
+            KafkaCluster(configMap, pollDuration, schemaRegistryUrl, groupId, coroutineContext)
     }
 
     private inner class KafkaLog<M>(
@@ -602,88 +578,6 @@ class KafkaCluster(
                         yield(Log.Record(epoch, rec.offset(), ofEpochMilli(rec.timestamp()), msg))
                     }
                 }
-            }
-        }
-
-        override fun openAtomicProducer(transactionalId: String, partition: Int) = object : AtomicProducer<M> {
-            private val prefixedTxId = listOfNotNull(transactionalIdPrefix, transactionalId).joinToString("-")
-
-            init {
-                LOG.info { "starting atomic producer with transactional.id '$prefixedTxId'" }
-            }
-
-            private val producer = KafkaProducer(
-                mapOf(
-                    "enable.idempotence" to "true",
-                    "acks" to "all",
-                    "compression.type" to "snappy",
-                    "linger.ms" to "0",
-                    "transactional.id" to prefixedTxId,
-                ) + kafkaConfigMap,
-                UnitSerializer,
-                ByteArraySerializer()
-            ).also { it.initTransactions() }
-
-            override fun openTx(): AtomicProducer.Tx<M> {
-                producer.beginTransaction()
-
-                return object : AtomicProducer.Tx<M> {
-                    private val futures = mutableListOf<CompletableDeferred<Log.MessageMetadata>>()
-                    private var isOpen = true
-
-                    override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
-                        check(isOpen) { "Transaction already closed" }
-                        val deferred = CompletableDeferred<Log.MessageMetadata>()
-                        futures.add(deferred)
-                        producer.send(ProducerRecord(topic, null, Unit, codec.encode(message))) { recordMetadata, e ->
-                            if (e == null) {
-                                deferred.complete(
-                                    Log.MessageMetadata(
-                                        epoch,
-                                        recordMetadata.offset(),
-                                        ofEpochMilli(recordMetadata.timestamp())
-                                    )
-                                )
-                            } else {
-                                deferred.completeExceptionally(e)
-                            }
-                        }
-                        return deferred
-                    }
-
-                    @OptIn(ExperimentalCoroutinesApi::class)
-                    override fun commit() {
-                        check(isOpen) { "Transaction already closed" }
-                        isOpen = false
-                        // commitTransaction flushes all pending sends, so deferreds are already complete
-                        producer.commitTransaction()
-                        futures.forEach {
-                            latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.getCompleted().logOffset) }
-                        }
-                    }
-
-                    override fun sendOffsetsToTransaction(
-                        offsets: Map<TopicPartition, OffsetAndMetadata>,
-                        groupMetadata: ConsumerGroupMetadata,
-                    ) {
-                        check(isOpen) { "Transaction already closed" }
-                        producer.sendOffsetsToTransaction(offsets, groupMetadata)
-                    }
-
-                    override fun abort() {
-                        check(isOpen) { "Transaction already closed" }
-                        isOpen = false
-                        producer.abortTransaction()
-                    }
-
-                    override fun close() {
-                        if (isOpen) abort()
-                    }
-                }
-            }
-
-            override fun close() {
-                producer.close()
             }
         }
 

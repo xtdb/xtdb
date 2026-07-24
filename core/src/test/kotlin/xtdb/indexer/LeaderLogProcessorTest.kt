@@ -90,6 +90,7 @@ class LeaderLogProcessorTest {
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         skipTxs: Set<MessageId> = emptySet(),
+        leaderTerm: Long = 1,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
@@ -98,7 +99,7 @@ class LeaderLogProcessorTest {
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, uploadDispatcher)
         val driver = wrapDriver(
             RealLeaderDriver(
-                replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+                partitionStorage, partitionState, blockUploader
             )
         )
 
@@ -108,8 +109,23 @@ class LeaderLogProcessorTest {
             extSource = null,
             skipTxs = skipTxs, dbCatalog = null,
             afterReplicaMsgId = -1,
+            leaderTerm = leaderTerm,
             scope = backgroundScope,
         ).also(leadersToClose::add)
+    }
+
+    // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
+    // [appendStarted] the first time the pump reaches it. Models a slow append-ack: while the gate is shut
+    // the message is not on the log, so it can't be consumed back — the ReadIndex ack (and thus executeTx)
+    // stays pending. Everything else, the tail included, delegates to the real driver.
+    private fun gatedDriver(
+        inner: LeaderDriver, gate: CompletableDeferred<Unit>, appendStarted: CompletableDeferred<Unit>,
+    ): LeaderDriver = object : LeaderDriver by inner {
+        override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata {
+            appendStarted.complete(Unit)
+            gate.await()
+            return inner.appendToReplica(msg)
+        }
     }
 
     @Test
@@ -159,7 +175,7 @@ class LeaderLogProcessorTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
-            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+            partitionStorage, partitionState, blockUploader
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -232,7 +248,7 @@ class LeaderLogProcessorTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
-            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+            partitionStorage, partitionState, blockUploader
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -278,23 +294,12 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
-        // Stall every append on the gate (a slow commit-ack) without blocking any thread.
-        val wrapDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
-                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
-                    val batch = msgs.toList()
-                    appendStarted.complete(Unit)
-                    gate.await()
-                    return inner.appendToReplica(batch.asSequence())
-                }
-            }
-        }
-
         // Skipped txs each stage a real (aborted) row without needing a valid tx-ops payload.
         val n = 5L
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            skipTxs = (0 until n).toSet(), wrapDriver = wrapDriver,
+            skipTxs = (0 until n).toSet(),
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
         )
 
         val now = Instant.now()
@@ -325,19 +330,9 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
-        val wrapDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
-                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
-                    appendStarted.complete(Unit)
-                    gate.await()
-                    return inner.appendToReplica(msgs)
-                }
-            }
-        }
-
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapDriver = wrapDriver,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
         )
 
         // launch the executeTx so we can observe its completion state without blocking the test
@@ -362,19 +357,9 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
-        val wrapDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
-                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
-                    appendStarted.complete(Unit)
-                    gate.await()
-                    return inner.appendToReplica(msgs)
-                }
-            }
-        }
-
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapDriver = wrapDriver,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
         )
 
         // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
@@ -425,64 +410,191 @@ class LeaderLogProcessorTest {
     }
 
     @Test
+    fun `closing the leader term fails a buffered, never-received source-log batch`() = runTest(timeout = 5.seconds) {
+        val writerEntered = CompletableDeferred<Unit>()
+        val writerGate = CompletableDeferred<Unit>()
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers)
+
+        // Park the persister inside an ext-source writer, so the source batch below lands in sourceLogCh's
+        // buffer and is never received.
+        backgroundScope.launch {
+            runCatching {
+                lp.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
+            }
+        }
+        writerEntered.await()
+
+        // processRecords stands in for the transport's poll thread: it awaits the batch's completion. If the
+        // term dies without failing the buffered batch, this await never returns — the poll thread wedges,
+        // the transport's unregister is never serviced, and DatabaseCatalog.close blows its bound (#5711).
+        val thrown = CompletableDeferred<Throwable>()
+        backgroundScope.launch {
+            try {
+                lp.processRecords(listOf(
+                    Log.Record(0, 0, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
+                ))
+                thrown.complete(AssertionError("processRecords returned normally"))
+            } catch (e: CancellationException) {
+                thrown.complete(e); throw e
+            } catch (e: Throwable) {
+                thrown.complete(e)
+            }
+        }
+        testScheduler.advanceUntilIdle()
+
+        lp.cancelAndJoin()
+
+        // A hang here fires runTest's timeout — that's the regression guard.
+        val e = thrown.await()
+        assertFalse(
+            e is AssertionError,
+            "processRecords must fail when the term closes on a buffered batch, not return normally"
+        )
+
+        // ...and it must fail as CANCELLATION. The transport treats anything else as a poll-loop failure and
+        // unwinds openGroupSubscription into the Database scope's handler, which poisons the watchers — so a
+        // benign teardown would present as a terminal query failure. See SourceBatch.abandon.
+        assertTrue(e is CancellationException, "the poll thread must see cancellation, got: $e")
+        assertNull(watchers.exception, "a benign term close must not poison the watchers")
+    }
+
+    @Test
     fun `a slow append pipelines subsequent ext-source txs`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
-        val appendBatchSizes = mutableListOf<Int>()
-
-        // Records each append's batch size, and stalls the first one on the gate (a slow commit-ack)
-        // without blocking any thread.
-        val wrapDriver = { inner: LeaderDriver ->
-            object : LeaderDriver by inner {
-                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
-                    val batch = msgs.toList()
-                    appendBatchSizes += batch.size
-                    appendStarted.complete(Unit)
-                    gate.await()
-                    return inner.appendToReplica(batch.asSequence())
-                }
-            }
-        }
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             // Explicit null head: the relaxed default returns a mock TransactionKey whose txId is 0,
-            // which would seed the staging index at 0 and shift the ext-source txIds to 1..5.
+            // which would seed the queue at 0 and shift the ext-source txIds to 1..5.
             liveIndex = liveIndexMock { every { latestCompletedTx } returns null },
-            wrapDriver = wrapDriver,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
         )
 
         // tx 0: stages an ext-source tx and kicks the gated append
         lp.submitTx(null) { TxIndexer.TxResult.Committed() }
         appendStarted.await()
 
-        // txs 1-4: submitted while the append is in-flight; they pipeline behind it.
-        // Launched so the test body doesn't block on the cap-1 channel send.
+        // txs 1-4: submitted while the append is in-flight; they pipeline behind it — resolution and the
+        // append pump are decoupled, so a stalled append doesn't block subsequent submitTx from resolving
+        // and staging. Launched so the test body doesn't block on the cap-1 channel send.
         repeat(4) { backgroundScope.launch { lp.submitTx(null) { TxIndexer.TxResult.Committed() } } }
 
         testScheduler.advanceUntilIdle()
 
-        // Open the gate: the in-flight append for tx0 completes; the persister settles it via the
-        // select arm and kicks whatever has accumulated behind it.
+        // Open the gate: the stalled appends drain, get consumed back, and the whole pipeline settles.
         gate.complete(Unit)
 
-        // Durability of tx4 confirms the full pipeline drained — every settle runs through the
-        // select arm, so a broken arm shows up here as a hang, not a wrong count.
+        // Durability of tx4 confirms the full pipeline drained in order — a stall that had blocked
+        // resolution would show up here as a hang.
         watchers.awaitTx(4)
-
-        // The batch SHAPE is emergent: scheduling decides how many producer transactions carry
-        // txs 1-4 (staging crosses launch → channel → persister, unlike a source-log poll batch),
-        // so assert correctness-under-accumulation and leave the coalescing factor to the
-        // kafka-source benchmark. tx 0 always seals alone — nothing else was staged when it kicked.
-        assertEquals(1, appendBatchSizes.first(), "tx 0 kicked its append alone")
-        assertEquals(5, appendBatchSizes.sum(), "every tx reached the replica log exactly once")
 
         val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
         assertEquals((0 until 5L).toList(), resolvedTxs.map { it.txId }, "all 5 txs land, in send order")
+    }
+
+    @Test
+    fun `a higher-term record read back resigns the leader`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        // Gate our own append so this leader's tx never lands: the only record on the log will be the
+        // higher-term one injected below, so consume-back reaches it. Term fencing on read-back is the sole
+        // split-brain guard now the transactional producer is gone (#5817) — this exercises the resign path.
+        val gate = CompletableDeferred<Unit>() // never opened
+        val appendStarted = CompletableDeferred<Unit>()
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            leaderTerm = 1,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        // An executeTx staged and awaiting durability — the resignation must fail it, not hang it. Capture
+        // its failure via a launch + Deferred: a failing `async` would propagate to the (non-supervisor)
+        // backgroundScope and fail the test, so we don't await it directly.
+        val thrown = CompletableDeferred<Throwable>()
+        backgroundScope.launch {
+            try {
+                lp.executeTx(null) { TxIndexer.TxResult.Committed() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                thrown.complete(e)
+            }
+        }
+        appendStarted.await()
+
+        // A newer leader (term 2) has written to our replica log. Injected straight onto the underlying log
+        // (past the gate), so consume-back reads it while our own term-1 append is still stalled.
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
+
+        // term 2 > our term 1 → we resign; the term tears down and fails everything staged.
+        val e = thrown.await()
+        assertTrue(
+            generateSequence(e) { it.cause }.any { it.message?.contains("superseded") == true },
+            "the awaiting executeTx surfaces the supersession, got: $e"
+        )
+
+        // A clean resignation is expected, not a query fault: the watchers must not be poisoned — the
+        // transport re-follows on the next rebalance.
+        assertNull(watchers.exception, "a clean resignation must not poison the watchers")
+    }
+
+    @Test
+    fun `resigning cancels in-flight source batches rather than surfacing the supersession`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        // Never opened. The BlockBoundary's append hangs here, so the cut never reads back and resolution
+        // stays paused — which is what makes this deterministic: batch #1 parks as `pausedBatch` and batch #2
+        // stays buffered in the driver's source-batch pipe, so the term resigns with both in flight.
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
+            leaderTerm = 1, wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        // Two batches, each standing in for the transport's poll thread awaiting `processRecords`.
+        fun pollThread(msgId: Long) = CompletableDeferred<Throwable>().also { outcome ->
+            backgroundScope.launch {
+                try {
+                    lp.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
+                    outcome.complete(AssertionError("processRecords returned normally"))
+                } catch (e: Throwable) {
+                    outcome.complete(e)
+                }
+            }
+        }
+
+        val paused = pollThread(0)          // cuts the block, then parks mid-batch
+        appendStarted.await()               // the boundary hit the gated append ⇒ we are paused
+        val buffered = pollThread(1)        // sent while paused ⇒ buffered, received by nobody
+        testScheduler.advanceUntilIdle()
+
+        // A newer leader writes at term 2 — injected past the gate, so consume-back reads it while paused
+        // (replicaMsgs is the one select arm the pause leaves open) and the leader resigns.
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 2))
+
+        // Both must fail as CANCELLATION, not with the LeaderSupersededException. The poll thread awaits
+        // these, and a non-cancellation escaping processRecords unwinds openGroupSubscription into the
+        // Database scope's CoroutineExceptionHandler → notifyError, so a clean resignation would present to
+        // queries as a terminal failure. See SourceBatch.abandon.
+        for ((name, handle) in listOf("paused" to paused, "buffered" to buffered))
+            assertTrue(
+                handle.await() is CancellationException,
+                "the $name batch must fail as cancellation, got: ${handle.await()}"
+            )
+
+        assertNull(watchers.exception, "a resignation must not poison the watchers")
     }
 
     @Test
@@ -509,7 +621,7 @@ class LeaderLogProcessorTest {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
-            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+            partitionStorage, partitionState, blockUploader
         )
 
         val lp = LeaderLogProcessor(

@@ -23,7 +23,6 @@ class TransitionLogProcessorTest {
     private lateinit var bufferPool: BufferPool
     private lateinit var liveIndex: LiveIndex
     private lateinit var blockUploader: BlockUploader
-    private lateinit var replicaProducer: Log.AtomicProducer<ReplicaMessage>
     private lateinit var watchers: Watchers
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
@@ -36,7 +35,6 @@ class TransitionLogProcessorTest {
         bufferPool = mockk(relaxed = true)
         liveIndex = mockk(relaxed = true)
         blockUploader = mockk(relaxed = true)
-        replicaProducer = mockk(relaxed = true)
         blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
@@ -54,7 +52,7 @@ class TransitionLogProcessorTest {
     private fun makeProcessor(hasExternalSource: Boolean = false) =
         TransitionLogProcessor(
             allocator, bufferPool, partitionState, "test", liveIndex,
-            blockUploader, replicaProducer,
+            blockUploader,
             watchers, null, afterReplicaMsgId = -1L,
             hasExternalSource = hasExternalSource,
         )
@@ -72,7 +70,7 @@ class TransitionLogProcessorTest {
             record(1, ReplicaMessage.BlockBoundary(0, txId)),
         ))
 
-        coVerify { blockUploader.uploadBlock(replicaProducer, 1, any(), any()) }
+        coVerify { blockUploader.uploadBlock(1, any(), any()) }
 
         proc.close()
     }

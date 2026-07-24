@@ -5,7 +5,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.Log.Record
 import java.time.InstantSource
 import java.util.concurrent.Executors
@@ -29,11 +28,9 @@ class InMemoryLogTest {
     }
 
     @Test
-    fun `commit does not deadlock on a single-threaded dispatcher`() {
-        // commit() uses runBlocking internally. The old Channel pipeline needed a
-        // Dispatchers.Default thread to process the message, so a single-threaded
-        // dispatcher would deadlock: runBlocking blocked the only thread while the
-        // pipeline needed it to complete the deferred.
+    fun `appendMessage does not deadlock on a single-threaded dispatcher`() {
+        // appendMessage must complete on the calling thread alone. An earlier Channel pipeline needed a
+        // Dispatchers.Default thread to process the message, so a single-threaded caller deadlocked.
         val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
         try {
@@ -41,9 +38,7 @@ class InMemoryLogTest {
 
             runBlocking(dispatcher) {
                 withTimeout(5.seconds) {
-                    log.openAtomicProducer("test", 0).withTx { tx ->
-                        tx.appendMessage(ReplicaMessage.NoOp())
-                    }
+                    log.appendMessage(ReplicaMessage.NoOp())
                 }
             }
 

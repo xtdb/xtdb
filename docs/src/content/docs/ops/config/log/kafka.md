@@ -8,7 +8,7 @@ title: Kafka
 v2.2: single-writer support — two topics per database
 
 : [Single-writer indexing](/about/dbs-in-xtdb#database-architecture) requires two Kafka topics per database: a **source log** for client writes and a **replica log** for the indexing leader's resolved output.
-  XTDB uses Kafka's consumer-group rebalance protocol to elect the leader for each database, and a transactional producer per leader to fence split-brain writes to the replica log — see ['Leader election and fencing'](#leader-election-and-fencing) below.
+  XTDB uses Kafka's consumer-group rebalance protocol to elect the leader for each database, and fences split-brain writes to the replica log by term — see ['Leader election and fencing'](#leader-election-and-fencing) below.
 
   Previously, a database used a single Kafka topic, and every indexer node consumed it independently.
   With single-writer, only the elected leader consumes the source topic; followers tail the replica topic instead.
@@ -16,8 +16,8 @@ v2.2: single-writer support — two topics per database
   Upgrading:
 
   - The replica topic defaults to `${topic}-replica` and auto-creates when `autoCreateTopic` is enabled, so existing deployments need no configuration changes to pick it up.
-  - If multiple XTDB deployments share a Kafka cluster, set `transactionalIdPrefix` on each deployment's `!Kafka` cluster config — otherwise their leaders will fence each other across deployment boundaries.
-  - ACL-restricted topics now need `Describe` / `Read` / `Write` on both the source and replica topics, plus transactional-producer permissions (see [Setup](#setup)).
+  - If multiple XTDB deployments share a Kafka cluster, give each a distinct `groupId` on its `!Kafka` cluster config — otherwise their consumer groups collide and leadership is assigned across deployment boundaries.
+  - ACL-restricted topics need `Describe` / `Read` / `Write` on both the source and replica topics.
 
 v2.2: `logClusters` renamed to `remotes`
 
@@ -96,7 +96,6 @@ See ['Database architecture'](/about/dbs-in-xtdb#database-architecture) for the 
       See the [example configuration](#auth_example) below.
     - If the Kafka cluster is using **ACLs**, the XTDB node needs:
         - `Describe` / `Read` / `Write` on **both** the source and replica topics.
-        - `Describe` / `Write` on the `TransactionalId` resource matching the replica-log producer's transactional ID (defaults to `${databaseName}-leader`, or `${transactionalIdPrefix}-${databaseName}-leader` when a prefix is set — see [Leader election and fencing](#leader-election-and-fencing)).
 
 ## Configuration
 
@@ -128,14 +127,9 @@ remotes:
     # A map of Kafka connection properties, supplied directly to the Kafka client.
     # propertiesMap:
 
-    # Prefix applied to the transactional IDs used by replica-log producers (v2.2+).
-    # Required when multiple XTDB deployments share a Kafka cluster, to avoid them
-    # fencing each other's leaders. Leave unset otherwise.
-    # transactionalIdPrefix: "prod"
-
     # Consumer-group ID used for per-database leader election (v2.2+).
-    # Defaults to "xtdb" — change it only if you need a separate group per deployment
-    # sharing a Kafka cluster (in most cases, `transactionalIdPrefix` is sufficient).
+    # Defaults to "xtdb" — set a distinct value per deployment when multiple XTDB
+    # deployments share a Kafka cluster, so their consumer groups don't collide.
     # groupId: "xtdb"
 
 ## For the database, we then create a log using the Kafka cluster we just defined:
@@ -209,19 +203,22 @@ When a leader node stops (crash, network partition, long GC pause) or a new node
 
 Because all databases on a node share one consumer group via a single underlying consumer, Kafka's `CooperativeStickyAssignor` distributes leaderships evenly across the cluster — e.g. with three nodes serving three databases, each node ends up leader for one database and follower for the other two.
 
-### Fencing via transactional producers
+### Fencing by term
 
-Once elected, a leader writes to its database's replica log via a Kafka transactional producer with a fixed transactional ID: `${databaseName}-leader` (or `${transactionalIdPrefix}-${databaseName}-leader` when a prefix is set).
+Each leader stamps every record it writes to the replica log with a **term** — the generation number Kafka assigns its consumer-group membership, which strictly increases each time the assignment moves.
+A leader applies and acknowledges a write only once it has read that write *back* from the replica log at its own term, with no higher-term record ahead of it.
 
-If a new leader is elected and opens a producer with the same transactional ID, Kafka's transaction coordinator fences the previous one — any in-flight writes from the outgoing leader raise `ProducerFencedException` and fail cleanly.
-This guarantees at most one node is ever writing to the replica log for a given database, even across unclean handovers.
+If a rebalance has meanwhile moved leadership on, the incoming leader writes at a higher term.
+The outgoing leader reads that higher-term record back, recognises it has been superseded, and resigns — its own unconfirmed writes are never acknowledged.
+Followers apply the highest term they have seen and discard lower-term records.
+So at most one leader's writes are ever confirmed for a given database, even across an unclean handover — without relying on Kafka transactions.
 
 ### Recreating the consumer group (v2.2+)
 
-Alongside the producer fence, each leader stamps every replica-log message with a **leader term**, and readers discard any message below the highest term they've seen.
-A term pairs the consumer group's `generationId` — which orders elections — with `termEpoch`, which orders one incarnation of the group against the next.
+A term is not that generation number alone: it pairs it with a `termEpoch`, which orders one incarnation of the consumer group against the next.
+The generation orders elections *within* one incarnation; the epoch is what survives the group being recreated.
 
-`generationId` restarts at 1 whenever the group is recreated, and Kafka recreates it more readily than you might expect: the coordinator deletes any consumer group that is empty and has no committed offsets, and XTDB commits none (the source-log position lives in the replica log instead).
+`generationId` restarts at 1 whenever that happens, and Kafka recreates the group more readily than you might expect: the coordinator deletes any consumer group that is empty and has no committed offsets, and XTDB commits none (the source-log position lives in the replica log instead).
 A cluster stopped for longer than the broker's `offsets.retention.check.interval.ms` — ten minutes by default — therefore comes back to a fresh group at generation 1, below the terms already on the replica log.
 
 Raise `termEpoch` on the log config whenever that happens, and whenever you change `groupId` or otherwise recreate the group deliberately:
@@ -245,19 +242,15 @@ Raise `termEpoch`, never lower it: a lower value puts the new leader back below 
 
 ### Sharing a Kafka cluster across deployments
 
-Kafka's transaction coordinator keys transactional IDs globally, not per-topic.
-If you run multiple XTDB deployments against the same Kafka cluster (e.g. staging + prod, or multiple tenants), their leaders will fence each other because they share transactional IDs like `xtdb-leader`.
-
-Set `transactionalIdPrefix` on each deployment's cluster config to disambiguate:
+Leader election runs through a Kafka consumer group (`groupId`, defaulting to `"xtdb"`).
+If you run multiple XTDB deployments against the same Kafka cluster (e.g. staging + prod, or multiple tenants), give each a distinct `groupId` — otherwise they join the same group and Kafka assigns their topics' partitions across both deployments' nodes.
 
 ``` yaml
 remotes:
   kafkaCluster: !Kafka
     bootstrapServers: "localhost:9092"
-    transactionalIdPrefix: "prod"   # → "prod-xtdb-leader", etc.
+    groupId: "prod"
 ```
-
-All logs on a cluster (source/replica for every database, including secondaries attached at runtime) inherit the prefix automatically.
 
 ## Kafka Log Durability
 
