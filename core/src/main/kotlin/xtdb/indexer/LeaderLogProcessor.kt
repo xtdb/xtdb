@@ -23,7 +23,6 @@ import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.TrieKey
 import xtdb.util.*
-import xtdb.util.StringUtil.asLexHex
 import java.time.*
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
@@ -32,6 +31,13 @@ import xtdb.api.tx.ExternalSourceToken
 import xtdb.types.MessageId
 
 private val LOG = LeaderLogProcessor::class.logger
+
+/**
+ * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
+ * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
+ * the transport re-follows on the next rebalance. See #5817.
+ */
+private class LeaderSupersededException(message: String) : RuntimeException(message)
 
 internal class LeaderLogProcessor(
     allocator: BufferAllocator,
@@ -68,104 +74,302 @@ internal class LeaderLogProcessor(
     private val trieCatalog = partitionState.trieCatalog
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
-    // resolved-but-not-yet-durable tx — until we've committed it into the live index below. Driven only
-    // from the persister coroutine, and freed in close() once that job is joined; see TxResolver.
+    // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
+    // into the live index. Driven only from the persister coroutine, and freed in close() once that job is
+    // joined; see TxResolver.
     private val txResolver =
         TxResolver(allocator, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs, instantSource)
 
     var pendingBlock: PendingBlock? = null
         private set
 
+    // The consume-back position: the last replica-log record we have read back and applied. Advances
+    // in the apply loop; on demote it seeds the re-opened follower (with `pendingBlock`).
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
+    // Where the consume pump starts tailing (the transition replay-target). Distinct from the advancing
+    // `latestReplicaMsgId` — the tail is opened once, from here.
+    private val replayFrom: MessageId = afterReplicaMsgId
+
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
-    private val maxStagedRows = nodeBase.config.indexer.rowsPerBlock
+    // From the live index, not the node config: the two agree in production, but they are one value and
+    // the live index is what owns the block being filled — `blockRowCount` below seeds the gauge from it.
+    private val rowsPerBlock = liveIndex.rowsPerBlock
 
-    /**
-     * The in-flight replica-log append: one fenced producer transaction carrying the sealed batch, run in
-     * the background and yielding each tx's replica-log position. At most one — the single fenced producer
-     * permits only one open transaction at a time, and holding it as a nullable field makes that invariant
-     * structural rather than checked at every append site.
-     *
-     * The txs it carries come back in its result, so there's no second copy here to drift from the
-     * resolver's — the resolver owns them throughout, and frees them at [TxResolver.applied].
-     */
-    private var inFlight: Deferred<List<Pair<ResolvedTx, Log.MessageMetadata>>>? = null
+    // Rows in the current block so far (resolve-side gauge). The boundary is cut off this rather than
+    // liveIndex.isFull(), which lags (it only reflects APPLIED — consume-back — txs). Seeded from the rows
+    // already applied into the open block: on a leadership change the new leader inherits a partially-filled
+    // block from replay, and must cut it at the same point the old leader would have (else block sizes drift
+    // across restarts — the #5817 stop/start off-by-one). Reset when a boundary is injected.
+    private var rowsSinceBlock: Long = liveIndex.blockRowCount
 
-    // Seal whatever has accumulated and launch its replica-log append — each tx serializing itself into
-    // a replica message (ResolvedTx.toReplicaMessage), all appended in one fenced producer transaction —
-    // in the background, so the resolver keeps resolving while the serialize + producer commit run.
-    // The persister settles it (settleAppend) once it completes. No-op if an append is already in flight
-    // (the accumulating tail rides the next kick, at settle) or there's nothing staged.
-    private fun kickAppend() {
-        if (inFlight != null) return
-        val txs = txResolver.seal() ?: return
+    // The source-log watermark and ext-source token as of the last-resolved tx — the boundary is now cut
+    // on the resolve side, ahead of the watchers (which advance on apply), so its `latestProcessedMsgId`
+    // and token come from here rather than `watchers.*`.
+    private var lastResolvedSrcMsgId: MessageId = watchers.latestSourceMsgId
+    private var lastResolvedExtToken: ExternalSourceToken? = watchers.externalSourceToken
 
-        inFlight = appendScope.async {
-            txs.zip(driver.appendToReplica(txs.asSequence().map { it.toReplicaMessage(leaderTerm) }))
+    // A block cut is in progress: the BlockBoundary has been appended but its BlockUploaded has not yet
+    // been produced. Resolution (source/ext/gc) is paused — excluded from the select — so no tx interleaves
+    // between the boundary and its upload, keeping the follower's bounded pending-block buffer empty.
+    private var blockInProgress: Boolean = false
+
+    // ---- append pump ----
+
+    // What the append pump serializes-and-appends, in resolution order. A tx borrows its [ResolvedTx]
+    // (the resolver owns and frees it); a control message is appended verbatim.
+    private sealed interface AppendItem
+    private class TxItem(val resolvedTx: ResolvedTx) : AppendItem
+    private class ControlItem(val message: ReplicaMessage) : AppendItem
+
+    // Unbounded, on purpose:
+    //  - the persister sends here from the same coroutine that services `replicaMsgs`;
+    //  - a bounded channel could block that send, stalling the apply loop;
+    //  - but apply is what drains the queue and makes progress → single-coroutine deadlock.
+    // Backpressure comes from the block pause + the resolve-side row gauge, not channel capacity.
+    private val awaitingAppend = Channel<AppendItem>(Channel.UNLIMITED)
+
+    // Records the consume pump has tailed back off the replica log, awaiting application.
+    private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
+
+    // Serialize each ResolvedTx (the costly Arrow-IPC step, kept off the resolver) and append it, in
+    // order, through the driver. Increment A keeps the atomic producer behind that seam so Kafka's
+    // transaction still fences a zombie at commit — belt-and-braces behind the term fence. An append
+    // failure propagates and tears the term down. Never closes a borrowed tx — the resolver owns it.
+    private suspend fun appendPump() {
+        for (item in awaitingAppend) {
+            val msg = when (item) {
+                is TxItem -> item.resolvedTx.toReplicaMessage(leaderTerm)
+                is ControlItem -> item.message
+            }
+            driver.appendToReplica(sequenceOf(msg))
         }
     }
 
-    private suspend fun settle(appended: List<Pair<ResolvedTx, Log.MessageMetadata>>) {
-        for ((resolvedTx, metadata) in appended) {
-            driver.applyTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
-            latestReplicaMsgId = metadata.msgId
-            watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
+    // Tail our own replica log from the replay target and post everything back to the apply loop. The
+    // same plain tail the follower uses — a separate consumer from the source-log group subscription that
+    // drives leader election, so this doesn't interfere with it.
+    private suspend fun consumePump() {
+        driver.tailReplica(replayFrom) { records -> records.forEach { replicaMsgs.send(it) } }
+    }
+
+    // ---- apply loop (consume-back) ----
+
+    // Apply one record read back off our own replica log. By term:
+    //  - term > ours: a newer leader has superseded us → resign (fail the term).
+    //  - term < ours: shouldn't appear past our replay target; discard defensively, still advancing.
+    //  - term == ours (the common case; terms are unique per leader, so an equal-term record IS our own):
+    //      - ResolvedTx  → import from the resolver's head (we still hold its relations — no re-materialisation).
+    //      - BlockBoundary → trigger the block upload (liveIndex now holds exactly this block's txs).
+    //      - everything else mirrors the follower.
+    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
+        val msg = record.message
+        val term = msg.termId
+
+        if (term > leaderTerm)
+            throw LeaderSupersededException("[$dbName] superseded: read term $term > our term $leaderTerm at ${record.msgId}")
+
+        // Below our term should not appear past our replay target; discard defensively, still advancing.
+        if (term != 0L && term < leaderTerm) {
+            LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $term < $leaderTerm)" }
+            latestReplicaMsgId = record.msgId
+            return
         }
 
-        // Watchers-derived rather than the last tx's: the promote loop above has just notified every
-        // tx in send order, so latestSourceMsgId equals the last tx's, and the token null-coalesces
-        // to the batch's last non-null — for a mixed source-log/ext-source batch, the last tx could
-        // be a source-log tx whose null token would drop the CDC resume point from the boundary.
-        // Matches the FlushBlock path, which already cuts blocks from the watchers' view.
-        if (liveIndex.isFull()) finishBlock(watchers.latestSourceMsgId, watchers.externalSourceToken)
+        when (msg) {
+            is ReplicaMessage.ResolvedTx -> {
+                val head = txResolver.removeHead()
+                // check is inside the try: head is already off the queue, so teardown's failPending can't
+                // reach it — the catch must fail its handle and the finally must free it, on ANY throw here
+                // (a queue-head mismatch included), or we leak Arrow buffers and hang an awaiting executeTx.
+                try {
+                    check(head.txKey.txId == msg.txId) {
+                        "[$dbName] queue head ${head.txKey.txId} != consumed tx ${msg.txId}"
+                    }
+                    driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
+                    // dbOp (attach/detach) was already applied on the resolve side (it had to run to
+                    // produce the tx result); the follower/transition apply it on consume-back, we don't.
+                    watchers.notifyTx(head.txResult, head.srcMsgId, head.externalSourceToken)
+                    head.pending?.complete(head.txResult)
+                } catch (e: Throwable) {
+                    head.pending?.completeExceptionally(e)
+                    throw e
+                } finally {
+                    head.close()
+                }
+            }
 
-        // Complete after the whole settle (promote loop + any block cut): signalling per-tx mid-loop
-        // lets a caller race ahead of finishBlock, and a hard cancel then can orphan a BlockBoundary
-        // with no BlockUploaded (the #5783 sim regression caught at 15/300).
-        appended.forEach { (resolvedTx, _) -> resolvedTx.pending?.complete(resolvedTx.txResult) }
+            // Catalog already updated on the resolve side; here we only advance the source watermark.
+            is ReplicaMessage.TriesAdded -> watchers.notifyMsg(msg.sourceMsgId)
+
+            is BlockBoundary -> {
+                pendingBlock = PendingBlock(record.msgId, msg)
+                // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
+                // append BlockUploaded and roll the index — all inside uploadBlock.
+                driver.uploadBlock(record.msgId, leaderTerm, msg)
+                pendingBlock = null
+
+                // advance the source watermark to the block's covered position (as the follower does)
+                watchers.notifyMsg(msg.latestProcessedMsgId)
+
+                blockGc.signal()
+                trieGc.signal()
+
+                blockInProgress = false
+                resumeCh.trySend(Unit) // resume a source batch stashed by the pause, if any
+            }
+
+            // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
+            // but advance the watermark.
+            is ReplicaMessage.BlockUploaded -> watchers.notifyMsg(msg.latestProcessedMsgId)
+
+            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
+
+            // Catalog already updated on the resolve side (see handleTriesDeleted); nothing to do here.
+            is ReplicaMessage.TriesDeleted -> {}
+        }
+
+        latestReplicaMsgId = record.msgId
     }
 
-    // The batch is released back to the resolver only once settle returns; on a settle fault — including a
-    // teardown cancellation thrown out of its await while the append coroutine may still be serializing the
-    // slices — it stays sealed, and close() frees it after cancelAndJoin has joined the append.
-    private suspend fun settleAppend() {
-        val append = inFlight ?: return
-        settle(append.await())
-        inFlight = null
-        txResolver.applied()
-        kickAppend()
+    // ---- resolution ----
+
+    // Cut a block: inject the boundary (in resolution order, so it lands after this block's txs and before
+    // the next block's) and pause resolution until it is read back and uploaded. Reset the row gauge.
+    private suspend fun cutBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
+        val boundary = BlockBoundary(
+            (blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken, termId = leaderTerm
+        )
+        awaitingAppend.send(ControlItem(boundary))
+        blockInProgress = true
+        rowsSinceBlock = 0
     }
 
-    // Opportunistically settle a *completed* append between records — promoting it and kicking
-    // the accumulated tail mid-batch — without ever suspending on one that's still going.
-    private suspend fun trySettleAppend() {
-        if (inFlight?.isCompleted == true) settleAppend()
+    // Hand a freshly-resolved tx to the append pump, advancing the resolve-side watermark and row gauge,
+    // and cut a block if this tx filled one.
+    private suspend fun appendTx(resolvedTx: ResolvedTx, srcMsgId: MessageId) {
+        lastResolvedSrcMsgId = srcMsgId
+        rowsSinceBlock += resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
+        awaitingAppend.send(TxItem(resolvedTx))
+        if (rowsSinceBlock >= rowsPerBlock) cutBlock(lastResolvedSrcMsgId, lastResolvedExtToken)
     }
 
-    // Fully drain: kick anything staged and settle appends until nothing is staged or in flight. The
-    // boundary callers — control messages, attach/detach, ext-source txs, GC's direct appends, the
-    // poll-boundary drain — rely on this post-condition: the replica log carries everything that
-    // preceded them in resolution order, and the fenced producer is idle for their own append.
-    private suspend fun drainStaging() {
-        while (true) {
-            kickAppend()
-            if (inFlight == null) return
-            settleAppend()
+    private suspend fun handleSourceLogRecord(record: Log.Record<SourceMessage>) {
+        val msgId = record.msgId
+        val msg = record.message
+        LOG.trace { "[$dbName] leader: message $msgId (${msg::class.simpleName})" }
+
+        when (msg) {
+            is SourceMessage.Tx -> appendTx(txResolver.indexTx(msgId, record.logTimestamp, msg), msgId)
+
+            is SourceMessage.LegacyTx -> appendTx(txResolver.indexTx(msgId, record.logTimestamp, msg), msgId)
+
+            is SourceMessage.FlushBlock -> {
+                val expectedBlockIdx = msg.expectedBlockIdx
+                if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
+                    cutBlock(msgId, lastResolvedExtToken)
+                } else {
+                    // see #5680
+                    awaitingAppend.send(ControlItem(ReplicaMessage.NoOp(srcMsgId = msgId, termId = leaderTerm)))
+                }
+                lastResolvedSrcMsgId = msgId
+            }
+
+            is SourceMessage.AttachDatabase -> {
+                val error = if (dbCatalog != null) {
+                    try {
+                        dbCatalog.attach(msg.dbName, msg.config)
+                        null
+                    } catch (e: Anomaly.Caller) {
+                        LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
+                        e
+                    }
+                } else null
+
+                val resolvedTx =
+                    if (error == null)
+                        txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Attach(msg.dbName, msg.config))
+                    else
+                        txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+
+                appendTx(resolvedTx, msgId)
+            }
+
+            is SourceMessage.DetachDatabase -> {
+                val error = if (dbCatalog != null) {
+                    try {
+                        dbCatalog.detach(msg.dbName)
+                        null
+                    } catch (e: Anomaly.Caller) {
+                        LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
+                        e
+                    }
+                } else null
+
+                val resolvedTx =
+                    if (error == null)
+                        txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Detach(msg.dbName))
+                    else
+                        txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+
+                appendTx(resolvedTx, msgId)
+            }
+
+            is SourceMessage.TriesAdded -> {
+                // Mutate the local trie catalog here (as the leader did pre-rewrite), then replicate for
+                // followers. Eager on the resolve side, not deferred to our own consume-back, because:
+                //  - callers see the effect promptly (the compactor/GC read the catalog synchronously);
+                //  - it stays a projection of the fenced log anyway — the block-cut pause serialises trie
+                //    mutations against boundaries, so no block snapshot straddles this add.
+                // We skip re-applying it on our own consume-back (see applyRecord); the follower applies it.
+                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
+                    msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
+                        trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
+                    }
+                awaitingAppend.send(
+                    ControlItem(TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId, termId = leaderTerm))
+                )
+                lastResolvedSrcMsgId = msgId
+            }
+
+            // TODO this one's going after 2.2
+            is SourceMessage.BlockUploaded -> {
+                watchers.notifyMsg(msgId)
+                // Keep the resolve-side gauge in step with the watermark we just advanced, or a following
+                // block cut would carry a lower latestProcessedMsgId and regress `notifyMsg` on apply.
+                lastResolvedSrcMsgId = msgId
+            }
         }
     }
 
+    private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
+        // The stamped watermark must be the RESOLVE-side one (`lastResolvedSrcMsgId`), not `watchers.*`:
+        // watchers advance on consume-back (apply), which lags resolution, so a source tx
+        // resolved-and-appended ahead of this ext tx would apply first and push the watermark past a stale
+        // stamp — `notifyTx`'s monotonicity check would then fire (#5817).
+        val resolvedTx = txResolver.indexTx(task.msg, srcMsgId = lastResolvedSrcMsgId)
 
-    // What the persister wakes up for: a source batch pulled from the driver, a task from one of the
-    // channels, or the in-flight append completing (Settle). Settle is select-driven — with ext-source
-    // handlers no longer draining, this arm is what promotes their batches even when no task is queued.
-    private sealed interface PersisterWork
-    private data object Settle : PersisterWork
-    private class SourceWork(val batch: SourceBatch) : PersisterWork
+        task.msg.externalSourceToken?.let { lastResolvedExtToken = it }
+        appendTx(resolvedTx, lastResolvedSrcMsgId)
+    }
 
-    private sealed interface PersisterTask : PersisterWork {
+    private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
+        // Remove from the local catalog here, then replicate for followers — eager on the resolve side so
+        // the GC's `commitTriesDeleted` await returns with the catalog already updated (its contract; the
+        // GC has already deleted the files). Safe as a fenced-log projection for the same reason as
+        // TriesAdded: the block-cut pause serialises this against any boundary, and gcCh is excluded while a
+        // block is in progress. Skipped on our own consume-back (see applyRecord); the follower applies it.
+        trieCatalog.deleteTries(task.tableName, task.trieKeys)
+        awaitingAppend.send(
+            ControlItem(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
+        )
+    }
+
+    // ---- persister channels & loop ----
+
+    private sealed interface PersisterTask {
         val onComplete: CompletableDeferred<Unit>
     }
 
@@ -181,198 +385,61 @@ internal class LeaderLogProcessor(
         }
     }
 
-    // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
-    // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
+    // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works
+    // the current one. `executeTx` still blocks on the result regardless of capacity.
     private val extSourceCh =
         Channel<ExtSourceTask>(capacity = 1, onUndeliveredElement = { task ->
             task.onComplete.cancel()
-            // Also cancel the per-tx durability handle: the task was never delivered to the persister,
-            // so settle() will never complete it — this is the only path that can.
             if (task is ExtSourceTask.IndexTx) task.msg.pending.cancel()
         })
 
-    private val gcCh =
-        Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
+    private val gcCh = Channel<GcTask>(onUndeliveredElement = { it.onComplete.cancel() })
 
-    private suspend fun handleSourceLogBatch(records: List<Log.Record<SourceMessage>>) {
-        for (record in records) {
-            LOG.trace { "[$dbName] leader: message ${record.msgId} (${record.message::class.simpleName})" }
-            handleSourceLogRecord(record)
+    // A source batch paused mid-way by a block cut: its remaining records and completion handle, resumed
+    // once the block uploads. At most one — the poll thread awaits each batch's onComplete before sending
+    // the next, so only one source batch is ever in flight. A nullable field makes that structural.
+    private class PartialBatch(
+        val records: List<Log.Record<SourceMessage>>, val startIdx: Int,
+        val onComplete: CompletableDeferred<Unit>,
+    )
 
-            trySettleAppend()
-        }
+    private var partialBatch: PartialBatch? = null
 
-        // Poll-boundary drain: flush any accumulated tail so the batch task returns with the resolver
-        // quiescent — nothing in flight when the poll loop re-enters poll() and Kafka may run a
-        // rebalance/transition under runBlocking (#5741).
-        drainStaging()
-    }
+    // Poked when a stashed [partialBatch] becomes resumable (the block finished uploading). Conflated: at
+    // most one resume is pending, and the select clause is gated on `partialBatch != null && !blockInProgress`.
+    private val resumeCh = Channel<Unit>(Channel.CONFLATED)
 
-    private suspend fun handleSourceLogRecord(record: Log.Record<SourceMessage>) {
-        val msgId = record.msgId
-        val msg = record.message
-
-        // Data txs accumulate into the staging batch and are committed together at the next drain. Every
-        // other message is a boundary that must first drain the accumulated txs: a control message's
-        // replica-log append has to land after the appends of the txs that preceded it in source order,
-        // and a block cut needs those txs durable before the block is written.
-        if (msg !is SourceMessage.Tx && msg !is SourceMessage.LegacyTx) drainStaging()
-
-        when (msg) {
-            is SourceMessage.Tx -> {
-                txResolver.indexTx(msgId, record.logTimestamp, msg)
-                kickAppend()
-            }
-
-            is SourceMessage.LegacyTx -> {
-                txResolver.indexTx(msgId, record.logTimestamp, msg)
-                kickAppend()
-            }
-
-            is SourceMessage.FlushBlock -> {
-                val expectedBlockIdx = msg.expectedBlockIdx
-                if (expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)) {
-                    finishBlock(msgId, watchers.externalSourceToken)
-                } else {
-                    // see #5680
-                    appendToReplica(ReplicaMessage.NoOp(srcMsgId = msgId, termId = leaderTerm))
-                }
-                watchers.notifyMsg(msgId)
-            }
-
-            is SourceMessage.AttachDatabase -> {
-                val error = if (dbCatalog != null) {
-                    try {
-                        dbCatalog.attach(msg.dbName, msg.config)
-                        null
-                    } catch (e: Anomaly.Caller) {
-                        LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
-                        e
-                    }
-                } else null
-
-                if (error == null)
-                    txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Attach(msg.dbName, msg.config))
-                else
-                    txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
-
-                drainStaging()
-            }
-
-            is SourceMessage.DetachDatabase -> {
-                val error = if (dbCatalog != null) {
-                    try {
-                        dbCatalog.detach(msg.dbName)
-                        null
-                    } catch (e: Anomaly.Caller) {
-                        LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
-                        e
-                    }
-                } else null
-
-                if (error == null)
-                    txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Detach(msg.dbName))
-                else
-                    txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
-
-                drainStaging()
-            }
-
-            is SourceMessage.TriesAdded -> {
-                if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch) {
-                    msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
-                        trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
-                    }
-                }
-
-                appendToReplica(TriesAdded(msg.storageVersion, msg.storageEpoch, msg.tries, sourceMsgId = msgId, termId = leaderTerm))
-
-                watchers.notifyMsg(msgId)
-            }
-
-            // TODO this one's going after 2.2
-            is SourceMessage.BlockUploaded -> {
-                watchers.notifyMsg(msgId)
+    // Process a source batch from `startIdx`, stopping if a block cut pauses us — stashing the remainder
+    // on [partialBatch] so the loop resumes it after the upload. Completes onComplete only when fully drained.
+    private suspend fun runSourceBatch(
+        records: List<Log.Record<SourceMessage>>, startIdx: Int, onComplete: CompletableDeferred<Unit>,
+    ) {
+        var i = startIdx
+        while (i < records.size) {
+            handleSourceLogRecord(records[i])
+            i++
+            if (blockInProgress) {
+                partialBatch = PartialBatch(records, i, onComplete)
+                return
             }
         }
+        onComplete.complete(Unit)
     }
 
-    private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
-        // Ext-source txs don't advance `latestSourceMsgId` (driven by the source log) — they track progress
-        // via `externalSourceToken` — but the resolver stamps the current watermark onto the replicated
-        // record. Read here rather than inside the resolver: this is the leader's view of the source log.
-        txResolver.indexTx(task.msg, srcMsgId = watchers.latestSourceMsgId)
+    private sealed interface Work
+    private class Apply(val record: Log.Record<ReplicaMessage>) : Work
+    private class SourceWork(val batch: SourceBatch) : Work
+    private class RunTask(val task: PersisterTask) : Work
+    private data object Resume : Work
 
-        kickAppend()
-        trySettleAppend()
-
-        // Safety bound: never accumulate more than a block's worth of rows — a bursty source
-        // must not grow staging without limit behind one slow commit (nor leave durability to
-        // the ~5-min FlushBlock). Rows, not bytes: it's the dimension the block-sizing machinery
-        // (isFull/rowsPerBlock) already manages, and the drain it triggers is ordinary
-        // backpressure, not a failure.
-        if (txResolver.unsealedRowCount > maxStagedRows) drainStaging()
-    }
-
-    private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
-        // Drain first: this appends TriesDeleted directly, and replica appends must stay in
-        // resolver-processing order — appending ahead of earlier-staged txs would invert the log.
-        drainStaging()
-        appendToReplica(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
-        trieCatalog.deleteTries(task.tableName, task.trieKeys)
-    }
-
-    // Run one unit of persister work, routing any failure onto its completion handle so no caller is
-    // left awaiting a term that has gone. Interrupts and cancellation are shutdown signals rather than
-    // ingestion faults, so only a genuine fault reaches the watchers. Every failure still propagates:
-    // the persister exits, and its `finally` sweeps whatever is left.
-    private suspend inline fun guarded(onComplete: CompletableDeferred<Unit>, block: () -> Unit) {
-        try {
-            block()
-            onComplete.complete(Unit)
-        } catch (e: CancellationException) {
-            onComplete.cancel(e)
-            throw e
-        } catch (e: InterruptedException) {
-            onComplete.completeExceptionally(e)
-            throw e
-        } catch (e: Interrupted) {
-            onComplete.completeExceptionally(e)
-            throw e
-        } catch (e: Throwable) {
-            watchers.notifyError(e)
-            onComplete.completeExceptionally(e)
-            throw e
-        }
-    }
-
-    // Hand the task to the persister and return its completion handle. The caller decides whether to
-    // await it: `executeTx` and GC await (they need the work done before returning); `submitTx`
-    // doesn't (fire-and-forget). Suspends only on the channel send (backpressure).
-    private suspend fun enqueue(task: PersisterTask): Deferred<Unit> {
-        when (task) {
-            is ExtSourceTask -> extSourceCh.send(task)
-            is GcTask -> gcCh.send(task)
-        }
-        return task.onComplete
-    }
-
-    // The term handle: a supervisor child of the Database scope, owning the persister body (launched
-    // last, in the `init` below) and the GCs. A term-internal failure surfaces via `notifyError`
-    // rather than cancelling the source-log subscription — its sibling under the Database scope's own
-    // SupervisorJob — and `cancelAndJoin` reaps the whole term. See dev/doc/coroutines.adoc.
+    // The term handle: a supervisor child of the Database scope, owning the pumps + persister loop
+    // (launched in `init`) and the GCs. A term-internal failure surfaces via `notifyError` rather than
+    // cancelling the source-log subscription; `cancelAndJoin` reaps the whole term. See dev/doc/coroutines.adoc.
     private val termJob = SupervisorJob(scope.coroutineContext.job)
 
-    // The GCs run under a SupervisorJob child of `termJob`, so one GC's failure cancels neither its
-    // sibling nor the persister; cancelling `termJob` reaps them all.
+    // The GCs run under a SupervisorJob child of `termJob`, so one GC's failure cancels neither its sibling
+    // nor the persister; cancelling `termJob` reaps them all.
     private val gcScope = scope + SupervisorJob(termJob)
-
-    // The in-flight replica-log append runs under its own SupervisorJob child of `termJob` for the same
-    // isolation: a failed append must NOT cancel the persister out from under settleAppend — the failure
-    // is held on the batch's Deferred and rethrown at settle, inside the task-handling try, so it
-    // surfaces through notifyError — while `cancelAndJoin` on the term still reaps an append mid-flight
-    // (the fenced producer transaction aborts, so nothing partial reaches the replica log).
-    private val appendScope = scope + SupervisorJob(termJob)
 
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
@@ -387,22 +454,9 @@ internal class LeaderLogProcessor(
     }
 
     internal val trieGc = nodeBase.config.garbageCollector.let { cfg ->
-        // The replica-log append and the local catalog mutation are one atom — both run inside
-        // a single Persister task. If they were split, this interleaving would corrupt
-        // persistent state:
-        //
-        //   1. Trie GC submits `TriesDeleted(G)` at replica position N, then (separately)
-        //      submits the catalog mutation.
-        //   2. Between the two, another Persister task — say an ext-source `commit` whose
-        //      `liveIndex.isFull()` — runs `finishBlock`, which uploads table-block files
-        //      snapshotting the current catalog. The catalog still has G in it (Trie GC's
-        //      mutation hasn't happened yet), so the table-block file at replica position
-        //      M > N records "catalog includes G" — even though the replica log already has
-        //      `TriesDeleted` for G at N.
-        //   3. Trie GC's catalog mutation finally runs and removes G.
-        //
-        // The table-block file uploaded at (2) is now a persistent snapshot of state that
-        // disagrees with the replica log it claims to be a snapshot of.
+        // Routed through the persister rather than applied inline: the catalog removal has to be serialised
+        // against block cuts, and this await must not return until the catalog reflects it — which is the
+        // GC's contract, since it has already deleted the files. See handleTriesDeleted.
         val commitTriesDeleted: suspend (TableRef, Set<TrieKey>) -> Unit = { tableName, trieKeys ->
             enqueue(GcTask.TriesDeleted(tableName, trieKeys)).await()
         }
@@ -417,77 +471,41 @@ internal class LeaderLogProcessor(
         )
     }
 
-    // Launched last so every field the body reaches — e.g. blockGc/trieGc via finishBlock — is
+    // Launched last so every field the body reaches — e.g. blockGc/trieGc via the boundary path — is
     // initialised before the first record. Runs under `termJob`, so `cancelAndJoin` reaps it.
     init {
         CoroutineScope(scope.coroutineContext + termJob).launch {
+            // Core: the append pump, the consume pump and the persister loop, structured together so any
+            // one failing cancels the others and surfaces the cause.
             launch {
-                // Close the channels with the failure cause so a subsequent `enqueue` send throws it rather
-                // than a bare ClosedSendChannelException. An awaiting caller (`executeTx`, GC, `processRecords`)
-                // sees the cause through its `await`; this close-with-cause is the safety net for fire-and-forget
-                // `submitTx`, and for any caller's next send once the persister loop has exited.
                 var cause: Throwable? = null
                 try {
-                    while (true) {
-                        // Every stage is followed by a kick and every settle re-kicks the accumulated tail,
-                        // so staged txs always have an in-flight append ahead of them; a violation here
-                        // means a wedge, not a race.
-                        check(!txResolver.hasUnsealedTxs || inFlight != null) {
-                            "staged txs with no in-flight append — nothing will kick them"
-                        }
-
-                        val work = selectUnbiased<PersisterWork> {
-                            // onJoin, not onAwait: join fires on failure too, and settleAppend's own await
-                            // rethrows the fault inside the try below, routing it through notifyError.
-                            inFlight?.let { append -> append.onJoin { Settle } }
-                            driver.sourceBatches.onBatch { SourceWork(it) }
-                            extSourceCh.onReceive { it }
-                            gcCh.onReceive { it }
-                        }
-
-                        when (work) {
-                            // Mirrors the guarded handlers: interrupts are shutdown signals, not
-                            // ingestion faults — they mustn't poison the watchers on their way out.
-                            Settle ->
-                                try {
-                                    settleAppend()
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: InterruptedException) {
-                                    throw e
-                                } catch (e: Interrupted) {
-                                    throw e
-                                } catch (e: Throwable) {
-                                    watchers.notifyError(e)
-                                    throw e
-                                }
-
-                            is SourceWork ->
-                                guarded(work.batch.onComplete) { handleSourceLogBatch(work.batch.records) }
-
-                            is PersisterTask ->
-                                guarded(work.onComplete) {
-                                    when (val task = work) {
-                                        is ExtSourceTask.IndexTx -> handleIndexTx(task)
-                                        is GcTask.TriesDeleted -> handleTriesDeleted(task)
-                                    }
-                                }
-                        }
+                    coroutineScope {
+                        launch(CoroutineName("$dbName-append-pump")) { appendPump() }
+                        launch(CoroutineName("$dbName-consume-pump")) { consumePump() }
+                        persisterLoop()
                     }
                 } catch (_: CancellationException) {
-                    // term cancellation: close the channels without an error cause
+                    // term cancellation
+                } catch (e: LeaderSupersededException) {
+                    // superseded by a newer leader — expected, not a query-facing fault; the transport
+                    // re-follows on the next rebalance. Don't poison the watchers.
+                    LOG.info("[$dbName] ${e.message}")
+                    cause = e
                 } catch (t: Throwable) {
+                    // A genuine term fault (e.g. an append-pump commit fault) surfaces to queries as a
+                    // failed term. Idempotent — the apply arm may already have notified for its own faults.
                     cause = t
+                    watchers.notifyError(t)
                 } finally {
-                    // Fail any ext-source tx that was staged or in-flight but will never settle:
-                    // the persister is exiting and settle() will never run for them.
                     val pendingCause = cause ?: CancellationException("leader term closed")
-                    txResolver.failPending(pendingCause)
 
-                    // A buffered-but-never-received task is invisible to both failPending (it was
-                    // never staged) and onUndeliveredElement (close() doesn't visit buffered
-                    // elements — only cancel() does), so a caller outside the term scope would
-                    // await it forever.
+                    // Fail everything that was staged / paused / buffered but will never be applied.
+                    txResolver.failPending(pendingCause)
+                    partialBatch?.onComplete?.let { if (!it.isCompleted) it.completeExceptionally(pendingCause) }
+
+                    // A buffered-but-never-received ext task is invisible to both failPending and
+                    // onUndeliveredElement (close visits neither), so complete it here.
                     while (true) {
                         val task = extSourceCh.tryReceive().getOrNull() ?: break
                         task.onComplete.completeExceptionally(pendingCause)
@@ -516,6 +534,102 @@ internal class LeaderLogProcessor(
         }
     }
 
+    private suspend fun persisterLoop() {
+        while (true) {
+            val work = selectUnbiased<Work> {
+                replicaMsgs.onReceive { Apply(it) }
+                if (!blockInProgress) {
+                    if (partialBatch != null) resumeCh.onReceive { Resume }
+                    driver.sourceBatches.onBatch { SourceWork(it) }
+                    extSourceCh.onReceive { RunTask(it) }
+                    gcCh.onReceive { RunTask(it) }
+                }
+            }
+
+            when (work) {
+                // The apply loop is where a supersession fails the term; let it propagate (interrupts too).
+                is Apply ->
+                    try {
+                        applyRecord(work.record)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: LeaderSupersededException) {
+                        throw e
+                    } catch (e: InterruptedException) {
+                        throw e
+                    } catch (e: Interrupted) {
+                        throw e
+                    } catch (e: Throwable) {
+                        watchers.notifyError(e)
+                        throw e
+                    }
+
+                is Resume -> {
+                    val pb = partialBatch ?: continue
+                    partialBatch = null
+                    runTaskGuarded(pb.onComplete) { runSourceBatch(pb.records, pb.startIdx, pb.onComplete) }
+                }
+
+                // The batch completes its own onComplete (deferred, if a block cut pauses it).
+                is SourceWork ->
+                    runTaskGuarded(work.batch.onComplete) {
+                        runSourceBatch(work.batch.records, 0, work.batch.onComplete)
+                    }
+
+                is RunTask -> {
+                    val task = work.task
+                    runTaskGuarded(task.onComplete, extResult = (task as? ExtSourceTask.IndexTx)?.msg?.pending) {
+                        when (task) {
+                            is ExtSourceTask.IndexTx -> {
+                                handleIndexTx(task); task.onComplete.complete(Unit)
+                            }
+                            is GcTask.TriesDeleted -> {
+                                handleTriesDeleted(task); task.onComplete.complete(Unit)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Run a resolution task, routing failures onto its completion handle (and any ext-source result) so no
+    // caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the watchers.
+    // A successful source batch completes its onComplete itself (possibly deferred, if paused).
+    private suspend inline fun runTaskGuarded(
+        onComplete: CompletableDeferred<Unit>,
+        extResult: CompletableDeferred<TransactionResult>? = null,
+        block: () -> Unit,
+    ) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            if (!onComplete.isCompleted) onComplete.cancel(e)
+            throw e
+        } catch (e: InterruptedException) {
+            if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+            throw e
+        } catch (e: Interrupted) {
+            if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e)
+            if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+            extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
+            throw e
+        }
+    }
+
+    // Hand the task to the persister and return its completion handle. The caller decides whether to await
+    // it: `executeTx`, GC and `processRecords` await; `submitTx` doesn't. Suspends only on the channel send.
+    private suspend fun enqueue(task: PersisterTask): Deferred<Unit> {
+        when (task) {
+            is ExtSourceTask -> extSourceCh.send(task)
+            is GcTask -> gcCh.send(task)
+        }
+        return task.onComplete
+    }
+
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
@@ -527,10 +641,10 @@ internal class LeaderLogProcessor(
         writer: suspend (OpenTx) -> TxResult,
     ): Deferred<TransactionResult> {
         val task = ExtSourceTask.IndexTx(ExtSourceMessage(externalSourceToken, systemTime, writer))
-        // enqueue's send throws if the channel is closed (dead indexer) — that's the early-exit signal.
-        // The returned handle is the message's `pending`, completed at settle once the tx is durably
-        // replicated; a fire-and-forget caller may discard it, and an unrecoverable failure also closes the
-        // channel with its cause, so the next `enqueue` throws it.
+        // enqueue's send throws if the channel is closed (dead indexer) — the early-exit signal. The
+        // returned handle is the message's `pending`, completed on consume-back once the tx is durably
+        // replicated AND confirmed unfenced (ReadIndex); an unrecoverable failure also closes the channel
+        // with its cause, so the next `enqueue` throws it.
         enqueue(task)
         return task.msg.pending
     }
@@ -540,39 +654,15 @@ internal class LeaderLogProcessor(
             blockFlusher.flushedTxId = driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
     }
 
-    private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
-        driver.appendToReplica(sequenceOf(message)).single()
-            .also { latestReplicaMsgId = it.msgId }
-
-    private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
-        val boundaryMsg =
-            BlockBoundary((blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, externalSourceToken, termId = leaderTerm)
-
-        val boundaryMsgId = appendToReplica(boundaryMsg).msgId
-        LOG.debug("[$dbName] block boundary b${boundaryMsg.blockIndex.asLexHex}: source=$latestProcessedMsgId, replica=$boundaryMsgId")
-
-        pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
-
-        latestReplicaMsgId = driver.uploadBlock(boundaryMsgId, leaderTerm, boundaryMsg)
-        pendingBlock = null
-
-        // Safe to call from inside a Persister task: signal() just enqueues a cycle on the GC's
-        // own coroutine; its `commitTriesDeleted` callback submits a fresh task that won't run
-        // until this one returns.
-        blockGc.signal()
-        trieGc.signal()
-    }
-
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
-        // Await the batch through the persister rather than firing and returning. The persister still
-        // resolves + imports on its own thread (the heavy work is off the poll thread), but blocking
-        // here until it's done keeps the shared consumer's poll loop and the persister in lock-step:
-        // whenever the poll thread is back in `poll()` — where Kafka runs rebalance callbacks, which
-        // run a leader/follower transition under `runBlocking` — the persister is quiescent, so a
-        // concurrent DETACH/shutdown that must cancel-join the term doesn't wedge against in-flight
-        // import work on a starved dispatcher (#5741).
+        // Await the batch through the persister rather than firing and returning:
+        //  - the persister resolves + hands off to the append pump on its own thread (heavy work off the
+        //    poll thread);
+        //  - blocking here until the batch is resolved keeps the poll loop and the persister roughly in
+        //    step (channel cap 1 → ~2 batches of lookahead);
+        //  - so a rebalance/transition under runBlocking doesn't pile up behind unbounded resolution (#5741).
         if (records.isNotEmpty()) driver.sourceBatches.submit(records).await()
     }
 
@@ -581,8 +671,8 @@ internal class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         driver.close()
-        // Frees every resolved-but-not-applied tx, including a batch whose settle never completed
-        // (fault / teardown) — safe now that cancelAndJoin has joined the persister and the append.
+        // Frees every resolved-but-not-applied tx — safe now that cancelAndJoin has joined the persister
+        // and the pumps.
         txResolver.close()
     }
 }

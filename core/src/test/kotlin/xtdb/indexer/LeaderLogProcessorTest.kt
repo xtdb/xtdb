@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.NodeBase
+import xtdb.api.IndexerConfig
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.Log
@@ -42,7 +43,6 @@ import xtdb.util.closeAll
 import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.TxIndexer
 
@@ -68,12 +68,23 @@ class LeaderLogProcessorTest {
         nodeBase.close()
     }
 
+    /**
+     * A relaxed [LiveIndex] mock carrying the production block threshold. Worth stubbing explicitly:
+     * a bare relaxed mock answers 0 for `rowsPerBlock`, which the leader's resolve-side gauge reads as
+     * "cut a block on every tx". These tests drive their cuts explicitly, via FlushBlock or the CAS.
+     */
+    private fun liveIndexMock(configure: LiveIndex.() -> Unit = {}) =
+        mockk<LiveIndex>(relaxed = true) {
+            every { rowsPerBlock } returns IndexerConfig().rowsPerBlock
+            configure()
+        }
+
     private fun TestScope.leaderProc(
         uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
-        liveIndex: LiveIndex = mockk(relaxed = true),
+        liveIndex: LiveIndex = liveIndexMock(),
         blockCatalog: BlockCatalog = BlockCatalog(null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
@@ -130,7 +141,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+        val liveIndex = liveIndexMock {
             every { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
@@ -175,7 +186,7 @@ class LeaderLogProcessorTest {
 
     @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
-        val liveIndex = mockk<LiveIndex>(relaxed = true)
+        val liveIndex = liveIndexMock()
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
 
@@ -201,7 +212,7 @@ class LeaderLogProcessorTest {
         )
         val tableRef = fromSchemaAndTable("public/foo")
 
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+        val liveIndex = liveIndexMock {
             every { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
             every { latestCompletedTx } returns null
         }
@@ -260,21 +271,18 @@ class LeaderLogProcessorTest {
     }
 
     @Test
-    fun `a slow append double-buffers the rest of the poll batch`() = runTest {
+    fun `a slow append does not stall resolution`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
-        val appendBatchSizes = mutableListOf<Int>()
 
-        // Records each append's batch size, and stalls the first one on the gate (a slow commit-ack)
-        // without blocking any thread — so the rest of the poll batch resolves behind it.
+        // Stall every append on the gate (a slow commit-ack) without blocking any thread.
         val wrapDriver = { inner: LeaderDriver ->
             object : LeaderDriver by inner {
                 override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
                     val batch = msgs.toList()
-                    appendBatchSizes += batch.size
                     appendStarted.complete(Unit)
                     gate.await()
                     return inner.appendToReplica(batch.asSequence())
@@ -294,16 +302,15 @@ class LeaderLogProcessorTest {
             Log.Record(0, it, now.plusMillis(it), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
         }
 
-        val batchJob = launch { lp.processRecords(records) }
-
+        // Resolution is decoupled from the append pump: the whole batch resolves and processRecords returns
+        // even though the append is still stalled on the gate — reaching the assertions below is the proof.
+        lp.processRecords(records)
         appendStarted.await()
-        gate.complete(Unit)
-        batchJob.join()
+        assertFalse(gate.isCompleted, "sanity: nothing opened the append gate")
 
-        assertEquals(
-            listOf(1, 4), appendBatchSizes,
-            "record 0 kicked its append alone; 1-4 resolved behind it and rode the next append"
-        )
+        // Once the append drains, every tx reaches the replica log — in send order.
+        gate.complete(Unit)
+        watchers.awaitTx(n - 1)
 
         val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
@@ -444,7 +451,7 @@ class LeaderLogProcessorTest {
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             // Explicit null head: the relaxed default returns a mock TransactionKey whose txId is 0,
             // which would seed the staging index at 0 and shift the ext-source txIds to 1..5.
-            liveIndex = mockk(relaxed = true) { every { latestCompletedTx } returns null },
+            liveIndex = liveIndexMock { every { latestCompletedTx } returns null },
             wrapDriver = wrapDriver,
         )
 
@@ -482,13 +489,9 @@ class LeaderLogProcessorTest {
     fun `block boundaries carry the latest external-source token, not the last tx's`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
 
-        // Test-controlled block fullness: false while the ext-source tx settles, flipped to true so
-        // the cut lands at the settle of a batch whose LAST tx is a token-less source-log tx.
-        val cutNow = AtomicBoolean(false)
-        val liveIndex = mockk<LiveIndex>(relaxed = true) {
+        val liveIndex = liveIndexMock {
             every { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
-            every { isFull() } answers { cutNow.get() }
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
             every { getPartitions(any()) } returns emptyList()
@@ -521,19 +524,22 @@ class LeaderLogProcessorTest {
         val token = byteArrayOf(1, 2, 3)
 
         // The ext-source tx carries the CDC resume token; awaiting its durability (txId 0) pins the
-        // ordering without any producer gating — no block is cut while cutNow is false.
+        // ordering — it resolves and applies before the token-less source-log tx that follows.
         lp.submitTx(token) { TxIndexer.TxResult.Committed() }
         watchers.awaitTx(0)
 
-        cutNow.set(true)
-
-        // Source-log record with msgId 10 (skipTxs covers it, so no Arrow payload needed; and its
-        // txId must exceed the ext tx's for watchers' monotonicity check). Its settle cuts the block:
-        // the batch's last tx is this token-less source-log tx, so txs.last() would write a null
-        // token — the boundary must instead carry the ext tx's token from the watchers' view.
+        // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
+        // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
         lp.processRecords(listOf(
             Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
         ))
+
+        // Force the cut with a FlushBlock: the block's last tx is the token-less source-log tx, so the
+        // boundary must carry the earlier ext tx's token (the last non-null token seen), not a null one.
+        lp.processRecords(listOf(
+            Log.Record(0, 11, Instant.now(), SourceMessage.FlushBlock(-1))
+        ))
+        watchers.awaitSource(11)
 
         val boundaries = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.BlockBoundary }.toList()

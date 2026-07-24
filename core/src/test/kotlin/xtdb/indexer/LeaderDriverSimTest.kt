@@ -157,7 +157,12 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 )
             ),
             watchers, extSource = null, skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1, scope = scope, gcDispatcher = dispatcher,
+            afterReplicaMsgId = -1,
+            // The same generation that fences this leader's producer is its term — one claim, one
+            // identity. Left at the default both leaders would share term 0, and a term is what tells
+            // a leader which records on the shared log are its own.
+            leaderTerm = generation.toLong(),
+            scope = scope, gcDispatcher = dispatcher,
         )
 
         /** Fire-and-forget: the returned handle completes only once the tx is durably replicated. */

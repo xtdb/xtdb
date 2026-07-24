@@ -324,6 +324,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                             simExtSource.awaitQuiescence()
 
                             replicaLog.awaitAllDelivered()
+                            awaitIdle()
                         }.invokeOnCompletion { cancel() }
                     }.join()
 
@@ -402,6 +403,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                                         followerA.watchers.awaitTx(lastReplicaTxId)
                                         followerB.watchers.awaitTx(lastReplicaTxId)
                                     }
+
+                                    awaitIdle()
                                 }.invokeOnCompletion { cancel() }
                             }.join()
 
@@ -498,6 +501,8 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     nodeA.watchers.awaitTx(lastReplicaTxId)
                                     nodeB.watchers.awaitTx(lastReplicaTxId)
                                 }
+
+                                awaitIdle()
                             }.invokeOnCompletion { cancel() }
                         }.join()
 

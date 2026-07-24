@@ -48,9 +48,13 @@ internal interface SourceBatches {
  * upload, or fail an append, none of which the real logs express in memory.
  *
  * Deliberately narrow. In-memory state mutations that happen to sit on the leader's path —
- * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do all *reads*
- * (`liveIndex.isFull()`, `blockCatalog.currentBlockIndex`). A mock holds real state objects, so
- * those reads stay consistent with what the driver has applied.
+ * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do reads of
+ * in-memory state (`liveIndex.isFull()`, `blockCatalog.currentBlockIndex`). A mock holds real state
+ * objects, so those reads stay consistent with what the driver has applied.
+ *
+ * The replica-log tail ([tailReplica]) is here despite being a read: since #5817 it is how the leader
+ * learns its own writes landed, and where the term fence bites, so a sim has to be able to feed it a
+ * superseding record that the real in-memory log would never produce on its own.
  */
 internal interface LeaderDriver : AutoCloseable {
 
@@ -64,6 +68,13 @@ internal interface LeaderDriver : AutoCloseable {
      * batch can run to a full block (`rowsPerBlock`, 100k rows by default).
      */
     suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata>
+
+    /**
+     * Tail our own replica log from [afterMsgId], handing each batch of records back for application.
+     * Suspends until cancelled — a plain tail, independent of the source-log group subscription that
+     * drives leader election.
+     */
+    suspend fun tailReplica(afterMsgId: MessageId, process: suspend (List<Log.Record<ReplicaMessage>>) -> Unit)
 
     /** Commit a resolved tx's writes into the durable live index. */
     suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>)
@@ -95,6 +106,7 @@ internal class RealLeaderDriver(
 ) : LeaderDriver {
 
     private val sourceLog = partitionStorage.sourceLog
+    private val replicaLog = partitionStorage.replicaLog
     private val liveIndex = partitionState.liveIndex
 
     // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
@@ -115,6 +127,10 @@ internal class RealLeaderDriver(
 
     override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> =
         replicaProducer.withTx { tx -> msgs.map { tx.appendMessage(it) }.toList() }.map { it.await() }
+
+    override suspend fun tailReplica(
+        afterMsgId: MessageId, process: suspend (List<Log.Record<ReplicaMessage>>) -> Unit,
+    ) = replicaLog.tailAll(afterMsgId) { records -> process(records) }
 
     override suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) =
         liveIndex.commitTx(txKey, tables)
