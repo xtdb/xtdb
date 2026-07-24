@@ -3,6 +3,7 @@ package xtdb.util
 
 import io.netty.util.internal.PlatformDependent
 import java.lang.Runtime.getRuntime
+import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.ClosedByInterruptException
 import java.nio.channels.FileChannel
@@ -27,3 +28,12 @@ fun toMmapPath(path: Path): MappedByteBuffer =
     } catch (e: ClosedByInterruptException) {
         throw InterruptedException()
     }
+
+fun ByteBuffer.slices(sliceSize: Int): Sequence<ByteBuffer> = sequence {
+    val src = duplicate()
+    while (src.hasRemaining()) {
+        val len = minOf(sliceSize, src.remaining())
+        yield(src.slice().limit(len))
+        src.position(src.position() + len)
+    }
+}
