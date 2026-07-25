@@ -19,7 +19,9 @@
         Compactor/NOOP))))
 
 (defn compact-all!
-  "`timeout` is now required, explicitly specify `nil` if you want to wait indefinitely."
+  "Compacts until idle. `timeout` is required; pass `nil` to wait indefinitely for
+   pending work. A failed compaction job is surfaced (thrown) rather than waited on,
+   so this won't hang (or time out) on a job that can never complete."
   [node timeout]
 
   (-> (.getCompactor (db/primary-db node))

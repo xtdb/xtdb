@@ -31,6 +31,7 @@ import xtdb.compactor.TemporalSplitting.*
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import xtdb.error.Fault
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.storage.MemoryStorage
@@ -70,7 +71,8 @@ enum class TemporalSplitting {
 data class CompactorDriverConfig(
     val temporalSplitting: TemporalSplitting = CURRENT,
     val baseTime: Instant = Instant.parse("2020-01-01T00:00:00Z"),
-    val blocksPerWeek: Long = 140
+    val blocksPerWeek: Long = 140,
+    val failJobs: Boolean = false
 )
 
 class CompactorMockDriverFactory(
@@ -83,6 +85,7 @@ class CompactorMockDriverFactory(
     private val temporalSplitting = config.temporalSplitting
     private val baseTime = config.baseTime
     private val blocksPerWeek = config.blocksPerWeek
+    private val failJobs = config.failJobs
     // Key is "tableName:trieKey" to avoid collisions between tables with the same trie key
     val trieKeyToFileSize = ConcurrentHashMap<String, Long>()
 
@@ -144,6 +147,7 @@ class CompactorMockDriverFactory(
         }
 
         override suspend fun executeJob(job: Job): TriesAdded {
+            if (failJobs) throw IllegalStateException("simulated compaction failure: ${job.table.tableName}")
             val tableName = job.table.tableName
             LOGGER.debug("[executeJob started] systemId=$systemId table=$tableName job.trieKeys=${job.trieKeys} job.outputTrieKey=${job.outputTrieKey}")
             yield() // Force suspension after executeJob has started
@@ -239,7 +243,8 @@ private const val logLevel = "WARN"
 annotation class WithCompactorDriverConfig(
     val temporalSplitting: TemporalSplitting = TemporalSplitting.CURRENT,
     val baseTime: String = "2020-01-01T00:00:00Z",
-    val blocksPerWeek: Long = 14
+    val blocksPerWeek: Long = 14,
+    val failJobs: Boolean = false
 )
 
 class DriverConfigExtension : BeforeEachCallback {
@@ -254,7 +259,8 @@ class DriverConfigExtension : BeforeEachCallback {
             CompactorDriverConfig(
                 temporalSplitting = temporalSplitting,
                 baseTime = Instant.parse(baseTime),
-                blocksPerWeek = blocksPerWeek
+                blocksPerWeek = blocksPerWeek,
+                failJobs = failJobs
             )
         }
     }
@@ -380,6 +386,45 @@ class CompactorSimulationTest : SimulationTestBase() {
     @Test
     fun singleL0CompactionNotHanging() {
         singleL0Compaction()
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithCompactorDriverConfig(failJobs = true)
+    fun compactAllSurfacesAFailedJob() {
+        val docsTable = TableRef("public", "docs")
+        val db = dbs[0]
+
+        db.withCompactor {
+            seedTries(docsTable, listOf(buildTrieDetails(docsTable.tableName, L0TrieKeys.first())))
+
+            // @Timeout guards a regression: a stuck job used to keep compactAll from reaching idle.
+            val e = assertThrows<Fault> { it.compactAllSync(null) }
+            assertTrue(e.cause!!.message!!.contains("simulated compaction failure"))
+        }
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @WithCompactorDriverConfig(failJobs = true)
+    fun compactAllSurfacesEveryFailedJob() {
+        val a = TableRef("public", "a")
+        val b = TableRef("public", "b")
+        val db = dbs[0]
+
+        db.withCompactor {
+            seedTries(a, listOf(buildTrieDetails(a.tableName, L0TrieKeys.first())))
+            seedTries(b, listOf(buildTrieDetails(b.tableName, L0TrieKeys.first())))
+
+            val e = assertThrows<Fault> { it.compactAllSync(null) }
+
+            // both jobs' failures are surfaced (one as cause, the rest suppressed), so a caller
+            // can find the specific one it cares about rather than getting an arbitrary single error
+            val messages = (listOf(e.cause) + e.suppressed.toList()).mapNotNull { it?.message }
+            assertEquals(2, messages.size)
+            assertTrue(messages.any { it.endsWith(": a") })
+            assertTrue(messages.any { it.endsWith(": b") })
+        }
     }
 
     @RepeatableSimulationTest

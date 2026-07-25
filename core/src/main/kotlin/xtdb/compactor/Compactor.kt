@@ -18,6 +18,7 @@ import xtdb.compactor.PageTree.Companion.asTree
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.DatabaseState
 import xtdb.database.DatabaseStorage
+import xtdb.error.Fault
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.segment.BufferPoolSegment
@@ -29,6 +30,13 @@ import java.time.Duration
 import kotlin.use
 
 typealias JobKey = Pair<TableRef, TrieKey>
+
+// a failed entry is kept (unlike a successful one, which is dropped) so we don't retry a poison
+// job and `compactAll` can surface its error.
+private sealed interface JobState {
+    data object InFlight : JobState
+    data class Failed(val error: Throwable) : JobState
+}
 
 private val LOGGER = Compactor::class.logger
 
@@ -176,7 +184,8 @@ interface Compactor : AutoCloseable {
             @Volatile
             private var availableJobs = emptyMap<JobKey, Job>()
 
-            private val queuedJobs = mutableSetOf<JobKey>()
+            // started jobs by disposition; touched only by the outer-loop coroutine, so unsynchronised.
+            private val jobStates = mutableMapOf<JobKey, JobState>()
 
             private val jobTimer: Timer? = meterRegistry?.let {
                 Timer.builder("compactor.job.timer")
@@ -184,7 +193,7 @@ interface Compactor : AutoCloseable {
                     .register(it)
             }
 
-            private val doneCh = Channel<JobKey>()
+            private val doneCh = Channel<Pair<JobKey, Throwable?>>()
             private val wakeupCh = Channel<Unit>(1, onBufferOverflow = DROP_OLDEST)
             private var compactAllPromise: CompletableDeferred<Unit>? = null
 
@@ -204,14 +213,35 @@ interface Compactor : AutoCloseable {
                                 jobCalculator.availableJobs(trieCatalog)
                                     .associateBy { JobKey(it.table, it.outputTrieKey.toString()) }
 
-                            if (availableJobs.isEmpty() && queuedJobs.isEmpty()) {
+                            // excluding started jobs is what stops a still-running (or failed) job
+                            // being re-launched.
+                            val pendingJobs = availableJobs.keys.filterNot { it in jobStates }
+
+                            if (pendingJobs.isEmpty() && jobStates.values.none { it is JobState.InFlight }) {
                                 LOGGER.trace("sending idle")
-                                compactAllPromise?.complete(Unit)
+
+                                val failed = jobStates.mapNotNull { (jobKey, state) ->
+                                    (state as? JobState.Failed)?.let { jobKey to it.error }
+                                }
+
+                                if (failed.isEmpty())
+                                    compactAllPromise?.complete(Unit)
+                                else
+                                    // surface *every* failed job rather than completing normally —
+                                    // otherwise the caller can't tell a drained compactor from one
+                                    // stuck on a failure, and can't see which job(s) failed. first as
+                                    // cause, rest suppressed, so a caller can find the one it induced.
+                                    compactAllPromise?.completeExceptionally(
+                                        Fault("compaction failed: ${failed.joinToString { (k, _) -> "${k.first}/${k.second}" }}",
+                                              "xtdb.compactor/jobs-failed", cause = failed.first().second)
+                                            .apply { failed.drop(1).forEach { (_, e) -> addSuppressed(e) } }
+                                    )
                             }
 
-                            availableJobs.keys.forEach { jobKey ->
-                                if (queuedJobs.add(jobKey)) {
-                                    launch(jobsDispatcher + CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
+                            pendingJobs.forEach { jobKey ->
+                                jobStates[jobKey] = JobState.InFlight
+                                launch(jobsDispatcher + CoroutineName("job: ${jobKey.first} / ${jobKey.second}")) {
+                                    val error = try {
                                         jobsSemaphore.withPermit {
                                             // check it's still required
                                             val job = availableJobs[jobKey]
@@ -234,16 +264,23 @@ interface Compactor : AutoCloseable {
                                                 }
                                             }
                                         }
-
-                                        // intentionally outside try/finally - if the job fails, we leave it in queuedJobs
-                                        // so this node doesn't attempt it again
-                                        doneCh.send(jobKey)
+                                        null
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Throwable) {
+                                        // already logged by the driver; kept to surface via compactAll
+                                        e
                                     }
+
+                                    doneCh.send(jobKey to error)
                                 }
                             }
 
                             select {
-                                doneCh.onReceive { queuedJobs.remove(it) }
+                                doneCh.onReceive { (jobKey, error) ->
+                                    if (error != null) jobStates[jobKey] = JobState.Failed(error)
+                                    else jobStates.remove(jobKey)
+                                }
 
                                 wakeupCh.onReceive {
                                     LOGGER.trace("wakey wakey")
