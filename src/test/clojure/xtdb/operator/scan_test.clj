@@ -91,12 +91,12 @@
                          [:put-docs :xt_docs {:xt/id i :foo {:bar "forty-two"}}]))
 
     (t/is (= #{{:foo {:bar 42}} {:foo {:bar "forty-two"}}}
-             (set (util/->clj (tu/query-ra
-                               ;; the cross-join copies data from the underlying MultiVectorReader
-                               '[:apply {:mode :cross-join, :columns {}}
-                                 [:table {:rows [{}]}]
-                                 [:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [foo]}]]
-                               {:node node})))))))
+             (set (tu/->clj (tu/query-ra
+                             ;; the cross-join copies data from the underlying MultiVectorReader
+                             '[:apply {:mode :cross-join, :columns {}}
+                               [:table {:rows [{}]}]
+                               [:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [foo]}]]
+                             {:node node})))))))
 
 (t/deftest test-smaller-page-limit
   (util/with-open [node (xtn/start-node (merge tu/*node-opts* {:indexer {:page-limit 16}}))]

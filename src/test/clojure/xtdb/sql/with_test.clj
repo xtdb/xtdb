@@ -46,13 +46,13 @@
 (t/deftest cte-exporting-valid-time-4054
   (xt/submit-tx tu/*node* [[:put-docs {:into :docs :valid-from #inst "2020" :valid-to #inst "2050"} {:xt/id 1}]])
 
-  (t/is (= [{:xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" #xt/zoned-date-time "2050-01-01T00:00Z"]}]
+  (t/is (= [{:xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" #xt/zoned-date-time "2050-01-01T00:00Z[UTC]"]}]
            (xt/q tu/*node*
                  "SELECT _valid_time
                   FROM (SELECT _valid_time
                         FROM docs) t")))
 
-  (t/is (= [{:xt/system-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}]
+  (t/is (= [{:xt/system-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" nil]}]
            (xt/q tu/*node*
                  "WITH data AS (
                      SELECT _system_time

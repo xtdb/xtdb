@@ -3588,17 +3588,20 @@
   ([sql args-rel] (sql->static-ops sql args-rel {}))
 
   ([sql ^RelationReader args-rel {:keys [scope] :as opts}]
-   (try
-     (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
-           arg-fields (mapv VectorReader/.getField (or args-rel []))
+   ;; parsed outside the catch below: a syntax error is the caller's, so it propagates to whoever is
+   ;; expanding (which surfaces and counts it) rather than being swallowed into an op that reaches the
+   ;; log and only fails in the indexer.
+   (let [ast (antlr/parse-statement sql)]
+     (try
+       (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
+             arg-fields (mapv VectorReader/.getField (or args-rel []))
 
-           {:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                   (assoc :arg-fields arg-fields))
-           tx-ops (-> (antlr/parse-statement sql)
-                      (.accept (->SqlToStaticOpsVisitor env scope arg-rows)))]
-       (when (and (empty? @!errors) (empty? @!warnings))
-         tx-ops))
+             {:keys [!errors !warnings] :as env} (-> (->env opts)
+                                                     (assoc :arg-fields arg-fields))
+             tx-ops (.accept ast (->SqlToStaticOpsVisitor env scope arg-rows))]
+         (when (and (empty? @!errors) (empty? @!warnings))
+           tx-ops))
 
-     ;; eventually we could deal with these on pre-submit
-     (catch IllegalArgumentException _)
-     (catch RuntimeException _))))
+       ;; a statement this visitor can't reduce to static ops is indexed as SQL instead
+       (catch IllegalArgumentException _)
+       (catch RuntimeException _)))))

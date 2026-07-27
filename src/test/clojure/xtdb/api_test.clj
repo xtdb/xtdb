@@ -244,9 +244,8 @@
 
     (t/is (= {:tx-id 0} tx))
 
-    (t/is (= [{:xt/id "foo", :xt/valid-from (-> (time/->zdt #inst "2018")
-                                                (.withZoneSameLocal (ZoneId/systemDefault))
-                                                (.withZoneSameInstant (ZoneId/of "UTC")))}]
+    ;; the DATE is read in the node's default zone — UTC here, this node not configuring one
+    (t/is (= [{:xt/id "foo", :xt/valid-from (time/->zdt #inst "2018")}]
              (xt/q *node* "SELECT foo._id, foo._valid_from, foo._valid_to FROM foo")))))
 
 (deftest test-dql-as-of-now-flag-339
@@ -611,9 +610,9 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/submit-tx tu/*node* [[:put-docs :users {:xt/id :claire, :name "Claire"}]])
   (xt/submit-tx tu/*node* [[:delete-docs :users :dave]])
 
-  (t/is (= [{:name "Dave", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z"
-                                                          #xt/zoned-date-time "2020-01-03T00:00Z"]}
-            {:name "Claire", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-02T00:00Z" nil]}]
+  (t/is (= [{:name "Dave", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]"
+                                                          #xt/zoned-date-time "2020-01-03T00:00Z[UTC]"]}
+            {:name "Claire", :xt/valid-time #xt/tstz-range [#xt/zoned-date-time "2020-01-02T00:00Z[UTC]" nil]}]
            (xt/q tu/*node* "SELECT name, _valid_time FROM users FOR ALL VALID_TIME")))
 
   (xt/submit-tx tu/*node* [[:put-docs :foo
@@ -628,11 +627,11 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
                 {:default-tz #xt/zone "UTC"})
 
   (let [expected #{{:xt/id 1,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z" nil]}
+                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-01-01T00:00Z[UTC]" nil]}
                    {:xt/id 2,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-03-01T00:00Z" #xt/zoned-date-time "2021-01-01T00:00Z"]}
+                    :for-range #xt/tstz-range [#xt/zoned-date-time "2020-03-01T00:00Z[UTC]" #xt/zoned-date-time "2021-01-01T00:00Z[UTC]"]}
                    {:xt/id 3,
-                    :for-range #xt/tstz-range [#xt/zoned-date-time "2021-08-01T00:00Z" #xt/zoned-date-time "2022-01-01T00:00Z"]}}]
+                    :for-range #xt/tstz-range [#xt/zoned-date-time "2021-08-01T00:00Z[UTC]" #xt/zoned-date-time "2022-01-01T00:00Z[UTC]"]}}]
 
     (t/is (= expected (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
@@ -671,5 +670,6 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"])
   (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id :foo, :name "Foo"}]])
   (tu/flush-block! tu/*node*)
 
-  (let [{:keys [latest-submitted-tx-ids latest-processed-tx-ids]} (xt/status tu/*node*)]
-    (t/is (= latest-submitted-tx-ids latest-processed-tx-ids))))
+  (let [{:keys [latest-submitted-msg-ids latest-processed-msg-ids]} (xt/status tu/*node*)]
+    (t/is (seq latest-submitted-msg-ids))
+    (t/is (= latest-submitted-msg-ids latest-processed-msg-ids))))

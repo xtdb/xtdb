@@ -32,10 +32,10 @@
 
 
        (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
-         (t/is (= (util/->clj (aet/read-arrow-edn-file file))
-                  (util/->clj (doto {:schema (.getSchema rel), 
-                                     :data (util/->clj (.getAsMaps rel))}
-                                (aet/maybe-write-arrow-edn! file))))
+         (t/is (= (tu/->clj (aet/read-arrow-edn-file file))
+                  (tu/->clj (doto {:schema (.getSchema rel),
+                                   :data (util/->clj (.getAsMaps rel))}
+                              (aet/maybe-write-arrow-edn! file))))
                (str "Mismatch in serialized tx-ops for " (.getName file))))))))
 
 (def devices-docs
@@ -116,13 +116,13 @@
                                            (mapv tx-ops/parse-tx-op [[:patch-docs :foo {:xt/id 1, :v 2} {:xt/id 3, :x "hello"}]])
                                            {:default-db "xtdb", :default-tz #xt/zone "Europe/London"})]
     (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
-      (t/is (= (util/->clj [{:default-tz "Europe/London"
-                             :tx-ops [#xt/tagged [:patch-docs
-                                                  {:iids [#bytes "4cd9b7672d7fbee8fb51fb1e049f6903"
-                                                          #bytes "9a83c6cb1126d93de4a30715b28f1f4b"],
-                                                   :documents #xt/tagged [:public/foo [{:xt/id 1, :v 2}
-                                                                                       {:xt/id 3, :x "hello"}]]}]]}])
-               (util/->clj (.getAsMaps rel)))))))
+      (t/is (= (tu/->clj [{:default-tz "Europe/London"
+                           :tx-ops [#xt/tagged [:patch-docs
+                                                {:iids [#bytes "4cd9b7672d7fbee8fb51fb1e049f6903"
+                                                        #bytes "9a83c6cb1126d93de4a30715b28f1f4b"],
+                                                 :documents #xt/tagged [:public/foo [{:xt/id 1, :v 2}
+                                                                                     {:xt/id 3, :x "hello"}]]}]]}])
+               (tu/->clj (.getAsMaps rel)))))))
 
 (t/deftest test-memory-log-epochs
   (util/with-tmp-dirs #{local-disk-path}

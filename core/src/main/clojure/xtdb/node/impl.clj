@@ -1,15 +1,17 @@
 (ns xtdb.node.impl
   (:require [clojure.pprint :as pp]
             [integrant.core :as ig]
-            [xtdb.api :as api]
+            [xtdb.adbc :as adbc]
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.garbage-collector]
             [xtdb.metrics :as metrics]
+            [xtdb.protocols :as xtp]
             [xtdb.sql :as sql]
             [xtdb.tracer]
             [xtdb.util :as util])
-  (:import io.micrometer.core.instrument.composite.CompositeMeterRegistry
+  (:import (clojure.lang IReduceInit)
+           io.micrometer.core.instrument.composite.CompositeMeterRegistry
            (java.io Closeable Writer)
            (java.time InstantSource)
            (java.util HashMap)
@@ -21,9 +23,72 @@
            (xtdb.api.metrics ConnectionMetrics)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database$Catalog)
-           (xtdb.query IQuerySource SqlPlanner)))
+           (xtdb.query IQuerySource SqlPlanner)
+           xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+;; the in-process ADBC path for `xtdb.api` — driven natively, bypassing pgwire. Extended here (not in
+;; `xtdb.api`) because this is where the connection type and the core query/tx machinery are visible;
+;; loaded whenever a node (and hence a connection) can exist.
+
+;; opens a connection to the op's `:database` (the connection carries the routing, so the ADBC
+;; bodies read/write against it) — defaulting to the node's default db.
+(defn- connect-node ^Xtdb$Connection [^Xtdb node {:keys [database]}]
+  (if database
+    (let [^String db-name (cond-> database (keyword? database) (-> symbol str NormalForm/normalForm))]
+      ;; validate up-front so an unknown db surfaces the same on the read path as the write path (the
+      ;; connection's db() only checks on submit, so a read would otherwise fail later as 'table not found')
+      (when-not (.contains (.getDatabaseNames node) db-name)
+        (throw (err/incorrect :xtdb/unknown-db (str "Unknown database: " db-name) {:db-name db-name})))
+      (.connect node db-name))
+    (.connect node)))
+
+;; threads the node's await-basis onto the per-op connection (and, for writes, back off it) so a read
+;; sees this node's prior writes — the read-your-writes the DataSource/pgwire path gets from the same
+;; token.
+(defn- with-node-conn [^Xtdb node opts f]
+  (with-open [conn (connect-node node opts)]
+    (some->> (.getAwaitToken node) (.setAwaitToken conn))
+    (let [res (f conn)]
+      (.setAwaitToken node (.getAwaitToken conn))
+      res)))
+
+(extend-protocol xtp/Connectable
+  ;; a connection is already bound to its database, so it rejects `:database` as the JDBC impls do —
+  ;; only the node (below) can route by it.
+  Xtdb$Connection
+  (-plan-q [conn sql args opts]
+    (xtp/check-no-database conn opts)
+    (adbc/plan-q conn sql args opts))
+
+  (-submit-tx [conn tx-ops opts]
+    (xtp/check-no-database conn opts)
+    (adbc/submit-tx conn tx-ops opts))
+
+  (-execute-tx [conn tx-ops opts]
+    (xtp/check-no-database conn opts)
+    (adbc/execute-tx conn tx-ops opts))
+  (-status [conn] (xtp/build-status conn))
+
+  Xtdb
+  ;; a node is more specific than the `DataSource` (pgwire) impl, so it wins dispatch — while an
+  ;; `xt/client` DataSource, which isn't an `Xtdb`, stays on pgwire.
+  (-plan-q [node sql args opts]
+    (reify IReduceInit
+      (reduce [_ f start]
+        (with-open [conn (connect-node node opts)]
+          (some->> (.getAwaitToken node) (.setAwaitToken conn))
+          (reduce f start (adbc/plan-q conn sql args opts))))))
+
+  (-submit-tx [node tx-ops opts] (with-node-conn node opts #(adbc/submit-tx % tx-ops opts)))
+  (-execute-tx [node tx-ops opts] (with-node-conn node opts #(adbc/execute-tx % tx-ops opts)))
+
+  ;; deliberately without the node's await-token, so status reports where the node is now rather than
+  ;; waiting on a tx someone else submitted through it.
+  (-status [node]
+    (with-open [conn (.connect node)]
+      (xtp/-status conn))))
 
 (defmethod ig/expand-key :xtdb/base [k ^Xtdb$Config config]
   {k {:config config}})

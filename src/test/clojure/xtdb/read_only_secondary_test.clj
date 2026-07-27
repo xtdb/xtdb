@@ -55,6 +55,8 @@ ATTACH DATABASE shared_db WITH $$
   mode: read-only
 $$"])
 
+        (xt-log/sync-node secondary-node #xt/duration "PT5S")
+
         (t/is (= [{:xt/id "from-primary"}]
                  (xt/q secondary-node "SELECT * FROM shared_db.foo"))
               "read-only secondary can read data written by primary")
@@ -93,6 +95,8 @@ ATTACH DATABASE shared_db WITH $$
     path: 'target/read-only-secondary/block-flush/objects'
   mode: read-only
 $$"])
+
+        (xt-log/sync-node secondary-node #xt/duration "PT5S")
 
         (t/is (= #{{:xt/id "before-block-1"} {:xt/id "before-block-2"}}
                  (set (xt/q secondary-node "SELECT * FROM shared_db.foo")))

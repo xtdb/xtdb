@@ -1,6 +1,7 @@
 (ns xtdb.pgwire.authz-test
   (:require [clojure.test :as t]
             [next.jdbc :as jdbc]
+            [xtdb.api :as xt]
             [xtdb.node :as xtn]
             [xtdb.pgwire-test :as pgw-test])
   (:import org.postgresql.util.PSQLException
@@ -77,3 +78,54 @@
       (with-open [conn (pgw-test/pgjdbc-conn {:dbname "new_db"})]
         (t/is (thrown-with-msg? PSQLException #"(?i)primary"
                                 (jdbc/execute! conn ["GRANT analyst TO alice"])))))))
+
+;; Moved from xtdb.authz-test: GRANT/REVOKE requires a superuser principal, which the in-process
+;; ADBC connection lacks (user = nil). pgwire authenticates as the `xtdb` superuser by default.
+
+(def ^:private membership-q-xt
+  "SELECT \"user\", role FROM xt.role_membership ORDER BY \"user\", role")
+
+(t/deftest grant-revoke-round-trip
+  (with-open [node (xtn/start-node)
+              conn (jdbc/get-connection node)]
+    (jdbc/execute! conn ["GRANT analyst TO alice"])
+    (jdbc/execute! conn ["GRANT admin TO alice"])
+    (jdbc/execute! conn ["GRANT analyst TO bob"])
+
+    (t/is (= [{:user "alice", :role "admin"}
+              {:user "alice", :role "analyst"}
+              {:user "bob", :role "analyst"}]
+             (pgw-test/q conn [membership-q-xt])))
+
+    (jdbc/execute! conn ["REVOKE analyst FROM alice"])
+
+    (t/is (= [{:user "alice", :role "admin"}
+              {:user "bob", :role "analyst"}]
+             (pgw-test/q conn [membership-q-xt]))
+          "REVOKE soft-closes just the one membership")
+
+    (t/testing "re-GRANT supersedes; REVOKE of an absent membership is a no-op"
+      (jdbc/execute! conn ["GRANT analyst TO alice"])
+      (jdbc/execute! conn ["REVOKE reporter FROM carol"])
+      (t/is (= [{:user "alice", :role "admin"}
+                {:user "alice", :role "analyst"}
+                {:user "bob", :role "analyst"}]
+               (pgw-test/q conn [membership-q-xt]))))))
+
+;; The acceptance test on #5683: REVOKE is a system-time soft-close, so membership
+;; history stays queryable as-of any past system-time.
+(t/deftest membership-queryable-as-of-system-time
+  (with-open [node (xtn/start-node)
+              conn (jdbc/get-connection node)]
+    (jdbc/execute! conn ["GRANT analyst TO alice"])
+    (let [t1 (.toInstant (:system-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
+      (jdbc/execute! conn ["REVOKE analyst FROM alice"])
+      (let [t2 (.toInstant (:system-time (first (pgw-test/q conn ["SHOW LATEST_SUBMITTED_TX"]))))]
+
+        (t/is (= [{:user "alice", :role "analyst"}]
+                 (xt/q conn membership-q-xt {:snapshot-time t1}))
+              "as-of the grant: membership in force")
+
+        (t/is (= []
+                 (xt/q conn membership-q-xt {:snapshot-time t2}))
+              "as-of the revoke: membership closed")))))

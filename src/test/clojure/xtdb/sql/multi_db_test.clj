@@ -384,6 +384,8 @@ ATTACH DATABASE xt1_db WITH $$
   mode: read-only
 $$"])
 
+        (xt-log/sync-node xt2 #xt/duration "PT5S")
+
         (t/is (= [{:xt/id "from-xt1"}]
                  (xt/q xt2 "SELECT * FROM xt1_db.foo"))
               "xt2 can read xt1's data via attached secondary")

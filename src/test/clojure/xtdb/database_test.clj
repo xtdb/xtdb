@@ -3,7 +3,6 @@
             [next.jdbc :as jdbc]
             [xtdb.api :as xt]
             [xtdb.node :as xtn]
-            [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock)
@@ -104,17 +103,13 @@
                    {:database :xtdb})))
 
     (t/testing "errors"
-      (t/is (= {:sql-state "3D000",
-                :message "database 'non_existent_db' does not exist"}
-               (pgw-test/reading-ex
-                 (xt/submit-tx node [[:put-docs :foo {:xt/id "non-existent"}]]
-                               {:database :non-existent-db}))))
+      (t/is (anomalous? [:incorrect nil "Unknown database: non_existent_db"]
+                        (xt/submit-tx node [[:put-docs :foo {:xt/id "non-existent"}]]
+                                      {:database :non-existent-db})))
 
-      (t/is (= {:sql-state "3D000",
-                :message "database 'non_existent_db' does not exist"}
-               (pgw-test/reading-ex
-                 (xt/q node ["SELECT * FROM foo"]
-                       {:database :non-existent-db}))))
+      (t/is (anomalous? [:incorrect nil "Unknown database: non_existent_db"]
+                        (xt/q node ["SELECT * FROM foo"]
+                              {:database :non-existent-db})))
 
       (t/testing "throws if database already selected (via connection)")
       (with-open [xtdb-conn (.build (.createConnectionBuilder node))]

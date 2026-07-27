@@ -1,6 +1,6 @@
 {:block-idx 1,
  :latest-completed-tx
- {:tx-id 2196, :system-time #xt/instant "2020-01-02T00:00:00Z"},
- :latest-processed-msg-id 3881,
- :table-names #{"xt/txs" "xt/role_membership" "public/foo"},
+ {:tx-id 1934, :system-time #xt/instant "2020-01-02T00:00:00Z"},
+ :latest-processed-msg-id 3357,
+ :table-names #{"xt/txs" "public/foo" "xt/role_membership"},
  :secondary-dbs {}}

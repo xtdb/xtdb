@@ -15,7 +15,7 @@
     {:num-tests tu/property-test-iterations}
     (prop/for-all [{:keys [vs] :as vec-gen} tg/vector-vs-gen]
       (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)]
-        (tg/lists-equal-normalized? vs (.getAsList src-vec))))))
+        (= (tu/->clj vs) (tu/vec->clj src-vec))))))
 
 (defn- copy-vector ^Vector
   ([^Vector src-vec ^BufferAllocator al]
@@ -30,7 +30,7 @@
 (defn- vectors-equal?
   [^Vector src-vec ^Vector out-vec]
   (and (= (.getValueCount src-vec) (.getValueCount out-vec))
-       (tg/lists-equal-normalized? (.getAsList src-vec) (.getAsList out-vec))))
+       (= (tu/->clj (.getAsList src-vec)) (tu/->clj (.getAsList out-vec)))))
 
 (t/deftest ^:property full-vector-copy-preserves-data
   (tu/run-property-test
@@ -49,8 +49,8 @@
                  (with-open [^Vector src-vec (tg/vec-gen->arrow-vec tu/*allocator* vec-gen)
                              ^Vector copied-vec (copy-vector src-vec tu/*allocator* start-idx end-idx)]
                    (let [expected-data (subvec (:vs vec-gen) start-idx end-idx)
-                         actual-data (.getAsList copied-vec)]
-                     (tg/lists-equal-normalized? expected-data actual-data))))))
+                         actual-data (tu/vec->clj copied-vec)]
+                     (= (tu/->clj expected-data) (tu/->clj actual-data)))))))
 
 (defn- merge-vectors-into-duv ^Vector [^BufferAllocator al vectors]
   (util/with-close-on-catch [^Vector duv-vec (Vector/open al #xt/field {"mixed" :union})]
@@ -69,8 +69,8 @@
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
                    (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
-                         actual-data (.getAsList duv)]
-                     (tg/lists-equal-normalized? expected-data actual-data))))))
+                         actual-data (tu/vec->clj duv)]
+                     (= (tu/->clj expected-data) (tu/->clj actual-data)))))))
 
 (t/deftest ^:property copy-two-duvs
   (tu/run-property-test
@@ -80,8 +80,8 @@
                              ^Vector src-vec2 (tg/vec-gen->arrow-vec tu/*allocator* vec-gen2)
                              ^Vector duv (merge-vectors-into-duv tu/*allocator* [src-vec1 src-vec2])]
                    (let [expected-data (concat (:vs vec-gen1) (:vs vec-gen2))
-                         actual-data (.getAsList duv)]
-                     (tg/lists-equal-normalized? expected-data actual-data))))))
+                         actual-data (tu/vec->clj duv)]
+                     (= (tu/->clj expected-data) (tu/->clj actual-data)))))))
 
 (t/deftest ^:property multiple-type-promotions
   (tu/run-property-test

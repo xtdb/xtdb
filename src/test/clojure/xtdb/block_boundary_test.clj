@@ -34,8 +34,8 @@
                       (let [res (xt/q node "SELECT * FROM docs")]
                         (= 1 (count res))))
                     (t/testing "document is equal to last entry"
-                      (= (tg/normalize-for-comparison (tu/remove-nils (last records)))
-                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+                      (= (tu/->clj (tu/remove-nils (last records)))
+                         (tu/->clj (first (xt/q node "SELECT * FROM docs"))))))))))
 
 (t/deftest ^:property multiple-writes-to-doc-in-same-tx
   (tu/run-property-test
@@ -58,8 +58,8 @@
                         (let [res (xt/q node "SELECT * FROM docs")] 
                           (= 1 (count res))))
                       (t/testing "document is equal to last entry"
-                        (= (tg/normalize-for-comparison (tu/remove-nils (last records)))
-                           (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs")))))))))))
+                        (= (tu/->clj (tu/remove-nils (last records)))
+                           (tu/->clj (first (xt/q node "SELECT * FROM docs")))))))))))
 
 (t/deftest ^:property mixed-records-flush-boundary
   (tu/run-property-test
@@ -239,8 +239,8 @@
                       (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL")]
                         (= 2 (count res))))
                     (t/testing "last document is present"
-                      (= (tg/normalize-for-comparison (tu/remove-nils record2))
-                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+                      (= (tu/->clj (tu/remove-nils record2))
+                         (tu/->clj (first (xt/q node "SELECT * FROM docs"))))))))))
 
 (t/deftest ^:property deleting-all-from-table-across-flush-boundaries
   (tu/run-property-test
@@ -313,8 +313,8 @@
                       (let [res (xt/q node "SELECT *, _valid_from FROM docs FOR VALID_TIME ALL FOR SYSTEM_TIME ALL")]
                         (= 1 (count res))))
                     (t/testing "last document is present"
-                      (= (tg/normalize-for-comparison (tu/remove-nils record2))
-                         (tg/normalize-for-comparison (first (xt/q node "SELECT * FROM docs"))))))))))
+                      (= (tu/->clj (tu/remove-nils record2))
+                         (tu/->clj (first (xt/q node "SELECT * FROM docs"))))))))))
 
 (t/deftest ^:property erasing-all-from-table-across-flush-boundaries
   (tu/run-property-test
@@ -442,8 +442,8 @@
                               record-fields [record (:fields update-statement-1) (:fields update-statement-2)]
                               expected-merged (reduce merge {:xt/id 1} record-fields)
                               expected-merged-no-nils (tu/remove-nils expected-merged)]
-                          (= (tg/normalize-for-comparison expected-merged-no-nils)
-                             (tg/normalize-for-comparison res))))))))))
+                          (= (tu/->clj expected-merged-no-nils)
+                             (tu/->clj res))))))))))
 
 (defn ->insert-tx [k v]
   (let [[sql-string & params] (honey-sql/format {:insert-into [:docs]
@@ -501,8 +501,8 @@
                           (t/testing "document has correct value"
                             (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
                                   expected (tu/remove-nils record)]
-                              (= (tg/normalize-for-comparison expected)
-                                 (tg/normalize-for-comparison res))))))
+                              (= (tu/->clj expected)
+                                 (tu/->clj res))))))
                        (catch Throwable t
                          ;; discard if the EE blew its bytecode budget — see #5635
                          (if (ee-method-too-large? (db/primary-db node))
@@ -541,8 +541,8 @@
                           (t/testing "document has final value"
                             (let [res (first (xt/q node "SELECT * FROM docs WHERE _id = 1"))
                                   expected (tu/remove-nils {:xt/id 1 :a value-3})]
-                              (= (tg/normalize-for-comparison expected)
-                                 (tg/normalize-for-comparison res))))))
+                              (= (tu/->clj expected)
+                                 (tu/->clj res))))))
                        (catch Throwable t
                          ;; discard if the EE blew its bytecode budget — see #5635
                          (if (ee-method-too-large? (db/primary-db node))

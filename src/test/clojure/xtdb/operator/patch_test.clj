@@ -195,6 +195,6 @@
                       (let [res (first (xt/q node "SELECT * FROM docs"))
                             records-no-nils (map tu/remove-nils records)
                             expected-merged (reduce merge {:xt/id 1} records-no-nils)] 
-                        (= (tg/normalize-for-comparison expected-merged)
-                           (tg/normalize-for-comparison res)))))))))
+                        (= (tu/->clj expected-merged)
+                           (tu/->clj res)))))))))
 

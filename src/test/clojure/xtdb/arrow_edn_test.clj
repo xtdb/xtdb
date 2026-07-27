@@ -71,8 +71,8 @@
                   file-name (str (.getFileName expected-path))]
             :when (.endsWith file-name ".arrow.edn")]
       (f (.relativize expected-dir expected-path)
-         (util/->clj (read-arrow-edn-file expected-path))
-         (util/->clj (read-arrow-edn-file actual))))))
+         (tu/->clj (read-arrow-edn-file expected-path))
+         (tu/->clj (read-arrow-edn-file actual))))))
 
 (defmacro check-arrow-edn-dir
   ([expected-path-ish actual-path-ish]

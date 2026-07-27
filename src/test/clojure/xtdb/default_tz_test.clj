@@ -2,8 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             xtdb.serde
-            [xtdb.test-util :as tu])
-  (:import [java.time ZoneId]))
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each
   (tu/with-opts {:default-tz #xt/zone "Europe/London"})
@@ -12,8 +11,8 @@
 (t/deftest can-specify-default-tz-in-query-396
   (let [q (str "SELECT CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE) AS tstz "
                "FROM (VALUES (NULL)) a (a)")]
-    (t/is (= [{:tstz (-> #xt/ldt "2020-08-01T00:00"
-                         (.atZone (ZoneId/systemDefault)))}]
+    ;; no per-query zone, so the node's configured one governs
+    (t/is (= [{:tstz #xt/zdt "2020-08-01T00:00+01:00[Europe/London]"}]
              (xt/q tu/*node* q {})))
 
     (t/is (= [{:tstz #xt/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
@@ -28,13 +27,13 @@
 
     (let [q "SELECT foo._id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 
+      ;; `cast_tstz` is cast at read time, so it takes the query's zone — the node's configured one here,
+      ;; for both rows, whatever zone each was written under
       (t/is (= #{{:xt/id "foo", :dt #xt/date "2020-08-01",
-                  :cast-tstz (-> #xt/ldt "2020-08-01T00:00"
-                                 (.atZone (ZoneId/systemDefault)))
+                  :cast-tstz #xt/zdt "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #xt/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
                  {:xt/id "bar", :dt #xt/date "2020-08-01"
-                  :cast-tstz (-> #xt/ldt "2020-08-01T00:00+01:00[Europe/London]"
-                                 (.atZone (ZoneId/systemDefault)))
+                  :cast-tstz #xt/zdt "2020-08-01T00:00+01:00[Europe/London]"
                   :tstz #xt/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
                (set (xt/q tu/*node* q))))

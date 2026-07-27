@@ -23,6 +23,10 @@
       (xt/execute-tx node [[:put-docs :foo {:xt/id "foo3"}]
                            [:put-docs :bar {:xt/id "bar2"}]])
 
+      ;; these stats come from the table catalog, which only counts rows in *finished* blocks — and
+      ;; nothing finishes the block holding the last tx's rows, since that's triggered by later indexing
+      (tu/flush-block! node)
+
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :opts {:db-name "xtdb", :table #xt/table foo, :columns [[:column id]]}}
                                      {:scan-fields {['foo 'id] #xt/field {"id" :utf8}},

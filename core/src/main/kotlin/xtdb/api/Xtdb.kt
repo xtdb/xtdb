@@ -133,7 +133,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     }
 
     class Connection(
-        private val allocator: BufferAllocator,
+        val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
         private val qSrc: IQuerySource,
         private val sqlPlanner: SqlPlanner,
@@ -603,8 +603,14 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             defaultAccessMode = accessMode
         }
 
+        // the basis arguments are the programmatic form of READ ONLY WITH (SNAPSHOT_TOKEN = …, SNAPSHOT_TIME = …,
+        // CLOCK_TIME = …); each defaults to the connection's own, as a bare BEGIN READ ONLY does.
         @JvmOverloads
-        fun beginReadOnly(tz: ZoneId = defaultTz) = beginTx(ReadOnly, pinReadBasis(), tz)
+        fun beginReadOnly(
+            tz: ZoneId = defaultTz, snapshotToken: String? = null, snapshotTime: Instant? = null,
+            currentTime: Instant? = null
+        ) =
+            beginTx(ReadOnly, pinReadBasis(snapshotToken, snapshotTime, currentTime), tz)
 
         @JvmOverloads
         fun beginWriteOnly(
@@ -756,7 +762,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun commitSync(): ExecutedTx? =
             drainWriteTx()?.let { (ops, opts) -> ops.useAll { executeTx(it, opts) } }
 
-        private fun expandStaticOps(ops: List<TxOp>, tz: ZoneId): List<TxOp> =
+        // exposed for the in-process `xtdb.api` path (xtdb.adbc): a batch submit must expand static DML
+        // eagerly like the statement path, since index-time SQL expansion mishandles PATCH ids.
+        /** @suppress */
+        @InternalApi
+        fun expandStaticOps(ops: List<TxOp>, tz: ZoneId): List<TxOp> =
             mutableListOf<TxOp>().closeAllOnCatch { out ->
                 ops.forEachIndexed { idx, op ->
                     val expanded = try {

@@ -2,13 +2,15 @@
   (:require [clojure.string :as str]
             [clojure.test.check.generators :as gen]
             [honey.sql :as sql]
-            [xtdb.time :as time]
+            ;; `duration-gen`/`interval-gen` read `#xt/…` literals at load time, so the readers they
+            ;; resolve to must already be bound — without this it depends on who loaded us first
+            xtdb.mirrors.time-literals
+            xtdb.serde.types
             [xtdb.types :as types])
   (:import [java.math BigDecimal]
            [java.net URI]
            [java.nio ByteBuffer]
-           [java.time.temporal Temporal]
-           [java.util List Map Set]
+           [java.util List]
            [org.apache.arrow.memory BufferAllocator]
            [xtdb.arrow MergeTypes ValueTypes Vector VectorType$Listy VectorType$Maybe VectorType$Null VectorType$Poly VectorType$Scalar VectorType$Struct]))
 
@@ -189,49 +191,6 @@
 
 (defn vec-gen->arrow-vec [^BufferAllocator allocator {:keys [^String vec-name ^List vs]}]
   (Vector/fromList allocator vec-name vs))
-
-;; TODO - Any utils/other way we could handle this?
-(defn normalize-for-comparison [obj]
-  (cond
-    (and (number? obj) (Double/isNaN (double obj)))
-    ::nan
-
-    (instance? ByteBuffer obj)
-    (vec (.array ^ByteBuffer obj))
-
-    (bytes? obj)
-    (vec obj)
-
-    (instance? Temporal obj)
-    (try
-      (time/->instant obj)
-      (catch Exception _ obj))
-
-    (instance? List obj)
-    (vec (map normalize-for-comparison obj))
-
-    (vector? obj)
-    (mapv normalize-for-comparison obj)
-
-    (list? obj)
-    (map normalize-for-comparison obj)
-
-    (or (instance? Set obj) (set? obj))
-    (set (map normalize-for-comparison obj))
-
-    (or (instance? Map obj) (map? obj))
-    (into {} (map (fn [[k v]]
-                    (let [norm-k (cond
-                                   (keyword? k) (name k)
-                                   :else (str k))]
-                      [norm-k (normalize-for-comparison v)]))
-                  obj))
-
-    :else obj))
-
-(defn lists-equal-normalized? [list1 list2]
-  (= (map normalize-for-comparison list1)
-     (map normalize-for-comparison list2)))
 
 (defprotocol ValueGenerator
   (vec-type->value-generator [vec-type]))

@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.test.check :as tc]
+            [clojure.walk :as walk]
             [cognitect.anomalies :as-alias anom]
             [xtdb.api :as xt]
             [xtdb.basis :as basis]
@@ -24,16 +25,16 @@
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant InstantSource LocalTime Period YearMonth ZoneId ZoneOffset)
-           (java.time.temporal ChronoUnit)
+           (java.time.temporal ChronoUnit Temporal)
            (java.util List)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector.types.pojo ArrowType$Struct Field Schema)
            (org.testcontainers.containers GenericContainer)
-           (xtdb PagesCursor)
+           (xtdb Bytes PagesCursor TaggedValue)
            (xtdb.api ICursor TransactionKey Xtdb)
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
-           (xtdb.arrow Relation RelationReader Vector VectorType)
+           (xtdb.arrow Relation RelationReader Vector VectorReader VectorType)
            [xtdb.database Database Database$Catalog]
            xtdb.database.Database$Catalog
            (xtdb.api.tx OpenTx)
@@ -463,6 +464,43 @@
    (let [opts (merge {:num-tests property-test-iterations} opts)
          result (tc/quick-check (:num-tests opts) property (dissoc opts :num-tests))]
      (t/is (:pass? result) (with-out-str (pp/pprint result))))))
+
+(defn ->clj
+  "`util/->clj` plus the coercions a test needs to compare values it wrote against values it read back.
+
+  `util/->clj` deliberately leaves binary as a `byte[]`, because that's what the public API returns —
+  but `byte[]` compares by identity, so a test can't use it directly. Binary is normalised to `Bytes`
+  (content equality) whichever representation it arrived in. `NaN` is likewise not `=` to itself, and a
+  temporal read back may be a different class to the one written, so both are collapsed."
+  [v]
+  (walk/prewalk (fn [v]
+                  (cond
+                    (bytes? v) (Bytes. v)
+                    (instance? ByteBuffer v) (Bytes. (.array ^ByteBuffer v))
+                    (and (number? v) (Double/isNaN (double v))) ::nan
+
+                    ;; `walk` only descends Clojure collections, so a tagged value's contents — a
+                    ;; tx-op's `iids`, say — are opaque to it; recur in ourselves as `util/->clj` does
+                    (instance? TaggedValue v)
+                    (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
+
+                    (instance? Temporal v)
+                    (try
+                      (time/->instant v)
+                      (catch Exception _ v))
+
+                    :else v))
+                (util/->clj v)))
+
+(defn vec->clj
+  "An Arrow vector's values, with struct keys as keywords.
+
+  `VectorReader.asList` reads with an identity key-fn, so a struct's keys come back as its raw Arrow
+  field names — strings. Comparing that against Clojure-authored data would then differ on key shape
+  alone, so a round-trip assertion wants this instead."
+  [^VectorReader v]
+  (->clj (mapv #(.getObject v % #xt/key-fn :kebab-case-keyword)
+               (range (.getValueCount v)))))
 
 (defn remove-nils [m]
   (into {} (remove (comp nil? val) m)))

@@ -733,25 +733,28 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
                       {:xt/id 1, :a "one", :b 2, :xt/column-2 42}]]]
 
             (t/testing "relevant schema unchanged since preparing query"
-              (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
+              ;; Use conn directly so its await-token is updated and openQuery sees the new rows.
+              ;; Use no-arg openQuery so queryOpts() supplies dbCat.snapshotToken(), which forces
+              ;; a snapshot refresh to include the newly-committed tx.
+              (xt/execute-tx conn [[:put-docs :foo {:xt/id 2 :a "two" :b 3}]])
 
               (.bind stmt args)
-              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+              (with-open [cursor (.openQuery stmt)]
                 (t/is (= res (tu/<-cursor cursor)))))
 
             (t/testing "irrelevant schema changed since preparing query"
 
-              (xt/execute-tx tu/*node* [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
+              (xt/execute-tx conn [[:put-docs :unrelated-table {:xt/id 2 :a 222}]])
 
               (.bind stmt args)
-              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+              (with-open [cursor (.openQuery stmt)]
                 (t/is (= res (tu/<-cursor cursor)))))
 
             (t/testing "a -> union, but prepared query is still fine outside of pgwire"
-              (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
+              (xt/execute-tx conn [[:put-docs :foo {:xt/id 3 :a 1 :b 4}]])
 
               (.bind stmt args)
-              (with-open [cursor (.openQuery stmt (QueryOpts.))]
+              (with-open [cursor (.openQuery stmt)]
                 (t/is (= [[{:xt/id 2, :a "two", :b 3, :xt/column-2 42}
                            {:xt/id 1, :a "one", :b 2, :xt/column-2 42}
                            {:xt/id 3, :a 1, :b 4, :xt/column-2 42}]]

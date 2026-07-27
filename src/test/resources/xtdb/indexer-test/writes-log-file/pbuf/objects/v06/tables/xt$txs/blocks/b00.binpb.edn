@@ -6,11 +6,11 @@
   "user_metadata" #xt/field {"user_metadata" [:? :struct]},
   "error" #xt/field {"error" [:? :transit]}},
  :hlls
- {"_id" [1360382973 3.004403133222472],
+ {"_id" [-857642243 3.004403133222472],
   "system_time" [-1544051178 3.004403133222472],
   "committed" [1743138479 1.0004885993744506],
   "user_metadata" [1742602241 0.0],
-  "error" [-558930497 1.0004885993744506]},
+  "error" [1597381852 1.0004885993744506]},
  :partitions
  [{:level 0,
    :part [],

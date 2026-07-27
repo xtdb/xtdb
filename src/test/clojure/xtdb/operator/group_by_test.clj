@@ -443,25 +443,25 @@
                      array-agg #xt/type [:list :i64],
                      array-agg-distinct #xt/type [:list :i64]}}
 
-           (util/->clj (-> (tu/query-ra [:group-by '{:columns [k
-                                                     {cnt (count v)}
-                                                     {cnt-distinct (count-distinct v)}
-                                                     {sum (sum v)}
-                                                     {sum-distinct (sum-distinct v)}
-                                                     {avg (avg v)}
-                                                     {avg-distinct (avg-distinct v)}
-                                                     {array-agg (array-agg v)}
-                                                     {array-agg-distinct (array-agg-distinct v)}]}
-                                         [::tu/pages
-                                          [[{:k :a, :v 10}
-                                            {:k :b, :v 12}
-                                            {:k :b, :v 15}
-                                            {:k :b, :v 15}
-                                            {:k :b, :v 10}]
-                                           [{:k :a, :v 12}
-                                            {:k :a, :v 10}]]]]
-                                        {:with-types? true})
-                           (update :res set))))))
+           (tu/->clj (-> (tu/query-ra [:group-by '{:columns [k
+                                                   {cnt (count v)}
+                                                   {cnt-distinct (count-distinct v)}
+                                                   {sum (sum v)}
+                                                   {sum-distinct (sum-distinct v)}
+                                                   {avg (avg v)}
+                                                   {avg-distinct (avg-distinct v)}
+                                                   {array-agg (array-agg v)}
+                                                   {array-agg-distinct (array-agg-distinct v)}]}
+                                       [::tu/pages
+                                        [[{:k :a, :v 10}
+                                          {:k :b, :v 12}
+                                          {:k :b, :v 15}
+                                          {:k :b, :v 15}
+                                          {:k :b, :v 10}]
+                                         [{:k :a, :v 12}
+                                          {:k :a, :v 10}]]]]
+                                      {:with-types? true})
+                         (update :res set))))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {}}

@@ -1984,19 +1984,13 @@
               {:u-name "james", :xt/id 2}]
              (xt/q tu/*node* "SELECT users._id, users.u_name FROM users ORDER BY _id"))))
 
-  (t/is (anomalous? [:incorrect :psql/invalid-parameter-value
-                     "No value specified for parameter 1."
-                     {:psql/state "22023",
-                      :sql "INSERT INTO users(_id, u_name) VALUES (?, ?)",
-                      :arg-rows nil}]
+  (t/is (anomalous? [:incorrect :xtdb.indexer/missing-sql-args
+                     "Arguments list was expected but not provided"]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)"]]))
         "no arg rows provided when args expected")
 
-  (t/is (anomalous? [:incorrect :psql/invalid-parameter-value
-                     "No value specified for parameter 2."
-                     {:psql/state "22023",
-                      :sql "INSERT INTO users(_id, u_name) VALUES (?, ?)",
-                      :arg-rows [[3] [4]]}]
+  (t/is (anomalous? [:incorrect :xtdb.indexer/incorrect-sql-arg-count
+                     "Parameter error: 1 provided, 2 expected"]
                     (xt/execute-tx tu/*node* [[:sql "INSERT INTO users(_id, u_name) VALUES (?, ?)" [3] [4]]]))
         "incorrect number of args on all arg-row")
 
@@ -3066,7 +3060,7 @@ UNION ALL
                     (sql/plan "SELECT 1 AS a, 2 AS a" {}))))
 
 (t/deftest test-hashcode-for-tstzrange-4263
-  (t/is (= [{:p #xt/tstz-range [#xt/zoned-date-time "2024-01-01T00:00Z" #xt/zoned-date-time "2024-01-02T00:00Z"]}]
+  (t/is (= [{:p #xt/tstz-range [#xt/zoned-date-time "2024-01-01T00:00Z[UTC]" #xt/zoned-date-time "2024-01-02T00:00Z[UTC]"]}]
            (xt/q tu/*node* "SELECT DISTINCT PERIOD(TIMESTAMP '2024-01-01Z', TIMESTAMP '2024-01-02Z') AS p;"))))
 
 (t/deftest patch-uuid-literal-id-4284

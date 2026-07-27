@@ -35,6 +35,9 @@ dependencies {
     api(libs.arrow.vector)
     api(libs.arrow.memory.netty)
 
+    // for `xt/open-adbc-conn`'s AdbcDatabase -> AdbcConnection contract
+    api(libs.arrow.adbc)
+
     api(kotlin("stdlib"))
     api(libs.kotlinx.serialization.json)
     

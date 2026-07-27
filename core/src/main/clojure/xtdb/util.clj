@@ -49,8 +49,6 @@
                     (instance? TaggedValue v)
                     (TaggedValue. (.getTag ^TaggedValue v) (->clj (.getValue ^TaggedValue v)))
 
-                    (bytes? v) (Bytes. v)
-
                     (instance? Schema v)
                     (->> (.getFields ^Schema v)
                          (into {} (map (juxt Field/.getName st/render-field-type))))
