@@ -13,7 +13,6 @@
             [xtdb.basis :as basis]
             [xtdb.error :as err]
             [xtdb.next.jdbc :as xt-jdbc]
-            [xtdb.protocols :as xtp]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
             [xtdb.tx-ops :as tx-ops])
@@ -22,7 +21,6 @@
            (java.sql BatchUpdateException Connection)
            [java.util.concurrent.atomic AtomicReference]
            (xtdb.api DataSource DataSource$ConnectionBuilder TransactionKey)
-           (xtdb.tx ClientTxOp DeleteDocs EraseDocs PatchDocs PutDocs Sql)
            xtdb.types.ClojureForm
            xtdb.util.NormalForm))
 
@@ -182,84 +180,71 @@
           (map second)
           kvs)))
 
-(extend-protocol xtp/ExecuteOp
-  PutDocs
-  (execute-op! [^PutDocs op conn]
-    (let [table-name (NormalForm/normalTableName (.getTableName op))
-          valid-from (.getValidFrom op)
-          valid-to (.getValidTo op)
-          docs (cond->> (.getDocs op)
-                 (or valid-from valid-to)
-                 (map (partial into (->> {:xt/valid-from valid-from, :xt/valid-to valid-to}
-                                         (into {} (remove (comp nil? val)))))))
-          copy-in (xt-jdbc/copy-in conn (format "COPY \"%s\".\"%s\" FROM STDIN WITH (FORMAT 'transit-json')"
-                                                (namespace table-name) (name table-name)))
-          bytes (serde/write-transit-seq docs :json)]
-      (.writeToCopy copy-in bytes 0 (alength bytes))
-      (.endCopy copy-in)))
+(defn- for-valid-time-sql [valid-from valid-to]
+  (if (or valid-from valid-to)
+    "FOR VALID_TIME FROM ? TO ?"
+    ""))
 
-  PatchDocs
-  (execute-op! [^PatchDocs op conn]
-    (let [table-name (NormalForm/normalTableName (.getTableName op))
-          valid-from (.getValidFrom op)
-          valid-to (.getValidTo op)
-          docs (.getDocs op)]
-      (with-open [stmt (jdbc/prepare conn [(format "PATCH INTO \"%s\".\"%s\" %s RECORDS ?"
-                                                   (namespace table-name) (name table-name)
-                                                   (if (or valid-from valid-to)
-                                                     "FOR VALID_TIME FROM ? TO ?"
-                                                     ""))])]
-        (jdbc/execute-batch! stmt (mapv (fn [doc]
-                                          (if (or valid-from valid-to)
-                                            [valid-from valid-to doc]
-                                            [doc]))
-                                        docs)))))
+(defn- put-docs! [{:keys [table-name docs valid-from valid-to]} conn]
+  (let [docs (cond->> docs
+               (or valid-from valid-to)
+               (map (partial into (->> {:xt/valid-from valid-from, :xt/valid-to valid-to}
+                                       (into {} (remove (comp nil? val)))))))
+        copy-in (xt-jdbc/copy-in conn (format "COPY \"%s\".\"%s\" FROM STDIN WITH (FORMAT 'transit-json')"
+                                              (namespace table-name) (name table-name)))
+        bytes (serde/write-transit-seq docs :json)]
+    (.writeToCopy copy-in bytes 0 (alength bytes))
+    (.endCopy copy-in)))
 
-  DeleteDocs
-  (execute-op! [^DeleteDocs op conn]
-    (let [table-name (NormalForm/normalTableName (.getTableName op))
-          valid-from (.getValidFrom op)
-          valid-to (.getValidTo op)
-          doc-ids (.getDocIds op)]
-      (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?"
-                                                   (namespace table-name) (name table-name)
-                                                   (if (or valid-from valid-to)
-                                                     "FOR VALID_TIME FROM ? TO ?"
-                                                     ""))])]
-        (jdbc/execute-batch! stmt (mapv (fn [doc-id]
-                                          (if (or valid-from valid-to)
-                                            [valid-from valid-to doc-id]
-                                            [doc-id]))
-                                        doc-ids)))))
+(defn- patch-docs! [{:keys [table-name docs valid-from valid-to]} conn]
+  (with-open [stmt (jdbc/prepare conn [(format "PATCH INTO \"%s\".\"%s\" %s RECORDS ?"
+                                               (namespace table-name) (name table-name)
+                                               (for-valid-time-sql valid-from valid-to))])]
+    (jdbc/execute-batch! stmt (mapv (fn [doc]
+                                      (if (or valid-from valid-to)
+                                        [valid-from valid-to doc]
+                                        [doc]))
+                                    docs))))
 
-  EraseDocs
-  (execute-op! [^EraseDocs op conn]
-    (let [table-name (NormalForm/normalTableName (.getTableName op))]
-      (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?"
-                                                   (namespace table-name) (name table-name))])]
-        (jdbc/execute-batch! stmt (mapv vector (.getDocIds op))))))
+(defn- delete-docs! [{:keys [table-name doc-ids valid-from valid-to]} conn]
+  (with-open [stmt (jdbc/prepare conn [(format "DELETE FROM \"%s\".\"%s\" %s WHERE _id = ?"
+                                               (namespace table-name) (name table-name)
+                                               (for-valid-time-sql valid-from valid-to))])]
+    (jdbc/execute-batch! stmt (mapv (fn [doc-id]
+                                      (if (or valid-from valid-to)
+                                        [valid-from valid-to doc-id]
+                                        [doc-id]))
+                                    doc-ids))))
 
-  Sql
-  (execute-op! [^Sql op conn]
-    (let [sql (.getSql op)
-          arg-rows (.getArgRows op)]
-      (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
-        (cond
-          (nil? arg-rows) (jdbc/execute! conn [sql])
-          (empty? arg-rows) nil
-          (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
-          :else (with-open [stmt (jdbc/prepare conn [sql])]
-                  (jdbc/execute-batch! stmt arg-rows)))))))
+(defn- erase-docs! [{:keys [table-name doc-ids]} conn]
+  (with-open [stmt (jdbc/prepare conn [(format "ERASE FROM \"%s\".\"%s\" WHERE _id = ?"
+                                               (namespace table-name) (name table-name))])]
+    (jdbc/execute-batch! stmt (mapv vector doc-ids))))
+
+(defn- sql! [{:keys [sql arg-rows]} conn]
+  (err/wrap-anomaly {:sql sql, :arg-rows arg-rows}
+    (cond
+      (nil? arg-rows) (jdbc/execute! conn [sql])
+      (empty? arg-rows) nil
+      (= 1 (count arg-rows)) (jdbc/execute! conn (into [sql] (first arg-rows)))
+      :else (with-open [stmt (jdbc/prepare conn [sql])]
+              (jdbc/execute-batch! stmt arg-rows)))))
+
+(defn- execute-op! [{:keys [op] :as tx-op} conn]
+  (case op
+    :put-docs (put-docs! tx-op conn)
+    :patch-docs (patch-docs! tx-op conn)
+    :delete-docs (delete-docs! tx-op conn)
+    :erase-docs (erase-docs! tx-op conn)
+    :sql (sql! tx-op conn)))
 
 (defn- submit-tx* [conn tx-ops tx-opts]
   (try
     (err/wrap-anomaly {}
       (jdbc/execute! conn (begin-rw-sql tx-opts))
       (try
-        (doseq [tx-op tx-ops
-                :let [tx-op (cond-> tx-op
-                              (not (instance? ClientTxOp tx-op)) tx-ops/parse-tx-op)]]
-          (xtp/execute-op! tx-op conn))
+        (doseq [tx-op tx-ops]
+          (execute-op! (tx-ops/parse-tx-op tx-op) conn))
         (catch BatchUpdateException e
           (throw (ex-cause e))))
 

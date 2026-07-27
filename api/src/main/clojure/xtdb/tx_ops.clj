@@ -2,8 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.time :as time])
-  (:import [xtdb.tx Sql PutDocs PatchDocs DeleteDocs EraseDocs]
-           xtdb.util.NormalForm))
+  (:import xtdb.util.NormalForm))
 
 (defmulti parse-tx-op
   (fn [tx-op]
@@ -26,30 +25,6 @@
 
 (defmethod parse-tx-op ::default [[op]]
   (throw (err/incorrect :xtql/unknown-tx-op "Unknown tx-op" {:op op})))
-
-(defn ->Sql
-  ([sql] (Sql. sql))
-  ([sql arg-rows] (Sql. sql arg-rows)))
-
-(defn ->PutDocs
-  ([table-name docs] (PutDocs. table-name docs))
-  ([table-name docs valid-from valid-to] (PutDocs. table-name docs valid-from valid-to)))
-
-(defn ->PatchDocs
-  ([table-name docs] (PatchDocs. table-name docs))
-  ([table-name docs valid-from valid-to] (PatchDocs. table-name docs valid-from valid-to)))
-
-(defn ->DeleteDocs
-  ([table-name doc-ids] (DeleteDocs. table-name doc-ids))
-  ([table-name doc-ids valid-from valid-to] (DeleteDocs. table-name doc-ids valid-from valid-to)))
-
-(defn ->EraseDocs [table-name doc-ids] (EraseDocs. table-name doc-ids))
-
-(defn map->PutDocs [{:keys [table-name docs valid-from valid-to]}]
-  (PutDocs. table-name docs valid-from valid-to))
-
-(defn map->PatchDocs [{:keys [table-name docs valid-from valid-to]}]
-  (PatchDocs. table-name docs valid-from valid-to))
 
 (def ^:private eid? (some-fn uuid? integer? string? keyword?))
 
@@ -79,7 +54,7 @@
   (if-not (string? sql)
     (throw (err/incorrect :xtdb.tx/expected-sql "Expected SQL query" {:sql sql}))
 
-    (->Sql sql (when (seq arg-rows) (vec arg-rows)))))
+    {:op :sql, :sql sql, :arg-rows (when (seq arg-rows) (vec arg-rows))}))
 
 (defmethod parse-tx-op :sql-str [sql]
   (parse-tx-op [:sql sql]))
@@ -91,10 +66,11 @@
   (let [{table :into, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:into table-or-opts})]
-    (->PutDocs (expect-table-name table)
-               (mapv expect-doc docs)
-               (some-> valid-from time/expect-instant)
-               (some-> valid-to time/expect-instant))))
+    {:op :put-docs
+     :table-name (expect-table-name table)
+     :docs (mapv expect-doc docs)
+     :valid-from (some-> valid-from time/expect-instant)
+     :valid-to (some-> valid-to time/expect-instant)}))
 
 (defmethod parse-tx-op :put-fn [_]
   (throw (err/unsupported :xtdb/tx-fns-removed
@@ -109,10 +85,11 @@
     (when (or valid-from valid-to)
       (throw (UnsupportedOperationException. "valid-from and valid-to are not yet supported for patch-docs")))
 
-    (->PatchDocs (expect-table-name table)
-                 (mapv expect-doc docs)
-                 (some-> valid-from time/expect-instant)
-                 (some-> valid-to time/expect-instant))))
+    {:op :patch-docs
+     :table-name (expect-table-name table)
+     :docs (mapv expect-doc docs)
+     :valid-from (some-> valid-from time/expect-instant)
+     :valid-to (some-> valid-to time/expect-instant)}))
 
 (defmethod parse-tx-op :insert-into [_]
   (throw (err/unsupported :xtdb/xtql-dml-removed
@@ -136,9 +113,11 @@
   (let [{table :from, :keys [valid-from valid-to]} (cond
                                                      (map? table-or-opts) table-or-opts
                                                      (keyword? table-or-opts) {:from table-or-opts})]
-    (->DeleteDocs (expect-table-name table) (mapv expect-eid doc-ids)
-                  (some-> valid-from time/expect-instant)
-                  (some-> valid-to time/expect-instant))))
+    {:op :delete-docs
+     :table-name (expect-table-name table)
+     :doc-ids (mapv expect-eid doc-ids)
+     :valid-from (some-> valid-from time/expect-instant)
+     :valid-to (some-> valid-to time/expect-instant)}))
 
 (defmethod parse-tx-op :erase [_]
   (throw (err/unsupported :xtdb/xtql-dml-removed
@@ -147,7 +126,9 @@
                                      "see the release notes for more information."]))))
 
 (defmethod parse-tx-op :erase-docs [[_ table & doc-ids]]
-  (->EraseDocs (expect-table-name table) (mapv expect-eid doc-ids)))
+  {:op :erase-docs
+   :table-name (expect-table-name table)
+   :doc-ids (mapv expect-eid doc-ids)})
 
 (defmethod parse-tx-op :assert-exists [_]
   (throw (err/unsupported :xtdb/xtql-dml-removed

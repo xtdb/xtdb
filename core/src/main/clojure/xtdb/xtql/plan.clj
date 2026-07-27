@@ -3,7 +3,6 @@
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.operator.group-by :as group-by]
-            xtdb.tx-ops
             [xtdb.util :as util]
             [xtdb.xtql :as xtql])
   (:import (clojure.lang MapEntry)

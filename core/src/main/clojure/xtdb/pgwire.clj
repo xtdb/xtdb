@@ -14,7 +14,6 @@
             [xtdb.pgwire.io :as pgio]
             [xtdb.serde :as serde]
             [xtdb.sql :as sql]
-            [xtdb.tx-ops :as tx-ops]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw]

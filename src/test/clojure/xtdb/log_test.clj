@@ -26,9 +26,7 @@
    (binding [*print-namespace-maps* false]
      (let [file (io/as-file file)
            actual-bytes (tu/serialize-tx-ops tu/*allocator*
-                                              (for [tx-op tx-ops]
-                                                (cond-> tx-op
-                                                  (not (record? tx-op)) tx-ops/parse-tx-op))
+                                              (mapv tx-ops/parse-tx-op tx-ops)
                                               ;; TODO test multi-db
                                               (merge {:default-db "xtdb", :default-tz #xt/zone "Europe/London"} opts))]
 
@@ -115,9 +113,7 @@
 ;; via pgwire, bypassing PatchDocsWriter entirely. See #5232.
 (t/deftest can-serialize-patch-docs
   (let [actual-bytes (tu/serialize-tx-ops tu/*allocator*
-                                           (for [tx-op [[:patch-docs :foo {:xt/id 1, :v 2} {:xt/id 3, :x "hello"}]]]
-                                             (cond-> tx-op
-                                               (not (record? tx-op)) tx-ops/parse-tx-op))
+                                           (mapv tx-ops/parse-tx-op [[:patch-docs :foo {:xt/id 1, :v 2} {:xt/id 3, :x "hello"}]])
                                            {:default-db "xtdb", :default-tz #xt/zone "Europe/London"})]
     (with-open [rel (Relation/openFromArrowStream tu/*allocator* actual-bytes)]
       (t/is (= (util/->clj [{:default-tz "Europe/London"
