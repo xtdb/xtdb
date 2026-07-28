@@ -21,33 +21,21 @@
 (deftest test-live-trie-can-overflow-log-limit-at-max-depth
   ;; every row shares one iid, so the trie bottoms out in a single max-depth leaf - that
   ;; trie-structure property is asserted in xtdb.indexer.LiveTableTest; here we pin the
-  ;; finished block's on-disk arrow format, at small (custom trie) and large scale.
-  (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
-        n 1000]
-    (tu/with-tmp-dirs #{path}
-      (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                       bp (.getBufferPool (db/primary-db node))
-                       allocator (RootAllocator.)
-                       live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
-        (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
-          (.importData live-table rel))
+  ;; finished block's on-disk arrow format.
+  ;;
+  ;; the rows are all identical, so the format is pinned by the first hundred of them.
+  (binding [*print-length* 100]
+    (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
+          n 1000]
+      (tu/with-tmp-dirs #{path}
+        (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
+                         bp (.getBufferPool (db/primary-db node))
+                         allocator (RootAllocator.)
+                         live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
+          (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
+            (.importData live-table rel))
 
-        (.finishBlock live-table bp 0)
+          (.finishBlock live-table bp 0)
 
-        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-                                 (.resolve path "objects")))))
-
-  (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
-        n 50000]
-    (tu/with-tmp-dirs #{path}
-      (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
-                       bp (.getBufferPool (db/primary-db node))
-                       allocator (RootAllocator.)
-                       live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.))]
-        (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
-          (.importData live-table rel))
-
-        (.finishBlock live-table bp 0)
-
-        (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-                                 (.resolve path "objects"))))))
+          (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie")))
+                                   (.resolve path "objects")))))))

@@ -112,17 +112,13 @@ class LiveTableTest {
         rel.endRow()
     }
 
-    @Test
-    fun `identical iids collapse to a single max-depth leaf`() {
-        // every row shares one iid, so the trie can't split: it must bottom out in a single
-        // max-depth leaf holding every row index rather than over-splitting or erroring.
+    // every row shares one iid, so the trie can't split: it must bottom out in a single
+    // max-depth leaf holding every row index rather than over-splitting or erroring.
+    private fun assertCollapsesToMaxDepthLeaf(n: Int, liveTrieFactory: LiveTable.LiveTrieFactory) {
         val uuid = UUID.fromString("7fffffff-ffff-ffff-4fff-ffffffffffff")
-        val n = 1000
 
         RootAllocator().use { allocator ->
-            LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter()) { iidVec ->
-                MemoryHashTrie.builder(iidVec).setLogLimit(2).setPageLimit(4).build()
-            }.use { liveTable ->
+            LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter(), liveTrieFactory).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     val iid = uuid.toIidBytes()
                     repeat(n) { writePut(sourceRel, iid, 0, 0, 0) }
@@ -136,6 +132,16 @@ class LiveTableTest {
             }
         }
     }
+
+    @Test
+    fun `identical iids collapse to a single max-depth leaf`() =
+        assertCollapsesToMaxDepthLeaf(1000) { MemoryHashTrie.builder(it).setLogLimit(2).setPageLimit(4).build() }
+
+    // the rigged limits above bottom the trie out in a handful of rows; the production 64/1024
+    // want rather more, and it's those we'd regress on.
+    @Test
+    fun `identical iids collapse to a single max-depth leaf at default trie limits`() =
+        assertCollapsesToMaxDepthLeaf(50_000) { MemoryHashTrie.emptyTrie(it) }
 
     // the relation/trie an already-open snapshot exposes must survive a subsequent finishBlock -
     // TableSnapshot.open takes its own direct slice rather than sharing the live table's mutable state.
