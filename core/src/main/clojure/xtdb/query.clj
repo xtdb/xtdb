@@ -40,20 +40,18 @@
            (java.time Duration InstantSource)
            (java.util HashMap LinkedHashMap Map)
            [java.util.concurrent.atomic AtomicBoolean]
-           (java.util.function Function)
-           [java.util.stream Stream StreamSupport]
            (org.antlr.v4.runtime.misc Interval)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            org.apache.arrow.vector.types.pojo.Field
            (xtdb PagesCursor)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext)
            (xtdb.api ICursor ResultCursor)
-           (xtdb.api.query IKeyFn PrepareOpts)
+           (xtdb.api.query PrepareOpts)
            (xtdb.arrow RelationReader VectorReader VectorType)
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query ErrorTrackingCursor IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -547,25 +545,3 @@
       (->query-source {:allocator allocator
                        :metrics-registry meter-registry
                        :scan-emitter scan-emitter}))))
-
-(defn- cache-key-fn [^IKeyFn key-fn]
-  (let [cache (HashMap.)]
-    (reify IKeyFn
-      (denormalize [_ k]
-        (.computeIfAbsent cache k
-                          (reify Function
-                            (apply [_ k]
-                              (.denormalize key-fn k))))))))
-
-(defn cursor->stream
-  (^java.util.stream.Stream [^ResultCursor cursor query-opts]
-   (cursor->stream cursor query-opts {}))
-  (^java.util.stream.Stream [^ResultCursor cursor {:keys [key-fn]} {:keys [query-error-counter]}]
-   (let [key-fn (cache-key-fn key-fn)]
-     (-> (StreamSupport/stream (cond-> cursor
-                                 query-error-counter (ErrorTrackingCursor. query-error-counter))
-                               false)
-         ^Stream (.onClose (fn []
-                             (util/close cursor)))
-         (.flatMap (fn [^RelationReader rel]
-                     (.stream (.toMaps rel key-fn))))))))
