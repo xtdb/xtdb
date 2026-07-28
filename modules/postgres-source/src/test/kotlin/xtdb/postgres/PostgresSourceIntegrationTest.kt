@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.postgres.proto.PostgresSourceToken
+import org.postgresql.replication.LogSequenceNumber
 import org.testcontainers.containers.Network
 import org.testcontainers.kafka.ConfluentKafkaContainer
 import org.testcontainers.lifecycle.Startables
@@ -277,6 +278,107 @@ class PostgresSourceIntegrationTest {
             assertEquals("Alice", rows[0]["name"])
             assertEquals("Bob", rows[1]["name"])
             assertEquals("Charlie", rows[2]["name"])
+        }
+    }
+
+    /**
+     * Records how we behave when a replication slot is dropped and recreated under a running source.
+     * This is **not supported** and users MUST NOT rely on it — it's written down so that we know what
+     * happens, not because we're committing to it continuing to happen.
+     *
+     * Postgres does not error on a resume LSN that predates the slot's `confirmed_flush_lsn` — it
+     * silently forwards to the slot's own position, logging `"%X/%X has been already streamed,
+     * forwarding to %X/%X"` at LOG level server-side (`CreateDecodingContext`, logical.c). Everything
+     * between our token and the new slot's consistent point is skipped with no client-visible signal,
+     * and the resume path never re-snapshots to reconcile it (`snapshotCompleted = true` goes straight
+     * to `streamChanges`). A dropped DELETE is the worst of it: the row stays in XT looking like live
+     * data, so the divergence doesn't even read as missing data.
+     *
+     * Reaching this state takes deliberate operator action — XTDB itself never drops or recreates a
+     * slot (`openSnapshot` only ever creates one that doesn't already exist, and fails if it does).
+     *
+     * Disabled rather than deleted: as a live test it asserts data loss, so it would fail the day we
+     * decide to guard against this — for the right reasons. Enable it by hand to check the behaviour
+     * hasn't drifted.
+     */
+    @Disabled("Characterises unsupported behaviour: a slot recreated under a running source. A record of how we behave, not a guarantee.")
+    @Test
+    fun `slot recreation silently drops changes`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_slot_gap (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_slot_gap (_id, name) VALUES (1, 'snapshot-row')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_slot_gap",
+        )
+
+        val tokenLsn = openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            // 1 table batch + 1 completion marker = 2 txs
+            awaitTxs(node, 2, db = "cdc")
+
+            // stream a row so the token advances past the snapshot's consistent point
+            pgExecute("INSERT INTO pg_slot_gap (_id, name) VALUES (2, 'streamed-row')")
+            awaitCondition("streamed row appears", timeout = 30.seconds) {
+                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 2").isNotEmpty()
+            }
+
+            val token = latestPostgresToken(node)
+            assertTrue(token.snapshotCompleted, "test precondition: restart should take the resume path")
+            token.latestCommittedLsn
+        }
+
+        awaitCondition("slot released after node close", timeout = 10.seconds) { pgSlotState(slotName) == false }
+
+        // the gap — one of each op type, with the node down
+        pgExecute(
+            "INSERT INTO pg_slot_gap (_id, name) VALUES (3, 'gap-insert')",
+            "UPDATE pg_slot_gap SET name = 'gap-update' WHERE _id = 2",
+            "DELETE FROM pg_slot_gap WHERE _id = 1",
+        )
+
+        // an operator reprovisions the slot — same name, fresh consistent point
+        pgExecute(
+            "SELECT pg_drop_replication_slot('$slotName')",
+            "SELECT pg_create_logical_replication_slot('$slotName', 'pgoutput')",
+        )
+
+        // written past the new slot's consistent point, so this one does arrive — the fence that
+        // proves the source resumed rather than merely lagging
+        pgExecute("INSERT INTO pg_slot_gap (_id, name) VALUES (4, 'post-recreate')")
+
+        val slotLsn = pgSlotConfirmedFlushLsn(slotName)
+        assertTrue(
+            slotLsn > tokenLsn,
+            "test precondition: recreated slot ($slotLsn) should be ahead of our token ($tokenLsn)"
+        )
+
+        openNode(sourceTopic).use { node ->
+            awaitCondition("post-recreate row appears", timeout = 60.seconds) {
+                runCatching {
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 4").isNotEmpty()
+                }.getOrDefault(false)
+            }
+
+            // pgoutput delivers in LSN order, so the fence having landed means everything in the
+            // gap was skipped outright — not still in flight
+            val rows = xtQueryDb(node, "cdc", "SELECT _id, name FROM public.pg_slot_gap ORDER BY _id")
+
+            assertEquals(listOf(1, 2, 4), rows.map { (it["_id"] as Number).toInt() }, "gap insert (3) is dropped")
+            assertEquals("streamed-row", rows[1]["name"], "gap update is dropped — XT keeps the stale value")
+            assertEquals("snapshot-row", rows[0]["name"], "gap delete is dropped — row 1 lives on in XT")
+
+            // Postgres has 2 (updated), 3, 4 — XT has 1 (should be gone), 2 (stale), 4
+            assertEquals(
+                listOf(2, 3, 4), pgQueryIds("SELECT _id FROM pg_slot_gap ORDER BY _id"),
+                "meanwhile Postgres has moved on"
+            )
+
+            // no error, no stall — the node is happily wrong
+            assertPrimaryDbHealthy(node)
         }
     }
 
@@ -1103,6 +1205,24 @@ class PostgresSourceIntegrationTest {
             }
         }
     }
+
+    private fun pgSlotConfirmedFlushLsn(slotName: String): Long =
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT confirmed_flush_lsn::text AS lsn FROM pg_replication_slots WHERE slot_name = '$slotName'")
+                    .use { rs ->
+                        assertTrue(rs.next(), "slot '$slotName' should exist")
+                        LogSequenceNumber.valueOf(rs.getString("lsn")).asLong()
+                    }
+            }
+        }
+
+    private fun pgQueryIds(sql: String): List<Int> =
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery(sql).use { rs -> buildList { while (rs.next()) add(rs.getInt(1)) } }
+            }
+        }
 
     @Test
     fun `streamed tx system-time is the postgres commit time`() = runTest(timeout = 120.seconds) {
