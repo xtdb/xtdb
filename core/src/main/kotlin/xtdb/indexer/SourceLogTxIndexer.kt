@@ -7,6 +7,7 @@ import xtdb.Metrics.withSpan
 import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
+import xtdb.api.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Anomaly.Companion.wrapAnomaly
@@ -49,6 +50,7 @@ internal class SourceLogTxIndexer(
     private val allocator: BufferAllocator,
     base: NodeBase,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     private val crashLogger: CrashLogger,
 ) {
 
@@ -252,7 +254,7 @@ internal class SourceLogTxIndexer(
                 tracer.withSpan(
                     "xtdb.transaction.patch-docs",
                     attributes = mapOf(
-                        "db" to dbState.name, "schema" to tableRef.schemaName, "table" to tableRef.tableName,
+                        "db" to dbName, "schema" to tableRef.schemaName, "table" to tableRef.tableName,
                     ),
                 ) {
                     table(tableRef).patchDocs(docs, validFrom, validTo)

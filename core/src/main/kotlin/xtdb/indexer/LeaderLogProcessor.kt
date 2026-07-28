@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.DatabaseName
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
@@ -39,6 +40,7 @@ internal class LeaderLogProcessor(
     private val partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     private val blockUploader: BlockUploader,
     private val watchers: Watchers,
     private val extSource: ExternalSource?,
@@ -54,12 +56,11 @@ internal class LeaderLogProcessor(
 ) : LogProcessor.Processor<SourceMessage>, TxIndexer {
 
     init {
-        require((dbCatalog != null) == (dbState.name == "xtdb")) {
+        require((dbCatalog != null) == (dbName == "xtdb")) {
             "dbCatalog must be provided iff database is 'xtdb'"
         }
     }
 
-    private val dbName = dbState.name
     private val partition = partitionStorage.partition
     private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
@@ -72,7 +73,7 @@ internal class LeaderLogProcessor(
     // resolved-but-not-yet-durable tx — until we've committed it into the live index below. Driven only
     // from the persister coroutine, and freed in close() once that job is joined; see TxResolver.
     private val txResolver =
-        TxResolver(allocator, nodeBase, partitionStorage, dbState, crashLogger, skipTxs, instantSource)
+        TxResolver(allocator, nodeBase, partitionStorage, dbState, dbName, crashLogger, skipTxs, instantSource)
 
     var pendingBlock: PendingBlock? = null
         private set
@@ -403,7 +404,7 @@ internal class LeaderLogProcessor(
 
         TrieGarbageCollector(
             gcScope,
-            bufferPool, dbState,
+            bufferPool, dbState, dbName,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
             nodeBase.meterRegistry,

@@ -515,7 +515,7 @@
       (let [^IQuerySource$QueryDatabase db db
             ^IQuerySource$QueryCatalog db-cat db-cat
             db-state (.getQueryState db)
-            db-name (.getName db-state)
+            db-name (.getName db)
             table-catalog (.getTableCatalog db-state)
             trie-catalog (.getTrieCatalog db-state)
             schema-info (-> (merge-with merge

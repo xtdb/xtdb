@@ -13,7 +13,6 @@ import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
 data class DatabaseState(
-    val name: DatabaseName,
     val blockCatalogOrNull: BlockCatalog?,
     val tableCatalogOrNull: TableCatalog?,
     val trieCatalogOrNull: TrieCatalog?,
@@ -58,7 +57,7 @@ data class DatabaseState(
 
             val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName, indexerConfig) }
 
-            DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
+            DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         }
     }
 }

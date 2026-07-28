@@ -59,13 +59,13 @@ class LiveIndexTest {
         nodeBase.close()
     }
 
-    private inner class TestDb(dbName: String = "xtdb") : AutoCloseable {
+    private inner class TestDb(private val dbName: String = "xtdb") : AutoCloseable {
         val bp = MemoryStorage(allocator, epoch = 0)
         private val blockCatalog = BlockCatalog(dbName, null)
         private val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName)
-        private val dbState = DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        private val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         private val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),
@@ -75,7 +75,7 @@ class LiveIndexTest {
         )
 
         fun openTx(txId: Long, systemTime: Instant) =
-            OpenTx(allocator, nodeBase, partitionStorage, dbState, TransactionKey(txId, systemTime), null)
+            OpenTx(allocator, nodeBase, partitionStorage, dbState, dbName, TransactionKey(txId, systemTime), null)
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)

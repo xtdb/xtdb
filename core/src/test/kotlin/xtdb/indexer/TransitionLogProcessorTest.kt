@@ -40,7 +40,7 @@ class TransitionLogProcessorTest {
         blockCatalog = BlockCatalog("test", null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
-        dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         every { bufferPool.epoch } returns 1
@@ -53,7 +53,7 @@ class TransitionLogProcessorTest {
 
     private fun makeProcessor(hasExternalSource: Boolean = false) =
         TransitionLogProcessor(
-            allocator, bufferPool, dbState, liveIndex,
+            allocator, bufferPool, dbState, "test", liveIndex,
             blockUploader, replicaProducer,
             watchers, null, afterReplicaMsgId = -1L,
             hasExternalSource = hasExternalSource,

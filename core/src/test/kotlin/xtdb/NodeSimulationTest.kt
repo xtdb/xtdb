@@ -117,13 +117,13 @@ class NodeSimulationTest : SimulationTestBase() {
             val blockCatalog = BlockCatalog("xtdb", sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val dbState = DatabaseState("xtdb", blockCatalog, null, trieCatalog, null)
+            val dbState = DatabaseState(blockCatalog, null, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
                 gcScope,
-                sharedBufferPool, dbState,
+                sharedBufferPool, dbState, "xtdb",
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
                     // simulation's view of the catalog still converges as the test asserts.

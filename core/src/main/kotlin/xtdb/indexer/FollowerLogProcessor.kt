@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
@@ -40,6 +41,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     replicaLog: PartitionLog<ReplicaMessage>,
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
@@ -50,8 +52,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
 ) : LogProcessor.Processor<ReplicaMessage> {
-
-    private val dbName = dbState.name
 
     private fun processTimer(msgType: String): Timer? = meterRegistry?.let {
         Timer.builder("xtdb.replica.process.timer")

@@ -1,6 +1,7 @@
 package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
@@ -26,6 +27,7 @@ class TransitionLogProcessor(
     allocator: BufferAllocator,
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     private val liveIndex: LiveIndex,
     private val blockUploader: BlockUploader,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
@@ -38,7 +40,6 @@ class TransitionLogProcessor(
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
-    private val dbName = dbState.name
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
 

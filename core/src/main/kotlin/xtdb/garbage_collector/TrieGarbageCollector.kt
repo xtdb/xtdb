@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
+import xtdb.api.DatabaseName
 import xtdb.database.DatabaseState
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
@@ -54,6 +55,7 @@ class TrieGarbageCollector(
     scope: CoroutineScope,
     private val bufferPool: BufferPool,
     dbState: DatabaseState,
+    dbName: DatabaseName,
     /**
      * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.
      * The Persister channel is the sole ordering point, so no other replica-log write interleaves between the two.
@@ -83,7 +85,7 @@ class TrieGarbageCollector(
     private val deleteTimer: Timer? = meterRegistry?.let {
         Timer.builder("xtdb.gc.tries.delete.timer")
             .publishPercentiles(0.75, 0.95, 0.99)
-            .tag("db", dbState.name)
+            .tag("db", dbName)
             .register(it)
     }
     

@@ -67,6 +67,7 @@ class OpenTx
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
     private val tracer: Tracer? = null,
@@ -144,6 +145,7 @@ class OpenTx
             val liveIndex = dbState.liveIndex
 
             val queryDb = object : IQuerySource.QueryDatabase {
+                override val name get() = dbName
                 override val storage get() = partitionStorage
                 override val queryState get() = dbState
                 // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
@@ -152,8 +154,8 @@ class OpenTx
             }
 
             return object : IQuerySource.QueryCatalog {
-                override val databaseNames: Collection<DatabaseName> get() = setOf(dbState.name)
-                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == dbState.name }
+                override val databaseNames: Collection<DatabaseName> get() = setOf(dbName)
+                override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == this@OpenTx.dbName }
             }
         }
 
@@ -169,7 +171,7 @@ class OpenTx
         val currentTime = opts.currentTime ?: txKey.systemTime
 
         val prepareOpts = PrepareOpts(
-            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbState.name,
+            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbName,
         )
 
         return nodeBase.querySource
@@ -191,7 +193,7 @@ class OpenTx
         val qOpts = opts.copy(currentTime = currentTime, tracer = opts.tracer ?: tracer)
 
         val prepareOpts = PrepareOpts(
-            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbState.name,
+            currentTime = currentTime, defaultTz = opts.defaultTz, defaultDb = dbName,
             argFields = args?.schema?.fields,
         )
 
@@ -304,10 +306,10 @@ class OpenTx
         principal: String?,
         revoke: Boolean
     ) {
-        if (dbState.name != "xtdb")
+        if (dbName != "xtdb")
             throw Incorrect(
                 "Role membership can only be managed on the primary 'xtdb' database.",
-                "xtdb/role-membership-non-primary", mapOf("db" to dbState.name),
+                "xtdb/role-membership-non-primary", mapOf("db" to dbName),
             )
 
         if (principal == null || !nodeBase.config.authn.isSuperuser(principal))
@@ -641,7 +643,7 @@ class OpenTx
             checkNotForbidden(ref)
 
             val prepareOpts = PrepareOpts(
-                currentTime = txKey.systemTime, defaultDb = dbState.name,
+                currentTime = txKey.systemTime, defaultDb = dbName,
                 argFields = docs.schema.fields,
             )
 

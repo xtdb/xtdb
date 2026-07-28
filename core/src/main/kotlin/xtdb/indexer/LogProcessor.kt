@@ -14,6 +14,7 @@ import xtdb.NodeBase
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.compactor.Compactor
+import xtdb.api.DatabaseName
 import xtdb.database.Database
 import xtdb.database.DatabaseState
 import xtdb.database.PartitionStorage
@@ -36,6 +37,7 @@ class LogProcessor(
     private val crashLogger: CrashLogger,
     private val partitionStorage: PartitionStorage,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
     private val compactor: Compactor.ForDatabase,
@@ -51,7 +53,6 @@ class LogProcessor(
         val latestReplicaMsgId: MessageId
     }
 
-    private val dbName = dbState.name
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
@@ -90,7 +91,7 @@ class LogProcessor(
     ): LeaderLogProcessor =
         // The leader term owns (and frees) its replica producer and ext source.
         LeaderLogProcessor(
-            allocator, base, partitionStorage, crashLogger, dbState, blockUploader,
+            allocator, base, partitionStorage, crashLogger, dbState, dbName, blockUploader,
             watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             replicaProducer, skipTxs, dbCatalog,
@@ -105,7 +106,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): TransitionLogProcessor =
         TransitionLogProcessor(
-            allocator, partitionStorage.bufferPool, dbState, dbState.liveIndex,
+            allocator, partitionStorage.bufferPool, dbState, dbName, dbState.liveIndex,
             blockUploader, replicaProducer, watchers, dbCatalog,
             afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
@@ -116,7 +117,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): FollowerLogProcessor =
         FollowerLogProcessor(
-            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, dbState, compactor, watchers,
+            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, dbState, dbName, compactor, watchers,
             dbCatalog, pendingBlock, afterReplicaMsgId, scope,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
@@ -146,7 +147,7 @@ class LogProcessor(
         base.meterRegistry?.let { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.state is Leading) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
-                .tag("db", dbState.name)
+                .tag("db", dbName)
                 .register(reg)
         }
     }

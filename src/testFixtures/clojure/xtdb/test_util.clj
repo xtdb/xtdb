@@ -388,7 +388,7 @@
    (->open-tx (.getAllocator node) node tx-key))
   (^OpenTx [^BufferAllocator allocator node ^TransactionKey tx-key]
    (let [db (db/primary-db node)]
-     (OpenTx. allocator (util/node-base node) (.getStorage db) (.getQueryState db) tx-key nil nil))))
+     (OpenTx. allocator (util/node-base node) (.getStorage db) (.getQueryState db) (.getName db) tx-key nil nil))))
 
 (defn open-put-log-rel
   "Builds a log-data relation of put ops via the public log-data writer - the same relation

@@ -62,6 +62,7 @@ private val LOG = Database::class.logger
 class Database(
     val allocator: BufferAllocator,
     val config: Config,
+    override val name: DatabaseName,
     val logs: DatabaseLogs,
     val isIndexing: Boolean,
     val partitions: Map<Int, DatabasePartition>,
@@ -78,7 +79,6 @@ class Database(
     // lookup once `partitions > 1` is enabled; for now every Database has exactly one.
     private val partition0: DatabasePartition get() = partitions.getValue(0)
 
-    val name: DatabaseName get() = partition0.state.name
     override val storage: PartitionStorage get() = partition0.storage
     override val queryState: DatabaseState get() = partition0.state
     val watchers: Watchers get() = partition0.watchers
@@ -343,7 +343,7 @@ class Database(
 
                 LogProcessor(
                     allocator, base, crashLogger,
-                    storage, state, watchers, blockUploader,
+                    storage, state, dbName, watchers, blockUploader,
                     compactorForDb, dbCatalog,
                     externalSourceFactory = dbConfig.externalSource,
                     scope = scope,
@@ -390,6 +390,7 @@ class Database(
             val db = Database(
                 allocator = allocator,
                 config = dbConfig,
+                name = dbName,
                 logs = logs,
                 isIndexing = indexerConfig.enabled,
                 partitions = mapOf(0 to partition),

@@ -47,7 +47,6 @@ class LogProcessorTest {
 
     private fun dbState(name: String = "test-db", liveIndex: LiveIndex = mockk(relaxed = true)) =
         DatabaseState(
-            name,
             BlockCatalog(name, null),
             mockk<TableCatalog>(relaxed = true),
             mockk<TrieCatalog>(relaxed = true),
@@ -62,7 +61,7 @@ class LogProcessorTest {
         scope: CoroutineScope,
     ) = LogProcessor(
         allocator, nodeBase, mockk(relaxed = true),
-        partitionStorage, dbState, watchers, blockUploader,
+        partitionStorage, dbState, "test-db", watchers, blockUploader,
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
         externalSourceFactory = null,
         scope = scope,

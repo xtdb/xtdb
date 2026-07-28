@@ -18,6 +18,7 @@ interface IQuerySource : AutoCloseable {
     }
 
     interface QueryDatabase : DatabaseSnapshot.Source {
+        val name: DatabaseName
         val storage: PartitionStorage
         val queryState: DatabaseState
     }

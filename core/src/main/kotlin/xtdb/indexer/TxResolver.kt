@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.Metrics.withSpan
 import xtdb.NodeBase
+import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.TransactionResult.Aborted
@@ -86,12 +87,12 @@ internal class TxResolver(
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
     private val dbState: DatabaseState,
+    private val dbName: DatabaseName,
     crashLogger: CrashLogger,
     private val skipTxs: Set<MessageId>,
     private val instantSource: InstantSource,
 ) : AutoCloseable {
 
-    private val dbName = dbState.name
     private val bufferPool = partitionStorage.bufferPool
 
     private val allocator = allocator.newChildAllocator("tx-resolver", 0, Long.MAX_VALUE)
@@ -100,7 +101,7 @@ internal class TxResolver(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
+    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, dbName, crashLogger)
 
     var latestCompletedTx: TransactionKey? = dbState.liveIndex.latestCompletedTx
         private set
@@ -154,7 +155,7 @@ internal class TxResolver(
     }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, partitionStorage, dbState, txKey, externalSourceToken, tracer, inFlightTxs)
+        OpenTx(allocator, nodeBase, partitionStorage, dbState, dbName, txKey, externalSourceToken, tracer, inFlightTxs)
 
     // Stage a fresh tx committing a single skip / abort / invalid-system-time row. `countError` mirrors the
     // pre-staging behaviour: skipped txs don't count as errors.
