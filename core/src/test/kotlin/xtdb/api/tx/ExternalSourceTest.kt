@@ -124,7 +124,7 @@ class ExternalSourceTest {
             allocator, nodeBase, dbStorage, crashLogger,
             dbState, blockUploader, watchers, extSource, replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1, scope = backgroundScope
+            afterReplicaMsgId = -1, scope = backgroundScope
         ).also(leadersToClose::add)
     }
 
@@ -394,7 +394,6 @@ class ExternalSourceTest {
 
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
         val partition = DatabasePartition(
-            partition = 0,
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
             state = DatabaseState("cdc", null, null, null, null),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),

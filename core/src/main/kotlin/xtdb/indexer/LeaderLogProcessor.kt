@@ -62,7 +62,6 @@ internal class LeaderLogProcessor(
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    partition: Int,
     afterReplicaMsgId: MessageId,
     private val instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
@@ -78,6 +77,7 @@ internal class LeaderLogProcessor(
     }
 
     private val dbName = dbState.name
+    private val partition = dbStorage.partition
     private val sourceLog = dbStorage.sourceLog
     private val bufferPool = dbStorage.bufferPool
     private val liveIndex = dbState.liveIndex

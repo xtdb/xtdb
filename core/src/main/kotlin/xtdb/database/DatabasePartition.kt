@@ -13,13 +13,15 @@ import xtdb.trie.TrieCatalog
 import java.time.Instant
 
 class DatabasePartition(
-    val partition: Int,
     val storage: PartitionStorage,
     val state: DatabaseState,
     val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
     val logProcessor: LogProcessor? = null,
 ) : AutoCloseable {
+
+    // the storage view owns the partition index; delegate rather than store a second copy so the two can't disagree
+    val partition: Int get() = storage.partition
 
     val blockCatalog: BlockCatalog get() = state.blockCatalog
     val tableCatalog: TableCatalog get() = state.tableCatalog

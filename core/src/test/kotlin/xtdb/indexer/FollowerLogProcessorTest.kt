@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.api.log.Log
+import xtdb.api.log.PartitionLog
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -79,7 +80,7 @@ class FollowerLogProcessorTest {
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            allocator, replicaLog, bufferPool, dbState, compactor,
+            allocator, PartitionLog(replicaLog, 0), bufferPool, dbState, compactor,
             watchers, null, null, afterReplicaMsgId = -1L, backgroundScope,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,

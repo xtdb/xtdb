@@ -280,7 +280,7 @@ class Database(
             val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
-            val storage = PartitionStorage(logs, bufferPool, metadataManager)
+            val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
             val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(
@@ -380,7 +380,6 @@ class Database(
             } ?: emptyList()
 
             val partition = DatabasePartition(
-                partition = 0,
                 storage = storage,
                 state = state,
                 watchers = watchers,

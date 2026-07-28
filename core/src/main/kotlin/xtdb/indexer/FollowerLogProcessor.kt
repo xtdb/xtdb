@@ -37,7 +37,7 @@ private val LOG = FollowerLogProcessor::class.logger
 
 class FollowerLogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
-    replicaLog: Log<ReplicaMessage>,
+    replicaLog: PartitionLog<ReplicaMessage>,
     private val bufferPool: BufferPool,
     private val dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
@@ -293,7 +293,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     // Launched last so every field the tail touches is initialised before the first record.
     private val job = scope.launch {
         try {
-            replicaLog.tailAll(partition = 0, afterReplicaMsgId, this@FollowerLogProcessor)
+            replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

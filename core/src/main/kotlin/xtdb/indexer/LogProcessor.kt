@@ -94,7 +94,7 @@ class LogProcessor(
             watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             replicaProducer, skipTxs, dbCatalog,
-            partition = 0, afterReplicaMsgId,
+            afterReplicaMsgId,
             flushTimeout = flushTimeout,
             scope = scope,
             gcDispatcher = gcDispatcher,
@@ -165,7 +165,7 @@ class LogProcessor(
 
     private suspend fun runTransition(followerSys: FollowerSystem) {
         try {
-            replicaLog.openAtomicProducer("$dbName-leader", partition = 0).closeOnCatch { replicaProducer ->
+            replicaLog.openAtomicProducer("$dbName-leader").closeOnCatch { replicaProducer ->
                 val followerProc = followerSys.proc
 
                 // NoOp to get a known msgId we can await — latestSubmittedMsgId won't do, because Kafka's

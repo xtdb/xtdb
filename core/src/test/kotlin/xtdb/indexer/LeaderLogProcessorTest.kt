@@ -92,7 +92,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = skipTxs, dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1,
+            afterReplicaMsgId = -1,
             scope = backgroundScope,
         ).also(leadersToClose::add)
     }
@@ -151,7 +151,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1,
+            afterReplicaMsgId = -1,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 
@@ -222,7 +222,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1,
+            afterReplicaMsgId = -1,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 
@@ -550,7 +550,7 @@ class LeaderLogProcessorTest {
             dbState, blockUploader, watchers,
             extSource = null, replicaProducer = replicaProducer,
             skipTxs = setOf(10), dbCatalog = null,
-            partition = 0, afterReplicaMsgId = -1,
+            afterReplicaMsgId = -1,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 
