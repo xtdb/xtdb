@@ -37,7 +37,7 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 1000,
-                   :date-times {:min 9.466848E8, :max 9.466848E8}}]}]}
+                   :date-times {:min 0.0, :max 0.0}}]}]}
    {:nodes #xt/tagged [:branch-iid [nil nil nil 0]]}
    {:nodes #xt/tagged [:branch-iid [nil nil nil 1]]}
    {:nodes #xt/tagged [:branch-iid [nil nil nil 2]]}

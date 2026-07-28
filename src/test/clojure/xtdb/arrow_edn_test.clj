@@ -66,9 +66,6 @@
                                    res)))))
 
     (doseq [^Path expected-path (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
-            :when (= "objects/v06/tables/public$hello/meta/l00-rc-b00.arrow.edn"
-                     (str (.relativize expected-dir expected-path)))
-
             :let [actual (-> actual-dir
                              (.resolve (.relativize expected-dir expected-path)))
                   file-name (str (.getFileName expected-path))]

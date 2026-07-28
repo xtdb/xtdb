@@ -39,7 +39,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 18,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 18,
@@ -69,7 +70,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 10,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 10,
@@ -99,7 +101,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 8,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 8,
@@ -129,7 +132,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 10,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 10,
@@ -160,7 +164,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 14,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 14,
@@ -220,7 +225,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 18,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 18,
@@ -281,7 +287,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 12,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 12,
@@ -311,7 +318,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 14,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 14,
@@ -341,7 +349,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 16,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 16,
@@ -371,7 +380,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 14,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 14,
@@ -402,7 +412,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 16,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 16,
@@ -432,7 +443,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 10,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 10,
@@ -462,7 +474,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 12,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 12,
@@ -492,7 +505,8 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 8,
-                   :date-times {:min 1.5785712E9, :max 1.5786576E9}}
+                   :date-times
+                   {:min 1.578571200000001E9, :max 1.5786576E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 8,

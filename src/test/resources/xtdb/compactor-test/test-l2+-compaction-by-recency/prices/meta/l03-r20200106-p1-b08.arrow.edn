@@ -73,7 +73,9 @@
                   {:col-name "_system_from",
                    :root-col? true,
                    :count 7,
-                   :date-times {:min 1.5778368E9, :max 1.578096E9}}
+                   :date-times
+                   {:min 1.577836800000001E9,
+                    :max 1.578096000000001E9}}
                   {:col-name "_id",
                    :root-col? true,
                    :count 7,
