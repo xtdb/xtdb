@@ -37,7 +37,7 @@ private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
 private val defaultBlockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
 
 class BlockUploader(
-    dbStorage: PartitionStorage,
+    partitionStorage: PartitionStorage,
     dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
@@ -45,8 +45,8 @@ class BlockUploader(
     private val scope: CoroutineScope,
     private val uploadDispatcher: CoroutineDispatcher = defaultBlockUploadDispatcher,
 ) {
-    private val sourceLog = dbStorage.sourceLog
-    private val bufferPool = dbStorage.bufferPool
+    private val sourceLog = partitionStorage.sourceLog
+    private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = dbState.liveIndex
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog

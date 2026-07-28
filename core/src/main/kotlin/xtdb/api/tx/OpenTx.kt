@@ -65,7 +65,7 @@ class OpenTx
 @JvmOverloads constructor(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
-    private val dbStorage: PartitionStorage,
+    private val partitionStorage: PartitionStorage,
     private val dbState: DatabaseState,
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
@@ -144,7 +144,7 @@ class OpenTx
             val liveIndex = dbState.liveIndex
 
             val queryDb = object : IQuerySource.QueryDatabase {
-                override val storage get() = dbStorage
+                override val storage get() = partitionStorage
                 override val queryState get() = dbState
                 // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
                 override fun openSnapshot(minBasis: List<Instant?>?) =

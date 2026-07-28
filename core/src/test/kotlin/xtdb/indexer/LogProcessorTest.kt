@@ -55,14 +55,14 @@ class LogProcessorTest {
         )
 
     private fun logProcessor(
-        dbStorage: PartitionStorage,
+        partitionStorage: PartitionStorage,
         dbState: DatabaseState,
         watchers: Watchers,
         blockUploader: BlockUploader,
         scope: CoroutineScope,
     ) = LogProcessor(
         allocator, nodeBase, mockk(relaxed = true),
-        dbStorage, dbState, watchers, blockUploader,
+        partitionStorage, dbState, watchers, blockUploader,
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
         externalSourceFactory = null,
         scope = scope,
@@ -74,12 +74,12 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
         val dbState = dbState()
-        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -96,12 +96,12 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
         val dbState = dbState()
-        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -121,8 +121,8 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
@@ -131,7 +131,7 @@ class LogProcessorTest {
         replicaProducer.close()
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 
@@ -156,15 +156,15 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
 
         val scope = CoroutineScope(SupervisorJob())
-        val logProc = logProcessor(dbStorage, dbState, watchers, blockUploader, scope)
+        val logProc = logProcessor(partitionStorage, dbState, watchers, blockUploader, scope)
 
         scope.launch { sourceLog.openGroupSubscription(logProc) }
 

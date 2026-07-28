@@ -53,7 +53,7 @@ private val LOG = LeaderLogProcessor::class.logger
 internal class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
-    private val dbStorage: PartitionStorage,
+    private val partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,
@@ -77,9 +77,9 @@ internal class LeaderLogProcessor(
     }
 
     private val dbName = dbState.name
-    private val partition = dbStorage.partition
-    private val sourceLog = dbStorage.sourceLog
-    private val bufferPool = dbStorage.bufferPool
+    private val partition = partitionStorage.partition
+    private val sourceLog = partitionStorage.sourceLog
+    private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = dbState.liveIndex
 
     private val blockCatalog = dbState.blockCatalog
@@ -627,7 +627,7 @@ internal class LeaderLogProcessor(
     }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, dbStorage, dbState, txKey, externalSourceToken, tracer, resolvedTxs)
+        OpenTx(allocator, nodeBase, partitionStorage, dbState, txKey, externalSourceToken, tracer, resolvedTxs)
 
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,

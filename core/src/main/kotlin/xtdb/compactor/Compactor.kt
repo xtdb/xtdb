@@ -62,25 +62,25 @@ interface Compactor : AutoCloseable {
         }
     }
 
-    fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
+    fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
 
     interface Driver : AutoCloseable {
         suspend fun executeJob(job: Job): TriesAdded
         suspend fun publishTries(triesAdded: TriesAdded)
 
         interface Factory {
-            fun create(allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): Driver
+            fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): Driver
         }
 
         companion object {
             @JvmStatic
             fun real(pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
-                    override fun create(allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : Driver {
+                    override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
-                        private val log = dbStorage.sourceLog
-                        private val bp = dbStorage.bufferPool
-                        private val mm = dbStorage.metadataManager
+                        private val log = partitionStorage.sourceLog
+                        private val bp = partitionStorage.bufferPool
+                        private val mm = partitionStorage.metadataManager
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al)
@@ -166,12 +166,12 @@ interface Compactor : AutoCloseable {
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
         private val jobsSemaphore = Semaphore(threadCount)
 
-        override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+        override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
             private val trieCatalog = dbState.trieCatalog
             private val liveIndex = dbState.liveIndexOrNull
 
-            val driver = driverFactory.create(allocator, dbStorage, dbState, watchers)
+            val driver = driverFactory.create(allocator, partitionStorage, dbState, watchers)
 
             @Volatile
             private var availableJobs = emptyMap<JobKey, Job>()
@@ -284,7 +284,7 @@ interface Compactor : AutoCloseable {
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+            override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override suspend fun compactAll() = Unit
                 override fun close() = Unit

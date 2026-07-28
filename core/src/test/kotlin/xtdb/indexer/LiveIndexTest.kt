@@ -66,7 +66,7 @@ class LiveIndexTest {
         val trieCatalog = createTrieCatalog()
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName)
         private val dbState = DatabaseState(dbName, blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        private val dbStorage = PartitionStorage(
+        private val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),
                 InMemoryLog<ReplicaMessage>(InstantSource.system(), 0),
@@ -75,7 +75,7 @@ class LiveIndexTest {
         )
 
         fun openTx(txId: Long, systemTime: Instant) =
-            OpenTx(allocator, nodeBase, dbStorage, dbState, TransactionKey(txId, systemTime), null)
+            OpenTx(allocator, nodeBase, partitionStorage, dbState, TransactionKey(txId, systemTime), null)
 
         fun commitTx(openTx: OpenTx) {
             openTx.writeTxRow(null, null)

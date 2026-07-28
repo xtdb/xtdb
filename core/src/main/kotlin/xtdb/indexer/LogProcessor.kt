@@ -34,7 +34,7 @@ class LogProcessor(
     private val allocator: BufferAllocator,
     private val base: NodeBase,
     private val crashLogger: CrashLogger,
-    private val dbStorage: PartitionStorage,
+    private val partitionStorage: PartitionStorage,
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
@@ -52,7 +52,7 @@ class LogProcessor(
     }
 
     private val dbName = dbState.name
-    private val replicaLog = dbStorage.replicaLog
+    private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
     // `close` MUST follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
@@ -90,7 +90,7 @@ class LogProcessor(
     ): LeaderLogProcessor =
         // The leader term owns (and frees) its replica producer and ext source.
         LeaderLogProcessor(
-            allocator, base, dbStorage, crashLogger, dbState, blockUploader,
+            allocator, base, partitionStorage, crashLogger, dbState, blockUploader,
             watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             replicaProducer, skipTxs, dbCatalog,
@@ -105,7 +105,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): TransitionLogProcessor =
         TransitionLogProcessor(
-            allocator, dbStorage.bufferPool, dbState, dbState.liveIndex,
+            allocator, partitionStorage.bufferPool, dbState, dbState.liveIndex,
             blockUploader, replicaProducer, watchers, dbCatalog,
             afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
@@ -116,7 +116,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): FollowerLogProcessor =
         FollowerLogProcessor(
-            allocator, dbStorage.replicaLog, dbStorage.bufferPool, dbState, compactor, watchers,
+            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, dbState, compactor, watchers,
             dbCatalog, pendingBlock, afterReplicaMsgId, scope,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,

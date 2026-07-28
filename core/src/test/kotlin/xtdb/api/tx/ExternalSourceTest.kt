@@ -113,15 +113,15 @@ class ExternalSourceTest {
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val dbState = DatabaseState("test", blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
-        val blockUploader = BlockUploader(dbStorage, dbState, compactor, null, null, backgroundScope)
+        val blockUploader = BlockUploader(partitionStorage, dbState, compactor, null, null, backgroundScope)
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
 
         return LeaderLogProcessor(
-            allocator, nodeBase, dbStorage, crashLogger,
+            allocator, nodeBase, partitionStorage, crashLogger,
             dbState, blockUploader, watchers, extSource, replicaProducer,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1, scope = backgroundScope
