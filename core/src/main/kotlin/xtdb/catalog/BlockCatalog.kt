@@ -10,7 +10,6 @@ import xtdb.block.proto.block
 import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
 import xtdb.storage.BufferPool
-import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
@@ -23,7 +22,6 @@ import java.nio.file.Path
 import kotlin.io.path.extension
 
 class BlockCatalog(
-    private val dbName: DatabaseName, 
     @field:Volatile private var latestBlock: Block?
 ) {
 

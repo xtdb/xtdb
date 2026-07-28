@@ -56,10 +56,10 @@ class ExternalSourceTest {
         nodeBase = openBase()
         bufferPool = MemoryStorage(allocator, 0)
 
-        val blockCatalog = BlockCatalog("test", null)
+        val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bufferPool).also { it.refresh(blockCatalog) }
         val trieCatalog = createTrieCatalog()
-        liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, "test")
+        liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
     }
 
     @AfterEach
@@ -109,7 +109,7 @@ class ExternalSourceTest {
         afterToken: ExternalSourceToken? = null,
         wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
     ): LeaderLogProcessor {
-        val blockCatalog = BlockCatalog("test", null)
+        val blockCatalog = BlockCatalog(null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)

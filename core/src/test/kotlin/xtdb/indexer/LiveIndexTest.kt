@@ -61,10 +61,10 @@ class LiveIndexTest {
 
     private inner class TestDb(private val dbName: String = "xtdb") : AutoCloseable {
         val bp = MemoryStorage(allocator, epoch = 0)
-        private val blockCatalog = BlockCatalog(dbName, null)
+        private val blockCatalog = BlockCatalog(null)
         private val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
-        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName)
+        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
         private val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         private val partitionStorage = PartitionStorage(
             DatabaseLogs(

@@ -47,7 +47,7 @@ class LogProcessorTest {
 
     private fun dbState(name: String = "test-db", liveIndex: LiveIndex = mockk(relaxed = true)) =
         DatabaseState(
-            BlockCatalog(name, null),
+            BlockCatalog(null),
             mockk<TableCatalog>(relaxed = true),
             mockk<TrieCatalog>(relaxed = true),
             liveIndex

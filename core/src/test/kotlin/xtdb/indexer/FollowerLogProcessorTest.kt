@@ -54,7 +54,7 @@ class FollowerLogProcessorTest {
         bufferPool = mockk(relaxed = true)
         liveIndex = mockk(relaxed = true)
         compactor = mockk(relaxed = true)
-        blockCatalog = BlockCatalog("test", null)
+        blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
         dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
@@ -125,7 +125,7 @@ class FollowerLogProcessorTest {
         // replaying a replica log that has old SW-era messages.
         // block catalog starts at block 5 (simulating startup from latest block).
         val startBlock = block { blockIndex = 5 }
-        blockCatalog = BlockCatalog("test", startBlock)
+        blockCatalog = BlockCatalog(startBlock)
         dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
         val proc = makeProcessor()

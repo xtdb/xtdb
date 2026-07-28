@@ -74,7 +74,7 @@ class LeaderLogProcessorTest {
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
         liveIndex: LiveIndex = mockk(relaxed = true),
-        blockCatalog: BlockCatalog = BlockCatalog("test", null),
+        blockCatalog: BlockCatalog = BlockCatalog(null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
@@ -138,7 +138,7 @@ class LeaderLogProcessorTest {
         }
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog("test", null)
+        val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
@@ -209,7 +209,7 @@ class LeaderLogProcessorTest {
         }
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog("test", null)
+        val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
@@ -536,7 +536,7 @@ class LeaderLogProcessorTest {
         }
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog("test", null)
+        val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 

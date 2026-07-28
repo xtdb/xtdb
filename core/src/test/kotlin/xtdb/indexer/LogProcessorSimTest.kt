@@ -157,10 +157,10 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val simExtSource: SimExtSource,
     ) : AutoCloseable {
 
-        val blockCatalog = BlockCatalog(dbName, null)
+        val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
-        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName, indexerConfig)
+        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig)
 
         val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
 

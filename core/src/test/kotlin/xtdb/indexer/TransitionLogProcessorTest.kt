@@ -37,7 +37,7 @@ class TransitionLogProcessorTest {
         liveIndex = mockk(relaxed = true)
         blockUploader = mockk(relaxed = true)
         replicaProducer = mockk(relaxed = true)
-        blockCatalog = BlockCatalog("test", null)
+        blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
         dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)

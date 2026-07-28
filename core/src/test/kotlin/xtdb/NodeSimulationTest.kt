@@ -114,7 +114,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         dbs = List(numberOfSystems) {
             val trieCatalog = createTrieCatalog()
-            val blockCatalog = BlockCatalog("xtdb", sharedBufferPool.latestBlock)
+            val blockCatalog = BlockCatalog(sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
             val dbState = DatabaseState(blockCatalog, null, trieCatalog, null)

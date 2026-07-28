@@ -281,7 +281,7 @@ class Database(
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
             val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
-            val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
+            val state = open { DatabaseState.open(allocator, storage, indexerConfig) }
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(
                 blockCatalog.latestProcessedMsgId ?: -1,

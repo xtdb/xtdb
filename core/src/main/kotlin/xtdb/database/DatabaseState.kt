@@ -6,7 +6,6 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveIndex
-import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.trie.TrieCatalog
 import xtdb.util.requiringResolve
@@ -36,12 +35,11 @@ data class DatabaseState(
         fun open(
             allocator: BufferAllocator,
             storage: PartitionStorage,
-            dbName: DatabaseName,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): DatabaseState = safelyOpening {
             val bufferPool = storage.bufferPool
 
-            val blockCatalog = BlockCatalog(dbName, bufferPool.latestBlock)
+            val blockCatalog = BlockCatalog(bufferPool.latestBlock)
 
             val tableCatalog = TableCatalog(bufferPool).also {
                 it.refresh(blockCatalog)
@@ -55,7 +53,7 @@ data class DatabaseState(
 
             val trieCatalog = trieCatalogFactory.open(bufferPool, blockCatalog)
 
-            val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, dbName, indexerConfig) }
+            val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig) }
 
             DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         }

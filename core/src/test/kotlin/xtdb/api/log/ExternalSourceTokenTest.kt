@@ -58,7 +58,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `Block proto round-trips external source token`() {
-        val blockCatalog = BlockCatalog("test-db", null)
+        val blockCatalog = BlockCatalog(null)
 
         val block = blockCatalog.buildBlock(
             blockIndex = 0,
@@ -77,7 +77,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `BlockCatalog externalSourceToken reads from latest block`() {
-        val blockCatalog = BlockCatalog("test-db", null)
+        val blockCatalog = BlockCatalog(null)
 
         assertNull(blockCatalog.externalSourceToken)
 
@@ -97,7 +97,7 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `BlockCatalog externalSourceToken returns null when no token`() {
-        val blockCatalog = BlockCatalog("test-db", null)
+        val blockCatalog = BlockCatalog(null)
 
         val block = blockCatalog.buildBlock(
             blockIndex = 0,

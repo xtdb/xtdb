@@ -54,7 +54,6 @@ class LiveIndex private constructor(
     private val allocator: BufferAllocator,
     private val tableCatalog: TableCatalog,
     val trieCatalog: TrieCatalog,
-    private val dbName: String,
     @Volatile var latestCompletedTx: TransactionKey?,
     initialBlockIdx: Long,
     indexerConfig: IndexerConfig,
@@ -221,11 +220,11 @@ class LiveIndex private constructor(
         @JvmName("open")
         fun open(
             allocator: BufferAllocator, blockCatalog: BlockCatalog, tableCatalog: TableCatalog,
-            trieCatalog: TrieCatalog, dbName: String, indexerConfig: IndexerConfig = IndexerConfig(),
+            trieCatalog: TrieCatalog, indexerConfig: IndexerConfig = IndexerConfig(),
         ) = safelyOpening {
             LiveIndex(
                 open { allocator.newChildAllocator("live-index", 0, Long.MAX_VALUE) },
-                tableCatalog, trieCatalog, dbName,
+                tableCatalog, trieCatalog,
                 blockCatalog.latestCompletedTx,
                 (blockCatalog.currentBlockIndex ?: -1L) + 1L,
                 indexerConfig,

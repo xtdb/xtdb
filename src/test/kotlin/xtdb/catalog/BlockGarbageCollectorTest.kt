@@ -63,7 +63,7 @@ class BlockGarbageCollectorTest {
                 assertBlockCount(bufferPool, table1BlockPath, 10)
                 assertBlockCount(bufferPool, table2BlockPath, 10)
 
-                val blockCat = BlockCatalog("xtdb", bufferPool.latestBlock)
+                val blockCat = BlockCatalog(bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(
                     backgroundScope,
