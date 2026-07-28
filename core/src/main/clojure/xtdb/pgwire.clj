@@ -562,11 +562,12 @@
 
 (defn cmd-commit
   ([conn] (cmd-commit conn nil))
-  ([{:keys [conn-state tx-error-counter tx-latency-timer] :as conn} commit-mode]
+  ([{:keys [conn-state tx-latency-timer] :as conn} commit-mode]
    ;; the connection owns the buffered ops + tx options; it submits (async) or submits-and-awaits (sync), clears
    ;; its transaction, and records lastSubmittedTx. A commit-time COMMIT SYNC / COMMIT ASYNC wins; a bare COMMIT
    ;; (nil mode) defers to the tx's begin-time async flag. The sync commit yields the awaited ExecutedTx, whose
-   ;; error pgwire re-throws so the client sees it.
+   ;; error pgwire re-throws so the client sees it. Counting `tx.error` is the connection's job — it sees both the
+   ;; presubmit failures and the aborted txs re-thrown here.
    (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
      (if (.isTxFailed node-conn)
        (throw (pgio/err-protocol-violation "transaction failed"))
@@ -581,9 +582,6 @@
                                        (when-let [^Xtdb$ExecutedTx executed (with-auth-check conn (.commitSync node-conn))]
                                          (when-let [error (.getError executed)]
                                            (throw error))))))
-         (catch Throwable t
-           (metrics/inc-counter! tx-error-counter)
-           (throw t))
          (finally
            (end-transaction conn)))))))
 
@@ -1131,7 +1129,7 @@
                                (throw (err-query-cancelled "query cancelled during execution")))
       Future$State/FAILED (throw (.exceptionNow task)))))
 
-(defn cmd-exec-query [{:keys [conn-state !closing? query-error-counter] :as conn}
+(defn cmd-exec-query [{:keys [conn-state !closing?] :as conn}
                       {:keys [limit ^ParsedStatement parsed ^ResultCursor cursor pg-cols portal-name pending-rows total-rows-sent]
                        :as _portal}]
   ;; Create an implicit transaction if one hasn't already been started
@@ -1142,68 +1140,63 @@
     (when-not (or (.isTxOpen node-conn) (instance? ParsedStatement$ShowVariable parsed))
       (begin-implicit conn :read-only)))
 
-  (try
-    (let [!n-rows-out (volatile! 0)
-          !pending (volatile! [])
-          session-params (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state))
-          fallback (fallback-type session-params)
-          serialize-row (fn [^RelationReader rel idx]
-                          (mapv (fn [{:keys [^String col-name pg-type result-format]}]
-                                  (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
-                                        rdr (.vectorForOrNull rel col-name)]
-                                    (when-not (.isNull rdr idx)
-                                      (if (= :binary result-format)
-                                        (.writeBinary pg-type session-params rdr idx)
-                                        (.writeText pg-type session-params rdr idx)))))
-                                pg-cols))
-          send-row! (fn [row]
-                      (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
-                      (vswap! !n-rows-out inc))]
-      (run-cancellable-query!
-       conn
-       (fn []
-         ;; Send any pending rows from previous Execute
-         (when (not-empty pending-rows)
-           (let [[to-send to-keep] (split-at (or limit (count pending-rows)) pending-rows)] 
-             (run! send-row! to-send)
-             (vreset! !pending (vec to-keep))))
+  ;; `query.timer` / `query.error` are recorded by the cursor the connection opened, so streaming its rows out
+  ;; needs no instrumentation of its own here.
+  (let [!n-rows-out (volatile! 0)
+        !pending (volatile! [])
+        session-params (.getSessionParameters ^Xtdb$Connection (:node-conn @conn-state))
+        fallback (fallback-type session-params)
+        serialize-row (fn [^RelationReader rel idx]
+                        (mapv (fn [{:keys [^String col-name pg-type result-format]}]
+                                (let [^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) fallback pg-type)
+                                      rdr (.vectorForOrNull rel col-name)]
+                                  (when-not (.isNull rdr idx)
+                                    (if (= :binary result-format)
+                                      (.writeBinary pg-type session-params rdr idx)
+                                      (.writeText pg-type session-params rdr idx)))))
+                              pg-cols))
+        send-row! (fn [row]
+                    (pgio/cmd-write-msg conn pgio/msg-data-row {:vals row})
+                    (vswap! !n-rows-out inc))]
+    (run-cancellable-query!
+     conn
+     (fn []
+       ;; Send any pending rows from previous Execute
+       (when (not-empty pending-rows)
+         (let [[to-send to-keep] (split-at (or limit (count pending-rows)) pending-rows)]
+           (run! send-row! to-send)
+           (vreset! !pending (vec to-keep))))
 
-         ;; If no pending rows left to process, continue with cursor
-         (while (and (empty? @!pending)
-                     (or (nil? limit) (< @!n-rows-out limit))
-                     (.tryAdvance cursor
-                                  (fn [^RelationReader rel]
-                                    (log/trace "advancing cursor with rel count" (.getRowCount rel))
-                                    (cond
-                                      (Thread/interrupted) (throw (InterruptedException.))
+       ;; If no pending rows left to process, continue with cursor
+       (while (and (empty? @!pending)
+                   (or (nil? limit) (< @!n-rows-out limit))
+                   (.tryAdvance cursor
+                                (fn [^RelationReader rel]
+                                  (log/trace "advancing cursor with rel count" (.getRowCount rel))
+                                  (cond
+                                    (Thread/interrupted) (throw (InterruptedException.))
 
-                                      @!closing? (log/trace "query result stream stopping (conn closing)")
+                                    @!closing? (log/trace "query result stream stopping (conn closing)")
 
-                                      :else (let [row-count (.getRowCount rel)
-                                                  num-to-send (cond-> row-count
-                                                                limit (min (- limit @!n-rows-out)))]
-                                              ;; Send rows up to limit 
-                                              (dotimes [idx num-to-send] 
-                                                (send-row! (serialize-row rel idx)))
-                                              ;; Buffer any remaining rows for next Execute 
-                                              (dotimes [idx (- row-count num-to-send)] 
-                                                (vswap! !pending conj (serialize-row rel (+ num-to-send idx))))))))))))
+                                    :else (let [row-count (.getRowCount rel)
+                                                num-to-send (cond-> row-count
+                                                              limit (min (- limit @!n-rows-out)))]
+                                            ;; Send rows up to limit
+                                            (dotimes [idx num-to-send]
+                                              (send-row! (serialize-row rel idx)))
+                                            ;; Buffer any remaining rows for next Execute
+                                            (dotimes [idx (- row-count num-to-send)]
+                                              (vswap! !pending conj (serialize-row rel (+ num-to-send idx))))))))))))
 
-      ;; Save any pending rows and cumulative count back to portal
-      (let [cumulative-rows (+ (or total-rows-sent 0) @!n-rows-out)]
-        (when portal-name
-          (swap! conn-state update-in [:portals portal-name]
-                 assoc :pending-rows @!pending :total-rows-sent cumulative-rows))
+    ;; Save any pending rows and cumulative count back to portal
+    (let [cumulative-rows (+ (or total-rows-sent 0) @!n-rows-out)]
+      (when portal-name
+        (swap! conn-state update-in [:portals portal-name]
+               assoc :pending-rows @!pending :total-rows-sent cumulative-rows))
 
-        (if (= @!n-rows-out limit)
-          (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
-          (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head (.getOriginalSql parsed)) " " cumulative-rows)}))))
-
-    (catch Interrupted e (throw e))
-    (catch InterruptedException e (throw e))
-    (catch Throwable e
-      (metrics/inc-counter! query-error-counter)
-      (throw e))))
+      (if (= @!n-rows-out limit)
+        (pgio/cmd-write-msg conn pgio/msg-portal-suspended)
+        (pgio/cmd-write-msg conn pgio/msg-command-complete {:command (str (statement-head (.getOriginalSql parsed)) " " cumulative-rows)})))))
 
 (defn- attach-db [{:keys [conn-state] :as conn} db-name config-yaml sql]
   (let [default-db (conn-db-name conn)]
@@ -1241,7 +1234,7 @@
       (when-let [error (.getError tx)]
         (throw error)))))
 
-(defn execute-portal [{:keys [conn-state query-timer] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
+(defn execute-portal [{:keys [conn-state] :as conn} {:keys [^ParsedStatement parsed canned-response] :as portal}]
   (verify-permissibility conn portal)
 
   (cond
@@ -1254,8 +1247,8 @@
                (visitQuery [_ _]
                  ;; the read gate + basis resolution happen when bind-stmt opens the cursor through the
                  ;; connection's openQuery (a read-write tx opens unchecked — the pgjdbc carve-out).
-                 (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
-               (visitShowVariable [_ _] (metrics/record-callable! query-timer (cmd-exec-query conn portal)))
+                 (cmd-exec-query conn portal))
+               (visitShowVariable [_ _] (cmd-exec-query conn portal))
                (visitDml [_ _] (cmd-exec-dml conn portal))
 
                (visitBegin [_ _]
@@ -1585,7 +1578,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, query-error-counter, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-timer, query-tracer] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1606,8 +1599,6 @@
                                                  (log/warn t "error on conn startup")
                                                  (throw t)))))
         conn (assoc conn
-                    :query-error-counter query-error-counter
-                    :query-timer query-timer
                     :query-tracer query-tracer
                     :tx-error-counter tx-error-counter
                     :tx-latency-timer tx-latency-timer
@@ -1702,8 +1693,6 @@
    (util/with-close-on-catch [accept-socket (ServerSocket. port 0 host)]
      (let [host (.getInetAddress accept-socket)
            port (.getLocalPort accept-socket) 
-           query-error-counter (when metrics-registry (metrics/add-counter metrics-registry "query.error"))
-           query-timer (when metrics-registry (metrics/add-timer metrics-registry "query.timer" {}))
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            tx-latency-timer (when metrics-registry (metrics/add-timer metrics-registry "pgwire.tx.latency" {}))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
@@ -1737,8 +1726,6 @@
                                 :ssl-ctx ssl-ctx})
 
            server (assoc server
-                         :query-error-counter query-error-counter
-                         :query-timer query-timer
                          :query-tracer (when query-tracing? tracer)
                          :tx-error-counter tx-error-counter
                          :tx-latency-timer tx-latency-timer

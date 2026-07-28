@@ -3,7 +3,6 @@
 
 package xtdb.api
 
-import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import io.micrometer.tracing.Tracer
@@ -27,6 +26,7 @@ import xtdb.ZoneIdSerde
 import xtdb.api.Authenticator.Factory.SingleRootUser
 import xtdb.api.log.Log
 import xtdb.types.MessageId
+import xtdb.api.metrics.ConnectionMetrics
 import xtdb.api.metrics.HealthzConfig
 import xtdb.api.metrics.TracerConfig
 import xtdb.api.module.XtdbModule
@@ -119,6 +119,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         @InternalApi
         fun openUncheckedQuery(): ResultCursor
 
+        // Reads at the caller's own basis rather than the connection's, and isn't metered — the connection's tx
+        // bookkeeping opens through here (see [Connection.awaitTx]), and its cost belongs to the tx timers, not to
+        // `query.timer`.
         fun openQuery(opts: QueryOpts): ResultCursor
 
         // the output columns given the bound-parameter types. The no-arg [executeSchema] resolves them with
@@ -143,10 +146,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         var defaultTz: ZoneId,
         private val tracer: Tracer?,
-        private val txErrorCounter: Counter?,
-        private val txAwaitTimer: Timer?,
-        private val txSubmitTimer: Timer?,
-        private val txExecuteTimer: Timer?,
+        private val metrics: ConnectionMetrics?,
     ) : AdbcConnection {
 
         var awaitToken: String? = null
@@ -231,6 +231,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
+        // every cursor the connection hands out at its own basis goes through here, so a query is timed and its
+        // errors counted once, whichever frontend asked for it.
+        private fun ResultCursor.metered(): ResultCursor =
+            metrics?.let { MeteredCursor(this, it) } ?: this
+
         private fun doSubmit(ops: List<TxOp>, opts: TxOpts): SubmittedTx {
             if (isTxOpen)
                 throw Incorrect(
@@ -245,18 +250,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     throw e.cause ?: e
                 }
             } catch (e: Anomaly) {
-                txErrorCounter?.increment()
+                metrics?.txErrorCounter?.increment()
                 throw e
             }
         }
 
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
-            txSubmitTimer.timed { doSubmit(ops, opts) }.record(opts.dbName ?: dbName)
+            metrics?.txSubmitTimer.timed { doSubmit(ops, opts) }.record(opts.dbName ?: dbName)
 
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
-            txExecuteTimer.timed {
+            metrics?.txExecuteTimer.timed {
                 val txId = doSubmit(ops, opts).txId
-                txAwaitTimer.timed { awaitTx(txId, opts.dbName ?: dbName) }
+                metrics?.txAwaitTimer.timed { awaitTx(txId, opts.dbName ?: dbName) }
+                    // a tx that came back aborted is an error for the client that submitted it, whichever
+                    // frontend that was — the indexer counts its own side separately.
+                    .also { if (!it.committed) metrics?.txErrorCounter?.increment() }
             }.record(opts.dbName ?: dbName)
 
         fun attachDb(dbName: DatabaseName, config: Database.Config): ExecutedTx =
@@ -432,7 +440,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     val preparedQuery = ensurePrepared()
                     if (preparedQuery.parsed !is ParsedStatement.ShowVariable) resolveForQuery()
                     val opts = queryOpts()
-                    return preparedQuery.openQuery(openQueryArgs(), opts)
+                    return preparedQuery.openQuery(openQueryArgs(), opts).metered()
                 }
 
                 // Open WITHOUT the access-mode gate — a frontend's driver-compatibility probe that must run in any
@@ -440,7 +448,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                 override fun openUncheckedQuery(): ResultCursor {
                     val preparedQuery = ensurePrepared()
                     val opts = queryOpts()
-                    return preparedQuery.openQuery(openQueryArgs(), opts)
+                    return preparedQuery.openQuery(openQueryArgs(), opts).metered()
                 }
 
                 override fun openQuery(opts: QueryOpts): ResultCursor =
@@ -754,6 +762,8 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     val expanded = try {
                         (op as? TxOp.Sql)?.let { sqlPlanner.toStaticOps(it.sql, it.args, allocator, tz) }
                     } catch (t: Throwable) {
+                        // a presubmit failure: the tx never reaches doSubmit, so it's counted here instead
+                        metrics?.txErrorCounter?.increment()
                         ops.subList(idx, ops.size).closeAll()
                         throw t
                     }

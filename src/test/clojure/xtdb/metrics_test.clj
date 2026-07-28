@@ -10,9 +10,18 @@
             [xtdb.types]
             [xtdb.util :as util])
   (:import (io.micrometer.core.instrument Counter Gauge Timer)
-           (java.time Duration)))
+           (java.time Duration)
+           (xtdb.api Xtdb)))
 
 (t/use-fixtures :each tu/with-mock-clock)
+
+(defn- in-process-q
+  "Runs a query through the node's own connection, i.e. an in-process frontend rather than pgwire."
+  [^Xtdb node sql]
+  (with-open [conn (.connect node)
+              stmt (.prepareStatement conn sql)
+              cursor (.openQuery stmt)]
+    (tu/<-cursor cursor)))
 
 (t/deftest test-error-and-warning-counter
   (let [node (xtn/start-node tu/*node-opts*)
@@ -146,6 +155,36 @@ $$"])
       (xt/q node "SELECT 1")
       (let [^Timer timer (.timer (.find registry "query.timer"))]
         (t/is (= (.count timer) 4))))))
+
+(t/deftest test-in-process-query-metrics
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))
+        timer-count #(.count ^Timer (.timer (.find registry "query.timer")))
+        counter-count #(.count ^Counter (.counter (.find registry %)))]
+
+    (in-process-q node "SELECT 1")
+    (t/is (= 1 (timer-count)) "an in-process query is timed")
+
+    (t/is (thrown? Exception (in-process-q node "SELECT 1/0"))
+          "runtime error in-process")
+    (t/is (= 2 (timer-count)) "a failed query is timed too")
+    (t/is (= 1.0 (counter-count "query.error")) "... and counted")
+
+    (in-process-q node "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY n NULLS FIRST) AS pc FROM (VALUES (1), (2)) AS t(n)")
+    (t/is (= 1.0 (counter-count "query.warning")) "a warning in-process is counted")))
+
+(t/deftest test-in-process-tx-error-counter
+  (let [node (xtn/start-node tu/*node-opts*)
+        registry (.getMeterRegistry (util/node-base node))
+        tx-error-count #(.count ^Counter (.counter (.find registry "tx.error")))]
+
+    (with-open [conn (.connect ^Xtdb node)]
+      (t/is (anomalous? [:incorrect :missing-id]
+                        (with-open [stmt (.createStatement conn "INSERT INTO foo (a) VALUES (42)")]
+                          (.executeUpdate stmt)))
+            "presubmit error expanding an in-process autocommit DML")
+
+      (t/is (= 1.0 (tx-error-count))))))
 
 (t/deftest test-pgwire-tx-latency-timer
   (let [node (xtn/start-node tu/*node-opts*)

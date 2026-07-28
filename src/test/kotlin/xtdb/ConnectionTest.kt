@@ -51,9 +51,6 @@ class ConnectionTest {
             InstantSource.system(),
             ZoneOffset.UTC,
             null,
-            null,
-            null,
-            null,
             null
         )
     }
