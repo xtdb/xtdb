@@ -370,10 +370,15 @@ class PostgresSourceIntegrationTest {
             fun metric(name: String) =
                 metrics.find(name).tags("db", "cdc", "source", slotName, "source_type", "postgres")
 
-            assertTrue((metric("xtdb.postgres_source.events.total").counter()?.count() ?: 0.0) >= 1.0,
-                "events.total should have counted the streamed row")
-            assertTrue((metric("xtdb.postgres_source.commits.total").counter()?.count() ?: 0.0) >= 1.0,
-                "commits.total should have counted the streamed commit")
+            // The counters are incremented in `promoteDurable`, which the poll loop reaches only
+            // after `settle` has completed the submit handle — and `settle` makes the row queryable
+            // before it does that. So the row being visible above doesn't imply it's been counted.
+            awaitCondition("events.total counted the streamed row") {
+                (metric("xtdb.postgres_source.events.total").counter()?.count() ?: 0.0) >= 1.0
+            }
+            awaitCondition("commits.total counted the streamed commit") {
+                (metric("xtdb.postgres_source.commits.total").counter()?.count() ?: 0.0) >= 1.0
+            }
 
             // Confirms the pg_replication_slots query path works against real Postgres —
             // the gauge pulls on read so this should be populated immediately after streaming.
