@@ -589,14 +589,16 @@ INSERT INTO docs (_id, _valid_from, _valid_to)
       (xt/execute-tx node [[:put-docs :docs
                             {:xt/id "foo", :a 1}
                             {:xt/id "bar", :b 2}
-                            {:xt/id "baz", :c 3}]])
+                            {:xt/id "baz", :c 3}]]
+                     {:default-tz #xt/zone "Europe/London"})
       (tu/flush-block! node)
-      (xt/execute-tx node [[:delete-docs :docs "foo"]])
+      (xt/execute-tx node [[:delete-docs :docs "foo"]] {:default-tz #xt/zone "Europe/London"})
       (tu/flush-block! node)
-      (xt/execute-tx node [[:erase-docs :docs "bar"]])
+      (xt/execute-tx node [[:erase-docs :docs "bar"]] {:default-tz #xt/zone "Europe/London"})
       (tu/flush-block! node)
       (xt/execute-tx node [[:delete-docs :docs "baz"]
-                           [:erase-docs :docs "baz"]])
+                           [:erase-docs :docs "baz"]]
+                     {:default-tz #xt/zone "Europe/London"})
       (tu/flush-block! node)
 
       (aet/check-arrow-edn-dir (io/as-file (io/resource "xtdb/indexer-test/copes-with-missing-put/arrow"))

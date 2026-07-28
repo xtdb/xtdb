@@ -552,14 +552,16 @@
         (xt/execute-tx node [[:put-docs :docs
                               {:xt/id "foo", :a 1}
                               {:xt/id "bar", :a 2}
-                              {:xt/id "baz", :a 3}]])
+                              {:xt/id "baz", :a 3}]]
+                       {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
-        (xt/execute-tx node [[:delete-docs :docs "foo"]])
+        (xt/execute-tx node [[:delete-docs :docs "foo"]] {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
-        (xt/execute-tx node [[:erase-docs :docs "bar"]])
+        (xt/execute-tx node [[:erase-docs :docs "bar"]] {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
         (xt/execute-tx node [[:delete-docs :docs "baz"]
-                             [:erase-docs :docs "baz"]])
+                             [:erase-docs :docs "baz"]]
+                       {:default-tz #xt/zone "Europe/London"})
         (tu/flush-block! node)
 
         (c/compact-all! node #xt/duration "PT2S")

@@ -191,7 +191,8 @@
     (util/delete-dir node-dir)
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
 
-      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]])
+      (xt/execute-tx node [[:put-docs :xt_docs {:xt/id "foo" :colours #{"red" "blue" "green"}}]]
+                     {:default-tz #xt/zone "Europe/London"})
 
       (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT1S")
@@ -221,7 +222,8 @@
       (xt/submit-tx node [[:put-docs :xt_docs
                            {:xt/id "foo", :duration #xt/duration "PT1H"}
                            {:xt/id "bar", :duration #xt/duration "P3D"}
-                           {:xt/id "baz", :duration #xt/duration "PT0S"}]])
+                           {:xt/id "baz", :duration #xt/duration "PT0S"}]]
+                    {:default-tz #xt/zone "Europe/London"})
 
       (tu/flush-block! node)
       (c/compact-all! node #xt/duration "PT1S")
