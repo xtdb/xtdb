@@ -21,7 +21,10 @@
 
 (defn- write-arrow-edn-file! [^Path path, data]
   (with-open [out (io/writer (.toFile path))]
-    (pp/pprint data out)))
+    ;; the REPL binds this to true, Gradle doesn't - pin it so that regen output
+    ;; doesn't depend on where you regenerated from.
+    (binding [*print-namespace-maps* true]
+      (pp/pprint data out))))
 
 #_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defn wrap-regen [f]
