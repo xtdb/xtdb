@@ -14,7 +14,7 @@ import xtdb.arrow.VectorType.Companion.TRANSIT
 import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
+import xtdb.database.PartitionStorage
 import xtdb.api.error.Conflict
 import xtdb.api.error.Incorrect
 import xtdb.indexer.DatabaseSnapshot
@@ -65,7 +65,7 @@ class OpenTx
 @JvmOverloads constructor(
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
-    private val dbStorage: DatabaseStorage,
+    private val dbStorage: PartitionStorage,
     private val dbState: DatabaseState,
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,

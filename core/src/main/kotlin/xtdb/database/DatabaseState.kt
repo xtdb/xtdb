@@ -36,7 +36,7 @@ data class DatabaseState(
         @JvmOverloads
         fun open(
             allocator: BufferAllocator,
-            storage: DatabaseStorage,
+            storage: PartitionStorage,
             dbName: DatabaseName,
             indexerConfig: IndexerConfig = IndexerConfig(),
         ): DatabaseState = safelyOpening {

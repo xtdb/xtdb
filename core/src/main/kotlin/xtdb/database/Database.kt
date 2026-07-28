@@ -79,7 +79,7 @@ class Database(
     private val partition0: DatabasePartition get() = partitions.getValue(0)
 
     val name: DatabaseName get() = partition0.state.name
-    override val storage: DatabaseStorage get() = partition0.storage
+    override val storage: PartitionStorage get() = partition0.storage
     override val queryState: DatabaseState get() = partition0.state
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
@@ -280,7 +280,7 @@ class Database(
             val metadataManager = open { PageMetadata.factory(allocator, bufferPool) }
             val logs = open { DatabaseLogs.open(base, dbConfig) }
 
-            val storage = DatabaseStorage(logs, bufferPool, metadataManager)
+            val storage = PartitionStorage(logs, bufferPool, metadataManager)
             val state = open { DatabaseState.open(allocator, storage, dbName, indexerConfig) }
             val blockCatalog = state.blockCatalog
             val sourceMsgId = maxOf(

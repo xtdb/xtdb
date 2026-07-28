@@ -12,7 +12,7 @@
            java.util.concurrent.TimeUnit
            (xtdb.api TransactionKey Xtdb$Config)
            (xtdb.api.log Log Log$Factory)
-           (xtdb.database Database DatabaseStorage Database$Config)
+           (xtdb.database Database PartitionStorage Database$Config)
            xtdb.api.TableRef
            (xtdb.util MsgIdUtil)))
 

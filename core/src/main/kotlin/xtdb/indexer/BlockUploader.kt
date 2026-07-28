@@ -22,7 +22,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
+import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.debug
@@ -37,7 +37,7 @@ private const val MAX_CONCURRENT_BLOCK_UPLOADS = 16
 private val defaultBlockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_BLOCK_UPLOADS, "block-upload")
 
 class BlockUploader(
-    dbStorage: DatabaseStorage,
+    dbStorage: PartitionStorage,
     dbState: DatabaseState,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,

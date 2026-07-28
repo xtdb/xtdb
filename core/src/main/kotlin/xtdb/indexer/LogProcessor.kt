@@ -16,7 +16,7 @@ import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
+import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.error.Fault
 import xtdb.api.error.Interrupted
@@ -34,7 +34,7 @@ class LogProcessor(
     private val allocator: BufferAllocator,
     private val base: NodeBase,
     private val crashLogger: CrashLogger,
-    private val dbStorage: DatabaseStorage,
+    private val dbStorage: PartitionStorage,
     private val dbState: DatabaseState,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,

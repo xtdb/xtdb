@@ -14,7 +14,7 @@ import xtdb.util.closeAll
  * Closing frees only the per-partition state — the logs are owned by the [Database]
  * and outlive every partition.
  */
-class DatabaseStorage(
+class PartitionStorage(
     val logs: DatabaseLogs,
     val bufferPoolOrNull: BufferPool?,
     val metadataManagerOrNull: PageMetadata.Factory?,

@@ -18,7 +18,7 @@ import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
+import xtdb.database.PartitionStorage
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import java.time.InstantSource
@@ -55,7 +55,7 @@ class LogProcessorTest {
         )
 
     private fun logProcessor(
-        dbStorage: DatabaseStorage,
+        dbStorage: PartitionStorage,
         dbState: DatabaseState,
         watchers: Watchers,
         blockUploader: BlockUploader,
@@ -74,7 +74,7 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockBufferPool()
         val dbState = dbState()
-        val dbStorage = DatabaseStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -96,7 +96,7 @@ class LogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 1)
         val bufferPool = mockBufferPool(epoch = 1)
         val dbState = dbState()
-        val dbStorage = DatabaseStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -121,7 +121,7 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = DatabaseStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
@@ -156,7 +156,7 @@ class LogProcessorTest {
             every { latestCompletedTx } returns null
         }
         val dbState = dbState(liveIndex = liveIndex)
-        val dbStorage = DatabaseStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val dbStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(dbStorage, dbState, mockk(relaxed = true), null, null, backgroundScope)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 

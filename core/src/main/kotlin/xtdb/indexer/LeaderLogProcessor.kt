@@ -53,7 +53,7 @@ private val LOG = LeaderLogProcessor::class.logger
 internal class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
-    private val dbStorage: DatabaseStorage,
+    private val dbStorage: PartitionStorage,
     crashLogger: CrashLogger,
     private val dbState: DatabaseState,
     private val blockUploader: BlockUploader,

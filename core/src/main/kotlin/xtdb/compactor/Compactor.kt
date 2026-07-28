@@ -17,7 +17,7 @@ import xtdb.arrow.Relation
 import xtdb.compactor.PageTree.Companion.asTree
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.database.DatabaseState
-import xtdb.database.DatabaseStorage
+import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.TrieMetadata
 import xtdb.segment.BufferPoolSegment
@@ -62,21 +62,21 @@ interface Compactor : AutoCloseable {
         }
     }
 
-    fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
+    fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): ForDatabase
 
     interface Driver : AutoCloseable {
         suspend fun executeJob(job: Job): TriesAdded
         suspend fun publishTries(triesAdded: TriesAdded)
 
         interface Factory {
-            fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers): Driver
+            fun create(allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): Driver
         }
 
         companion object {
             @JvmStatic
             fun real(pageSize: Int, recencyPartition: RecencyPartition?) =
                 object : Factory {
-                    override fun create(allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : Driver {
+                    override fun create(allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : Driver {
                         private val al = allocator.openChildAllocator("compactor")
                         private val log = dbStorage.sourceLog
                         private val bp = dbStorage.bufferPool
@@ -166,7 +166,7 @@ interface Compactor : AutoCloseable {
         private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
         private val jobsSemaphore = Semaphore(threadCount)
 
-        override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+        override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
 
             private val trieCatalog = dbState.trieCatalog
             private val liveIndex = dbState.liveIndexOrNull
@@ -284,7 +284,7 @@ interface Compactor : AutoCloseable {
     companion object {
         @JvmField
         val NOOP = object : Compactor {
-            override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: DatabaseStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
+            override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, dbStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers) = object : ForDatabase {
                 override fun signalBlock() = Unit
                 override suspend fun compactAll() = Unit
                 override fun close() = Unit
