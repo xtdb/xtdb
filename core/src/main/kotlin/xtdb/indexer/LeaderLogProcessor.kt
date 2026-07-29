@@ -2,51 +2,34 @@
 
 package xtdb.indexer
 
-import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.selectUnbiased
 import org.apache.arrow.memory.BufferAllocator
-import xtdb.Metrics.withSpan
 import xtdb.NodeBase
-import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
-import xtdb.api.TransactionResult.Aborted
-import xtdb.api.TransactionResult.Committed
 import xtdb.api.log.*
 import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
-import xtdb.arrow.Relation
-import xtdb.arrow.VectorReader
-import xtdb.arrow.asChannel
 import xtdb.database.*
 import xtdb.api.error.Anomaly
-import xtdb.api.error.Fault
-import xtdb.api.error.Incorrect
 import xtdb.api.error.Interrupted
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.api.TableRef
 import xtdb.table.fromSchemaAndTable
-import xtdb.time.InstantUtil.asMicros
-import xtdb.time.InstantUtil.fromMicros
 import xtdb.trie.TrieKey
-import xtdb.tx.deserializeUserMetadata
 import xtdb.util.*
-import xtdb.util.StringUtil.asLexDec
 import xtdb.util.StringUtil.asLexHex
-import java.nio.ByteBuffer
 import java.time.*
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.types.MessageId
-
-private val SKIPPED_EXN: Throwable = Fault("Transaction was skipped", "xtdb/skipped-tx")
 
 private val LOG = LeaderLogProcessor::class.logger
 
@@ -60,10 +43,10 @@ internal class LeaderLogProcessor(
     private val watchers: Watchers,
     private val extSource: ExternalSource?,
     private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
-    private val skipTxs: Set<MessageId>,
+    skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
-    private val instantSource: InstantSource = InstantSource.system(),
+    instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration = Duration.ofMinutes(5),
     scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
@@ -85,11 +68,11 @@ internal class LeaderLogProcessor(
     private val blockCatalog = dbState.blockCatalog
     private val trieCatalog = dbState.trieCatalog
 
-    private val allocator = allocator.newChildAllocator("leader-log-processor", 0, Long.MAX_VALUE)
-
-    private val tracer = nodeBase.tracer?.takeIf { nodeBase.config.tracer.transactionTracing }
-
-    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, crashLogger)
+    // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
+    // resolved-but-not-yet-durable tx — until we've committed it into the live index below. Driven only
+    // from the persister coroutine, and freed in close() once that job is joined; see TxResolver.
+    private val txResolver =
+        TxResolver(allocator, nodeBase, partitionStorage, dbState, crashLogger, skipTxs, instantSource)
 
     var pendingBlock: PendingBlock? = null
         private set
@@ -101,93 +84,63 @@ internal class LeaderLogProcessor(
 
     private val maxStagedRows = nodeBase.config.indexer.rowsPerBlock
 
-    // Resolver-owned staging area: resolved-but-not-yet-durable txs, seeded at the durable head. The
-    // resolver is its sole accessor (no lock). Freed in close() (phase 2), once the resolver job is
-    // joined so nothing live still touches it; see StagingIndex.
-    private val stagingIndex = StagingIndex(liveIndex.latestCompletedTx)
-
     /**
-     * A sealed batch: the txs bound for one replica-log producer transaction, in send order, together
-     * with [append] — that producer transaction's background commit, yielding the per-tx replica-log
-     * positions. One value on purpose: the txs and the append that carries them can't drift apart.
+     * The in-flight replica-log append: one fenced producer transaction carrying the sealed batch, run in
+     * the background and yielding each tx's replica-log position. At most one — the single fenced producer
+     * permits only one open transaction at a time, and holding it as a nullable field makes that invariant
+     * structural rather than checked at every append site.
+     *
+     * The txs it carries come back in its result, so there's no second copy here to drift from the
+     * resolver's — the resolver owns them throughout, and frees them at [TxResolver.applied].
      */
-    private inner class InFlightBatch(
-        val txs: List<ResolvedTx>, private val append: Deferred<List<Pair<ResolvedTx, Log.MessageMetadata>>>
-    ) : AutoCloseable {
-
-        val isCompleted: Boolean get() = append.isCompleted
-
-        // onJoin, not onAwait: join fires on failure too, letting settleAppend's own await rethrow
-        // the fault inside the persister's try/catch, which routes it through notifyError.
-        val onJoin get() = append.onJoin
-
-        suspend fun settle() {
-            val metadatas = append.await()
-
-            for ((resolvedTx, metadata) in metadatas) {
-                liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
-                latestReplicaMsgId = metadata.msgId
-                watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
-            }
-
-            // Watchers-derived rather than txs.last(): the promote loop above has just notified every
-            // tx in send order, so latestSourceMsgId equals the last tx's, and the token null-coalesces
-            // to the batch's last non-null — for a mixed source-log/ext-source batch, txs.last() could
-            // be a source-log tx whose null token would drop the CDC resume point from the boundary.
-            // Matches the FlushBlock path, which already cuts blocks from the watchers' view.
-            if (liveIndex.isFull()) finishBlock(watchers.latestSourceMsgId, watchers.externalSourceToken)
-
-            // Complete after the whole settle (promote loop + any block cut): signalling per-tx mid-loop
-            // lets a caller race ahead of finishBlock, and a hard cancel then can orphan a BlockBoundary
-            // with no BlockUploaded (the #5783 sim regression caught at 15/300).
-            txs.forEach { it.pending?.complete(it.txResult) }
-        }
-
-        fun failPending(cause: Throwable) = txs.forEach { it.pending?.completeExceptionally(cause) }
-
-        override fun close() {
-            txs.closeAll()
-        }
-    }
-
-    /**
-     * The sealed-but-not-yet-promoted batch. At most one — the single fenced producer permits only one
-     * open transaction at a time, and holding it as a nullable field makes that invariant structural
-     * rather than checked at every append site.
-     */
-    private var inFlight: InFlightBatch? = null
-
-    private val resolvedTxs get() = inFlight?.txs.orEmpty() + stagingIndex.resolvedTxs
+    private var inFlight: Deferred<List<Pair<ResolvedTx, Log.MessageMetadata>>>? = null
 
     // Seal whatever has accumulated and launch its replica-log append — each tx serializing itself into
     // a replica message (ResolvedTx.toReplicaMessage), all appended in one fenced producer transaction —
     // in the background, so the resolver keeps resolving while the serialize + producer commit run.
-    // At most one append is in flight, held on `inFlight`; the persister settles it (settleAppend) once
-    // it completes. No-op if a batch is already in flight (the accumulating tail rides the next kick,
-    // at settle) or there's nothing staged.
-    private fun kickAppend(): InFlightBatch? =
-        if (inFlight != null) null
-        else stagingIndex.seal()?.closeAllOnCatch { txs ->
-            InFlightBatch(
-                txs,
-                appendScope.async {
-                    replicaProducer
-                        .withTx { tx ->
-                            txs.map { it to tx.appendMessage(it.toReplicaMessage()) }
-                        }
-                        .map { it.first to it.second.await() }
+    // The persister settles it (settleAppend) once it completes. No-op if an append is already in flight
+    // (the accumulating tail rides the next kick, at settle) or there's nothing staged.
+    private fun kickAppend() {
+        if (inFlight != null) return
+        val txs = txResolver.seal() ?: return
+
+        inFlight = appendScope.async {
+            replicaProducer
+                .withTx { tx ->
+                    txs.map { it to tx.appendMessage(it.toReplicaMessage()) }
                 }
-            ).also { this.inFlight = it }
+                .map { it.first to it.second.await() }
+        }
+    }
+
+    private suspend fun settle(appended: List<Pair<ResolvedTx, Log.MessageMetadata>>) {
+        for ((resolvedTx, metadata) in appended) {
+            liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
+            latestReplicaMsgId = metadata.msgId
+            watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
         }
 
-    // The batch is freed here only once settle returns; on a settle fault — including a teardown
-    // cancellation thrown out of its await while the append coroutine may still be serializing the
-    // slices — it stays on `inFlight`, and close() frees it after cancelAndJoin has joined the append.
+        // Watchers-derived rather than the last tx's: the promote loop above has just notified every
+        // tx in send order, so latestSourceMsgId equals the last tx's, and the token null-coalesces
+        // to the batch's last non-null — for a mixed source-log/ext-source batch, the last tx could
+        // be a source-log tx whose null token would drop the CDC resume point from the boundary.
+        // Matches the FlushBlock path, which already cuts blocks from the watchers' view.
+        if (liveIndex.isFull()) finishBlock(watchers.latestSourceMsgId, watchers.externalSourceToken)
+
+        // Complete after the whole settle (promote loop + any block cut): signalling per-tx mid-loop
+        // lets a caller race ahead of finishBlock, and a hard cancel then can orphan a BlockBoundary
+        // with no BlockUploaded (the #5783 sim regression caught at 15/300).
+        appended.forEach { (resolvedTx, _) -> resolvedTx.pending?.complete(resolvedTx.txResult) }
+    }
+
+    // The batch is released back to the resolver only once settle returns; on a settle fault — including a
+    // teardown cancellation thrown out of its await while the append coroutine may still be serializing the
+    // slices — it stays sealed, and close() frees it after cancelAndJoin has joined the append.
     private suspend fun settleAppend() {
-        val batch = inFlight ?: return
-        batch.settle()
+        val append = inFlight ?: return
+        settle(append.await())
         inFlight = null
-        batch.close()
+        txResolver.applied()
         kickAppend()
     }
 
@@ -229,13 +182,7 @@ internal class LeaderLogProcessor(
     }
 
     private sealed interface ExtSourceTask : PersisterTask {
-        class IndexTx(
-            val externalSourceToken: ExternalSourceToken?,
-            val systemTime: Instant?,
-            val writer: suspend (OpenTx) -> TxResult,
-        ) : ExtSourceTask {
-            val result = CompletableDeferred<TransactionResult>()
-
+        class IndexTx(val msg: ExtSourceMessage) : ExtSourceTask {
             override val onComplete = CompletableDeferred<Unit>()
         }
     }
@@ -258,7 +205,7 @@ internal class LeaderLogProcessor(
             task.onComplete.cancel()
             // Also cancel the per-tx durability handle: the task was never delivered to the persister,
             // so settle() will never complete it — this is the only path that can.
-            if (task is ExtSourceTask.IndexTx) task.result.cancel()
+            if (task is ExtSourceTask.IndexTx) task.msg.pending.cancel()
         })
 
     private val gcCh =
@@ -289,11 +236,13 @@ internal class LeaderLogProcessor(
         if (msg !is SourceMessage.Tx && msg !is SourceMessage.LegacyTx) drainStaging()
 
         when (msg) {
-            is SourceMessage.Tx, is SourceMessage.LegacyTx -> {
-                val (txResult, openTx) = resolveTx(msgId, record, msg)
-                openTx.use {
-                    stagingIndex.stage(it, msgId, txResult, dbOp = null, pending = null)
-                }
+            is SourceMessage.Tx -> {
+                txResolver.indexTx(msgId, record.logTimestamp, msg)
+                kickAppend()
+            }
+
+            is SourceMessage.LegacyTx -> {
+                txResolver.indexTx(msgId, record.logTimestamp, msg)
                 kickAppend()
             }
 
@@ -309,7 +258,6 @@ internal class LeaderLogProcessor(
             }
 
             is SourceMessage.AttachDatabase -> {
-                val txKey = TransactionKey(msgId, record.logTimestamp)
                 val error = if (dbCatalog != null) {
                     try {
                         dbCatalog.attach(msg.dbName, msg.config)
@@ -320,17 +268,15 @@ internal class LeaderLogProcessor(
                     }
                 } else null
 
-                openTx(txKey, null).use { openTx ->
-                    openTx.writeTxRow(error, null)
-                    val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
-                    val dbOp = if (error == null) DbOp.Attach(msg.dbName, msg.config) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp, pending = null)
-                }
+                if (error == null)
+                    txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Attach(msg.dbName, msg.config))
+                else
+                    txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+
                 drainStaging()
             }
 
             is SourceMessage.DetachDatabase -> {
-                val txKey = TransactionKey(msgId, record.logTimestamp)
                 val error = if (dbCatalog != null) {
                     try {
                         dbCatalog.detach(msg.dbName)
@@ -341,12 +287,11 @@ internal class LeaderLogProcessor(
                     }
                 } else null
 
-                openTx(txKey, null).use { openTx ->
-                    openTx.writeTxRow(error, null)
-                    val txResult = if (error == null) Committed(txKey) else Aborted(txKey, error)
-                    val dbOp = if (error == null) DbOp.Detach(msg.dbName) else null
-                    stagingIndex.stage(openTx, msgId, txResult, dbOp, pending = null)
-                }
+                if (error == null)
+                    txResolver.indexDbOp(msgId, record.logTimestamp, DbOp.Detach(msg.dbName))
+                else
+                    txResolver.indexFailedDbOp(msgId, record.logTimestamp, error)
+
                 drainStaging()
             }
 
@@ -370,58 +315,20 @@ internal class LeaderLogProcessor(
     }
 
     private suspend fun handleIndexTx(task: ExtSourceTask.IndexTx) {
-        val txKey = TransactionKey(
-            (stagingIndex.latestCompletedTx?.txId ?: -1) + 1,
-            smoothSystemTime(task.systemTime ?: instantSource.instant())
-        )
+        // Ext-source txs don't advance `latestSourceMsgId` (driven by the source log) — they track progress
+        // via `externalSourceToken` — but the resolver stamps the current watermark onto the replicated
+        // record. Read here rather than inside the resolver: this is the leader's view of the source log.
+        txResolver.indexTx(task.msg, srcMsgId = watchers.latestSourceMsgId)
 
-        var openTx = openTx(txKey, task.externalSourceToken)
+        kickAppend()
+        trySettleAppend()
 
-        @Suppress("ConvertTryFinallyToUseCall") // because openTx is a var
-        try {
-            try {
-                val writerResult = task.writer(openTx)
-                val txResult: TransactionResult = when (writerResult) {
-                    is TxResult.Committed -> {
-                        openTx.writeTxRow(null, writerResult.userMetadata)
-                        Committed(txKey)
-                    }
-
-                    is TxResult.Aborted -> {
-                        txErrorCounter?.increment()
-                        openTx.close()
-                        // fresh tx for the abort row — the original openTx may hold partial writes
-                        openTx = openTx(txKey, task.externalSourceToken)
-                        openTx.writeTxRow(writerResult.error, writerResult.userMetadata)
-                        Aborted(txKey, writerResult.error)
-                    }
-                }
-
-                // Ext-source txs carry no source-log position of their own and track progress via
-                // `externalSourceToken`, so they don't advance `latestSourceMsgId` (driven by the source log).
-                // We do stamp the current source-log watermark onto the replicated record: without it a
-                // follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes
-                // the source log from a stale point and replays an already-covered block boundary.
-                val effectiveSrcMsgId = watchers.latestSourceMsgId
-                stagingIndex.stage(openTx, effectiveSrcMsgId, txResult, dbOp = null, pending = task.result)
-            } catch (e: Throwable) {
-                // Writer, writeTxRow, or stage threw before the tx was handed to the in-flight batch.
-                // The persister finally won't see a staged entry for this tx, so complete the handle here —
-                // the caller awaiting task.result would otherwise hang until the term closes.
-                task.result.completeExceptionally(e)
-                throw e
-            }
-            kickAppend()
-            trySettleAppend()
-            // Safety bound: never accumulate more than a block's worth of rows — a bursty source
-            // must not grow staging without limit behind one slow commit (nor leave durability to
-            // the ~5-min FlushBlock). Rows, not bytes: it's the dimension the block-sizing machinery
-            // (isFull/rowsPerBlock) already manages, and the drain it triggers is ordinary
-            // backpressure, not a failure.
-            if (stagingIndex.rowCount > maxStagedRows) drainStaging()
-        } finally {
-            openTx.close()
-        }
+        // Safety bound: never accumulate more than a block's worth of rows — a bursty source
+        // must not grow staging without limit behind one slow commit (nor leave durability to
+        // the ~5-min FlushBlock). Rows, not bytes: it's the dimension the block-sizing machinery
+        // (isFull/rowsPerBlock) already manages, and the drain it triggers is ordinary
+        // backpressure, not a failure.
+        if (txResolver.unsealedRowCount > maxStagedRows) drainStaging()
     }
 
     private suspend fun handleTriesDeleted(task: GcTask.TriesDeleted) {
@@ -443,8 +350,6 @@ internal class LeaderLogProcessor(
         }
         return task.onComplete
     }
-
-    private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
     // The term handle: a supervisor child of the Database scope, owning the persister body (launched
     // last, in the `init` below) and the GCs. A term-internal failure surfaces via `notifyError`
@@ -521,14 +426,14 @@ internal class LeaderLogProcessor(
                         // Every stage is followed by a kick and every settle re-kicks the accumulated tail,
                         // so staged txs always have an in-flight append ahead of them; a violation here
                         // means a wedge, not a race.
-                        check(stagingIndex.isEmpty || inFlight != null) {
+                        check(!txResolver.hasUnsealedTxs || inFlight != null) {
                             "staged txs with no in-flight append — nothing will kick them"
                         }
 
                         val work = selectUnbiased<PersisterWork> {
                             // onJoin, not onAwait: join fires on failure too, and settleAppend's own await
                             // rethrows the fault inside the try below, routing it through notifyError.
-                            inFlight?.let { batch -> batch.onJoin { Settle } }
+                            inFlight?.let { append -> append.onJoin { Settle } }
                             sourceLogCh.onReceive { it }
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
@@ -585,8 +490,7 @@ internal class LeaderLogProcessor(
                     // Fail any ext-source tx that was staged or in-flight but will never settle:
                     // the persister is exiting and settle() will never run for them.
                     val pendingCause = cause ?: CancellationException("leader term closed")
-                    inFlight?.failPending(pendingCause)
-                    stagingIndex.failPending(pendingCause)
+                    txResolver.failPending(pendingCause)
 
                     // A buffered-but-never-received task is invisible to both failPending (it was
                     // never staged) and onUndeliveredElement (close() doesn't visit buffered
@@ -595,7 +499,7 @@ internal class LeaderLogProcessor(
                     while (true) {
                         val task = extSourceCh.tryReceive().getOrNull() ?: break
                         task.onComplete.completeExceptionally(pendingCause)
-                        if (task is ExtSourceTask.IndexTx) task.result.completeExceptionally(pendingCause)
+                        if (task is ExtSourceTask.IndexTx) task.msg.pending.completeExceptionally(pendingCause)
                     }
 
                     sourceLogCh.close(cause)
@@ -620,15 +524,6 @@ internal class LeaderLogProcessor(
         }
     }
 
-    private fun smoothSystemTime(systemTime: Instant): Instant {
-        val lct = stagingIndex.latestCompletedTx?.systemTime ?: return systemTime
-        val floor = fromMicros(lct.asMicros + 1)
-        return if (systemTime.isBefore(floor)) floor else systemTime
-    }
-
-    private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, partitionStorage, dbState, txKey, externalSourceToken, tracer, resolvedTxs)
-
     override suspend fun executeTx(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
@@ -639,13 +534,13 @@ internal class LeaderLogProcessor(
         externalSourceToken: ExternalSourceToken?, systemTime: Instant?,
         writer: suspend (OpenTx) -> TxResult,
     ): Deferred<TransactionResult> {
-        val task = ExtSourceTask.IndexTx(externalSourceToken, systemTime, writer)
+        val task = ExtSourceTask.IndexTx(ExtSourceMessage(externalSourceToken, systemTime, writer))
         // enqueue's send throws if the channel is closed (dead indexer) — that's the early-exit signal.
-        // The returned handle is `task.result`, completed at settle once the tx is durably replicated; a
-        // fire-and-forget caller may discard it, and an unrecoverable failure also closes the channel with
-        // its cause, so the next `enqueue` throws it.
+        // The returned handle is the message's `pending`, completed at settle once the tx is durably
+        // replicated; a fire-and-forget caller may discard it, and an unrecoverable failure also closes the
+        // channel with its cause, so the next `enqueue` throws it.
         enqueue(task)
-        return task.result
+        return task.msg.pending
     }
 
     private suspend fun maybeFlushBlock() {
@@ -678,170 +573,6 @@ internal class LeaderLogProcessor(
         trieGc.signal()
     }
 
-    // A fresh tx committing a single skip / abort / invalid-system-time row, returned LIVE — the caller
-    // stages it (which slices its writes) then closes it. On any failure the tx is closed here so nothing
-    // leaks. `countError` mirrors the pre-staging behaviour: skipped txs don't count as errors.
-    private fun commitStandaloneTx(
-        txKey: TransactionKey, error: Throwable, userMetadata: Map<*, *>?, countError: Boolean,
-    ): Pair<TransactionResult, OpenTx> {
-        if (countError) txErrorCounter?.increment()
-        val openTx = openTx(txKey, null)
-        return try {
-            openTx.writeTxRow(error, userMetadata)
-            Aborted(txKey, error) to openTx
-        } catch (e: Throwable) {
-            openTx.close(); throw e
-        }
-    }
-
-    // Resolves a source-log tx and returns its result alongside the LIVE OpenTx that produced it — the
-    // resolver stages that OpenTx (taking independent slices of its writes) and closes it afterwards.
-    // Any OpenTx not returned (an aborted tx's partial-write attempt, or one whose commit throws) is closed
-    // here.
-    private fun indexSourceLogTx(
-        msgId: MessageId,
-        msgTimestamp: Instant,
-        txOps: VectorReader?,
-        systemTime: Instant?,
-        defaultTz: ZoneId?,
-        user: String?,
-        userMetadata: Any?,
-    ): Pair<TransactionResult, OpenTx> = tracer.withSpan(
-        "xtdb.transaction",
-        attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
-    ) {
-        val userMetadataMap = userMetadata as? Map<*, *>
-        // The APPLIED head (staging), not the durable head: a tx must system-time-smooth against the
-        // staged predecessors it resolves behind, which lead the durable index.
-        val lcTx = stagingIndex.latestCompletedTx
-
-        // If lc-tx's systemTime >= msgTimestamp, bump past it by 1µs; otherwise use msgTimestamp.
-        // (`+1000ns` is `+1µs`.)
-        val defaultSystemTime: Instant = lcTx?.systemTime?.let { lcSysTime ->
-            if (lcSysTime >= msgTimestamp) lcSysTime.plusNanos(1_000) else null
-        } ?: msgTimestamp
-
-        // Specified system-time before lc-tx → invalid; abort with that error.
-        // The aborted tx-key uses the *default* (smoothed) systemTime, not the rejected one,
-        // so the tx-key still satisfies the monotonicity invariant.
-        if (systemTime != null && lcTx != null && systemTime < lcTx.systemTime) {
-            val err = Incorrect(
-                "specified system-time older than current tx",
-                "invalid-system-time",
-                mapOf(
-                    "tx-key" to TransactionKey(msgId, systemTime),
-                    "latest-completed-tx" to lcTx,
-                ),
-            )
-            LOG.warn { "specified system-time '$systemTime' older than current tx '$lcTx'" }
-
-            return@withSpan commitStandaloneTx(
-                TransactionKey(msgId, defaultSystemTime), err, userMetadataMap, countError = true
-            )
-        }
-
-        val effectiveSystemTime = systemTime ?: defaultSystemTime
-        val txKey = TransactionKey(msgId, effectiveSystemTime)
-
-        if (txOps == null)
-            return@withSpan commitStandaloneTx(txKey, SKIPPED_EXN, userMetadataMap, countError = false)
-
-        val openTx = openTx(txKey, null)
-        val result = try {
-            val opts = SourceLogTxIndexer.TxOpts(
-                txKey = txKey,
-                currentTime = effectiveSystemTime,
-                systemTime = effectiveSystemTime.asMicros,
-                defaultTz = defaultTz,
-                user = user,
-            )
-            sourceLogTxIndexer.ForTx(txOps, opts).indexTx(openTx)
-        } catch (e: Throwable) {
-            openTx.close(); throw e
-        }
-
-        when (result) {
-            is TxResult.Committed ->
-                try {
-                    openTx.writeTxRow(null, userMetadataMap)
-                    Committed(txKey) to openTx
-                } catch (e: Throwable) {
-                    openTx.close(); throw e
-                }
-
-            is TxResult.Aborted -> {
-                LOG.debug(result.error) { "aborted tx" }
-                // fresh tx for the abort row — the original openTx may hold partial writes
-                openTx.close()
-                commitStandaloneTx(txKey, result.error, userMetadataMap, countError = true)
-            }
-        }
-    }
-
-    private fun resolveTx(
-        msgId: MessageId, record: Log.Record<SourceMessage>, msg: SourceMessage
-    ): Pair<TransactionResult, OpenTx> {
-        if (skipTxs.isNotEmpty() && skipTxs.contains(msgId)) {
-            LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
-
-            val payload = when (msg) {
-                is SourceMessage.Tx -> msg.encode()
-                is SourceMessage.LegacyTx -> msg.payload
-                else -> error("unexpected message type: ${msg::class}")
-            }
-            bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
-
-            return indexSourceLogTx(msgId, record.logTimestamp, null, null, null, null, null)
-        }
-
-        return when (msg) {
-            is SourceMessage.Tx -> {
-                msg.txOps.asChannel.use { ch ->
-                    Relation.StreamLoader(allocator, ch).use { loader ->
-                        Relation(allocator, loader.schema).use { rel ->
-                            loader.loadNextPage(rel)
-
-                            val userMetadata = msg.userMetadata?.let { deserializeUserMetadata(allocator, it) }
-
-                            indexSourceLogTx(
-                                msgId, record.logTimestamp,
-                                rel["tx-ops"],
-                                msg.systemTime, msg.defaultTz, msg.user, userMetadata
-                            )
-                        }
-                    }
-                }
-            }
-
-            is SourceMessage.LegacyTx -> {
-                msg.payload.asChannel.use { txOpsCh ->
-                    Relation.StreamLoader(allocator, txOpsCh).use { loader ->
-                        Relation(allocator, loader.schema).use { rel ->
-                            loader.loadNextPage(rel)
-
-                            val systemTime =
-                                (rel["system-time"].getObject(0) as ZonedDateTime?)?.toInstant()
-
-                            val defaultTz =
-                                (rel["default-tz"].getObject(0) as String?).let { ZoneId.of(it) }
-
-                            val userMetadata = rel.vectorForOrNull("user-metadata")?.getObject(0)
-                            val user = rel.vectorForOrNull("user")?.getObject(0) as String?
-
-                            indexSourceLogTx(
-                                msgId, record.logTimestamp,
-                                rel["tx-ops"].listElements,
-                                systemTime, defaultTz, user, userMetadata
-                            )
-                        }
-                    }
-                }
-            }
-
-            else -> error("unexpected message type: ${msg::class}")
-        }
-    }
-
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
@@ -860,8 +591,8 @@ internal class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         replicaProducer.close()
-        inFlight?.close() // free a batch whose settle never completed (fault / teardown)
-        stagingIndex.close() // free any un-promoted staged slices before the allocator
-        allocator.close() // last: Arrow won't close it while a child buffer is live
+        // Frees every resolved-but-not-applied tx, including a batch whose settle never completed
+        // (fault / teardown) — safe now that cancelAndJoin has joined the persister and the append.
+        txResolver.close()
     }
 }
