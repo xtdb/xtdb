@@ -9,7 +9,7 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
 import xtdb.api.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
 import xtdb.time.microsAsInstant
@@ -54,7 +54,7 @@ class TrieGarbageCollector(
     /** The owner's scope: supplies this collector's lifetime and the thread its loop runs on. Cancelling it stops the loop. */
     scope: CoroutineScope,
     private val bufferPool: BufferPool,
-    dbState: DatabaseState,
+    dbState: PartitionState,
     dbName: DatabaseName,
     /**
      * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.

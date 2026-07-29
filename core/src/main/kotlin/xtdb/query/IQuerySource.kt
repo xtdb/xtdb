@@ -4,7 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.PrepareOpts
 import xtdb.database.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.indexer.DatabaseSnapshot
 import xtdb.api.TableRef
@@ -20,7 +20,7 @@ interface IQuerySource : AutoCloseable {
     interface QueryDatabase : DatabaseSnapshot.Source {
         val name: DatabaseName
         val storage: PartitionStorage
-        val queryState: DatabaseState
+        val queryState: PartitionState
     }
 
     fun prepareQuery(query: ParsedStatement, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery

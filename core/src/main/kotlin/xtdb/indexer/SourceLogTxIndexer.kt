@@ -8,7 +8,7 @@ import xtdb.NodeBase
 import xtdb.api.TransactionKey
 import xtdb.arrow.*
 import xtdb.api.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Anomaly.Companion.wrapAnomaly
 import xtdb.api.error.Fault
@@ -49,7 +49,7 @@ private fun assertTimestampColType(rdr: VectorReader) {
 internal class SourceLogTxIndexer(
     private val allocator: BufferAllocator,
     base: NodeBase,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     private val crashLogger: CrashLogger,
 ) {

@@ -39,7 +39,7 @@ internal class LeaderLogProcessor(
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     private val blockUploader: BlockUploader,
     private val watchers: Watchers,

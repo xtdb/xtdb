@@ -27,7 +27,7 @@ import xtdb.SimulationTestUtils.Companion.L0TrieKeys
 import xtdb.SimulationTestUtils.Companion.L3TrieKeys
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.log.proto.TrieDetails
@@ -117,7 +117,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val blockCatalog = BlockCatalog(sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val dbState = DatabaseState(blockCatalog, null, trieCatalog, null)
+            val dbState = PartitionState(blockCatalog, null, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)

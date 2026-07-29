@@ -23,7 +23,7 @@ import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.arrow.asChannel
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.InstantUtil.fromMicros
@@ -86,7 +86,7 @@ internal class TxResolver(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     crashLogger: CrashLogger,
     private val skipTxs: Set<MessageId>,

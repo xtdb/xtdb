@@ -24,7 +24,7 @@ import xtdb.api.log.SourceMessage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.MemoryStorage
@@ -65,7 +65,7 @@ class LiveIndexTest {
         private val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
-        private val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        private val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         private val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),

@@ -30,7 +30,7 @@ import xtdb.compactor.RecencyPartition.WEEK
 import xtdb.compactor.TemporalSplitting.*
 import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -57,7 +57,7 @@ class MockDb(
     val compactor: Compactor,
 ) {
     val partitionStorage: PartitionStorage get() = PartitionStorage(DatabaseLogs(null, null), bufferPool, null)
-    val dbState: DatabaseState get() = DatabaseState(null, null, trieCatalog, null)
+    val dbState: PartitionState get() = PartitionState(null, null, trieCatalog, null)
 }
 
 private val LOGGER = CompactorMockDriverFactory::class.logger
@@ -98,12 +98,12 @@ class CompactorMockDriverFactory(
     // system's listener failing doesn't cancel the others.
     val scope = CoroutineScope(dispatcher + SupervisorJob())
 
-    override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: DatabaseState, watchers: Watchers): Driver {
+    override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: PartitionState, watchers: Watchers): Driver {
         val systemId = nextSystemId++
         return CompactorMockDriver(partitionStorage, dbState, systemId)
     }
 
-    private inner class CompactorMockDriver(val partitionStorage: PartitionStorage, val dbState: DatabaseState, val systemId: Int) : Driver {
+    private inner class CompactorMockDriver(val partitionStorage: PartitionStorage, val dbState: PartitionState, val systemId: Int) : Driver {
         val trieCatalog = dbState.trieCatalog
         val bufferPool = partitionStorage.bufferPool
 

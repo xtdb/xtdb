@@ -14,7 +14,7 @@ import java.time.Instant
 
 class DatabasePartition(
     val storage: PartitionStorage,
-    val state: DatabaseState,
+    val state: PartitionState,
     val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
     val logProcessor: LogProcessor? = null,

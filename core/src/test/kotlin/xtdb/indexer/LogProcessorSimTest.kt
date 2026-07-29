@@ -25,7 +25,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
@@ -162,7 +162,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val trieCatalog = createTrieCatalog()
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig)
 
-        val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }

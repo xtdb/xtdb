@@ -19,7 +19,7 @@ import xtdb.block.proto.Block.parseFrom
 import xtdb.catalog.BlockCatalog.Companion.blockFilePath
 import xtdb.compactor.Compactor
 import xtdb.database.Database
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Interrupted
 import xtdb.types.LogTimestamp
@@ -40,7 +40,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
     replicaLog: PartitionLog<ReplicaMessage>,
     private val bufferPool: BufferPool,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,

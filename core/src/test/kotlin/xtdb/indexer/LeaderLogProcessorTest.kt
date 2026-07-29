@@ -31,7 +31,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
@@ -82,7 +82,7 @@ class LeaderLogProcessorTest {
         wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
-        val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val blockUploader = BlockUploader(partitionStorage, dbState, compactor, null, null, backgroundScope, uploadDispatcher)
@@ -140,7 +140,7 @@ class LeaderLogProcessorTest {
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
@@ -211,7 +211,7 @@ class LeaderLogProcessorTest {
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
@@ -540,7 +540,7 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
-        val dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, dbState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))

@@ -13,7 +13,7 @@ import xtdb.api.storage.Storage
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Interrupted
 import xtdb.database.Database
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
 import xtdb.util.*
@@ -26,7 +26,7 @@ private val LOG = TransitionLogProcessor::class.logger
 class TransitionLogProcessor(
     allocator: BufferAllocator,
     private val bufferPool: BufferPool,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     private val liveIndex: LiveIndex,
     private val blockUploader: BlockUploader,

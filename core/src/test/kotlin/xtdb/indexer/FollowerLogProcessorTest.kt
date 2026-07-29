@@ -24,7 +24,7 @@ import xtdb.block.proto.block
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.api.error.Fault
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
@@ -41,7 +41,7 @@ class FollowerLogProcessorTest {
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
-    private lateinit var dbState: DatabaseState
+    private lateinit var dbState: PartitionState
     private lateinit var replicaLog: Log<ReplicaMessage>
 
     // runTest cancels and joins backgroundScope before tearDown, so the followers are quiescent here
@@ -57,7 +57,7 @@ class FollowerLogProcessorTest {
         blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
-        dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // The processor self-launches its replica tail; park it so it idles while the test drives
@@ -126,7 +126,7 @@ class FollowerLogProcessorTest {
         // block catalog starts at block 5 (simulating startup from latest block).
         val startBlock = block { blockIndex = 5 }
         blockCatalog = BlockCatalog(startBlock)
-        dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
         val proc = makeProcessor()
 

@@ -13,7 +13,7 @@ import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
 import xtdb.authz.RoleMembership
 import xtdb.database.DatabaseName
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.error.Conflict
 import xtdb.api.error.Incorrect
@@ -66,7 +66,7 @@ class OpenTx
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
-    private val dbState: DatabaseState,
+    private val dbState: PartitionState,
     private val dbName: DatabaseName,
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,

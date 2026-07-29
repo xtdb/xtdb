@@ -11,7 +11,7 @@ import xtdb.trie.TrieCatalog
 import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
-data class DatabaseState(
+class PartitionState(
     val blockCatalogOrNull: BlockCatalog?,
     val tableCatalogOrNull: TableCatalog?,
     val trieCatalogOrNull: TrieCatalog?,
@@ -36,7 +36,7 @@ data class DatabaseState(
             allocator: BufferAllocator,
             storage: PartitionStorage,
             indexerConfig: IndexerConfig = IndexerConfig(),
-        ): DatabaseState = safelyOpening {
+        ): PartitionState = safelyOpening {
             val bufferPool = storage.bufferPool
 
             val blockCatalog = BlockCatalog(bufferPool.latestBlock)
@@ -55,7 +55,7 @@ data class DatabaseState(
 
             val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig) }
 
-            DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         }
     }
 }

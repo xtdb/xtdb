@@ -18,7 +18,7 @@ import xtdb.api.log.SourceMessage
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.indexer.LiveIndex
 import xtdb.storage.MemoryStorage
@@ -49,7 +49,7 @@ class OpenTxTest {
             val trieCatalog = createTrieCatalog()
             val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
 
-            DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex).use { dbState ->
+            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex).use { dbState ->
                 val storage = PartitionStorage(
                     DatabaseLogs(
                         InMemoryLog<SourceMessage>(InstantSource.system(), 0),

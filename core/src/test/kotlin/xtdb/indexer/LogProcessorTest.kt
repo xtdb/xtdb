@@ -17,7 +17,7 @@ import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
@@ -46,7 +46,7 @@ class LogProcessorTest {
         mockk<BufferPool>(relaxed = true) { every { this@mockk.epoch } returns epoch }
 
     private fun dbState(name: String = "test-db", liveIndex: LiveIndex = mockk(relaxed = true)) =
-        DatabaseState(
+        PartitionState(
             BlockCatalog(null),
             mockk<TableCatalog>(relaxed = true),
             mockk<TrieCatalog>(relaxed = true),
@@ -55,7 +55,7 @@ class LogProcessorTest {
 
     private fun logProcessor(
         partitionStorage: PartitionStorage,
-        dbState: DatabaseState,
+        dbState: PartitionState,
         watchers: Watchers,
         blockUploader: BlockUploader,
         scope: CoroutineScope,

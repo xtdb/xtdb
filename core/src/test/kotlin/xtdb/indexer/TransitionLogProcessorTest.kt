@@ -12,7 +12,7 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
-import xtdb.database.DatabaseState
+import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import java.time.Instant
@@ -28,7 +28,7 @@ class TransitionLogProcessorTest {
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
-    private lateinit var dbState: DatabaseState
+    private lateinit var dbState: PartitionState
 
     @BeforeEach
     fun setUp() {
@@ -40,7 +40,7 @@ class TransitionLogProcessorTest {
         blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
-        dbState = DatabaseState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         every { bufferPool.epoch } returns 1
