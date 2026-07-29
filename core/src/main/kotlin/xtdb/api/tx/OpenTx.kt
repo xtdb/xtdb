@@ -140,7 +140,9 @@ class OpenTx
     }
 
 
-    private val queryCatalog: IQuerySource.QueryCatalog
+    // `internal` rather than `private` solely so OpenTxTest can assert the single-db contract directly;
+    // no production code outside this file reads it.
+    internal val queryCatalog: IQuerySource.QueryCatalog
         get() {
             val liveIndex = dbState.liveIndex
 
