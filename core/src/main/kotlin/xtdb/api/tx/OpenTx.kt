@@ -66,7 +66,7 @@ class OpenTx
     private val allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     val txKey: TransactionKey,
     val externalSourceToken: ExternalSourceToken?,
@@ -144,12 +144,12 @@ class OpenTx
     // no production code outside this file reads it.
     internal val queryCatalog: IQuerySource.QueryCatalog
         get() {
-            val liveIndex = dbState.liveIndex
+            val liveIndex = partitionState.liveIndex
 
             val queryDb = object : IQuerySource.QueryDatabase {
                 override val name get() = dbName
                 override val storage get() = partitionStorage
-                override val queryState get() = dbState
+                override val queryState get() = partitionState
                 // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
                 override fun openSnapshot(minBasis: List<Instant?>?) =
                     DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))

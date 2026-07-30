@@ -41,7 +41,7 @@ class FollowerLogProcessorTest {
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
-    private lateinit var dbState: PartitionState
+    private lateinit var partitionState: PartitionState
     private lateinit var replicaLog: Log<ReplicaMessage>
 
     // runTest cancels and joins backgroundScope before tearDown, so the followers are quiescent here
@@ -57,7 +57,7 @@ class FollowerLogProcessorTest {
         blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
-        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // The processor self-launches its replica tail; park it so it idles while the test drives
@@ -80,7 +80,7 @@ class FollowerLogProcessorTest {
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            allocator, PartitionLog(replicaLog, 0), bufferPool, dbState, "test", compactor,
+            allocator, PartitionLog(replicaLog, 0), bufferPool, partitionState, "test", compactor,
             watchers, null, null, afterReplicaMsgId = -1L, backgroundScope,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
@@ -126,7 +126,7 @@ class FollowerLogProcessorTest {
         // block catalog starts at block 5 (simulating startup from latest block).
         val startBlock = block { blockIndex = 5 }
         blockCatalog = BlockCatalog(startBlock)
-        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
         val proc = makeProcessor()
 

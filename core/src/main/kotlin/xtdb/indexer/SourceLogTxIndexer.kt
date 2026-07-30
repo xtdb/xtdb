@@ -49,12 +49,12 @@ private fun assertTimestampColType(rdr: VectorReader) {
 internal class SourceLogTxIndexer(
     private val allocator: BufferAllocator,
     base: NodeBase,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val crashLogger: CrashLogger,
 ) {
 
-    private val liveIndex = dbState.liveIndex
+    private val liveIndex = partitionState.liveIndex
 
     private val tracer: Tracer? =
         if (base.config.tracer.transactionTracing) base.tracer else null

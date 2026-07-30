@@ -40,7 +40,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
     replicaLog: PartitionLog<ReplicaMessage>,
     private val bufferPool: BufferPool,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
@@ -116,10 +116,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
             is ReplicaState.Failed -> s.msgId
         }
 
-    private val blockCatalog = dbState.blockCatalog
-    private val tableCatalog = dbState.tableCatalog
-    private val trieCatalog = dbState.trieCatalog
-    private val liveIndex = dbState.liveIndex
+    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
+    private val trieCatalog = partitionState.trieCatalog
+    private val liveIndex = partitionState.liveIndex
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
 

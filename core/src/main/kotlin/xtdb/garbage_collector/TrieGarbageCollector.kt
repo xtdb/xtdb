@@ -54,7 +54,7 @@ class TrieGarbageCollector(
     /** The owner's scope: supplies this collector's lifetime and the thread its loop runs on. Cancelling it stops the loop. */
     scope: CoroutineScope,
     private val bufferPool: BufferPool,
-    dbState: PartitionState,
+    partitionState: PartitionState,
     dbName: DatabaseName,
     /**
      * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.
@@ -72,8 +72,8 @@ class TrieGarbageCollector(
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
-    private val blockCatalog = dbState.blockCatalog
-    private val trieCatalog = dbState.trieCatalog
+    private val blockCatalog = partitionState.blockCatalog
+    private val trieCatalog = partitionState.trieCatalog
 
     // [signal] is fire-and-forget; bursts coalesce into one upcoming cycle.
     private val signalCh = Channel<Unit>(CONFLATED)

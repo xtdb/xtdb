@@ -36,7 +36,7 @@ class LogProcessor(
     private val base: NodeBase,
     private val crashLogger: CrashLogger,
     private val partitionStorage: PartitionStorage,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val watchers: Watchers,
     private val blockUploader: BlockUploader,
@@ -91,7 +91,7 @@ class LogProcessor(
     ): LeaderLogProcessor =
         // The leader term owns (and frees) its replica producer and ext source.
         LeaderLogProcessor(
-            allocator, base, partitionStorage, crashLogger, dbState, dbName, blockUploader,
+            allocator, base, partitionStorage, crashLogger, partitionState, dbName, blockUploader,
             watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             replicaProducer, skipTxs, dbCatalog,
@@ -106,7 +106,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): TransitionLogProcessor =
         TransitionLogProcessor(
-            allocator, partitionStorage.bufferPool, dbState, dbName, dbState.liveIndex,
+            allocator, partitionStorage.bufferPool, partitionState, dbName, partitionState.liveIndex,
             blockUploader, replicaProducer, watchers, dbCatalog,
             afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
@@ -117,7 +117,7 @@ class LogProcessor(
         afterReplicaMsgId: MessageId,
     ): FollowerLogProcessor =
         FollowerLogProcessor(
-            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, dbState, dbName, compactor, watchers,
+            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
             dbCatalog, pendingBlock, afterReplicaMsgId, scope,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
@@ -141,7 +141,7 @@ class LogProcessor(
 
     @Volatile
     private var state: State =
-        Following(openFollowerSystem(dbState.blockCatalog.boundaryReplicaMsgId ?: -1))
+        Following(openFollowerSystem(partitionState.blockCatalog.boundaryReplicaMsgId ?: -1))
 
     init {
         base.meterRegistry?.let { reg ->

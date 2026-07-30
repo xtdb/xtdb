@@ -28,7 +28,7 @@ class TransitionLogProcessorTest {
     private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
-    private lateinit var dbState: PartitionState
+    private lateinit var partitionState: PartitionState
 
     @BeforeEach
     fun setUp() {
@@ -40,7 +40,7 @@ class TransitionLogProcessorTest {
         blockCatalog = BlockCatalog(null)
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
-        dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         every { bufferPool.epoch } returns 1
@@ -53,7 +53,7 @@ class TransitionLogProcessorTest {
 
     private fun makeProcessor(hasExternalSource: Boolean = false) =
         TransitionLogProcessor(
-            allocator, bufferPool, dbState, "test", liveIndex,
+            allocator, bufferPool, partitionState, "test", liveIndex,
             blockUploader, replicaProducer,
             watchers, null, afterReplicaMsgId = -1L,
             hasExternalSource = hasExternalSource,

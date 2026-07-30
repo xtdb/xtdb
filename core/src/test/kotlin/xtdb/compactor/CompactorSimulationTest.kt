@@ -57,7 +57,7 @@ class MockDb(
     val compactor: Compactor,
 ) {
     val partitionStorage: PartitionStorage get() = PartitionStorage(DatabaseLogs(null, null), bufferPool, null)
-    val dbState: PartitionState get() = PartitionState(null, null, trieCatalog, null)
+    val partitionState: PartitionState get() = PartitionState(null, null, trieCatalog, null)
 }
 
 private val LOGGER = CompactorMockDriverFactory::class.logger
@@ -98,13 +98,13 @@ class CompactorMockDriverFactory(
     // system's listener failing doesn't cancel the others.
     val scope = CoroutineScope(dispatcher + SupervisorJob())
 
-    override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, dbState: PartitionState, watchers: Watchers): Driver {
+    override fun create(allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers): Driver {
         val systemId = nextSystemId++
-        return CompactorMockDriver(partitionStorage, dbState, systemId)
+        return CompactorMockDriver(partitionStorage, partitionState, systemId)
     }
 
-    private inner class CompactorMockDriver(val partitionStorage: PartitionStorage, val dbState: PartitionState, val systemId: Int) : Driver {
-        val trieCatalog = dbState.trieCatalog
+    private inner class CompactorMockDriver(val partitionStorage: PartitionStorage, val partitionState: PartitionState, val systemId: Int) : Driver {
+        val trieCatalog = partitionState.trieCatalog
         val bufferPool = partitionStorage.bufferPool
 
         init {
@@ -332,7 +332,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     // ForDatabase to free the driver.
     private fun MockDb.withCompactor(block: (Compactor.ForDatabase) -> Unit) {
         val scope = CoroutineScope(dispatcher)
-        val forDb = compactor.openForDatabase(scope, allocator, partitionStorage, dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+        val forDb = compactor.openForDatabase(scope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
         try {
             block(forDb)
         } finally {
@@ -344,7 +344,7 @@ class CompactorSimulationTest : SimulationTestBase() {
     private fun withCompactors(dbs: List<MockDb>, block: (List<Compactor.ForDatabase>) -> Unit) {
         val scopes = dbs.map { CoroutineScope(dispatcher) }
         val forDbs = dbs.zip(scopes).map { (db, scope) ->
-            db.compactor.openForDatabase(scope, allocator, db.partitionStorage, db.dbState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
+            db.compactor.openForDatabase(scope, allocator, db.partitionStorage, db.partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1))
         }
         try {
             block(forDbs)

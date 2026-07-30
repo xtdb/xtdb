@@ -162,7 +162,7 @@ class LogProcessorSimTest : SimulationTestBase() {
         val trieCatalog = createTrieCatalog()
         val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig)
 
-        val dbState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
             .also { simExtSource.watch(it) }
@@ -174,8 +174,8 @@ class LogProcessorSimTest : SimulationTestBase() {
         fun openLogProcessor(scope: CoroutineScope) =
             LogProcessor(
                 allocator, nodeBase, crashLogger,
-                partitionStorage, dbState, dbName, watchers,
-                BlockUploader(partitionStorage, dbState, mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
+                partitionStorage, partitionState, dbName, watchers,
+                BlockUploader(partitionStorage, partitionState, mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
                 mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
                 externalSourceFactory = object : ExternalSource.Factory {
                     override fun open(
@@ -190,7 +190,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         override fun close() {
             logProcessor?.close()
-            dbState.close()
+            partitionState.close()
         }
     }
 

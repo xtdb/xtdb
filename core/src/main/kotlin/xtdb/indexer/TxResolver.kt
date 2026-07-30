@@ -86,7 +86,7 @@ internal class TxResolver(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     crashLogger: CrashLogger,
     private val skipTxs: Set<MessageId>,
@@ -101,9 +101,9 @@ internal class TxResolver(
 
     private val txErrorCounter: Counter? = nodeBase.meterRegistry?.let { Counter.builder("tx.error").register(it) }
 
-    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, dbState, dbName, crashLogger)
+    private val sourceLogTxIndexer = SourceLogTxIndexer(this.allocator, nodeBase, partitionState, dbName, crashLogger)
 
-    var latestCompletedTx: TransactionKey? = dbState.liveIndex.latestCompletedTx
+    var latestCompletedTx: TransactionKey? = partitionState.liveIndex.latestCompletedTx
         private set
 
     private var sealedBatch: List<ResolvedTx> = emptyList()
@@ -155,7 +155,7 @@ internal class TxResolver(
     }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, partitionStorage, dbState, dbName, txKey, externalSourceToken, tracer, inFlightTxs)
+        OpenTx(allocator, nodeBase, partitionStorage, partitionState, dbName, txKey, externalSourceToken, tracer, inFlightTxs)
 
     // Stage a fresh tx committing a single skip / abort / invalid-system-time row. `countError` mirrors the
     // pre-staging behaviour: skipped txs don't count as errors.

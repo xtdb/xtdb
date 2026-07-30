@@ -26,7 +26,7 @@ private val LOG = TransitionLogProcessor::class.logger
 class TransitionLogProcessor(
     allocator: BufferAllocator,
     private val bufferPool: BufferPool,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val liveIndex: LiveIndex,
     private val blockUploader: BlockUploader,
@@ -40,8 +40,8 @@ class TransitionLogProcessor(
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
-    private val blockCatalog = dbState.blockCatalog
-    private val trieCatalog = dbState.trieCatalog
+    private val blockCatalog = partitionState.blockCatalog
+    private val trieCatalog = partitionState.trieCatalog
 
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
 

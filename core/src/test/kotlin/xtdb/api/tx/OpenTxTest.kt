@@ -49,7 +49,7 @@ class OpenTxTest {
             val trieCatalog = createTrieCatalog()
             val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
 
-            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex).use { dbState ->
+            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex).use { partitionState ->
                 val storage = PartitionStorage(
                     DatabaseLogs(
                         InMemoryLog<SourceMessage>(InstantSource.system(), 0),
@@ -58,7 +58,7 @@ class OpenTxTest {
                     bp, null
                 )
 
-                OpenTx(allocator, nodeBase, storage, dbState, dbName, TransactionKey(0, Instant.EPOCH), null).use(f)
+                OpenTx(allocator, nodeBase, storage, partitionState, dbName, TransactionKey(0, Instant.EPOCH), null).use(f)
             }
         }
 

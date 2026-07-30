@@ -39,7 +39,7 @@ internal class LeaderLogProcessor(
     private val nodeBase: NodeBase,
     private val partitionStorage: PartitionStorage,
     crashLogger: CrashLogger,
-    private val dbState: PartitionState,
+    private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val blockUploader: BlockUploader,
     private val watchers: Watchers,
@@ -64,16 +64,16 @@ internal class LeaderLogProcessor(
     private val partition = partitionStorage.partition
     private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
-    private val liveIndex = dbState.liveIndex
+    private val liveIndex = partitionState.liveIndex
 
-    private val blockCatalog = dbState.blockCatalog
-    private val trieCatalog = dbState.trieCatalog
+    private val blockCatalog = partitionState.blockCatalog
+    private val trieCatalog = partitionState.trieCatalog
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-durable tx — until we've committed it into the live index below. Driven only
     // from the persister coroutine, and freed in close() once that job is joined; see TxResolver.
     private val txResolver =
-        TxResolver(allocator, nodeBase, partitionStorage, dbState, dbName, crashLogger, skipTxs, instantSource)
+        TxResolver(allocator, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs, instantSource)
 
     var pendingBlock: PendingBlock? = null
         private set
@@ -404,7 +404,7 @@ internal class LeaderLogProcessor(
 
         TrieGarbageCollector(
             gcScope,
-            bufferPool, dbState, dbName,
+            bufferPool, partitionState, dbName,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
             nodeBase.meterRegistry,

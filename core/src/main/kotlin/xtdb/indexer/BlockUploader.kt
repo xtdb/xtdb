@@ -38,7 +38,7 @@ private val defaultBlockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_
 
 class BlockUploader(
     partitionStorage: PartitionStorage,
-    dbState: PartitionState,
+    partitionState: PartitionState,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
@@ -47,10 +47,10 @@ class BlockUploader(
 ) {
     private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
-    private val liveIndex = dbState.liveIndex
-    private val blockCatalog = dbState.blockCatalog
-    private val trieCatalog = dbState.trieCatalog
-    private val tableCatalog = dbState.tableCatalog
+    private val liveIndex = partitionState.liveIndex
+    private val blockCatalog = partitionState.blockCatalog
+    private val trieCatalog = partitionState.trieCatalog
+    private val tableCatalog = partitionState.tableCatalog
     private val blockUploadTimer: Timer? = meterRegistry?.let {
         Timer.builder("block.upload.timer")
             .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
