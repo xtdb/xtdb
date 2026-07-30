@@ -24,7 +24,6 @@ import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.DriverManager
-import java.sql.SQLException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -33,6 +32,7 @@ import java.time.ZonedDateTime
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import io.kotest.assertions.nondeterministic.eventually
 
 @Tag("integration")
 class PostgresSourceIntegrationTest {
@@ -199,27 +199,6 @@ class PostgresSourceIntegrationTest {
         throw AssertionError("Timed out waiting for $expected txs on db '$db' (got $count)")
     }
 
-    private suspend fun awaitCondition(description: String, timeout: Duration = 10.seconds, check: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-
-        while (System.currentTimeMillis() < deadline) {
-            // A poll often queries a cdc table before its snapshot has created it. XT now resolves
-            // internal/external-source tables strictly, so that's a hard "Table not found" - which here
-            // just means "not ready yet", so we keep polling. (#5733: the cdc db is a DirectMirror and
-            // rejects client txs, so we can't pre-create the table to avoid this; when that lands, the
-            // poll can query a pre-created empty table and this narrow catch can go.) Anything else propagates.
-            val ready = try {
-                check()
-            } catch (e: SQLException) {
-                if (e.message?.contains("Table not found") == true) false else throw e
-            }
-            if (ready) return
-            runInterruptible { Thread.sleep(200) }
-        }
-
-        fail("Timed out waiting for: $description")
-    }
-
     /** Reads the most-recently applied source token from the live index (no flush required).
      *  Reflects the *last tx the source committed* — useful for asserting the source's
      *  progress against the snapshotCompleted flag. */
@@ -255,8 +234,8 @@ class PostgresSourceIntegrationTest {
             // Stream an insert so the token advances beyond the snapshot LSN
             pgExecute("INSERT INTO pg_resume (_id, name) VALUES (2, 'Bob')")
 
-            awaitCondition("Bob appears", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_resume WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_resume WHERE _id = 2").isNotEmpty(), "Bob appears")
             }
         }
 
@@ -267,10 +246,8 @@ class PostgresSourceIntegrationTest {
         // The node replays the ATTACH DATABASE from the source log,
         // recovers the CDC token (snapshotCompleted=true), and resumes streaming.
         openNode(sourceTopic).use { node ->
-            awaitCondition("Charlie appears after restart", timeout = 60.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_resume WHERE _id = 3").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_resume WHERE _id = 3").isNotEmpty(), "Charlie appears after restart")
             }
 
             val rows = xtQueryDb(node, "cdc", "SELECT _id, name FROM public.pg_resume ORDER BY _id")
@@ -322,8 +299,8 @@ class PostgresSourceIntegrationTest {
 
             // stream a row so the token advances past the snapshot's consistent point
             pgExecute("INSERT INTO pg_slot_gap (_id, name) VALUES (2, 'streamed-row')")
-            awaitCondition("streamed row appears", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 2").isNotEmpty(), "streamed row appears")
             }
 
             val token = latestPostgresToken(node)
@@ -331,7 +308,7 @@ class PostgresSourceIntegrationTest {
             token.latestCommittedLsn
         }
 
-        awaitCondition("slot released after node close", timeout = 10.seconds) { pgSlotState(slotName) == false }
+        eventually(10.seconds) { assertTrue(pgSlotState(slotName) == false, "slot released after node close") }
 
         // the gap — one of each op type, with the node down
         pgExecute(
@@ -357,10 +334,8 @@ class PostgresSourceIntegrationTest {
         )
 
         openNode(sourceTopic).use { node ->
-            awaitCondition("post-recreate row appears", timeout = 60.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 4").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_slot_gap WHERE _id = 4").isNotEmpty(), "post-recreate row appears")
             }
 
             // pgoutput delivers in LSN order, so the fence having landed means everything in the
@@ -407,16 +382,16 @@ class PostgresSourceIntegrationTest {
                 awaitTxs(node, 2, db = "cdc")
 
                 for (i in 2..21) pgExecute("INSERT INTO pg_diverge (_id, name) VALUES ($i, 'row-$i')")
-                awaitCondition("all streamed rows ingested", timeout = 60.seconds) {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21
+                eventually(60.seconds) {
+                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21, "all streamed rows ingested")
                 }
 
                 // Flush a block so the cdc block catalog persists latestCompletedTx (high txId)
                 // and latestProcessedMsgId (low source-log offset) to durable storage.
                 val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
                 cdc.sendFlushBlockMessage()
-                awaitCondition("block persisted for cdc", timeout = 30.seconds) {
-                    cdc.blockCatalog.currentBlockIndex != null
+                eventually(30.seconds) {
+                    assertTrue(cdc.blockCatalog.currentBlockIndex != null, "block persisted for cdc")
                 }
 
                 val txId = cdc.blockCatalog.latestCompletedTx!!.txId
@@ -431,10 +406,8 @@ class PostgresSourceIntegrationTest {
             // Pre-31b825623 openNode would throw IllegalStateException (due to us validating offsets against txId)
             // and the node would fail to start.
             openNode(sourceTopic).use { node ->
-                awaitCondition("cdc db queryable after restart", timeout = 60.seconds) {
-                    runCatching {
-                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21
-                    }.getOrDefault(false)
+                eventually(60.seconds) {
+                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_diverge").size == 21, "cdc db queryable after restart")
                 }
 
                 assertPrimaryDbHealthy(node)
@@ -465,8 +438,8 @@ class PostgresSourceIntegrationTest {
             awaitTxs(node, 2, db = "cdc")
 
             pgExecute("INSERT INTO pg_metrics (_id, name) VALUES (2, 'stream-row')")
-            awaitCondition("streamed row visible") {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_metrics WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_metrics WHERE _id = 2").isNotEmpty(), "streamed row visible")
             }
 
             fun metric(name: String) =
@@ -475,11 +448,11 @@ class PostgresSourceIntegrationTest {
             // The counters are incremented in `promoteDurable`, which the poll loop reaches only
             // after `settle` has completed the submit handle — and `settle` makes the row queryable
             // before it does that. So the row being visible above doesn't imply it's been counted.
-            awaitCondition("events.total counted the streamed row") {
-                (metric("xtdb.postgres_source.events.total").counter()?.count() ?: 0.0) >= 1.0
+            eventually(30.seconds) {
+                assertTrue((metric("xtdb.postgres_source.events.total").counter()?.count() ?: 0.0) >= 1.0, "events.total counted the streamed row")
             }
-            awaitCondition("commits.total counted the streamed commit") {
-                (metric("xtdb.postgres_source.commits.total").counter()?.count() ?: 0.0) >= 1.0
+            eventually(30.seconds) {
+                assertTrue((metric("xtdb.postgres_source.commits.total").counter()?.count() ?: 0.0) >= 1.0, "commits.total counted the streamed commit")
             }
 
             // Confirms the pg_replication_slots query path works against real Postgres —
@@ -547,17 +520,15 @@ class PostgresSourceIntegrationTest {
                 attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
                 // Wait until the first batch lands — proves the snapshot has started.
-                awaitCondition("snapshot in flight", timeout = 30.seconds) {
-                    runCatching {
-                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_kill LIMIT 1").isNotEmpty()
-                    }.getOrDefault(false)
+                eventually(30.seconds) {
+                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_kill LIMIT 1").isNotEmpty(), "snapshot in flight")
                 }
 
                 dedicatedPg.stop()
 
                 val cdc = (node as XtdbInternal).dbCatalog
-                awaitCondition("cdc surfaces ingestionError when PG dies during snapshot", timeout = 30.seconds) {
-                    cdc["cdc"]?.ingestionError != null
+                eventually(30.seconds) {
+                    assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError when PG dies during snapshot")
                 }
                 assertNotNull(cdc["cdc"]?.ingestionError,
                     "snapshot failure must surface IngestionStoppedException, not silently exit")
@@ -594,15 +565,15 @@ class PostgresSourceIntegrationTest {
                 // stream is live before we kill the upstream.
                 awaitTxs(node, 2, db = "cdc")
                 dedicatedPg.executeSql("INSERT INTO pg_stream_kill (_id, name) VALUES (2, 'Bob')")
-                awaitCondition("streamed row visible", timeout = 30.seconds) {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_stream_kill WHERE _id = 2").isNotEmpty()
+                eventually(30.seconds) {
+                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_stream_kill WHERE _id = 2").isNotEmpty(), "streamed row visible")
                 }
 
                 dedicatedPg.stop()
 
                 val cdc = (node as XtdbInternal).dbCatalog
-                awaitCondition("cdc surfaces ingestionError when PG dies mid-stream", timeout = 60.seconds) {
-                    cdc["cdc"]?.ingestionError != null
+                eventually(60.seconds) {
+                    assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError when PG dies mid-stream")
                 }
                 assertNotNull(cdc["cdc"]?.ingestionError,
                     "stream failure must surface IngestionStoppedException, not silently exit")
@@ -632,8 +603,8 @@ class PostgresSourceIntegrationTest {
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             val cdc = (node as XtdbInternal).dbCatalog
-            awaitCondition("cdc surfaces ingestionError for missing publication", timeout = 30.seconds) {
-                cdc["cdc"]?.ingestionError != null
+            eventually(30.seconds) {
+                assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError for missing publication")
             }
             assertNotNull(cdc["cdc"]?.ingestionError,
                 "missing publication must surface IngestionStoppedException, not silently stall")
@@ -657,8 +628,8 @@ class PostgresSourceIntegrationTest {
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             val cdc = (node as XtdbInternal).dbCatalog
-            awaitCondition("cdc surfaces ingestionError on auth failure", timeout = 30.seconds) {
-                cdc["cdc"]?.ingestionError != null
+            eventually(30.seconds) {
+                assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError on auth failure")
             }
             assertNotNull(cdc["cdc"]?.ingestionError,
                 "auth failure must surface IngestionStoppedException")
@@ -685,11 +656,12 @@ class PostgresSourceIntegrationTest {
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             // Wait for both tables to be snapshotted
-            awaitCondition("both tables snapshotted", timeout = 30.seconds) {
-                runCatching {
+            eventually(30.seconds) {
+                assertTrue(
                     xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users").size == 2 &&
-                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders").size == 1
-                }.getOrDefault(false)
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders").size == 1,
+                    "both tables snapshotted"
+                )
             }
 
             val users = xtQueryDb(node, "cdc", "SELECT _id, name FROM public.pg_mt_users ORDER BY _id")
@@ -707,9 +679,12 @@ class PostgresSourceIntegrationTest {
                 "COMMIT",
             )
 
-            awaitCondition("streaming changes to both tables", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users WHERE _id = 3").isNotEmpty() &&
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(
+                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_users WHERE _id = 3").isNotEmpty() &&
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_mt_orders WHERE _id = 2").isNotEmpty(),
+                    "streaming changes to both tables"
+                )
             }
         }
     }
@@ -731,10 +706,8 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic).use { node ->
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
-            awaitCondition("included table snapshotted", timeout = 30.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 1").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 1").isNotEmpty(), "included table snapshotted")
             }
 
             // Stream a change to both tables; only the included one should land.
@@ -743,8 +716,8 @@ class PostgresSourceIntegrationTest {
                 "INSERT INTO pg_pub_out (_id, name) VALUES (2, 'out-stream')",
             )
 
-            awaitCondition("streaming change to included table", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_pub_in WHERE _id = 2").isNotEmpty(), "streaming change to included table")
             }
 
             // pg_pub_out is not in the publication — neither its snapshot row
@@ -777,10 +750,8 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic).use { node ->
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
-            awaitCondition("Alice snapshotted", timeout = 30.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_evolve WHERE _id = 1").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_evolve WHERE _id = 1").isNotEmpty(), "Alice snapshotted")
             }
 
             // ALTER TABLE in PG while streaming is active
@@ -789,11 +760,9 @@ class PostgresSourceIntegrationTest {
                 "INSERT INTO pg_evolve (_id, name, email) VALUES (2, 'Bob', 'bob@example.com')",
             )
 
-            awaitCondition("Bob with new column appears", timeout = 30.seconds) {
-                runCatching {
-                    val rows = xtQueryDb(node, "cdc", "SELECT _id, email FROM public.pg_evolve WHERE _id = 2")
-                    rows.isNotEmpty() && rows[0]["email"] == "bob@example.com"
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                val rows = xtQueryDb(node, "cdc", "SELECT _id, email FROM public.pg_evolve WHERE _id = 2")
+                assertEquals("bob@example.com", rows.firstOrNull()?.get("email"), "Bob with new column appears")
             }
 
             // Alice (pre-evolution row) should have null for the new column
@@ -822,7 +791,7 @@ class PostgresSourceIntegrationTest {
             awaitTxs(node, 2, db = "cdc")
 
             val snapshotRows = xtQueryDb(
-                node, "cdc",
+                    node, "cdc",
                 "SELECT _id, name, email FROM public.pg_cdc_users ORDER BY _id"
             )
             assertEquals(1, snapshotRows.size, "Snapshot should ingest Alice")
@@ -834,9 +803,12 @@ class PostgresSourceIntegrationTest {
                 "UPDATE pg_cdc_users SET email = 'alice-new@example.com' WHERE _id = 1",
             )
 
-            awaitCondition("Alice updated", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT email FROM public.pg_cdc_users WHERE _id = 1")
-                    .firstOrNull()?.get("email") == "alice-new@example.com"
+            eventually(30.seconds) {
+                assertTrue(
+                    xtQueryDb(node, "cdc", "SELECT email FROM public.pg_cdc_users WHERE _id = 1")
+                        .firstOrNull()?.get("email") == "alice-new@example.com",
+                    "Alice updated"
+                )
             }
 
             val bob = xtQueryDb(node, "cdc", "SELECT email FROM public.pg_cdc_users WHERE _id = 2")
@@ -846,8 +818,8 @@ class PostgresSourceIntegrationTest {
             // Phase 3: delete
             pgExecute("DELETE FROM pg_cdc_users WHERE _id = 2")
 
-            awaitCondition("Bob deleted", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_cdc_users WHERE _id = 2").isEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_cdc_users WHERE _id = 2").isEmpty(), "Bob deleted")
             }
         }
     }
@@ -892,10 +864,8 @@ class PostgresSourceIntegrationTest {
 
             val cols = "span, dt, tm, ts, tstz, meta, uid, amount, enabled, note"
 
-            awaitCondition("snapshot row ingested", timeout = 30.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_types WHERE _id = 1").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_types WHERE _id = 1").isNotEmpty(), "snapshot row ingested")
             }
             val snap = xtQueryDb(node, "cdc", "SELECT $cols FROM public.pg_types WHERE _id = 1").single()
             assertTypedRow(
@@ -929,8 +899,8 @@ class PostgresSourceIntegrationTest {
                    )"""
             )
 
-            awaitCondition("streaming row ingested", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_types WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_types WHERE _id = 2").isNotEmpty(), "streaming row ingested")
             }
             val streamed = xtQueryDb(node, "cdc", "SELECT $cols FROM public.pg_types WHERE _id = 2").single()
             assertTypedRow(
@@ -968,10 +938,8 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic).use { node ->
             attachPostgresSource(node, publicationName = pubName)
 
-            awaitCondition("snapshot enum row ingested", timeout = 30.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 1").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 1").isNotEmpty(), "snapshot enum row ingested")
             }
             assertEquals(
                 "happy",
@@ -980,8 +948,8 @@ class PostgresSourceIntegrationTest {
 
             pgExecute("INSERT INTO pg_moods VALUES (2, 'sad', 'streamed row')")
 
-            awaitCondition("streaming enum row ingested", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_moods WHERE _id = 2").isNotEmpty(), "streaming enum row ingested")
             }
             assertEquals(
                 "sad",
@@ -1042,8 +1010,8 @@ class PostgresSourceIntegrationTest {
 
             // Stream an insert so we know streaming is running and holding the slot
             pgExecute("INSERT INTO pg_cancel (_id, name) VALUES (2, 'Bob')")
-            awaitCondition("Bob appears", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_cancel WHERE _id = 2").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_cancel WHERE _id = 2").isNotEmpty(), "Bob appears")
             }
 
             // Streaming connection is now holding the slot
@@ -1053,8 +1021,8 @@ class PostgresSourceIntegrationTest {
         // The closeOnCancel child coroutine should force-close the PG connection,
         // releasing the replication slot.
 
-        awaitCondition("slot released after node close", timeout = 10.seconds) {
-            pgSlotState(slotName) == false
+        eventually(10.seconds) {
+            assertTrue(pgSlotState(slotName) == false, "slot released after node close")
         }
     }
 
@@ -1073,18 +1041,20 @@ class PostgresSourceIntegrationTest {
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
             pgExecute("INSERT INTO pg_collapse (_id, name) VALUES (1, 'v0')")
-            awaitCondition("v0 ingested", timeout = 30.seconds) {
-                runCatching { xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_collapse WHERE _id = 1").isNotEmpty() }
-                    .getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_collapse WHERE _id = 1").isNotEmpty(), "v0 ingested")
             }
 
             pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v1' WHERE _id = 1", "COMMIT")
             pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v2' WHERE _id = 1", "COMMIT")
             pgExecute("BEGIN", "UPDATE pg_collapse SET name = 'v3' WHERE _id = 1", "COMMIT")
 
-            awaitCondition("final update applied", timeout = 30.seconds) {
-                xtQueryDb(node, "cdc", "SELECT name FROM public.pg_collapse WHERE _id = 1")
-                    .firstOrNull()?.get("name") == "v3"
+            eventually(30.seconds) {
+                assertTrue(
+                    xtQueryDb(node, "cdc", "SELECT name FROM public.pg_collapse WHERE _id = 1")
+                        .firstOrNull()?.get("name") == "v3",
+                    "final update applied"
+                )
             }
 
             val history = xtQueryDb(node, "cdc", "SELECT name FROM public.pg_collapse FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from")
@@ -1111,9 +1081,8 @@ class PostgresSourceIntegrationTest {
 
             pgExecute("INSERT INTO pg_vf (_id, name, _valid_from) VALUES (1, 'Alice', TIMESTAMPTZ '2020-01-01 00:00:00+00')")
 
-            awaitCondition("row ingested", timeout = 30.seconds) {
-                runCatching { xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vf WHERE _id = 1").isNotEmpty() }
-                    .getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vf WHERE _id = 1").isNotEmpty(), "row ingested")
             }
 
             val document = xtQueryDb(node, "cdc", "SELECT *, _valid_from FROM public.pg_vf WHERE _id = 1").single()
@@ -1145,10 +1114,8 @@ class PostgresSourceIntegrationTest {
                            TIMESTAMPTZ '2021-01-01 00:00:00+00')"""
             )
 
-            awaitCondition("row ingested", timeout = 30.seconds) {
-                runCatching {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vt FOR ALL VALID_TIME WHERE _id = 1").isNotEmpty()
-                }.getOrDefault(false)
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_vt FOR ALL VALID_TIME WHERE _id = 1").isNotEmpty(), "row ingested")
             }
 
             val document = xtQueryDb(node, "cdc",
@@ -1181,8 +1148,8 @@ class PostgresSourceIntegrationTest {
             pgExecute("INSERT INTO pg_vf_bad (_id, name, _valid_from) VALUES (1, 'Alice', TIMESTAMP '2020-01-01 00:00:00')")
 
             val cdc = (node as XtdbInternal).dbCatalog
-            awaitCondition("cdc surfaces ingestionError for non-TIMESTAMPTZ _valid_from", timeout = 30.seconds) {
-                cdc["cdc"]?.ingestionError != null
+            eventually(30.seconds) {
+                assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError for non-TIMESTAMPTZ _valid_from")
             }
 
             val cause = generateSequence(cdc["cdc"]?.ingestionError as Throwable?) { it.cause }.toList()
@@ -1244,14 +1211,17 @@ class PostgresSourceIntegrationTest {
                 attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
                 // wait until the snapshot is done and streaming is live, so the insert below streams
-                awaitCondition("streaming live", timeout = 60.seconds) {
-                    (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
-                        ?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
+                eventually(60.seconds) {
+                    assertTrue(
+                        (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
+                            ?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true,
+                        "streaming live"
+                    )
                 }
 
                 pg.executeSql("INSERT INTO pg_systime (_id, name) VALUES (1, 'streamed')")
-                awaitCondition("streamed row visible", timeout = 60.seconds) {
-                    xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_systime WHERE _id = 1").isNotEmpty()
+                eventually(60.seconds) {
+                    assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_systime WHERE _id = 1").isNotEmpty(), "streamed row visible")
                 }
 
                 // pgwire hands these back as different types from the two connections —
@@ -1297,8 +1267,8 @@ class PostgresSourceIntegrationTest {
         openNode(sourceTopic).use { node ->
             attachPostgresSource(node, slotName = slotName, publicationName = pubName)
 
-            awaitCondition("snapshot row visible", timeout = 60.seconds) {
-                xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_systime WHERE _id = 1").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_snap_systime WHERE _id = 1").isNotEmpty(), "snapshot row visible")
             }
 
             // XTDB returns _system_from (timestamptz) as a ZonedDateTime over pgwire

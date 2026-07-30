@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines)
 
     testImplementation(libs.mockk)
+    testImplementation(libs.kotest)
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers)

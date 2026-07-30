@@ -18,6 +18,8 @@ import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import org.junit.jupiter.api.Assertions.assertTrue
+import io.kotest.assertions.nondeterministic.eventually
 
 /**
  * Fuzzes CDC type fidelity and bitemporal update-history over a real Postgres container:
@@ -192,7 +194,7 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
      *  go live, runs `f`, then drops the replication slot.
      *
      *  `suspend inline` (with non-suspend lambdas) so both this body and the inlined lambdas can
-     *  call the `suspend` `awaitStreaming` / `awaitCondition` / `flushBlock` helpers inside
+     *  call the `suspend` `awaitStreaming` / `eventually` / `flushBlock` helpers inside
      *  `checkAll`'s suspend block. */
     private suspend inline fun runCdc(
         columns: List<Col>,
@@ -238,8 +240,8 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
         fun fetch() = xtQueryAwaiting(node, "SELECT $cols FROM public.$table")
             .associateBy { (it["_id"] as Number).toLong() }
 
-        awaitCondition("rows appear in $table ($stage)", timeout = 30.seconds) {
-            fetch().keys.containsAll(ids)
+        eventually(30.seconds) {
+            assertTrue(fetch().keys.containsAll(ids), "rows appear in $table ($stage)")
         }
         val actual = fetch()
         rows.forEach { row ->
@@ -260,10 +262,12 @@ class PostgresSourceTypesPropertyTest : PostgresSourceTestBase() {
         val cols = columns.joinToString { it.name }
         val q = "SELECT $cols FROM public.$table FOR ALL VALID_TIME WHERE _id = 1 ORDER BY _valid_from"
         val expected = states.map { normalizeRow(columns, it) }
-        // assert on the awaited value (not a bare awaitCondition) so a shortfall reports exactly which
-        // versions showed up vs the expected list, rather than just timing out
-        val actual = await(done = { it.size == expected.size }) { xtQueryAwaiting(node, q).map { normalizeRow(columns, it) } }
-        assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
+        // assert inside `eventually` so a shortfall reports exactly which versions showed up vs the
+        // expected list, rather than just timing out
+        eventually(30.seconds) {
+            val actual = xtQueryAwaiting(node, q).map { normalizeRow(columns, it) }
+            assertEquals(expected, actual, "$stage — expected ${expected.size} versions, got ${actual.size}")
+        }
     }
 
     // --- property tests -----------------------------------------------------------------------

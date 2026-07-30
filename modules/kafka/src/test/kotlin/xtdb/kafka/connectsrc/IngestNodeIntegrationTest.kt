@@ -1,6 +1,5 @@
 package xtdb.kafka.connectsrc
 
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.test.runTest
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
@@ -31,6 +30,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import org.junit.jupiter.api.Assertions.assertTrue
+import io.kotest.assertions.nondeterministic.eventually
 
 /**
  * End-to-end test of the embedding story: a custom JVM app builds an [IngestNode.Config] with a
@@ -75,15 +76,6 @@ class IngestNodeIntegrationTest {
             "value.serializer" to ByteArraySerializer::class.java.name,
         )
         KafkaProducer<String, ByteArray>(props).use { it.send(ProducerRecord(topic, key, value)).get() }
-    }
-
-    private suspend fun awaitCondition(description: String, timeout: Duration = 30.seconds, check: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        while (System.currentTimeMillis() < deadline) {
-            if (runCatching(check).getOrDefault(false)) return
-            runInterruptible { Thread.sleep(200) }
-        }
-        throw AssertionError("Timed out waiting for: $description")
     }
 
     /** A user-supplied indexer that records the keys it sees rather than writing them anywhere. */
@@ -132,10 +124,10 @@ class IngestNodeIntegrationTest {
             .database("events", dbConfig)
             .open()
             .use {
-                awaitCondition("both records indexed") { seenKeys.toSet() == setOf("k1", "k2") }
+                eventually(30.seconds) { assertTrue(seenKeys.toSet() == setOf("k1", "k2"), "both records indexed") }
 
                 produce(sourceTopic, "k3", """{"name":"Charlie"}""".toByteArray())
-                awaitCondition("streamed record indexed") { "k3" in seenKeys }
+                eventually(30.seconds) { assertTrue("k3" in seenKeys, "streamed record indexed") }
             }
 
         assertEquals(listOf("k1", "k2", "k3"), seenKeys.toList())
@@ -202,19 +194,19 @@ class IngestNodeIntegrationTest {
                             mode: read-only
                         """.trimIndent())
 
-                        awaitCondition("read-only attach sees pre-flush records") {
-                            queryIds(queryNode) == setOf("k1", "k2")
+                        eventually(30.seconds) {
+                            assertTrue(queryIds(queryNode) == setOf("k1", "k2"), "read-only attach sees pre-flush records")
                         }
 
                         val ingestDb = checkNotNull(ingestNode.database("events"))
                         ingestDb.sendFlushBlockMessage()
-                        awaitCondition("ingest node cuts the block") {
-                            ingestDb.blockCatalog.currentBlockIndex == 0L
+                        eventually(30.seconds) {
+                            assertTrue(ingestDb.blockCatalog.currentBlockIndex == 0L, "ingest node cuts the block")
                         }
 
                         val followerDb = (queryNode as XtdbInternal).dbCatalog["events"]
-                        awaitCondition("read-only attach processes the flushed block") {
-                            followerDb?.blockCatalog?.currentBlockIndex == 0L
+                        eventually(30.seconds) {
+                            assertTrue(followerDb?.blockCatalog?.currentBlockIndex == 0L, "read-only attach processes the flushed block")
                         }
 
                         assertEquals(
@@ -223,8 +215,8 @@ class IngestNodeIntegrationTest {
                         )
 
                         produce(sourceTopic, "k3", """{"name":"Charlie"}""".toByteArray())
-                        awaitCondition("read-only attach sees the post-flush record") {
-                            queryIds(queryNode) == setOf("k1", "k2", "k3")
+                        eventually(30.seconds) {
+                            assertTrue(queryIds(queryNode) == setOf("k1", "k2", "k3"), "read-only attach sees the post-flush record")
                         }
                     }
                 }

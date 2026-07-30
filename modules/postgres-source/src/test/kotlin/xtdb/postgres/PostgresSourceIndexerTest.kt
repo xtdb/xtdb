@@ -1,9 +1,10 @@
 package xtdb.postgres
 
 import kotlinx.coroutines.test.runTest
+import io.kotest.assertions.nondeterministic.eventually
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.postgresql.util.PSQLException
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
@@ -75,16 +76,11 @@ class PostgresSourceIndexerTest : PostgresSourceTestBase() {
 
             // the row lands in the rerouted `gadgets` table (proving reroute), with `secret` absent
             // from the projection (proving the drop) — `name` survives
-            val gadgets = await(
-                done = { rows: List<Map<String, Any?>> -> rows.isNotEmpty() },
-            ) {
-                // `gadgets` only exists once the rerouted tx lands, and planning throws for unknown
-                // tables (#4467) — during CDC catch-up that's "no rows yet", not a failure.
-                try {
-                    xtQuery(node, database = "cdc", sql = "SELECT * FROM gadgets")
-                } catch (e: PSQLException) {
-                    if (e.message?.contains("Table not found") == true) emptyList() else throw e
-                }
+            // `gadgets` only exists once the rerouted tx lands, and planning throws for unknown tables
+            // (#4467) — during CDC catch-up that's "no rows yet", which `eventually` retries.
+            val gadgets = eventually(30.seconds) {
+                xtQuery(node, database = "cdc", sql = "SELECT * FROM gadgets")
+                    .also { assertTrue(it.isNotEmpty(), "rerouted row lands in `gadgets`") }
             }
 
             assertEquals(1, gadgets.size)

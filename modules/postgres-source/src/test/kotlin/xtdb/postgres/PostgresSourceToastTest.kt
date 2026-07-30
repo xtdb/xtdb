@@ -1,8 +1,8 @@
 package xtdb.postgres
 
 import kotlinx.coroutines.test.runTest
+import io.kotest.assertions.nondeterministic.eventually
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
@@ -50,10 +50,11 @@ class PostgresSourceToastTest : PostgresSourceTestBase() {
     @Test
     fun `unchanged TOASTed column without REPLICA IDENTITY FULL halts the source`() = runTest(timeout = 5.minutes) {
         updateLeavingToastUnchanged(replicaIdentityFull = false) { node, _ ->
-            val err = await(timeout = 30.seconds, done = { it != null }) { cdcIngestionError(node) }
-            assertNotNull(err, "expected ingestion to halt on the unchanged TOASTed column")
+            val err = eventually(30.seconds) {
+                checkNotNull(cdcIngestionError(node)) { "expected ingestion to halt on the unchanged TOASTed column" }
+            }
             assertTrue(
-                err!!.message!!.contains("REPLICA IDENTITY FULL"),
+                err.message!!.contains("REPLICA IDENTITY FULL"),
                 "error should point at the REPLICA IDENTITY FULL remedy, got: ${err.message}",
             )
         }
@@ -62,12 +63,9 @@ class PostgresSourceToastTest : PostgresSourceTestBase() {
     @Test
     fun `REPLICA IDENTITY FULL lets an unchanged TOASTed column stream`() = runTest(timeout = 5.minutes) {
         updateLeavingToastUnchanged(replicaIdentityFull = true) { node, table ->
-            val rows = await(
-                timeout = 30.seconds,
-                done = { r -> r.any { (it["name"] as String?) == "after" } },
-            ) {
-                runCatching { xtQuery(node, "cdc", "SELECT _id, name, blob FROM public.$table ORDER BY _id") }
-                    .getOrDefault(emptyList())
+            val rows = eventually(30.seconds) {
+                xtQuery(node, "cdc", "SELECT _id, name, blob FROM public.$table ORDER BY _id")
+                    .also { r -> assertTrue(r.any { (it["name"] as String?) == "after" }, "the update streamed") }
             }
             assertNull(cdcIngestionError(node), "cdc ingestion should not have stopped with REPLICA IDENTITY FULL")
             assertEquals(1, rows.size)

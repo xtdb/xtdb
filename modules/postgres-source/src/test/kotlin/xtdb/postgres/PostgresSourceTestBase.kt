@@ -1,7 +1,5 @@
 package xtdb.postgres
 
-import kotlinx.coroutines.runInterruptible
-import org.junit.jupiter.api.fail
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
@@ -13,8 +11,9 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
 import java.util.UUID
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.test.assertTrue
+import io.kotest.assertions.nondeterministic.eventually
 
 /**
  * Shared plumbing for the Postgres-source CDC tests: a logical-replication Postgres container plus
@@ -100,34 +99,13 @@ abstract class PostgresSourceTestBase {
 
     // --- awaits ---
 
-    protected suspend fun awaitCondition(description: String, timeout: Duration = 10.seconds, check: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        while (System.currentTimeMillis() < deadline) {
-            if (check()) return
-            runInterruptible { Thread.sleep(200) }
-        }
-        fail("Timed out waiting for: $description")
-    }
-
-    /** Polls `f` until `done` holds or the timeout elapses, returning the last value either way —
-     * so a caller can assert on it and surface what actually showed up rather than a bare timeout. */
-    protected suspend fun <T> await(timeout: Duration = 30.seconds, done: (T) -> Boolean, f: () -> T): T {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        var v = f()
-        while (!done(v) && System.currentTimeMillis() < deadline) {
-            runInterruptible { Thread.sleep(200) }
-            v = f()
-        }
-        return v
-    }
-
     protected suspend fun flushBlock(node: Xtdb) {
         val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
         val before = cdc.blockCatalog.currentBlockIndex
         cdc.sendFlushBlockMessage()
         // wait for *this* flush's block, not just any block — matters when flushing repeatedly
-        awaitCondition("block persisted for cdc", timeout = 30.seconds) {
-            cdc.blockCatalog.currentBlockIndex.let { it != null && (before == null || it > before) }
+        eventually(30.seconds) {
+            assertTrue(cdc.blockCatalog.currentBlockIndex.let { it != null && (before == null || it > before) }, "block persisted for cdc")
         }
     }
 
@@ -143,9 +121,12 @@ abstract class PostgresSourceTestBase {
     protected suspend fun awaitStreaming(node: Xtdb) =
         // cdc may be momentarily absent right after a restart (it re-attaches from the replayed log),
         // so resolve it inside the poll rather than up front
-        awaitCondition("cdc snapshot complete, streaming live", timeout = 30.seconds) {
+        eventually(30.seconds) {
             val cdc = (node as XtdbInternal).dbCatalog["cdc"]
-            cdc?.watchers?.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true
+            assertTrue(
+                cdc?.watchers?.externalSourceToken?.let { PostgresSourceToken.parseFrom(it).snapshotCompleted } == true,
+                "cdc snapshot complete, streaming live"
+            )
         }
 
     companion object {

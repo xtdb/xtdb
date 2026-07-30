@@ -41,6 +41,7 @@ import java.time.ZoneId
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import io.kotest.assertions.nondeterministic.eventually
 
 @Tag("integration")
 class KafkaConnectSourceIntegrationTest {
@@ -136,15 +137,6 @@ class KafkaConnectSourceIntegrationTest {
             }
         }
 
-    private suspend fun awaitCondition(description: String, timeout: Duration = 30.seconds, check: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeout.inWholeMilliseconds
-        while (System.currentTimeMillis() < deadline) {
-            if (runCatching(check).getOrDefault(false)) return
-            runInterruptible { Thread.sleep(200) }
-        }
-        throw AssertionError("Timed out waiting for: $description")
-    }
-
     @Test
     fun `JsonConverter happy path snapshot + streaming`() = runTest(timeout = 120.seconds) {
         val sourceTopic = "events-${UUID.randomUUID()}"
@@ -169,8 +161,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("both records appear") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events").size == 2
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events").size == 2, "both records appear")
             }
 
             val k1 = xtQueryDb(node, "events", "SELECT _id, name, age FROM public.events WHERE _id = 'k1'")
@@ -183,8 +175,8 @@ class KafkaConnectSourceIntegrationTest {
             assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'from-value'").isEmpty())
 
             produceBytes(sourceTopic, "k3", """{"name":"Charlie"}""".toByteArray())
-            awaitCondition("streamed record appears") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k3'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k3'").isNotEmpty(), "streamed record appears")
             }
         }
     }
@@ -215,8 +207,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("both records appear") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events").size == 2
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events").size == 2, "both records appear")
             }
 
             fun metric(name: String) =
@@ -260,13 +252,13 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("Alice ingested") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty(), "Alice ingested")
             }
 
             produceBytes(sourceTopic, "k1", null)
-            awaitCondition("Alice deleted") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty(), "Alice deleted")
             }
         }
     }
@@ -298,21 +290,21 @@ class KafkaConnectSourceIntegrationTest {
         openNode(xtLog).use { node ->
             attach(node, "events", attachYaml)
 
-            awaitCondition("Alice appears") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'a'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'a'").isNotEmpty(), "Alice appears")
             }
 
             produceBytes(sourceTopic, "b", """{"name":"Bob"}""".toByteArray())
-            awaitCondition("Bob appears") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'b'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'b'").isNotEmpty(), "Bob appears")
             }
         }
 
         produceBytes(sourceTopic, "c", """{"name":"Charlie"}""".toByteArray())
 
         openNode(xtLog).use { node ->
-            awaitCondition("Charlie appears after restart", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'c'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'c'").isNotEmpty(), "Charlie appears after restart")
             }
 
             val rows = xtQueryDb(node, "events", "SELECT _id, name FROM public.events ORDER BY _id")
@@ -346,8 +338,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("first record ingested — source is healthy") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty(), "first record ingested — source is healthy")
             }
 
             produceBytes(sourceTopic, "bad", "{not-json".toByteArray())
@@ -387,16 +379,16 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("first record ingested — source is healthy") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'first'").isNotEmpty(), "first record ingested — source is healthy")
             }
 
             produceBytes(sourceTopic, null, """{"name":"no-id"}""".toByteArray())
             produceBytes(sourceTopic, "second", """{"name":"Second"}""".toByteArray())
 
             val cat = (node as XtdbInternal).dbCatalog
-            awaitCondition("source halts with an ingestion error") {
-                cat["events"]?.ingestionError != null
+            eventually(30.seconds) {
+                assertTrue(cat["events"]?.ingestionError != null, "source halts with an ingestion error")
             }
 
             val second = xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'second'")
@@ -436,8 +428,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("unwrapped record appears") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'alice'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'alice'").isNotEmpty(), "unwrapped record appears")
             }
 
             val rows = xtQueryDb(node, "events", "SELECT _id, name, age FROM public.events WHERE _id = 'alice'")
@@ -486,8 +478,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("record appears with both transforms applied") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'alice'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'alice'").isNotEmpty(), "record appears with both transforms applied")
             }
 
             val rows = xtQueryDb(node, "events", "SELECT _id, name, email FROM public.events WHERE _id = 'alice'")
@@ -534,9 +526,9 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("Alice ingested with masked email") {
+            eventually(30.seconds) {
                 val rows = xtQueryDb(node, "events", "SELECT email FROM public.events WHERE _id = 'alice'")
-                rows.isNotEmpty() && rows[0]["email"] == "REDACTED"
+                assertEquals("REDACTED", rows.firstOrNull()?.get("email"), "Alice ingested with masked email")
             }
 
             // Without the predicate, MaskField would crash on the tombstone's null value
@@ -589,8 +581,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("valid attach after the failed one still indexes") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events").isNotEmpty(), "valid attach after the failed one still indexes")
             }
         }
     }
@@ -644,8 +636,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("record appears") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty(), "record appears")
             }
 
             val row = xtQueryDb(
@@ -772,8 +764,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("record appears", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty(), "record appears")
             }
 
             val row = xtQueryDb(
@@ -858,14 +850,14 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("Alice ingested", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty(), "Alice ingested")
             }
 
             // Tombstones are just null value bytes — same wire shape regardless of format.
             produceBytes(sourceTopic, "k1", null)
-            awaitCondition("Alice deleted") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty(), "Alice deleted")
             }
         }
     }
@@ -905,13 +897,13 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("Alice ingested", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isNotEmpty(), "Alice ingested")
             }
 
             produceBytes(sourceTopic, "k1", null)
-            awaitCondition("Alice deleted") {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty()
+            eventually(30.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'k1'").isEmpty(), "Alice deleted")
             }
         }
     }
@@ -1015,8 +1007,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("record appears", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'nested'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'nested'").isNotEmpty(), "record appears")
             }
 
             val row = xtQueryDb(
@@ -1143,8 +1135,8 @@ class KafkaConnectSourceIntegrationTest {
                     table: events
             """.trimIndent())
 
-            awaitCondition("record appears", timeout = 60.seconds) {
-                xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty()
+            eventually(60.seconds) {
+                assertTrue(xtQueryDb(node, "events", "SELECT _id FROM public.events WHERE _id = 'all-types'").isNotEmpty(), "record appears")
             }
 
             val row = xtQueryDb(
