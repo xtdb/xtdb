@@ -1,5 +1,9 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.SelectClause1
 import xtdb.api.TableRef
 import xtdb.api.TransactionKey
 import xtdb.api.log.Log
@@ -11,6 +15,29 @@ import xtdb.arrow.RelationReader
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
+
+/** One poll batch inbound from the transport, plus the handle its submitter awaits. */
+internal class SourceBatch(val records: List<Log.Record<SourceMessage>>) {
+    val onComplete = CompletableDeferred<Unit>()
+}
+
+/**
+ * The inbound source-log pipe — the one edge that runs the other way, so the persister *pulls*
+ * batches through a select clause rather than being pushed at.
+ *
+ * One owned object rather than three members on [LeaderDriver]: submitting, selecting and shutting
+ * down are the three ends of a single pipe, and keeping them together is what stops them drifting.
+ */
+internal interface SourceBatches {
+    /** Armed by the persister's select, alongside its own channels. */
+    val onBatch: SelectClause1<SourceBatch>
+
+    /** Hand a batch to the persister; the returned handle completes once it has been processed. */
+    suspend fun submit(records: List<Log.Record<SourceMessage>>): Deferred<Unit>
+
+    /** Term teardown: no batch will be processed after this, and a later [submit] throws [cause]. */
+    fun shutdown(cause: Throwable?)
+}
 
 /**
  * The leader term's observable external effects, behind one seam.
@@ -26,6 +53,8 @@ import xtdb.types.MessageId
  * those reads stay consistent with what the driver has applied.
  */
 internal interface LeaderDriver : AutoCloseable {
+
+    val sourceBatches: SourceBatches
 
     /**
      * Append [msgs] to the replica log as one atomic unit, in order, and await their positions.
@@ -63,6 +92,22 @@ internal class RealLeaderDriver(
 
     private val sourceLog = partitionStorage.sourceLog
     private val liveIndex = partitionState.liveIndex
+
+    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
+    // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending
+    // the send.
+    override val sourceBatches = object : SourceBatches {
+        private val ch = Channel<SourceBatch>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
+
+        override val onBatch get() = ch.onReceive
+
+        override suspend fun submit(records: List<Log.Record<SourceMessage>>): Deferred<Unit> =
+            SourceBatch(records).also { ch.send(it) }.onComplete
+
+        override fun shutdown(cause: Throwable?) {
+            ch.close(cause)
+        }
+    }
 
     override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> =
         replicaProducer.withTx { tx -> msgs.map { tx.appendMessage(it) }.toList() }.map { it.await() }
