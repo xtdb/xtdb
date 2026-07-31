@@ -99,7 +99,7 @@ class Database(
 
     internal fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? {
         val historical = tableCatalog.getTypes(table)
-        // TODO (#5557 unit 7) iterate the snapshot's partitions and merge per-partition live types;
+        // TODO (#5835) iterate the snapshot's partitions and merge per-partition live types;
         // for now single-partition is the only allowed shape, so pick the only Snapshot.
         // gate on the current basis so a just-committed table's columns are visible (getTableSchema awaits first).
         val live = openSnapshot(currentBasis()).use { it.partitions.first().allColumnTypes[table] }
@@ -254,8 +254,8 @@ class Database(
             val readOnly = dbConfig.isReadOnly
 
             // Attach-time gate: the type signatures admit N throughout, but TableCatalog wrappers +
-            // UNION-at-scan (unit 7) and xt.txs_$partition naming (unit 8) haven't landed. Lifting
-            // this gate is unit 9.
+            // UNION-at-scan (#5835) and xt.txs_$partition naming (#5836) haven't landed. Lifting
+            // this gate is #5837.
             if (dbConfig.partitions > 1)
                 throw Incorrect(
                     "multi-partition external-source databases are not yet enabled " +

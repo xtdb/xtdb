@@ -190,7 +190,8 @@ class KafkaCluster(
             private val completion = CompletableDeferred<Unit>()
             private var listenerState: ListenerState<M> = Following()
 
-            // expecting a load of change here for multi-part.
+            // #5841: listenerState becomes one entry per assigned partition, and the callbacks below
+            // fan out over the collection Kafka hands them instead of collapsing it with single().
 
             fun onPartitionsAssigned(partitions: Collection<TopicPartition>) {
                 val tp = partitions.single()

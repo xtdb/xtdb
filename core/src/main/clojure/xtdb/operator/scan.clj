@@ -207,7 +207,7 @@
                   (let [state (.getQueryState (.databaseOrNull db-catalog db-name))
                         table-catalog (.getTableCatalog state)
                         ^DatabaseSnapshot db-snap (get snaps db-name)
-                        ;; TODO (#5557 unit 7) reduce types/merge-types over per-partition live
+                        ;; TODO (#5835) reduce types/merge-types over per-partition live
                         ;; types here; for now we only allow single-partition databases.
                         ^Snapshot snap (first (.getPartitions db-snap))]
                     (types/merge-types (.getType table-catalog table col-name)
@@ -270,7 +270,7 @@
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, query-source, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^DatabaseSnapshot db-snapshot (get snaps db-name)
-                           ;; TODO (#5557 unit 7) walk every partition's Snapshot and UNION at scan,
+                           ;; TODO (#5835) walk every partition's Snapshot and UNION at scan,
                            ;; instead of picking the only partition.
                            ^Snapshot snapshot (first (.getPartitions db-snapshot))
                            derived-table-schema (info-schema/derived-table table)]
