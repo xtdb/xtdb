@@ -1,5 +1,6 @@
 package xtdb
 
+import kotlinx.coroutines.yield
 import org.junit.jupiter.api.extension.BeforeEachCallback
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.extension.ExtensionContext
@@ -75,6 +76,25 @@ abstract class SimulationTestBase {
     var currentSeed: Int = 0
     lateinit var rand: Random
     lateinit var dispatcher: DeterministicDispatcher
+
+    /**
+     * Suspend until nothing on the simulation's dispatcher is runnable.
+     *
+     * [DeterministicDispatcher] drains its queue to empty, so "no other runnable job" is the simulation's
+     * fixed point: every coroutine is parked with no work to do. Asserting after this sees a settled
+     * system rather than one with effects still in flight — which matters wherever an effect cascades
+     * (a leader's block boundary is read back, uploaded, announced, then applied by each follower), since
+     * waiting on any single step in that chain stops too early.
+     *
+     * Deliberately not time-based: the dispatcher implements no [kotlinx.coroutines.Delay], so there is
+     * no virtual clock to advance, and a wall-clock wait would make a seeded run machine-dependent.
+     * `runTest`'s own timeout bounds this, so a simulation that never settles fails there.
+     *
+     * MUST be called from a coroutine running on [dispatcher].
+     */
+    protected suspend fun awaitIdle() {
+        while (dispatcher.hasRunnableJobs) yield()
+    }
 
     protected fun assertInterleaved() {
         assertTrue(
