@@ -30,8 +30,10 @@ import xtdb.database.PartitionStorage
 import xtdb.api.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
+import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
+import xtdb.indexer.RealLeaderDriver
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import xtdb.util.closeAll
@@ -107,22 +109,26 @@ class ExternalSourceTest {
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
-        wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
+        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ): LeaderLogProcessor {
         val blockCatalog = BlockCatalog(null)
         val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
         val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope)
+        val driver = wrapDriver(
+            RealLeaderDriver(
+                replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+            )
+        )
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", blockUploader, watchers, extSource, replicaProducer,
+            partitionState, "test", driver, watchers, extSource,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1, scope = backgroundScope
         ).also(leadersToClose::add)
@@ -346,16 +352,10 @@ class ExternalSourceTest {
 
     @Test
     fun `a replica-log commit fault in the background append surfaces through executeTx`() = runTest {
-        val failingProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
-            object : Log.AtomicProducer<ReplicaMessage> {
-                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-                    val tx = inner.openTx()
-                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                        override fun commit() = throw RuntimeException("replica-log commit fault")
-                    }
-                }
-
-                override fun close() = inner.close()
+        val failingDriver = { inner: LeaderDriver ->
+            object : LeaderDriver by inner {
+                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>) =
+                    throw RuntimeException("replica-log commit fault")
             }
         }
 
@@ -377,7 +377,7 @@ class ExternalSourceTest {
             override fun close() {}
         }
 
-        leaderProc(watchers = watchers, extSource = extSource, wrapProducer = failingProducer)
+        leaderProc(watchers = watchers, extSource = extSource, wrapDriver = failingDriver)
 
         val e = thrown.await()
         assertEquals(

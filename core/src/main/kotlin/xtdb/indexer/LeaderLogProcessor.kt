@@ -10,7 +10,6 @@ import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
-import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
@@ -41,10 +40,9 @@ internal class LeaderLogProcessor(
     crashLogger: CrashLogger,
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
-    private val blockUploader: BlockUploader,
+    private val driver: LeaderDriver,
     private val watchers: Watchers,
     private val extSource: ExternalSource?,
-    private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
@@ -62,7 +60,6 @@ internal class LeaderLogProcessor(
     }
 
     private val partition = partitionStorage.partition
-    private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = partitionState.liveIndex
 
@@ -106,17 +103,13 @@ internal class LeaderLogProcessor(
         val txs = txResolver.seal() ?: return
 
         inFlight = appendScope.async {
-            replicaProducer
-                .withTx { tx ->
-                    txs.map { it to tx.appendMessage(it.toReplicaMessage()) }
-                }
-                .map { it.first to it.second.await() }
+            txs.zip(driver.appendToReplica(txs.asSequence().map { it.toReplicaMessage() }))
         }
     }
 
     private suspend fun settle(appended: List<Pair<ResolvedTx, Log.MessageMetadata>>) {
         for ((resolvedTx, metadata) in appended) {
-            liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
+            driver.applyTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
             latestReplicaMsgId = metadata.msgId
             watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
         }
@@ -164,22 +157,15 @@ internal class LeaderLogProcessor(
     }
 
 
-    // What the persister wakes up for: a task from one of the channels, or the in-flight append
-    // completing (Settle). Settle is select-driven — with ext-source handlers no longer draining,
-    // this arm is what promotes their batches even when no task is queued.
+    // What the persister wakes up for: a source batch pulled from the driver, a task from one of the
+    // channels, or the in-flight append completing (Settle). Settle is select-driven — with ext-source
+    // handlers no longer draining, this arm is what promotes their batches even when no task is queued.
     private sealed interface PersisterWork
     private data object Settle : PersisterWork
+    private class SourceWork(val batch: SourceBatch) : PersisterWork
 
     private sealed interface PersisterTask : PersisterWork {
         val onComplete: CompletableDeferred<Unit>
-    }
-
-    private sealed interface SourceLogTask : PersisterTask {
-        // One task per poll batch; the persister resolves + imports the records in order.
-        // onComplete is required by PersisterTask but unused here — processRecords fires and returns.
-        data class Batch(val records: List<Log.Record<SourceMessage>>) : SourceLogTask {
-            override val onComplete = CompletableDeferred<Unit>()
-        }
     }
 
     private sealed interface ExtSourceTask : PersisterTask {
@@ -193,11 +179,6 @@ internal class LeaderLogProcessor(
             override val onComplete = CompletableDeferred<Unit>()
         }
     }
-
-    // capacity 1: the poll thread can deposit one batch ahead and read the next while the persister
-    // works, bounding lookahead to ~2 batches. Backpressure falls out of a full channel suspending the send.
-    private val sourceLogCh =
-        Channel<SourceLogTask>(capacity = 1, onUndeliveredElement = { it.onComplete.cancel() })
 
     // capacity 1 so a fire-and-forget `submitTx` caller can queue one tx ahead while the persister works the
     // current one (bounding lookahead to ~2). `executeTx` still blocks on the result regardless of capacity.
@@ -340,12 +321,35 @@ internal class LeaderLogProcessor(
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
     }
 
+    // Run one unit of persister work, routing any failure onto its completion handle so no caller is
+    // left awaiting a term that has gone. Interrupts and cancellation are shutdown signals rather than
+    // ingestion faults, so only a genuine fault reaches the watchers. Every failure still propagates:
+    // the persister exits, and its `finally` sweeps whatever is left.
+    private suspend inline fun guarded(onComplete: CompletableDeferred<Unit>, block: () -> Unit) {
+        try {
+            block()
+            onComplete.complete(Unit)
+        } catch (e: CancellationException) {
+            onComplete.cancel(e)
+            throw e
+        } catch (e: InterruptedException) {
+            onComplete.completeExceptionally(e)
+            throw e
+        } catch (e: Interrupted) {
+            onComplete.completeExceptionally(e)
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e)
+            onComplete.completeExceptionally(e)
+            throw e
+        }
+    }
+
     // Hand the task to the persister and return its completion handle. The caller decides whether to
-    // await it: `executeTx`, GC and `processRecords` await (they need the work done before returning);
-    // `submitTx` doesn't (fire-and-forget). Suspends only on the channel send (backpressure).
+    // await it: `executeTx` and GC await (they need the work done before returning); `submitTx`
+    // doesn't (fire-and-forget). Suspends only on the channel send (backpressure).
     private suspend fun enqueue(task: PersisterTask): Deferred<Unit> {
         when (task) {
-            is SourceLogTask -> sourceLogCh.send(task)
             is ExtSourceTask -> extSourceCh.send(task)
             is GcTask -> gcCh.send(task)
         }
@@ -435,13 +439,13 @@ internal class LeaderLogProcessor(
                             // onJoin, not onAwait: join fires on failure too, and settleAppend's own await
                             // rethrows the fault inside the try below, routing it through notifyError.
                             inFlight?.let { append -> append.onJoin { Settle } }
-                            sourceLogCh.onReceive { it }
+                            driver.sourceBatches.onBatch { SourceWork(it) }
                             extSourceCh.onReceive { it }
                             gcCh.onReceive { it }
                         }
 
                         when (work) {
-                            // Mirrors the task catches below: interrupts are shutdown signals, not
+                            // Mirrors the guarded handlers: interrupts are shutdown signals, not
                             // ingestion faults — they mustn't poison the watchers on their way out.
                             Settle ->
                                 try {
@@ -457,30 +461,16 @@ internal class LeaderLogProcessor(
                                     throw e
                                 }
 
-                            is PersisterTask -> {
-                                val task = work
-                                try {
-                                    when (task) {
-                                        is SourceLogTask.Batch -> handleSourceLogBatch(task.records)
+                            is SourceWork ->
+                                guarded(work.batch.onComplete) { handleSourceLogBatch(work.batch.records) }
+
+                            is PersisterTask ->
+                                guarded(work.onComplete) {
+                                    when (val task = work) {
                                         is ExtSourceTask.IndexTx -> handleIndexTx(task)
                                         is GcTask.TriesDeleted -> handleTriesDeleted(task)
                                     }
-                                    task.onComplete.complete(Unit)
-                                } catch (e: CancellationException) {
-                                    task.onComplete.cancel(e)
-                                    throw e
-                                } catch (e: InterruptedException) {
-                                    task.onComplete.completeExceptionally(e)
-                                    throw e
-                                } catch (e: Interrupted) {
-                                    task.onComplete.completeExceptionally(e)
-                                    throw e
-                                } catch (e: Throwable) {
-                                    watchers.notifyError(e)
-                                    task.onComplete.completeExceptionally(e)
-                                    throw e
                                 }
-                            }
                         }
                     }
                 } catch (_: CancellationException) {
@@ -503,7 +493,7 @@ internal class LeaderLogProcessor(
                         if (task is ExtSourceTask.IndexTx) task.msg.pending.completeExceptionally(pendingCause)
                     }
 
-                    sourceLogCh.close(cause)
+                    driver.sourceBatches.shutdown(cause)
                     extSourceCh.close(cause)
                     gcCh.close(cause)
                 }
@@ -545,14 +535,12 @@ internal class LeaderLogProcessor(
     }
 
     private suspend fun maybeFlushBlock() {
-        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
-            val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).msgId
-        }
+        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex))
+            blockFlusher.flushedTxId = driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
     }
 
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
-        replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
+        driver.appendToReplica(sequenceOf(message)).single()
             .also { latestReplicaMsgId = it.msgId }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
@@ -564,7 +552,7 @@ internal class LeaderLogProcessor(
 
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
 
-        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
+        latestReplicaMsgId = driver.uploadBlock(boundaryMsgId, boundaryMsg)
         pendingBlock = null
 
         // Safe to call from inside a Persister task: signal() just enqueues a cycle on the GC's
@@ -584,14 +572,14 @@ internal class LeaderLogProcessor(
         // run a leader/follower transition under `runBlocking` — the persister is quiescent, so a
         // concurrent DETACH/shutdown that must cancel-join the term doesn't wedge against in-flight
         // import work on a starved dispatcher (#5741).
-        if (records.isNotEmpty()) enqueue(SourceLogTask.Batch(records)).await()
+        if (records.isNotEmpty()) driver.sourceBatches.submit(records).await()
     }
 
     suspend fun cancelAndJoin() = termJob.cancelAndJoin()
 
     override fun close() {
         extSource?.close()
-        replicaProducer.close()
+        driver.close()
         // Frees every resolved-but-not-applied tx, including a batch whose settle never completed
         // (fault / teardown) — safe now that cancelAndJoin has joined the persister and the append.
         txResolver.close()
