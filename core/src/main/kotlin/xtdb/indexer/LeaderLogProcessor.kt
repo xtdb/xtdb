@@ -106,11 +106,7 @@ internal class LeaderLogProcessor(
         val txs = txResolver.seal() ?: return
 
         inFlight = appendScope.async {
-            replicaProducer
-                .withTx { tx ->
-                    txs.map { it to tx.appendMessage(it.toReplicaMessage()) }
-                }
-                .map { it.first to it.second.await() }
+            txs.zip(appendToReplica(txs.asSequence().map { it.toReplicaMessage() }))
         }
     }
 
@@ -551,8 +547,18 @@ internal class LeaderLogProcessor(
         }
     }
 
+    /**
+     * Append [msgs] to the replica log as one atomic unit, in order, and await their positions.
+     *
+     * [msgs] is consumed *inside* the producer transaction, so a caller may serialize each message
+     * lazily rather than materialising a whole batch's worth of Arrow bytes up front — a sealed batch
+     * can run to a full block (`rowsPerBlock`, 100k rows by default).
+     */
+    private suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> =
+        replicaProducer.withTx { tx -> msgs.map { tx.appendMessage(it) }.toList() }.map { it.await() }
+
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
-        replicaProducer.withTx { tx -> tx.appendMessage(message) }.await()
+        appendToReplica(sequenceOf(message)).single()
             .also { latestReplicaMsgId = it.msgId }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
