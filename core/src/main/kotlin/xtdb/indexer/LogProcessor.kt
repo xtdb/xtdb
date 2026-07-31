@@ -89,12 +89,14 @@ class LogProcessor(
         replicaProducer: Log.AtomicProducer<ReplicaMessage>,
         afterReplicaMsgId: MessageId,
     ): LeaderLogProcessor =
-        // The leader term owns (and frees) its replica producer and ext source.
+        // The leader term owns (and frees) its driver — and through it the replica producer — and its
+        // ext source.
         LeaderLogProcessor(
-            allocator, base, partitionStorage, crashLogger, partitionState, dbName, blockUploader,
+            allocator, base, partitionStorage, crashLogger, partitionState, dbName,
+            RealLeaderDriver(replicaProducer, partitionStorage, partitionState, blockUploader),
             watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
-            replicaProducer, skipTxs, dbCatalog,
+            skipTxs, dbCatalog,
             afterReplicaMsgId,
             flushTimeout = flushTimeout,
             scope = scope,

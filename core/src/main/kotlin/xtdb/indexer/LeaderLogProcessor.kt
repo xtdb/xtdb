@@ -10,7 +10,6 @@ import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
-import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
@@ -41,10 +40,9 @@ internal class LeaderLogProcessor(
     crashLogger: CrashLogger,
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
-    private val blockUploader: BlockUploader,
+    private val driver: LeaderDriver,
     private val watchers: Watchers,
     private val extSource: ExternalSource?,
-    private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
@@ -62,7 +60,6 @@ internal class LeaderLogProcessor(
     }
 
     private val partition = partitionStorage.partition
-    private val sourceLog = partitionStorage.sourceLog
     private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = partitionState.liveIndex
 
@@ -106,13 +103,13 @@ internal class LeaderLogProcessor(
         val txs = txResolver.seal() ?: return
 
         inFlight = appendScope.async {
-            txs.zip(appendToReplica(txs.asSequence().map { it.toReplicaMessage() }))
+            txs.zip(driver.appendToReplica(txs.asSequence().map { it.toReplicaMessage() }))
         }
     }
 
     private suspend fun settle(appended: List<Pair<ResolvedTx, Log.MessageMetadata>>) {
         for ((resolvedTx, metadata) in appended) {
-            liveIndex.commitTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
+            driver.applyTx(resolvedTx.txKey, resolvedTx.allTables.associate { it.ref to it.relation })
             latestReplicaMsgId = metadata.msgId
             watchers.notifyTx(resolvedTx.txResult, resolvedTx.srcMsgId, resolvedTx.externalSourceToken)
         }
@@ -541,24 +538,12 @@ internal class LeaderLogProcessor(
     }
 
     private suspend fun maybeFlushBlock() {
-        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex)) {
-            val flushMessage = SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1)
-            blockFlusher.flushedTxId = sourceLog.appendMessage(flushMessage).msgId
-        }
+        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex))
+            blockFlusher.flushedTxId = driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
     }
 
-    /**
-     * Append [msgs] to the replica log as one atomic unit, in order, and await their positions.
-     *
-     * [msgs] is consumed *inside* the producer transaction, so a caller may serialize each message
-     * lazily rather than materialising a whole batch's worth of Arrow bytes up front — a sealed batch
-     * can run to a full block (`rowsPerBlock`, 100k rows by default).
-     */
-    private suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> =
-        replicaProducer.withTx { tx -> msgs.map { tx.appendMessage(it) }.toList() }.map { it.await() }
-
     private suspend fun appendToReplica(message: ReplicaMessage): Log.MessageMetadata =
-        appendToReplica(sequenceOf(message)).single()
+        driver.appendToReplica(sequenceOf(message)).single()
             .also { latestReplicaMsgId = it.msgId }
 
     private suspend fun finishBlock(latestProcessedMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
@@ -570,7 +555,7 @@ internal class LeaderLogProcessor(
 
         pendingBlock = PendingBlock(boundaryMsgId, boundaryMsg)
 
-        latestReplicaMsgId = blockUploader.uploadBlock(replicaProducer, boundaryMsgId, boundaryMsg)
+        latestReplicaMsgId = driver.uploadBlock(boundaryMsgId, boundaryMsg)
         pendingBlock = null
 
         // Safe to call from inside a Persister task: signal() just enqueues a cycle on the GC's
@@ -597,7 +582,7 @@ internal class LeaderLogProcessor(
 
     override fun close() {
         extSource?.close()
-        replicaProducer.close()
+        driver.close()
         // Frees every resolved-but-not-applied tx, including a batch whose settle never completed
         // (fault / teardown) — safe now that cancelAndJoin has joined the persister and the append.
         txResolver.close()

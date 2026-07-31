@@ -79,18 +79,22 @@ class LeaderLogProcessorTest {
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
         skipTxs: Set<MessageId> = emptySet(),
-        wrapProducer: (Log.AtomicProducer<ReplicaMessage>) -> Log.AtomicProducer<ReplicaMessage> = { it },
+        wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val replicaProducer = wrapProducer(replicaLog.openAtomicProducer("test-leader", 0))
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, uploadDispatcher)
+        val driver = wrapDriver(
+            RealLeaderDriver(
+                replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+            )
+        )
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", blockUploader, watchers,
-            extSource = null, replicaProducer = replicaProducer,
+            partitionState, "test", driver, watchers,
+            extSource = null,
             skipTxs = skipTxs, dbCatalog = null,
             afterReplicaMsgId = -1,
             scope = backgroundScope,
@@ -142,14 +146,16 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val driver = RealLeaderDriver(
+            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+        )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", blockUploader, watchers,
-            extSource = null, replicaProducer = replicaProducer,
+            partitionState, "test", driver, watchers,
+            extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
             scope = backgroundScope,
@@ -213,14 +219,16 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val driver = RealLeaderDriver(
+            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+        )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", blockUploader, watchers,
-            extSource = null, replicaProducer = replicaProducer,
+            partitionState, "test", driver, watchers,
+            extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
             scope = backgroundScope,
@@ -258,33 +266,19 @@ class LeaderLogProcessorTest {
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
-        val producerBatchSizes = mutableListOf<Int>()
+        val appendBatchSizes = mutableListOf<Int>()
 
-        // Counts each producer transaction's size, and gates every append handle so the first batch's
-        // settle stalls on the gate (a slow commit-ack) without blocking any thread.
-        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
-            object : Log.AtomicProducer<ReplicaMessage> {
-                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-                    val tx = inner.openTx()
-                    var count = 0
-                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
-                            count++
-                            val real = tx.appendMessage(message)
-                            appendStarted.complete(Unit)
-                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
-                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
-                            }
-                        }
-
-                        override fun commit() {
-                            tx.commit()
-                            producerBatchSizes += count
-                        }
-                    }
+        // Records each append's batch size, and stalls the first one on the gate (a slow commit-ack)
+        // without blocking any thread — so the rest of the poll batch resolves behind it.
+        val wrapDriver = { inner: LeaderDriver ->
+            object : LeaderDriver by inner {
+                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
+                    val batch = msgs.toList()
+                    appendBatchSizes += batch.size
+                    appendStarted.complete(Unit)
+                    gate.await()
+                    return inner.appendToReplica(batch.asSequence())
                 }
-
-                override fun close() = inner.close()
             }
         }
 
@@ -292,7 +286,7 @@ class LeaderLogProcessorTest {
         val n = 5L
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            skipTxs = (0 until n).toSet(), wrapProducer = wrapProducer,
+            skipTxs = (0 until n).toSet(), wrapDriver = wrapDriver,
         )
 
         val now = Instant.now()
@@ -307,8 +301,8 @@ class LeaderLogProcessorTest {
         batchJob.join()
 
         assertEquals(
-            listOf(1, 4), producerBatchSizes,
-            "record 0 kicked its append alone; 1-4 resolved behind it and rode the next producer transaction"
+            listOf(1, 4), appendBatchSizes,
+            "record 0 kicked its append alone; 1-4 resolved behind it and rode the next append"
         )
 
         val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
@@ -324,28 +318,19 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
-        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
-            object : Log.AtomicProducer<ReplicaMessage> {
-                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-                    val tx = inner.openTx()
-                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
-                            val real = tx.appendMessage(message)
-                            appendStarted.complete(Unit)
-                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
-                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
-                            }
-                        }
-                    }
+        val wrapDriver = { inner: LeaderDriver ->
+            object : LeaderDriver by inner {
+                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
+                    appendStarted.complete(Unit)
+                    gate.await()
+                    return inner.appendToReplica(msgs)
                 }
-
-                override fun close() = inner.close()
             }
         }
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapProducer = wrapProducer,
+            wrapDriver = wrapDriver,
         )
 
         // launch the executeTx so we can observe its completion state without blocking the test
@@ -370,28 +355,19 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
-        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
-            object : Log.AtomicProducer<ReplicaMessage> {
-                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-                    val tx = inner.openTx()
-                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
-                            val real = tx.appendMessage(message)
-                            appendStarted.complete(Unit)
-                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
-                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
-                            }
-                        }
-                    }
+        val wrapDriver = { inner: LeaderDriver ->
+            object : LeaderDriver by inner {
+                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
+                    appendStarted.complete(Unit)
+                    gate.await()
+                    return inner.appendToReplica(msgs)
                 }
-
-                override fun close() = inner.close()
             }
         }
 
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
-            wrapProducer = wrapProducer,
+            wrapDriver = wrapDriver,
         )
 
         // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
@@ -448,33 +424,19 @@ class LeaderLogProcessorTest {
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
-        val producerBatchSizes = mutableListOf<Int>()
+        val appendBatchSizes = mutableListOf<Int>()
 
-        // Counts each producer transaction's size, and gates every append handle so the first batch's
-        // settle stalls on the gate (a slow commit-ack) without blocking any thread.
-        val wrapProducer = { inner: Log.AtomicProducer<ReplicaMessage> ->
-            object : Log.AtomicProducer<ReplicaMessage> {
-                override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-                    val tx = inner.openTx()
-                    var count = 0
-                    return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                        override fun appendMessage(message: ReplicaMessage): CompletableDeferred<Log.MessageMetadata> {
-                            count++
-                            val real = tx.appendMessage(message)
-                            appendStarted.complete(Unit)
-                            return CompletableDeferred<Log.MessageMetadata>().also { gated ->
-                                backgroundScope.launch { gate.await(); gated.complete(real.await()) }
-                            }
-                        }
-
-                        override fun commit() {
-                            tx.commit()
-                            producerBatchSizes += count
-                        }
-                    }
+        // Records each append's batch size, and stalls the first one on the gate (a slow commit-ack)
+        // without blocking any thread.
+        val wrapDriver = { inner: LeaderDriver ->
+            object : LeaderDriver by inner {
+                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>): List<Log.MessageMetadata> {
+                    val batch = msgs.toList()
+                    appendBatchSizes += batch.size
+                    appendStarted.complete(Unit)
+                    gate.await()
+                    return inner.appendToReplica(batch.asSequence())
                 }
-
-                override fun close() = inner.close()
             }
         }
 
@@ -483,7 +445,7 @@ class LeaderLogProcessorTest {
             // Explicit null head: the relaxed default returns a mock TransactionKey whose txId is 0,
             // which would seed the staging index at 0 and shift the ext-source txIds to 1..5.
             liveIndex = mockk(relaxed = true) { every { latestCompletedTx } returns null },
-            wrapProducer = wrapProducer,
+            wrapDriver = wrapDriver,
         )
 
         // tx 0: stages an ext-source tx and kicks the gated append
@@ -508,8 +470,8 @@ class LeaderLogProcessorTest {
         // txs 1-4 (staging crosses launch → channel → persister, unlike a source-log poll batch),
         // so assert correctness-under-accumulation and leave the coalescing factor to the
         // kafka-source benchmark. tx 0 always seals alone — nothing else was staged when it kicked.
-        assertEquals(1, producerBatchSizes.first(), "tx 0 kicked its append alone")
-        assertEquals(5, producerBatchSizes.sum(), "every tx reached the replica log exactly once")
+        assertEquals(1, appendBatchSizes.first(), "tx 0 kicked its append alone")
+        assertEquals(5, appendBatchSizes.sum(), "every tx reached the replica log exactly once")
 
         val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
             .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
@@ -542,13 +504,15 @@ class LeaderLogProcessorTest {
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val replicaProducer = replicaLog.openAtomicProducer("test-leader", 0)
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val driver = RealLeaderDriver(
+            replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+        )
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", blockUploader, watchers,
-            extSource = null, replicaProducer = replicaProducer,
+            partitionState, "test", driver, watchers,
+            extSource = null,
             skipTxs = setOf(10), dbCatalog = null,
             afterReplicaMsgId = -1,
             scope = backgroundScope,
