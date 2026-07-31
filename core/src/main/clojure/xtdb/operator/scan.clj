@@ -309,6 +309,9 @@
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
                                live-table-snaps (.table snapshot table)
+                               ;; TODO (#5835) each branch takes its own partition's basis slot. Wrong
+                               ;; rather than absent at N>1: every branch would apply partition 0's
+                               ;; temporal bound, so the scan returns wrong rows rather than failing.
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
                                                                       (get-in [db-name 0])))]

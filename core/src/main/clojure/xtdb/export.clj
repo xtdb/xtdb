@@ -59,6 +59,10 @@
                                   (log/warn "No completed blocks found - aborting."))]
 
            (let [export-dir (export-dir-path block-idx start-time)
+                 ;; Deliberately the unmarked two-arg root: a snapshot is a fresh single-partition
+                 ;; store, whatever it was exported from. Don't sweep this to the partition-aware
+                 ;; form — that would key every export under parts/N/ and break restore. The input
+                 ;; side is the open question (#5838), not this.
                  export-root (.resolve export-dir (Storage/storageRoot Storage/VERSION 0))
                  tables (.getTables trie-cat)]
 

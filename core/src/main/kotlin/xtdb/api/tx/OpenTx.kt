@@ -142,6 +142,13 @@ class OpenTx
 
     // `internal` rather than `private` solely so OpenTxTest can assert the single-db contract directly;
     // no production code outside this file reads it.
+    // Both narrowings below — one database, one partition — are load-bearing rather than incidental, and
+    // the single-element snapshot is the one to leave alone. Unioning the partitions would make a writer's
+    // output depend on sibling partitions' log positions, which vary by node, so a new leader re-resolving
+    // its slice after a transition would emit different rows from the original leader and diverge the
+    // replica logs. Pinning a per-partition basis in the resolved tx restores determinism only by making
+    // every partition wait on every other, which is the independence the throughput scaling is built on.
+    // #5843 covers the separate question of whether the narrowing should be visible in the method names.
     internal val queryCatalog: IQuerySource.QueryCatalog
         get() {
             val liveIndex = partitionState.liveIndex
@@ -168,6 +175,10 @@ class OpenTx
      * matched to the query's `?` placeholders by ordinal position. The columns must be supplied unnamed or
      * named `$1..$N` in order (see [withPositionalParamNames]); mis-ordered names are rejected rather than
      * silently rebound. Defaults for [opts] are derived from the tx's system-time and the database's default timezone.
+     *
+     * Reads are scoped to this transaction's own database — narrower than the same SQL run from a
+     * connection, which resolves a two-part name against every attached database. A table in another
+     * database is not reachable from here, and referring to one reports that the table was not found.
      */
     fun openQuery(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts()): ResultCursor {
         val currentTime = opts.currentTime ?: txKey.systemTime
@@ -187,6 +198,9 @@ class OpenTx
      * [openQuery] — unnamed or named `$1..$N` in order.
      *
      * DML writes to forbidden schemas (`xt`, `information_schema`, `pg_catalog`) will throw.
+     *
+     * The scope narrowing documented on [openQuery] applies to any read this performs — including an
+     * `INSERT … SELECT` source.
      */
     @JvmOverloads
     fun executeSql(sql: String, args: RelationReader? = null, opts: QueryOpts = QueryOpts(), user: String? = null) {

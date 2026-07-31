@@ -63,12 +63,22 @@ object Storage {
     }
 
     /**
-     * At `totalPartitions == 1` this is byte-identical to the single-partition layout, so existing
-     * object stores and local directories keep working without a key-space migration — load-bearing
-     * for rolling upgrades, since blob stores have no `mv` primitive and re-keying a database would
-     * mean a full copy-and-delete sweep. Only at N > 1 does the `parts/<partition>/` grouping appear.
-     * Partition counts are immutable post-attach, so a store is one shape or the other for its whole
-     * lifetime and the two never collide.
+     * The `totalPartitions == 1` branch produces the same key-space as the pre-multi-partition layout,
+     * and must keep doing so — do not unify the two branches. An older version resolves against the
+     * unmarked root, so a single-partition database writing under `parts/0/` would leave a rollback with
+     * nothing to read and a data migration to run at the worst possible moment. Avoiding a re-key of
+     * existing stores is the secondary benefit — blob stores have no `mv` primitive, so that means a full
+     * copy-and-delete sweep — but reversibility is the sharper reason. Only at N > 1 does the
+     * `parts/<partition>/` grouping appear, and partition counts are immutable post-attach, so a store is
+     * one shape or the other for its whole lifetime and the two never collide.
+     *
+     * The nesting is deliberately partition-outer rather than epoch-outer. That was a free choice —
+     * multi-partition key-spaces are always born fresh — and it buys three things: each partition
+     * subtree is a complete store of the single-partition shape, so anything defined against a store
+     * root works per-partition verbatim; a partition is a stable identity where an epoch is a
+     * transient recovery event, and the stable thing belongs outer; and it leaves room for
+     * partition-scoped epochs, recovering one partition of a large external-source database without
+     * re-ingesting the whole thing. Epoch-outer would foreclose that structurally.
      */
     @JvmStatic
     fun storageRoot(version: StorageVersion, epoch: Int, partition: Int, totalPartitions: Int): Path {
