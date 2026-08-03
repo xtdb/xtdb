@@ -83,6 +83,11 @@
 
         (xt/execute-tx rw-node [[:put-docs :bar {:xt/id "b", :y 2}]])
 
+        ;; `execute-tx` only tells us the *leader* applied it. A follower buffers records between
+        ;; BlockBoundary and BlockUploaded, so without this it can still be mid-block when we query,
+        ;; with `bar` buffered rather than applied — "table not found".
+        (xt-log/sync-node ro-node #xt/duration "PT5S")
+
         (t/is (= [{:xt/id "b", :y 2}]
                  (xt/q ro-node "SELECT * FROM bar"))
               "table in live index is visible")
@@ -103,7 +108,9 @@
 
         (with-open [ro-node (-> (xtn/->config cfg)
                                 (.readOnlyDatabases true)
-                                (.open))] 
+                                (.open))]
+          (xt-log/sync-node ro-node #xt/duration "PT5S")
+
           (t/is (= [{:xt/id "a", :x 1}]
                    (xt/q ro-node "SELECT * FROM foo"))
                 "table from block flushed before startup is visible")
