@@ -1,0 +1,234 @@
+= Postgres HA test image
+
+A streaming-replication pair from a single image, so tests can promote a standby and watch what happens to a logical replication slot.
+That is the shape of the Azure HA maintenance failover in https://github.com/xtdb/xtdb/issues/5828[#5828] — see link:../../../../kotlin/xtdb/postgres/PostgresSourceFailoverTest.kt[`PostgresSourceFailoverTest`].
+
+WARNING: Test use only.
+The primary permits unauthenticated replication connections from any host — see `primary-initdb.sh`.
+
+== Features
+
+* **Two roles, one image**, selected by `HA_ROLE`.
+  The primary delegates to the official entrypoint; the standby builds its own data directory with `pg_basebackup` and comes up in recovery.
+* **`ha-promote.sh`**, which promotes and does not return until `pg_controldata` reports the cluster is genuinely out of recovery — `pg_ctl promote` returns as soon as the request is merely accepted.
+* **Optional PG17 slot synchronisation**, via `HA_SYNC_SLOTS`.
+* **Any Postgres major**, via the `PG_IMAGE` build arg.
+
+TIP: The test builds this image itself through Testcontainers, so you only need the steps below to poke at a pair by hand.
+
+== Usage
+
+Run from the repo root.
+
+1. Build, and create a network so the standby can resolve the primary by name:
++
+[source,shell]
+----
+docker build -t xtdb-pg-ha modules/postgres-source/src/test/resources/xtdb/postgres/ha
+docker network create pg-ha
+----
+
+2. Start the primary:
++
+[source,shell]
+----
+docker run -d --name primary --network pg-ha -p 5433:5432 \
+  -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpass -e POSTGRES_DB=testdb \
+  xtdb-pg-ha
+
+until docker exec primary pg_isready -h localhost -U testuser -d testdb -q; do sleep 1; done
+----
+
+3. Give it something to replicate, and a slot to lose.
+`failover => false` is the default, spelled out here to contrast with the slot-sync section below:
++
+[source,shell]
+----
+docker exec primary psql -U testuser -d testdb \
+  -c "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT);
+      INSERT INTO widgets VALUES (1, 'before');
+      CREATE PUBLICATION widgets_pub FOR TABLE widgets;" \
+  -c "SELECT pg_create_logical_replication_slot('xtdb_slot', 'pgoutput', failover => false)"
+----
++
+NOTE: The slot needs its own `-c`.
+Statements in one `-c` share an implicit transaction, which a slot creation cannot join.
+
+4. Start the standby.
+It waits for the primary, takes a base backup, and comes up in recovery:
++
+[source,shell]
+----
+docker run -d --name standby --network pg-ha -p 5434:5432 \
+  -e HA_ROLE=standby -e HA_PRIMARY_HOST=primary -e HA_REPLICATION_USER=testuser \
+  -e HA_PRIMARY_SLOT=standby_slot \
+  xtdb-pg-ha
+
+until docker exec standby pg_isready -h localhost -U testuser -d testdb -q; do sleep 1; done
+----
+
+5. Fail over — promote the standby, stop the old primary:
++
+[source,shell]
+----
+docker exec standby ha-promote.sh
+docker stop primary
+----
+
+6. Observe what survived:
++
+[source,shell]
+----
+docker exec standby psql -U testuser -d testdb -c \
+  "SELECT pg_is_in_recovery() AS in_recovery,
+          (SELECT count(*) FROM widgets) AS widget_rows,
+          (SELECT count(*) FROM pg_publication) AS publications,
+          (SELECT count(*) FROM pg_replication_slots) AS slots"
+----
++
+----
+ in_recovery | widget_rows | publications | slots
+-------------+-------------+--------------+-------
+ f           |           1 |            1 |     0
+----
++
+The rows and the publication are intact; the slot is not.
+A consumer resuming here gets `ERROR: replication slot "xtdb_slot" does not exist`.
+
+7. Tear down:
++
+[source,shell]
+----
+docker rm -f primary standby && docker network rm pg-ha
+----
+
+== Configuration
+
+Build arg, either role:
+
+[cols="1,3"]
+|===
+| `PG_IMAGE` | Base image, default `postgres:17-alpine`. Point at another major for version-specific behaviour — PG16 predates failover slots, PG18 adds `idle_replication_slot_timeout`.
+|===
+
+=== Primary
+
+[cols="1,3"]
+|===
+| `HA_ROLE` | `primary`, the default.
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | As the official image. The primary delegates to its entrypoint.
+|===
+
+=== Standby
+
+[cols="1,3"]
+|===
+| `HA_ROLE` | `standby`. Required to select this role.
+| `HA_PRIMARY_HOST` | Required. Hostname of the primary, resolvable on the container network.
+| `HA_PRIMARY_PORT` | Default `5432`.
+| `HA_REPLICATION_USER` | Defaults to `POSTGRES_USER`, then `postgres`.
+| `HA_PRIMARY_SLOT` | Optional physical slot name, created on the primary by `pg_basebackup`. Makes the primary retain WAL for this standby, and is a prerequisite for slot synchronisation.
+| `HA_SYNC_SLOTS` | `on` or `off` (default). Sets `sync_replication_slots`. See below.
+| `HA_PRIMARY_DB` | Database for the sync worker's connection. Defaults to `POSTGRES_DB`, then `postgres`. Only read when `HA_SYNC_SLOTS=on`.
+| `HA_PRIMARY_PASSWORD` | Password for the same connection. Defaults to `POSTGRES_PASSWORD`. Only read when `HA_SYNC_SLOTS=on`.
+|===
+
+Both roles read `/etc/xtdb/ha.conf`, generated by `ha-entrypoint.sh`.
+Append `-c name=value` to the container command to override any of it — command-line arguments beat `postgresql.conf`.
+
+== How it works
+
+=== One image, two roles
+
+Both halves need the same binaries and the same HA settings, and a promoted standby *becomes* a primary — so two images would mean keeping two things in step for no gain.
+`ha-entrypoint.sh` branches on `HA_ROLE`; everything else is shared.
+
+=== The primary is the stock image, plus two lines
+
+`HA_ROLE=primary` execs the official entrypoint, so initdb, the `POSTGRES_*` variables and the privilege drop all behave exactly as upstream documents.
+`primary-initdb.sh` runs partway through it and adds only what the stock image lacks:
+
+* `host replication all all trust` in `pg_hba.conf`.
+  The shipped `replication` entries cover 127.0.0.1 and ::1 only, and a `host all all all` line does *not* match replication connections — the database column has to say `replication` literally.
+  Without this, the standby's base backup is refused outright.
+* An `include_if_exists` line pointing at `/etc/xtdb/ha.conf`, which `ha-entrypoint.sh` generates from the environment.
+
+=== The standby copies the primary with pg_basebackup
+
+Streaming replication is *physical*: the standby replays the primary's WAL byte for byte, so it has to begin from an exact binary copy of the primary's data directory — same system identifier, same timeline, same relation files.
+A freshly `initdb`'d cluster cannot be pointed at a primary and told to catch up; the two have nothing in common.
+`pg_basebackup` takes that copy, over a replication connection, from the running primary.
+
+Each flag earns its place:
+
+`-R`:: Writes `standby.signal` and `primary_conninfo`, so the copy comes up as a standby rather than an independent primary.
+`-X stream`:: Streams the WAL produced *during* the backup on a second connection, so the copy is self-consistent and can start without any archived WAL.
+`-c fast`:: Takes an immediate checkpoint rather than spreading it out — worth it with a test waiting.
+`--create-slot --slot`:: Creates the physical slot on the primary as part of the same operation; `-R` then records it as `primary_slot_name`.
+
+Two consequences are worth knowing.
+`pg_basebackup` copies `postgresql.conf` and `pg_hba.conf` verbatim, so the standby — and the primary it becomes — inherit both of the primary's added lines without repeating the setup.
+And it *excludes* `pg_replslot/`, which is exactly why a standby holds no logical slots, and so why this image can demonstrate losing one at all.
+
+The directory it writes is not `0700`, and Postgres refuses to start on a data directory readable by group or others, so the entrypoint chmods it.
+
+=== Promotion waits
+
+`pg_ctl promote` returns as soon as the request is *accepted*, far too early to query the new primary.
+`ha-promote.sh` polls `pg_controldata` until the cluster state reads `in production`, reading the control file rather than calling `pg_is_in_recovery()` so the wait doesn't depend on how this container authenticates a local connection.
+
+== Slot synchronisation
+
+Slots live in `pg_replslot/` — the directory `pg_basebackup` skips — so streaming replication alone never puts one on a standby.
+
+PostgreSQL 17 adds a mechanism that does.
+With `HA_SYNC_SLOTS=on` and the standby holding a physical slot, a slotsync worker maintains a copy of the primary's slot on the standby.
+Two conditions bite: only slots created with `failover = true` are ever candidates, and a copy that has not caught up far enough to be usable is dropped at promotion rather than promoted with the server.
+
+XTDB's slots are not created that way — pgjdbc's replication API has no `FAILOVER` option — so `failover` is always false and the slot is lost on failover.
+That is what `PostgresSourceFailoverTest` pins, and what #5828 is about changing.
+
+To watch the other path instead, change two of the steps above.
+
+Start the standby with synchronisation on.
+The sync worker connects to the primary as an ordinary client rather than a replication one, so unlike `pg_basebackup` it needs a database and a password:
+
+[source,shell]
+----
+docker run -d --name standby --network pg-ha -p 5434:5432 \
+  -e HA_ROLE=standby -e HA_PRIMARY_HOST=primary -e HA_REPLICATION_USER=testuser \
+  -e HA_PRIMARY_SLOT=standby_slot \
+  -e HA_SYNC_SLOTS=on -e HA_PRIMARY_DB=testdb -e HA_PRIMARY_PASSWORD=testpass \
+  xtdb-pg-ha
+----
+
+Create the slot with `failover` set, and consume it so it advances to a position the standby can vouch for.
+`pg_create_logical_replication_slot` takes `(slot_name, plugin, temporary, twophase, failover)`, so name the argument rather than counting positional booleans:
+
+[source,shell]
+----
+docker exec primary psql -U testuser -d testdb -c \
+  "SELECT pg_create_logical_replication_slot('xtdb_slot', 'pgoutput', failover => true)"
+
+docker exec -d primary pg_recvlogical -U testuser -d testdb --slot=xtdb_slot \
+  --plugin=pgoutput --start -o proto_version=1 -o publication_names=widgets_pub -f /dev/null
+----
+
+The copy appears on the standby once the worker has run:
+
+[source,shell]
+----
+docker exec standby psql -U testuser -d testdb -c \
+  "SELECT slot_name, failover, synced, wal_status FROM pg_replication_slots"
+----
+
+Promote as before, and this time the slot is still there:
+
+----
+ slot_name | failover | synced | wal_status
+-----------+----------+--------+------------
+ xtdb_slot | t        | t      | reserved
+----
+
+NOTE: Don't call `pg_sync_replication_slots()` by hand while `HA_SYNC_SLOTS=on` — it fails with `cannot synchronize replication slots concurrently`.
+It is for forcing a sync when the worker isn't running.
