@@ -81,7 +81,10 @@ class LiveIndex private constructor(
     @JvmField
     val pageLimit = indexerConfig.pageLimit
 
-    private val rowsPerBlock = indexerConfig.rowsPerBlock
+    /** The block-size threshold. Public because the leader cuts blocks off its own resolve-side row
+     * gauge (which leads the applied count [blockRowCount] reflects) and must use the same limit. */
+    val rowsPerBlock = indexerConfig.rowsPerBlock
+
     private val skipTxs = indexerConfig.skipTxs
 
     private val liveTrieFactory = LiveTable.LiveTrieFactory { iidVec ->
@@ -176,6 +179,9 @@ class LiveIndex private constructor(
         }
 
     fun isFull() = rowCounter.blockRowCount >= rowsPerBlock
+
+    /** Rows applied into the current (open) block — used to seed the leader's resolve-side block gauge. */
+    val blockRowCount: Long get() = rowCounter.blockRowCount
 
     fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
         this@LiveIndex.tables.mapValues { (_, lt) -> lt.blockMetadata() }

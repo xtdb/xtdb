@@ -3,6 +3,7 @@ package xtdb.indexer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
+import xtdb.api.log.LeaderTerm
 import xtdb.api.log.Log
 import xtdb.types.LogOffset
 import xtdb.types.MessageId
@@ -48,6 +49,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
     val wakeLeader = Channel<Unit>(Channel.CONFLATED)
     val wakePlainConsumers = Channel<Unit>(Channel.CONFLATED)
     val rebalanceTrigger = Channel<Unit>(Channel.CONFLATED)
+    private val termCounter = java.util.concurrent.atomic.AtomicLong(0)
 
     var leader: GroupConsumer<M>? = null
 
@@ -160,7 +162,7 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         if (groupConsumers.isNotEmpty()) {
             val newLeader = groupConsumers.random(rand)
             LOG.debug("$name/chooseLeader: launching transition for new leader")
-            pending = Pending(newLeader, newLeader.listener.launchTransition(0))
+            pending = Pending(newLeader, newLeader.listener.launchTransition(0, LeaderTerm.of(0, termCounter.incrementAndGet())))
             // installed by commitPendingLeader (group-loop select clause) once the transition completes
         } else {
             LOG.debug("$name/chooseLeader: no consumers, no leader elected")
@@ -200,41 +202,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
 
     override suspend fun appendMessage(message: M, partition: Int): Log.MessageMetadata =
         appendSync(message)
-
-    override fun openAtomicProducer(transactionalId: String, partition: Int) = object : Log.AtomicProducer<M> {
-        override fun openTx() = object : Log.AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<Log.MessageMetadata>>>()
-            private var isOpen = true
-
-            override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
-                check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<Log.MessageMetadata>()
-                    .also { buffer.add(message to it) }
-            }
-
-            override fun commit() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                LOG.debug("$name/atomicProducer($transactionalId): committing ${buffer.size} message(s)")
-                for ((message, res) in buffer) {
-                    res.complete(appendSync(message))
-                }
-            }
-
-            override fun abort() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                LOG.debug("$name/atomicProducer($transactionalId): aborting ${buffer.size} message(s)")
-                buffer.clear()
-            }
-
-            override fun close() {
-                if (isOpen) abort()
-            }
-        }
-
-        override fun close() {}
-    }
 
     override fun readLastMessage(partition: Int): M? = topic.lastOrNull()?.message
 

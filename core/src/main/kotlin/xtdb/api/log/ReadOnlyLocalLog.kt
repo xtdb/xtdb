@@ -37,12 +37,14 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
     private val rootPath: Path,
     private val codec: MessageCodec<M>,
     override val epoch: Int,
+    private val termEpoch: Int = 0,
     coroutineContext: CoroutineContext = Dispatchers.Default,
     private val baseFileName: String = "LOG",
     val partitions: Int = 1,
 ) : Log<M> {
 
     private val scope = CoroutineScope(coroutineContext)
+    private val elections = java.util.concurrent.atomic.AtomicLong(0)
 
     companion object {
         private fun messageSizeBytes(size: Int) = 1 + INT_BYTES + LONG_BYTES + size + LONG_BYTES
@@ -112,9 +114,6 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
 
     override suspend fun appendMessage(message: M, partition: Int): MessageMetadata =
         throw Incorrect("Cannot append to read-only database log")
-
-    override fun openAtomicProducer(transactionalId: String, partition: Int) =
-        throw Incorrect("Cannot open atomic producer on read-only database log")
 
     override fun readLastMessage(partition: Int): M? {
         val latest = latestSubmittedOffset(partition)
@@ -205,7 +204,7 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         for (p in 0 until partitions) {
             launch {
                 try {
-                    listener.launchTransition(p).await()
+                    listener.launchTransition(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
                     val spec = listener.commitLeader(p)
                     tailAll(p, spec.afterMsgId, spec.processor)
                 } finally {

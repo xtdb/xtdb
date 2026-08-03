@@ -25,6 +25,7 @@ import kotlin.time.Duration.Companion.minutes
 class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
     override val epoch: Int,
+    private val termEpoch: Int = 0,
     val partitions: Int = 1,
 ) : Log<M> {
 
@@ -33,18 +34,26 @@ class InMemoryLog<M> @JvmOverloads constructor(
     data class Factory(
         @Transient var instantSource: InstantSource = InstantSource.system(),
         var epoch: Int = 0,
+        /**
+         * Declares that the leader-election counter behind this log has been reset, so that terms
+         * from before the reset still order below terms from after it. Bump it — never lower it —
+         * whenever that happens; a node that finds its own term already fenced on the replica log
+         * refuses to lead and names this setting. See [LeaderTerm].
+         */
+        var termEpoch: Int = 0,
     ) : Log.Factory {
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun termEpoch(termEpoch: Int) = apply { this.termEpoch = termEpoch }
 
         override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            InMemoryLog<SourceMessage>(instantSource, epoch, partitions)
+            InMemoryLog<SourceMessage>(instantSource, epoch, termEpoch, partitions)
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
             ReadOnlyLog(openSourceLog(remotes, partitions))
 
         override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            InMemoryLog<ReplicaMessage>(instantSource, epoch, partitions)
+            InMemoryLog<ReplicaMessage>(instantSource, epoch, termEpoch, partitions)
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
             ReadOnlyLog(openReplicaLog(remotes, partitions))
@@ -69,6 +78,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
     }
 
     private val partitionStates = List(partitions) { PartitionState() }
+    private val elections = java.util.concurrent.atomic.AtomicLong(0)
 
     private fun state(partition: Int): PartitionState =
         partitionStates.getOrNull(partition)
@@ -86,41 +96,6 @@ class InMemoryLog<M> @JvmOverloads constructor(
             ps.committedCh.emit(record)
             MessageMetadata(epoch, record.logOffset, ts.truncatedTo(MICROS))
         }
-    }
-
-    override fun openAtomicProducer(transactionalId: String, partition: Int) = object : AtomicProducer<M> {
-        override fun openTx() = object : AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<MessageMetadata>>>()
-            private var isOpen = true
-
-            override fun appendMessage(message: M): CompletableDeferred<MessageMetadata> {
-                check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<MessageMetadata>()
-                    .also { buffer.add(message to it) }
-            }
-
-            override fun commit() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@InMemoryLog.appendMessage(message, partition))
-                    }
-                }
-            }
-
-            override fun abort() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                buffer.clear()
-            }
-
-            override fun close() {
-                if (isOpen) abort()
-            }
-        }
-
-        override fun close() {}
     }
 
     override fun readLastMessage(partition: Int): M? = null
@@ -167,7 +142,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         for (p in 0 until partitions) {
             launch {
                 try {
-                    listener.launchTransition(p).await()
+                    listener.launchTransition(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
                     val spec = listener.commitLeader(p)
                     tailAll(p, spec.afterMsgId, spec.processor)
                 } finally {

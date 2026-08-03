@@ -9,7 +9,7 @@ import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -44,41 +44,6 @@ import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Kafka's transactional-id fencing, modelled in memory: claiming the id supersedes every earlier
- * claimant, and a superseded producer's commit is rejected by the coordinator — so the appends
- * buffered in that transaction never reach the log.
- *
- * Neither [InMemoryLog] nor `SimLog` models this: both hand out independent producers that append
- * happily alongside each other. Fencing is the *only* thing standing between two nodes that each
- * believe they lead and a corrupted replica log, so without a model of it that guard is untested.
- */
-private class ReplicaLogFence {
-    private var latest = 0
-
-    fun claim() = ++latest
-
-    fun isFenced(generation: Int) = generation != latest
-}
-
-private class ProducerFenced(generation: Int) :
-    RuntimeException("replica producer generation $generation was fenced by a newer leader")
-
-private fun Log.AtomicProducer<ReplicaMessage>.fencedAt(generation: Int, fence: ReplicaLogFence) =
-    object : Log.AtomicProducer<ReplicaMessage> {
-        override fun openTx(): Log.AtomicProducer.Tx<ReplicaMessage> {
-            val tx = this@fencedAt.openTx()
-            return object : Log.AtomicProducer.Tx<ReplicaMessage> by tx {
-                override fun commit() {
-                    if (fence.isFenced(generation)) throw ProducerFenced(generation)
-                    tx.commit()
-                }
-            }
-        }
-
-        override fun close() = this@fencedAt.close()
-    }
-
-/**
  * Two `LeaderLogProcessor`s, each believing it leads the same database, against one shared replica
  * log and one shared object store.
  *
@@ -94,7 +59,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
     private lateinit var bufferPool: MemoryStorage
     private lateinit var sourceLog: InMemoryLog<SourceMessage>
     private lateinit var replicaLog: InMemoryLog<ReplicaMessage>
-    private lateinit var fence: ReplicaLogFence
+    private var latestTerm = 0L
 
     private val leaders = mutableListOf<SimLeader>()
 
@@ -110,7 +75,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
         bufferPool = MemoryStorage(allocator, epoch = 0)
         sourceLog = InMemoryLog(InstantSource.system(), 0)
         replicaLog = InMemoryLog(InstantSource.system(), 0)
-        fence = ReplicaLogFence()
+        latestTerm = 0L
     }
 
     @AfterEach
@@ -127,9 +92,9 @@ class LeaderDriverSimTest : SimulationTestBase() {
      */
     private inner class SimLeader(
         name: String, rowsPerBlock: Long, scope: CoroutineScope,
+        val termId: Long, afterReplicaMsgId: MessageId,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ) : AutoCloseable {
-        val generation = fence.claim()
 
         val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bufferPool)
@@ -147,7 +112,6 @@ class LeaderDriverSimTest : SimulationTestBase() {
             wrapDriver(
                 RecordingDriver(
                     RealLeaderDriver(
-                        replicaLog.openAtomicProducer("test-db-leader", 0).fencedAt(generation, fence),
                         partitionStorage, partitionState,
                         BlockUploader(
                             partitionStorage, partitionState, mockk<Compactor.ForDatabase>(relaxed = true),
@@ -157,7 +121,11 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 )
             ),
             watchers, extSource = null, skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1, scope = scope, gcDispatcher = dispatcher,
+            afterReplicaMsgId = afterReplicaMsgId,
+            // Never left at the default: two leaders sharing term 0 would each read the other's records
+            // back as its own, and the term is exactly what tells them apart.
+            leaderTerm = termId,
+            scope = scope, gcDispatcher = dispatcher,
         )
 
         /** Fire-and-forget: the returned handle completes only once the tx is durably replicated. */
@@ -188,15 +156,40 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
     /** Records the boundary each block was actually uploaded for — see [assertBlockCutsAgree]. */
     private inner class RecordingDriver(private val inner: LeaderDriver) : LeaderDriver by inner {
-        override suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary) =
-            inner.uploadBlock(boundaryMsgId, boundary)
+        override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary) =
+            inner.uploadBlock(boundaryMsgId, termId, boundary)
                 .also { blockUploads += boundary.blockIndex to boundaryMsgId }
     }
 
-    private fun openLeader(
+    /**
+     * Open a leader the way a real transition does: claim the next term by appending a `NoOp` stamped with
+     * it, and tail from that record.
+     *
+     * The claim has to reach the log. With the transactional producer gone, a superseded leader finds out
+     * only by *reading back* a higher term (#5817) — so a leader that claimed silently would leave its
+     * predecessor happily acking forever, which is not how `LogProcessor.runTransition` behaves.
+     */
+    private suspend fun openLeader(
         name: String, rowsPerBlock: Long, scope: CoroutineScope,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
-    ) = SimLeader(name, rowsPerBlock, scope, wrapDriver).also { leaders += it }
+    ): SimLeader {
+        val termId = ++latestTerm
+        val replayTarget = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = termId)).msgId
+        return SimLeader(name, rowsPerBlock, scope, termId, replayTarget, wrapDriver).also { leaders += it }
+    }
+
+    /**
+     * The reader-side fence, as every follower and leader applies it: a record is ignored if a higher term
+     * precedes it on the log. Term 0 is the legacy marker and is never fenced.
+     */
+    private fun fencedIn(): List<ReplicaMessage> {
+        var maxTerm = 0L
+        return replicaMessages().filter { msg ->
+            val term = msg.termId
+            if (term != 0L && term < maxTerm) false
+            else { maxTerm = maxOf(maxTerm, term); true }
+        }
+    }
 
     // ---- observations of the shared replica log ----
 
@@ -270,7 +263,8 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 "the sole leader must ack everything it submits before anyone supersedes it"
             )
 
-            // B claims the transactional id — A is a zombie now, though it doesn't know yet.
+            // B claims the next term, announcing it on the log — A is a zombie now, but only finds
+            // out when its consume-back reaches that claim.
             val b = openLeader("B", rowsPerBlock = 10_000, scope = scope)
 
             val afterAcked = List(afterCount) { a.trySubmitRows(randomRows) }.filterNotNull()
@@ -279,12 +273,20 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 emptyList<Long>(), afterAcked,
                 "a fenced leader must not ack anything it submitted after being superseded"
             )
-            // The fence specifically, not merely "something went wrong" — `notifyError` wraps the
-            // cause in an IngestionStoppedException, so an unrelated fault would otherwise satisfy
-            // a bare non-null check and quietly pass this off as the fencing behaviour.
-            assertInstanceOf(
-                ProducerFenced::class.java, a.watchers.exception?.cause,
-                "the fence must fail A's term rather than leave it silently wedged"
+            // A resignation, not a fault. Under the transactional producer this arrived as a
+            // ProducerFenced surfacing through `notifyError`; the term fence makes it orderly, so the
+            // watchers MUST stay clean — the transport re-follows on the next rebalance, and poisoning
+            // the watchers would turn an expected handover into a terminal query failure.
+            assertNull(
+                a.watchers.exception,
+                "a superseded leader must resign cleanly, not poison its watchers (seed=$currentSeed)"
+            )
+
+            // And it really did stop: everything A resolved after the claim is fenced out of the log's
+            // applied subsequence, so no reader ever adopts it.
+            assertTrue(
+                fencedIn().filterIsInstance<ReplicaMessage.ResolvedTx>().none { it.termId == a.termId && it.txId !in beforeAcked },
+                "nothing A wrote after being superseded may survive the reader-side fence (seed=$currentSeed)"
             )
             assertNoPhantomAcks(beforeAcked + afterAcked)
 
@@ -295,23 +297,27 @@ class LeaderDriverSimTest : SimulationTestBase() {
         }
 
     /**
-     * The one interleaving where two leaders really are concurrent. Fencing bites at commit, so a
-     * younger leader kills an older one the instant it claims — the only way to have both live at
-     * once is to catch the older one with work already in flight. Here A is held inside
-     * `uploadBlock`, having already appended its `BlockBoundary`, when B supersedes it.
+     * The one interleaving where two leaders really are concurrent: A is held inside `uploadBlock`,
+     * having already appended its `BlockBoundary`, when B supersedes it.
+     *
+     * Note what changed with the transactional producer's removal. A fenced producer's commit was
+     * rejected, so a superseded leader's `BlockUploaded` never reached the log at all. A plain append
+     * always lands — so the record *is* on the log, stamped with A's now-stale term, and what keeps the
+     * system consistent is that every reader discards it. The block files A wrote to the object store
+     * land either way; that was true under the producer too, since the writes precede the commit.
      */
     @Test
-    fun `a leader fenced mid-upload announces no block`() = runTest(timeout = 10.seconds) {
+    fun `a leader fenced mid-upload has its block ignored`() = runTest(timeout = 10.seconds) {
         val atUpload = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val scope = leaderScope
 
         val a = openLeader("A", rowsPerBlock = 2, scope = scope) { inner ->
             object : LeaderDriver by inner {
-                override suspend fun uploadBlock(boundaryMsgId: MessageId, boundary: BlockBoundary): MessageId {
+                override suspend fun uploadBlock(boundaryMsgId: MessageId, termId: Long, boundary: BlockBoundary): MessageId {
                     atUpload.complete(Unit)
                     release.await()
-                    return inner.uploadBlock(boundaryMsgId, boundary)
+                    return inner.uploadBlock(boundaryMsgId, termId, boundary)
                 }
             }
         }
@@ -333,10 +339,15 @@ class LeaderDriverSimTest : SimulationTestBase() {
             "A should have announced block b0's boundary before being fenced"
         )
 
-        assertEquals(
-            emptyList<Long>(),
-            replicaMessages().filterIsInstance<ReplicaMessage.BlockUploaded>().map { it.blockIndex },
-            "a leader fenced mid-upload must not get its BlockUploaded onto the log"
+        // A's upload lands on the log, carrying its own (now stale) term...
+        val uploaded = replicaMessages().filterIsInstance<ReplicaMessage.BlockUploaded>().singleOrNull()
+        assertNotNull(uploaded, "A completed its upload, so its BlockUploaded is on the log")
+        assertEquals(a.termId, uploaded!!.termId, "A must stamp its own term, not the one that superseded it")
+
+        // ...and every reader drops it, because B's claim precedes it.
+        assertTrue(
+            fencedIn().none { it is ReplicaMessage.BlockUploaded },
+            "a stale-term BlockUploaded must be fenced out by every reader (seed=$currentSeed)"
         )
         assertNoPhantomAcks(acked)
         assertBlockCutsAgree()

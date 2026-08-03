@@ -1,6 +1,7 @@
 package xtdb.catalog
 
 import com.google.protobuf.ByteString
+import xtdb.api.log.LeaderTerm
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.types.MessageId
@@ -64,7 +65,8 @@ class BlockCatalog(
         boundaryReplicaMsgId: MessageId?,
         tables: Collection<TableRef>,
         secondaryDatabases: Map<String, DatabaseConfig>?,
-        externalSourceToken: ExternalSourceToken? = null
+        externalSourceToken: ExternalSourceToken? = null,
+        termId: Long = LeaderTerm.NONE,
     ): Block {
         val currentBlockIndex = this.currentBlockIndex
         check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
@@ -84,6 +86,7 @@ class BlockCatalog(
             this.tableNames.addAll(tables.map { it.sym.toString() })
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
             externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
+            this.termId = termId
         }
     }
 
@@ -101,6 +104,11 @@ class BlockCatalog(
 
     val boundaryReplicaMsgId: MessageId?
         get() = latestBlock?.let { block -> block.boundaryReplicaMsgId.takeIf { block.hasBoundaryReplicaMsgId() } }
+
+    // the leader term that produced the latest block's boundary; a follower seeds its read-side term
+    // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
+    val boundaryTermId: Long
+        get() = latestBlock?.termId ?: LeaderTerm.NONE
 
     val externalSourceToken: ExternalSourceToken?
         get() = latestBlock?.takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray()

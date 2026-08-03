@@ -47,9 +47,9 @@ private val LOG = TxResolver::class.logger
 
 /**
  * An external source's request to index a transaction: the [writer] that stages its ops, alongside the
- * [pending] handle its submitter awaits. The leader completes [pending] with the tx's result once the
- * replica-log commit settles, or fails it on any path where that will never happen (writer throw, append
- * fault, term cancellation, undelivered send).
+ * [pending] handle its submitter awaits. The leader completes [pending] with the tx's result once the tx has
+ * been read back off the replica log and applied, or fails it on any path where that will never happen
+ * (writer throw, append fault, term cancellation, undelivered send).
  */
 internal class ExtSourceMessage(
     val externalSourceToken: ExternalSourceToken?,
@@ -61,26 +61,25 @@ internal class ExtSourceMessage(
 
 /**
  * Resolves transactions for the leader: turns a source-log message, a database attach/detach, or an
- * external source's writer into a [ResolvedTx], and holds it until the leader has made it durable.
+ * external source's writer into a [ResolvedTx], and holds it until the leader has applied it.
  *
  * State, no processes — the [LeaderLogProcessor] both creates and drives this, calling it only from its
  * persister coroutine, so the resolver is single-threaded by confinement and needs no lock.
  *
- * ## The resolved-tx staging area
+ * ## The resolved-tx queue
  *
- * Every resolved tx lands here and stays until the leader has committed it into the durable live index.
- * It sits in one of two slots, in resolution order:
+ * Every resolved tx joins the tail of a FIFO and stays there until the leader has read it back off its own
+ * replica log and imported it into the durable live index, at which point it leaves via [removeHead]. The
+ * queue OWNS its txs — their table relations — and frees them at [removeHead] (once imported) or [close]
+ * (teardown). The leader's append pump only borrows a tx to serialize it ([ResolvedTx.toReplicaMessage]);
+ * it never closes one.
  *
- * - **accumulating** — resolved since the last [seal], not yet handed to the replica log.
- * - **sealed** — handed out by [seal] for one replica-log producer transaction and freed at [applied].
- *   At most one batch at a time, matching the single fenced producer's one-open-transaction limit.
+ * Everything still queued is a read-your-writes predecessor for the next tx to resolve, which is why the
+ * queue and resolution sit together: a tx resolving now must see every predecessor not yet applied.
  *
- * Both slots are read-your-writes predecessors for the next tx to resolve, and both are the resolver's to
- * free — the leader borrows the sealed batch for the duration of its append, but never owns it.
- *
- * Two heads: [latestCompletedTx] here is the APPLIED head (it drives resolution — the next external-source
- * tx-id and system-time smoothing), and it leads [LiveIndex.latestCompletedTx] (the durable/query basis)
- * by everything staged but not yet applied.
+ * Two heads: [latestCompletedTx] here is the RESOLVED head (it drives resolution — the next external-source
+ * tx-id and system-time smoothing), and it leads [LiveIndex.latestCompletedTx] (the durable/query basis) by
+ * everything queued but not yet applied.
  */
 internal class TxResolver(
     allocator: BufferAllocator,
@@ -106,65 +105,42 @@ internal class TxResolver(
     var latestCompletedTx: TransactionKey? = partitionState.liveIndex.latestCompletedTx
         private set
 
-    private var sealedBatch: List<ResolvedTx> = emptyList()
-    private val accumulating = ArrayDeque<ResolvedTx>()
+    private val queue = ArrayDeque<ResolvedTx>()
 
-    /** Staged predecessors for resolution layering (read-your-writes), oldest→newest. */
-    private val inFlightTxs: List<ResolvedTx> get() = sealedBatch + accumulating
+    /** Queued predecessors for resolution layering (read-your-writes), oldest→newest. */
+    private val resolvedTxs: List<ResolvedTx> get() = queue.toList()
 
-    /** Whether anything has resolved since the last [seal] — the leader's wedge check. */
-    val hasUnsealedTxs: Boolean get() = accumulating.isNotEmpty()
-
-    /** Rows across the accumulating slot — derived, so it can't drift. Bounds how far ingest runs ahead. */
-    val unsealedRowCount: Long get() = accumulating.sumOf { tx -> tx.allTables.sumOf { it.relation.rowCount.toLong() } }
+    /** Remove and return the head (oldest) tx; ownership passes to the caller, which imports then closes it. */
+    fun removeHead(): ResolvedTx = queue.removeFirst()
 
     /**
-     * Take the accumulated txs as an ordered batch (send order) for the replica-log append, advancing them
-     * into the sealed slot. Null if nothing has accumulated, or a sealed batch is still outstanding.
-     *
-     * The batch stays resolver-owned: later txs still resolve behind it, and it's freed at [applied].
-     */
-    fun seal(): List<ResolvedTx>? {
-        if (sealedBatch.isNotEmpty() || accumulating.isEmpty()) return null
-
-        return accumulating.toList().also { sealedBatch = it; accumulating.clear() }
-    }
-
-    /** Free the sealed batch, once its writes are in the durable live index. */
-    fun applied() {
-        sealedBatch.closeAll()
-        sealedBatch = emptyList()
-    }
-
-    /**
-     * Fail every pending deferred we're still holding. Called on teardown paths where staged txs will never
+     * Fail every pending deferred we're still holding. Called on teardown paths where queued txs will never
      * settle — the leader's persister is exiting and nobody else will complete them.
      */
-    fun failPending(cause: Throwable) = inFlightTxs.forEach { it.pending?.completeExceptionally(cause) }
+    fun failPending(cause: Throwable) = queue.forEach { it.pending?.completeExceptionally(cause) }
 
     /**
-     * Take ownership of [openTx]'s written tables (a reference move — see `OpenTx.sealTables`), hold them in
-     * the accumulating slot, and advance the applied head. The caller closes the (now table-less) [openTx].
+     * Take ownership of [openTx]'s written tables (a reference move — see `OpenTx.sealTables`), enqueue them,
+     * and advance the resolved head. The caller closes the (now table-less) [openTx].
      */
     private fun stage(
         openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult,
         dbOp: DbOp?, pending: CompletableDeferred<TransactionResult>?,
-    ) {
-        accumulating.addLast(ResolvedTx.stage(openTx, srcMsgId, txResult, dbOp, pending))
-        latestCompletedTx = openTx.txKey
-    }
+    ): ResolvedTx =
+        ResolvedTx.stage(openTx, srcMsgId, txResult, dbOp, pending)
+            .also { queue.addLast(it); latestCompletedTx = openTx.txKey }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
-        OpenTx(allocator, nodeBase, partitionStorage, partitionState, dbName, txKey, externalSourceToken, tracer, inFlightTxs)
+        OpenTx(allocator, nodeBase, partitionStorage, partitionState, dbName, txKey, externalSourceToken, tracer, resolvedTxs)
 
     // Stage a fresh tx committing a single skip / abort / invalid-system-time row. `countError` mirrors the
     // pre-staging behaviour: skipped txs don't count as errors.
     private fun stageStandaloneTx(
         msgId: MessageId, txKey: TransactionKey, error: Throwable, userMetadata: Map<*, *>?, countError: Boolean,
-    ) {
+    ): ResolvedTx {
         if (countError) txErrorCounter?.increment()
 
-        openTx(txKey, null).use { openTx ->
+        return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(error, userMetadata)
             stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
         }
@@ -178,13 +154,13 @@ internal class TxResolver(
         defaultTz: ZoneId?,
         user: String?,
         userMetadata: Any?,
-    ): Unit = tracer.withSpan(
+    ): ResolvedTx = tracer.withSpan(
         "xtdb.transaction",
         attributes = mapOf("operations.count" to (txOps?.valueCount ?: 0).toString()),
     ) {
         val userMetadataMap = userMetadata as? Map<*, *>
-        // The APPLIED head (staging), not the durable head: a tx must system-time-smooth against the
-        // staged predecessors it resolves behind, which lead the durable index.
+        // The RESOLVED head (the queue), not the durable head: a tx must system-time-smooth against the
+        // queued predecessors it resolves behind, which lead the durable index.
         val lcTx = latestCompletedTx
 
         // If lc-tx's systemTime >= msgTimestamp, bump past it by 1µs; otherwise use msgTimestamp.
@@ -250,18 +226,18 @@ internal class TxResolver(
 
     // Park the payload for later inspection, then stage the tx as a no-op abort so the tx-id sequence
     // (and everything downstream keyed on it) stays unbroken.
-    private fun indexSkippedTx(msgId: MessageId, msgTimestamp: Instant, payload: ByteArray) {
+    private fun indexSkippedTx(msgId: MessageId, msgTimestamp: Instant, payload: ByteArray): ResolvedTx {
         LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
         bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
 
-        indexSourceLogTx(msgId, msgTimestamp, null, null, null, null, null)
+        return indexSourceLogTx(msgId, msgTimestamp, null, null, null, null, null)
     }
 
-    fun indexTx(msgId: MessageId, msgTimestamp: Instant, msg: SourceMessage.Tx) {
+    fun indexTx(msgId: MessageId, msgTimestamp: Instant, msg: SourceMessage.Tx): ResolvedTx {
         if (msgId in skipTxs) return indexSkippedTx(msgId, msgTimestamp, msg.encode())
 
-        msg.txOps.asChannel.use { ch ->
+        return msg.txOps.asChannel.use { ch ->
             Relation.StreamLoader(allocator, ch).use { loader ->
                 Relation(allocator, loader.schema).use { rel ->
                     loader.loadNextPage(rel)
@@ -278,10 +254,10 @@ internal class TxResolver(
         }
     }
 
-    fun indexTx(msgId: MessageId, msgTimestamp: Instant, msg: SourceMessage.LegacyTx) {
+    fun indexTx(msgId: MessageId, msgTimestamp: Instant, msg: SourceMessage.LegacyTx): ResolvedTx {
         if (msgId in skipTxs) return indexSkippedTx(msgId, msgTimestamp, msg.payload)
 
-        msg.payload.asChannel.use { txOpsCh ->
+        return msg.payload.asChannel.use { txOpsCh ->
             Relation.StreamLoader(allocator, txOpsCh).use { loader ->
                 Relation(allocator, loader.schema).use { rel ->
                     loader.loadNextPage(rel)
@@ -315,7 +291,7 @@ internal class TxResolver(
      * stamp a follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes the
      * source log from a stale point and replays an already-covered block boundary.
      */
-    suspend fun indexTx(msg: ExtSourceMessage, srcMsgId: MessageId) {
+    suspend fun indexTx(msg: ExtSourceMessage, srcMsgId: MessageId): ResolvedTx {
         val txKey = TransactionKey(
             (latestCompletedTx?.txId ?: -1) + 1,
             smoothSystemTime(msg.systemTime ?: instantSource.instant())
@@ -325,7 +301,7 @@ internal class TxResolver(
 
         @Suppress("ConvertTryFinallyToUseCall") // because openTx is a var
         try {
-            try {
+            return try {
                 val writerResult = msg.writer(openTx)
                 val txResult: TransactionResult = when (writerResult) {
                     is TxResult.Committed -> {
@@ -345,8 +321,8 @@ internal class TxResolver(
 
                 stage(openTx, srcMsgId, txResult, dbOp = null, pending = msg.pending)
             } catch (e: Throwable) {
-                // Writer, writeTxRow, or stage threw before the tx reached the staging area, so nothing will
-                // ever settle it — complete the handle here, or a caller awaiting it hangs until the term closes.
+                // Writer, writeTxRow, or stage threw before the tx reached the queue, so nothing will ever
+                // settle it — complete the handle here, or a caller awaiting it hangs until the term closes.
                 msg.pending.completeExceptionally(e)
                 throw e
             }
@@ -356,20 +332,20 @@ internal class TxResolver(
     }
 
     /** Stage the tx row recording an applied database attach/detach. */
-    fun indexDbOp(msgId: MessageId, msgTimestamp: Instant, dbOp: DbOp) {
+    fun indexDbOp(msgId: MessageId, msgTimestamp: Instant, dbOp: DbOp): ResolvedTx {
         val txKey = TransactionKey(msgId, msgTimestamp)
 
-        openTx(txKey, null).use { openTx ->
+        return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(null, null)
             stage(openTx, msgId, Committed(txKey), dbOp, pending = null)
         }
     }
 
     /** Stage the abort row for a database attach/detach the catalog rejected. */
-    fun indexFailedDbOp(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller) {
+    fun indexFailedDbOp(msgId: MessageId, msgTimestamp: Instant, error: Anomaly.Caller): ResolvedTx {
         val txKey = TransactionKey(msgId, msgTimestamp)
 
-        openTx(txKey, null).use { openTx ->
+        return openTx(txKey, null).use { openTx ->
             openTx.writeTxRow(error, null)
             stage(openTx, msgId, Aborted(txKey, error), dbOp = null, pending = null)
         }
@@ -377,8 +353,7 @@ internal class TxResolver(
 
     // Called in the leader's close, once its persister is joined so nothing live still touches the slices.
     override fun close() {
-        sealedBatch.closeAll()
-        accumulating.closeAll()
+        queue.closeAll()
         allocator.close() // last: Arrow won't close it while a child buffer is live
     }
 }

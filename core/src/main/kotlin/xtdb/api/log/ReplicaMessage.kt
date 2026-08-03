@@ -28,6 +28,9 @@ import java.time.Instant
 
 sealed interface ReplicaMessage {
 
+    // The leader term that produced this message (0 if unset). Set by the creator; used for read-side fencing. See #5817.
+    val termId: Long
+
     fun encode(): ByteArray
 
     companion object Codec : MessageCodec<ReplicaMessage> {
@@ -60,33 +63,36 @@ sealed interface ReplicaMessage {
                                 dbOp,
                                 it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
                                 if (it.hasSrcMsgId()) it.srcMsgId else null,
+                                termId = msg.termId,
                             )
                         }
 
                         ReplicaLogMessage.MessageCase.TRIES_ADDED -> msg.triesAdded.let {
-                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList, it.sourceMsgId)
+                            TriesAdded(it.storageVersion, it.storageEpoch, it.triesList, it.sourceMsgId, termId = msg.termId)
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_BOUNDARY -> msg.blockBoundary.let {
                             BlockBoundary(
                                 it.blockIndex, it.latestProcessedMsgId,
-                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray()
+                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
+                                termId = msg.termId,
                             )
                         }
 
                         ReplicaLogMessage.MessageCase.BLOCK_UPLOADED -> msg.blockUploaded.let {
                             BlockUploaded(
                                 it.storageVersion, it.storageEpoch, it.blockIndex, it.latestProcessedMsgId, it.triesList,
-                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray()
+                                it.externalSourceToken.takeIf { _ -> it.hasExternalSourceToken() }?.toByteArray(),
+                                termId = msg.termId,
                             )
                         }
 
                         ReplicaLogMessage.MessageCase.NO_OP -> msg.noOp.let {
-                            NoOp(if (it.hasSrcMsgId()) it.srcMsgId else null)
+                            NoOp(if (it.hasSrcMsgId()) it.srcMsgId else null, termId = msg.termId)
                         }
 
                         ReplicaLogMessage.MessageCase.TRIES_DELETED -> msg.triesDeleted.let {
-                            TriesDeleted(it.tableName, it.trieKeysList.toSet())
+                            TriesDeleted(it.tableName, it.trieKeysList.toSet(), termId = msg.termId)
                         }
 
                         else -> null
@@ -98,7 +104,7 @@ sealed interface ReplicaMessage {
         abstract fun toLogMessage(): ReplicaLogMessage
 
         final override fun encode(): ByteArray =
-            toLogMessage().let {
+            toLogMessage().toBuilder().setTermId(termId).build().let {
                 ByteBuffer.allocate(1 + it.serializedSize).apply {
                     put(PROTOBUF_HEADER)
                     put(it.toByteArray())
@@ -120,6 +126,7 @@ sealed interface ReplicaMessage {
         // their `latestSourceMsgId` in step between block boundaries). Null only on legacy records
         // written before this field existed (see #5586).
         val srcMsgId: MessageId? = null,
+        override val termId: Long = 0,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             resolvedTx = resolvedTx {
@@ -151,6 +158,7 @@ sealed interface ReplicaMessage {
     data class TriesAdded(
         val storageVersion: Int, val storageEpoch: StorageEpoch, val tries: List<TrieDetails>,
         val sourceMsgId: MessageId = 0,
+        override val termId: Long = 0,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             triesAdded = triesAdded {
@@ -164,7 +172,8 @@ sealed interface ReplicaMessage {
 
     data class BlockBoundary(
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
-        val externalSourceToken: ExternalSourceToken? = null
+        val externalSourceToken: ExternalSourceToken? = null,
+        override val termId: Long = 0,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockBoundary = blockBoundary {
@@ -179,7 +188,8 @@ sealed interface ReplicaMessage {
         val storageVersion: Int, val storageEpoch: StorageEpoch,
         val blockIndex: BlockIndex, val latestProcessedMsgId: MessageId,
         val tries: List<TrieDetails>,
-        val externalSourceToken: ExternalSourceToken? = null
+        val externalSourceToken: ExternalSourceToken? = null,
+        override val termId: Long = 0,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             blockUploaded = blockUploaded {
@@ -196,7 +206,7 @@ sealed interface ReplicaMessage {
     // `srcMsgId` carries the leader's source-log watermark when no other record propagates it
     // (a FlushBlock that finishes no block); followers advance `latestSourceMsgId` on it. Null
     // when used purely as a transition replay-target marker.
-    data class NoOp(val srcMsgId: MessageId? = null) : ProtobufMessage() {
+    data class NoOp(val srcMsgId: MessageId? = null, override val termId: Long = 0) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             noOp = noOp { this@NoOp.srcMsgId?.let { srcMsgId = it } }
         }
@@ -205,6 +215,7 @@ sealed interface ReplicaMessage {
     data class TriesDeleted(
         val tableName: String,
         val trieKeys: Set<TrieKey>,
+        override val termId: Long = 0,
     ) : ProtobufMessage() {
         override fun toLogMessage() = replicaLogMessage {
             triesDeleted = triesDeleted {

@@ -402,8 +402,8 @@ class Database(
 
             if (indexerConfig.enabled && !readOnly) {
                 val listener = object : Log.SubscriptionListener<SourceMessage> {
-                    override fun launchTransition(partition: Int) =
-                        db.partitions.getValue(partition).logProcessor!!.launchTransition(partition)
+                    override fun launchTransition(partition: Int, termId: Long) =
+                        db.partitions.getValue(partition).logProcessor!!.launchTransition(partition, termId)
 
                     override fun commitLeader(partition: Int) =
                         db.partitions.getValue(partition).logProcessor!!.commitLeader(partition)

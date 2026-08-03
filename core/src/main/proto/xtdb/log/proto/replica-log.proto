@@ -15,6 +15,11 @@ message ReplicaLogMessage {
         NoOp no_op = 5;
         TriesDeleted tries_deleted = 6;
     }
+
+    // The leader term that produced this message, for read-side fencing: followers
+    // discard any message below the max term they've seen. Default 0 on messages
+    // written before this field existed. See #5817.
+    int64 term_id = 7;
 }
 
 message TriesDeleted {

@@ -30,11 +30,11 @@ class TransitionLogProcessor(
     private val dbName: DatabaseName,
     private val liveIndex: LiveIndex,
     private val blockUploader: BlockUploader,
-    private val replicaProducer: Log.AtomicProducer<ReplicaMessage>,
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     afterReplicaMsgId: MessageId,
     private val hasExternalSource: Boolean,
+    private val termId: Long = 0,
 ) : LogProcessor.Processor<ReplicaMessage> {
 
     override var latestReplicaMsgId: MessageId = afterReplicaMsgId
@@ -113,7 +113,7 @@ class TransitionLogProcessor(
 
             is ReplicaMessage.BlockBoundary -> {
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
-                blockUploader.uploadBlock(replicaProducer, msgId, msg)
+                blockUploader.uploadBlock(msgId, termId, msg)
                 watchers.notifyMsg(msg.latestProcessedMsgId)
             }
 

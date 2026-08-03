@@ -21,6 +21,7 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
+import xtdb.api.error.Incorrect
 import xtdb.api.error.Interrupted
 import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
@@ -120,6 +121,40 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
+
+    // Read-side term fence: the highest leader term seen so far, seeded from the last persisted block
+    // boundary. A record below this was written by a superseded leader and is discarded — its consume
+    // position still advances, so a transition catch-up never hangs on a fenced no-op. See #5817.
+    // Volatile: `checkTermUnfenced` reads it from the transition coroutine, not the processing one.
+    @Volatile
+    private var maxLeaderTerm: Long = blockCatalog.boundaryTermId
+
+    /**
+     * Refuse a leader term the replica log has already moved past: a claim stamped with it would be
+     * discarded by every reader, so leading under it would index nothing.
+     *
+     * Call this once the claim itself has been read back, at which point it is expected to *be* the max
+     * — so a higher one is someone else's. In practice that means the election counter regressed
+     * underneath us, which is what the term's epoch is there to declare (see [LeaderTerm]). Refusing
+     * costs liveness only and never safety, so unlike the fence's ordering it is sound to decide from
+     * whatever we happen to have read.
+     */
+    fun checkTermUnfenced(term: Long) {
+        val maxTerm = maxLeaderTerm
+        if (maxTerm > term)
+            throw Incorrect(
+                "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
+                        "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
+                        "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
+                        "bump the log's termEpoch above ${LeaderTerm.epochOf(maxTerm)}",
+                "xtdb/leader-term-fenced",
+                mapOf(
+                    "db-name" to dbName,
+                    "term" to LeaderTerm.format(term),
+                    "fenced-by" to LeaderTerm.format(maxTerm),
+                ),
+            )
+    }
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
 
@@ -258,7 +293,21 @@ class FollowerLogProcessor @JvmOverloads constructor(
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
-                handleRecord(record)
+                val term = record.message.termId
+                // Never fence the unset term, so a not-yet-upgraded leader's writes are still applied
+                // during a mixed-version window; only stamped terms fence each other. See #5817.
+                if (term != LeaderTerm.NONE && term < maxLeaderTerm) {
+                    // Fenced: a higher-term leader has superseded this message's writer. Discard it,
+                    // but still advance the consume position below (discard suppresses application,
+                    // not consumption) so a transition catch-up can't hang on a fenced no-op.
+                    LOG.debug {
+                        "[$dbName] follower: discarding fenced record ${record.msgId} " +
+                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(maxLeaderTerm)})"
+                    }
+                } else {
+                    maxLeaderTerm = maxOf(maxLeaderTerm, term)
+                    handleRecord(record)
+                }
                 replicaState.value = ReplicaState.Active(record.msgId)
             } catch (e: CancellationException) {
                 // The owner cancelled the term — not a processing failure, so don't poison the

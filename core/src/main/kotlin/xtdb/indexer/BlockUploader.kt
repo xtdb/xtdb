@@ -7,11 +7,8 @@ import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import xtdb.api.log.Log
-import xtdb.api.log.Log.AtomicProducer.Companion.withTx
 import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -46,6 +43,7 @@ class BlockUploader(
     private val uploadDispatcher: CoroutineDispatcher = defaultBlockUploadDispatcher,
 ) {
     private val sourceLog = partitionStorage.sourceLog
+    private val replicaLog = partitionStorage.replicaLog
     private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = partitionState.liveIndex
     private val blockCatalog = partitionState.blockCatalog
@@ -58,7 +56,8 @@ class BlockUploader(
     }
 
     suspend fun uploadBlock(
-        replicaProducer: Log.AtomicProducer<ReplicaMessage>, boundaryReplicaMsgId: MessageId, boundary: BlockBoundary,
+        boundaryReplicaMsgId: MessageId, termId: Long,
+        boundary: BlockBoundary,
     ): MessageId {
         val latestProcessedMsgId = boundary.latestProcessedMsgId
         val blockIdx = boundary.blockIndex
@@ -103,23 +102,21 @@ class BlockUploader(
         val block = blockCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock,
-            externalSourceToken
+            externalSourceToken, termId
         )
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
         blockCatalog.refresh(block)
 
         // Now signal followers that the block is available.
-        @OptIn(ExperimentalCoroutinesApi::class)
-        val uploadedMsgId = replicaProducer.withTx { tx ->
-            tx.appendMessage(
-                BlockUploaded(
-                    Storage.VERSION, bufferPool.epoch,
-                    blockIdx, latestProcessedMsgId,
-                    addedTries, externalSourceToken
-                )
+        val uploadedMsgId = replicaLog.appendMessage(
+            BlockUploaded(
+                Storage.VERSION, bufferPool.epoch,
+                blockIdx, latestProcessedMsgId,
+                addedTries, externalSourceToken,
+                termId = termId,
             )
-        }.getCompleted().msgId
+        ).msgId
 
         LOG.debug("block uploaded b${blockIdx.asLexHex}: source=$latestProcessedMsgId, replica=$uploadedMsgId")
 

@@ -15,8 +15,6 @@ v2.2: Kafka replica log topic
 
   - **Docker image** — `XTDB_REPLICA_LOG_TOPIC` defaults to `xtdb-log-replica` via the Dockerfile. If you customise `XTDB_LOG_TOPIC`, override this env var too so the pair stays consistent.
   - **Helm chart** — `xtdbConfig.kafkaReplicaLogTopic` defaults to `xtdb-log-replica` and auto-creates alongside the source topic. Existing deployments pick this up on next rollout without any values changes.
-  - **Shared Kafka clusters** — `XTDB_TRANSACTIONAL_ID_PREFIX` / `xtdbConfig.kafkaTransactionalIdPrefix` defaults to `xtdb`.
-    If multiple XTDB deployments share a Kafka cluster, set a distinct prefix per deployment so their leaders don't fence each other — see ['Leader election and fencing'](config/log/kafka#leader-election-and-fencing).
 
 </details>
 
@@ -180,7 +178,6 @@ The following environment variables configure the `xtdb-azure` image:
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap server containing the XTDB topics. |
 | `XTDB_LOG_TOPIC` | Kafka topic used as the source log. |
 | `XTDB_REPLICA_LOG_TOPIC` | (v2.2+) Kafka topic used as the replica log. Defaults to `xtdb-log-replica`. If you override `XTDB_LOG_TOPIC`, override this too to keep the pair consistent. |
-| `XTDB_TRANSACTIONAL_ID_PREFIX` | (v2.2+) Prefix applied to Kafka transactional producer IDs. Defaults to `xtdb`. Override per deployment when sharing a Kafka cluster across multiple XTDB clusters — see [Leader election and fencing](config/log/kafka#leader-election-and-fencing). |
 | `XTDB_AZURE_STORAGE_ACCOUNT` | Name of the Azure Storage Account. |
 | `XTDB_AZURE_STORAGE_CONTAINER` | Name of the Azure Storage Container. |
 | `XTDB_AZURE_USER_MANAGED_IDENTITY_CLIENT_ID` | Azure Client ID for the User Assigned Managed Identity used for authentication. |

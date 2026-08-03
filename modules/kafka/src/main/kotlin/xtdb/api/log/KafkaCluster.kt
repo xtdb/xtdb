@@ -22,12 +22,10 @@ import kotlinx.serialization.modules.PolymorphicModuleBuilder
 import kotlinx.serialization.modules.subclass
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.ConsumerRecords
 import org.apache.kafka.clients.consumer.KafkaConsumer
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -144,7 +142,6 @@ class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
     private val pollDuration: Duration,
     val schemaRegistryUrl: String? = null,
-    val transactionalIdPrefix: String? = null,
     private val groupId: String = "xtdb",
     coroutineContext: CoroutineContext = Dispatchers.Default
 ) : Remote {
@@ -185,6 +182,7 @@ class KafkaCluster(
         inner class TopicSubscription<M>(
             val codec: MessageCodec<M>,
             val epoch: Int,
+            val termEpoch: Int,
             val listener: Log.SubscriptionListener<M>,
         ) {
             private val completion = CompletableDeferred<Unit>()
@@ -210,7 +208,10 @@ class KafkaCluster(
                 // paused (never fetched) and re-seeked to the real offset before resume at commit.
                 consumer.seekToEnd(listOf(tp))
 
-                val transition = listener.launchTransition(tp.partition())
+                // The consumer group's generation orders elections, but only within this incarnation of
+                // the group — see LeaderTerm for why `termEpoch` has to carry across a reset (#5817).
+                val term = LeaderTerm.of(termEpoch, consumer.groupMetadata().generationId().toLong())
+                val transition = listener.launchTransition(tp.partition(), term)
                 val transitioning = Transitioning<M>(transition)
                 listenerState = transitioning
 
@@ -427,9 +428,10 @@ class KafkaCluster(
             topic: String,
             codec: MessageCodec<M>,
             epoch: Int,
+            termEpoch: Int,
             listener: Log.SubscriptionListener<M>,
         ): TopicSubscription<M> {
-            val sub = TopicSubscription(codec, epoch, listener)
+            val sub = TopicSubscription(codec, epoch, termEpoch, listener)
             commandCh.send(GroupCommand.Register(topic, sub))
             consumer.wakeup()
             return sub
@@ -481,7 +483,6 @@ class KafkaCluster(
         var propertiesMap: Map<String, String> = emptyMap(),
         var propertiesFile: Path? = null,
         var schemaRegistryUrl: String? = null,
-        var transactionalIdPrefix: String? = null,
         var groupId: String = "xtdb",
         @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.Default
     ) : Remote.Factory<KafkaCluster> {
@@ -490,8 +491,6 @@ class KafkaCluster(
         fun propertiesMap(propertiesMap: Map<String, String>) = apply { this.propertiesMap = propertiesMap }
         fun propertiesFile(propertiesFile: Path) = apply { this.propertiesFile = propertiesFile }
         fun schemaRegistryUrl(schemaRegistryUrl: String) = apply { this.schemaRegistryUrl = schemaRegistryUrl }
-        fun transactionalIdPrefix(transactionalIdPrefix: String?) =
-            apply { this.transactionalIdPrefix = transactionalIdPrefix }
 
         fun groupId(groupId: String) = apply { this.groupId = groupId }
 
@@ -507,31 +506,14 @@ class KafkaCluster(
                 .plus(propertiesFile?.asPropertiesMap.orEmpty())
 
         override fun open(): KafkaCluster =
-            KafkaCluster(
-                configMap, pollDuration, schemaRegistryUrl,
-                // normalise empty/blank prefix to null so `ENV XTDB_TRANSACTIONAL_ID_PREFIX=""`
-                // from the Docker image produces `xtdb-leader` rather than `-xtdb-leader`.
-                transactionalIdPrefix?.ifBlank { null },
-                groupId, coroutineContext
-            )
-    }
-
-    /** @suppress */
-    interface AtomicProducer<M> : Log.AtomicProducer<M> {
-        override fun openTx(): Tx<M>
-
-        interface Tx<M> : Log.AtomicProducer.Tx<M> {
-            fun sendOffsetsToTransaction(
-                offsets: Map<TopicPartition, OffsetAndMetadata>,
-                groupMetadata: ConsumerGroupMetadata,
-            )
-        }
+            KafkaCluster(configMap, pollDuration, schemaRegistryUrl, groupId, coroutineContext)
     }
 
     private inner class KafkaLog<M>(
         private val codec: MessageCodec<M>,
         private val topic: String,
         override val epoch: Int,
+        private val termEpoch: Int,
     ) : Log<M> {
 
         private fun readLatestSubmittedMessage(kafkaConfigMap: KafkaConfigMap): LogOffset =
@@ -599,88 +581,6 @@ class KafkaCluster(
             }
         }
 
-        override fun openAtomicProducer(transactionalId: String, partition: Int) = object : AtomicProducer<M> {
-            private val prefixedTxId = listOfNotNull(transactionalIdPrefix, transactionalId).joinToString("-")
-
-            init {
-                LOG.info { "starting atomic producer with transactional.id '$prefixedTxId'" }
-            }
-
-            private val producer = KafkaProducer(
-                mapOf(
-                    "enable.idempotence" to "true",
-                    "acks" to "all",
-                    "compression.type" to "snappy",
-                    "linger.ms" to "0",
-                    "transactional.id" to prefixedTxId,
-                ) + kafkaConfigMap,
-                UnitSerializer,
-                ByteArraySerializer()
-            ).also { it.initTransactions() }
-
-            override fun openTx(): AtomicProducer.Tx<M> {
-                producer.beginTransaction()
-
-                return object : AtomicProducer.Tx<M> {
-                    private val futures = mutableListOf<CompletableDeferred<Log.MessageMetadata>>()
-                    private var isOpen = true
-
-                    override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
-                        check(isOpen) { "Transaction already closed" }
-                        val deferred = CompletableDeferred<Log.MessageMetadata>()
-                        futures.add(deferred)
-                        producer.send(ProducerRecord(topic, null, Unit, codec.encode(message))) { recordMetadata, e ->
-                            if (e == null) {
-                                deferred.complete(
-                                    Log.MessageMetadata(
-                                        epoch,
-                                        recordMetadata.offset(),
-                                        ofEpochMilli(recordMetadata.timestamp())
-                                    )
-                                )
-                            } else {
-                                deferred.completeExceptionally(e)
-                            }
-                        }
-                        return deferred
-                    }
-
-                    @OptIn(ExperimentalCoroutinesApi::class)
-                    override fun commit() {
-                        check(isOpen) { "Transaction already closed" }
-                        isOpen = false
-                        // commitTransaction flushes all pending sends, so deferreds are already complete
-                        producer.commitTransaction()
-                        futures.forEach {
-                            latestSubmittedOffset0.updateAndGet { prev -> prev.coerceAtLeast(it.getCompleted().logOffset) }
-                        }
-                    }
-
-                    override fun sendOffsetsToTransaction(
-                        offsets: Map<TopicPartition, OffsetAndMetadata>,
-                        groupMetadata: ConsumerGroupMetadata,
-                    ) {
-                        check(isOpen) { "Transaction already closed" }
-                        producer.sendOffsetsToTransaction(offsets, groupMetadata)
-                    }
-
-                    override fun abort() {
-                        check(isOpen) { "Transaction already closed" }
-                        isOpen = false
-                        producer.abortTransaction()
-                    }
-
-                    override fun close() {
-                        if (isOpen) abort()
-                    }
-                }
-            }
-
-            override fun close() {
-                producer.close()
-            }
-        }
-
         private fun KafkaConsumer<*, ByteArray>.pollRecords(): List<Log.Record<M>> =
             try {
                 poll(pollDuration)
@@ -711,7 +611,7 @@ class KafkaCluster(
         }
 
         override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) {
-            val sub = sharedGroupConsumer.register(topic, codec, epoch, listener)
+            val sub = sharedGroupConsumer.register(topic, codec, epoch, termEpoch, listener)
             LOG.info { "registered group subscription for topic '$topic'" }
             try {
                 sub.await()
@@ -732,12 +632,20 @@ class KafkaCluster(
         var replicaTopic: String = "$topic-replica",
         var autoCreateTopic: Boolean = true,
         var epoch: Int = 0,
+        /**
+         * Declares that the leader-election counter behind this log has been reset, so that terms
+         * from before the reset still order below terms from after it. Bump it — never lower it —
+         * whenever that happens; a node that finds its own term already fenced on the replica log
+         * refuses to lead and names this setting. See [LeaderTerm].
+         */
+        var termEpoch: Int = 0,
     ) : Log.Factory {
 
         fun replicaCluster(replicaCluster: RemoteAlias) = apply { this.replicaCluster = replicaCluster }
         fun replicaTopic(replicaTopic: String) = apply { this.replicaTopic = replicaTopic }
         fun autoCreateTopic(autoCreateTopic: Boolean) = apply { this.autoCreateTopic = autoCreateTopic }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
+        fun termEpoch(termEpoch: Int) = apply { this.termEpoch = termEpoch }
 
         override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int): Log<SourceMessage> {
             val clusterAlias = this.cluster
@@ -751,7 +659,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(topic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch)
+            return cluster.KafkaLog(SourceMessage.Codec, topic, epoch, termEpoch)
         }
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
@@ -769,7 +677,7 @@ class KafkaCluster(
                 admin.ensureTopicExists(replicaTopic, autoCreateTopic)
             }
 
-            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch)
+            return cluster.KafkaLog(ReplicaMessage.Codec, replicaTopic, epoch, termEpoch)
         }
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
@@ -779,6 +687,7 @@ class KafkaCluster(
             dbConfig.setOtherLog(ProtoAny.pack(kafkaLogConfig {
                 this.topic = this@LogFactory.topic
                 this.epoch = this@LogFactory.epoch
+                this.termEpoch = this@LogFactory.termEpoch
                 this.logClusterAlias = cluster
                 this.replicaClusterAlias = replicaCluster
                 this.replicaTopic = this@LogFactory.replicaTopic
@@ -796,6 +705,7 @@ class KafkaCluster(
             msg.unpack(KafkaLogConfig::class.java).let {
                 LogFactory(it.logClusterAlias, it.topic).apply {
                     epoch = it.epoch
+                    termEpoch = it.termEpoch
                     if (it.hasReplicaClusterAlias()) replicaCluster = it.replicaClusterAlias
                     if (it.hasReplicaTopic()) replicaTopic = it.replicaTopic
                 }

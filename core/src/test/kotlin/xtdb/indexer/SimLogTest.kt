@@ -41,7 +41,7 @@ class SimLogTest : SimulationTestBase() {
 
                     launch {
                         log.openGroupSubscription(object : Log.SubscriptionListener<String> {
-                            override fun launchTransition(partition: Int) = CompletableDeferred(Unit)
+                            override fun launchTransition(partition: Int, termId: Long) = CompletableDeferred(Unit)
                             override fun commitLeader(partition: Int) =
                                 Log.TailSpec<String>(afterMsgId = -1L) { _ -> error("groupConsumer failure") }
 

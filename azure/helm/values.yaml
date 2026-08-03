@@ -53,8 +53,6 @@ xtdbConfig:
   kafkaLogTopic: "xtdb-log"
   # XTDB replica log topic on Kafka (v2.2+)
   kafkaReplicaLogTopic: "xtdb-log-replica"
-  # Kafka transactional-ID prefix (v2.2+). Override per deployment when sharing a Kafka cluster.
-  kafkaTransactionalIdPrefix: "xtdb"
 
   # OPTIONAL
   # JDK options - ensure that heap + direct memory + metaspace <= memory limit, and that some overhead is left for the OS
@@ -76,7 +74,6 @@ xtdbConfig:
     logClusters:
       kafkaCluster: !Kafka
         bootstrapServers: !Env KAFKA_BOOTSTRAP_SERVERS
-        transactionalIdPrefix: !Env XTDB_TRANSACTIONAL_ID_PREFIX
 
     log: !Kafka
       cluster: kafkaCluster

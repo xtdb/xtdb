@@ -14,8 +14,6 @@ import xtdb.api.log.ReadOnlyLog
 import xtdb.database.proto.DatabaseConfig
 import xtdb.util.MsgIdUtil.msgIdToEpoch
 import xtdb.util.MsgIdUtil.msgIdToOffset
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit
@@ -73,41 +71,6 @@ class RecordingLog<M>(private val instantSource: InstantSource, messages: List<M
             if (rec.logOffset >= toOffset) break
             if (rec.logOffset >= fromOffset) yield(rec)
         }
-    }
-
-    override fun openAtomicProducer(transactionalId: String, partition: Int) = object : Log.AtomicProducer<M> {
-        override fun openTx() = object : Log.AtomicProducer.Tx<M> {
-            private val buffer = mutableListOf<Pair<M, CompletableDeferred<Log.MessageMetadata>>>()
-            private var isOpen = true
-
-            override fun appendMessage(message: M): CompletableDeferred<Log.MessageMetadata> {
-                check(isOpen) { "Transaction already closed" }
-                return CompletableDeferred<Log.MessageMetadata>()
-                    .also { buffer.add(message to it) }
-            }
-
-            override fun commit() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                runBlocking {
-                    for ((message, res) in buffer) {
-                        res.complete(this@RecordingLog.appendMessage(message, partition))
-                    }
-                }
-            }
-
-            override fun abort() {
-                check(isOpen) { "Transaction already closed" }
-                isOpen = false
-                buffer.clear()
-            }
-
-            override fun close() {
-                if (isOpen) abort()
-            }
-        }
-
-        override fun close() {}
     }
 
     override suspend fun tailAll(partition: Int, afterMsgId: Long, processor: Log.RecordProcessor<M>): Unit = error("tailAll")

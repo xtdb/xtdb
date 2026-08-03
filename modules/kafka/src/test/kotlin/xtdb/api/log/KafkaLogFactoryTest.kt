@@ -54,4 +54,15 @@ class KafkaLogFactoryTest {
 
         assertEquals(42, restored.epoch)
     }
+
+    @Test
+    fun `round-trips termEpoch`() {
+        // a secondary database's config reaches the node through this same proto (#5817)
+        val original = KafkaCluster.LogFactory("myCluster", "my-topic")
+            .termEpoch(3)
+
+        val restored = roundTrip(original)
+
+        assertEquals(3, restored.termEpoch)
+    }
 }

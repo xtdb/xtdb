@@ -101,7 +101,7 @@ class ExternalSourceTest {
     }
 
     // The leader is launched into `backgroundScope`, which runTest cancels and joins at end of test;
-    // tearDown then frees the leader's allocator and replica producer.
+    // tearDown then frees the leader's allocator.
     private fun TestScope.leaderProc(
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -120,7 +120,7 @@ class ExternalSourceTest {
         val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope)
         val driver = wrapDriver(
             RealLeaderDriver(
-                replicaLog.openAtomicProducer("test-leader", 0), partitionStorage, partitionState, blockUploader
+                partitionStorage, partitionState, blockUploader
             )
         )
 
@@ -351,11 +351,11 @@ class ExternalSourceTest {
     }
 
     @Test
-    fun `a replica-log commit fault in the background append surfaces through executeTx`() = runTest {
+    fun `a replica-log append fault in the background append surfaces through executeTx`() = runTest {
         val failingDriver = { inner: LeaderDriver ->
             object : LeaderDriver by inner {
-                override suspend fun appendToReplica(msgs: Sequence<ReplicaMessage>) =
-                    throw RuntimeException("replica-log commit fault")
+                override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    throw RuntimeException("replica-log append fault")
             }
         }
 
@@ -381,7 +381,7 @@ class ExternalSourceTest {
 
         val e = thrown.await()
         assertEquals(
-            "replica-log commit fault", e.message,
+            "replica-log append fault", e.message,
             "executeTx surfaces the background append's fault via its durability handle"
         )
         assertNotNull(watchers.exception, "the fault reaches watchers: the term is failed, not silently wedged")

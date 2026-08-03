@@ -8,6 +8,9 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
+import xtdb.api.error.Incorrect
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
@@ -111,6 +114,70 @@ class LogProcessorTest {
         replicaLog.close()
     }
 
+    // A leader's election counter is only monotonic within one incarnation of the mechanism that
+    // elects it: Kafka deletes an idle consumer group, and the local logs' counter dies with the
+    // process. The next pair covers both sides of a counter that has restarted below the terms
+    // already on the replica log — see LeaderTerm and #5817.
+
+    @Test
+    fun `refuses to lead when the election counter has regressed below the replica log`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val partitionState = newPartitionState()
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        // a previous incarnation of the counter reached 9
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        // ...so the fresh counter's first term, 0.1, is one every reader would discard
+        val subscription = scope.async { sourceLog.openGroupSubscription(logProc) }
+        val e = assertThrows<Incorrect> { subscription.await() }
+        assertTrue(
+            e.message!!.contains("termEpoch"),
+            "the refusal names the knob that fixes it, was: ${e.message}"
+        )
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `leads once the term epoch is raised past the regressed counter`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0, termEpoch = 1)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val liveIndex = mockk<LiveIndex>(relaxed = true) { every { latestCompletedTx } returns null }
+        val partitionState = newPartitionState(liveIndex = liveIndex)
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
+        replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        scope.launch { sourceLog.openGroupSubscription(logProc) }
+
+        // term 1.1 outranks 0.9, so the transition goes through and replays the log
+        watchers.awaitTx(1)
+        verify { liveIndex.commitTx(any(), any()) }
+
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
     @Test
     fun `leader replays existing replica messages during transition`() = runTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
@@ -125,9 +192,7 @@ class LogProcessorTest {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
         // Pre-populate the replica log with a transaction
-        val replicaProducer = replicaLog.openAtomicProducer("setup", 0)
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
-        replicaProducer.close()
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)

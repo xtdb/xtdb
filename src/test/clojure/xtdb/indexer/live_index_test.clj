@@ -124,8 +124,9 @@
           (xt/execute-tx node [[:put-docs :docs {:xt/id 1 :foo 1}]])
           (tu/flush-block! node)
 
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 62)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 63)]
+          ;; sizes include the block boundary's term_id (=1 for a fresh leader), added in #5817 level 1
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 64)
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 65)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
 
 (t/deftest staged-empty-create-table-visible-across-a-batch-5507
