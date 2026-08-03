@@ -17,13 +17,6 @@ max_wal_senders = 20
 hot_standby = on
 hot_standby_feedback = on
 EOF
-
-    # PG17+ slot synchronisation, off unless a test asks for it. On its own this preserves
-    # nothing: only slots created with `failover = true` are ever candidates for syncing, and
-    # XTDB can't create those yet (#5828).
-    if [ "$HA_ROLE" = 'standby' ] && [ "${HA_SYNC_SLOTS:-off}" = 'on' ]; then
-        echo "sync_replication_slots = on" >> "$HA_CONF"
-    fi
 }
 
 # Build this standby's data directory from the primary.
@@ -72,15 +65,14 @@ standby_setup() {
     # directory pg_basebackup wrote into doesn't come out 0700.
     chmod 0700 "$PGDATA"
 
-    # The slot sync worker opens an *ordinary* connection to the primary, so unlike pg_basebackup
-    # above it isn't covered by the `host replication ... trust` line and needs both a database
-    # and a password. `pg_basebackup -R` writes neither. Ours goes in last, and the last setting
-    # in postgresql.auto.conf wins.
-    if [ "${HA_SYNC_SLOTS:-off}" = 'on' ]; then
-        local db="${HA_PRIMARY_DB:-${POSTGRES_DB:-postgres}}"
+    # Slot synchronisation opens an *ordinary* connection to the primary, so unlike pg_basebackup
+    # above it isn't covered by the `host replication ... trust` line and needs both a database and
+    # a password. `pg_basebackup -R` writes neither. Ours goes in last, and the last setting in
+    # postgresql.auto.conf wins.
+    if [ -n "${HA_PRIMARY_DB:-}" ]; then
         local pw="${HA_PRIMARY_PASSWORD:-${POSTGRES_PASSWORD:-}}"
-        log "rewriting primary_conninfo for slot synchronisation (dbname=$db)"
-        echo "primary_conninfo = 'host=$host port=$port user=$user dbname=$db${pw:+ password=$pw}'" \
+        log "rewriting primary_conninfo with dbname=$HA_PRIMARY_DB"
+        echo "primary_conninfo = 'host=$host port=$port user=$user dbname=$HA_PRIMARY_DB${pw:+ password=$pw}'" \
             >> "$PGDATA/postgresql.auto.conf"
     fi
 
