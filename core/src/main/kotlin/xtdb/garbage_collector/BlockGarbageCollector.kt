@@ -28,8 +28,8 @@ private const val DEFAULT_DELETE_PARALLELISM = 64
  *
  * The leader [signal]s at every block boundary; followers never construct one. Block garbage
  * only appears as a side-effect of block uploads, so this is the natural trigger — no timer
- * needed. Fire-and-forget: tx processing never waits for a GC cycle to complete (GC has been
- * disabled for months, so the first cycle's backlog could be huge — see PR #5511).
+ * needed. Fire-and-forget: tx processing never waits for a GC cycle to complete — on a deployment
+ * that hasn't collected in a while, the first cycle's backlog can be huge.
  *
  * Parallelism is bounded in two dimensions: [tableParallelism] tables concurrently,
  * [deleteParallelism] DELETEs in flight across the whole cycle (shared pool).

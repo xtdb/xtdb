@@ -37,9 +37,9 @@ private const val TRIES_DELETED_CHUNK_SIZE = 1024
  * Leader-owned cleanup of stale trie files (meta + data).
  *
  * The leader [signal]s at every block boundary; followers never construct one. Fire-and-forget:
- * tx processing never waits for a GC cycle (GC has been off for months on existing deployments —
- * the first cycle's backlog could stall the indexer for minutes if it were awaited, so the
- * leader's block-boundary path uses non-suspending [signal] instead — see PR #5511).
+ * tx processing never waits for a GC cycle — on a deployment that hasn't collected in a while, the
+ * first cycle's backlog could stall the indexer for minutes if it were awaited, so the leader's
+ * block-boundary path uses the non-suspending [signal] instead.
  *
  * Per-table ordering: obj-store DELETE → atomic ([commitTriesDeleted]) publish-and-commit.
  * A crash mid-cycle leaves orphaned catalog entries that the next cycle re-DELETEs idempotently
