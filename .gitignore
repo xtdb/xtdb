@@ -54,3 +54,6 @@ terraform.tfstate.backup
 
 # This directory should only contain data not checked in
 src/test/resources/data/
+
+# local experiments (not for commit)
+/scratch/
