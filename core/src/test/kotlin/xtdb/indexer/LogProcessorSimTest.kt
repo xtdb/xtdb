@@ -20,6 +20,7 @@ import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.IndexerConfig
+import xtdb.api.Xtdb
 import xtdb.api.log.*
 import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
@@ -57,7 +58,8 @@ class LogProcessorSimTest : SimulationTestBase() {
 
     @BeforeEach
     fun setUp() {
-        nodeBase = openBase(openMeterRegistry = false)
+        // [assertBlockFilesExist] requires every uploaded block file to survive; these sims cut well past `blocksToKeep`.
+        nodeBase = openBase(Xtdb.Config().garbageCollector { enabled = false }, openMeterRegistry = false)
         allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
         srcLog = SimLog("src", rand)
         replicaLog = SimLog("replica", rand)

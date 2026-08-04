@@ -104,9 +104,8 @@ entity TriesDeletedMessage {
 
 config {
     -- See: api/GarbageCollectorConfig.kt
-    -- Defaults match the implementation. `enabled` is opt-in for now while the
-    -- leader-only flow gets some real-world miles.
-    enabled: Boolean = false
+    -- Defaults match the implementation.
+    enabled: Boolean = true
     blocks_to_keep: Integer = 10
     garbage_lifetime: Duration = 24.hours
 

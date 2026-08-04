@@ -5,6 +5,15 @@ title: Configuration
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: garbage collection is on by default
+
+: Superseded object-store files are reclaimed without any configuration — see [Garbage Collector](#garbage-collector).
+
+  Previously `garbageCollector.enabled` defaulted to `false`, so storage grew monotonically unless an operator opted in.
+  Collection now runs on each database's indexing leader at block boundaries, bounded by `blocksToKeep` and `garbageLifetime`.
+
+  No upgrade steps: existing config that sets `enabled` explicitly is still honoured, and a node started with GC enabled collects the backlog left by earlier versions.
+
 v2.2: `remotes` replaces `logClusters`
 
 : Named connections to external systems are now configured under [`remotes`](#remotes).
@@ -242,12 +251,12 @@ indexer:
 
 Reclaims object-store space by deleting files left behind once compaction has superseded them.
 
-Disabled by default.
+Runs on each database's indexing leader, at block boundaries.
 
 ```yaml
 garbageCollector:
-  # Set to true to enable garbage collection
-  enabled: false # default
+  # Set to false to retain superseded files indefinitely
+  enabled: true # default
 
   # Number of recent blocks to retain
   blocksToKeep: 10 # default

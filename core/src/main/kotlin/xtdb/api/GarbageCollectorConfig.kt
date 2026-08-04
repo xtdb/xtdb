@@ -9,9 +9,8 @@ import java.time.Duration
 data class GarbageCollectorConfig(
     /**
      * Gates the leader's auto-signal at block boundaries; explicit `awaitNoGarbage()` always runs.
-     * Defaults to `false` — opt-in for now while the leader-only flow gets some real-world miles.
      */
-    var enabled: Boolean = false,
+    var enabled: Boolean = true,
 
     var blocksToKeep: Int = 10,
     var garbageLifetime: Duration = Duration.ofHours(24),
