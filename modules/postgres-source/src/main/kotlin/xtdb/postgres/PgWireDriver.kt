@@ -6,7 +6,6 @@ import org.jdbi.v3.core.Jdbi
 import org.jdbi.v3.core.kotlin.KotlinPlugin
 import org.jdbi.v3.core.transaction.TransactionIsolationLevel.REPEATABLE_READ
 import org.postgresql.PGConnection
-import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
@@ -18,9 +17,7 @@ import xtdb.util.info
 import xtdb.util.logger
 import xtdb.util.trace
 import java.sql.Connection
-import java.sql.DriverManager
 import java.time.Instant
-import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
 
 private val LOG = PgWireDriver::class.logger
@@ -59,19 +56,8 @@ class PgWireDriver(
 
     private data class ColumnInfo(val name: String, val typeOid: Int)
 
-    // PGProperty.set() is the correct API here — it resolves the internal property name string.
-    // props[PGProperty.USER] = "..." silently breaks: it puts the enum object as the key,
-    // but pgjdbc looks up by string (e.g. "user"), so the password is never found.
     fun openReplicationConnection(): Connection =
-        DriverManager.getConnection(
-            "jdbc:postgresql://$hostname:$port/$database",
-            Properties().also {
-                PGProperty.USER.set(it, username)
-                PGProperty.PASSWORD.set(it, password)
-                PGProperty.ASSUME_MIN_SERVER_VERSION.set(it, "15")
-                PGProperty.REPLICATION.set(it, "database")
-                PGProperty.PREFER_QUERY_MODE.set(it, "simple")
-            })
+        openReplicationConnection(hostname, port, database, username, password)
 
     val jdbi: Jdbi by lazy {
         Jdbi.create("jdbc:postgresql://$hostname:$port/$database", username, password)
