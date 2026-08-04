@@ -51,7 +51,7 @@
            (xtdb.indexer DatabaseSnapshot Snapshot)
            xtdb.NodeBase
            xtdb.operator.scan.IScanEmitter
-           (xtdb.query IQuerySource IQuerySource$Factory ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
+           (xtdb.query IQuerySource IQuerySource$Factory IQuerySource$QueryCatalog IQuerySource$QueryPartition ParsedStatement PreparedQuery SqlStatement$Assert SqlStatement$CreateTable SqlStatement$Delete SqlStatement$Erase SqlStatement$GrantRole SqlStatement$Patch SqlStatement$Put SqlStatement$RevokeRole)
            xtdb.util.RefCounter))
 
 (defn- wrap-result-types [^ICursor cursor, result-types]
@@ -183,14 +183,19 @@
     conformed-plan))
 
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
-                   scan-emitter, db-cat, snaps
+                   scan-emitter, ^IQuerySource$QueryCatalog db-cat, snaps
                    param-types, {:keys [default-tz]}]
   (.get emit-cache {:scan-vec-types (scan/scan-vec-types db-cat snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous
+                    ;; every partition's block index: a scan's stats and its emitted branches both
+                    ;; depend on all of them, so a block landing in any partition must invalidate.
                     :last-known-blocks (->> (for [db-name (.getDatabaseNames db-cat)]
-                                              [db-name (some-> (.databaseOrNull db-cat db-name) .getQueryState .getBlockCatalog .getCurrentBlockIndex)]))
+                                              [db-name (some->> (.databaseOrNull db-cat db-name)
+                                                                (.getPartitions)
+                                                                (mapv (fn [^IQuerySource$QueryPartition part]
+                                                                        (.getCurrentBlockIndex (.getBlockCatalog (.getState part))))))]))
 
                     :default-tz default-tz
                     :param-types param-types

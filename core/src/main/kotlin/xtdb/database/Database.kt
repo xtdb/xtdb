@@ -25,7 +25,7 @@ import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.applyStorage
 import xtdb.arrow.VectorType
 import xtdb.catalog.BlockCatalog
-import xtdb.catalog.TableCatalog
+import xtdb.catalog.DatabaseTableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
 import xtdb.database.proto.DatabaseMode
@@ -48,6 +48,7 @@ import xtdb.util.MsgIdUtil.msgIdToOffset
 import xtdb.util.MsgIdUtil.offsetToMsgId
 import xtdb.util.closeAll
 import xtdb.util.info
+import xtdb.util.safeMapIndexed
 import xtdb.util.safelyOpening
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
@@ -65,7 +66,7 @@ class Database(
     override val name: DatabaseName,
     val logs: DatabaseLogs,
     val isIndexing: Boolean,
-    val partitions: List<DatabasePartition>,
+    override val partitions: List<DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
     private val job: Job? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
@@ -85,26 +86,25 @@ class Database(
     // lookup once `partitions > 1` is enabled; for now every Database has exactly one.
     private val partition0: DatabasePartition get() = partitions[0]
 
-    override val storage: PartitionStorage get() = partition0.storage
-    override val queryState: PartitionState get() = partition0.state
     val watchers: Watchers get() = partition0.watchers
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
     override fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot =
-        DatabaseSnapshot(partitions.mapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
+        // safeMapIndexed, not mapIndexed: a partition failing to open would otherwise strand its
+        // predecessors' snapshots with a live retain on the shared live-index snap.
+        DatabaseSnapshot(partitions.safeMapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
 
     /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
     fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
 
     val blockCatalog: BlockCatalog get() = partition0.blockCatalog
-    val tableCatalog: TableCatalog get() = partition0.tableCatalog
+
+    override val tableCatalog: DatabaseTableCatalog by lazy { DatabaseTableCatalog(partitions.map { it.tableCatalog }) }
 
     internal fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? {
         val historical = tableCatalog.getTypes(table)
-        // TODO (#5835) iterate the snapshot's partitions and merge per-partition live types;
-        // for now single-partition is the only allowed shape, so pick the only Snapshot.
         // gate on the current basis so a just-committed table's columns are visible (getTableSchema awaits first).
-        val live = openSnapshot(currentBasis()).use { it.partitions.first().allColumnTypes[table] }
+        val live = openSnapshot(currentBasis()).use { it.columnTypes(table) }
         return if (historical == null && live == null) null
         else (historical ?: emptyMap()) + (live ?: emptyMap())
     }

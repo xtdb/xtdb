@@ -12,6 +12,7 @@ import xtdb.arrow.VectorType.Companion.I64
 import xtdb.arrow.VectorType.Companion.INSTANT
 import xtdb.arrow.VectorType.Companion.TRANSIT
 import xtdb.authz.RoleMembership
+import xtdb.catalog.DatabaseTableCatalog
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -153,10 +154,15 @@ class OpenTx
         get() {
             val liveIndex = partitionState.liveIndex
 
+            val queryPartition = object : IQuerySource.QueryPartition {
+                override val storage get() = partitionStorage
+                override val state get() = partitionState
+            }
+
             val queryDb = object : IQuerySource.QueryDatabase {
                 override val name get() = dbName
-                override val storage get() = partitionStorage
-                override val queryState get() = partitionState
+                override val partitions = listOf(queryPartition)
+                override val tableCatalog = DatabaseTableCatalog(listOf(partitionState.tableCatalog))
                 // a tx always builds a fresh read-your-writes snapshot; the read basis doesn't apply
                 override fun openSnapshot(minBasis: List<Instant?>?) =
                     DatabaseSnapshot(listOf(liveIndex.openSnapshot(resolvedTxs, this@OpenTx)))
