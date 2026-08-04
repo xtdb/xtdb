@@ -1,9 +1,11 @@
 package xtdb.postgres
 
+import clojure.lang.Keyword
 import io.kotest.assertions.nondeterministic.eventually
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
 import org.testcontainers.containers.wait.strategy.Wait
@@ -11,16 +13,19 @@ import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
-import org.postgresql.PGProperty
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Incorrect
 import xtdb.postgres.proto.PostgresSourceToken
 import java.nio.file.Files
+import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Duration
-import java.util.Properties
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -49,6 +54,16 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 .get()
 
             DockerImageName.parse(tag).asCompatibleSubstituteFor("postgres")
+        }
+
+        /** Lazy so only the pre-PG17 refusal pays for it. */
+        private val pg16: PostgreSQLContainer by lazy {
+            PostgreSQLContainer("postgres:16-alpine")
+                .withDatabaseName("testdb")
+                .withUsername("testuser")
+                .withPassword("testpass")
+                .withCommand("postgres", "-c", "wal_level=logical")
+                .also { it.start() }
         }
     }
 
@@ -126,8 +141,8 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
         }
     }
 
-    private fun conn(host: String, port: Int): Connection =
-        DriverManager.getConnection("jdbc:postgresql://$host:$port/testdb", "testuser", "testpass")
+    private fun conn(host: String, port: Int, database: String = "testdb"): Connection =
+        DriverManager.getConnection("jdbc:postgresql://$host:$port/$database", "testuser", "testpass")
 
     private fun pgColumn(host: String, port: Int, sql: String): List<String?> =
         conn(host, port).use { c ->
@@ -139,22 +154,9 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     private fun pgExec(host: String, port: Int, sql: String) =
         conn(host, port).use { c -> c.createStatement().use { it.execute(sql) } }
 
-    /** `ALTER_REPLICATION_SLOT` isn't SQL — it's only accepted on a connection started with
-     * `replication=database`. Simple query mode goes with it: such connections reject the extended
-     * query protocol pgjdbc otherwise defaults to. */
-    private fun replicationCommand(host: String, port: Int, command: String) {
-        val props = Properties().apply {
-            PGProperty.USER.set(this, "testuser")
-            PGProperty.PASSWORD.set(this, "testpass")
-            PGProperty.REPLICATION.set(this, "database")
-            PGProperty.ASSUME_MIN_SERVER_VERSION.set(this, "9.4")
-            PGProperty.PREFER_QUERY_MODE.set(this, "simple")
-        }
-
-        DriverManager.getConnection("jdbc:postgresql://$host:$port/testdb", props).use { c ->
-            c.createStatement().use { it.execute(command) }
-        }
-    }
+    /** Every refusal below is an [Incorrect], so the code is what distinguishes them. */
+    private val Anomaly.errorCode: String?
+        get() = (getData().valAt(Keyword.intern("xtdb.error", "code")) as? Keyword)?.toString()
 
     private fun latestToken(node: Xtdb): PostgresSourceToken? =
         (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
@@ -322,8 +324,9 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 )
             }
 
-            replicationCommand(ha.primaryHost, ha.primaryPort, "ALTER_REPLICATION_SLOT $slot (FAILOVER true)")
+            val flip = FailoverSlot.enable(pgRemote(ha.primaryHost, ha.primaryPort), slot)
 
+            assertIs<FailoverSlot.Outcome.Enabled>(flip)
             assertEquals(
                 listOf("t"),
                 pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
@@ -372,6 +375,187 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 )
                 assertPrimaryDbHealthy(node)
             }
+        }
+    }
+
+    // --- the tool, against a single server; the promotion path is the test above ---
+
+    @Test
+    fun `enables failover on an idle slot`() {
+        val remote = pgRemote()
+        val slot = unique("tool_slot")
+        pgExecute("SELECT pg_create_logical_replication_slot('$slot', 'pgoutput')")
+
+        try {
+            val outcome = assertIs<FailoverSlot.Outcome.Enabled>(FailoverSlot.enable(remote, slot))
+
+            assertFalse(outcome.before.failover, "test precondition: slots are created without failover")
+            assertTrue(outcome.after.failover)
+            assertEquals(
+                listOf("t"),
+                pgColumn(remote.hostname, remote.port, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
+                "Postgres agrees, rather than us reporting back our own intent",
+            )
+        } finally {
+            dropSlot(slot)
+        }
+    }
+
+    @Test
+    fun `reports a slot that already has failover enabled`() {
+        val remote = pgRemote()
+        val slot = unique("tool_slot")
+        pgExecute("SELECT pg_create_logical_replication_slot('$slot', 'pgoutput')")
+
+        try {
+            FailoverSlot.enable(remote, slot)
+
+            assertIs<FailoverSlot.Outcome.AlreadyEnabled>(FailoverSlot.enable(remote, slot))
+        } finally {
+            dropSlot(slot)
+        }
+    }
+
+    @Test
+    fun `refuses a slot the source is still holding`() = runTest(timeout = 180.seconds) {
+        val remote = pgRemote()
+        val slot = unique("tool_slot")
+        val pub = unique("tool_pub")
+        val table = unique("tool_widgets")
+        val logDir = Files.createTempDirectory("tool-log")
+        val storageDir = Files.createTempDirectory("tool-storage")
+        val cdcLog = Files.createTempDirectory("tool-cdc-log")
+        val cdcStorage = Files.createTempDirectory("tool-cdc-storage")
+
+        pgExecute("CREATE TABLE $table (_id INT PRIMARY KEY)", "CREATE PUBLICATION $pub FOR TABLE $table")
+
+        try {
+            openNode(logDir, storageDir).use { node ->
+                attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
+                awaitStreaming(node)
+
+                assertEquals(
+                    listOf("t"),
+                    pgColumn(remote.hostname, remote.port, "SELECT active FROM pg_replication_slots WHERE slot_name = '$slot'"),
+                    "test precondition: the source is holding the slot",
+                )
+
+                val error = assertThrows<Incorrect> { FailoverSlot.enable(remote, slot) }
+                assertEquals(":xtdb.postgres/slot-active", error.errorCode)
+                assertTrue(
+                    error.message!!.contains(slot),
+                    "expected the refusal to name the slot, got: ${error.message}",
+                )
+            }
+        } finally {
+            runCatching { dropSlot(slot) }
+            pgExecute("DROP PUBLICATION IF EXISTS $pub", "DROP TABLE IF EXISTS $table")
+        }
+    }
+
+    /** Postgres scopes neither the command nor the error by database — the flip succeeds against a
+     * slot the remote has nothing to do with, so a mistyped name silently alters someone else's. */
+    @Test
+    fun `refuses a slot belonging to another database`() {
+        val remote = pgRemote()
+        val otherDb = unique("tool_db")
+        val slot = unique("tool_slot")
+
+        pgExecute("CREATE DATABASE $otherDb")
+
+        try {
+            conn(remote.hostname, remote.port, otherDb).use { c ->
+                c.createStatement().use { it.execute("SELECT pg_create_logical_replication_slot('$slot', 'pgoutput')") }
+            }
+
+            val error = assertThrows<Incorrect> { FailoverSlot.enable(remote, slot) }
+            assertEquals(":xtdb.postgres/slot-wrong-database", error.errorCode)
+            assertTrue(
+                error.message!!.contains(otherDb) && error.message!!.contains(remote.database),
+                "expected the refusal to name both databases, got: ${error.message}",
+            )
+        } finally {
+            dropSlot(slot)
+            pgExecute("DROP DATABASE IF EXISTS $otherDb")
+        }
+    }
+
+    // --- resolving the slot from node config, as `pg-enable-slot-failover` does ---
+
+    private fun nodeConfig(remote: PostgresRemote): Path =
+        Files.createTempFile("failover-config", ".yaml").also {
+            Files.writeString(
+                it,
+                """
+                remotes:
+                  pg: !Postgres
+                    hostname: ${remote.hostname}
+                    port: ${remote.port}
+                    database: ${remote.database}
+                    username: ${remote.username}
+                    password: ${remote.password}
+                """.trimIndent()
+            )
+        }
+
+    @Test
+    fun `enables failover on the slot named by a remote alias in node config`() {
+        val remote = pgRemote()
+        val slot = unique("tool_slot")
+        val config = nodeConfig(remote)
+        pgExecute("SELECT pg_create_logical_replication_slot('$slot', 'pgoutput')")
+
+        try {
+            val outcome = assertIs<FailoverSlot.Outcome.Enabled>(FailoverSlot.enable(config, "pg", slot))
+
+            assertEquals("${remote.hostname}:${remote.port}/${remote.database}", outcome.server)
+            assertEquals(
+                listOf("t"),
+                pgColumn(remote.hostname, remote.port, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
+                "the aliased remote's slot was the one altered",
+            )
+            assertTrue(
+                FailoverSlot.report(outcome).contains("Enabled failover on replication slot '$slot'"),
+                "the operator is told which slot changed, got: ${FailoverSlot.report(outcome)}",
+            )
+        } finally {
+            dropSlot(slot)
+            Files.deleteIfExists(config)
+        }
+    }
+
+    @Test
+    fun `refuses an alias the node config doesn't define`() {
+        val config = nodeConfig(pgRemote())
+
+        try {
+            val error = assertThrows<Incorrect> { FailoverSlot.enable(config, "nope", "irrelevant_slot") }
+            assertEquals(":xtdb.postgres/missing-remote", error.errorCode)
+            assertTrue(
+                error.message!!.contains("pg"),
+                "expected the refusal to list the aliases that are defined, got: ${error.message}",
+            )
+        } finally {
+            Files.deleteIfExists(config)
+        }
+    }
+
+    /** `ALTER_REPLICATION_SLOT` arrived with failover slots in PG17. Before that the server answers
+     * `syntax error at or near "ALTER_REPLICATION_SLOT"`, which reads as a bug in XTDB's SQL. */
+    @Test
+    fun `refuses a server predating failover slots`() {
+        val slot = unique("tool_slot")
+        pgExecute(pg16, "SELECT pg_create_logical_replication_slot('$slot', 'pgoutput')")
+
+        try {
+            val error = assertThrows<Incorrect> { FailoverSlot.enable(pgRemote(pg16), slot) }
+            assertEquals(":xtdb.postgres/failover-slots-unsupported", error.errorCode)
+            assertTrue(
+                error.message!!.contains("PostgreSQL 17") && error.message!!.endsWith("is 16"),
+                "expected the refusal to name the required and actual versions, got: ${error.message}",
+            )
+        } finally {
+            pgExecute(pg16, "SELECT pg_drop_replication_slot('$slot') FROM pg_replication_slots WHERE slot_name = '$slot'")
         }
     }
 }

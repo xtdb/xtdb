@@ -11,7 +11,8 @@
             [xtdb.logging :as logging]
             [xtdb.util :as util])
   (:import java.io.File
-           (xtdb.api PasswordHash)))
+           (xtdb.api PasswordHash)
+           (xtdb.api.error Anomaly)))
 
 (defn print-help []
   (println (str "--- " (util/xtdb-version-string) " ---"))
@@ -24,6 +25,7 @@
   (println " * `reset-compactor <db-name>`: resets the compacted files on the given node.")
   (println " * `export-snapshot <db-name>`: exports a consistent snapshot of object storage for the given database.")
   (println " * `hash-password [--bcrypt] <password>`: hashes a password for an `!UserList` authn config entry (reads stdin if no password given).")
+  (println " * `pg-enable-slot-failover <remote-alias> <slot-name>`: enables PG17 failover on a Postgres source's replication slot, so it survives a promotion.")
   (newline)
   (println "For more information about any command, run `<command> --help`, e.g. `playground --help`"))
 
@@ -228,6 +230,38 @@
                               (PasswordHash/bcrypt password)
                               (PasswordHash/argon2id password)))))))
 
+(def pg-enable-slot-failover-cli-spec
+  [["-f" "--file CONFIG_FILE" "Node config file to resolve the remote alias against - YAML"
+    :id :file
+    :parse-fn io/file
+    :validate [if-it-exists "Config file doesn't exist"
+               #(= "yaml" (util/file-extension %)) "Config file must be .yaml"]]
+   ["-h" "--help"]])
+
+(defn- pg-enable-slot-failover! [args]
+  (let [{{:keys [file]} :options, [remote-alias slot-name] :arguments}
+        (-> (parse-args args pg-enable-slot-failover-cli-spec)
+            (handling-arg-errors-or-help))
+
+        file (or file (some-> (io/file "xtdb.yaml") if-it-exists))]
+
+    (when (or (nil? remote-alias) (nil? slot-name))
+      (binding [*out* *err*]
+        (println "Usage: `pg-enable-slot-failover [-f <config>.yaml] <remote-alias> <slot-name>`")
+        (System/exit 2)))
+
+    (when (nil? file)
+      (binding [*out* *err*]
+        (println "Missing config file: `pg-enable-slot-failover -f <config>.yaml <remote-alias> <slot-name>`")
+        (System/exit 2)))
+
+    (try
+      ((requiring-resolve 'xtdb.postgres/enable-slot-failover!) file remote-alias slot-name)
+      (catch Anomaly e
+        (binding [*out* *err*]
+          (println (ex-message e))
+          (System/exit 2))))))
+
 (def read-arrow-file-cli-spec
   [["-h" "--help"]])
 
@@ -347,6 +381,10 @@
         "hash-password" (do
                           (hash-password! more-args)
                           (System/exit 0))
+
+        "pg-enable-slot-failover" (do
+                                    (pg-enable-slot-failover! more-args)
+                                    (System/exit 0))
 
         "read-arrow-file" (do
                             (read-arrow-file more-args)

@@ -50,6 +50,15 @@ abstract class PostgresSourceTestBase {
     protected fun dropSlot(slot: String) =
         pgExecute("SELECT pg_drop_replication_slot('$slot') FROM pg_replication_slots WHERE slot_name = '$slot'")
 
+    /** The `!Postgres` remote for a server, as node config would resolve it — what an operator tool
+     * takes in place of a bag of connection strings. */
+    protected fun pgRemote(
+        pgHost: String, pgPort: Int,
+        database: String = "testdb", username: String = "testuser", password: String = "testpass",
+    ) = PostgresRemote(pgHost, pgPort, database, username, password)
+
+    protected fun pgRemote(pg: PostgreSQLContainer = postgres) = pgRemote(pg.host, pg.firstMappedPort)
+
     // --- node ---
 
     /** Binds the `pg` remote to a bare host/port rather than a container we hold — a failover test
