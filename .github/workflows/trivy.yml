@@ -11,7 +11,7 @@ jobs:
       checks: write
     steps:
       - name: Check out the repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v5
 
       - name: Run Trivy against sample XTDBk8s
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.34.1
