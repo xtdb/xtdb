@@ -34,7 +34,9 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * You MUST update the Allium specs if you've made changes in those areas.
 * The full test suite MUST pass (`./gradlew test`).
   If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
-  CI will run integration tests regardless, but `./gradlew test` is the minimum.
+  If you've touched indexing, compaction or GC, you MUST also run `./gradlew property-test` — those are the subsystems the simulation tests cover.
+  The simulation classes carry `@Tag("property")`, so `./gradlew test` never reaches them and a change that breaks them looks green locally.
+  CI will run integration and property tests regardless, but `./gradlew test` is the minimum.
   You can assume that all tests are passing on `main`.
 * There MUST NOT be any reflection or boxed math warnings.
 * For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
