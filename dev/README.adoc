@@ -27,7 +27,7 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1 \
 bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1
 ```
 
-See link:../skills/clojure-eval/SKILL.md[skills/clojure-eval/SKILL.md] for usage details.
+See the `/clojure-eval` skill for usage details - it ships with `clojure-mcp-light` rather than living in this repo.
 
 == Getting started
 
