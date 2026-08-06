@@ -337,23 +337,37 @@
                                     :for-valid-time :all-time, :columns [_id version]}]
                            {:node tu/*node*}))))))
 
+(defn- ->xt-docs-col-type [col]
+  (:types
+   (tu/query-ra `[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [~col]}]
+                {:node tu/*node*, :with-types? true})))
+
 (t/deftest test-scan-col-types
-  (letfn [(->col-type [col]
-            (:types
-             (tu/query-ra `[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [~col]}]
-                          {:node tu/*node*, :with-types? true})))]
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
 
-    (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id :doc}]])
+  (tu/flush-block! tu/*node*)
 
-    (tu/flush-block! tu/*node*)
+  (t/is (= '{_id #xt/type :keyword}
+           (->xt-docs-col-type '_id)))
 
-    (t/is (= '{_id #xt/type :keyword}
-             (->col-type '_id)))
+  (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo"}]])
 
-    (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "foo"}]])
+  (t/is (= '{_id #xt/type #{:keyword :utf8}}
+           (->xt-docs-col-type '_id))))
 
-    (t/is (= '{_id #xt/type #{:keyword :utf8}}
-             (->col-type '_id)))))
+(t/deftest scan-col-type-widens-for-column-absent-from-the-live-table
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id 1, :v 1}]])
+  (tu/flush-block! tu/*node*)
+
+  (t/is (= '{v #xt/type :i64} (->xt-docs-col-type 'v))
+        "baseline: every row has a `v`, so it isn't nullable yet")
+
+  (xt/execute-tx tu/*node* [[:put-docs :xt_docs {:xt/id 2}]])
+
+  ;; the live table now has the table but no `v` vector, so its rows *are* null for `v` — distinct
+  ;; from the live index having nothing to say about the table, and only this case widens the type.
+  (t/is (= '{v #xt/type [:? :i64]} (->xt-docs-col-type 'v))
+        "a live row without `v` widens it to nullable"))
 
 (t/deftest test-content-pred
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
