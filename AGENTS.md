@@ -118,6 +118,35 @@ Typical durations:
 - Full project suite: 10+ min.
 - Integration tests: 5–15 min (I/O bound).
 
+### Regenerating arrow-edn golden fixtures
+
+Several namespaces assert a live run against committed `.arrow.edn` fixtures under `src/test/resources/xtdb/` — `xtdb.log-test`, `xtdb.indexer-test`, `xtdb.indexer.live-index-test`, `xtdb.indexer.live-table-test`, `xtdb.database-test`, `xtdb.metadata-test`, `xtdb.compactor-test`.
+`xtdb.check-pbuf` reads the same toggle for its `.binpb.edn` fixtures, so anything you do below applies to those too.
+
+To regenerate after an intended serialization change:
+
+1. Uncomment the `#_aet/wrap-regen` line in that namespace's `use-fixtures` — it binds `xtdb.arrow-edn-test/*regen?*` true for that namespace only.
+   Prefer this over flipping the `*regen?*` default: a blanket regen rewrites every fixture the run touches and masks unintended drift.
+2. Run the namespace with `--rerun-tasks` — Gradle caches a repeated `--tests` invocation as UP-TO-DATE and does nothing.
+3. Copy the regenerated files back into `src/test/resources/`, then re-comment the toggle and re-run with `--rerun-tasks` to verify green.
+
+Gotchas, all of which have cost real time:
+
+- **The output does not land in `src/`.**
+  Expected paths resolve through `io/resource`, which under the Gradle `test` task is `build/resources/test/xtdb/…`.
+  `git status src/` after a regen run shows nothing; you MUST copy the files back yourself.
+- **A regen run tells you nothing about correctness.**
+  `check-arrow-edn-dir` writes the expected file from the actual one and *then* compares, so it is trivially green; `maybe-write-arrow-edn!` (the `xtdb.log-test` shape) reads the old fixture before writing the new one, so that assertion fails exactly once by design and the new bytes land anyway.
+  Either way the only meaningful verification is a re-run with the toggle off.
+- **Do NOT `git rm` a fixture to force a regen.**
+  `io/resource` returns nil for a missing resource and the write path breaks — regen only works against a fixture that already exists.
+- **Comparison walks the expected tree**, so a file the run produces that the fixture lacks is silently unchecked.
+  A genuinely new fixture file has to arrive via the regen path.
+- **Both toggles are tagged `<<no-commit>>`** and the `.githooks/pre-commit` hook aborts a commit whose staged diff contains that marker.
+  If the hook fires, you left a toggle on — don't `--no-verify` past it.
+- **Never pin `xt$txs` in a golden file.**
+  A tx-id is a message id derived from the log offset, so the same sequence of transactions yields different tx-ids from run to run.
+
 ## GitHub project board, milestones, labels
 
 XTDB 2.x work is tracked on the [xtdb org "2.x" project board](https://github.com/orgs/xtdb/projects/13), with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
