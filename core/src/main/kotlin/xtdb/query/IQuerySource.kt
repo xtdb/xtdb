@@ -3,6 +3,7 @@ package xtdb.query
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.query.PrepareOpts
+import xtdb.catalog.DatabaseTableCatalog
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -17,10 +18,24 @@ interface IQuerySource : AutoCloseable {
         fun databaseOrNull(dbName: DatabaseName): QueryDatabase?
     }
 
+    /** One partition's read-side state — what a single scan branch reads from. */
+    interface QueryPartition {
+        val storage: PartitionStorage
+        val state: PartitionState
+    }
+
     interface QueryDatabase : DatabaseSnapshot.Source {
         val name: DatabaseName
-        val storage: PartitionStorage
-        val queryState: PartitionState
+
+        /**
+         * In partition-index order. Slot `i` here, slot `i` of the [DatabaseSnapshot] this database
+         * opens, and slot `i` of its basis vector are the same partition — the read path zips the
+         * three positionally.
+         */
+        val partitions: List<QueryPartition>
+
+        /** Historical table metadata across every partition — the planner's database-level view. */
+        val tableCatalog: DatabaseTableCatalog
     }
 
     fun prepareQuery(query: ParsedStatement, dbs: QueryCatalog, opts: PrepareOpts): PreparedQuery

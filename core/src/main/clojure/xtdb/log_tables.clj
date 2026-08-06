@@ -241,6 +241,10 @@
                               (case lower-op :>= v, :> (inc v))))
           to-msg-id (long (let [v (long upper-val)]
                             (case upper-op :<= (inc v), :< v)))
+          ;; hardcoded partition 0. `msg_id` encodes an offset within one partition, so above one
+          ;; partition the required msg_id bounds are ambiguous rather than merely partial — the
+          ;; same addressing problem `xt.block_files` has, and sharper here, because the replica log
+          ;; is what you read to work out why a particular partition is stuck. #5849
           record-seq (.readRecords log 0 from-msg-id to-msg-id)
           record-iter (.iterator record-seq)
           decode-tx-ops? (and source? (contains? col-names "tx_ops"))]

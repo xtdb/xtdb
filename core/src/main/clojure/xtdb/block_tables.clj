@@ -128,6 +128,11 @@
     (catch Exception _e
       nil)))
 
+;; The three cursors below read `Database.bufferPool`, which is partition 0's. Above one partition
+;; that's ambiguous rather than merely incomplete: these tables are addressed by block index, and
+;; block N exists in every partition with different contents, so unioning them would read as
+;; duplicates of one block. Deciding how a partition is addressed here is #5849.
+
 (defn- ->block-files-cursor
   [^Database db ^BufferAllocator allocator col-names col-preds selects schema args]
   (let [derived-table-schema (get block-tables 'xt/block_files)

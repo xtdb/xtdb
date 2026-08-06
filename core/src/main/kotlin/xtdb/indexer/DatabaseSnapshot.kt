@@ -2,6 +2,9 @@ package xtdb.indexer
 
 import xtdb.api.TransactionKey
 import xtdb.api.TableRef
+import xtdb.arrow.VectorType
+import xtdb.catalog.TableCatalog.Companion.mergeTypeMaps
+import xtdb.catalog.TableCatalog.Companion.mergeTypesByTable
 import xtdb.trie.ColumnName
 import xtdb.util.closeAll
 import java.time.Instant
@@ -34,6 +37,23 @@ class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
                 a + (table to (a[table].orEmpty() + cols))
             }
         }
+
+    /**
+     * Live type of [column] in [table], merged across [partitions]; null if no partition has it.
+     *
+     * Via [columnTypes] rather than reducing each partition's `columnType`, so the two can't
+     * disagree — a partition that has the table but not the column has to widen the merged type
+     * to nullable rather than drop out of it.
+     */
+    fun columnType(table: TableRef, column: ColumnName): VectorType? = columnTypes(table)?.get(column)
+
+    /** Live `{column → type}` for [table], merged across [partitions]; null if no partition has it. */
+    fun columnTypes(table: TableRef): Map<ColumnName, VectorType>? =
+        mergeTypeMaps(partitions.map { it.allColumnTypes[table] })
+
+    /** Live `{table → {column → type}}` merged across [partitions]. */
+    val allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>>
+        get() = mergeTypesByTable(partitions.map { it.allColumnTypes })
 
     /** One [TransactionKey] per partition, in partition-index order. */
     val txBasis: List<TransactionKey?> get() = partitions.map { it.txBasis }

@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [xtdb.basis :as basis]
+            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.information-schema :as info-schema]
@@ -28,8 +29,8 @@
            (xtdb.api ICursor)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
            (xtdb.metadata MetadataPredicate PageMetadata)
-           (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
-           xtdb.query.IQuerySource$QueryCatalog
+           (xtdb.operator.scan MultiIidSelector PartitionedScanCursor ScanCursor ScanMetrics SingleIidSelector)
+           (xtdb.query IQuerySource$QueryCatalog IQuerySource$QueryPartition)
            (xtdb.segment BufferPoolSegment MergePlanner)
            xtdb.api.TableRef
            (xtdb.trie Bucketer)
@@ -204,14 +205,10 @@
               (or (types/temporal-vec-types col-name)
                   (-> (info-schema/derived-table table)
                       (get (symbol col-name)))
-                  (let [state (.getQueryState (.databaseOrNull db-catalog db-name))
-                        table-catalog (.getTableCatalog state)
-                        ^DatabaseSnapshot db-snap (get snaps db-name)
-                        ;; TODO (#5835) reduce types/merge-types over per-partition live
-                        ;; types here; for now we only allow single-partition databases.
-                        ^Snapshot snap (first (.getPartitions db-snap))]
+                  (let [table-catalog (.getTableCatalog (.databaseOrNull db-catalog db-name))
+                        ^DatabaseSnapshot db-snap (get snaps db-name)]
                     (types/merge-types (.getType table-catalog table col-name)
-                                       (.columnType snap table col-name))))))]
+                                       (.columnType db-snap table col-name))))))]
     (->> scan-cols
          (into {} (map (juxt identity ->vec-type))))))
 
@@ -220,11 +217,7 @@
     (emitScan [_ db-cat {:keys [opts]} scan-vec-types param-types]
       (let [{:keys [db-name ^TableRef table columns] :as scan-opts} opts
             db (.databaseOrNull db-cat db-name)
-            storage (.getStorage db)
-            state (.getQueryState db)
-            metadata-mgr (.getMetadataManager storage)
-            buffer-pool (.getBufferPool storage)
-            table-catalog (.getTableCatalog state)
+            table-catalog (.getTableCatalog db)
             col-names (->> columns
                            (into #{} (map (fn [[col-type arg]]
                                             (case col-type
@@ -270,10 +263,24 @@
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, query-source, snaps, snapshot-token, schema, args pushdown-blooms pushdown-iids explain-analyze? tracer query-span] :as opts}]
                      (let [^DatabaseSnapshot db-snapshot (get snaps db-name)
-                           ;; TODO (#5835) walk every partition's Snapshot and UNION at scan,
-                           ;; instead of picking the only partition.
-                           ^Snapshot snapshot (first (.getPartitions db-snapshot))
-                           derived-table-schema (info-schema/derived-table table)]
+                           derived-table-schema (info-schema/derived-table table)
+                           query-parts (.getPartitions db)
+                           part-snaps (.getPartitions db-snapshot)
+                           basis (basis/<-time-basis-str snapshot-token)]
+
+                       ;; the snapshot slots and basis slots are read positionally against the partition
+                       ;; list, so a short one drops a partition's rows or silently unpins its temporal
+                       ;; bound rather than failing. Checked ahead of the branch split because the
+                       ;; info_schema cursor reads both lists too.
+                       (letfn [(check-length [what n]
+                                 (when-not (= n (count query-parts))
+                                   (throw (err/fault ::partition-slot-mismatch
+                                                     (format "%s doesn't cover every partition of the database" what)
+                                                     {:db-name db-name, :partitions (count query-parts), what n}))))]
+                         (check-length :snapshots (count part-snaps))
+                         (when-let [db-basis (get basis db-name)]
+                           (check-length :basis-slots (count db-basis))))
+
                        (cond
                          (log-tables/log-table table)
                          (log-tables/->cursor db allocator table col-names col-preds selects schema args)
@@ -282,7 +289,7 @@
                          (block-tables/->cursor db allocator table col-names col-preds selects schema args)
 
                          derived-table-schema
-                         (info-schema/->cursor info-schema allocator db db-cat query-source snapshot derived-table-schema table col-names col-preds schema args)
+                         (info-schema/->cursor info-schema allocator db db-cat query-source db-snapshot derived-table-schema table col-names col-preds schema args)
 
                          :else
 
@@ -308,60 +315,77 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               live-table-snaps (.table snapshot table)
-                               ;; TODO (#5835) each branch takes its own partition's basis slot. Wrong
-                               ;; rather than absent at N>1: every branch would apply partition 0's
-                               ;; temporal bound, so the scan returns wrong rows rather than failing.
-                               temporal-bounds (->temporal-bounds allocator args scan-opts
-                                                                  (-> (basis/<-time-basis-str snapshot-token)
-                                                                      (get-in [db-name 0])))]
+                               ;; shared across the branches: partition count is a physical property of
+                               ;; the database, so the operator reports one aggregate set of counters
+                               ;; however many branches it fans out to.
+                               ^ScanMetrics metrics (ScanMetrics. db-name
+                                                                  (str (.getSchemaName table) "." (.getTableName table)))
 
-                           (util/with-close-on-catch [!segments (LinkedList.)]
+                               ->partition-cursor
+                               (fn [part-idx ^IQuerySource$QueryPartition query-part ^Snapshot snapshot]
+                                 (let [storage (.getStorage query-part)
+                                       metadata-mgr (.getMetadataManager storage)
+                                       buffer-pool (.getBufferPool storage)
+                                       temporal-bounds (->temporal-bounds allocator args scan-opts
+                                                                          (get-in basis [db-name part-idx]))]
 
-                             (let [filter-opts {:query-bounds temporal-bounds
-                                                :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
-                                                :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
-                                   ^ScanMetrics metrics (ScanMetrics. db-name
-                                                                      (str (.getSchemaName table) "." (.getTableName table)))
-                                   current-tries (cat/current-tries (.trieTableState snapshot table))
-                                   filtered-tries (cat/filter-tries current-tries filter-opts)]
+                                   (util/with-close-on-catch [!segments (LinkedList.)]
 
-                               (.addFiles metrics
-                                          (long (- (count current-tries) (count filtered-tries)))
-                                          (long (count filtered-tries)))
+                                     (let [filter-opts {:query-bounds temporal-bounds
+                                                        :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
+                                                        :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
+                                           current-tries (cat/current-tries (.trieTableState snapshot table))
+                                           filtered-tries (cat/filter-tries current-tries filter-opts)]
 
-                               (doseq [{:keys [^String trie-key]} filtered-tries]
-                                 (.add !segments
-                                       (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
+                                       (.addFiles metrics
+                                                  (long (- (count current-tries) (count filtered-tries)))
+                                                  (long (count filtered-tries)))
 
-                               (doseq [^TableSnapshot live-table-snap live-table-snaps]
-                                 (.add !segments (.getSegment live-table-snap)))
+                                       (doseq [{:keys [^String trie-key]} filtered-tries]
+                                         (.add !segments
+                                               (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
 
-                               (let [count-pages (fn [pages]
-                                                   (let [survivors (trie/filter-pages pages filter-opts)]
-                                                     (.addPages metrics
-                                                                (long (- (count pages) (count survivors)))
-                                                                (long (count survivors)))
-                                                     survivors))
-                                     merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
-                               (cond-> (ScanCursor. allocator (vec col-names) col-preds
-                                                    temporal-bounds (boolean (:clamp-valid-time? scan-opts))
-                                                    !segments (.iterator ^Iterable merge-tasks)
-                                                    schema args
-                                                    metrics)
-                                 (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
-                                                                                                    query-span
-                                                                                                    (format "query.cursor.scan.%s" (.getTableName table))
-                                                                                                    (not-empty
-                                                                                                     (merge-with merge
-                                                                                                                 (when pushdown-blooms
-                                                                                                                   (update-keys
-                                                                                                                    (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
-                                                                                                                    str))
+                                       (doseq [^TableSnapshot live-table-snap (.table snapshot table)]
+                                         (.add !segments (.getSegment live-table-snap)))
+
+                                       (let [count-pages (fn [pages]
+                                                           (let [survivors (trie/filter-pages pages filter-opts)]
+                                                             (.addPages metrics
+                                                                        (long (- (count pages) (count survivors)))
+                                                                        (long (count survivors)))
+                                                             survivors))
+                                             merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
+                                         (ScanCursor. allocator (vec col-names) col-preds
+                                                      temporal-bounds (boolean (:clamp-valid-time? scan-opts))
+                                                      !segments (.iterator ^Iterable merge-tasks)
+                                                      schema args
+                                                      metrics))))))]
+
+                           ;; the tracing wrap stays inside the close-on-catch: it takes ownership of the
+                           ;; cursors, so anything it throws on the way (building the attribute map, say)
+                           ;; would otherwise strand them with their segments open.
+                           (util/with-close-on-catch [!cursors (LinkedList.)]
+                             (dorun (map-indexed (fn [part-idx [query-part snapshot]]
+                                                   (.add !cursors (->partition-cursor part-idx query-part snapshot)))
+                                                 (map vector query-parts part-snaps)))
+
+                             (cond-> (if (= 1 (.size !cursors))
+                                       (.getFirst !cursors)
+                                       (PartitionedScanCursor. (vec !cursors) metrics))
+
+                               (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
+                                                                                                  query-span
+                                                                                                  (format "query.cursor.scan.%s" (.getTableName table))
+                                                                                                  (not-empty
+                                                                                                   (merge-with merge
+                                                                                                               (when pushdown-blooms
                                                                                                                  (update-keys
-                                                                                                                  (update-vals (into {} (filter val) (or pushdown-iids {}))
-                                                                                                                               (fn [s] {:iids s}))
-                                                                                                                  str))))))))))))}))))
+                                                                                                                  (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
+                                                                                                                  str))
+                                                                                                               (update-keys
+                                                                                                                (update-vals (into {} (filter val) (or pushdown-iids {}))
+                                                                                                                             (fn [s] {:iids s}))
+                                                                                                                str))))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-vec-types, param-types]}]
   (assert db-cat)
