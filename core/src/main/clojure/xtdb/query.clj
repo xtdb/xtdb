@@ -350,17 +350,25 @@
                 ;; when people have 'proper' multi-tenancy, this will be a problem
                 ;; thankfully we can probably figure out what databases may be relevant to the query at parse-time
                 (util/with-close-on-catch [!snaps (HashMap.)]
-                  (doseq [db-name (.getDatabaseNames db-cat)]
-                    (.put !snaps db-name (.openSnapshot (.databaseOrNull db-cat db-name) (get min-basis db-name))))
+                  ;; `getDatabaseNames` and `databaseOrNull` are separate reads, so a concurrent
+                  ;; DETACH can drop a database between them — skip it, as Database.Catalog's own
+                  ;; iterators do. We open a snapshot for every attached database, so a query that
+                  ;; never mentions the detached one would otherwise die on its NPE.
+                  (doseq [db-name (.getDatabaseNames db-cat)
+                          :let [db (.databaseOrNull db-cat db-name)]
+                          :when db]
+                    (.put !snaps db-name (.openSnapshot db (get min-basis db-name))))
                   (into {} !snaps)))
 
               (->table-info [min-basis]
                 ;; TODO this, too, gets the schema for *every* db in the catalog
                 (->> (.getDatabaseNames db-cat)
                      (into {} (mapcat (fn [db-name]
-                                        (util/with-open [^DatabaseSnapshot snap (.openSnapshot (.databaseOrNull db-cat db-name) (get min-basis db-name))]
-                                          (->> (.tableInfo snap)
-                                               (map (fn [[table-ref cols]] [[db-name table-ref] (set cols)])))))))))
+                                        ;; same detach race as open-snaps above
+                                        (when-let [db (.databaseOrNull db-cat db-name)]
+                                          (util/with-open [^DatabaseSnapshot snap (.openSnapshot db (get min-basis db-name))]
+                                            (->> (.tableInfo snap)
+                                                 (map (fn [[table-ref cols]] [[db-name table-ref] (set cols)]))))))))))
 
               (plan-query* [table-info]
                 (-plan-query this parsed-query query-opts table-info))]

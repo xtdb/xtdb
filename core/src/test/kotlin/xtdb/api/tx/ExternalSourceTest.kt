@@ -404,7 +404,7 @@ class ExternalSourceTest {
             name = "cdc",
             logs = DatabaseLogs(null, null),
             isIndexing = false,
-            partitions = mapOf(0 to partition),
+            partitions = listOf(partition),
             meterRegistry = null,
         )
 
