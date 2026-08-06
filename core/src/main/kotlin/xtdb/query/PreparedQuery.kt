@@ -17,5 +17,7 @@ interface PreparedQuery {
     // connection gate a read on its statement kind — e.g. SHOW bypasses the access-mode gate.
     val parsed: ParsedStatement? get() = null
 
+    // takes ownership of [args] — closed here on failure, otherwise by the returned cursor.
+    // no separate `.use`/`closeOnCatch` on the args at the call site, or it'd double-free.
     fun openQuery(args: RelationReader?, opts: QueryOpts): ResultCursor
 }
