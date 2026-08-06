@@ -1207,6 +1207,38 @@
           "range": true,
           "refId": "Node Average",
           "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "DS_PROMETHEUS"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "sum(pgwire_pending_connections)",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "Cluster Awaiting Handler",
+          "range": true,
+          "refId": "Pending",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "DS_PROMETHEUS"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "sum(rate(pgwire_connections_refused_total[5m]))",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "Cluster Refused /sec",
+          "range": true,
+          "refId": "Refused",
+          "useBackend": false
         }
       ],
       "title": "Cluster PGWire Active Connections",

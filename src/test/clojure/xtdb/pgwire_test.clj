@@ -452,6 +452,66 @@
     (.close server)
     (check-server-resources-freed server)))
 
+;;; #5850 — a wedged pgwire endpoint that kept accepting sockets and never closed them.
+;;; These cover the containment: a slot can't be held forever, saturation refuses rather
+;;; than queueing without limit, and a client's length prefix isn't believed before it's
+;;; bounded.
+
+(defn- silent-socket
+  "A client that completes the TCP handshake and then says nothing at all."
+  ^Socket [port]
+  (Socket. (InetAddress/getLoopbackAddress) (int port)))
+
+(defn- hung-up?
+  "Whether the server closes its end within `ms`."
+  [^Socket socket ms]
+  (.setSoTimeout socket (int ms))
+  (try
+    (neg? (.read (.getInputStream socket)))
+    (catch java.net.SocketTimeoutException _ false)
+    (catch java.net.SocketException _ true)))
+
+(deftest silent-client-disconnected-once-authn-times-out-5850
+  (with-open [server (serve {:authn-timeout-ms 100})
+              socket (silent-socket (:port server))]
+    (is (hung-up? socket 10000)
+        "a client that never sends a startup packet doesn't hold its handler forever")))
+
+(deftest connections-beyond-capacity-refused-not-queued-5850
+  ;; num-threads 1 gives one handler plus a queue of one, so silent clients exhaust the
+  ;; server almost immediately. The authn timeout is set high so that it's capacity, and
+  ;; not the timeout, that ends up refusing them.
+  (with-open [server (serve {:num-threads 1, :authn-timeout-ms 600000})]
+    (let [port (:port server)
+          sockets (atom [])]
+      (try
+        (is (some (fn [_]
+                    (let [socket (silent-socket port)]
+                      (swap! sockets conj socket)
+                      (hung-up? socket 500)))
+                  (range 10))
+            "server refuses once handlers and queue are full, rather than accumulating sockets")
+        (finally
+          (run! util/try-close @sockets))))))
+
+(deftest client-declared-message-length-is-bounded-5850
+  ;; one server for both cases — `Server.close` closes the allocator it was given, which
+  ;; here is the shared fixture allocator, so a second server would start out broken
+  (with-open [server (serve)]
+    (letfn [(startup-with-length [len]
+              (with-open [socket (silent-socket (:port server))]
+                (doto (java.io.DataOutputStream. (.getOutputStream socket))
+                  (.writeInt len)
+                  (.flush))
+                (.setSoTimeout socket 10000)
+                (.read (.getInputStream socket))))]
+
+      (testing "a length we'd have to allocate ~2GiB to believe"
+        (is (= (int \E) (startup-with-length Integer/MAX_VALUE))))
+
+      (testing "a length shorter than its own header"
+        (is (= (int \E) (startup-with-length 0)))))))
+
 (defn- get-connections [server]
   (vals (:connections @(:server-state server))))
 

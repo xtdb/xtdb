@@ -6,7 +6,7 @@
   (:import [clojure.lang MapEntry]
            [java.io BufferedInputStream BufferedOutputStream ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream EOFException IOException InputStream OutputStream]
            [java.lang AutoCloseable]
-           [java.net Socket]
+           [java.net Socket SocketTimeoutException]
            [java.nio.charset StandardCharsets]
            [javax.net.ssl SSLContext SSLSocket]))
 
@@ -15,7 +15,9 @@
     [frontend msg-def]
     [frontend msg-def data])
 
-  (read-client-msg! [frontend])
+  ;; max-length bounds the allocation we size from the client's length prefix. Callers on
+  ;; the pre-auth path MUST pass max-startup-packet-length — see the note by that constant.
+  (read-client-msg! [frontend max-length])
   (host-address [frontend])
 
   (upgrade-to-ssl [frontend ssl-ctx])
@@ -88,14 +90,32 @@
    ;; gssapi encoding is not supported by xt, and we tell the client that
    80877104 :gssenc})
 
-(defn- read-untyped-msg [^DataInputStream in]
-  (let [size (- (.readInt in) 4)
-        barr (byte-array size)
-        _ (.readFully in barr)]
-    (DataInputStream. (ByteArrayInputStream. barr))))
+(defn err-protocol-violation
+  ([msg] (err-protocol-violation msg nil))
+  ([msg cause]
+   (ex-info msg {::pgw/severity :error, ::pgw/error-code "08P01"} cause)))
+
+;; The length prefix is the first thing an unauthenticated client sends, and we size an
+;; allocation from it — so it's bounded before it's believed. Both limits are Postgres':
+;; a startup packet can't exceed 10000 bytes, and no message may reach 1GB.
+;;
+;; The tight bound holds for as long as the client is unauthenticated, which is past the
+;; startup packet itself: the password exchange is read under it too. Only once auth has
+;; succeeded does a client get to declare a large message.
+(def max-startup-packet-length 10000)
+(def max-msg-length 0x3FFFFFFF)
+
+(defn- read-untyped-msg [^DataInputStream in ^long max-length]
+  (let [size (- (.readInt in) 4)]
+    (when (or (neg? size) (> size max-length))
+      (throw (err-protocol-violation (str "Invalid message length: " (+ size 4)))))
+
+    (let [barr (byte-array size)]
+      (.readFully in barr)
+      (DataInputStream. (ByteArrayInputStream. barr)))))
 
 (defn read-version [^DataInputStream in]
-  (let [^DataInputStream msg-in (read-untyped-msg in)
+  (let [^DataInputStream msg-in (read-untyped-msg in max-startup-packet-length)
         version (.readInt msg-in)]
     {:msg-in msg-in
      :version (version-messages version)}))
@@ -107,11 +127,6 @@
     :msg-parameter-status :msg-auth :msg-ready
     :msg-portal-suspended
     :msg-copy-in-response :msg-copy-done})
-
-(defn err-protocol-violation
-  ([msg] (err-protocol-violation msg nil))
-  ([msg cause]
-   (ex-info msg {::pgw/severity :error, ::pgw/error-code "08P01"} cause)))
 
 (defrecord SocketFrontend [^Socket socket, ^DataInputStream in, ^DataOutputStream out]
   Frontend
@@ -135,14 +150,21 @@
       (when (flush-messages (:name msg-def))
         (.flush out))))
 
-  (read-client-msg! [_]
+  (read-client-msg! [_ max-length]
     (try
       (let [type-char (char (.readUnsignedByte in))
             msg-var (or (client-msgs type-char)
                         (throw (err-protocol-violation (str "Unknown client message " type-char))))
             rdr (:read @msg-var)]
-        (-> (rdr (read-untyped-msg in))
+        (-> (rdr (read-untyped-msg in max-length))
             (assoc :msg-name (:name @msg-var))))
+
+      ;; a read deadline expiring isn't the client violating the protocol, and the caller
+      ;; needs to tell the two apart — it must not try to write back to a peer that has
+      ;; already stopped talking to us
+      (catch SocketTimeoutException e
+        (throw e))
+
       (catch IOException e
         (throw (err-protocol-violation (str "Error reading client message " (ex-message e)) e)))))
 

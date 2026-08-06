@@ -22,14 +22,14 @@
   (:import io.micrometer.core.instrument.Counter
            [java.io Closeable DataInputStream EOFException IOException PushbackInputStream]
            [java.lang Thread$State]
-           [java.net InetAddress ServerSocket Socket SocketException]
+           [java.net InetAddress ServerSocket Socket SocketException SocketTimeoutException]
            [java.nio ByteBuffer]
            [java.nio.charset StandardCharsets]
            [java.nio.channels FileChannel]
            [java.nio.file Path]
            [java.security KeyStore]
            [java.time Clock Duration ZoneId]
-           [java.util.concurrent ExecutorService Executors Future$State FutureTask TimeUnit]
+           [java.util.concurrent ExecutorService Future$State FutureTask LinkedBlockingQueue RejectedExecutionException ThreadPoolExecutor TimeUnit]
            [javax.net.ssl KeyManagerFactory SSLContext]
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.types.pojo.Field
@@ -57,6 +57,8 @@
 (defrecord Server [^BufferAllocator allocator
                    ^InetAddress host
                    port read-only? playground?
+
+                   num-threads authn-timeout-ms
 
                    ^ServerSocket accept-socket
                    ^Thread accept-thread
@@ -409,7 +411,7 @@
           (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
 
           ;; we go idle until we receive a message
-          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
+          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend pgio/max-startup-packet-length)]
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "password authentication failed for user: " user)))
 
@@ -437,7 +439,7 @@
           (pgio/cmd-write-msg conn pgio/msg-auth {:result 3})
 
           ;; we go idle until we receive a message
-          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend)]
+          (when-let [{:keys [msg-name] :as msg} (pgio/read-client-msg! frontend pgio/max-startup-packet-length)]
             (if (not= :msg-password msg-name)
               (throw (err-invalid-auth-spec (str "client credentials authentication failed for user: " user)))
 
@@ -495,6 +497,14 @@
       (log/debug e "EOFException during startup")
       (doto conn
         (handle-msg* {:msg-name :msg-terminate})))
+
+    ;; deliberately no send-ex: the client has already proved it isn't reading, and a
+    ;; write to a peer that isn't draining its receive window would block us in turn.
+    (catch SocketTimeoutException _
+      (log/debug "Timed out waiting for the client to authenticate" {:cid (:cid conn)})
+      (doto conn
+        (handle-msg* {:msg-name :msg-terminate})))
+
     (catch Exception e
       (doto conn
         (send-ex e)
@@ -1566,7 +1576,7 @@
 
         ;; go idle until we receive another msg from the client
         :else (do
-                (when-let [msg (pgio/read-client-msg! frontend)]
+                (when-let [msg (pgio/read-client-msg! frontend pgio/max-msg-length)]
                   (handle-msg conn msg))
 
                 (recur))))))
@@ -1578,7 +1588,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [{:keys [node, ^Authenticator authn, server-state, port, allocator, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-tracer] :as server} ^Socket conn-socket]
+  [{:keys [node, ^Authenticator authn, server-state, port, allocator, authn-timeout-ms, tx-error-counter, tx-latency-timer, ^Counter total-connections-counter, ^Counter cancelled-connections-counter, query-tracer] :as server} ^Socket conn-socket]
   (let [close-promise (promise)
         {:keys [cid !closing?] :as conn} (util/with-close-on-catch [_ conn-socket]
                                            (let [cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
@@ -1587,6 +1597,13 @@
                                                  !closing? (atom false)]
                                              (log/debug "New connection" {:cid cid})
                                              (try
+                                               ;; A client that completes the TCP handshake and then goes quiet would
+                                               ;; otherwise hold one of the server's finite handler slots for good — see
+                                               ;; #5850. Bound the pre-auth phase, as Postgres does with
+                                               ;; authentication_timeout. An SSL upgrade layers over this same socket,
+                                               ;; so the deadline survives it.
+                                               (.setSoTimeout conn-socket (int authn-timeout-ms))
+
                                                (-> (map->Connection {:cid cid, :node node, :authn authn, :server server,
                                                                      :frontend (pgio/->socket-frontend conn-socket),
                                                                      :!closing? !closing?
@@ -1597,7 +1614,11 @@
                                                  (reset! !closing? true))
                                                (catch Throwable t
                                                  (log/warn t "error on conn startup")
-                                                 (throw t)))))
+                                                 (throw t))
+                                               (finally
+                                                 ;; an authenticated session is entitled to idle for as long as it likes
+                                                 (when-not (.isClosed conn-socket)
+                                                   (.setSoTimeout conn-socket 0))))))
         conn (assoc conn
                     :query-tracer query-tracer
                     :tx-error-counter tx-error-counter
@@ -1657,8 +1678,27 @@
           (try
             (let [conn-socket (.accept accept-socket)]
               (.setTcpNoDelay conn-socket true)
-              ;; TODO fix buffer on tp? q gonna be infinite right now
-              (.submit thread-pool ^Runnable (fn [] (connect server conn-socket))))
+              (try
+                ;; execute, not submit: submit buries an escaping throwable in a Future
+                ;; nobody reads, which is why #5850 produced no logs at all.
+                (.execute thread-pool ^Runnable (fn [] (connect server conn-socket)))
+                (catch RejectedExecutionException _
+                  ;; At capacity. Closing is the only honest answer — a queued socket the
+                  ;; client eventually abandons sits in CLOSE_WAIT forever, holding an fd
+                  ;; nobody will ever read or close (#5850).
+                  ;;
+                  ;; We close rather than write an ErrorResponse because the client may not
+                  ;; have spoken yet: an unsolicited 'E' would be misread as the single-byte
+                  ;; reply to an SSLRequest.
+                  ;; the pool also rejects once it's been shut down, and an accept that
+                  ;; races shutdown is routine — don't report that as saturation
+                  (if @(:!closing? server)
+                    (log/debug "Refusing connection, server closing" {:port (:port server)})
+                    (log/warn "PGwire at capacity, refusing connection"
+                              {:port (:port server), :max-connections (:num-threads server)}))
+                  (when-some [c (:connections-refused-counter server)]
+                    (.increment ^Counter c))
+                  (util/try-close conn-socket))))
             (catch SocketException e
               (when (and (not (.isClosed accept-socket))
                          (not= "Socket closed" (.getMessage e)))
@@ -1682,21 +1722,41 @@
 
   :port (default 0, opening the socket on an unused port).
   :num-threads (bounds the number of client connections, default 42)
+  :authn-timeout-ms (how long a client has to complete the startup handshake, default 60s)
   :playground? (default false) - if true, the server will create a new in-memory database if it doesn't already exist.
   "
   (^Server [node] (serve node {}))
-  (^Server [node {:keys [allocator host port num-threads drain-wait ssl-ctx metrics-registry tracer query-tracing? read-only? playground?]
+  (^Server [node {:keys [allocator host port num-threads authn-timeout-ms drain-wait ssl-ctx metrics-registry tracer query-tracing? read-only? playground?]
                   :or {host (InetAddress/getLoopbackAddress)
                        port 0
                        num-threads 42
+                       authn-timeout-ms 60000
                        drain-wait 5000}}]
    (util/with-close-on-catch [accept-socket (ServerSocket. port 0 host)]
      (let [host (.getInetAddress accept-socket)
-           port (.getLocalPort accept-socket) 
+           port (.getLocalPort accept-socket)
            tx-error-counter (when metrics-registry (metrics/add-counter metrics-registry "tx.error"))
            tx-latency-timer (when metrics-registry (metrics/add-timer metrics-registry "pgwire.tx.latency" {}))
            total-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.total_connections"))
-           cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections")) 
+           cancelled-connections-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.cancelled_connections"))
+           connections-refused-counter (when metrics-registry (metrics/add-counter metrics-registry "pgwire.connections_refused"))
+
+           ;; A handler owns its connection for the connection's whole life, so `num-threads`
+           ;; is a ceiling on concurrent clients and the queue only holds accepted-but-not-yet-
+           ;; started sockets. It has to be bounded: an unbounded one converts handler
+           ;; saturation into unbounded fd growth, with every queued client hanging on a
+           ;; handshake that will never come (#5850).
+           ;;
+           ;; Not zero-length, though — a SynchronousQueue refuses whenever no worker is
+           ;; sitting in poll() at that instant, which spuriously rejects under ordinary churn.
+           thread-pool (ThreadPoolExecutor. num-threads num-threads
+                                            0 TimeUnit/MILLISECONDS
+                                            (LinkedBlockingQueue. (int num-threads))
+                                            (-> (Thread/ofVirtual)
+                                                (.name "pgwire-connection-" 0)
+                                                (.uncaughtExceptionHandler util/uncaught-exception-handler)
+                                                (.factory)))
+
            server (map->Server {:allocator allocator
                                 :node node
                                 :authn (authn/<-node node)
@@ -1704,11 +1764,10 @@
                                 :host host
                                 :port port
                                 :read-only? read-only?
+                                :num-threads num-threads
+                                :authn-timeout-ms authn-timeout-ms
                                 :accept-socket accept-socket
-                                :thread-pool (Executors/newFixedThreadPool num-threads (-> (Thread/ofVirtual)
-                                                                                           (.name "pgwire-connection-" 0)
-                                                                                           (.uncaughtExceptionHandler util/uncaught-exception-handler)
-                                                                                           (.factory)))
+                                :thread-pool thread-pool
                                 :!closing? (atom false)
                                 ;;TODO use clock from node or at least take clock as a param for testing
                                 :server-state (atom (let [default-clock (Clock/systemDefaultZone)]
@@ -1733,7 +1792,8 @@
                          :tx-error-counter tx-error-counter
                          :tx-latency-timer tx-latency-timer
                          :total-connections-counter total-connections-counter
-                         :cancelled-connections-counter cancelled-connections-counter)
+                         :cancelled-connections-counter cancelled-connections-counter
+                         :connections-refused-counter connections-refused-counter)
            accept-thread (-> (Thread/ofVirtual)
                              (.name (str "pgwire-server-accept-" port))
                              (.uncaughtExceptionHandler util/uncaught-exception-handler)
@@ -1745,7 +1805,14 @@
        (when metrics-registry
          (metrics/add-gauge metrics-registry "pgwire.active_connections" server
                             (fn [server]
-                              (count (:connections @(:server-state server))))))
+                              (count (:connections @(:server-state server)))))
+
+         ;; the saturation signal. Sustained non-zero here is the endpoint running out of
+         ;; handlers, which is what #5850 looked like from the outside and had no reading at
+         ;; the time. Scrapeable, so it works where taking a thread dump doesn't.
+         (metrics/add-gauge metrics-registry "pgwire.pending_connections" server
+                            (fn [server]
+                              (.size (.getQueue ^ThreadPoolExecutor (:thread-pool server))))))
        (.start accept-thread)
        server))))
 

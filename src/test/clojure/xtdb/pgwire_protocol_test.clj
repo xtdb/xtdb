@@ -45,7 +45,8 @@
       (swap! !in-msgs conj [(:name msg-def) data]))
     nil)
 
-  (read-client-msg! [_]
+  ;; no wire framing here, so nothing to bound
+  (read-client-msg! [_ _max-length]
     (let [msg (first @!out-msgs)]
       (swap! !out-msgs rest)
       (when-not msg (throw (Exception. "No more messages")))
