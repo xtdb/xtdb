@@ -324,6 +324,39 @@ Import, don't fully-qualify::
 In Kotlin and in Clojure alike, add the import and use the short name — `IKeyFn$KeyFn/SNAKE_CASE_STRING`, not `xtdb.api.query.IKeyFn$KeyFn/SNAKE_CASE_STRING`.
 Nested types need importing in their own right: importing `IKeyFn` does not bring in `IKeyFn$KeyFn`.
 
+One space, never aligned::
++
+Don't pad `=` — or `:`, or anything else — with extra spaces so that it lines up with the neighbouring lines; one space each side, always.
+Aligned blocks make noisy diffs, because adding or renaming one key forces re-alignment of the whole block and drags unrelated whitespace through the review.
+Where the surrounding code is already aligned, don't propagate the style: write new lines single-spaced and leave the neighbours alone.
+
+Visibility follows intent, not the caller count::
++
+"The only callers are in-module or in tests" is not grounds for making something `internal` or `private`.
+We design public surfaces ahead of their consumers — the granular and batch write APIs on `OpenTx.Table` are deliberately exposed for external-source writers that don't exist yet.
++
+Tighten a genuine implementation-detail leak — `OpenTx.Table.txRelation`, the raw staging relation behind those APIs, is `internal` for exactly that reason.
+For anything else, ask about the intended surface rather than inferring it from a caller grep.
+Visibility is a design decision in the same family as _Make illegal states unrepresentable_ and _Intentional defaults_: the declaration states what callers may do, so it has to be chosen rather than derived from what they happen to do today.
+
+Inject the collaborator; don't reach for a `Factory`::
++
+A factory earns its keep only when instances must be created per-something at runtime, by code that doesn't have the dependencies to hand.
+`Compactor.Driver.Factory` qualifies — `Compactor.Impl.openForDatabase` creates one driver per database.
+`LeaderLogProcessor` doesn't: its driver has a single construction site, `LogProcessor.openLeader`, which already holds `partitionStorage`, `partitionState` and `blockUploader`, so it takes a `LeaderDriver` as a constructor parameter instead.
++
+Before writing `interface Factory`, look at every call site of the thing being constructed.
+One site that already has the arguments means a plain constructor parameter — and direct injection shrinks the consumer as well, because the collaborator absorbs the parameters the consumer only held in order to pass them along.
+
+Valid time is when a fact becomes true, not what it describes::
++
+Valid time models when an assertion becomes true, becomes known, or is reported.
+The instant a fact *describes* — a reporting period's start and end, an event's effective date — is an ordinary domain column, and stays one.
++
+Back-dating valid-from to the period a fact describes asserts that we held the fact before it existed: an organisation does not report its FY2024 net income at the start of 2024, so a flow figure's valid-from is the date it was filed, not its `period_start`.
+An instantaneous measure differs — an as-of balance is true as of its `period_end`.
+When choosing valid-from for a CDC or indexer put, ask "when did this become true or known?", not "what date does it refer to?".
+
 === Comments
 
 Comments that merely restate the code add visual noise without value.
