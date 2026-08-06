@@ -1705,7 +1705,10 @@
                                 :port port
                                 :read-only? read-only?
                                 :accept-socket accept-socket
-                                :thread-pool (Executors/newFixedThreadPool num-threads (-> (Thread/ofVirtual) (.name "pgwire-connection-" 0) (.factory)))
+                                :thread-pool (Executors/newFixedThreadPool num-threads (-> (Thread/ofVirtual)
+                                                                                           (.name "pgwire-connection-" 0)
+                                                                                           (.uncaughtExceptionHandler util/uncaught-exception-handler)
+                                                                                           (.factory)))
                                 :!closing? (atom false)
                                 ;;TODO use clock from node or at least take clock as a param for testing
                                 :server-state (atom (let [default-clock (Clock/systemDefaultZone)]
