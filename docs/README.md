@@ -50,6 +50,9 @@ To deploy to the live site, push to the `docs-live` branch on GitHub.
 End-user documentation lives under `docs/src/content/docs/`, organised around the [Diataxis](https://diataxis.fr/) framework.
 The conventions below keep pages coherent across contributors (human and AI), and are also what an AI agent should follow when editing or adding pages.
 
+For anything persuasive — a landing page, the `about/` pages, a conference abstract — read [positioning.md](./positioning.md) first.
+It holds the framing behind *why* XTDB exists, which is a separate question from the voice and structure conventions below.
+
 ### Diataxis
 
 The four Diataxis quadrants — tutorials, how-to, reference, explanation — apply recursively.
