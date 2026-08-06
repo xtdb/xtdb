@@ -52,14 +52,13 @@ Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec aga
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
 * You MUST include tests for new/changed functionality.
-* You MUST run tests locally to verify they pass.
+* You MUST run tests locally to verify they pass, per `skills/xtdb-testing/SKILL.md`.
 * You MUST update the Allium specs if you've made changes in the areas they cover — see [Allium specs](#allium-specs) for the map.
 * The full test suite MUST pass (`./gradlew test`).
   If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
-  If you've touched indexing, compaction or GC, you MUST also run `./gradlew property-test` — those are the subsystems the simulation tests cover.
-  The simulation classes carry `@Tag("property")`, so `./gradlew test` never reaches them and a change that breaks them looks green locally.
+  If you've touched indexing, compaction or GC, you MUST also run `./gradlew property-test` — those are the subsystems the simulation tests cover, and `./gradlew test` cannot reach them.
   CI will run integration and property tests regardless, but `./gradlew test` is the minimum.
-  You can assume that all tests are passing on `main`.
+  All tests pass on `main`, so a failure is yours — see [Running tests](#running-tests) for how to handle one.
 * There MUST NOT be any reflection or boxed math warnings.
 * For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
 * Verify: all changes committed AND pushed
@@ -85,67 +84,10 @@ For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, n
 
 ## Running tests
 
-- You MUST NOT run tests yourself - use sub-agents.
-- You SHOULD use the `gradle-tests` agent via the Task tool.
-  Clojure tests can also be exercised through the REPL via the `/clojure-eval` skill (see the "REPL evaluation" rule above), which gives faster feedback for pure-Clojure work.
-- You MUST NOT launch multiple `gradle-tests` agents concurrently.
-  Combine test namespaces into a single agent invocation instead.
-  The test agent will decide what/how to invoke it.
-- You SHOULD proactively run relevant tests after code changes to verify they work.
+Before you run a test, or delegate a test run to a sub-agent, you MUST read `skills/xtdb-testing/SKILL.md`.
 
-### Gradle test conventions
-
-The `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace); the XTDB-specific knowledge it needs lives here.
-
-Test tasks:
-- `./gradlew test` — standard unit tests.
-- `./gradlew integration-test` — integration tests (longer running).
-- `./gradlew property-test` — property-based tests (default 100 iterations).
-- `./gradlew property-test -Piterations=500` — custom iteration count.
-- `./gradlew kafka-test` — tests requiring Kafka (needs `docker-compose up`).
-
-Module addressing (per the commit-tag rules above):
-- Top-level modules: `:xtdb-core:test`, `:xtdb-api:test`, etc.
-- Modules under `modules/`: `:modules:xtdb-kafka:test`, `:modules:xtdb-aws:test`, etc.
-
-Clojure test filtering:
-- In `--tests` patterns, Clojure namespaces use underscores, not dashes — `xtdb.api_test`, not `xtdb.api-test`.
-- Example: `./gradlew :xtdb-core:test --tests 'xtdb.api_test*'`.
-
-Typical durations:
-- Single namespace: 30–60s.
-- Module test suite: 2–5 min.
-- Full project suite: 10+ min.
-- Integration tests: 5–15 min (I/O bound).
-
-### Regenerating arrow-edn golden fixtures
-
-Several namespaces assert a live run against committed `.arrow.edn` fixtures under `src/test/resources/xtdb/` — `xtdb.log-test`, `xtdb.indexer-test`, `xtdb.indexer.live-index-test`, `xtdb.indexer.live-table-test`, `xtdb.database-test`, `xtdb.metadata-test`, `xtdb.compactor-test`.
-`xtdb.check-pbuf` reads the same toggle for its `.binpb.edn` fixtures, so anything you do below applies to those too.
-
-To regenerate after an intended serialization change:
-
-1. Uncomment the `#_aet/wrap-regen` line in that namespace's `use-fixtures` — it binds `xtdb.arrow-edn-test/*regen?*` true for that namespace only.
-   Prefer this over flipping the `*regen?*` default: a blanket regen rewrites every fixture the run touches and masks unintended drift.
-2. Run the namespace with `--rerun-tasks` — Gradle caches a repeated `--tests` invocation as UP-TO-DATE and does nothing.
-3. Copy the regenerated files back into `src/test/resources/`, then re-comment the toggle and re-run with `--rerun-tasks` to verify green.
-
-Gotchas, all of which have cost real time:
-
-- **The output does not land in `src/`.**
-  Expected paths resolve through `io/resource`, which under the Gradle `test` task is `build/resources/test/xtdb/…`.
-  `git status src/` after a regen run shows nothing; you MUST copy the files back yourself.
-- **A regen run tells you nothing about correctness.**
-  `check-arrow-edn-dir` writes the expected file from the actual one and *then* compares, so it is trivially green; `maybe-write-arrow-edn!` (the `xtdb.log-test` shape) reads the old fixture before writing the new one, so that assertion fails exactly once by design and the new bytes land anyway.
-  Either way the only meaningful verification is a re-run with the toggle off.
-- **Do NOT `git rm` a fixture to force a regen.**
-  `io/resource` returns nil for a missing resource and the write path breaks — regen only works against a fixture that already exists.
-- **Comparison walks the expected tree**, so a file the run produces that the fixture lacks is silently unchecked.
-  A genuinely new fixture file has to arrive via the regen path.
-- **Both toggles are tagged `<<no-commit>>`** and the `.githooks/pre-commit` hook aborts a commit whose staged diff contains that marker.
-  If the hook fires, you left a toggle on — don't `--no-verify` past it.
-- **Never pin `xt$txs` in a golden file.**
-  A tx-id is a message id derived from the log offset, so the same sequence of transactions yields different tx-ids from run to run.
+It is the single home for every XTDB-specific testing rule and mechanism — delegation to the `gradle-tests` agent, serialising Gradle runs across worktrees, test tasks and filters, iteration counts, the simulation tests that `./gradlew test` cannot reach, diagnosing a failure, and regenerating arrow-edn golden fixtures.
+Do not reconstruct any of it from memory: the `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace) and carries none of this knowledge itself, so it is yours to pass on.
 
 ## GitHub project board, milestones, labels
 
