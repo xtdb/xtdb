@@ -25,13 +25,35 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
 
+## Allium specs
+
+`.allium` files are behavioural specifications of XTDB's subsystems — entities, rules, invariants, contracts and surfaces, plus the rationale and open questions that the code alone doesn't carry.
+
+Before you make an architectural claim about one of the areas below, or change the code that implements it, you MUST read the corresponding spec.
+Where the spec and the code disagree, say so rather than silently picking one: some specs deliberately run ahead of the implementation, and mark themselves as such (`db.allium`'s leader-pipelining section, for instance).
+
+Specs live in two directories, `allium/` and `dev/doc/` — glob `**/*.allium` rather than assuming a single location.
+Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec against the code.
+
+| Spec | Covers |
+| --- | --- |
+| `allium/live-index.allium` | In-memory staging of transactions before block flush — `LiveIndex`/`LiveTable`, transaction lifecycle, snapshot visibility, and the leader's resolve/append/consume-back/apply pipeline. |
+| `allium/log-processor-lifecycle.allium` | Per-database leader election in the `LogProcessor` — the Following/Prepared/Leading state machine, the term fence that keeps one confirmed leader per database, and the split between launching a transition and committing the role. |
+| `allium/memory-hash-trie.allium` | The immutable in-memory hash trie indexing rows by IID within a `LiveTable` — bucketing, leaf ordering, log compaction, splitting. |
+| `dev/doc/db.allium` | The processing model of one database end to end — submit → log processing → block flush → query, the source/replica log message types, the block and table catalogs, and the compaction message flow. |
+| `dev/doc/tx.allium` | The connection-level transaction model sitting above `db.allium` — begin/buffer/commit, access-mode resolution, read basis, and pgwire/ADBC frontend parity. |
+| `dev/doc/trie-cat.allium` | The trie catalog — per-table inventory of immutable trie snapshots, the nascent/live/garbage state machine, and supersession by compaction output. |
+| `dev/doc/compaction.allium` | Coordination-free compaction — deterministic job selection and the merge algorithm. The message flow around it lives in `db.allium`. |
+| `dev/doc/gc.allium` | Trie garbage collection — leader-only, signalled at block boundaries, deleting superseded data/meta files and publishing those deletions atomically to the replica log. |
+| `dev/doc/block-gc.allium` | Garbage collection of superseded block-catalog and per-table block files — leader-only, and needs no replica-log coordination because block files are read only at startup/catch-up. |
+
 ## Definition of Done (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
 * You MUST include tests for new/changed functionality.
 * You MUST run tests locally to verify they pass.
-* You MUST update the Allium specs if you've made changes in those areas.
+* You MUST update the Allium specs if you've made changes in the areas they cover — see [Allium specs](#allium-specs) for the map.
 * The full test suite MUST pass (`./gradlew test`).
   If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
   If you've touched indexing, compaction or GC, you MUST also run `./gradlew property-test` — those are the subsystems the simulation tests cover.
