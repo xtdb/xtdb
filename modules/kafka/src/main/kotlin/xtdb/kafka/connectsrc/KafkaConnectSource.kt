@@ -238,8 +238,11 @@ class KafkaConnectSource internal constructor(
                                             runInterruptible(Dispatchers.IO) { consumer.poll(POLL_DURATION) }
                                         } catch (_: WakeupException) {
                                             break
-                                        } catch (_: InterruptException) {
-                                            break
+                                        } catch (e: InterruptException) {
+                                            // Kafka re-asserts the interrupt flag - clear it, or consumer.close()
+                                            // throws it again on the way out, beyond this catch's reach.
+                                            Thread.interrupted()
+                                            throw InterruptedException().apply { initCause(e) }
                                         }
 
                                         if (records.isEmpty) continue
@@ -280,6 +283,10 @@ class KafkaConnectSource internal constructor(
             }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: InterruptedException) {
+            // an interrupt is how cancellation reaches the blocking poll - a demotion, not a fault,
+            // so it mustn't land in ingestionError and outlive the term that raised it
+            throw CancellationException("[$dbName] external source interrupted").apply { initCause(e) }
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
