@@ -156,6 +156,24 @@ To attach YourKit:
 +
 This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
+== Debugging Arrow memory leaks
+
+An Arrow "Memory was leaked" error reports the *close-time detection* stack, not the allocation site.
+To get the allocation site, enable Arrow's debug allocator: the leak error then gains an `event log for Allocator(...)` section with `ALLOCATE` stack traces.
+
+`-D` on the command line and `JAVA_TOOL_OPTIONS` won't work - `build.gradle.kts` pins `-Darrow.memory.debug.allocator=false` in `defaultJvmArgs`, which every `Test`/`JavaExec`/`clojureRepl` task inherits, and that overrides anything passed in.
+Flip that entry to `=true`, and flip it back before committing: the debug allocator does per-allocation bookkeeping.
+
+Two things worth knowing when hunting one down:
+
+* XTDB leaks are frequently *failure-path cleanup gaps* - a buffer opened and then orphaned because an exception unwinds past its close.
+  Look for `openSlice`/`open*` whose result is handed off without a `.use`/`closeOnCatch`, on a path that can now throw.
+  `xtdb.util/closeOnCatch` closes on exception only, which is what you want when the success path's consumer already owns the buffer.
+* Property-test shrinking is unreliable for leaks - the shrinker assumes a determinism that leaks don't have, so its `:smallest` case can misattribute.
+  Bisect with the property test across commits at a high `-Piterations`, then confirm a single-op repro with a plain `deftest` under the debug allocator.
+
+The leaking allocator's name identifies the subsystem - e.g. `leader-log-processor` is tx indexing, not the query allocator.
+
 == Monitoring local dev
 
 The `monitoring/` directory contains a Docker Compose stack for local observability:
