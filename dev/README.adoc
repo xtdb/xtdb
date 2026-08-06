@@ -283,6 +283,21 @@ If your types can only represent valid states, you get correctness by constructi
 +
 The corollary: **don't pass hack values.**
 If you find yourself passing `true`, `null`, or `emptyMap()` to satisfy a field that doesn't apply, that's a sign the type is complecting two concerns.
++
+--
+*Worked example* - the Kafka leader transition (#5773, `modules/kafka/src/main/kotlin/xtdb/api/log/KafkaCluster.kt`).
+A `Map<TopicPartition, Pending(token, Deferred)>` plus a nullable processor field collapsed into a single sealed `ListenerState` held on `TopicSubscription`: `Following | Transitioning(deferred) | LeaderCommitted(processor)`.
+The `Transitioning` instance serves as its own identity token - a superseded transition's completion is dropped by `listenerState !== cmd.transitioning`, with no generation counter anywhere - and the field stays private behind `onTransitionComplete` / `evict` / `await`.
+
+Four smells travel together; spot one and go looking for the other three:
+
+* A `Map<Id, State>` alongside the objects those Ids identify -> put the state *on* the object.
+  A side-map is a second source of truth, and it drifts.
+* A token/generation/version counter answering "is this still the operation I started?" -> use the object's identity (`a !== b`).
+  If you're holding the object, you don't need to number it.
+* A field that's null in some states and set in others, guarded at each use -> a sealed hierarchy, one variant per state carrying exactly its valid data, driven by an exhaustive `when` with no `else`.
+* Reaching into another object's fields to decide what to do to it -> move the behaviour onto that object; pass the event in and let it extract what it needs.
+--
 
 Tidy first::
 +
@@ -307,6 +322,16 @@ Assume your reader is a senior developer familiar with XTDB and its codebase, Cl
 * Comments that repeat the function/variable name
 * Docstrings that describe obvious behaviour
 * Step-by-step narration of what code does
+* Caller lists on a function - "called by X to do Y", "the canonical caller is Z".
+  Document the function's own contract: what it does, its threading/locking discipline, its preconditions.
+  The contract is stable; the call graph isn't, so a caller list becomes either a lie or a maintenance chore.
+  If a *specific* call site needs explaining (unusual sequencing, a workaround), comment at that call site instead.
+* "Used to be" narration - "this used to use X", "mirrors the old mutex shape", "previously we did Z".
+  A comment that only lands as a contrast with the previous code rots at the next refactor.
+  Ask whether it would make sense to a reader with no knowledge of prior versions; if not, move it to the commit body and describe the current contract directly.
+* Re-narration of an established pattern at every site it's applied.
+  A `close()` that closes things needs no comment, nor a "Phase 2 of teardown" label.
+  Document the pattern once in its canonical place (e.g. link:doc/coroutines.adoc[] for two-phase teardown) and leave the instances bare, keeping only the genuinely non-obvious: a stated precondition, a real gotcha (Arrow won't close a parent allocator while a child buffer is live, so the allocator closes last), subtle correctness reasoning.
 
 **Do write:**
 
@@ -329,6 +354,34 @@ Choose the appropriate anomaly category:
 * `err/fault` — internal error (our fault)
 
 See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
+
+=== Writing tests
+
+(For *running* tests, see <<_testing,Testing>> above.)
+
+Observe real phenomena, not internal calls::
++
+Wire up real components - `LiveIndex.open(...)` and the catalogs it needs, `InMemoryLog`, `MemoryStorage` - and assert against observable state: is the data queryable, did the replica log get the right `ResolvedTx`, did the watcher tip into `Failed`.
+Lift the expensive ones into `@BeforeEach` fields and close them in `@AfterEach`.
++
+Avoid `verify(exactly = N) { mock.someMethod(any()) }`.
+Mock-call assertions test *implementation*, not *behaviour* - they pin the test to the current call structure, so a behaviour-preserving refactor (routing the same effect through a different internal API) breaks the test even though the user-visible outcome is unchanged.
+Reach for a mock only to inject failure or non-determinism you can't otherwise produce - "what does the leader do when `importTx` throws?" is a legitimate mock; "did `commitTx` get called?" is not.
++
+Name tests after the observable behaviour rather than the method on today's code path: `successive external events appear in the replica log with monotonic txIds`, not `subscription routes events through commitTx`.
++
+When a refactor surfaces a brittle test, work out what it was protecting and then delete and rewrite it.
+Patching tends to keep the bad shape - mock plus verify, name referencing internals - and just shift it sideways.
+
+Don't wrap a single assertion in `t/testing`::
++
+Use `t/is`'s message argument - `(t/is <expr> "what this checks")` - which already carries the description into the failure output.
+Reserve `t/testing` for grouping *multiple* assertions under a shared context.
+
+Split test namespaces by the surface they exercise::
++
+Default to the lowest surface that can express the case, and reach for a higher one only when the case *requires* it - so authz, for instance, defaults to node-level `xt/*` tests in `xtdb.authz-test`, with `xtdb.pgwire.authz-test` taking only the cases that need a real connection (a non-default tx principal, or `pg_catalog` introspection).
+The mechanism under test is usually testable without the protocol, and dragging pgwire into every case makes the suite slower and the failures harder to read.
 
 === Git
 
