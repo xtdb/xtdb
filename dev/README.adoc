@@ -27,7 +27,7 @@ bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1 \
 bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.1
 ```
 
-See link:../skills/clojure-eval/SKILL.md[skills/clojure-eval/SKILL.md] for usage details.
+See the `/clojure-eval` skill for usage details - it ships with `clojure-mcp-light` rather than living in this repo.
 
 == Getting started
 
@@ -156,6 +156,24 @@ To attach YourKit:
 +
 This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
+== Debugging Arrow memory leaks
+
+An Arrow "Memory was leaked" error reports the *close-time detection* stack, not the allocation site.
+To get the allocation site, enable Arrow's debug allocator: the leak error then gains an `event log for Allocator(...)` section with `ALLOCATE` stack traces.
+
+`-D` on the command line and `JAVA_TOOL_OPTIONS` won't work - `build.gradle.kts` pins `-Darrow.memory.debug.allocator=false` in `defaultJvmArgs`, which every `Test`/`JavaExec`/`clojureRepl` task inherits, and that overrides anything passed in.
+Flip that entry to `=true`, and flip it back before committing: the debug allocator does per-allocation bookkeeping.
+
+Two things worth knowing when hunting one down:
+
+* XTDB leaks are frequently *failure-path cleanup gaps* - a buffer opened and then orphaned because an exception unwinds past its close.
+  Look for `openSlice`/`open*` whose result is handed off without a `.use`/`closeOnCatch`, on a path that can now throw.
+  `xtdb.util/closeOnCatch` closes on exception only, which is what you want when the success path's consumer already owns the buffer.
+* Property-test shrinking is unreliable for leaks - the shrinker assumes a determinism that leaks don't have, so its `:smallest` case can misattribute.
+  Bisect with the property test across commits at a high `-Piterations`, then confirm a single-op repro with a plain `deftest` under the debug allocator.
+
+The leaking allocator's name identifies the subsystem - e.g. `leader-log-processor` is tx indexing, not the query allocator.
+
 == Monitoring local dev
 
 The `monitoring/` directory contains a Docker Compose stack for local observability:
@@ -265,6 +283,21 @@ If your types can only represent valid states, you get correctness by constructi
 +
 The corollary: **don't pass hack values.**
 If you find yourself passing `true`, `null`, or `emptyMap()` to satisfy a field that doesn't apply, that's a sign the type is complecting two concerns.
++
+--
+*Worked example* - the Kafka leader transition (#5773, `modules/kafka/src/main/kotlin/xtdb/api/log/KafkaCluster.kt`).
+A `Map<TopicPartition, Pending(token, Deferred)>` plus a nullable processor field collapsed into a single sealed `ListenerState` held on `TopicSubscription`: `Following | Transitioning(deferred) | LeaderCommitted(processor)`.
+The `Transitioning` instance serves as its own identity token - a superseded transition's completion is dropped by `listenerState !== cmd.transitioning`, with no generation counter anywhere - and the field stays private behind `onTransitionComplete` / `evict` / `await`.
+
+Four smells travel together; spot one and go looking for the other three:
+
+* A `Map<Id, State>` alongside the objects those Ids identify -> put the state *on* the object.
+  A side-map is a second source of truth, and it drifts.
+* A token/generation/version counter answering "is this still the operation I started?" -> use the object's identity (`a !== b`).
+  If you're holding the object, you don't need to number it.
+* A field that's null in some states and set in others, guarded at each use -> a sealed hierarchy, one variant per state carrying exactly its valid data, driven by an exhaustive `when` with no `else`.
+* Reaching into another object's fields to decide what to do to it -> move the behaviour onto that object; pass the event in and let it extract what it needs.
+--
 
 Tidy first::
 +
@@ -279,6 +312,51 @@ Kotlin parameter defaults are appropriate when the default is the overwhelming n
 For data structures where the caller SHOULD care about every field (wire format types, domain records), don't use defaults — force every construction site to be explicit.
 Defaults hide intent; a caller can accidentally omit a field and get a value that compiles but doesn't mean what they think.
 
+Name the database, not the `db`::
++
+The bare name `db` is reserved for the `Database` object; the database *name* is `db-name` in Clojure, `dbName` in Kotlin.
+The two coexist in the same scopes — `scan`/`emitScan` resolves a name into a `Database` — so a bare `db` holding a string misreads.
+Concretely, the scan logical-plan option is `:db-name`, and planner pairs are `[db-name table-ref]`.
+The user-facing XTQL surface is the exception and keeps its own key: `(from {:db "…", :table …})`.
+
+Import, don't fully-qualify::
++
+In Kotlin and in Clojure alike, add the import and use the short name — `IKeyFn$KeyFn/SNAKE_CASE_STRING`, not `xtdb.api.query.IKeyFn$KeyFn/SNAKE_CASE_STRING`.
+Nested types need importing in their own right: importing `IKeyFn` does not bring in `IKeyFn$KeyFn`.
+
+One space, never aligned::
++
+Don't pad `=` — or `:`, or anything else — with extra spaces so that it lines up with the neighbouring lines; one space each side, always.
+Aligned blocks make noisy diffs, because adding or renaming one key forces re-alignment of the whole block and drags unrelated whitespace through the review.
+Where the surrounding code is already aligned, don't propagate the style: write new lines single-spaced and leave the neighbours alone.
+
+Visibility follows intent, not the caller count::
++
+"The only callers are in-module or in tests" is not grounds for making something `internal` or `private`.
+We design public surfaces ahead of their consumers — the granular and batch write APIs on `OpenTx.Table` are deliberately exposed for external-source writers that don't exist yet.
++
+Tighten a genuine implementation-detail leak — `OpenTx.Table.txRelation`, the raw staging relation behind those APIs, is `internal` for exactly that reason.
+For anything else, ask about the intended surface rather than inferring it from a caller grep.
+Visibility is a design decision in the same family as _Make illegal states unrepresentable_ and _Intentional defaults_: the declaration states what callers may do, so it has to be chosen rather than derived from what they happen to do today.
+
+Inject the collaborator; don't reach for a `Factory`::
++
+A factory earns its keep only when instances must be created per-something at runtime, by code that doesn't have the dependencies to hand.
+`Compactor.Driver.Factory` qualifies — `Compactor.Impl.openForDatabase` creates one driver per database.
+`LeaderLogProcessor` doesn't: its driver has a single construction site, `LogProcessor.openLeader`, which already holds `partitionStorage`, `partitionState` and `blockUploader`, so it takes a `LeaderDriver` as a constructor parameter instead.
++
+Before writing `interface Factory`, look at every call site of the thing being constructed.
+One site that already has the arguments means a plain constructor parameter — and direct injection shrinks the consumer as well, because the collaborator absorbs the parameters the consumer only held in order to pass them along.
+
+Valid time is when a fact becomes true, not what it describes::
++
+Valid time models when an assertion becomes true, becomes known, or is reported.
+The instant a fact *describes* — a reporting period's start and end, an event's effective date — is an ordinary domain column, and stays one.
++
+Back-dating valid-from to the period a fact describes asserts that we held the fact before it existed: an organisation does not report its FY2024 net income at the start of 2024, so a flow figure's valid-from is the date it was filed, not its `period_start`.
+An instantaneous measure differs — an as-of balance is true as of its `period_end`.
+When choosing valid-from for a CDC or indexer put, ask "when did this become true or known?", not "what date does it refer to?".
+
 === Comments
 
 Comments that merely restate the code add visual noise without value.
@@ -289,6 +367,16 @@ Assume your reader is a senior developer familiar with XTDB and its codebase, Cl
 * Comments that repeat the function/variable name
 * Docstrings that describe obvious behaviour
 * Step-by-step narration of what code does
+* Caller lists on a function - "called by X to do Y", "the canonical caller is Z".
+  Document the function's own contract: what it does, its threading/locking discipline, its preconditions.
+  The contract is stable; the call graph isn't, so a caller list becomes either a lie or a maintenance chore.
+  If a *specific* call site needs explaining (unusual sequencing, a workaround), comment at that call site instead.
+* "Used to be" narration - "this used to use X", "mirrors the old mutex shape", "previously we did Z".
+  A comment that only lands as a contrast with the previous code rots at the next refactor.
+  Ask whether it would make sense to a reader with no knowledge of prior versions; if not, move it to the commit body and describe the current contract directly.
+* Re-narration of an established pattern at every site it's applied.
+  A `close()` that closes things needs no comment, nor a "Phase 2 of teardown" label.
+  Document the pattern once in its canonical place (e.g. link:doc/coroutines.adoc[] for two-phase teardown) and leave the instances bare, keeping only the genuinely non-obvious: a stated precondition, a real gotcha (Arrow won't close a parent allocator while a child buffer is live, so the allocator closes last), subtle correctness reasoning.
 
 **Do write:**
 
@@ -311,6 +399,90 @@ Choose the appropriate anomaly category:
 * `err/fault` — internal error (our fault)
 
 See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
+
+=== Internal-but-public declarations
+
+Some Kotlin declarations have to stay `public` without being public API — they're called from Clojure over interop, or from another module.
+Kotlin `internal` isn't an option for either: it name-mangles the JVM symbol (so Clojure can't resolve it) and it doesn't cross module boundaries.
+
+Mark those with `@InternalApi` (`api/src/main/kotlin/xtdb/InternalApi.kt`), a `@RequiresOptIn(level = ERROR)` marker.
+The declaration stays public — Clojure and cross-module callers are untouched — while a Kotlin caller has to write `@OptIn(InternalApi::class)`, at the declaration or as a `@file:` annotation.
+
+`@InternalApi` and `/** @suppress */` are complementary, not alternatives:
+
+* `/** @suppress */` hides the declaration from kdoc, and enforces nothing.
+* `@InternalApi` is a compile-time barrier for Kotlin callers, and does not hide anything from kdoc.
+
+So an internal-but-public member carries both.
+`grep @InternalApi` enumerates the whole surface; each site SHOULD carry a comment saying what would have to change for it to become genuinely `internal` (see `OpenTx`'s constructor for the shape).
+
+=== Clojure style
+
+Type-hint at the source, not at the call sites::
++
+Hint where the value is introduced — the destructuring form, the `let` binding, the fn param — rather than at each `.method` call.
+`{:keys [^String default-db]}` fixes every use of `default-db` in scope; `(.databaseOrNull db-cat ^String default-db)` fixes one.
+
+Don't hint speculatively::
++
+A *resolved* Java instance-method call already carries its declared return type, and that type flows — into the next call in a chain, and into a `let`/`with-open` binding.
+So `(with-open [conn (.connect node db-name)] (.submitTx conn ops opts))` needs no `^Xtdb$Connection`: `.connect` resolves off a typed `node` with return type `Xtdb$Connection`, `conn` is tagged from that, and `.submitTx`/`.close` resolve off `conn`.
++
+Where you're unsure whether an expression reflects, verify rather than pre-empting.
+The dev REPL sets `*warn-on-reflection*` (`src/dev/clojure/user.clj`); the Gradle build does not, so a green test run proves nothing either way.
+
+Use `.getX`, not `.x`, for Kotlin `val` properties::
++
+Clojure's `(.x obj)` resolves to a no-arg method `x()` or a public field `x`, and a Kotlin property is neither — it compiles to `getX()` over a private backing field.
+So `(.getSchema loader)`, not `(.schema loader)`.
+
+Pass a plain `fn` where a Java functional interface is expected::
++
+Clojure 1.12 coerces a `fn` to a `@FunctionalInterface` at an interop site where the compiler knows the target parameter type, so prefer `(.tryAdvance cursor (fn [^RelationReader rel] ...))` over a `reify` of `Consumer` — it drops the boilerplate and the import.
+It needs the receiver hinted (`^ResultCursor cursor`) for the overload, and its own param hinted to keep calls against that param out of reflection.
+
+=== Writing tests
+
+(For *running* tests, see <<_testing,Testing>> above.)
+
+Observe real phenomena, not internal calls::
++
+Wire up real components - `LiveIndex.open(...)` and the catalogs it needs, `InMemoryLog`, `MemoryStorage` - and assert against observable state: is the data queryable, did the replica log get the right `ResolvedTx`, did the watcher tip into `Failed`.
+Lift the expensive ones into `@BeforeEach` fields and close them in `@AfterEach`.
++
+Avoid `verify(exactly = N) { mock.someMethod(any()) }`.
+Mock-call assertions test *implementation*, not *behaviour* - they pin the test to the current call structure, so a behaviour-preserving refactor (routing the same effect through a different internal API) breaks the test even though the user-visible outcome is unchanged.
+Reach for a mock only to inject failure or non-determinism you can't otherwise produce - "what does the leader do when `importTx` throws?" is a legitimate mock; "did `commitTx` get called?" is not.
++
+Name tests after the observable behaviour rather than the method on today's code path: `successive external events appear in the replica log with monotonic txIds`, not `subscription routes events through commitTx`.
++
+When a refactor surfaces a brittle test, work out what it was protecting and then delete and rewrite it.
+Patching tends to keep the bad shape - mock plus verify, name referencing internals - and just shift it sideways.
+
+Don't wrap a single assertion in `t/testing`::
++
+Use `t/is`'s message argument - `(t/is <expr> "what this checks")` - which already carries the description into the failure output.
+Reserve `t/testing` for grouping *multiple* assertions under a shared context.
+
+Split test namespaces by the surface they exercise::
++
+Default to the lowest surface that can express the case, and reach for a higher one only when the case *requires* it - so authz, for instance, defaults to node-level `xt/*` tests in `xtdb.authz-test`, with `xtdb.pgwire.authz-test` taking only the cases that need a real connection (a non-default tx principal, or `pg_catalog` introspection).
+The mechanism under test is usually testable without the protocol, and dragging pgwire into every case makes the suite slower and the failures harder to read.
+
+Use dash-free table names::
++
+The three table-name representations disagree on kebab-case.
+`[:put-docs :my-table …]` normalises the keyword to `my_table`, while the `#xt/table my-table` reader literal and `OpenTx.table(schema, "my-table")` both keep the dash.
+A test that writes through one and reads through the other silently addresses two different tables, and the read finds nothing.
+Name test tables `:docs`, `:foo` — anything without a dash — and all three agree.
+
+White-box tests of `internal` Kotlin have to be Kotlin::
++
+Kotlin `internal` members are JVM name-mangled (`foo$xtdb_core`), so Clojure interop cannot resolve them at all — the failure is `IllegalArgumentException: No matching method`.
+A test that needs one has to be a Kotlin test in the same module; the corollary is that tightening a Kotlin member to `internal` breaks every Clojure caller, which is what `xtdb.InternalApi` exists to avoid (see <<_internal_but_public_declarations,Internal-but-public declarations>>).
++
+`core/src/test/kotlin/xtdb/indexer/LiveIndexTest.kt` stands up a real `LiveIndex`, catalogs, storage and `OpenTx` without a node — copy its `TestDb` fixture rather than reaching for a full node.
+Ingest-and-inspect and on-disk format cases can stay in Clojure at node level (`xt/execute-tx`).
 
 === Git
 

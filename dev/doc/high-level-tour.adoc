@@ -23,6 +23,33 @@ Each event simply contains the IID of the entity, the system-time of the event, 
 On query, we then merge-sort the individual files of the LSM tree to re-construct the bitemporal history for each entity.
 * XTDB is https://jepsen.io/consistency['strictly serializable'^] - both that updates to entities appear to have a total ordering, and that reads observe all previous successful writes.
 
+== Layering: storage, state and services
+
+A hexagonal-inspired split that most of the indexing/storage side of the codebase follows.
+It's a useful lens for placing a new class, and for spotting one that's ended up doing two jobs.
+
+Storage - the I/O layer::
+`BufferPool` (`xtdb.storage`, with `RemoteBufferPool`/`LocalStorage`/`MemoryStorage` behind it), `ObjectStore` (`xtdb.api.storage`), `Log<M>` (`xtdb.api.log`), and `PageMetadata` (`xtdb.metadata`) - a read-through cache over the buffer pool.
+
+State - in-memory state holders::
+`BlockCatalog` and `TableCatalog` (`xtdb.catalog`), `TrieCatalog` (interface in `xtdb.trie`, implemented in `xtdb.trie-catalog`), and `LiveIndex` (`xtdb.indexer`).
+
+Services - orchestration::
+`LogProcessor` and its three role implementations, `BlockUploader` and `CrashLogger` (`xtdb.indexer`); `Compactor` (`xtdb.compactor`); `BlockGarbageCollector` and `TrieGarbageCollector` (`xtdb.garbage-collector`); and `DatabaseCatalog` (`xtdb.database` - a service despite the name, managing database attach/detach and lifecycle).
+
+Dependencies flow inward: services depend on state and on storage; state depends on neither.
+State components *yield* data and the service does the I/O - `LiveIndex.finishBlock` takes a `BufferPool` as a call parameter rather than holding one, and it's `BlockUploader` (which does hold one) that supplies it and writes the resulting files.
+That's 'functional core, imperative shell' in OO vocabulary.
+
+`PartitionState` and `PartitionStorage` (`xtdb.database`) state the split most explicitly: the former bundles the four state holders, the latter the buffer pool, the source/replica logs and the page-metadata factory.
+
+Two caveats, so you don't read more into this than is there:
+
+* *It isn't a package boundary.*
+  `xtdb.catalog`, `xtdb.compactor` and `xtdb.garbage-collector` are clean, but `xtdb.indexer` holds `LiveIndex` (state) alongside the log processors and `BlockUploader` (services), and `xtdb.trie` holds the `TrieCatalog` interface alongside the trie/data/metadata file writers.
+* *`TableCatalog` keeps a `BufferPool` for its lifetime*, unlike `BlockCatalog` (which takes none) and `TrieCatalog` (whose I/O sits in the factory).
+  It's only used by `refresh`, called once from `PartitionState.open` at startup - so 'state does no runtime I/O' holds here by convention rather than by construction.
+
 == The lifecycle of a transaction
 
 1. *Clients submit transactions to any XTDB node*
@@ -34,6 +61,15 @@ Transactions in XTDB are fundamentally asynchronous and non-interactive.
 Transaction 'operations' (e.g. put-docs, delete-docs, or a SQL query) are buffered into an atomic transaction as required, serialised into Arrow format, and submitted to the log.
 
 The client receives a 'ticket' containing the tx-id (essentially a log sequence number) and system-time of the transaction, which it later provides on query to ensure it observes the results of the submitted transactions.
+
+*SQL DML is expanded eagerly, at submit time, wherever we can manage it* - rather than submitting a raw `TxOp.Sql` and re-planning it on every node at index time.
+`Xtdb.Connection.expandStaticOps` runs each op through `SqlPlanner.toStaticOps` (implemented by `xtdb.sql/->sql-planner` over `sql->static-ops`), which turns INSERT and PATCH into core `TxOp.PutDocs`/`TxOp.PatchDocs`.
+Statements we can't expand statically - UPDATE, DELETE, ERASE, and the non-DML remainder - return `nil` from the planner, and the caller keeps the raw `TxOp.Sql`.
+
+There are two submit points, both going through `expandStaticOps`: the manual-tx drain (`drainWriteTx`) and the autocommit `executeTxOp`.
+Every frontend funnels through them - pgwire's `executeUpdate`, the ADBC batch path in `xtdb.adbc`, Flight SQL - so there is one expansion path rather than one per frontend.
+That matters beyond the saved work: expanding at submit time means malformed DML is rejected by the planner, with a planner error, at the point the client submits it, rather than surfacing later as a generic indexer failure.
+Before the drain, the connection's `DmlBuffer` coalesces consecutive same-SQL ops, appending their args into the last op's relation, so a prepared INSERT in a loop becomes a single multi-row op.
 --
 2. *A single leader per database indexes the source log*
 +
@@ -247,3 +283,16 @@ These expressions are compiled into Clojure 'kernels' - forms which, when compil
 
 The results from the outermost operator are then deserialised from Arrow format into the appropriate output format for the user.
 --
+
+=== Two decode paths, held in agreement by hand
+
+`xt/q` dispatches on what you pass it (`xtdb.protocols/Connectable`), and the two impls decode results by completely different routes:
+
+* an `Xtdb` node or `Xtdb$Connection` reads *in-process*, decoding Arrow directly - `xtdb.adbc/plan-q`, via `RelationReader.toMaps`;
+* a `DataSource`/`java.sql.Connection` - including an `xt/client` against a remote node - goes over pgwire and next.jdbc, via `xtdb.next.jdbc/builder-fn`.
+
+The two are *made* to agree; they don't agree for free.
+The Arrow decode yields `java.util` collections, so `xtdb.adbc/reduce-page` walks every row through `xtdb.util/->clj`, and the JDBC builder does the equivalent walk on its side - both so that results compare `=` and hash the same whichever way you queried.
+
+The hazard when you touch either path is that a divergence is close to invisible: two values can print identically and still fail `=`, because the difference is in the type rather than the rendering (a `ZonedDateTime` carrying `ZoneId "UTC"` against one carrying the `ZoneOffset` `Z`, say, or a numeric width).
+Assert equality against a literal, not against a re-printed string.

@@ -50,6 +50,9 @@ To deploy to the live site, push to the `docs-live` branch on GitHub.
 End-user documentation lives under `docs/src/content/docs/`, organised around the [Diataxis](https://diataxis.fr/) framework.
 The conventions below keep pages coherent across contributors (human and AI), and are also what an AI agent should follow when editing or adding pages.
 
+For anything persuasive — a landing page, the `about/` pages, a conference abstract — read [positioning.md](./positioning.md) first.
+It holds the framing behind *why* XTDB exists, which is a separate question from the voice and structure conventions below.
+
 ### Diataxis
 
 The four Diataxis quadrants — tutorials, how-to, reference, explanation — apply recursively.
@@ -144,6 +147,16 @@ Not every v2.X feature needs a changelog entry.
   Single-writer indexing replaced multi-writer indexing — that's a transition.
 - **Inline `(vX.Y+)` marker** — for purely *additive* features.
   Read-only secondaries and `XTDB_SKIP_DBS` added new capabilities but didn't change anything that existed before, so they live inline on their section heading (`### Read-only secondary databases (v2.2+)`) without a dedicated changelog entry.
+
+### Unreleased changes get neither
+
+The released-or-not test that governs the commit-message `!` (see `AGENTS.md`) governs the docs too.
+Where the behaviour being changed only ever existed on an unreleased code path, there is no docs update and no changelog entry — the commit body carries the reasoning, and that's enough.
+A changelog documents transitions users lived through; if nothing shipped, there were none.
+
+This holds even when the change feels significant.
+Routing the Clojure `xtdb.api` fns in-process over ADBC made node operations honour the node's configured `defaultTz` rather than the client JVM's zone — over pgwire, pgjdbc announces the client zone in its startup packet, so a node's `defaultTz` had never governed a Clojure query.
+Genuinely user-visible, and deliberately left out of both the docs and the changelog, because the in-process path it changed had not been released.
 
 ### Properties vs mechanism
 
