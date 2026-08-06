@@ -44,6 +44,11 @@ I find this works well, but each to their own.)
 This is related to the previous point, because it's much easier to reason about/bisect changes if they're linear. It means:
 
 ** Prefer rebasing feature branches on `main` to pull in changes from elsewhere over merging `main` into the feature branch.
+** When you rebase a stale branch across a path that's seen heavy churn, the real risk isn't the textual conflicts - it's that taking the *branch's* side of one silently reverts a fix that landed on `main` after the branch forked.
+   A conflict on a critical path is often two fixes competing, and which side encodes a fix is visible in the issue/PR intent, not in the diff.
++
+For each conflicting file, `git log <merge-base>..origin/main -- <file>` to find the intervening commits, read their PRs/issues, and only then choose a side.
+After resolving, trace the fixed code path end-to-end rather than just eyeballing the marker site - a resolution can be locally coherent and still have dropped a fix a few lines away.
 ** When you merge your feature branch back into main, there are a few patterns, depending on the size of the change:
 *** Github's 'squash and merge PR' is a reasonable default
 *** If it's a single commit, it can go straight onto main (once reviewed)
