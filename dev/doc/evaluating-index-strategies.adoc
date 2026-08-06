@@ -71,3 +71,19 @@ Pricing data::
 Static reference data::
 * Low and static cardinality, low update frequency
 * Often this is frequently accessed and, due to its size, is likely to be fully cached - not generally a significant concern.
+
+== Superseded vs current: which way a table's tree grows
+
+The shapes above have a framing that unifies them, and it's the one to reach for when reasoning about how a table's LSM tree lands in the object store.
+
+Apply the https://en.wikipedia.org/wiki/Lindy_effect[Lindy effect] to data: newer data is far more likely to be superseded, and data that has stayed current a long time tends to stay current.
+Compare generational GC - but the axis here is *superseded vs current*, not *old vs new*.
+
+The consequence is that per table you tend to get one shape or the other, rarely both:
+
+* *the superseded side grows wide* - high-churn feeds, where each entity is overwritten constantly and almost all of the history is dead (pricing data, IoT readings above);
+* *the current side grows deep* - settle-and-stay data, where entities accumulate and then stop changing (trade/order data, user profiles above).
+
+This is what makes compaction tractable rather than merely helpful.
+Because XTDB understands temporality, it knows which files a query *cannot* touch, so compaction can elide the vast majority of files for any given query rather than having to merge everything.
+It's also why the immutable Arrow/HAMT file layout pays off: files are cheap to keep on S3 and cacheable per-application, so an OLTP workload keeps the current data hot while an OLAP one caches more of the history.
