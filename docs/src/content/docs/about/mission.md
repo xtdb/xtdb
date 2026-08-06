@@ -4,7 +4,9 @@ title: Mission
 
 At [JUXT](https://juxt.pro/), the company behind XTDB, our mission is **to simplify how the world makes software**.
 
-We want XTDB to reduce the time and money required for organizations to build and maintain [**safe**](https://www.juxt.pro/blog/kent-beck-podcast/) systems of record and their associated APIs.
+We want XTDB to reduce the time and money it takes for organizations with business-critical, time-oriented requirements to [**safely**](https://www.juxt.pro/blog/kent-beck-podcast/) build and maintain systems of record.
+
+Put another way: XTDB helps when time is complex and correctness matters.
 
 ## Time Matters
 
@@ -40,6 +42,15 @@ This lack of accurate time-based versioning has four main consequences that plag
 
 XTDB, therefore, is an immutable, time-travel database designed for building complex applications, supporting developers with features that are essential for meeting common regulatory compliance requirements.
 
+Crucially, this is not a trade of convenience for safety.
+We want both:
+
+- the ease and performance of a traditional update-in-place database, for everyday transactions and queries, *and*
+- the safety net of bitemporality, for when you need it.
+
+So `INSERT` is `INSERT`, `UPDATE` is `UPDATE`, `DELETE` is `DELETE` - no temporal filters to remember, and no separate OLAP system and ETL pipeline to keep in step.
+Queries read "as of now" by default; history is there when you ask for it, rather than something you model explicitly everywhere and pay for in every query and join.
+
 It is built to help solve the hard problems of: 
 
 - accurate record keeping (with full ACID transaction support), 
@@ -50,3 +61,13 @@ XTDB achieves this by its ubiquitous ['bitemporal'](https://en.wikipedia.org/wik
 It records the history of all changes (particularly UPDATEs and DELETEs, which are normally destructive operations), and by restricting the scope of concurrent database usage, to retain an auditable, linear sequence of all changes.
 
 Beyond the obvious auditing and debugging benefits of retaining change data and prior database states, XTDB's history-preserving capability presents a robust & stable source of truth - a *'basis'* - within a wider IT architecture that is unlike anything that most databases can offer.
+
+This matters increasingly where decisions are made autonomously.
+Every query runs at a basis, and earlier bases stay queryable, so "what exactly did this system see when it made that decision?" has an exact answer that can be reproduced long after the fact.
+
+## Adoption
+
+Adopting XTDB does not require a migration.
+
+Add one data source at a time - direct SQL DML, Postgres, Kafka - and size compute per application.
+Federation and external sources are what make this practical: they let XTDB sit as a component within a wider data architecture, rather than as a monolith that everything else has to move onto first.
