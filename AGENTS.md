@@ -18,9 +18,14 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * Modules are named `xtdb-<directory>` - e.g. `:xtdb-core`, `:modules:xtdb-kafka` - so that the Maven artifacts have the `xtdb-` prefix.
 * We use conventional commits for commit messages. Common prefixes: `feat:`, `fix:`, `refactor:`, `tidy:`, `build:`, `test:`, `dev:`, `ai:`.
   * Use sub-tags/scopes in parentheses where relevant, e.g. `fix(ee):`, `feat(sql):`, `refactor(logical-plan):`.
+  * `feat:` is for **externally-visible** functionality only — new SQL syntax, a new config YAML key, new pgwire behaviour, a new public Java/Kotlin API that users call.
+    A new internal abstraction, seam or behaviour-preserving reorg is `refactor:` (or `tidy:` for pure equivalence changes), however large it is.
+    Ask "can a user see or do something new because of this change?"; if not, it isn't `feat:`.
   * Indicate breaking changes with `!`, e.g. `tidy!:`.
     `!` only applies to **user-facing** API changes (SQL syntax, pgwire protocol, config YAML, public Java/Kotlin API).
     Internal refactors (e.g. changing internal types like `TransactionResult`, `Watchers`) are not breaking even if the types are technically `public` in Kotlin.
+    The surface MUST also have **shipped in a release**.
+    Changing a public API that was added but never released breaks no existing user, so it's a plain `fix:`/`feat:` — no `!`, and no `breaking change` label.
   * You MUST use the commit skill for writing commit messages.
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill.
