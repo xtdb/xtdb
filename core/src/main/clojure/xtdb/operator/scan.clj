@@ -27,6 +27,7 @@
            (xtdb Bytes)
            (xtdb.api ICursor)
            (xtdb.indexer DatabaseSnapshot Snapshot Snapshot$Source TableSnapshot)
+           (xtdb.database PartitionStorage)
            (xtdb.metadata MetadataPredicate PageMetadata)
            (xtdb.operator.scan MultiIidSelector ScanCursor ScanMetrics SingleIidSelector)
            xtdb.query.IQuerySource$QueryCatalog
@@ -198,6 +199,47 @@
         (test [_ path]
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
+(defn- ->partition-scan-cursor
+  "Everything partition-specific arrives as an argument, so this knows nothing about which partition
+   it's been given or how many exist."
+  ^ICursor [{:keys [allocator ^TableRef table col-names col-preds iid-set metadata-pred scan-opts
+                    schema args ^ScanMetrics metrics]}
+            ^PartitionStorage storage ^Snapshot snapshot ^TemporalBounds temporal-bounds]
+
+  (let [metadata-mgr (.getMetadataManager storage)
+        buffer-pool (.getBufferPool storage)]
+
+    (util/with-close-on-catch [!segments (LinkedList.)]
+      (let [filter-opts {:query-bounds temporal-bounds
+                         :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
+                         :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
+            current-tries (cat/current-tries (.trieTableState snapshot table))
+            filtered-tries (cat/filter-tries current-tries filter-opts)]
+
+        (.addFiles metrics
+                   (long (- (count current-tries) (count filtered-tries)))
+                   (long (count filtered-tries)))
+
+        (doseq [{:keys [^String trie-key]} filtered-tries]
+          (.add !segments (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
+
+        (doseq [^TableSnapshot live-table-snap (.table snapshot table)]
+          (.add !segments (.getSegment live-table-snap)))
+
+        (let [count-pages (fn [pages]
+                            (let [survivors (trie/filter-pages pages filter-opts)]
+                              (.addPages metrics
+                                         (long (- (count pages) (count survivors)))
+                                         (long (count survivors)))
+                              survivors))
+              merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
+
+          (ScanCursor. allocator (vec col-names) col-preds
+                       temporal-bounds (boolean (:clamp-valid-time? scan-opts))
+                       !segments (.iterator ^Iterable merge-tasks)
+                       schema args
+                       metrics))))))
+
 (defn scan-vec-types [^IQuerySource$QueryCatalog db-catalog, snaps, scan-cols]
   (letfn [(->vec-type [[db-name ^TableRef table col-name]]
             (let [col-name (str col-name)]
@@ -222,8 +264,6 @@
             db (.databaseOrNull db-cat db-name)
             storage (.getStorage db)
             state (.getQueryState db)
-            metadata-mgr (.getMetadataManager storage)
-            buffer-pool (.getBufferPool storage)
             table-catalog (.getTableCatalog state)
             col-names (->> columns
                            (into #{} (map (fn [[col-type arg]]
@@ -308,60 +348,43 @@
                                              (update :for-valid-time
                                                      (fn [fvt]
                                                        (or fvt [:at [:now]]))))
-                               live-table-snaps (.table snapshot table)
-                               ;; TODO (#5835) each branch takes its own partition's basis slot. Wrong
-                               ;; rather than absent at N>1: every branch would apply partition 0's
+
+                               ;; EXPLAIN ANALYZE reports one set of counters per operator, and these
+                               ;; are keyed by (db, scan source) — operator identity. Built here so
+                               ;; that stays true however many cursors the operator ends up building.
+                               ^ScanMetrics metrics (ScanMetrics. db-name
+                                                                  (str (.getSchemaName table) "." (.getTableName table)))
+
+                               ;; TODO (#5835) each partition takes its own basis slot. Wrong rather
+                               ;; than absent at N>1: every partition would apply partition 0's
                                ;; temporal bound, so the scan returns wrong rows rather than failing.
                                temporal-bounds (->temporal-bounds allocator args scan-opts
                                                                   (-> (basis/<-time-basis-str snapshot-token)
-                                                                      (get-in [db-name 0])))]
+                                                                      (get-in [db-name 0])))
 
-                           (util/with-close-on-catch [!segments (LinkedList.)]
+                               trace? (or explain-analyze? (and tracer query-span))
+                               trace-attrs (when trace?
+                                             (not-empty
+                                              (merge-with merge
+                                                          (when pushdown-blooms
+                                                            (update-keys (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
+                                                                         str))
+                                                          (update-keys (update-vals (into {} (filter val) (or pushdown-iids {}))
+                                                                                    (fn [s] {:iids s}))
+                                                                       str))))]
 
-                             (let [filter-opts {:query-bounds temporal-bounds
-                                                :projects-temporal-cols? (boolean (some #{"_valid_from" "_valid_to" "_system_from" "_system_to"} col-names))
-                                                :clamp-valid-time? (boolean (:clamp-valid-time? scan-opts))}
-                                   ^ScanMetrics metrics (ScanMetrics. db-name
-                                                                      (str (.getSchemaName table) "." (.getTableName table)))
-                                   current-tries (cat/current-tries (.trieTableState snapshot table))
-                                   filtered-tries (cat/filter-tries current-tries filter-opts)]
-
-                               (.addFiles metrics
-                                          (long (- (count current-tries) (count filtered-tries)))
-                                          (long (count filtered-tries)))
-
-                               (doseq [{:keys [^String trie-key]} filtered-tries]
-                                 (.add !segments
-                                       (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
-
-                               (doseq [^TableSnapshot live-table-snap live-table-snaps]
-                                 (.add !segments (.getSegment live-table-snap)))
-
-                               (let [count-pages (fn [pages]
-                                                   (let [survivors (trie/filter-pages pages filter-opts)]
-                                                     (.addPages metrics
-                                                                (long (- (count pages) (count survivors)))
-                                                                (long (count survivors)))
-                                                     survivors))
-                                     merge-tasks (MergePlanner/planSync !segments (->path-pred iid-set) count-pages)]
-                               (cond-> (ScanCursor. allocator (vec col-names) col-preds
-                                                    temporal-bounds (boolean (:clamp-valid-time? scan-opts))
-                                                    !segments (.iterator ^Iterable merge-tasks)
-                                                    schema args
-                                                    metrics)
-                                 (or explain-analyze? (and tracer query-span)) (ICursor/wrapTracing tracer
-                                                                                                    query-span
-                                                                                                    (format "query.cursor.scan.%s" (.getTableName table))
-                                                                                                    (not-empty
-                                                                                                     (merge-with merge
-                                                                                                                 (when pushdown-blooms
-                                                                                                                   (update-keys
-                                                                                                                    (update-vals pushdown-blooms (fn [b] {:bloom-filter b}))
-                                                                                                                    str))
-                                                                                                                 (update-keys
-                                                                                                                  (update-vals (into {} (filter val) (or pushdown-iids {}))
-                                                                                                                               (fn [s] {:iids s}))
-                                                                                                                  str))))))))))))}))))
+                           ;; the cursor owns its segments from the moment it's built, and the tracing
+                           ;; wrap takes that ownership over — so it has to happen under a scope that
+                           ;; closes the cursor if the wrap itself throws.
+                           (util/with-close-on-catch [cursor (->partition-scan-cursor
+                                                              {:allocator allocator, :table table, :col-names col-names,
+                                                               :col-preds col-preds, :iid-set iid-set, :metadata-pred metadata-pred,
+                                                               :scan-opts scan-opts, :schema schema, :args args, :metrics metrics}
+                                                              storage snapshot temporal-bounds)]
+                             (cond-> cursor
+                               trace? (ICursor/wrapTracing tracer query-span
+                                                           (format "query.cursor.scan.%s" (.getTableName table))
+                                                           trace-attrs)))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter db-cat scan-vec-types, param-types]}]
   (assert db-cat)
