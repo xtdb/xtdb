@@ -65,7 +65,7 @@ class Database(
     override val name: DatabaseName,
     val logs: DatabaseLogs,
     val isIndexing: Boolean,
-    val partitions: Map<Int, DatabasePartition>,
+    val partitions: List<DatabasePartition>,
     private val meterRegistry: MeterRegistry?,
     private val job: Job? = null,
     private val registeredGauges: List<Gauge> = emptyList(),
@@ -73,11 +73,18 @@ class Database(
 
     init {
         require(partitions.isNotEmpty()) { "Database must have at least one partition" }
+
+        // List position *is* the partition index. The basis-token codec is positional — slot N of a
+        // database's vector is partition N — so `openSnapshot`, `currentBasis`, `latestCompletedTxs`
+        // and `awaitAll` all index partitions and basis slots against one another.
+        partitions.forEachIndexed { idx, part ->
+            require(part.partition == idx) { "partition ${part.partition} at index $idx" }
+        }
     }
 
     // Single-partition delegate. Per the stage-4 design, this becomes a per-partition
     // lookup once `partitions > 1` is enabled; for now every Database has exactly one.
-    private val partition0: DatabasePartition get() = partitions.getValue(0)
+    private val partition0: DatabasePartition get() = partitions[0]
 
     override val storage: PartitionStorage get() = partition0.storage
     override val queryState: PartitionState get() = partition0.state
@@ -85,14 +92,10 @@ class Database(
     val compactorOrNull: Compactor.ForDatabase? get() = partition0.compactorOrNull
 
     override fun openSnapshot(minBasis: List<Instant?>?): DatabaseSnapshot =
-        // Index minBasis by sorted position, matching how `currentBasis`/`snapshotToken` pack it and how
-        // `txBasis`/`validate-basis-not-before` read it back — slot N is the Nth partition in key order.
-        DatabaseSnapshot(partitions.entries.sortedBy { it.key }
-            .mapIndexed { idx, e -> e.value.openSnapshot(minBasis?.getOrNull(idx)) })
+        DatabaseSnapshot(partitions.mapIndexed { idx, part -> part.openSnapshot(minBasis?.getOrNull(idx)) })
 
     /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
-    fun currentBasis(): List<Instant?> =
-        partitions.entries.sortedBy { it.key }.map { it.value.liveIndex.latestCompletedTx?.systemTime }
+    fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
 
     val blockCatalog: BlockCatalog get() = partition0.blockCatalog
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
@@ -152,7 +155,7 @@ class Database(
         // Phase 2: the job tree has already been cancel-joined (by `cancelAndJoin` above, or by the
         // owner cancelling the catalog root). Free state, children before the database allocator.
         meterRegistry?.let { reg -> registeredGauges.forEach { reg.remove(it) } }
-        (partitions.values + listOf(logs, allocator)).closeAll()
+        (partitions + listOf(logs, allocator)).closeAll()
     }
 
     fun submitTxBlocking(ops: List<TxOp>, opts: TxOpts): Xtdb.SubmittedTx {
@@ -194,7 +197,7 @@ class Database(
      * Intended for tests and manual admin pokes; bypasses the `enabled` flag.
      */
     fun gcAll() {
-        partitions.values.forEach { it.logProcessor?.gcAll() }
+        partitions.forEach { it.logProcessor?.gcAll() }
     }
 
     companion object {
@@ -405,7 +408,7 @@ class Database(
                 name = dbName,
                 logs = logs,
                 isIndexing = indexerConfig.enabled,
-                partitions = mapOf(0 to partition),
+                partitions = listOf(partition),
                 meterRegistry = meterRegistry,
                 job = job,
                 registeredGauges = gauges,
@@ -414,13 +417,13 @@ class Database(
             if (indexerConfig.enabled && !readOnly) {
                 val listener = object : Log.SubscriptionListener<SourceMessage> {
                     override fun launchTransition(partition: Int, termId: Long) =
-                        db.partitions.getValue(partition).logProcessor!!.launchTransition(partition, termId)
+                        db.partitions[partition].logProcessor!!.launchTransition(partition, termId)
 
                     override fun commitLeader(partition: Int) =
-                        db.partitions.getValue(partition).logProcessor!!.commitLeader(partition)
+                        db.partitions[partition].logProcessor!!.commitLeader(partition)
 
                     override suspend fun demoteLeader(partition: Int) {
-                        db.partitions[partition]?.logProcessor?.demoteLeader(partition)
+                        db.partitions.getOrNull(partition)?.logProcessor?.demoteLeader(partition)
                     }
                 }
                 scope.launch { logs.sourceLog.openGroupSubscription(listener) }
@@ -516,10 +519,9 @@ class Database(
                     .map { db ->
                         launch {
                             val basisVec = basis[db.name] ?: return@launch
-                            db.partitions.entries.sortedBy { it.key }
-                                .forEach { (partIdx, part) ->
-                                    basisVec.getOrNull(partIdx)?.let { part.watchers.awaitSource(it) }
-                                }
+                            db.partitions.forEachIndexed { partIdx, part ->
+                                basisVec.getOrNull(partIdx)?.let { part.watchers.awaitSource(it) }
+                            }
                         }
                     }
                     .joinAll()
@@ -563,22 +565,21 @@ class Database(
                 .encodeTimeBasisToken()
 
         // each database's latest-completed tx per partition, surfaced through Xtdb.latestCompletedTxs and
-        // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional (sorted by partition key),
-        // so it lines up with the basis-token codec.
+        // pgwire's `SHOW LATEST_COMPLETED_TXS`. Partition order is positional, so it lines up with the
+        // basis-token codec.
         fun latestCompletedTxs(): Map<DatabaseName, List<TransactionKey?>> =
             databaseNames.mapNotNull { dbName ->
                 // databaseNames and databaseOrNull are read separately, so a concurrent detach can drop a db
                 // between them — skip it, as the sibling awaitAll0/syncAll0 do, rather than NPE.
                 databaseOrNull(dbName)?.let { db ->
-                    dbName to db.partitions.entries.sortedBy { it.key }
-                        .map { it.value.liveIndex.latestCompletedTx }
+                    dbName to db.partitions.map { it.liveIndex.latestCompletedTx }
                 }
             }.toMap()
 
         fun latestSubmittedMsgIds(): Map<DatabaseName, List<MessageId>> =
             databaseNames.mapNotNull { dbName ->
                 databaseOrNull(dbName)?.let { db ->
-                    dbName to db.partitions.keys.sorted().map { db.sourceLog.latestSubmittedMsgId(it) }
+                    dbName to db.partitions.indices.map { db.sourceLog.latestSubmittedMsgId(it) }
                 }
             }.toMap()
 
