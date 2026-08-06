@@ -30,6 +30,17 @@ We take great inspiration from the principle of 'making illegal states unreprese
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill.
 
+## Stakes
+
+XTDB is deployed as critical infrastructure at national scale.
+That is the actual operating context, not a device to make you more careful — a bad commit that reaches production takes down systems people depend on.
+
+What that changes about how you work:
+
+* When you change an interface, grep for every consumer across the whole project, not just the module the interface lives in.
+* "It compiles in the module I changed" is not verification.
+* When in doubt, verify more rather than less.
+
 ## Allium specs
 
 `.allium` files are behavioural specifications of XTDB's subsystems — entities, rules, invariants, contracts and surfaces, plus the rationale and open questions that the code alone doesn't carry.
