@@ -98,11 +98,24 @@ Do not reconstruct any of it from memory: the `gradle-tests` agent is generic (f
 
 XTDB 2.x work is tracked on the [xtdb org "2.x" project board](https://github.com/orgs/xtdb/projects/13), with each release cut against a milestone named `2-NEXT` (which gets renamed to the release version when it ships — so the milestone *name* is stable but its number/ID changes).
 
+The 2.x board is not the org's only project, and some work is deliberately tracked on another one.
+"Not on the 2.x board" therefore does not mean "untracked".
+Before adding a card on the grounds that an issue looks orphaned, check which projects already claim it:
+
+```bash
+gh api graphql -f query='query { repository(owner:"xtdb",name:"xtdb"){
+  issue(number:NNNN){ projectItems(first:10, includeArchived:true){
+    nodes{ isArchived project{ number title } } } } }'
+```
+
+Not all of those projects are public, so this file names none of them and you MUST NOT record their names, numbers or contents here.
+Treat a hit from another project as "already tracked, leave it alone".
+
 ### What goes where
 
 When you open an issue *or* PR, work out whether it's standalone or part of a surrounding issue, then:
 
-- **There's a surrounding issue** (the PR closes, advances, or is otherwise scoped by an open issue): the **issue** carries the board card and the milestone.
+- **There's a surrounding issue** (the PR closes, advances, or is otherwise scoped by an open issue): the **issue** carries the board card and, if the work is end-user-visible, the milestone.
   The PR does not go on the board and does not get a milestone — it inherits them through the issue.
 - **It's a standalone PR** (no surrounding issue, e.g. a small fix, cleanup, or dependency bump worth noting in release notes): the **PR** goes on the board and on the milestone directly.
 
@@ -110,9 +123,23 @@ This mirrors how the release notes are written — one entry per issue-or-standa
 Applies to docs-only and meta/repo-admin work too (1.x work is the only category that doesn't go on the 2.x board, and there's very little of that these days).
 
 Board `Status` is set automatically on item creation — you don't need to manage it.
-`Stream` is preferable to have set, but don't make one up: set it when the right category is obvious, otherwise leave it blank and let a human classify it.
+`Stream` is preferable to have set, but don't make one up: set it when the right category is obvious, otherwise ask, or leave it blank and let a human classify it.
+Note that a sub-issue does NOT inherit its parent's stream — the parent's category says nothing about a child whose subject is something else — so "obvious from the parent" is not obvious.
+When that's the only reason you'd have a candidate, ask.
+
+### Sub-issues
+
+A sub-issue's parent SHOULD be its natural surrounding issue — the prerequisite, or the closest piece of work that explains why this matters — not automatically the top-level umbrella.
+Before filing one, ask which open issue creates the conditions for this work; that's the parent.
+
+Nesting two or three deep is fine and often right: umbrella → migration → split-out.
+Flattening everything onto the umbrella out of habit loses the dependency structure, which is the thing that makes "open and un-blocked" a usable queue.
 
 ### Milestones
+
+A milestone is the release-notes scope, so it carries a narrower test than the board does: set one only when the work is **end-user-visible**.
+Internal refactors, module-author-facing SPI tightening, test-infra and infrastructure cleanup go on the board with an appropriate `Stream` but MUST NOT go on `2-NEXT` or any other milestone, however large they are.
+End users don't read about interface tightening; putting it on the milestone clutters the release notes with internal noise.
 
 The open milestone is always named `2-NEXT`.
 Look up its current REST number by name+state rather than caching it:
@@ -178,6 +205,10 @@ Don't ask chalk to discover them; don't paraphrase.
 Under the hood, chalk runs the commands below — handy to know when writing a chalk prompt or diagnosing an unexpected result:
 
 - Add an existing issue/PR to the board: `gh project item-add 13 --owner xtdb --url <url>`
+- Take an item off the board: `gh project item-archive 13 --owner xtdb --id <item-id>` — **archive, never `item-delete`**.
+  Archiving keeps the card associated with the project so the tracking history survives; deleting destroys the association outright.
+  This is the default for any "take this off the board" instruction, including undoing a mistaken add of your own; only delete if a human explicitly says delete.
+  Gotcha: archived items are invisible to *both* `gh project item-list` and the GraphQL `ProjectV2.items` connection, so neither can distinguish "archived" from "never added" — check via the issue instead, with the `projectItems(includeArchived: true)` query above.
 - Set a field on an item: `gh project item-edit --id <item-id> --project-id PVT_kwDOBNKmUs4AJUwS --field-id <field-id> --single-select-option-id <option-id>`
 - Set the issue type (org-level, not exposed on plain `gh`): `gh api graphql -f query='mutation($issue:ID!,$type:ID!){ updateIssueIssueType(input:{issueId:$issue,issueTypeId:$type}){ issue { id } } }' -f issue=<issue-node-id> -f type=<type-id>`
 - Add the breaking-change label: `gh issue edit N --add-label 'breaking change'` / `gh pr edit N --add-label 'breaking change'`
