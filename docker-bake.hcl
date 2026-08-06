@@ -18,7 +18,7 @@ target "bench" {
 // image changes.
 
 variable "BUILDER_TAG" {
-  default = "20260429-1"
+  default = "20260806-1"
 }
 
 target "builder" {

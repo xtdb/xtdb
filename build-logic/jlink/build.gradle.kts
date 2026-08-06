@@ -26,6 +26,14 @@ val jlinkModules = listOf(
     // clojureRepl
     "jdk.compiler",
     "jdk.javadoc",
+
+    // production diagnostics. Without these a shipped image cannot be asked what it's
+    // doing, which is how #5850 got as far as it did with no thread dump.
+    // jcmd/jstack attach by signalling the target, so they're no use where the security
+    // context blocks signals to the JVM's pid — jfr is the signal-free path, via
+    // -XX:StartFlightRecording at JVM start.
+    "jdk.jcmd",
+    "jdk.jfr",
 )
 
 val customJreDir = layout.buildDirectory.dir("custom-jre")
