@@ -312,6 +312,18 @@ Kotlin parameter defaults are appropriate when the default is the overwhelming n
 For data structures where the caller SHOULD care about every field (wire format types, domain records), don't use defaults — force every construction site to be explicit.
 Defaults hide intent; a caller can accidentally omit a field and get a value that compiles but doesn't mean what they think.
 
+Name the database, not the `db`::
++
+The bare name `db` is reserved for the `Database` object; the database *name* is `db-name` in Clojure, `dbName` in Kotlin.
+The two coexist in the same scopes — `scan`/`emitScan` resolves a name into a `Database` — so a bare `db` holding a string misreads.
+Concretely, the scan logical-plan option is `:db-name`, and planner pairs are `[db-name table-ref]`.
+The user-facing XTQL surface is the exception and keeps its own key: `(from {:db "…", :table …})`.
+
+Import, don't fully-qualify::
++
+In Kotlin and in Clojure alike, add the import and use the short name — `IKeyFn$KeyFn/SNAKE_CASE_STRING`, not `xtdb.api.query.IKeyFn$KeyFn/SNAKE_CASE_STRING`.
+Nested types need importing in their own right: importing `IKeyFn` does not bring in `IKeyFn$KeyFn`.
+
 === Comments
 
 Comments that merely restate the code add visual noise without value.
@@ -355,6 +367,47 @@ Choose the appropriate anomaly category:
 
 See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
 
+=== Internal-but-public declarations
+
+Some Kotlin declarations have to stay `public` without being public API — they're called from Clojure over interop, or from another module.
+Kotlin `internal` isn't an option for either: it name-mangles the JVM symbol (so Clojure can't resolve it) and it doesn't cross module boundaries.
+
+Mark those with `@InternalApi` (`api/src/main/kotlin/xtdb/InternalApi.kt`), a `@RequiresOptIn(level = ERROR)` marker.
+The declaration stays public — Clojure and cross-module callers are untouched — while a Kotlin caller has to write `@OptIn(InternalApi::class)`, at the declaration or as a `@file:` annotation.
+
+`@InternalApi` and `/** @suppress */` are complementary, not alternatives:
+
+* `/** @suppress */` hides the declaration from kdoc, and enforces nothing.
+* `@InternalApi` is a compile-time barrier for Kotlin callers, and does not hide anything from kdoc.
+
+So an internal-but-public member carries both.
+`grep @InternalApi` enumerates the whole surface; each site SHOULD carry a comment saying what would have to change for it to become genuinely `internal` (see `OpenTx`'s constructor for the shape).
+
+=== Clojure style
+
+Type-hint at the source, not at the call sites::
++
+Hint where the value is introduced — the destructuring form, the `let` binding, the fn param — rather than at each `.method` call.
+`{:keys [^String default-db]}` fixes every use of `default-db` in scope; `(.databaseOrNull db-cat ^String default-db)` fixes one.
+
+Don't hint speculatively::
++
+A *resolved* Java instance-method call already carries its declared return type, and that type flows — into the next call in a chain, and into a `let`/`with-open` binding.
+So `(with-open [conn (.connect node db-name)] (.submitTx conn ops opts))` needs no `^Xtdb$Connection`: `.connect` resolves off a typed `node` with return type `Xtdb$Connection`, `conn` is tagged from that, and `.submitTx`/`.close` resolve off `conn`.
++
+Where you're unsure whether an expression reflects, verify rather than pre-empting.
+The dev REPL sets `*warn-on-reflection*` (`src/dev/clojure/user.clj`); the Gradle build does not, so a green test run proves nothing either way.
+
+Use `.getX`, not `.x`, for Kotlin `val` properties::
++
+Clojure's `(.x obj)` resolves to a no-arg method `x()` or a public field `x`, and a Kotlin property is neither — it compiles to `getX()` over a private backing field.
+So `(.getSchema loader)`, not `(.schema loader)`.
+
+Pass a plain `fn` where a Java functional interface is expected::
++
+Clojure 1.12 coerces a `fn` to a `@FunctionalInterface` at an interop site where the compiler knows the target parameter type, so prefer `(.tryAdvance cursor (fn [^RelationReader rel] ...))` over a `reify` of `Consumer` — it drops the boilerplate and the import.
+It needs the receiver hinted (`^ResultCursor cursor`) for the overload, and its own param hinted to keep calls against that param out of reflection.
+
 === Writing tests
 
 (For *running* tests, see <<_testing,Testing>> above.)
@@ -382,6 +435,21 @@ Split test namespaces by the surface they exercise::
 +
 Default to the lowest surface that can express the case, and reach for a higher one only when the case *requires* it - so authz, for instance, defaults to node-level `xt/*` tests in `xtdb.authz-test`, with `xtdb.pgwire.authz-test` taking only the cases that need a real connection (a non-default tx principal, or `pg_catalog` introspection).
 The mechanism under test is usually testable without the protocol, and dragging pgwire into every case makes the suite slower and the failures harder to read.
+
+Use dash-free table names::
++
+The three table-name representations disagree on kebab-case.
+`[:put-docs :my-table …]` normalises the keyword to `my_table`, while the `#xt/table my-table` reader literal and `OpenTx.table(schema, "my-table")` both keep the dash.
+A test that writes through one and reads through the other silently addresses two different tables, and the read finds nothing.
+Name test tables `:docs`, `:foo` — anything without a dash — and all three agree.
+
+White-box tests of `internal` Kotlin have to be Kotlin::
++
+Kotlin `internal` members are JVM name-mangled (`foo$xtdb_core`), so Clojure interop cannot resolve them at all — the failure is `IllegalArgumentException: No matching method`.
+A test that needs one has to be a Kotlin test in the same module; the corollary is that tightening a Kotlin member to `internal` breaks every Clojure caller, which is what `xtdb.InternalApi` exists to avoid (see <<_internal_but_public_declarations,Internal-but-public declarations>>).
++
+`core/src/test/kotlin/xtdb/indexer/LiveIndexTest.kt` stands up a real `LiveIndex`, catalogs, storage and `OpenTx` without a node — copy its `TestDb` fixture rather than reaching for a full node.
+Ingest-and-inspect and on-disk format cases can stay in Clojure at node level (`xt/execute-tx`).
 
 === Git
 
