@@ -23,7 +23,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
     Internal refactors (e.g. changing internal types like `TransactionResult`, `Watchers`) are not breaking even if the types are technically `public` in Kotlin.
   * You MUST use the commit skill for writing commit messages.
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
-* For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill (see `skills/clojure-eval/SKILL.md`).
+* For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill.
 
 ## Allium specs
 
@@ -52,7 +52,7 @@ Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec aga
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
 * You MUST include tests for new/changed functionality.
-* You MUST run tests locally to verify they pass, per `skills/xtdb-testing/SKILL.md`.
+* You MUST run tests locally to verify they pass, per the `xtdb-testing` skill.
 * You MUST update the Allium specs if you've made changes in the areas they cover — see [Allium specs](#allium-specs) for the map.
 * The full test suite MUST pass (`./gradlew test`).
   If you've affected any integration tests (e.g. Kafka, remote storage), you MUST also run `./gradlew integration-test`.
@@ -84,7 +84,7 @@ For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, n
 
 ## Running tests
 
-Before you run a test, or delegate a test run to a sub-agent, you MUST read `skills/xtdb-testing/SKILL.md`.
+Before you run a test, or delegate a test run to a sub-agent, you MUST invoke the `xtdb-testing` skill.
 
 It is the single home for every XTDB-specific testing rule and mechanism — delegation to the `gradle-tests` agent, serialising Gradle runs across worktrees, test tasks and filters, iteration counts, the simulation tests that `./gradlew test` cannot reach, diagnosing a failure, and regenerating arrow-edn golden fixtures.
 Do not reconstruct any of it from memory: the `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace) and carries none of this knowledge itself, so it is yours to pass on.
