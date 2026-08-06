@@ -125,6 +125,15 @@ Budget for compilation and reporting overhead as well as the tests themselves.
 - Integration tests: 5–15 min, I/O bound.
 - Property tests: varies with iteration count.
 
+## What a run does not prove
+
+- **`./gradlew :compileClojure` is not a cheap syntax check.**
+  No namespaces are configured for AOT, so every `compileClojure` task reports `SKIPPED` and the build goes green without loading a line of Clojure.
+  To find out whether a Clojure change compiles at all, run a focused test over a namespace that requires it.
+- **A green run does not prove absence of reflection.**
+  The Gradle build never sets `*warn-on-reflection*` — only the dev REPL does, via `src/dev/clojure/user.clj`.
+  If reflection is the question, answer it in the REPL; don't add type hints speculatively on a reviewer's say-so.
+
 ## When a test fails
 
 **All tests pass on `main`. There are no pre-existing failures.**
