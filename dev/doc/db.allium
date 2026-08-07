@@ -14,76 +14,57 @@
 -- Compactor is a peer at db-system level, not a child of the processor.
 -- Leader/follower transitions driven by Kafka consumer group rebalancing (or local log startup).
 -- A single LiveIndex sits outside the processor as shared state.
--- Leader mode feeds it from source processing; follower mode feeds it from replica processing.
---
--- Leader pipelining (see live-index.allium) — single-resolver model. NOTE:
--- spec-ahead-of-code — the leader is currently a fully-synchronous single
--- persister; the pipelined commit described here is not yet implemented.
---
--- On a leader, a SINGLE resolver coroutine drives the whole pipeline. Only the
--- producer-transaction commit (the durability step) is offloaded to a secondary
--- committer coroutine:
---   Resolver           — OWNS the staging index outright (sole accessor, so staging
---                        needs no lock) AND owns the replica-log producer's append
---                        path. Serialises source-log / external-source messages,
---                        resolves each (reading durable ⊕ its own staging for
---                        read-your-writes), applies it to the accumulating slot
---                        (advancing the staging index's own latest_completed_tx, the
---                        applied head) AND holds the tx's pending replica message in
---                        the slot in send order. It does NOT append to a producer
---                        transaction at resolve time. At each tx boundary it decides
---                        whether to seal the batch and whether to cut a block. SEALING
---                        is where the appends happen: it opens a FRESH producer
---                        transaction, appends the whole accumulating slot's held
---                        messages in send order (the cheap step that fixes the txs'
---                        order on the replica log and yields per-tx append handles),
---                        and hands the OPEN-BUT-UNCOMMITTED producer transaction to
---                        the committer. Once the committer confirms a batch durable it
---                        PROMOTES the committing batch → durable live tables ONE TX AT
---                        A TIME in send order, advancing the durable
---                        LiveIndex.latest_completed_tx and the apply cursor per tx,
---                        refreshing the shared snapshot, and notifying watchers
---                        POST-DURABLE.
---   Committer          — a secondary coroutine that does ONE thing: commit() the
---                        already-appended sealed producer transaction (the slow Kafka
---                        round-trip), off the resolver's dispatcher thread, and signal
---                        the resolver when it lands. It does NOT append (the resolver
---                        appended at seal), does NOT touch staging, and does NOT touch
---                        the durable index. A Kafka transactional producer allows only
---                        one open transaction at a time, and commit() commits
---                        everything appended since the transaction opened (no prefix
---                        commit, no second concurrent transaction — a second producer
---                        would be fenced); so appending each tx at RESOLVE time is not
---                        realizable (a tx resolving during a commit would have nowhere
---                        to append), which is why appends move to SEAL time — a fresh
---                        transaction per batch, committed once — no double-buffer of
---                        producer transactions.
--- SENDS are serial (one open producer transaction at a time) but ACCUMULATION
--- continues during a send: while the committer commits the sealed batch, the resolver
--- keeps resolving and accumulating the NEXT slot; it just cannot SEAL the next batch
--- until the current commit completes and promotes. At-most-one-batch-in-flight is
--- enforced by the resolver (the staging index's in_flight flag), matching the single
--- open producer transaction.
--- The block cut + uploadBlock and the per-tx watcher notify stay on the resolver,
--- downstream of the commit (post-durable). The apply cursor advances per promoted tx
--- to that tx's replica-log position (the append positions from the per-tx handles the
--- resolver recorded at seal time). Errors propagate via job-tree cancellation.
--- A query MUST NEVER see a tx that isn't yet durably on the replica log: external
--- snapshots open at the durable LiveIndex.latest_completed_tx. The applied head is
--- the staging index's own latest_completed_tx — callers choose which to read.
--- Followers/transition have no staging — they import already-durable replica
--- messages straight into the durable live index.
+-- Leader mode feeds it from its own replica-log CONSUME-BACK; follower mode feeds it
+-- from replica processing.
 -- A single Watchers instance tracks both txId and sourceMsgId for client correlation,
 -- plus the latest ExternalSourceToken for external-source databases.
 -- Follower→leader transition sync uses a separate MutableStateFlow on the FollowerProcessor,
 -- not Watchers (see FollowerProcessor.awaitReplicaMsgId).
 -- The compactor writes L1+ to the source log; the leader forwards to replica.
 --
--- Leader comes in two flavours:
---   Leader                 — client-driven; subscribes to source log, resolves TxMessages.
---   ExternalSourceLeader   — fed by an ExternalSource (CDC); assigns its own tx_id, uses the
---                            source log only for flush / tries / block coordination. Rejects
---                            client submitTx with xtdb/submit-tx-to-external-source-db.
+-- Leader pipelining — resolve / append / consume-back / apply.
+--   The leader applies its OWN writes only once it has read them BACK off its own
+--   replica log at its own TERM (Raft's ReadIndex): that consume-back IS the fence.
+--   Four coroutines, all children of the leader term — the RESOLVER (a select loop over
+--   the source log, external-source txs and GC tasks), the APPEND PUMP (serialise, then
+--   a plain term-stamped append), the CONSUME PUMP (tail our own replica log from the
+--   transition replay target), and the resolver's own APPLY arm (servicing the
+--   consume-back channel, so a tx cannot interleave a partial state).
+--   Mechanism, ownership and the durability-handle failure legs: live-index.allium.
+--   Role lifecycle, the term and its epoch: log-processor-lifecycle.allium.
+--
+-- Two heads, two homes — callers choose:
+--   RESOLVED head (TxResolver.latest_completed_tx): the highest tx resolved, and so
+--     staged. Drives resolution — next external-source tx_id, system-time smoothing,
+--     read-your-writes.
+--   DURABLE head (LiveIndex.latest_completed_tx): the highest tx applied, i.e. consumed
+--     back and imported. The QUERY BASIS. Resolved leads; durable lags by everything
+--     staged but not yet applied.
+--
+-- Two source watermarks, and the tell that they differ:
+--   The leader's RESOLVE-side watermark (Leader.last_resolved_src_msg_id) is what gets
+--   STAMPED onto each replica record. The DURABLE one lives on Watchers and advances only
+--   on apply. Stamping from the watchers instead would regress notifyTx's monotonicity
+--   check, because a source tx resolved behind an external-source tx applies first and
+--   pushes the watermark past the stale stamp (#5817).
+--
+-- Followers and the transition processor have no resolver and no consume-back: every
+-- message they import is already durable, so they import straight into the durable live
+-- index and advance the watchers as they go.
+--
+-- A query MUST NEVER see a tx the leader has not read back: external snapshots open at
+-- the durable LiveIndex.latest_completed_tx.
+--
+-- One leader variant, not two. An external source is an OPTIONAL COLLABORATOR of the
+-- leader rather than a separate processor: flush / tries / block coordination and the
+-- whole resolve → append → consume-back → apply pipeline are identical either way, and
+-- the two differ only in where a tx enters and how its tx_id is assigned.
+--   - No external source: client-driven. Subscribes to the source log, resolves
+--     TxMessages, and takes each tx_id from the source-log position.
+--   - External source configured: transactions arrive via the TxIndexer callback, and
+--     tx_id is assigned off the RESOLVED head. Client submitTx is rejected with
+--     xtdb/submit-tx-to-external-source-db. The source log is still consumed, for
+--     flush / tries / block coordination only.
 
 use "./trie-cat.allium" as trie_cat
 use "./compaction.allium" as compaction
@@ -93,8 +74,7 @@ use "./compaction.allium" as compaction
 given {
     database: Database
     log_processor: LogProcessor
-    staging_index: StagingIndex?       -- leader-only (resolver-owned); absent in follower/transition modes
-    committer: Committer?              -- leader-only (secondary coroutine, commit only); absent in follower/transition modes
+    tx_resolver: TxResolver?           -- leader-only (persister-owned); absent in follower/transition modes
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- single instance: correlates source msg_ids and tx_ids with client futures
     block_catalog: BlockCatalog
@@ -126,10 +106,11 @@ external entity ExternalSource {
     -- calls back through a TxIndexer, providing an opaque resume token and
     -- a writer that populates an OpenTx with the transformed row data.
     -- An external-source database assigns its own monotonically increasing
-    -- tx_id (live_index.latest_completed_tx.tx_id + 1) rather than taking
-    -- it from the source log position. Client submitTx is rejected for
-    -- these databases — transactions enter only through the external source.
-    -- See: database/ExternalSource.kt
+    -- tx_id off the RESOLVED head (tx_resolver.latest_completed_tx.tx_id + 1)
+    -- rather than taking it from the source log position. Client submitTx is
+    -- rejected for these databases — transactions enter only through the
+    -- external source.
+    -- See: api/tx/ExternalSource.kt
 }
 
 ---- Entities
@@ -138,27 +119,34 @@ entity LiveIndex {
     -- See: indexer/LiveIndex.kt, live-index.allium
     -- Single instance shared across leader and follower modes.
     --
-    -- latest_completed_tx — DURABLE basis / QUERY BASIS: highest tx in the
-    --   durable live tables. External snapshots open at this. On a leader it is
-    --   advanced by promotion from staging; on a follower/transition by importTx.
-    -- The APPLIED/resolution head (next external-source tx_id, system-time
-    --   smoothing) is NOT a field here: on a leader it lives in the staging index
-    --   (the staging index's own latest_completed_tx, see live-index.allium
-    --   StagingIndex), which db.allium does not import and therefore cannot read
-    --   directly. Resolution that needs the next tx key delegates id-assignment to
-    --   the staging layer via beginStagedTx (below); external queries read the
-    --   durable latest_completed_tx.
+    -- latest_completed_tx — DURABLE head / QUERY BASIS: the highest tx in the durable
+    --   live tables. External snapshots open at this. On a leader it is advanced by
+    --   apply on CONSUME-BACK (so it lags the resolved head by everything staged but
+    --   not yet read back); on a follower/transition by importTx, which has no lag
+    --   because every message it imports is already durable.
+    -- The RESOLVED head is NOT a field here: on a leader it lives on the resolver (see
+    --   TxResolver). LiveIndex is resolver-agnostic — it knows only the durable layer.
     latest_completed_tx: TransactionKey?
     is_full: Boolean
+
+    -- Rows already applied into the currently-open block. Seeds the leader's
+    -- rows_since_block gauge, so a leader inheriting a partially-filled block from
+    -- replay cuts it where the previous leader would have.
+    block_row_count: Integer
 
     -- Derived
     has_data: latest_completed_tx != null
 }
 
 entity Database {
-    -- See: indexer/Indexer.kt
+    -- See: database/Database.kt
     source_log: Log
     replica_log: Log
+
+    -- Configured external source, if any. This — not the local processor's mode — is
+    -- what rejects a client submitTx: the source log is shared, so any node's submit
+    -- path has to make the same decision whether or not it happens to be the leader.
+    external_source: ExternalSource?
 
     invariant DistinctLogs {
         source_log != replica_log
@@ -168,125 +156,123 @@ entity Database {
 entity LogProcessor {
     -- See: indexer/LogProcessor.kt
     -- Owns the indexing pipeline lifecycle for a database.
-    -- Implements Log.SubscriptionListener (onPartitionsAssigned/Revoked drive transitions).
-    -- Starts in follower mode. Always in exactly one mode.
+    -- Implements Log.SubscriptionListener (launchTransition/commitLeader/demoteLeader
+    -- drive transitions). Starts in follower mode. Always in exactly one mode.
     --
-    -- Every processor tracks BOTH positions:
-    --   latest_source_msg_id: highest source-log message id that has been processed.
-    --   latest_replica_msg_id: highest replica-log message id that has been processed.
-    -- Both positions are needed during transitions so the new processor starts from
-    -- the right place.
+    -- latest_replica_msg_id: the replica-log position this processor has reached — on a
+    --   leader, the CONSUME-BACK position (how far it has read its own writes back); on
+    --   a follower, its tail position. It seeds the next mode on every handover, which
+    --   is why every mode tracks it.
     --
-    -- Transitions are driven by Kafka consumer group rebalancing:
-    --   onPartitionsAssigned → TransitionToLeader
-    --   onPartitionsRevoked  → TransitionToFollower
+    -- The SOURCE-log watermark is deliberately NOT here. The durable one lives on
+    --   Watchers (advanced on apply, by every mode); the leader additionally keeps a
+    --   resolve-side one, ahead of it, on the Leader variant. Two watermarks that lead
+    --   and lag each other are two fields, not one.
+    --
+    -- Transitions are driven by the transport's group subscription:
+    --   launchTransition → TransitionToLeader (off the serialization point)
+    --   demoteLeader     → TransitionToFollower (at the serialization point)
+    -- The intermediate Prepared role — a built-but-uncommitted leader — is modelled in
+    -- log-processor-lifecycle.allium, which owns the committed-role state machine; `mode`
+    -- here is the coarser view db.allium's rules need.
     -- For local log, the single node is always immediately assigned.
-    mode: Leader | ExternalSourceLeader | Follower | Transition
-    latest_source_msg_id: MessageId
+    mode: Leader | Follower | Transition
     latest_replica_msg_id: MessageId
 }
 
 variant Leader : LogProcessor {
-    -- Client-driven leader: subscribes to the source log, resolves
-    -- client-submitted TxMessages (and Attach/Detach on the primary),
-    -- writes resolved output to the replica log. Also owns block finishing
-    -- via BlockUploader.
-    -- See: indexer/LeaderLogProcessor.kt
-    pending_block: PendingBlock?  -- set between BlockBoundary and BlockUploaded during finishBlock
-}
+    -- The sole writer of this database's replica log for its term. Resolves source-log
+    -- messages and external-source txs, appends them (plain, term-stamped), reads them
+    -- back and applies them. Also owns block finishing via BlockUploader, and the trie
+    -- and block garbage collectors.
+    -- See: indexer/LeaderLogProcessor.kt, indexer/LeaderDriver.kt
+    --
+    -- external_source is present iff the database has one configured; it makes this
+    -- leader external-source-fed rather than client-driven (see the header).
+    external_source: ExternalSource?
 
-variant ExternalSourceLeader : LogProcessor {
-    -- External-source leader: holds the replica-log transactional producer
-    -- for a database whose transactions originate from an external system.
-    -- Transactions arrive via the TxIndexer callback, not from the source log:
-    --   external_source.onPartitionAssigned(partition, after_token, tx_indexer)
-    -- tx_id is assigned by this processor (live_index.latest_completed_tx.tx_id + 1),
-    -- NOT taken from a source-log position. An ExternalSourceToken is carried
-    -- end-to-end (tx → replica log → watchers → block) so the source can resume
-    -- after restart / leader handoff.
-    --
-    -- It still consumes the source log for flush/tries/block-uploaded coordination
-    -- (forwarding TriesAdded, acting on FlushBlock), but client TxMessage /
-    -- AttachDatabase / DetachDatabase MUST NOT appear on its source log —
-    -- the primary rejects these at submit time.
-    --
-    -- See: indexer/ExternalSourceProcessor.kt
-    external_source: ExternalSource
-    pending_block: PendingBlock?
+    -- This leader's fencing term: the transport's leader-election counter packed under an
+    -- operator-declared epoch (see log-processor-lifecycle.allium, api/log/LeaderTerm.kt).
+    -- Stamped onto every replica record this term writes, and checked on consume-back.
+    leader_term: Long
+
+    -- RESOLVE-side source watermark: the source-log position as of the last-resolved tx.
+    -- Stamped onto each replica record. Leads watchers.latest_source_msg_id, which only
+    -- advances on apply — see the header.
+    last_resolved_src_msg_id: MessageId
+
+    -- The last non-null external-source token seen on the resolve side. Carried onto a
+    -- BlockBoundary so the persisted Block holds a live resume point.
+    last_resolved_ext_token: ExternalSourceToken?
+
+    -- RESOLVE-side block gauge: rows resolved into the currently-open block. The boundary
+    -- is cut off this rather than live_index.is_full, which lags (it reflects only APPLIED
+    -- txs). Seeded from live_index.block_row_count; reset when a boundary is injected.
+    rows_since_block: Integer
+
+    -- A block cut is in progress: the BlockBoundary has been appended but its
+    -- BlockUploaded has not been produced. Resolution is PAUSED while true — the
+    -- source-log, external-source and GC arms are excluded from the select — so no tx
+    -- interleaves between the boundary and its upload, keeping the follower's bounded
+    -- pending-block buffer empty. See live-index.allium "Block cut".
+    block_in_progress: Boolean
+
+    pending_block: PendingBlock?  -- set between BlockBoundary and BlockUploaded during the upload
 }
 
 variant Follower : LogProcessor {
-    -- Subscribes to the replica log.
-    -- Feeds the shared live_index from replica messages.
+    -- Subscribes to the replica log and is the SOLE replica-log consumer for its node.
+    -- Feeds the shared live_index from replica messages, all of which are already durable.
     -- Exposes pending_block state for handoff during leader transition.
-    -- awaitReplicaMsgId uses a MutableStateFlow updated in the finally block
-    -- of processRecords — after every record, including errors.
+    -- awaitReplicaMsgId uses a MutableStateFlow updated after every record, including
+    -- errors, so a transition's catch-up await advances even on failure.
     -- See: indexer/FollowerLogProcessor.kt
     pending_block: PendingBlock?
+
+    -- READ-SIDE TERM FENCE: the highest leader term seen so far, seeded from the last
+    -- persisted block boundary (block_catalog.boundary_term_id) so it survives restart.
+    -- A record BELOW this was written by a superseded leader and is discarded. See the
+    -- Fencing section.
+    max_leader_term: Long
 }
 
 variant Transition : LogProcessor {
-    -- Processes replica messages during leader startup.
-    -- Used to replay buffered records from a pending block and any
-    -- BlockBoundary messages encountered during the replay.
-    -- On BlockBoundary: directly calls blockUploader.uploadBlock() (unlike the
-    -- follower, which enters pending mode and waits for BlockUploaded).
+    -- Processes replica messages during leader startup, driven synchronously through the
+    -- transition rather than looping on its own.
+    -- Used to replay buffered records from a pending block and any BlockBoundary messages
+    -- encountered during the replay.
+    -- On BlockBoundary: directly calls blockUploader.uploadBlock() (unlike the follower,
+    -- which enters pending mode and waits for BlockUploaded).
+    -- Appends under the INCOMING term, not the term that cut the boundary — see
+    -- BlockUploader.
     -- See: indexer/TransitionLogProcessor.kt
+    term_id: Long
 }
 
-entity StagingIndex {
-    -- The resolver-owned staging index for a leader term. Its full structure
-    -- (slots, staged tables, the applied head) lives in live-index.allium; here it
-    -- is an opaque handle so db.allium's rules can name the resolver's apply /
-    -- seal / promote operations. db.allium does not `use` live-index.allium, so it
-    -- cannot name StagingSlot directly. Exists only on a leader (Leader or
-    -- ExternalSourceLeader); absent on followers and the transition processor.
+entity TxResolver {
+    -- The leader's transaction resolver, opaque here: its full structure (the FIFO of
+    -- resolved-but-not-yet-applied txs and their relations, the read-your-writes staged
+    -- segments, the per-tx durability handles and their failure legs) lives in
+    -- live-index.allium. db.allium does not `use` live-index.allium, so it names only
+    -- what its own rules need.
+    -- See: indexer/TxResolver.kt, live-index.allium TxResolver
     --
-    -- Standing state the LeaderLogProcessor owns from construction and frees in
-    -- its two-phase close (see TransitionToFollower). NOT a field on LiveIndex —
-    -- the resolver is its sole accessor, so it needs no lock.
+    -- Standing state the leader owns from construction and frees in its two-phase close
+    -- (see TransitionToFollower). NOT a field on LiveIndex — the leader's persister
+    -- coroutine is its sole accessor, so it needs no lock. Absent on followers and the
+    -- transition processor, which only import already-durable messages.
     --
-    -- APPLIED head: the staging index's own latest_completed_tx (next tx_id,
-    -- system-time smoothing). See live-index.allium StagingIndex.
+    -- RESOLVED head: the highest tx resolved, and so staged. Drives resolution — the next
+    -- external-source tx_id, system-time smoothing, read-your-writes. Seeded from the
+    -- durable head; leads it by exactly the txs staged but not yet applied.
     latest_completed_tx: TransactionKey?
 
-    -- in_flight is true exactly while a sealed batch's producer transaction is open,
-    -- being committed and promoted (between seal — which opens the transaction,
-    -- appends, and hands off — and the last per-tx promote once the committer confirms
-    -- the batch durable). The resolver checks it to enforce at-most-one-batch in flight
-    -- — matching the single open producer transaction a Kafka transactional producer
-    -- permits. Accumulation of the next slot continues while in_flight is true; only
-    -- the next seal (the next send) is gated.
-    in_flight: Boolean
-}
-
-entity Committer {
-    -- The leader's committer: a secondary coroutine that does ONE thing — commit()
-    -- the sealed replica-log producer transaction (the slow Kafka round-trip), off
-    -- the resolver's dispatcher thread. Exists only on a leader (client-driven Leader
-    -- or ExternalSourceLeader); followers and the transition processor have none.
-    -- See: indexer/LeaderLogProcessor.kt (commit-offload half).
-    --
-    -- It does NOT append — the resolver appended each tx's message at SEAL time (openTx
-    -- once per batch, then appendMessage per held pending message, in send order),
-    -- before handing the OPEN-BUT-UNCOMMITTED transaction over. The committer receives
-    -- the sealed producer transaction, commits it durably, and signals the resolver
-    -- when the commit lands. It touches NEITHER the staging index NOR the durable live
-    -- index — promotion (and the block cut + uploadBlock) is the resolver's job, done
-    -- once the commit confirms durable.
-    --
-    -- A Kafka transactional producer allows only one open transaction at a time, and
-    -- commit() commits everything appended since it opened (no prefix commit); so there
-    -- is one open producer transaction per batch, opened fresh at seal and committed
-    -- once — no double-buffer. Both the client-driven leader and the external-source
-    -- leader share the one producer: each appended tx carries its own
-    -- external_source_token (null for the client-driven leader, the LSN for an external
-    -- source), threaded at seal/append time by the resolver.
-
-    -- Highest replica-log message id whose producer transaction has been durably
-    -- committed. Monotonicity (advances, never decreases) is a runtime/temporal
-    -- property, not a single-point-in-time invariant — documented here, not asserted.
-    latest_replica_msg_id: MessageId
+    -- The queue itself is NOT modelled here — live-index.allium declares it, and derives
+    -- its own is_empty from it. What db.allium relies on is the ORDER PROPERTY that makes
+    -- the queue head predictable: resolution order = append order = consume-back order,
+    -- and terms are unique per leader. So an equal-term ResolvedTx read back is always the
+    -- matching head, which is why the apply arm can import without re-materialising. It is
+    -- checked rather than assumed (see LeaderAppliesOwnTx).
 }
 
 entity BlockCatalog {
@@ -295,6 +281,9 @@ entity BlockCatalog {
 
     -- Derived
     current_block_index: latest_block?.block_index
+    boundary_replica_msg_id: latest_block?.boundary_replica_msg_id
+    -- Seeds a follower's max_leader_term, which is what makes the fence survive restart.
+    boundary_term_id: latest_block?.term_id ?? 0
 }
 
 entity TableCatalog {
@@ -305,7 +294,8 @@ entity TableCatalog {
 entity Watchers {
     -- Single instance per database.
     -- Tracks both txId and sourceMsgId progression, plus the external-source
-    -- resume token for external-source databases.
+    -- resume token for external-source databases. These are the DURABLE watermarks:
+    -- every mode advances them only once a message has been applied.
     -- Clients call awaitTx(txId) to wait for a transaction result.
     -- Transition code calls awaitSource(srcMsgId) to wait for source processing.
     --
@@ -313,7 +303,7 @@ entity Watchers {
     --   sourceMsgId; if the token is non-null it overrides the tracked token
     --   (so restarts can read the latest resume point from the watcher).
     -- notifyMsg(srcMsgId): advances only sourceMsgId (for non-tx messages like
-    --   TriesAdded, FlushBlock, BlockBoundary, BlockUploaded).
+    --   TriesAdded, BlockBoundary, BlockUploaded, and a NoOp carrying one).
     -- notifyError(exception): transitions to Failed state; all subsequent awaits throw.
     --
     -- See: api/log/Watchers.kt
@@ -326,21 +316,32 @@ entity Watchers {
     -- notifyTx must supply txId > latest_tx_id (strictly increasing)
     -- notifyTx and notifyMsg must supply srcMsgId >= latest_source_msg_id (non-decreasing)
     --   >= not >: BlockBoundary can carry the same source msgId as the preceding
-    --   ResolvedTx when the block was triggered by isFull() (no FlushBlock in between).
+    --   ResolvedTx when the block was triggered by the row gauge (no FlushBlock in between).
 }
 
 entity BlockUploader {
-    -- Shared class used by both LeaderLogProcessor (for normal block finishing)
-    -- and TransitionLogProcessor (for completing interrupted blocks during transition).
+    -- Shared class used by both LeaderLogProcessor (for normal block finishing) and
+    -- TransitionLogProcessor (for completing interrupted blocks during transition).
     --
-    -- uploadBlock(replicaProducer, boundaryMsgId, boundaryMessage):
-    --   1. Finishes live index block (liveIndex.finishBlock)
-    --   2. Registers L0 tries in trie catalog
-    --   3. Finishes table catalog, writes table blocks
-    --   4. Builds and persists block file to object store
-    --   5. Writes BlockUploaded to replica log (via atomic producer)
-    --   6. Calls liveIndex.nextBlock() and compactor.signalBlock()
+    -- uploadBlock(boundaryMsgId, termId, boundaryMessage):
+    --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries
+    --   2. Registers those L0 tries in the trie catalog
+    --   3. Finishes table catalog, uploads per-table block files
+    --   4. Builds and persists the block file — carrying termId, which is what seeds a
+    --      restarted follower's fence
+    --   5. Refreshes the block catalog, then appends BlockUploaded to the replica log
+    --      (a PLAIN, term-stamped append — there is no producer)
+    --   6. Calls liveIndex.nextBlock()
+    --   7. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
+    --      TriesAdded, then compactor.signalBlock(). Off-coroutine because uploadBlock runs
+    --      on the source log's sole consumer, so appending inline self-deadlocks when the
+    --      source-log buffer saturates at a boundary.
     --   Returns the replica msg_id of the BlockUploaded message.
+    --
+    -- termId is the APPENDING term, which is not always the boundary's: a transition
+    -- finishes the previous leader's pending block, and its BlockUploaded must carry the
+    -- NEW term or followers that have already advanced would fence it and never complete
+    -- the block.
     --
     -- See: indexer/BlockUploader.kt
 }
@@ -372,12 +373,13 @@ value ExternalSourceToken {
     -- Carried through ResolvedTx → BlockBoundary → BlockUploaded on the replica
     -- log, tracked in Watchers, and persisted in Block so that on restart the
     -- external source can resume from the last durably persisted position.
-    -- See: database/ExternalSource.kt (ExternalSourceToken = ProtoAny)
+    -- See: api/tx/ExternalSource.kt (ExternalSourceToken = ProtoAny)
 }
 
 value TransactionKey {
     -- See: block/proto/block.proto (TxKey)
-    -- tx_id is monotonically increasing (assigned by the source log).
+    -- tx_id is monotonically increasing (assigned by the source log, or off the
+    -- RESOLVED head for an external-source database).
     -- system_time is NOT monotonic (clients can set arbitrary system times).
     -- Ordering comparisons MUST use tx_id, not system_time.
     tx_id: Long
@@ -391,19 +393,27 @@ value Block {
     latest_processed_msg_id: MessageId         -- source log
     boundary_replica_msg_id: MessageId?        -- replica log; msg id of the BlockBoundary message
     external_source_token: ExternalSourceToken?  -- last token seen by the external source at block time
+    -- The term that APPENDED this block's BlockUploaded. Persisting it is what makes the
+    -- read-side fence survive a restart: a follower seeds max_leader_term from here, so a
+    -- leader claiming a regressed election counter is refused rather than silently ignored
+    -- (see log-processor-lifecycle.allium step 2a).
+    term_id: Long
     -- See: catalog/BlockCatalog.kt, block/proto/block.proto
 }
 
 value PendingBlock {
     -- Captures the state between BlockBoundary and BlockUploaded.
-    -- In the follower: also buffers subsequent replica messages.
-    -- In the leader: set during finishBlock, cleared after uploadBlock completes.
+    -- In the follower: also buffers subsequent replica messages, up to
+    -- max_buffered_records — overflow is a fault (xtdb.indexer/follower-buffer-overflow),
+    -- which the leader's block-cut pause is what keeps unreachable.
+    -- In the leader: set during the upload, cleared after it completes.
     -- Passed from leader to follower on revocation, and from follower to
     -- transition processor on assignment.
     -- See: indexer/PendingBlock.kt
     boundary_msg_id: MessageId
     boundary_message: BlockBoundaryMessage
     buffered_records: List<ReplicaMessage>   -- follower only; leader creates with no buffer
+    max_buffered_records: Integer
 }
 
 value Snapshot {
@@ -432,23 +442,32 @@ variant Detach : DbOp {
 ---- Source Log Messages
 
 -- Messages on the source log. Written by clients, the leader (FlushBlock),
--- and the compactor (TriesAdded L1+).
--- See: log/proto/log.proto (LogMessage oneof)
+-- and the block upload / compactor (TriesAdded).
+-- See: log/proto/log.proto (LogMessage oneof), api/log/SourceMessage.kt
 
 entity SourceMessage {
     msg_id: MessageId
     log_timestamp: Instant
-    kind: TxMessage | FlushBlockMessage | TriesAddedMessage
+    kind: TxMessage | LegacyTxMessage | FlushBlockMessage | TriesAddedMessage
          | BlockUploadedMessage | AttachDbMessage | DetachDbMessage
 }
 
 variant TxMessage : SourceMessage {
     -- Client-submitted transaction operations.
-    -- See: tx/TxWriter.kt, api/log/Log.kt, api/log/SourceMessage.kt (SourceMessage$Tx) — serialised via TxWriter, not proto.
+    -- See: tx/TxWriter.kt, api/log/SourceMessage.kt (SourceMessage$Tx) — the tx ops are
+    -- serialised via TxWriter, the envelope via proto.
     system_time: Instant?
     default_tz: ZoneId               -- always present (non-nullable)
     user: String?
     user_metadata: Bytes?            -- optional serialized user metadata
+}
+
+variant LegacyTxMessage : SourceMessage {
+    -- A pre-proto transaction: the whole message is one opaque payload rather than a
+    -- proto envelope. Still resolvable (tx_resolver.indexTx has an overload for it) so
+    -- that a log written by an older node replays.
+    -- See: api/log/SourceMessage.kt (SourceMessage$LegacyTx)
+    payload: Bytes
 }
 
 variant FlushBlockMessage : SourceMessage {
@@ -458,8 +477,8 @@ variant FlushBlockMessage : SourceMessage {
 }
 
 variant TriesAddedMessage : SourceMessage {
-    -- L1+ compaction results written by the compactor.
-    -- The leader forwards these to the replica log.
+    -- New tries available on the source log: L0 posted by the block upload, L1+ written
+    -- by the compactor. The leader forwards these to the replica log.
     -- See: log/proto/log.proto (TriesAdded)
     storage_version: Int
     storage_epoch: Int
@@ -468,7 +487,7 @@ variant TriesAddedMessage : SourceMessage {
 
 variant BlockUploadedMessage : SourceMessage {
     -- Legacy variant: no current path emits this. The leader ignores it
-    -- (notifies watchers only) and it will be removed before release.
+    -- (notifies watchers only) and it will be removed after 2.2.
     -- See: log/proto/log.proto (BlockUploaded)
     storage_version: Int
     storage_epoch: Int
@@ -490,42 +509,59 @@ variant DetachDbMessage : SourceMessage {
 
 ---- Replica Log Messages
 
--- Messages on the replica log. Written exclusively by the leader.
--- Consumed by all nodes (including the leader's own follower, after transition).
+-- Messages on the replica log. Written by the leader for its term, via plain appends.
+-- Consumed by all nodes (including the leader itself, on consume-back, and its own
+-- follower after transition).
 
 entity ReplicaMessage {
     msg_id: MessageId
     log_timestamp: Instant
+
+    -- The leader term that produced this message; 0 (unset) on a record written before
+    -- terms existed. Set by the message's CREATOR, not by an append primitive, and
+    -- carried on the envelope so every message kind is fenceable. This field is the whole
+    -- fence: there is no producer, no fencing token, no write-time failure.
+    -- See the Fencing section, log/proto/replica-log.proto (term_id).
+    term_id: Long
+
     kind: ResolvedTxMessage | BlockBoundaryMessage | BlockUploadedMessage
-         | TriesAddedMessage | NoOpMessage
+         | TriesAddedMessage | TriesDeletedMessage | NoOpMessage
 }
 
 variant ResolvedTxMessage : ReplicaMessage {
     -- A resolved transaction: put/delete/erase events that require no database reads.
-    -- Carries the source tx_id so watchers can correlate with submit-tx responses.
     -- Attach/detach results are encoded as a dbOp field within the resolved tx.
     -- For external-source databases, carries the ExternalSourceToken (e.g. the
     -- Postgres LSN at the tx boundary) for resume-on-restart.
-    -- See: api/log/Log.kt (Message.ResolvedTx), api/log/ReplicaMessage.kt (ResolvedTx)
+    -- See: api/log/ReplicaMessage.kt (ResolvedTx)
     tx_id: MessageId                          -- source-log msg id of the original Tx/Attach/Detach,
-                                              -- or processor-assigned tx_id for external-source DBs
+                                              -- or the resolver-assigned tx_id for external-source DBs
     system_time: Instant                      -- resolved system time for the transaction
     committed: Boolean
     error: Throwable?                         -- abort reason (null if committed)
     db_op: DbOp?                              -- Attach or Detach side-effect, if any
     table_data: Map<String, Bytes>            -- resolved row data per table, serialized; imported by replica processor
     external_source_token: ExternalSourceToken?  -- present for external-source DBs
+
+    -- The leader's RESOLVE-side source watermark when this record was produced: for a
+    -- source-log tx its own msg_id, for an external-source tx the leader's current
+    -- source-log position (so followers keep their durable watermark in step between
+    -- block boundaries). Null only on records written before the field existed (#5586),
+    -- where readers fall back to the tx_id or the tracked watermark.
+    src_msg_id: MessageId?
 }
 
 variant BlockBoundaryMessage : ReplicaMessage {
-    -- Leader signals that a block boundary has been reached.
+    -- The leader signals that a block boundary has been reached. Injected by the leader
+    -- in RESOLUTION order, off the resolve-side row gauge (or on a FlushBlock CAS pass),
+    -- so it lands after this block's txs and before the next block's.
     -- Followers enter pending mode and buffer subsequent messages until BlockUploaded.
     -- L0 tries are delivered in the subsequent BlockUploaded message (not separately).
     -- For external-source DBs, carries the ExternalSourceToken as of the boundary
     -- so it gets persisted in the Block on upload.
     -- See: log/proto/replica-log.proto (BlockBoundary), api/log/ReplicaMessage.kt (BlockBoundary)
     block_index: Long
-    latest_processed_msg_id: MessageId           -- source log high-water at block time
+    latest_processed_msg_id: MessageId           -- resolve-side source watermark at block time
     external_source_token: ExternalSourceToken?  -- present for external-source DBs
 }
 
@@ -545,8 +581,7 @@ variant BlockUploadedMessage : ReplicaMessage {
 }
 
 variant TriesAddedMessage : ReplicaMessage {
-    -- New tries available.
-    -- L1+ tries: forwarded by the leader from the source log (compactor writes).
+    -- New tries available, forwarded by the leader from the source log.
     -- source_msg_id carries the original source-log position so that staleness
     -- checking and watchers can advance their watermarks correctly.
     -- See: log/proto/log.proto (TriesAdded), api/log/ReplicaMessage.kt (TriesAdded)
@@ -556,48 +591,88 @@ variant TriesAddedMessage : ReplicaMessage {
     source_msg_id: MessageId   -- source-log msg_id of the original TriesAdded
 }
 
+variant TriesDeletedMessage : ReplicaMessage {
+    -- Tries the leader's trie GC has deleted from the object store, published so that
+    -- followers drop them from their in-memory catalogs at the same logical position.
+    -- Written only by the leader, only after every file in the chunk is gone. Replay is
+    -- always safe — deleteTries is set-removal, so it is idempotent and never stale.
+    -- See: gc.allium, api/log/ReplicaMessage.kt (TriesDeleted)
+    table_name: String
+    trie_keys: Set<trie_cat/TrieKey>
+}
+
 variant NoOpMessage : ReplicaMessage {
-    -- No-operation message used for fencing during leader transition.
-    -- The new leader sends a NoOp after opening the transactional producer,
-    -- then the follower's awaitReplicaMsgId waits for it to ensure the follower
-    -- has fully processed all prior messages before handoff.
+    -- No-operation message, used for two things:
+    --   1. The transition's replay target. The new leader appends a NoOp stamped with its
+    --      new term to learn a known, CONSUMER-DELIVERABLE position — the log's
+    --      latest-submitted offset won't do, because it can include positions a consumer
+    --      never delivers. The follower's awaitReplicaMsgId then waits for it, and the
+    --      leader's consume pump tails from it.
+    --   2. Carrying the leader's source watermark forward when no other record would (a
+    --      FlushBlock whose CAS fails and so finishes no block) — see #5680.
     -- See: api/log/ReplicaMessage.kt (NoOp)
+    src_msg_id: MessageId?   -- null when used purely as a replay-target marker
 }
 
 ---- Config
 
 config {
     flush_timeout: Duration = 5.minutes
-    max_block_rows: Integer = 102400
+    rows_per_block: Integer = 102400
 }
 
 ---- Rules: Coordinator Transitions
 
--- Kafka consumer group rebalancing (or local log startup) drives transitions.
--- The LogProcessor serializes transitions: close old system, start new one.
+-- The transport's group subscription drives transitions. Launching the transition runs
+-- off the transport's serialization point; committing the leader and demoting run on it.
+-- log-processor-lifecycle.allium owns that split and the committed-role state machine.
 
 -- == Fencing ==
 --
--- The leader holds a transactional producer on the replica log.
--- Opening a new transactional producer fences the old one — no further
--- messages can be committed by the previous leader.
--- This guarantees at most one writer to the replica log at any time.
+-- There is at most one CONFIRMED leader per database, enforced by a TERM on the read
+-- side. There is no producer and no write-time fence.
 --
--- The source log is NOT fenced. Stale messages from a previous leader
--- (FlushBlock) or compactor (TriesAdded) may appear on the source log
--- after a transition. This is safe because:
+-- Every replica record carries the term of the leader that created it. The term pairs an
+-- operator-declared epoch with the transport's own election counter (Kafka's
+-- consumer-group generationId, an in-process counter for the local logs), packed so the
+-- epoch dominates the ordering — so plain numeric comparison is already lexicographic
+-- over (epoch, election), and every comparison site stays a Long.
+--
+-- The fence bites in two places:
+--   - The LEADER, on CONSUME-BACK (Raft's ReadIndex): it applies and acknowledges a write
+--     only once it has read that write back at its OWN term. A HIGHER term read back means
+--     a newer leader has superseded it, so it RESIGNS without acknowledging its
+--     outstanding writes; a LOWER term is discarded, still advancing the consume position.
+--   - A FOLLOWER, on read: a record below the highest term it has seen is DISCARDED, its
+--     consume position still advancing (so a transition catch-up can never hang on a
+--     fenced no-op). Its high-water term is seeded from the last persisted block, so the
+--     fence survives restart.
+--
+-- Two nodes may therefore briefly both believe themselves leader and both APPEND. Only
+-- the newer term's writes are ever confirmed, and the older leader's are discarded, which
+-- is the property that matters — not single-writer-at-the-log.
+--
+-- Term 0 (unset) is never fenced, so a mixed-version window doesn't discard a
+-- not-yet-upgraded leader's writes.
+--
+-- The SOURCE log is not fenced. Stale messages from a previous leader (FlushBlock) or the
+-- compactor (TriesAdded) may appear after a transition. This is safe because:
 --   - FlushBlock is a CAS on expected_block_idx; stale flushes fail the check.
 --   - TriesAdded is idempotent; addTries tolerates duplicates.
 
 -- == Transition Safety ==
 --
--- close() on the active system MUST NOT interrupt an in-flight transaction
--- commit or import. Applying (resolving) a transaction is safe to interrupt
--- because it does not mutate the live index — only the commit/import step
--- writes to the live index. close() waits for any in-progress commit/import
--- to complete, then stops the subscription. This ensures the live index
--- always reflects a complete prefix of the replica log (for followers)
--- or source log (for the leader), never a partial transaction.
+-- Teardown ABANDONS in-flight resolution rather than draining it. A staged-but-not-yet-
+-- applied tx was never visible to an external query, so discarding it costs nothing: the
+-- next leader re-reads it from the source log and re-resolves it. What teardown MUST do
+-- instead is fail everything awaiting the term — every staged external-source tx's
+-- durability handle, the paused source batch, and whatever is still queued — because the
+-- symptom of missing one is a HANG, and for a source batch that hang is on the transport's
+-- poll thread, which is also the sole servicer of unregister (#5711 / #5817).
+--
+-- So the live index still reflects a complete prefix of the replica log: it is only ever
+-- advanced by APPLY, one whole tx at a time, and an abandoned tx is one that was never
+-- applied.
 
 -- == Leader Startup ==
 --
@@ -605,101 +680,110 @@ config {
 --   1. The last persisted block (from block catalog)
 --   2. The follower's in-memory state (which has been processing replica messages)
 --
--- The fencing + NoOp + awaitReplicaMsgId sequence ensures the follower has
--- fully caught up before its state is captured and it is shut down.
--- If the follower had a pending block (saw BlockBoundary but not BlockUploaded),
--- the new leader finishes the block via BlockUploader before starting source
--- log consumption.
+-- The NoOp + awaitReplicaMsgId sequence ensures the follower has fully caught up before
+-- its state is captured and it is shut down: the follower is the sole replica-log consumer
+-- and the leader consumes the source log instead, so records in [follower-pos,
+-- replay_target) would otherwise be silently skipped.
+-- If the follower had a pending block (saw BlockBoundary but not BlockUploaded), the new
+-- leader finishes the block via BlockUploader — under its OWN term — before starting
+-- source log consumption.
 
 -- == Staleness ==
 --
--- Both FollowerLogProcessor and TransitionLogProcessor use a staleness check
--- based on latest_source_msg_id as a watermark. A replica message is stale
--- if its source position is at or behind the watermark:
---   ResolvedTx: stale if txId <= latest_source_msg_id
---   TriesAdded: stale if source_msg_id <= latest_source_msg_id
---   BlockBoundary: stale if latest_processed_msg_id <= latest_source_msg_id
---   BlockUploaded: stale if latest_processed_msg_id <= latest_source_msg_id
---   NoOp: never stale
+-- Both FollowerLogProcessor and TransitionLogProcessor skip a replica message whose effect
+-- has already been applied. Each kind is compared against the watermark that actually
+-- records its effect, rather than against a single source-log position:
+--   ResolvedTx:     stale if tx_id <= watchers.latest_tx_id
+--   TriesAdded:     stale if source_msg_id <= watchers.latest_source_msg_id
+--   BlockBoundary:  stale if block_index <= block_catalog.current_block_index
+--   BlockUploaded:  stale if block_index <= block_catalog.current_block_index
+--   NoOp:           stale if it carries a src_msg_id at or behind
+--                   watchers.latest_source_msg_id; a bare marker NoOp is never stale
+--   TriesDeleted:   never stale — deleteTries is set-removal, so replay is a no-op
 -- Stale messages are skipped entirely before dispatch. This replaces per-type
 -- idempotency checks within the handler.
+--
+-- The term fence is a SEPARATE, earlier check (see Fencing): a fenced record is discarded
+-- before staleness is even considered.
 
 rule TransitionToLeader {
-    when: PartitionsAssigned(database)
+    -- db.allium's view of the transition: what it means for THIS database's pipeline.
+    -- log-processor-lifecycle.allium owns the five steps, the off-serialization-point
+    -- split, the Prepared role and the cancellation-recovery path; don't duplicate them
+    -- here.
+    when: LaunchTransition(database, term)
     requires: log_processor.mode = Follower
 
     ensures:
-        -- Fence: open transactional producer on replica log.
-        -- After this, the previous leader cannot commit further messages.
-        let producer = database.replica_log.openTransactionalProducer()
+        -- Append a NoOp STAMPED WITH THE NEW TERM to learn a known, consumer-deliverable
+        -- replay target. A plain append — there is no producer to open, and nothing is
+        -- fenced at write time.
+        let replay_target = NoOpMessage.created(term_id: term, src_msg_id: null)
+                                appended to database.replica_log
 
-        -- Send a NoOp to get a known msg_id (replay_target).
-        -- We cannot use latestSubmittedMsgId because Kafka's endOffsets
-        -- includes transaction marker offsets that consumers never deliver.
-        let replay_target = NoOpMessage.created() appended to database.replica_log
-
-        -- Wait for the follower to process all replica messages up to the NoOp.
-        -- This uses FollowerProcessor.awaitReplicaMsgId (a MutableStateFlow),
-        -- NOT Watchers. The flow is updated in the finally block of processRecords
-        -- so it advances even on error.
+        -- Wait for the follower to process all replica messages up to the NoOp. Uses
+        -- FollowerProcessor.awaitReplicaMsgId (a MutableStateFlow), NOT Watchers; it
+        -- advances even on error.
         follower.awaitReplicaMsgId(replay_target)
+
+        -- Refuse a term the replica log has already moved past. Our own claim has just
+        -- been read back, so the follower's max term is expected to BE this term; a higher
+        -- one is another leader's, and leading under a fenced term would index nothing.
+        -- Fails with xtdb/leader-term-fenced, naming the epoch to raise. Checked here —
+        -- after the catch-up, before the follower is stopped — so a refusal takes the
+        -- existing recovery path with the follower still alive.
+        CheckTermUnfenced(follower, term)
 
         -- Close the follower system. No further processing after this point.
         follower.close()
 
         -- Capture the follower's pending block state (if it saw BlockBoundary
-        -- but not BlockUploaded before the fence point).
+        -- but not BlockUploaded before the replay target).
         let pending_block = follower.pending_block
 
-        -- Open a TransitionProcessor to replay any buffered records.
-        -- It receives the follower's latest_source_msg_id and latest_replica_msg_id
-        -- so it knows where the follower left off.
-        let transition = Transition.created(
-            after_source_msg_id: follower.latest_source_msg_id,
-            after_replica_msg_id: follower.latest_replica_msg_id
-        )
-
-        -- If the follower had a pending block, the new leader must finish it.
-        -- The pending block's data is already in the live index (written before
-        -- BlockBoundary), but the block file was never persisted.
-        if pending_block is set:
-            -- Use BlockUploader to persist the block and write BlockUploaded.
+        -- If the follower had a pending block, the new leader must finish it. The block's
+        -- data is already in the live index (applied before BlockBoundary), but the block
+        -- file was never persisted. The BlockUploaded is appended under the INCOMING term,
+        -- not the term that cut the boundary: followers have already advanced past that
+        -- term and would fence it, never completing the block.
+        if pending_block != null:
             block_uploader.uploadBlock(
-                producer,
                 pending_block.boundary_msg_id,
+                term,
                 pending_block.boundary_message
             )
-            -- Replay buffered records through the transition processor.
-            -- The transition processor handles BlockBoundary by immediately
-            -- calling blockUploader.uploadBlock (unlike the follower which
+
+            -- Replay buffered records through a transient transition processor, which
+            -- handles BlockBoundary by uploading immediately (unlike the follower, which
             -- enters pending mode).
+            let transition = Transition.created(
+                latest_replica_msg_id: follower.latest_replica_msg_id,
+                term_id: term
+            )
             transition.processRecords(pending_block.buffered_records)
 
-        -- Determine source log resume point from the transition processor.
-        -- This accounts for all work done: follower processing + any replayed records.
-        let source_resume = transition.latest_source_msg_id
-
-        -- Switch to leader mode: subscribe to source log.
-        -- The leader receives replay_target as its after_replica_msg_id so it
-        -- knows where the replica log left off.
-        -- For databases with an external source configured, the new mode is
-        -- ExternalSourceLeader (see Database.openLeaderSystem); otherwise Leader.
-        log_processor.mode = Leader
-        log_processor.start(source_resume, after_replica_msg_id: replay_target)
-
-        -- Stand up the leader term's pipeline: the resolver-owned staging index
-        -- (applied head seeded from the durable head; see live-index BeginStagedTx)
-        -- and the secondary committer coroutine that commits the sealed producer
-        -- transactions (the resolver opens a fresh one and appends at each seal; this
-        -- producer handle is used per-seal). Both are torn down on revocation by the
-        -- two-phase close (TransitionToFollower).
-        StagingIndex.created(
-            latest_completed_tx: live_index.latest_completed_tx,
-            in_flight: false
+        -- Switch to leader mode. It resumes the SOURCE log from the durable watermark
+        -- (which the replay above has advanced), and its consume pump tails the REPLICA
+        -- log from the replay target. Its resolver is seeded at the durable head, and its
+        -- block gauge from the rows already in the open block, so it cuts this block where
+        -- the previous leader would have.
+        log_processor.mode = Leader.created(
+            -- Opened per term from the database's configured source, so this leader is
+            -- CDC-fed iff the database is. Explicit rather than defaulted: it is what
+            -- decides where transactions enter.
+            external_source: database.external_source,
+            leader_term: term,
+            latest_replica_msg_id: replay_target,
+            last_resolved_src_msg_id: watchers.latest_source_msg_id,
+            last_resolved_ext_token: watchers.external_source_token,
+            rows_since_block: live_index.block_row_count,
+            block_in_progress: false,
+            pending_block: null
         )
-        Committer.created(
-            latest_replica_msg_id: replay_target
+        TxResolver.created(
+            latest_completed_tx: live_index.latest_completed_tx
         )
+        log_processor.start(after_source: watchers.latest_source_msg_id, after_replica: replay_target)
 
     @guidance
         -- ReplayEquivalence: the live index state after transition is identical
@@ -707,66 +791,66 @@ rule TransitionToLeader {
 }
 
 rule TransitionToFollower {
-    -- Applies when revoking from either Leader or ExternalSourceLeader.
-    when: PartitionsRevoked(database)
-    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
+    when: DemoteLeader(database)
+    requires: log_processor.mode = Leader
 
     ensures:
-        -- Two-phase close (per commit ec0f3947e). Phase 1: cancelAndJoin the
-        -- leader's job tree (resolver + committer) so nothing live still touches
-        -- staging — close() completes any in-flight commit, joins both coroutines,
-        -- then stops the subscription.
+        -- Two-phase close. Phase 1: cancelAndJoin the leader's job tree (resolver +
+        -- append pump + consume pump + GCs) so nothing live still touches the resolver.
+        -- On the resolver's exit it FAILS every pending durability handle before the
+        -- channels close, so no executeTx caller waits forever (live-index
+        -- FailPendingHandles).
         let leader = log_processor as Leader
+        leader.cancelAndJoin()
+
+        -- Phase 2: synchronously free the resolver — the buffers of any staged-but-not-
+        -- yet-applied tx — before the allocator. Demotion IS this teardown; there is no
+        -- separate runtime drop. Those txs are discarded (they were never visible to
+        -- external queries) and will be re-read from the source log and re-resolved by the
+        -- next leader. The durable live index is untouched (live-index CloseResolver).
         leader.close()
+        if tx_resolver != null:
+            CloseResolver(tx_resolver)
 
-        -- Phase 2: synchronously free the leader-term staging index (closing any
-        -- un-promoted slot buffers) BEFORE the allocator. Demotion IS this teardown
-        -- — there is no separate runtime drop. Any staged-but-not-yet-durable txs
-        -- are discarded (they were never visible to external queries) and will be
-        -- re-read from the source log and re-resolved by the next leader. The
-        -- durable live index is untouched (live-index CloseStagingIndex).
-        if staging_index != null:
-            CloseStagingIndex(staging_index)
-
-        -- The leader's pending_block is passed to the new follower.
-        -- If the leader was mid-block-flush when revoked (between BlockBoundary
-        -- and BlockUploaded), the follower picks up the pending state.
-        log_processor.mode = Follower
-        log_processor.start(
-            from_source: leader.latest_source_msg_id,
-            from_replica: leader.latest_replica_msg_id,
-            pending_block: leader.pending_block
+        -- The leader's pending_block is passed to the new follower. If the leader was
+        -- mid-upload when revoked (between BlockBoundary and BlockUploaded), the follower
+        -- picks up the pending state. The watermark fields stay readable after the close —
+        -- they are not allocator-backed.
+        log_processor.mode = Follower.created(
+            latest_replica_msg_id: leader.latest_replica_msg_id,
+            pending_block: leader.pending_block,
+            max_leader_term: block_catalog.boundary_term_id
         )
 }
 
 ---- Rules: Transaction Submission
 
 rule ClientSubmitsTransaction {
-    -- Client submits a transaction. Only permitted on a client-driven leader
-    -- (mode is Leader). An ExternalSourceLeader rejects submitTx with error
-    -- code `xtdb/submit-tx-to-external-source-db`: external-source databases
-    -- assign their own tx_id sequence and accept transactions only via the
-    -- TxIndexer callback.
+    -- Client submits a transaction: it is appended to the SOURCE log, which every node
+    -- shares, so this succeeds whether or not this node happens to be the leader.
     -- See: database/Database.kt (submitTxBlocking)
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: log_processor.mode = Leader
+    requires: database.external_source = null
 
     ensures:
         let msg = TxMessage.created(
             system_time: opts.system_time,
             default_tz: opts.default_tz,
-            user: opts.user
+            user: opts.user,
+            user_metadata: opts.user_metadata
         )
         msg appended to database.source_log
 }
 
 rule ClientSubmitsTransactionToExternalSourceDb {
-    -- Rejected: submitTx is not a valid entry point for an external-source DB.
-    -- Returns error xtdb/submit-tx-to-external-source-db.
+    -- Rejected: submitTx is not a valid entry point for an external-source DB, which
+    -- assigns its own tx_id sequence off the resolved head and accepts transactions only
+    -- via the TxIndexer callback. Decided from the DATABASE's config, not this node's
+    -- role — see Database.external_source.
     when: ClientSubmitsTx(client, database, tx_ops, opts)
 
-    requires: log_processor.mode = ExternalSourceLeader
+    requires: database.external_source != null
 
     ensures:
         SubmitTxRejected(
@@ -775,366 +859,394 @@ rule ClientSubmitsTransactionToExternalSourceDb {
         )
 }
 
----- Rules: Leader Mode — Resolver (source processing)
+---- Rules: Leader Mode — resolve side
 
--- The leader subscribes to the source log. The RESOLVER, sole accessor of its
--- staging index, resolves each message (reading durable ⊕ its own staging), applies
--- the result to the STAGING accumulating slot (live_index.applyToStaging), advancing
--- the staging index's own latest_completed_tx (the applied head), AND holds the tx's
--- pending replica message in the slot in send order. It does NOT append to a producer
--- transaction here — the append happens at seal time (MaybeSealBatch → sealStagingBatch)
--- — and does NOT commit (the committer does that) and does NOT notify watchers — those
--- follow from the durable commit and the resolver's own post-durable promotion. At each
--- tx boundary it decides whether to seal a batch (MaybeSealBatch): only if no batch is
--- in flight and work has accumulated. Resolution runs AHEAD of the durable commit:
--- later txs resolve against staging while a sealed batch commits.
--- At the start of each processRecords batch, the leader checks the block flush
--- timeout via BlockFlusher.
+-- The leader's persister select loop is the RESOLVER. Its arms are the source-log batch
+-- pipe, the external-source task channel, the GC task channel, the block-cut resume, and
+-- the consume-back channel (the APPLY arm, further down). All but the apply arm are
+-- EXCLUDED from the select while block_in_progress — the block-cut pause.
+--
+-- Resolving a tx stages it on the resolver's own queue (advancing the RESOLVED head, so
+-- later txs read-your-writes against it) and SENDS it to the append pump. Nothing here
+-- touches the durable live index and nothing here notifies watchers: both follow from
+-- apply, on consume-back. Resolution therefore runs AHEAD of durability.
+--
+-- At the start of each source batch the leader checks the block flush timeout
+-- (BlockFlusher). A batch that a block cut pauses part-way is STASHED and resumed after
+-- the upload, completing its handle only once fully drained — so the transport's poll
+-- thread stays in step with resolution.
 
 rule LeaderProcessesTx {
+    -- Covers TxMessage and LegacyTxMessage alike: they differ only in how the payload
+    -- decodes, which is below this spec's abstraction level.
     when: msg: TxMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-
     ensures:
-        -- Resolve and apply to the resolver-owned staging index (advances the applied
-        -- head latest_completed_tx). ApplyToStaging applies the tx to the accumulating
-        -- slot and holds its pending replica message in send order — it does NOT append
-        -- to a producer transaction; the append happens at seal time.
-        let resolved = IndexTransaction(msg)
-        live_index.applyToStaging(staging_index, resolved)
-        log_processor.latest_source_msg_id = msg.msg_id
-
-        -- Tx-boundary decision: seal the batch (open a fresh producer transaction,
-        -- append the held messages, hand it to the committer) if appropriate. No commit
-        -- and no watcher notify here.
-        MaybeSealBatch(staging_index)
+        -- Resolve and stage on the resolver's queue, advancing the RESOLVED head
+        -- (live-index CommitTransaction / AbortTransaction — an aborted tx is staged too,
+        -- as an abort row, and still consumes a tx_id).
+        let resolved = ResolveTx(tx_resolver, msg)
+        AppendTx(resolved, src_msg_id: msg.msg_id)
 }
 
 rule LeaderProcessesAttachDb {
+    -- The catalog mutation happens EAGERLY, here on the resolve side, because it has to
+    -- run to produce the tx result at all. A caller-fault failure is resolved as a FAILED
+    -- dbOp tx rather than propagating: the transaction aborts with that error, and the log
+    -- carries the abort. The leader then SKIPS the dbOp on its own consume-back (the
+    -- catalog is already mutated); followers and the transition processor apply it there.
     when: msg: AttachDbMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-
     ensures:
-        let resolved = ResolveAttach(msg)
-        live_index.applyToStaging(staging_index, resolved)
-        log_processor.latest_source_msg_id = msg.msg_id
-
-        MaybeSealBatch(staging_index)
+        let error = ApplyAttachToCatalog(msg.db_name, msg.config)
+        let resolved =
+            if error = null:
+                ResolveDbOp(tx_resolver, msg, Attach{db_name: msg.db_name, config: msg.config})
+            else:
+                ResolveFailedDbOp(tx_resolver, msg, error)
+        AppendTx(resolved, src_msg_id: msg.msg_id)
 }
 
 rule LeaderProcessesDetachDb {
+    -- Mirror of LeaderProcessesAttachDb.
     when: msg: DetachDbMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-
     ensures:
-        let resolved = ResolveDetach(msg)
-        live_index.applyToStaging(staging_index, resolved)
-        log_processor.latest_source_msg_id = msg.msg_id
-
-        MaybeSealBatch(staging_index)
-}
-
----- Rules: Leader Mode — Resolver seal and post-commit promotion
-
--- The resolver-side of the pipeline. The resolver, at a tx boundary, seals: it opens
--- a fresh producer transaction, appends the accumulating slot's held messages in send
--- order, moves the slot into the committing sequence (live-index SealStagingBatch),
--- and hands the OPEN-BUT-UNCOMMITTED producer transaction to the secondary committer
--- coroutine to COMMIT. At-most-one-batch-in-flight is enforced here by the staging
--- index's in_flight flag — matching the single open producer transaction a Kafka
--- transactional producer permits. When the committer signals the batch durable
--- (BatchCommitted), the resolver PROMOTES the committing batch → durable ONE TX AT A
--- TIME, advancing the durable basis and the apply cursor per tx, refreshing the shared
--- snapshot and notifying watchers POST-DURABLE — and then may seal the next
--- accumulated batch.
-
-rule MaybeSealBatch {
-    -- Tx-boundary decision: seal only when no batch is in flight and work has
-    -- accumulated. If a batch is already in flight, the newly-staged txs simply
-    -- coalesce into the accumulating slot (accumulating continues during a send) and
-    -- their held pending messages are appended when THIS slot is next sealed, once the
-    -- in-flight batch is promoted (see ResolverPromotesBatch).
-    when: MaybeSealBatch(staging_index)
-
-    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
-    requires: not staging_index.in_flight
-
-    ensures:
-        -- Seal: open a fresh producer transaction, append the accumulating slot's held
-        -- pending messages in send order, move the slot into the committing sequence,
-        -- and return the batch's resolved txs in send order (live-index
-        -- SealStagingBatch). If the accumulating slot was empty, sealStagingBatch is a
-        -- no-op (see its requires) — nothing is appended and nothing is committed.
-        let resolved_batch = live_index.sealStagingBatch(staging_index)
-        staging_index.in_flight = true
-
-        -- Hand the OPEN-BUT-UNCOMMITTED producer transaction to the committer to commit
-        -- durably. The committer signals back when the commit lands. Each appended tx
-        -- carries its own external_source_token (null for the client-driven leader),
-        -- threaded at seal/append time; the batch carries a block cut only when the
-        -- resolver decided to cut one at this boundary.
-        CommitBatch(committer, resolved_batch)
-}
-
-rule CommitterCommitsBatch {
-    -- The secondary committer coroutine: commit() the already-appended sealed producer
-    -- transaction durably (the slow Kafka round-trip), then signal the resolver. It
-    -- does NOT append (the resolver appended at seal), and touches NEITHER the staging
-    -- index NOR the durable live index — promotion is the resolver's job.
-    when: CommitBatch(committer, resolved_batch)
-
-    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
-
-    ensures:
-        -- Commit the open producer transaction: everything appended at seal becomes
-        -- durable together (commit() commits the whole transaction, not a prefix). The
-        -- PER-TX replica-log positions (i-th ↔ i-th tx, send order) come from the
-        -- per-tx append handles the resolver obtained at seal (each appendMessage
-        -- returns a handle completing at commit with the position); commit does not
-        -- reassign them. resolved_batch carries them so the resolver can advance the
-        -- apply cursor tx-by-tx on promote. These are replica-LOG positions, distinct
-        -- from the tx-id (a source-log position).
-        CommitProducerTransaction(database, resolved_batch)
-
-        -- Signal the resolver that the batch is durable; promotion follows on the
-        -- resolver, not here.
-        BatchCommitted(staging_index, resolved_batch)
-}
-
-rule ResolverPromotesBatch {
-    -- The resolver handles the committer's durable signal: the committing batch is
-    -- durable. It promotes the batch → durable ONE TX AT A TIME, in send order (via
-    -- live-index PromoteNext, which imports the tx into the durable live tables,
-    -- advances the durable basis to that tx, and refreshes the shared snapshot). For
-    -- each promoted tx it advances the apply cursor (latest_replica_msg_id, the
-    -- follower's resume point) to that tx's replica-log position — the i-th promoted
-    -- tx takes the i-th seal-time append position — and notifies watchers POST-DURABLE.
-    -- Once the batch is drained no batch is in flight, so it finishes the block if the
-    -- durable live index is now full and seals the next accumulated batch if any.
-    --
-    -- Per-tx (not wholesale) promotion + per-tx cursor advance is what makes a partial
-    -- failure safe: if importTx faults mid-batch, the imported prefix is durable, the
-    -- cursor sits at the last tx that ACTUALLY imported, and the un-imported tail stays
-    -- parked in committing (freed by CloseStagingIndex on teardown). A follower
-    -- resuming from that cursor re-applies only the tail — never double-importing the
-    -- durable prefix.
-    --
-    -- The per-tx replica-log positions carried on resolved_batch are the append
-    -- positions from the per-tx handles the resolver obtained at SEAL time, i-th ↔ i-th
-    -- tx in send order.
-    when: BatchCommitted(staging_index, resolved_batch)
-
-    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
-
-    ensures:
-        -- Promote each tx in send order. Each resolved tx carries its own replica-log
-        -- position (from the per-tx append handle the resolver obtained at seal, i-th ↔ i-th tx).
-        -- PromoteNext imports the tx into the durable live tables, advances the durable
-        -- basis to it, and refreshes the shared snapshot. Advance the apply cursor to
-        -- this tx's replica-log position, then notify watchers POST-DURABLE, threading
-        -- the tx's own external_source_token so restarts can resume the external source.
-        -- If PromoteNext faults partway, the cursor is left at the last tx that actually
-        -- imported (partial-failure safety).
-        for resolved in resolved_batch:
-            live_index.promoteNext(staging_index)
-            log_processor.latest_replica_msg_id = resolved.replica_msg_id
-            watchers.notifyTx(resolved.result, resolved.tx_key.tx_id, resolved.external_source_token)
-
-        -- The committing sequence is now drained; no batch is in flight.
-        staging_index.in_flight = false
-
-        let durable_tx = resolved_batch.last.tx_key
-
-        -- The block boundary's resume token comes from the WATCHERS' view, which the
-        -- promote loop above just advanced (notifyTx null-coalesces the tracked token to
-        -- the last non-null it saw). A MIXED batch's last tx can be a source-log tx whose
-        -- token is null; reading resolved_batch.last.external_source_token would drop the
-        -- CDC resume point in that case. watchers.external_source_token holds the batch's
-        -- last NON-NULL token instead, so the boundary carries a live resume point.
-        let durable_token = watchers.external_source_token
-
-        -- BlockBoundary closes the batch: finish the block once durable and full,
-        -- by which point staging is drained (see live-index FinishBlock). An
-        -- external-source batch carries a non-null token and finishes via
-        -- ExternalSourceFinishesBlock so it is persisted in the Block; a pure client-
-        -- driven batch has never seen a token (watchers' token stays null) and finishes
-        -- via LeaderFinishesBlock.
-        if live_index.is_full:
-            if durable_token != null:
-                ExternalSourceFinishesBlock(durable_tx.tx_id, durable_token)
+        let error = ApplyDetachToCatalog(msg.db_name)
+        let resolved =
+            if error = null:
+                ResolveDbOp(tx_resolver, msg, Detach{db_name: msg.db_name})
             else:
-                LeaderFinishesBlock(durable_tx.tx_id)
+                ResolveFailedDbOp(tx_resolver, msg, error)
+        AppendTx(resolved, src_msg_id: msg.msg_id)
+}
 
-        -- Now no batch is in flight; seal the next accumulated batch if any.
-        MaybeSealBatch(staging_index)
+rule AppendTx {
+    -- Hand a freshly-resolved tx to the append pump, advance the resolve-side watermark,
+    -- and cut a block if this tx filled one.
+    --
+    -- src_msg_id is the source-log position this tx sits at: a source-log tx advances it;
+    -- an external-source tx passes the current one back, having no source-log position of
+    -- its own. Either way it is what gets STAMPED on the tx's replica record — see the
+    -- header's note on the two watermarks.
+    when: AppendTx(resolved, src_msg_id)
+
+    requires: log_processor.mode = Leader
+
+    ensures:
+        let leader = log_processor as Leader
+        leader.last_resolved_src_msg_id = src_msg_id
+        leader.rows_since_block = leader.rows_since_block + resolved.row_count
+        AppendReplicaMessage(resolved)
+
+        if leader.rows_since_block >= config.rows_per_block:
+            LeaderCutsBlock(leader.last_resolved_src_msg_id, leader.last_resolved_ext_token)
+}
+
+rule LeaderCutsBlock {
+    -- Inject the boundary in RESOLUTION order (so it lands after this block's txs and
+    -- before the next block's) and PAUSE resolution until it is read back and its block
+    -- uploaded. The pause is what keeps the follower's bounded pending-block buffer empty.
+    -- Deliberately the status quo — block double-buffering is separate work (#4495).
+    --
+    -- The same event as live-index.allium's CutBlock, from the db side: this is where the
+    -- boundary MESSAGE is built, because its fields come from here (the next block index
+    -- off the block catalog, the resolve-side source watermark, the resume token) —
+    -- live-index knows nothing of block catalogs or external sources.
+    --
+    -- One rule, not one per leader flavour: the token is whatever the resolve side last
+    -- saw (null throughout for a client-driven leader), so there is nothing to branch on.
+    -- Reading the token from the WATCHERS instead would be wrong here — they advance on
+    -- apply, which lags this cut.
+    when: LeaderCutsBlock(latest_processed_msg_id, external_source_token)
+
+    requires: log_processor.mode = Leader
+
+    let leader = log_processor as Leader
+    let block_index = (block_catalog.current_block_index ?? -1) + 1
+
+    ensures:
+        AppendReplicaMessage(BlockBoundaryMessage.created(
+            block_index: block_index,
+            latest_processed_msg_id: latest_processed_msg_id,
+            external_source_token: external_source_token
+        ))
+        leader.block_in_progress = true
+        leader.rows_since_block = 0
 }
 
 rule LeaderProcessesFlushBlock {
-    -- Source-log coordination message, handled on the resolver thread. The block
-    -- cut itself is a resolver decision: it drains staging (awaits the in-flight
-    -- commit and promotes), then the block is finished with staging drained (see
-    -- live-index FinishBlock).
+    -- Source-log coordination message, handled on the resolver.
     when: msg: FlushBlockMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
+    let leader = log_processor as Leader
 
     ensures:
-        -- CAS check: only finish the block if the expected index matches.
-        -- When the CAS fails (stale FlushBlock, or null expected_block_idx),
-        -- we still advance watchers and latest_source_msg_id.
+        -- CAS check: only cut the block if the expected index matches.
         if msg.expected_block_idx != null
            and msg.expected_block_idx = (block_catalog.current_block_index ?? -1):
-            LeaderFinishesBlock(msg.msg_id)
+            LeaderCutsBlock(msg.msg_id, leader.last_resolved_ext_token)
+        else:
+            -- Stale FlushBlock (or a null expected index): nothing to cut, but the source
+            -- watermark still has to reach the followers, and no other record would carry
+            -- it. A NoOp does (#5680).
+            AppendReplicaMessage(NoOpMessage.created(src_msg_id: msg.msg_id))
 
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
+        leader.last_resolved_src_msg_id = msg.msg_id
 }
 
 rule LeaderProcessesTriesAdded {
-    -- L1+ from compactor. The leader needs these in its trie catalog
-    -- for correct partition info at block time, and the resolver forwards them to
-    -- the replica log via the producer (the resolver owns the append path).
+    -- L0 from the block upload, L1+ from the compactor. The leader needs these in its own
+    -- trie catalog for correct partition info at block time, and forwards them to the
+    -- replica log for followers.
+    --
+    -- The catalog mutation is EAGER, on the resolve side, rather than deferred to the
+    -- leader's own consume-back: callers read the catalog synchronously (the compactor and
+    -- GC do), and it stays a projection of the fenced log anyway, because the block-cut
+    -- pause serialises trie mutations against boundaries — so no block snapshot straddles
+    -- an add. Skipped on the leader's own consume-back; the follower applies it there.
     when: msg: TriesAddedMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-    requires: msg.storage_version = current_storage_version
-    requires: msg.storage_epoch = current_storage_epoch
+    let leader = log_processor as Leader
 
     ensures:
-        -- Update the trie catalog (needed for finishBlock partition info).
-        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+        if msg.storage_version = current_storage_version
+           and msg.storage_epoch = current_storage_epoch:
+            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
 
-        -- Forward to replica log so followers see L1+ tries.
-        -- Include source_msg_id so followers can advance their watermarks.
-        TriesAddedMessage.created(
+        -- Forward regardless of storage version: the follower applies the same guard, and
+        -- the message still has to carry the source watermark forward.
+        AppendReplicaMessage(TriesAddedMessage.created(
             storage_version: msg.storage_version,
             storage_epoch: msg.storage_epoch,
             tries: msg.tries,
             source_msg_id: msg.msg_id
-        ) appended to database.replica_log
+        ))
 
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
+        leader.last_resolved_src_msg_id = msg.msg_id
 }
 
+-- The trie GC's publish step is a THIRD resolve-side arm, alongside the source log and the
+-- external source: the GC hands `commitTriesDeleted` to the persister and awaits it, rather
+-- than touching the catalog or the log itself. gc.allium owns that rule
+-- (CommitTriesDeletedRule), including why the catalog removal and the replica-log append
+-- need no lock. Two facts belong here, being properties of this pipeline rather than of the
+-- GC:
+--   - the GC arm is EXCLUDED from the select while block_in_progress, so a TriesDeleted can
+--     never be resolved between a boundary and its upload;
+--   - its TriesDeletedMessage leaves via the append pump like any other, and is skipped on
+--     the leader's own consume-back — the catalog was already mutated on the resolve side.
+
 rule LeaderProcessesBlockUploaded {
-    -- Legacy variant: no current path emits BlockUploaded on the source log.
-    -- The leader ignores it (notifies watchers only) — see BlockUploadedMessage.
+    -- Legacy variant: no current path emits BlockUploaded on the source log. The leader
+    -- ignores it, advancing the watermarks directly — including the resolve-side one, or a
+    -- following block cut would carry a lower latest_processed_msg_id and regress
+    -- notifyMsg on apply.
     when: msg: BlockUploadedMessage consumed from database.source_log
     requires: log_processor.mode = Leader
 
-    requires: msg.msg_id > log_processor.latest_source_msg_id
+    let leader = log_processor as Leader
 
     ensures:
         watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
+        leader.last_resolved_src_msg_id = msg.msg_id
 }
 
----- Rules: Leader Block Finishing
+---- Rules: Leader Mode — append pump
 
--- The leader finishes blocks via BlockUploader: by the time we get here the
--- resolver has drained staging (the in-flight batch promoted), so the durable
--- block never contains non-durable rows (see live-index FinishBlock, which
--- requires staging drained).
--- The leader sets pending_block between writing BlockBoundary and BlockUploaded.
--- If the leader is revoked during this window, the pending block gets passed
--- to the follower (see TransitionToFollower).
---
--- Double-finish is not possible: LeaderFinishesBlock is fired by either
--- ResolverPromotesBatch (when live_index.is_full, post-promotion) or
--- LeaderProcessesFlushBlock.
--- These are processed sequentially on the resolver thread.
--- If a batch flush triggers a block finish, it calls
--- nextBlock() — the live index is no longer full. If a FlushBlock message
--- arrives later for the same block_index, its CAS (expected_block_idx ==
--- block_catalog.current_block_index) fails because the block catalog has
--- already advanced.
+rule AppendReplicaMessage {
+    -- The append pump: serialise the message (for a tx, the costly Arrow-IPC step, kept
+    -- off the resolver's hot path) and append it to the replica log, in resolution order,
+    -- STAMPED with this leader's term.
+    --
+    -- A PLAIN append. Nothing here is atomic across messages and nothing needs to be: a
+    -- superseded leader is fenced by the term its records carry, checked when it reads
+    -- them back (#5817), not by an append that fails. An append fault propagates and tears
+    -- the term down.
+    --
+    -- The pump only BORROWS a tx to serialise it — the resolver owns and frees it (see
+    -- live-index.allium "Ownership").
+    when: AppendReplicaMessage(msg)
 
-rule LeaderFinishesBlock {
-    when: LeaderFinishesBlock(latest_processed_msg_id)
+    requires: log_processor.mode = Leader
 
-    let block_index = (block_catalog.current_block_index ?? -1) + 1
+    let leader = log_processor as Leader
 
     ensures:
-        -- Signal replica: block boundary first.
-        -- The BlockBoundary message's msg_id becomes the block's
-        -- latest_replica_msg_id — the resume point for replica log subscriptions.
-        let block_boundary = BlockBoundaryMessage.created(
-            block_index: block_index,
-            latest_processed_msg_id: latest_processed_msg_id,
-            external_source_token: null
-        )
-        block_boundary appended to database.replica_log
+        msg.term_id = leader.leader_term
+        msg appended to database.replica_log
+}
 
-        -- Set pending_block between boundary and upload.
-        -- If revoked during this window, the pending block is handed to the follower.
-        log_processor.pending_block = PendingBlock(
-            boundary_msg_id: block_boundary.msg_id,
-            boundary_message: block_boundary
-        )
+---- Rules: Leader Mode — consume-back / apply (ReadIndex)
 
-        -- Use BlockUploader to finish the block.
-        -- This persists tries, table blocks, block file, writes BlockUploaded,
-        -- calls nextBlock() and signals the compactor.
-        block_uploader.uploadBlock(
-            producer,
-            block_boundary.msg_id,
-            block_boundary
-        )
+-- The consume pump tails the leader's OWN replica log from the transition replay target —
+-- a separate consumer from the source-log group subscription that drives leader election,
+-- so it doesn't interfere with it — and posts each record onto a bounded channel that the
+-- resolver's select loop services. Because resolution and apply share one coroutine, a tx
+-- cannot interleave a partial state.
+--
+-- This is where a committed tx becomes queryable and where an external-source caller's
+-- durability handle completes: confirmed durably replicated AND confirmed unfenced.
 
-        log_processor.pending_block = null
+rule LeaderAppliesRecord {
+    -- Apply one record read back off our own replica log, fenced by TERM. Consumption
+    -- advances in all three branches — discarding suppresses application, not consumption,
+    -- so a catch-up can never hang on a fenced record.
+    when: record: ReplicaMessage consumed from database.replica_log
+    requires: log_processor.mode = Leader
+
+    let leader = log_processor as Leader
+
+    ensures:
+        if record.term_id > leader.leader_term:
+            -- A newer leader has superseded us. RESIGN: the term fails without
+            -- acknowledging its outstanding writes, its teardown fails everything awaiting
+            -- it (see Transition Safety and live-index.allium FailPendingHandles), and the
+            -- transport re-follows on the next rebalance.
+            --
+            -- A clean resignation, NOT an ingestion fault: it must not poison the watchers,
+            -- or a routine leadership handover would surface to queries as a failed
+            -- database (see ProcessingErrorHaltsNode).
+            LeaderSuperseded(resolver: tx_resolver)
+        else if record.term_id != 0 and record.term_id < leader.leader_term:
+            -- Shouldn't appear past our replay target; discard defensively.
+            RecordDiscarded(resolver: tx_resolver)
+            leader.latest_replica_msg_id = record.msg_id
+        else:
+            -- Equal term (the common case): terms are unique per leader, so this record is
+            -- our own.
+            ApplyOwnRecord(record)
+            leader.latest_replica_msg_id = record.msg_id
+}
+
+rule LeaderAppliesOwnTx {
+    -- The leader reads its own staged tx back at its own term and IMPORTS it. It imports
+    -- from the resolver's QUEUE HEAD — which still holds the tx's relations, so there is
+    -- NO re-materialisation from the replica record; that record's only job was to confirm
+    -- durability and term. A head whose tx_id doesn't match the record just read back is a
+    -- fault.
+    --
+    -- This is the point at which the tx becomes queryable: the DURABLE head advances here,
+    -- watchers are notified here, and an external-source caller's durability handle
+    -- completes here — after, not before, the tx is durable.
+    --
+    -- The dbOp (attach/detach) is NOT applied here: it was applied eagerly on the resolve
+    -- side, because it had to run to produce the tx result. Followers and the transition
+    -- processor do apply it on their consume-back.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = ResolvedTxMessage
+
+    -- Take the head FIRST, then check it. Taking it first is what makes the failure path
+    -- safe: once off the queue, teardown's fail-pending can no longer reach it, so this
+    -- rule owns failing its durability handle and freeing its buffers on ANY throw here —
+    -- the tx_id mismatch included.
+    let head = TakeResolvedHead(tx_resolver)
+    requires: head.tx_key.tx_id = record.tx_id
+
+    ensures:
+        -- Everything notified below comes from the HEAD, not from the record: the head still
+        -- holds the tx's result, watermark stamp and token, which is exactly why the record
+        -- needs no re-materialisation. The two agree by construction — the head is what was
+        -- stamped onto the record at append time.
+        ApplyResolvedTx(tx_resolver, head)
+        watchers.notifyTx(head.tx_result, head.src_msg_id, head.external_source_token)
+}
+
+rule LeaderUploadsBlockOnBoundary {
+    -- The leader reads its OWN BlockBoundary back. By log order the durable live index now
+    -- holds exactly this block's txs and no more — which is precisely what the block-cut
+    -- pause buys: nothing was resolved-and-applied between the boundary and here, so a
+    -- durable L0 block never contains rows from a later block.
+    --
+    -- uploadBlock snapshots the index, uploads the files, appends BlockUploaded and rolls
+    -- the index. Then the GCs are signalled (a block boundary is the only moment new
+    -- garbage can appear) and resolution RESUMES, picking up any stashed source batch.
+    when: ApplyOwnRecord(record)
+    requires: record.kind = BlockBoundaryMessage
+
+    let leader = log_processor as Leader
+
+    ensures:
+        leader.pending_block = PendingBlock(
+            boundary_msg_id: record.msg_id,
+            boundary_message: record
+        )
+        block_uploader.uploadBlock(record.msg_id, leader.leader_term, record)
+        leader.pending_block = null
+
+        watchers.notifyMsg(record.latest_processed_msg_id)
+
+        BlockGcSignalled()
+        TrieGcSignalled()
+
+        leader.block_in_progress = false
+        ResolutionResumed()
+}
+
+rule LeaderAppliesOwnControlRecord {
+    -- The leader's remaining own records need no work on apply — only the durable
+    -- watermark advance, which is exactly what makes it lag resolution.
+    --   TriesAdded / TriesDeleted: the trie catalog was already mutated on the resolve side.
+    --   BlockUploaded: our own, read back after uploadBlock already rolled the index.
+    --   NoOp: advances the watermark iff it carries one (a replay-target marker doesn't).
+    when: ApplyOwnRecord(record)
+    requires: record.kind in {TriesAddedMessage, TriesDeletedMessage, BlockUploadedMessage, NoOpMessage}
+
+    ensures:
+        if record.kind = TriesAddedMessage:
+            watchers.notifyMsg(record.source_msg_id)
+        if record.kind = BlockUploadedMessage:
+            watchers.notifyMsg(record.latest_processed_msg_id)
+        if record.kind = NoOpMessage and record.src_msg_id != null:
+            watchers.notifyMsg(record.src_msg_id)
 }
 
 ---- Rules: Leader Flush Timeout
 
 rule LeaderFlushTimeout {
-    -- BlockFlusher checks at the start of each processRecords batch.
-    -- It compares the current block's latest tx_id against the previous check.
-    -- If the block hasn't advanced after flush_timeout, and we haven't already
-    -- flushed this tx, it returns true and the leader writes FlushBlock to source.
-    -- Applies to both Leader and ExternalSourceLeader.
+    -- BlockFlusher checks at the start of each source batch. It compares the current
+    -- block's latest tx_id against the previous check; if the block hasn't advanced after
+    -- flush_timeout, and we haven't already flushed this tx, the leader writes FlushBlock
+    -- to the SOURCE log — so the cut goes through resolution in log order like any other
+    -- boundary trigger, rather than being applied out of band.
     -- See: indexer/BlockFlusher.kt
     when: block_flusher.checkBlockTimeout() = true
-    requires: log_processor.mode = Leader or log_processor.mode = ExternalSourceLeader
+    requires: log_processor.mode = Leader
 
     requires: live_index.has_data
 
     ensures:
         FlushBlockMessage.created(
-            expected_block_idx: block_catalog.current_block_index
+            expected_block_idx: block_catalog.current_block_index ?? -1
         ) appended to database.source_log
 }
 
----- Rules: External Source Leader
+---- Rules: External Source
 
--- An ExternalSourceLeader does NOT subscribe to the source log for tx ingestion.
--- Instead, the external source is handed a TxIndexer callback on partition
--- assignment and feeds transactions in directly. Flush/tries/block-uploaded
--- coordination still uses the source log, so the processor also reads it —
--- but TxMessage / AttachDatabase / DetachDatabase MUST NOT appear there
--- (rejected at submit time by the primary or by this database's submit path).
+-- An external-source leader does NOT take transactions from the source log. The external
+-- source is handed a TxIndexer callback on partition assignment and feeds transactions in
+-- directly. Flush/tries/block-uploaded coordination still uses the source log, so the
+-- leader also reads it — but TxMessage / AttachDatabase / DetachDatabase MUST NOT appear
+-- there, rejected at submit time (ClientSubmitsTransactionToExternalSourceDb).
 --
--- See: indexer/ExternalSourceProcessor.kt
+-- See: indexer/LeaderLogProcessor.kt (the TxIndexer half), api/tx/ExternalSource.kt
 
 rule ExternalSourceAssigned {
-    -- On partition assignment the external source receives a TxIndexer and
-    -- the last persisted ExternalSourceToken, and begins streaming txs.
-    -- The starting token is taken from watchers.external_source_token
-    -- (which reflects the latest replay of the replica log, possibly ahead
-    -- of the last persisted block).
+    -- On partition assignment the external source receives a TxIndexer and the resume
+    -- token to start after, then begins streaming txs. The token comes from
+    -- watchers.external_source_token, which reflects the replay of the replica log and so
+    -- may be ahead of the last persisted block.
     when: PartitionsAssigned(database)
-    requires: log_processor.mode = ExternalSourceLeader
+    requires: log_processor.mode = Leader
+    requires: database.external_source != null
 
     ensures:
-        let leader = log_processor as ExternalSourceLeader
+        let leader = log_processor as Leader
         leader.external_source.onPartitionAssigned(
             partition: 0,
             after_token: watchers.external_source_token,
@@ -1143,169 +1255,92 @@ rule ExternalSourceAssigned {
 }
 
 rule ExternalSourceIndexesTx {
-    -- Per-tx entry point. The external source calls TxIndexer.executeTx
-    -- (synchronous, returns the TxResult) or TxIndexer.submitTx
-    -- (fire-and-forget, returns without awaiting) with an opaque resume
-    -- token, optional system_time, and a writer that populates an OpenTx
-    -- with the transformed row data. The per-tx indexing behaviour below is
-    -- identical for both; they differ only in whether the caller awaits the
-    -- result, which is caller-side and below this spec's abstraction level.
+    -- Per-tx entry point. The external source calls TxIndexer.executeTx (awaits the
+    -- result) or TxIndexer.submitTx (fire-and-forget, returning the handle) with an opaque
+    -- resume token, an optional system_time, and a writer that populates an OpenTx with
+    -- the transformed row data. The per-tx indexing below is identical for both; they
+    -- differ only in whether the caller awaits, which is caller-side.
     --
-    -- Unlike the client-driven leader, tx_id here is assigned off the STAGING
-    -- head (the staging index's own latest_completed_tx), NOT a source-log
-    -- position and NOT the durable basis. id-assignment is delegated to the
-    -- staging layer via live_index.beginStagedTx, which assigns the next tx_id
-    -- (staging-head tx_id + 1), smooths system_time strictly greater than the
-    -- previous tx's, applies the resolved data to the resolver's staging index, and
-    -- returns the assigned TransactionKey. (See live-index.allium BeginStagedTx /
-    -- deferred below.)
+    -- Unlike a client-driven tx, tx_id here is assigned off the RESOLVED head
+    -- (tx_resolver.latest_completed_tx.tx_id + 1), NOT a source-log position and NOT the
+    -- durable head. system_time is smoothed strictly greater than the previous tx's.
     --
-    -- The resulting ResolvedTx carries the external_source_token all the way
-    -- through watchers, so block boundaries and restarts can resume from it.
+    -- The caller's handle completes on CONSUME-BACK (LeaderAppliesOwnTx), so it means
+    -- durably replicated AND confirmed unfenced. Every path on which the tx will never be
+    -- applied MUST fail it instead, or the caller waits forever — see live-index.allium
+    -- "Per-tx durability handles".
     --
-    -- This is the RESOLVER: resolve and apply to its staging index, holding the tx's
-    -- pending replica message in the slot (beginStagedTx does both — no append yet),
-    -- then decide at this tx boundary whether to seal (the append happens at seal). The
-    -- durable commit is the committer's job (CommitterCommitsBatch); the promotion and
-    -- post-durable watcher notify are the resolver's own, once the commit lands
-    -- (ResolverPromotesBatch).
+    -- Backpressure is the task channel's capacity (one queued tx of lookahead) plus the
+    -- block-cut pause: while a block is in progress the external-source arm is excluded
+    -- from the select, so a bursty source cannot grow the resolver's queue without bound.
     when: ExternalSourceIndexTx(external_source_token, system_time, writer)
-    requires: log_processor.mode = ExternalSourceLeader
+    requires: log_processor.mode = Leader
+    requires: database.external_source != null
+
+    let leader = log_processor as Leader
 
     ensures:
-        -- Delegate id-assignment and the staging apply to the staging layer.
-        -- beginStagedTx assigns tx_id off the staging head, smooths system_time, applies
-        -- the writer's resolved data to the resolver's staging index, holds the tx's
-        -- pending replica message (with the token) in the accumulating slot in send
-        -- order, and returns the key. It does NOT append to a producer transaction — the
-        -- append happens at seal.
-        let tx_key = live_index.beginStagedTx(staging_index, system_time, external_source_token, writer)
-
-        -- Tx-boundary decision: seal the batch if appropriate. The tx coalesces behind the
-        -- (at most one) in-flight batch and settles when that commit lands — it is NOT
-        -- drained per-tx here.
-        --
-        -- Staging row cap: after staging, if the accumulating slot holds more than a
-        -- block's worth of rows (rows_per_block — the dimension the block-sizing machinery
-        -- already manages), the resolver instead falls back to a full SYNCHRONOUS drain —
-        -- seal, await the commit, promote — before taking another task, so a bursty source
-        -- cannot grow staging without limit behind one slow commit. Ordinary backpressure,
-        -- not a failure. See live-index.allium StagingIndex.over_row_cap.
-        MaybeSealBatch(staging_index)
-}
-
-rule ExternalSourceProcessesFlushBlock {
-    -- Same CAS semantics as LeaderProcessesFlushBlock, but finishes the
-    -- block with the token currently tracked on watchers.
-    when: msg: FlushBlockMessage consumed from database.source_log
-    requires: log_processor.mode = ExternalSourceLeader
-
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-
-    ensures:
-        if msg.expected_block_idx != null
-           and msg.expected_block_idx = (block_catalog.current_block_index ?? -1):
-            ExternalSourceFinishesBlock(msg.msg_id, watchers.external_source_token)
-
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
-}
-
-rule ExternalSourceProcessesTriesAdded {
-    -- Same shape as LeaderProcessesTriesAdded: update trie catalog and
-    -- forward to the replica log with the original source_msg_id.
-    when: msg: TriesAddedMessage consumed from database.source_log
-    requires: log_processor.mode = ExternalSourceLeader
-
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-    requires: msg.storage_version = current_storage_version
-    requires: msg.storage_epoch = current_storage_epoch
-
-    ensures:
-        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-
-        TriesAddedMessage.created(
-            storage_version: msg.storage_version,
-            storage_epoch: msg.storage_epoch,
-            tries: msg.tries,
-            source_msg_id: msg.msg_id
-        ) appended to database.replica_log
-
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
-}
-
-rule ExternalSourceProcessesBlockUploaded {
-    -- Legacy variant: ignored by ExternalSourceLeader — see BlockUploadedMessage.
-    when: msg: BlockUploadedMessage consumed from database.source_log
-    requires: log_processor.mode = ExternalSourceLeader
-
-    requires: msg.msg_id > log_processor.latest_source_msg_id
-
-    ensures:
-        watchers.notifyMsg(msg.msg_id)
-        log_processor.latest_source_msg_id = msg.msg_id
-}
-
-rule ExternalSourceFinishesBlock {
-    -- Mirror of LeaderFinishesBlock for the external-source leader. The
-    -- BlockBoundary and the persisted Block both carry the
-    -- external_source_token so that a restart can resume the external source
-    -- from the last durably persisted position. Driven by the resolver
-    -- (ResolverPromotesBatch) after the in-flight batch is promoted, so staging
-    -- is drained before the block is written.
-    when: ExternalSourceFinishesBlock(latest_processed_msg_id, external_source_token)
-
-    let block_index = (block_catalog.current_block_index ?? -1) + 1
-
-    ensures:
-        let block_boundary = BlockBoundaryMessage.created(
-            block_index: block_index,
-            latest_processed_msg_id: latest_processed_msg_id,
-            external_source_token: external_source_token
-        )
-        block_boundary appended to database.replica_log
-
-        log_processor.pending_block = PendingBlock(
-            boundary_msg_id: block_boundary.msg_id,
-            boundary_message: block_boundary
+        -- The stamped watermark MUST be the resolve-side one, not watchers': a source tx
+        -- resolved and appended ahead of this one applies first and pushes the durable
+        -- watermark past a stale stamp, at which point notifyTx's monotonicity check fires
+        -- (#5817).
+        let resolved = ResolveExternalSourceTx(
+            tx_resolver, system_time, external_source_token, writer,
+            src_msg_id: leader.last_resolved_src_msg_id
         )
 
-        block_uploader.uploadBlock(
-            producer,
-            block_boundary.msg_id,
-            block_boundary
-        )
+        if external_source_token != null:
+            leader.last_resolved_ext_token = external_source_token
 
-        log_processor.pending_block = null
+        AppendTx(resolved, src_msg_id: leader.last_resolved_src_msg_id)
 }
 
 ---- Rules: Replica Message Handling
 
--- Staleness-based skip: before dispatching any replica message,
--- the processor checks if the message is stale (source position at or behind
--- the latest_source_msg_id watermark). Stale messages are skipped entirely.
--- This replaces per-type idempotency checks.
+-- A follower and the transition processor both apply already-durable messages, so they
+-- import straight into the durable live index and advance the watchers as they go. Both
+-- run two checks before dispatch:
+--   1. The TERM FENCE (see Fencing): a record below the highest term seen is discarded,
+--      its consume position still advancing.
+--   2. STALENESS (see Staleness): a message whose effect is already applied is skipped.
 --
--- In the follower, staleness is checked OUTSIDE the pending block guard:
--- if in pending mode, the pending block handler runs first (buffers or matches
--- BlockUploaded). Only non-pending, non-stale messages reach processRecord.
---
--- In the transition processor, all messages go through the stale check first.
+-- In the follower, staleness is checked OUTSIDE the pending block guard: if in pending
+-- mode, the pending block handler runs first (buffers, or matches BlockUploaded). Only
+-- non-pending, non-stale messages reach processRecord.
 
--- == Follower HandleRecord dispatch ==
+-- == Follower handleRecord dispatch ==
 --
--- The follower's handleRecord has two phases:
--- 1. Pending block guard: if pending_block is set, check if the message is
---    a matching BlockUploaded. If so, finish the block. Otherwise buffer.
---    Return in either case.
+-- 1. Pending block guard: if pending_block is set, check whether the message is the
+--    matching BlockUploaded. If so, finish the block and replay the buffer. Otherwise
+--    buffer it (overflowing the cap is a fault). Return in either case.
 -- 2. Staleness check: if the message is stale, skip. Otherwise processRecord.
 
+rule FollowerFencesRecord {
+    -- The read-side fence. Term 0 is never fenced, so a not-yet-upgraded leader's writes
+    -- still apply during a mixed-version window. A discarded record still advances the
+    -- consume position, so a transition's catch-up await can't hang on it.
+    when: record: ReplicaMessage consumed from database.replica_log
+    requires: log_processor.mode = Follower
+
+    let follower = log_processor as Follower
+
+    ensures:
+        if record.term_id != 0 and record.term_id < follower.max_leader_term:
+            RecordDiscarded(record)
+        else:
+            follower.max_leader_term = max(follower.max_leader_term, record.term_id)
+            HandleReplicaMessage(record)
+
+        -- Advanced after every record, discarded or not, and on error too — this is what
+        -- awaitReplicaMsgId waits on.
+        follower.latest_replica_msg_id = record.msg_id
+}
+
 rule HandleReplicaMessage {
-    -- Dispatches a single replica message after staleness check passes.
-    -- Used by the follower processor. The transition processor overrides
-    -- specific message types (see Transition rules below).
-    when: msg: ReplicaMessage
+    -- Dispatches a single replica message that has passed the fence, the pending-block
+    -- guard and the staleness check. The transition processor overrides BlockBoundary
+    -- (see Transition rules below).
+    when: HandleReplicaMessage(msg)
 
     ensures:
         if msg.kind = ResolvedTxMessage:
@@ -1315,138 +1350,97 @@ rule HandleReplicaMessage {
                     database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
                 if msg.db_op.kind = Detach:
                     database.catalog.detach(msg.db_op.db_name)
-            log_processor.latest_source_msg_id = msg.tx_id
-            watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
+            -- src_msg_id where present. On a pre-#5586 record it is absent, and the
+            -- fallback differs by database: an external-source tx_id is an independent
+            -- counter, so it says nothing about the source log and the tracked watermark
+            -- has to stand in; a source-log tx_id IS a source-log position.
+            let effective_src_msg_id =
+                msg.src_msg_id
+                    ?? (if database.external_source != null:
+                            watchers.latest_source_msg_id
+                        else: msg.tx_id)
+            watchers.notifyTx(msg.result, effective_src_msg_id, msg.external_source_token)
 
         if msg.kind = TriesAddedMessage:
-            requires: msg.storage_version = current_storage_version
-            requires: msg.storage_epoch = current_storage_epoch
-            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-            log_processor.latest_source_msg_id = msg.source_msg_id
+            if msg.storage_version = current_storage_version
+               and msg.storage_epoch = current_storage_epoch:
+                trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
             watchers.notifyMsg(msg.source_msg_id)
 
+        if msg.kind = TriesDeletedMessage:
+            -- Set-removal, so unconditional and idempotent: no storage-version guard and
+            -- no staleness check.
+            trie_cat/trie_catalog.deleteTries(msg.table_name, msg.trie_keys)
+
         if msg.kind = BlockBoundaryMessage:
-            -- Follower: enters pending mode. Subsequent messages (except a matching
-            -- BlockUploaded) will be buffered by the pending block guard above.
-            -- Also advances latest_source_msg_id and notifies watchers.
-            pending_block = PendingBlock(msg.record_msg_id, msg)
-            log_processor.latest_source_msg_id = msg.latest_processed_msg_id
+            -- Follower: enters pending mode. Subsequent messages (except the matching
+            -- BlockUploaded) are buffered by the pending block guard above.
+            pending_block = PendingBlock(msg.msg_id, msg)
             watchers.notifyMsg(msg.latest_processed_msg_id)
 
-        if msg.kind = BlockUploadedMessage:
-            -- In the follower's normal (non-pending) path, this handles
-            -- BlockUploaded messages that aren't matched to a pending block
-            -- (e.g. stale ones that passed the stale check).
-            -- Adds L0 tries and notifies watchers.
-            requires: msg.storage_version = current_storage_version
-            requires: msg.storage_epoch = current_storage_epoch
-            trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
-            watchers.notifyMsg(msg.latest_processed_msg_id)
-
-        if msg.kind = NoOpMessage:
-            -- No-op; used for fencing synchronization only.
-            pass
+        if msg.kind = NoOpMessage and msg.src_msg_id != null:
+            watchers.notifyMsg(msg.src_msg_id)
 }
 
 rule FollowerHandlesBlockUploaded {
-    -- When the follower is in pending mode and receives the matching
-    -- BlockUploaded message, it finishes the block by reading the block
-    -- file from the object store (via buffer pool), not from the message.
-    -- The BlockUploaded message is just a signal.
+    -- When the follower is in pending mode and receives the matching BlockUploaded
+    -- message, it finishes the block by reading the block file from the object store (via
+    -- buffer pool), not from the message. The BlockUploaded message is just a signal.
     when: msg: BlockUploadedMessage
-    requires: pending_block is set
-    requires: msg.block_index = pending_block.block_index
+    requires: pending_block != null
+    requires: msg.block_index = pending_block.boundary_message.block_index
+    requires: msg.storage_version = current_storage_version
     requires: msg.storage_epoch = current_storage_epoch
 
     ensures:
+        trie_cat/trie_catalog.addTries(msg.tries, msg.log_timestamp)
+
         -- Read the block file from the object store.
-        let block = Block.parseFrom(buffer_pool.getByteArray(blockFilePath(pending_block.block_index)))
+        let block = Block.parseFrom(buffer_pool.getByteArray(blockFilePath(msg.block_index)))
         block_catalog.refresh(block)
+        table_catalog.updateFromBlockMetadata(block_catalog.current_block_index, live_index.blockMetadata())
         live_index.nextBlock()
         CompactorSignalled()
 
-        -- Clear pending mode and replay buffered records.
+        -- Clear pending mode and replay buffered records; their typed notifications are
+        -- what advance the watermarks.
         let buffered = pending_block.buffered_records
         pending_block = null
-        ReplayBuffered(buffered)
+        for record in buffered:
+            HandleReplicaMessage(record)
 }
 
 ---- Rules: Transition Processor Message Handling
 
--- The transition processor handles replica messages differently from the follower:
+-- The transition processor handles BlockBoundary differently from the follower: instead
+-- of entering pending mode, it immediately calls blockUploader.uploadBlock to persist the
+-- block. Everything else matches the follower, staleness check included.
 --
--- 1. BlockBoundary: instead of entering pending mode, it immediately calls
---    blockUploader.uploadBlock to persist the block.
---
--- 2. ResolvedTx: has an extra txId guard on importTx. During transition,
---    the live index may already contain transactions from follower processing.
---    The follower relies on the staleness check (which skips the entire message
---    including importTx), but the transition processor additionally guards
---    importTx itself: only calls it if txId > live_index.latest_completed_tx.tx_id.
---    This is because the transition processor's staleness watermark may not
---    perfectly align with what the live index has already imported.
-
-rule TransitionHandlesResolvedTx {
-    -- Extra guard: only importTx if the tx hasn't already been applied.
-    when: msg: ResolvedTxMessage
-    requires: log_processor.mode = Transition
-
-    ensures:
-        if live_index.latest_completed_tx = null
-           or msg.tx_id > live_index.latest_completed_tx.tx_id:
-            live_index.importTx(msg)
-        if msg.committed:
-            if msg.db_op.kind = Attach:
-                database.catalog.attach(msg.db_op.db_name, msg.db_op.config)
-            if msg.db_op.kind = Detach:
-                database.catalog.detach(msg.db_op.db_name)
-        log_processor.latest_source_msg_id = msg.tx_id
-        watchers.notifyTx(result, msg.tx_id, msg.external_source_token)
-}
+-- It runs no term fence of its own: it is driven synchronously through the transition,
+-- over the records the follower buffered, which the follower already fenced.
 
 rule TransitionHandlesBlockBoundary {
-    -- On BlockBoundary: directly finish the block via BlockUploader.
-    -- This is different from the follower, which enters pending mode.
     when: msg: BlockBoundaryMessage
     requires: log_processor.mode = Transition
 
+    let transition = log_processor as Transition
+
     ensures:
-        block_uploader.uploadBlock(
-            producer,
-            msg.record_msg_id,
-            msg
-        )
-        log_processor.latest_source_msg_id = msg.latest_processed_msg_id
+        -- Under the INCOMING term, not the term that cut the boundary: followers have
+        -- already advanced past that term and would fence this BlockUploaded, never
+        -- completing the block.
+        block_uploader.uploadBlock(msg.msg_id, transition.term_id, msg)
         watchers.notifyMsg(msg.latest_processed_msg_id)
 }
 
 rule TransitionHandlesBlockUploaded {
-    -- BlockUploaded messages are ignored by the transition processor
-    -- (the block was already uploaded by the BlockBoundary handler above).
-    -- But it still advances the watermarks.
+    -- Ignored: the block was already uploaded by the BlockBoundary handler above, whose
+    -- own BlockUploaded this may be. Still advances the watermark.
     when: msg: BlockUploadedMessage
     requires: log_processor.mode = Transition
 
     ensures:
-        log_processor.latest_source_msg_id = msg.latest_processed_msg_id
         watchers.notifyMsg(msg.latest_processed_msg_id)
-}
-
----- Rules: Follower Mode
-
--- The follower subscribes to the replica log and dispatches each
--- message through handleRecord (pending block guard → staleness → processRecord).
--- latest_replica_msg_id is updated in the finally block of processRecords,
--- after every record including errors. This is what awaitReplicaMsgId waits on.
-
-rule FollowerProcessesMessage {
-    when: msg: ReplicaMessage consumed from database.replica_log
-    requires: log_processor.mode = Follower
-
-    ensures:
-        HandleRecord(msg)
-        -- Updated in finally block, not conditionally:
-        log_processor.latest_replica_msg_id = msg.record_msg_id
 }
 
 ---- Rules: Compaction Orchestration
@@ -1486,9 +1480,9 @@ rule CompactionJobConfirmed {
 ---- Rules: Query Serving
 
 rule ClientOpensSnapshot {
-    -- External queries open at the DURABLE basis: latest_completed_tx, never the
-    -- staged-but-not-yet-durable applied head. A query must never see a tx that
-    -- could vanish if the leader crashed before its replica-log write landed.
+    -- External queries open at the DURABLE head: latest_completed_tx, never the resolved
+    -- head. A query must never see a tx that could vanish if the leader crashed before its
+    -- replica-log write landed, nor one a newer-term leader superseded.
     when: ClientOpensSnapshot(client, database)
 
     ensures:
@@ -1500,8 +1494,12 @@ rule ClientOpensSnapshot {
 ---- Rules: Error Handling
 
 rule ProcessingErrorHaltsNode {
-    -- On processing error, watchers.notifyError transitions Watchers to Failed state.
-    -- All subsequent awaitTx/awaitSource calls throw the exception.
+    -- A genuine ingestion fault: watchers.notifyError transitions Watchers to Failed, and
+    -- all subsequent awaitTx/awaitSource calls throw.
+    --
+    -- A SUPERSESSION is not one of these, and neither is a cancellation or an interrupt:
+    -- see LeaderSuperseded. Poisoning the watchers on a routine leadership handover would
+    -- surface it to queries as a failed database and evict the shared consumer.
     when: ProcessingError(msg_id, error)
 
     ensures:
@@ -1525,10 +1523,15 @@ surface TransactionSubmission {
 
     provides:
         ClientSubmitsTx(caller, db, tx_ops, opts)
-            when log_processor.mode = Leader
+            when db.external_source = null
 
     @guarantee OrderedProcessing
         -- Transactions are processed in the order they appear in the source log.
+
+    @guarantee SubmitIsRoleAgnostic
+        -- Submission appends to the shared source log, so it succeeds from any node
+        -- regardless of which node leads this database. Whether the transaction has been
+        -- INDEXED is a separate question, answered by awaiting its txId on the watchers.
 }
 
 surface QueryAccess {
@@ -1541,54 +1544,48 @@ surface QueryAccess {
 
     @guarantee SnapshotIsolation
         -- A snapshot sees a consistent point-in-time view.
-        -- It includes all transactions up to latest_completed_tx — durably-
-        -- replicated transactions only. Staged-but-not-yet-durable txs (resolved
-        -- on the leader but not yet confirmed on the replica log) are NOT visible.
+        -- It includes all transactions up to latest_completed_tx — those the leader has
+        -- read BACK off its own replica log and applied. Resolved-but-not-yet-applied txs
+        -- are NOT visible, and neither are the writes of a leader a newer term superseded.
 }
 
 ---- Deferred Specifications
 
-deferred IndexTransaction           -- transaction resolution (put/delete/erase logic)
-deferred ResolveAttach              -- attach database resolution
-deferred ResolveDetach              -- detach database resolution
-deferred CommitProducerTransaction  -- commits the open replica-log producer transaction (the
-                                    -- committer's durability step — the slow Kafka round-trip): the
-                                    -- batch's appends (made by the resolver at seal) become durable
-                                    -- together (commit() commits the whole transaction, not a prefix).
-                                    -- The per-tx replica-log positions come from the per-tx append
-                                    -- handles the resolver obtained at seal (i-th ↔ i-th tx, send order);
-                                    -- commit does not reassign them, and the resolver uses them to advance
-                                    -- the apply cursor on promote.
-deferred BeginStagedTx              -- live_index.beginStagedTx(staging_index, system_time, token, writer):
-                                    -- the staging layer assigns the next external-source tx_id off the
-                                    -- staging head (head tx_id + 1), smooths system_time strictly
-                                    -- greater than the previous tx's, applies the writer's resolved data
-                                    -- to the resolver's staging index, holds the tx's pending replica
-                                    -- message (with the token) in the accumulating slot in send order,
-                                    -- and returns the assigned TransactionKey. It does NOT append to a
-                                    -- producer transaction — the append happens at seal. db.allium
-                                    -- delegates here rather than reading the staging head (which it
-                                    -- cannot — it does not use live-index.allium).
-                                    -- See: live-index.allium BeginStagedTx
-deferred ApplyToStaging             -- live_index.applyToStaging(staging_index, resolved): the resolver
-                                    -- applies the resolved tx into the accumulating slot, holds its
-                                    -- pending replica message in the slot in send order, and advances the
-                                    -- staging index's applied head. It does NOT append to a producer
-                                    -- transaction — the append happens at seal. See: live-index.allium
-                                    -- CommitTransaction
-deferred SealStagingBatch           -- live_index.sealStagingBatch(staging_index): opens a fresh producer
-                                    -- transaction, appends the accumulating slot's held pending messages
-                                    -- in send order (yielding the per-tx append handles), seals the slot
-                                    -- into the committing sequence (no-op if empty), and returns the
-                                    -- batch's resolved txs in send order. See: live-index.allium
-                                    -- SealStagingBatch
-deferred PromoteNext                -- live_index.promoteNext(staging_index): once the committer confirms
-                                    -- the batch durable, the resolver promotes the OLDEST staged tx in
-                                    -- the committing sequence — imports its rows into the durable live
-                                    -- tables, advances the durable basis to it, refreshes the shared
-                                    -- snapshot, then drops it. Called once per tx, in send order.
-                                    -- See: live-index.allium PromoteNext
-deferred CloseStagingIndex           -- live-index.allium CloseStagingIndex(staging_index): phase-2 of the
-                                    -- leader's two-phase close frees the staging index; demotion is
-                                    -- exactly this teardown (no separate runtime drop).
-                                    -- See: live-index.allium CloseStagingIndex
+deferred ResolveTx                   -- tx_resolver.indexTx(msgId, timestamp, msg): resolve a source-log
+                                     -- transaction (put/delete/erase logic), stage it on the resolver's
+                                     -- queue and advance the RESOLVED head. Covers the LegacyTx payload
+                                     -- overload too. See: live-index.allium CommitTransaction /
+                                     -- AbortTransaction
+deferred ResolveExternalSourceTx     -- tx_resolver.indexTx(msg, srcMsgId): assign the next tx_id off the
+                                     -- RESOLVED head (head tx_id + 1), smooth system_time strictly
+                                     -- greater than the previous tx's, run the caller's writer against a
+                                     -- fresh OpenTx, and stage the result with the caller's durability
+                                     -- handle. See: live-index.allium CommitTransaction
+deferred ResolveDbOp                 -- tx_resolver.indexDbOp: resolve an attach/detach whose catalog
+                                     -- mutation has already succeeded, as a ResolvedTx carrying the dbOp
+deferred ResolveFailedDbOp           -- tx_resolver.indexFailedDbOp: resolve an attach/detach whose catalog
+                                     -- mutation failed with a caller fault, as an ABORTED ResolvedTx
+                                     -- carrying that error
+deferred ApplyAttachToCatalog        -- dbCatalog.attach(dbName, config), returning the caller fault if it
+                                     -- failed. Runs on the resolve side, before the tx is resolved
+deferred ApplyDetachToCatalog        -- dbCatalog.detach(dbName), as above
+deferred TakeResolvedHead            -- tx_resolver.removeHead(): remove and return the OLDEST staged tx,
+                                     -- passing ownership to the caller — which must then import it and
+                                     -- close it, or fail its durability handle and free it, on every path.
+                                     -- Removal precedes validation deliberately; see LeaderAppliesOwnTx
+deferred ApplyResolvedTx             -- apply on consume-back: import the head's rows into the durable live
+                                     -- tables, advance the DURABLE head to it, complete its durability
+                                     -- handle, then free it. Frees it on ANY throw, so teardown's
+                                     -- fail-pending can't double-close it.
+                                     -- See: live-index.allium ApplyResolvedTx
+deferred FailPendingHandles          -- resolver exit fails every still-staged tx's durability handle with
+                                     -- the exit cause, before the channels close, so no executeTx caller
+                                     -- waits forever. See: live-index.allium FailPendingHandles
+deferred CloseResolver               -- phase 2 of the leader's two-phase close frees the resolver and the
+                                     -- buffers of any un-applied staged tx; demotion is exactly this
+                                     -- teardown, with no separate runtime drop.
+                                     -- See: live-index.allium CloseResolver
+deferred CheckTermUnfenced           -- follower.checkTermUnfenced(term): refuse a claimed leader term the
+                                     -- replica log has already moved past, naming the term epoch to raise
+                                     -- (xtdb/leader-term-fenced). Refusing costs liveness only, never
+                                     -- safety. See: log-processor-lifecycle.allium step 2a

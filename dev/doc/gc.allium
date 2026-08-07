@@ -3,16 +3,16 @@
 --
 -- Garbage collection of superseded tries (data + meta files) for one database.
 --
--- Per-database, leader-only, signal-driven. The same node that owns the
--- replica-log atomic producer for this database also owns its trie GC; followers
--- do not run trie GC at all. There is no periodic timer: the leader signals at
--- every block boundary (the only moment new garbage can appear), and tx
--- processing carries on without waiting for the GC cycle.
+-- Per-database, leader-only, signal-driven. The node that leads this database's
+-- replica log also owns its trie GC; followers do not run trie GC at all. There
+-- is no periodic timer: the leader signals at every block boundary (the only
+-- moment new garbage can appear), and tx processing carries on without waiting
+-- for the GC cycle.
 --
 -- Tries transition to `garbage` during addTries (see trie-cat.allium); this
--- spec covers physical cleanup: deleting object-store files and atomically
--- publishing those deletions to the replica log so followers drop them from
--- their in-memory catalogs at the same logical position.
+-- spec covers physical cleanup: deleting object-store files and publishing
+-- those deletions to the replica log so followers drop them from their
+-- in-memory catalogs at the same logical position.
 --
 -- Block-file GC lives in block-gc.allium — block files are consumed only at
 -- startup/catch-up, so they don't need replica-log coordination.
@@ -122,28 +122,14 @@ config {
 -- Rules: Lifecycle
 ------------------------------------------------------------
 
--- The trie GC's lifetime is bound to the LeaderSystem: constructed when the
--- log processor enters a leader mode (Leader or ExternalSourceLeader, see
--- db.allium: TransitionToLeader, openLeaderSystem) and closed when it leaves.
--- Two rules cover the two leader modes; the ensures clauses are identical.
+-- The trie GC's lifetime is bound to the leader term: constructed when the log
+-- processor enters Leader mode (see db.allium TransitionToLeader) and closed when
+-- it leaves. One rule, because there is one leader mode — whether the database is
+-- CDC-sourced makes no difference to the GC.
 
 rule LeaderOpensTrieGc {
     -- See: indexer/LeaderLogProcessor.kt (init)
     when: lp: db/LogProcessor.mode becomes Leader
-
-    ensures:
-        TrieGarbageCollector.created(
-            enabled: config.enabled,
-            blocks_to_keep: config.blocks_to_keep,
-            garbage_lifetime: config.garbage_lifetime,
-            has_pending_signal: false,
-            is_running: true
-        )
-}
-
-rule ExternalSourceLeaderOpensTrieGc {
-    -- See: indexer/LeaderLogProcessor.kt (init), database/Database.kt
-    when: lp: db/LogProcessor.mode becomes ExternalSourceLeader
 
     ensures:
         TrieGarbageCollector.created(
@@ -178,12 +164,13 @@ rule LeaderClosesTrieGc {
 
 -- Two channels feed the loop, each playing a different role:
 --
---   `signal()`:           fire-and-forget. Used by the leader's block-boundary
---                         path (db.allium: LeaderFinishesBlock). The channel
---                         is conflated, so a burst of block boundaries
---                         coalesces into one upcoming cycle. Tx processing
---                         never blocks on GC progress — the first cycle after
---                         a long disabled period could take minutes.
+--   `signal()`:           fire-and-forget. Used by the leader once a block
+--                         upload completes (db.allium:
+--                         LeaderUploadsBlockOnBoundary). The channel is
+--                         conflated, so a burst of block boundaries coalesces
+--                         into one upcoming cycle. Tx processing never blocks on
+--                         GC progress — the first cycle after a long disabled
+--                         period could take minutes.
 --
 --   `awaitNoGarbage()`:   suspending. Used by tests and admin pokes
 --                         (Database.gcAll). Every caller is enqueued into an
@@ -203,13 +190,14 @@ rule LeaderFinishBlockSignalsTrieGc {
     -- block flush — see trie-cat.allium). After every block upload, the
     -- leader pokes the trie GC so any backlog gets cleaned up promptly.
     --
-    -- Called from inside the leader's replica-log mutex. Safe because
-    -- `signal` is non-suspending and only enqueues; the GC's
-    -- `commit_tries_deleted` callback only takes the mutex when its loop runs,
-    -- by which time finishBlock has long released it.
+    -- Signalled ON the leader's persister coroutine, which is also what will
+    -- later run `commit_tries_deleted`. Safe because `signal` is non-suspending
+    -- and only enqueues: it cannot re-enter the persister, so it cannot deadlock
+    -- against the cycle it is scheduling.
     --
-    -- Chains from db.allium's LeaderFinishesBlock trigger emission.
-    when: LeaderFinishesBlock(latest_processed_msg_id)
+    -- Chains from db.allium's LeaderUploadsBlockOnBoundary, i.e. once the upload
+    -- has completed — not when the boundary was cut.
+    when: TrieGcSignalled()
     requires: trie_gc.enabled
     requires: trie_gc.is_running
 
@@ -344,40 +332,40 @@ rule DeleteAndCommitChunkRule {
 }
 
 rule CommitTriesDeletedRule {
-    -- The atomicity invariant. The replica-log append AND the local catalog
-    -- mutation MUST happen under the SAME replica-log mutex held by the
-    -- LeaderLogProcessor. Without that mutex, this four-step interleaving
-    -- corrupts persistent state:
+    -- The ordering obligation, and why it needs no lock. The catalog mutation
+    -- and the replica-log append are ONE task on the leader's persister
+    -- coroutine — the GC hands `commitTriesDeleted` to that coroutine and awaits
+    -- it, rather than applying either half itself. So the pair is serialised
+    -- against every other resolve-side effect by confinement, not by a mutex.
     --
-    --   1. Trie GC takes the mutex, appends `TriesDeleted(G)` at replica
-    --      position N, releases the mutex.
-    --   2. Before Trie GC re-takes a (separate) lock to mutate its in-memory
-    --      catalog, another coroutine — say an external-source `commit` whose
-    --      `liveIndex.isFull()` is true — grabs the mutex.
-    --   3. That coroutine runs `finishBlock`, which uploads table-block files
-    --      that snapshot the current catalog. The catalog still contains G
-    --      (Trie GC's mutation hasn't happened yet), so the table-block file
-    --      at replica position M > N records "catalog includes G" — even
-    --      though the replica log already holds `TriesDeleted(G)` at N.
-    --   4. Trie GC finally mutates the catalog and removes G.
+    -- What that has to rule out is a table-block file disagreeing with the
+    -- replica log it claims to snapshot:
     --
-    -- The table-block file from step 3 is now a persistent on-disk snapshot
-    -- of catalog state at replica position M, but it disagrees with the
-    -- replica log it claims to be a snapshot of. A later cold start that
-    -- hydrates from M will see G in its catalog — pointing at object-store
-    -- files that have already been deleted. The mutex prevents step 2 from
-    -- interleaving between the append at step 1 and the mutation at step 4.
+    --   1. `TriesDeleted(G)` is appended at replica position N.
+    --   2. A block boundary is cut, and its upload writes table-block files
+    --      snapshotting the current catalog, at replica position M > N.
+    --   3. If the catalog still contained G at step 2, that file records
+    --      "catalog includes G" while the log already says G is gone.
     --
-    -- See: indexer/LeaderLogProcessor.kt (commitTriesDeleted callback;
-    -- appendToReplica and trieCatalog.deleteTries inside one mutex.withLock).
+    -- A cold start hydrating from M would then see G in its catalog, pointing at
+    -- object-store files already deleted. Two properties close it:
+    --   - the catalog removal happens FIRST, on the resolve side, before the
+    --     `TriesDeleted` is even queued for append — so any boundary appended
+    --     afterwards is already downstream of the removal;
+    --   - the block-cut PAUSE excludes the GC arm from the persister's select
+    --     while a block is in progress, so no `TriesDeleted` can be resolved
+    --     between a boundary and its upload.
+    --
+    -- See: indexer/LeaderLogProcessor.kt (handleTriesDeleted, and the gcCh arm
+    -- of persisterLoop), db.allium LeaderCommitsTriesDeleted.
     when: CommitTriesDeleted(table, trie_keys)
 
     ensures:
+        trie_cat/trie_catalog.deleteTries(table, trie_keys)
         TriesDeletedMessage.created(
             table_name: table.schema_and_table,
             trie_keys: trie_keys
         )
-        trie_cat/trie_catalog.deleteTries(table, trie_keys)
 }
 
 ------------------------------------------------------------
@@ -390,9 +378,9 @@ rule FollowerReplaysTriesDeleted {
     --
     -- Replay is unconditionally non-stale — `trieCatalog.deleteTries` is
     -- set-removal and therefore idempotent, so even a redundant replay is
-    -- harmless. (Contrast with ResolvedTx, TriesAdded, BlockBoundary,
-    -- BlockUploaded, all of which have staleness guards based on
-    -- latest_source_msg_id.)
+    -- harmless. (Contrast with ResolvedTx, TriesAdded, BlockBoundary and
+    -- BlockUploaded, each of which has a staleness guard against the watermark
+    -- that records its own effect — see db.allium "Staleness".)
     --
     -- See: indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt
     --      (TriesDeleted handler), api/log/ReplicaMessage.kt (TriesDeleted)
@@ -419,11 +407,14 @@ contract TrieGcDualWriteAtomicity {
     -- ordering of replica-log appends and catalog mutations across
     -- coroutines. See the long comment on rule CommitTriesDeletedRule.
 
-    @invariant DualWriteAtomicity
-        -- For each (TriesDeleted append, trie catalog deleteTries) pair, no
-        -- other replica-log append (in particular BlockUploaded triggered by
-        -- finishBlock) may interleave between them. Enforced by holding the
-        -- shared replica-log mutex across both operations.
+    @invariant DualWriteOrdering
+        -- For each (trie catalog deleteTries, TriesDeleted append) pair, no
+        -- block upload — which persists a table-block snapshot of the catalog —
+        -- may observe a catalog state the replica log has already moved past.
+        -- Enforced by confinement rather than a lock: both halves are one task
+        -- on the leader's persister coroutine, the removal precedes the append,
+        -- and the block-cut pause keeps the GC arm out of the select while a
+        -- block is in progress.
 
     @invariant DeleteBeforeCommit
         -- Within one (table, chunk) atomic step: every (data, meta) DELETE
@@ -497,4 +488,4 @@ surface TrieGcAdmin {
 -- Open Questions
 ------------------------------------------------------------
 
-open question "First-cycle mutex contention: when an operator first flips `enabled = true` on a database that's been running without GC for months, the backlog can be enormous. Each chunk takes the replica-log mutex for the duration of `commitTriesDeleted` (Kafka append + catalog delete). Tx commits compete for the same mutex. Chunking caps message size but not mutex hold time. Worth measuring in practice and considering an explicit bound on chunks/cycle, or a yield between chunks."
+open question "First-cycle contention for the persister: when an operator first flips `enabled = true` on a database that's been running without GC for months, the backlog can be enormous, and each chunk's `commitTriesDeleted` is one awaited task on the leader's persister coroutine, competing with source batches for select turns. Per chunk the persister only does a catalog set-removal and an unbounded-channel send — the log append itself is asynchronous on the append pump — so each turn is short. What is not bounded is the NUMBER of turns, nor the burst of TriesDeleted the append pump then carries ahead of tx records. Worth measuring, and considering an explicit bound on chunks per cycle or a yield between chunks."

@@ -85,26 +85,14 @@ config {
 -- Rules: Lifecycle
 ------------------------------------------------------------
 
--- The block GC's lifetime is bound to the LeaderSystem: constructed when the
--- log processor enters a leader mode (Leader or ExternalSourceLeader, see
--- db.allium: TransitionToLeader, openLeaderSystem) and closed when it leaves.
+-- The block GC's lifetime is bound to the leader term: constructed when the log
+-- processor enters Leader mode (see db.allium TransitionToLeader) and closed when
+-- it leaves. One rule, because there is one leader mode — whether the database is
+-- CDC-sourced makes no difference to the GC.
 
 rule LeaderOpensBlockGc {
     -- See: indexer/LeaderLogProcessor.kt (init)
     when: lp: db/LogProcessor.mode becomes Leader
-
-    ensures:
-        BlockGarbageCollector.created(
-            enabled: config.enabled,
-            blocks_to_keep: config.blocks_to_keep,
-            has_pending_signal: false,
-            is_running: true
-        )
-}
-
-rule ExternalSourceLeaderOpensBlockGc {
-    -- See: indexer/LeaderLogProcessor.kt (init), database/Database.kt
-    when: lp: db/LogProcessor.mode becomes ExternalSourceLeader
 
     ensures:
         BlockGarbageCollector.created(
@@ -145,15 +133,17 @@ rule LeaderClosesBlockGc {
 --                          the `enabled` gate.
 
 rule LeaderFinishBlockSignalsBlockGc {
-    -- Auto-poke from the leader's block-boundary path. Bursts of block
+    -- Auto-poke from the leader once a block upload completes. Bursts of block
     -- finishes coalesce because the signal channel is conflated.
-    -- See: LeaderLogProcessor.finishBlock (`blockGc.signal()`).
+    -- See: LeaderLogProcessor.applyRecord (the BlockBoundary arm,
+    -- `blockGc.signal()`).
     --
     -- The `enabled` gate lives inside the loop's `select` — `signal()` always
     -- enqueues, but the loop only listens to the signal channel when enabled.
     --
-    -- Chains from db.allium's LeaderFinishesBlock trigger emission.
-    when: LeaderFinishesBlock(latest_processed_msg_id)
+    -- Chains from db.allium's LeaderUploadsBlockOnBoundary, i.e. once the upload
+    -- has completed — not when the boundary was cut.
+    when: BlockGcSignalled()
     requires: block_gc.enabled
     requires: block_gc.is_running
 

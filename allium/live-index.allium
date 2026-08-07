@@ -10,12 +10,13 @@
 --     CommitTransaction, AbortTransaction, FinishBlock, NextBlock) execute serially.
 --     This is enforced structurally: whichever LogProcessor variant owns the live
 --     index drives mutations sequentially. On a leader, that is the
---     LeaderLogProcessor consuming the source log; on a follower, the
---     FollowerLogProcessor applying ReplicaMessages; during promotion, the
---     TransitionLogProcessor; and for CDC-sourced databases, an
---     ExternalSourceProcessor. All variants are single-threaded writers against
---     the live index, so the concurrency model below is the same regardless of
---     which variant is in play.
+--     LeaderLogProcessor's persister coroutine, applying on consume-back — the
+--     same coroutine whether or not the database is CDC-sourced, since an
+--     external source is an optional collaborator of the leader rather than a
+--     processor of its own; on a follower, the FollowerLogProcessor applying
+--     ReplicaMessages; during promotion, the TransitionLogProcessor. All
+--     variants are single-threaded writers against the live index, so the
+--     concurrency model below is the same regardless of which variant is in play.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
 --   - Writes don't block reads: a shared, reference-counted snapshot is a lazily-
 --     advanced cache, rebuilt on read only when a reader demands a basis it does
