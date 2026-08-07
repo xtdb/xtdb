@@ -18,6 +18,7 @@ import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
+import xtdb.api.error.Conflict
 import xtdb.api.log.KafkaCluster
 import xtdb.time.Interval
 import java.math.BigDecimal
@@ -608,6 +609,46 @@ class PostgresSourceIntegrationTest {
             }
             assertNotNull(cdc["cdc"]?.ingestionError,
                 "missing publication must surface IngestionStoppedException, not silently stall")
+
+            assertPrimaryDbHealthy(node)
+        }
+    }
+
+    @Test
+    fun `source fails when the replication slot already exists`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_dup_slot (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_dup_slot",
+            "SELECT pg_create_logical_replication_slot('$slotName', 'pgoutput')",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            val cdc = (node as XtdbInternal).dbCatalog
+            eventually(30.seconds) {
+                assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError for a pre-existing slot")
+            }
+
+            val chain = generateSequence(cdc["cdc"]?.ingestionError as Throwable?) { it.cause }.toList()
+            val conflict = chain.filterIsInstance<Conflict>().firstOrNull()
+                ?: throw AssertionError(
+                    "a pre-existing slot must surface as Conflict, got: " +
+                            chain.joinToString { "${it::class.simpleName}: ${it.message}" }
+                )
+
+            assertEquals(
+                Keyword.intern("xtdb.postgres", "slot-exists"),
+                conflict.data.valAt(Keyword.intern("xtdb.error", "code")),
+            )
+            assertTrue(
+                conflict.message?.contains("already exists") == true,
+                "Postgres' own message survives the wrap, got: ${conflict.message}",
+            )
 
             assertPrimaryDbHealthy(node)
         }

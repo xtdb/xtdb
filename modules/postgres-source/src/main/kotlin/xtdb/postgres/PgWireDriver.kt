@@ -10,6 +10,7 @@ import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
+import xtdb.api.error.Conflict
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.pgwire.PgType
@@ -46,11 +47,31 @@ private val IDLE_POLL_PAUSE = 50.milliseconds
 private fun coerceText(text: String, typeOid: Int): Any? =
     PgType.fromOid(typeOid)?.readText(text.toByteArray()) ?: text
 
+private const val SQLSTATE_DUPLICATE_OBJECT = "42710"
+
 private data class CreatedSlot(val consistentPoint: Long, val snapshotName: String)
 
 private fun Connection.createLogicalSlot(slotName: String): CreatedSlot =
     createStatement().use { stmt ->
-        stmt.executeQuery("CREATE_REPLICATION_SLOT $slotName LOGICAL pgoutput (SNAPSHOT 'export')").use { rs ->
+        val created =
+            try {
+                stmt.executeQuery("CREATE_REPLICATION_SLOT $slotName LOGICAL pgoutput (SNAPSHOT 'export')")
+            } catch (e: PSQLException) {
+                val data = mapOf("slot-name" to slotName)
+
+                throw if (e.sqlState == SQLSTATE_DUPLICATE_OBJECT)
+                    Conflict(
+                        "Replication slot '$slotName' already exists: ${e.message}",
+                        "xtdb.postgres/slot-exists", data, e,
+                    )
+                else
+                    Incorrect(
+                        "Failed to create replication slot '$slotName': ${e.message}",
+                        "xtdb.postgres/slot-creation-failed", data, e,
+                    )
+            }
+
+        created.use { rs ->
             if (!rs.next())
                 throw Fault(
                     "CREATE_REPLICATION_SLOT returned no row for slot '$slotName'",
