@@ -15,6 +15,7 @@ v2.2: Kafka replica log topic
 
   - **Docker image** — `XTDB_REPLICA_LOG_TOPIC` defaults to `xtdb-log-replica` via the Dockerfile. If you customise `XTDB_LOG_TOPIC`, override this env var too so the pair stays consistent.
   - **Helm chart** — `xtdbConfig.kafkaReplicaLogTopic` defaults to `xtdb-log-replica` and auto-creates alongside the source topic. Existing deployments pick this up on next rollout without any values changes.
+  - **Deployment isolation** — `xtdbConfig.kafkaTransactionalIdPrefix` is gone, along with the Kafka transactions it configured. Deployments sharing a Kafka cluster are now separated by consumer group instead: set a distinct `groupId` on the `!Kafka` cluster entry in `xtdbConfig.nodeConfig`.
 
 </details>
 
@@ -185,7 +186,8 @@ The chart uses one Kafka topic for each of the source and replica logs (v2.2+):
 
 Both topics auto-create on startup.
 
-If multiple XTDB deployments share a Kafka cluster, set `xtdbConfig.kafkaTransactionalIdPrefix` to a distinct value per deployment (defaults to `xtdb`) — see [Leader election and fencing](config/log/kafka#leader-election-and-fencing).
+If multiple XTDB deployments share a Kafka cluster, give each a distinct consumer group: set `groupId` on the `!Kafka` cluster entry in `xtdbConfig.nodeConfig` (defaults to `xtdb`).
+The chart exposes no dedicated value for it — see [Sharing a Kafka cluster across deployments](config/log/kafka#sharing-a-kafka-cluster-across-deployments).
 
 ### Resources
 
