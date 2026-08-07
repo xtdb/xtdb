@@ -134,15 +134,15 @@ So at most one leader's writes are ever confirmed for a database, without relyin
 
 === Three LogProcessor states
 
-`xtdb.indexer.LogProcessor` is a small state machine, driven by Kafka's `onPartitionsAssigned` / `onPartitionsRevoked` callbacks:
+`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through three `Log.SubscriptionListener` operations — `launchTransition`, `commitLeader`, `demoteLeader`:
 
 Follower (`FollowerLogProcessor`)::
 The default state for a node that isn't currently leader.
 Tails the replica log and applies each `ReplicaMessage` to its live index.
 It does not consume the source log at all.
 
-Leader (`LeaderLogProcessor`, or `ExternalSourceProcessor` — see below)::
-Consumes the source log via the consumer-group subscription, resolves each transaction, indexes it locally, and appends the resulting `ReplicaMessage` to the replica log.
+Leader (`LeaderLogProcessor`)::
+Consumes the source log via the consumer-group subscription, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
 Only the leader writes L0 files to the object store.
 
 Transition (`TransitionLogProcessor`)::
@@ -166,17 +166,24 @@ Rather than continue with divergent state, we poison the watchers and let the no
 == External-source databases
 
 Some databases aren't fed by client `submitTx` at all — they mirror an external system via CDC (e.g. Postgres logical replication).
-These use a dedicated leader processor, `xtdb.indexer.ExternalSourceProcessor` (ESP), that fills the leader role instead of `LeaderLogProcessor`.
 
-The key differences from a regular leader:
+There's no separate processor for these: an `ExternalSource` is an optional collaborator of `LeaderLogProcessor`, which implements `ExternalSource.TxIndexer` itself and hands that to the source on partition assignment.
+Flush, tries and block coordination are identical either way, and the leader still consumes the source log for them.
+The differences are confined to where a transaction enters and how its tx-id is assigned:
 
-* *tx-ids come from the ESP, not the source log*.
-  The ESP owns the tx-id sequence directly (monotonically from the live index's latest completed tx) rather than deriving it from source-log msg-ids.
+* *tx-ids come from the leader, not the source log*.
+  They're assigned off the resolver's *resolved* head (`TxResolver.latestCompletedTx` + 1) rather than derived from source-log msg-ids.
+  Note this is the resolved head, not the durable one — resolution runs ahead of durability, so taking it from the live index would re-use a tx-id for every tx still in flight.
 * *client `submitTx` is rejected* on external-source DBs with error code `xtdb/submit-tx-to-external-source-db` — users must submit through the external source instead.
-* *the ESP drives its own ingestion loop* via the `ExternalSource.TxIndexer` interface, per-tx: smooth the system-time, open an `OpenTx`, let the source populate it, add the `xt/txs` row, commit or abort the live index, and append to the replica log.
+  The check is on the *database's* configured source, not on whether this node happens to lead it, because the source log is shared and every node's submit path has to answer the same way.
+* *the source drives ingestion* through `TxIndexer`, per-tx: smooth the system-time, open an `OpenTx`, let the source populate it, add the `xt/txs` row, then stage it on the resolver and hand it to the append pump.
   'Smoothing' nudges the system-time forward as needed to keep it strictly monotonic — upstream sources don't always guarantee that, but XTDB requires it.
   This is also how CDC sources get to choose tx metadata (including `userMetadata`) after seeing the transaction rather than before.
-* *external-source tokens* (e.g. a Postgres LSN) are carried in the replica log alongside each tx, so on restart the ESP can resume the upstream source from the last durably-indexed position — see `ExternalSourceToken` and the `afterToken` argument on `ExternalSource.onPartitionAssigned`.
+* *durability is confirmed on read-back*, not at append.
+  `executeTx` awaits a per-tx handle that completes only when the leader reads that tx back at its own term — durably replicated *and* confirmed unfenced.
+  `submitTx` returns the handle without awaiting it.
+  Every path on which the tx will never be applied has to fail the handle instead, or the caller waits forever.
+* *external-source tokens* (e.g. a Postgres LSN) are carried in the replica log alongside each tx, so on restart the source can resume from the last durably-indexed position — see `ExternalSourceToken` and the `afterToken` argument on `ExternalSource.onPartitionAssigned`.
 
 Followers of an external-source database work exactly as above — they tail the replica log and apply `ReplicaMessage`s.
 They have no visibility into the upstream CDC source at all.
