@@ -52,19 +52,28 @@ abstract class PostgresSourceTestBase {
 
     // --- node ---
 
+    /** Binds the `pg` remote to a bare host/port rather than a container we hold — a failover test
+     * reopens its node against a *different* server than the one it first attached to, and that
+     * server isn't necessarily a [PostgreSQLContainer]. */
     protected fun openNode(
         logDir: Path, storageDir: Path,
-        pg: PostgreSQLContainer = postgres,
+        pgHost: String, pgPort: Int,
         username: String = "testuser", password: String = "testpass",
     ): Xtdb = Xtdb.openNode {
         server { port = 0 }
         log(localLog(logDir))
         storage(Storage.local(storageDir))
         remote("pg", PostgresRemote.Factory(
-            hostname = pg.host, port = pg.firstMappedPort,
+            hostname = pgHost, port = pgPort,
             database = "testdb", username = username, password = password,
         ))
     }
+
+    protected fun openNode(
+        logDir: Path, storageDir: Path,
+        pg: PostgreSQLContainer = postgres,
+        username: String = "testuser", password: String = "testpass",
+    ): Xtdb = openNode(logDir, storageDir, pg.host, pg.firstMappedPort, username, password)
 
     protected fun attachCdc(node: Xtdb, database: String, cdcLog: Path, cdcStorage: Path, slot: String, pub: String) {
         node.createConnectionBuilder().build().use { c ->
