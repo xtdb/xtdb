@@ -879,6 +879,8 @@ createBench(
 
 createBench("ts-devices", mapOf("size" to "--size"))
 
+createBench("food-prices", mapOf("size" to "--size", "dropout" to "--dropout"))
+
 dokka {
     moduleName.set("")
     moduleVersion.set("2.x-SNAPSHOT")

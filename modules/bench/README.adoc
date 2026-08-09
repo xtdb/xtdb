@@ -27,6 +27,16 @@ The node config (registering the docker-compose broker as the `kafkaCluster` rem
 On the benchmark cluster, run it via the 'Nightly Benchmark Kafka Source' workflow dispatch (or `./cloud/run-bench.sh azure kafka-source`).
 
 
+Food Prices::
+`./gradlew food-prices -Psize=small`
++
+Bitemporal delta ingestion over ADBC, ported from https://github.com/jr200-labs/polars-hist-db[jr200-labs/polars-hist-db].
+Ingests a monthly price series a partition at a time, and for each one binds the batch's keys as a list, `UNNEST`s them to find which rows actually moved, resolves the foreign keys the same way, and writes the survivors back under an explicit `SYSTEM_TIME` - so most of what it measures is the keyed temporal join, not the write.
+Sizes are `tiny`, `small` (default), `med` and `big`; `-Pdropout=true` additionally closes out rows the incoming batch no longer mentions.
++
+The dataset is not checked in - the benchmark syncs it from `s3://xtdb-datasets/food-prices/` on its `download` stage, so you need credentials for that bucket (or a local copy under `modules/bench/dataset-downloads/food-prices/<size>/`).
+To refresh or regenerate it, see `modules/bench/mirrors/food-prices/`.
+
 TSBS IoT::
 `XTDB_LOGGING_LEVEL_BENCH_TSBS=debug ./gradlew :tsbs-iot -Pfile=/path/to/txs.transit.json`
 +
@@ -90,6 +100,12 @@ Readings::
 docker run --rm ghcr.io/xtdb/xtdb-bench:nightly readings \
   --devices 10000
   --readings 10000
+----
+Food Prices::
+[source,bash]
+----
+docker run --rm ghcr.io/xtdb/xtdb-bench:nightly food-prices \
+  --size small
 ----
 Products::
 [source,bash]
