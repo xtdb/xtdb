@@ -27,7 +27,7 @@
            (xtdb.tx TxOp$PatchDocs TxOp$PutDocs)
            (xtdb.antlr Sql$DirectlyExecutableStatementContext Sql$GroupByClauseContext Sql$HavingClauseContext Sql$JoinSpecificationContext Sql$JoinTypeContext Sql$ObjectNameAndValueContext Sql$OrderByClauseContext Sql$QualifiedRenameColumnContext Sql$QueryBodyTermContext Sql$QuerySpecificationContext Sql$QueryTailContext Sql$RenameColumnContext Sql$SearchedWhenClauseContext Sql$SelectClauseContext Sql$SetClauseContext Sql$SimpleWhenClauseContext Sql$SortSpecificationContext Sql$SortSpecificationListContext Sql$WhenOperandContext Sql$WhereClauseContext Sql$WithTimeZoneContext SqlLexer SqlVisitor)
            (xtdb.arrow RelationReader VectorReader)
-           xtdb.query.SqlPlanner
+           (xtdb.query ParsedStatement$Dml SqlParser SqlPlanner)
            xtdb.api.TableRef
            xtdb.util.StringUtil))
 
@@ -3576,8 +3576,6 @@
   (visitEraseStatement [_ _])
 
   (visitAssertStatement [_ _])
-  (visitQueryExpr [_ _])
-  (visitShowVariableStatement [_ _])
 
   ;; not statically expandable — fall through to the raw Sql op, which the indexer interprets
   (visitGrantRoleStatement [_ _])
@@ -3588,20 +3586,26 @@
   ([sql args-rel] (sql->static-ops sql args-rel {}))
 
   ([sql ^RelationReader args-rel {:keys [scope] :as opts}]
-   ;; parsed outside the catch below: a syntax error is the caller's, so it propagates to whoever is
+   ;; classified outside the catch below: a syntax error is the caller's, so it propagates to whoever is
    ;; expanding (which surfaces and counts it) rather than being swallowed into an op that reaches the
    ;; log and only fails in the indexer.
-   (let [ast (antlr/parse-statement sql)]
-     (try
-       (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
-             arg-fields (mapv VectorReader/.getField (or args-rel []))
+   ;;
+   ;; Only DML reduces to static ops, so the visitor's obligation is the DML alternatives rather than
+   ;; every `directlyExecutableStatement` in the grammar. Without the gate an unimplemented alternative
+   ;; is an AbstractMethodError — an Error, so it escapes the catch below rather than falling back to a
+   ;; raw Sql op (#5856).
+   (let [parsed (SqlParser/parseStatement sql)]
+     (when (instance? ParsedStatement$Dml parsed)
+       (try
+         (let [arg-rows (some-> args-rel (.toTuples #xt/key-fn :snake-case-string))
+               arg-fields (mapv VectorReader/.getField (or args-rel []))
 
-             {:keys [!errors !warnings] :as env} (-> (->env opts)
-                                                     (assoc :arg-fields arg-fields))
-             tx-ops (.accept ast (->SqlToStaticOpsVisitor env scope arg-rows))]
-         (when (and (empty? @!errors) (empty? @!warnings))
-           tx-ops))
+               {:keys [!errors !warnings] :as env} (-> (->env opts)
+                                                       (assoc :arg-fields arg-fields))
+               tx-ops (.accept (.getAst parsed) (->SqlToStaticOpsVisitor env scope arg-rows))]
+           (when (and (empty? @!errors) (empty? @!warnings))
+             tx-ops))
 
-       ;; a statement this visitor can't reduce to static ops is indexed as SQL instead
-       (catch IllegalArgumentException _)
-       (catch RuntimeException _)))))
+         ;; DML this visitor can't reduce to static ops is indexed as SQL instead
+         (catch IllegalArgumentException _)
+         (catch RuntimeException _))))))

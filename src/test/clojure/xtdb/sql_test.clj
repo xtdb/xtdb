@@ -2383,6 +2383,24 @@ SELECT PERIOD(DATE '2022-12-31', TIMESTAMP '2023-01-02') CONTAINS (DATE '2023-01
                                                  [{"_id" 1, "value" "mundo"}])]
                (sql/sql->static-ops "INSERT INTO bar RECORDS $1" args))))))
 
+(t/deftest test-sql->static-ops-non-dml-5856
+  (t/are [sql] (nil? (sql/sql->static-ops sql vw/empty-args))
+    "BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00Z')"
+    "BEGIN"
+    "COMMIT"
+    "ROLLBACK"
+    "SET TIME ZONE 'America/New_York'"
+    "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"
+    "SET ROLE xtdb"
+    "SHOW TIME ZONE"
+    "SHOW AWAIT_TOKEN"
+    "SELECT 1"
+    "PREPARE foo AS SELECT 1"
+    "EXECUTE foo"
+    "ATTACH DATABASE other_db"
+    "DETACH DATABASE other_db"
+    "COPY foo FROM STDIN WITH (FORMAT 'transit-json')"))
+
 (t/deftest test-sql->static-ops-decimals-4483
   (t/is (= [{:op :put-docs, :table-name 'public/foo,
              :docs [{"_id" 1, "dec" 1.01M} {"_id" 2, "dec" 1.012M}],
