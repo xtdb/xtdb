@@ -160,7 +160,7 @@ internal class LocalStorage(
                         }
                     }
 
-                    override fun end(): FileSize {
+                    override suspend fun end(): FileSize {
                         unloader.end()
                         fileChannel.close()
 

@@ -113,7 +113,7 @@ class MetadataFileWriter(
         return metaPos
     }
 
-    fun end(): TrieMetadata {
+    suspend fun end(): TrieMetadata {
         bp.openArrowWriter(table.metaFilePath(trieKey), metaRel)
             .use { metaFileWriter ->
                 metaFileWriter.writePage()

@@ -99,7 +99,7 @@ abstract class StorageTest {
                 val relation = Relation(al, listOf(fooVec), fooVec.valueCount)
                 bp.openArrowWriter("foo".asPath, relation).use { writer ->
                     writer.writePage()
-                    assertEquals(526, writer.end())
+                    assertEquals(526, writer.endSync())
                 }
             }
         }

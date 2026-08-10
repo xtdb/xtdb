@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -158,7 +160,7 @@ class LeaderLogProcessorTest {
     fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val liveIndex = liveIndexMock {
-            every { finishBlock(any(), any()) } returns emptyMap()
+            coEvery { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
@@ -194,7 +196,7 @@ class LeaderLogProcessorTest {
         ))
         watchers.awaitSource(0)
 
-        verify { liveIndex.finishBlock(any(), eq(0)) }
+        coVerify { liveIndex.finishBlock(any(), eq(0)) }
         verify { liveIndex.nextBlock() }
         verify { compactor.signalBlock() }
         assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have block messages")
@@ -212,7 +214,7 @@ class LeaderLogProcessorTest {
         ))
         watchers.awaitSource(0)
 
-        verify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
+        coVerify(exactly = 0) { liveIndex.finishBlock(any(), any()) }
     }
 
     @Test
@@ -229,7 +231,7 @@ class LeaderLogProcessorTest {
         val tableRef = fromSchemaAndTable("public/foo")
 
         val liveIndex = liveIndexMock {
-            every { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
+            coEvery { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
             every { latestCompletedTx } returns null
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
@@ -602,7 +604,7 @@ class LeaderLogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
 
         val liveIndex = liveIndexMock {
-            every { finishBlock(any(), any()) } returns emptyMap()
+            coEvery { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
         val trieCatalog = mockk<TrieCatalog>(relaxed = true) {

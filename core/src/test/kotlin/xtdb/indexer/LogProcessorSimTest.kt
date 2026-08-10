@@ -162,7 +162,8 @@ class LogProcessorSimTest : SimulationTestBase() {
         val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
-        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig)
+        val liveIndex =
+            LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
 

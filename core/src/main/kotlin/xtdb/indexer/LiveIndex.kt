@@ -1,5 +1,7 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.IndexerConfig
 import xtdb.api.TransactionKey
@@ -57,6 +59,7 @@ class LiveIndex private constructor(
     @Volatile var latestCompletedTx: TransactionKey?,
     initialBlockIdx: Long,
     indexerConfig: IndexerConfig,
+    private val ioDispatcher: CoroutineDispatcher,
 ) : Snapshot.Source, AutoCloseable {
 
     private val tables = HashMap<TableRef, LiveTable>()
@@ -186,7 +189,8 @@ class LiveIndex private constructor(
     fun blockMetadata(): Map<TableRef, LiveTable.BlockMetadata> =
         this@LiveIndex.tables.mapValues { (_, lt) -> lt.blockMetadata() }
 
-    fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) = this@LiveIndex.tables.finishBlock(bp, blockIdx)
+    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex) =
+        this@LiveIndex.tables.finishBlock(bp, blockIdx, ioDispatcher)
 
     private val skipTxsLogged = AtomicBoolean(false)
 
@@ -227,6 +231,11 @@ class LiveIndex private constructor(
         fun open(
             allocator: BufferAllocator, blockCatalog: BlockCatalog, tableCatalog: TableCatalog,
             trieCatalog: TrieCatalog, indexerConfig: IndexerConfig = IndexerConfig(),
+            /**
+             * Dispatcher for the per-table block-write fan-out. Sims inject the seeded dispatcher so the
+             * fan-out stays on the simulation's thread, and hence within its quiescence fixed point.
+             */
+            ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ) = safelyOpening {
             LiveIndex(
                 open { allocator.newChildAllocator("live-index", 0, Long.MAX_VALUE) },
@@ -234,6 +243,7 @@ class LiveIndex private constructor(
                 blockCatalog.latestCompletedTx,
                 (blockCatalog.currentBlockIndex ?: -1L) + 1L,
                 indexerConfig,
+                ioDispatcher,
             ).also { it.refreshSnap() }
         }
     }

@@ -35,7 +35,7 @@
           (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
             (.importData live-table rel))
 
-          (.finishBlock live-table bp 0)
+          (.finishBlockSync live-table bp 0)
 
           (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie")))
                                    (.resolve path "objects")))))))

@@ -3,6 +3,7 @@
 package xtdb.indexer
 
 import clojure.lang.Keyword
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -277,7 +278,7 @@ class LiveIndexTest {
 
             assertNotNull(db.liveIndex.table(table))
 
-            db.liveIndex.finishBlock(db.bp, 0L)
+            runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
             db.liveIndex.nextBlock()
 
             assertNull(db.liveIndex.table(table))
@@ -299,7 +300,7 @@ class LiveIndexTest {
 
             db.liveIndex.openSnapshot(Instant.parse("2000-01-01T00:00:00Z")).use { snap ->
                 val before = snap.table(table).single().relation.rowCount
-                db.liveIndex.finishBlock(db.bp, 0L)
+                runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }
                 assertEquals(before, snap.table(table).single().relation.rowCount)
                 assertEquals(1, before)
             }
@@ -328,7 +329,7 @@ class LiveIndexTest {
                 }
 
                 // drive the BlockUploader flow up to (but not including) nextBlock
-                for ((t, fb) in db.liveIndex.finishBlock(db.bp, 0L)) {
+                for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
                     val trieDetails = TrieDetails.newBuilder()
                         .setTableName(t.schemaAndTable)
                         .setTrieKey(fb.trieKey)

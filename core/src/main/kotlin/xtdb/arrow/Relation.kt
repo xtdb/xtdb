@@ -15,7 +15,6 @@ import org.apache.arrow.vector.ipc.message.MessageSerializer
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.Field
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.ArrowWriter
 import xtdb.api.ICursor
 import xtdb.arrow.ArrowUnloader.Mode
 import xtdb.arrow.ArrowUnloader.Mode.FILE
@@ -86,9 +85,16 @@ class Relation(
                 }
             }
 
-    inner class RelationUnloader(private val arrowUnloader: ArrowUnloader) : ArrowWriter {
+    /**
+     * Writes Arrow pages to a local channel.
+     *
+     * Deliberately not an [xtdb.ArrowWriter] — that's a handle on an object in a [xtdb.storage.BufferPool],
+     * whose backing store may be remote and whose `end` therefore suspends. This one only ever touches a
+     * local channel, and its callers (query spill, shuffle, compaction output) are not coroutine-native.
+     */
+    inner class RelationUnloader(private val arrowUnloader: ArrowUnloader) : AutoCloseable {
 
-        override fun writePage() {
+        fun writePage() {
             try {
                 openArrowRecordBatch().use { arrowUnloader.writeBatch(it) }
             } catch (_: ClosedByInterruptException) {
@@ -96,7 +102,7 @@ class Relation(
             }
         }
 
-        override fun end() = arrowUnloader.end()
+        fun end() = arrowUnloader.end()
 
         override fun close() = arrowUnloader.close()
     }

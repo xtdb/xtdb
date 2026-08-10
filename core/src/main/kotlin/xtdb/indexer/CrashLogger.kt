@@ -38,7 +38,7 @@ class CrashLogger @JvmOverloads constructor(
         rel.openDirectSlice(allocator).use { slicedRel ->
             bufferPool.openArrowWriter(path, slicedRel).use { writer ->
                 writer.writePage()
-                writer.end()
+                writer.endSync()
             }
         }
     }
@@ -48,7 +48,7 @@ class CrashLogger @JvmOverloads constructor(
             Relation(allocator, listOf(slicedVec), txOpsRdr.valueCount).use { txOpsRel ->
                 bufferPool.openArrowWriter(path, txOpsRel).use { writer ->
                     writer.writePage()
-                    writer.end()
+                    writer.endSync()
                 }
             }
         }

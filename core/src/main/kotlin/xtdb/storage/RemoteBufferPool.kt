@@ -171,7 +171,7 @@ internal class RemoteBufferPool(
                     object : ArrowWriter {
                         override fun writePage() = unloader.writePage()
 
-                        override fun end(): FileSize {
+                        override suspend fun end(): FileSize {
                             unloader.end()
                             fileChannel.close()
 

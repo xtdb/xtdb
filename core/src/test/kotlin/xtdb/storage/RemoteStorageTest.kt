@@ -144,7 +144,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
                 writer.writePage()
-                writer.end()
+                writer.endSync()
             }
         }
 
@@ -184,7 +184,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
                 val v = relation["a"]
                 for (i in 0 until 10) v.writeInt(i)
                 writer.writePage()
-                writer.end()
+                writer.endSync()
             }
         }
 
@@ -199,7 +199,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
                     val v = relation["a"]
                     for (i in 0 until 10) v.writeInt(i)
                     writer.writePage()
-                    writer.end()
+                    writer.endSync()
                     throw Exception("Test exception")
                 }
             }

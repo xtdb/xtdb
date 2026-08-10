@@ -98,7 +98,7 @@ internal class MemoryStorage(
                         unloader.writePage()
                     }
 
-                    override fun end(): FileSize {
+                    override suspend fun end(): FileSize {
                         unloader.end()
                         writeChannel.close()
                         val bytes = baos.toByteArray()

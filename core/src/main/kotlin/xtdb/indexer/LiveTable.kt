@@ -1,8 +1,10 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.arrow.*
@@ -75,7 +77,11 @@ class LiveTable @JvmOverloads constructor(
         val hllDeltas: Map<FieldName, HLL>
     )
 
-    fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
+    /** For callers that aren't coroutine-native — see [finishBlock]. */
+    fun finishBlockSync(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock =
+        runBlocking { finishBlock(bp, blockIdx) }
+
+    suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
         val rowCount = liveRelation.rowCount
         val trieKey = Trie.l0Key(blockIdx).toString()
 
@@ -104,13 +110,20 @@ class LiveTable @JvmOverloads constructor(
                 return type.children
             }
 
-        @JvmStatic
-        fun Map<TableRef, LiveTable>.finishBlock(bp: BufferPool, blockIdx: BlockIndex): Map<TableRef, FinishedBlock> =
-            // migrated here because of #5107 - may migrate the rest later.
-            runBlocking {
+        /**
+         * Writes every table's block in parallel on [ioDispatcher].
+         *
+         * The dispatcher is a parameter rather than [Dispatchers.IO] because hardcoding it would put this
+         * fan-out outside whatever dispatcher the caller runs on — which, under a deterministic simulation,
+         * means outside the scheduler whose quiescence the simulation treats as its fixed point.
+         */
+        suspend fun Map<TableRef, LiveTable>.finishBlock(
+            bp: BufferPool, blockIdx: BlockIndex, ioDispatcher: CoroutineDispatcher
+        ): Map<TableRef, FinishedBlock> =
+            coroutineScope {
                 this@finishBlock
                     .map { (tableName, liveTable) ->
-                        async(Dispatchers.IO) {
+                        async(ioDispatcher) {
                             tableName to liveTable.finishBlock(bp, blockIdx)
                         }
                     }

@@ -49,7 +49,7 @@ class PageTrieWriter(
         }
     }
 
-    fun writePageTree(
+    suspend fun writePageTree(
         table: TableRef, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int

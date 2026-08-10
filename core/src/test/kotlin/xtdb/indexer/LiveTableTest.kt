@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -175,7 +176,7 @@ class LiveTableTest {
                     TableSnapshot.open(allocator, liveTable).use { snap ->
                         val before = snap.snapData()
 
-                        liveTable.finishBlock(bp, 0L)
+                        runBlocking { liveTable.finishBlock(bp, 0L) }
 
                         val after = snap.snapData()
 
