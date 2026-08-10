@@ -1,6 +1,6 @@
 ---
 name: xtdb-testing
-description: XTDB-specific rules and mechanics for running tests — delegation, Gradle serialisation, test tasks and filters, iteration counts, simulation-test coverage, diagnosing failures, and regenerating arrow-edn golden fixtures. Read this before running or delegating any test run in this repo.
+description: XTDB-specific rules and mechanics for running tests — delegation, the mid-run edit freeze, test tasks and filters, iteration counts, simulation-test coverage, diagnosing failures, and regenerating arrow-edn golden fixtures. Read this before running or delegating any test run in this repo.
 ---
 
 # Running tests in XTDB
@@ -13,12 +13,11 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 ## The rules you MUST NOT get wrong
 
 1. You MUST NOT run tests yourself — delegate to the `gradle-tests` agent.
-2. You MUST NOT have two Gradle invocations in flight at once, anywhere on this machine.
-3. You MUST NOT edit source files while a test run is in flight.
-4. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
-5. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
+2. You MUST NOT edit source files in a worktree that has a test run in flight.
+3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
+4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 
-The rest of this document is the mechanics behind those five.
+The rest of this document is the mechanics behind those four.
 
 ## Delegating to `gradle-tests`
 
@@ -34,21 +33,16 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
   Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
 - You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
 
-## Serialising Gradle runs
+## Edits are frozen while a run is in flight
 
-Every worktree shares one `~/.gradle` — `GRADLE_USER_HOME` is not overridden — so concurrent Gradle invocations contend over the same caches and daemons regardless of which checkout they were launched from.
+The freeze is scoped to the worktree the run is compiling from.
 
-Before starting a run:
-
-```bash
-pgrep -af gradlew
-```
-
-If anything comes back, wait for it — including runs started from another worktree or by another agent.
-
-While a run is in flight, edits are frozen.
 Recompiling under a running build produces **bogus cross-language type errors and cascading failures** that look exactly like real breakage, and chasing them costs far more than waiting did.
 If you have already edited mid-run, discard that run's results entirely and re-run once the tree is stable — do not try to reason about which failures were real.
+
+Runs in other worktrees do not concern you, and you MUST NOT check for them or wait on them.
+Each worktree has its own `build/` and `.gradle/`, and Gradle takes cross-process locks over the shared `~/.gradle` caches, so a build elsewhere on the machine cannot corrupt yours.
+Those locks block rather than fail, so a run that stalls early — typically reporting that it is waiting to acquire a lock — is that mechanism working; wait it out rather than killing the run.
 
 ## Test tasks
 
