@@ -85,3 +85,14 @@
            (types/field->col-type #xt/field {"a" [:? :list]})))
   (t/is (= [:union #{[:set :null] :null}]
            (types/field->col-type #xt/field {"b" [:? :set]}))))
+
+;; Kotlin's non-null signature can't hold Clojure callers - erasure means nil reaches `mergeTypes`
+;; as a null element. It must land as an anomaly, not a bare NoWhenBranchMatchedException.
+(t/deftest merge-types-rejects-nil
+  (t/is (thrown? xtdb.api.error.Fault (types/merge-types nil)))
+  (t/is (thrown? xtdb.api.error.Fault (types/merge-types #xt/type :i64 nil)))
+
+  ;; `#xt/type :nothing` doesn't read - `render-type` emits `:nothing` but the reader has no clause for it
+  (t/testing "the lattice bottom is how a source says it has nothing to contribute"
+    (t/is (= #xt/type :i64
+             (types/merge-types #xt/type :i64 xtdb.arrow.VectorType$Nothing/INSTANCE)))))

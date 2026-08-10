@@ -2,6 +2,7 @@ package xtdb.arrow
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.arrow.vector.types.pojo.ArrowType
+import xtdb.api.error.Fault
 import xtdb.arrow.VectorType.*
 import xtdb.arrow.VectorType.Companion.structOf
 import xtdb.arrow.VectorType.Companion.fromLegs
@@ -78,10 +79,35 @@ data class MergeTypes(
         fun joinContributions(types: Collection<VectorType>): VectorType =
             if (types.all { it == Nothing }) Nothing else mergeTypes(types)
 
+        /**
+         * A source with nothing to say contributes [VectorType.Nothing], the lattice bottom - never a Kotlin
+         * null. A null is rejected rather than discarded, because discarding one drops a contribution from
+         * the join without trace: that is how #5855 stayed hidden, an accessor returning null for "no such
+         * column" looking like a legitimate argument.
+         *
+         * The signature holds Kotlin callers to that. It cannot hold Clojure ones - erasure means there is no
+         * per-element check on a generic collection - hence the explicit rejection below.
+         */
         @JvmStatic
-        fun mergeTypes(types: Collection<VectorType?>): VectorType = cache[types.mapNotNullTo(mutableSetOf()) { it }]
+        fun mergeTypes(types: Collection<VectorType>): VectorType {
+            val set = mutableSetOf<VectorType>()
 
-        fun mergeTypes(vararg types: VectorType?): VectorType = mergeTypes(types.toList())
+            for (type in types) {
+                // The compiler calls this comparison senseless because the element type is non-null; it is
+                // reachable anyway, from Clojure through erasure. Do not delete it. Without it a nil falls
+                // through `merge`'s exhaustive `when` as a bare NoWhenBranchMatchedException - no anomaly
+                // category, no indication of which argument was bad. Checking here rather than inside the
+                // cache loader also keeps the offending caller's frame directly above the throw.
+                @Suppress("SENSELESS_COMPARISON")
+                if (type == null) throw Fault("null passed to mergeTypes - a source with nothing to say contributes Nothing", "xtdb/merge-types-null")
+
+                set.add(type)
+            }
+
+            return cache[set]
+        }
+
+        fun mergeTypes(vararg types: VectorType): VectorType = mergeTypes(types.toList())
     }
 }
 
