@@ -7,7 +7,9 @@
             [xtdb.information-schema :as i-s]
             [xtdb.pgwire-test :as pgw-test]
             [xtdb.test-util :as tu]
-            [xtdb.time :as time]))
+            [xtdb.time :as time])
+  (:import xtdb.api.Xtdb
+           xtdb.arrow.Relation))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
@@ -524,6 +526,46 @@
                                     "pgwire.total_connections"}
                                   (into #{} (map :name) res)))
           "at least has these ones, maybe others")))
+
+(defn- arrow-rows [sql]
+  ;; `xt/q` reduces the page `RelationReader` directly, so it never checks the declared types against
+  ;; the relation the info-schema cursor actually built. Only the Arrow-schema path does.
+  (with-open [conn (.connect ^Xtdb tu/*node*)
+              stmt (.createStatement conn)]
+    (.setSqlQuery stmt sql)
+    (with-open [rdr (.getReader (.executeQuery stmt))]
+      (let [root (.getVectorSchemaRoot rdr)
+            !res (atom [])]
+        ;; nothing wraps `root` while `loadNextBatch` runs - a load that throws part-way leaves the
+        ;; root's vectors referencing freed buffers, and reading them then segfaults the JVM
+        (while (.loadNextBatch rdr)
+          (with-open [rel (Relation/fromRoot tu/*allocator* root)]
+            (swap! !res into (.getAsMaps rel))))
+
+        @!res))))
+
+(t/deftest metrics-tags-stream-as-arrow
+  (doseq [table ["xt.metrics_counters" "xt.metrics_gauges" "xt.metrics_timers"]]
+    (let [rows (arrow-rows (str "SELECT * FROM " table))]
+      (t/is (seq rows) table)
+
+      (t/is (every? #(contains? % "node-id") (map (comp #(into {} %) :tags) rows))
+            (str table ".tags carries the registry's tag keys verbatim - `node-id`, not `:node-id`")))))
+
+(t/deftest trie-stats-temporal-metadata-streams-as-arrow
+  (xt/execute-tx tu/*node* [[:put-docs :foo {:xt/id 1}]])
+  (tu/flush-block! tu/*node*)
+  (c/compact-all! tu/*node* #xt/duration "PT1S")
+
+  (let [rows (arrow-rows "SELECT * FROM xt.trie_stats")]
+    (t/is (some :temporal-metadata rows)
+          "a compacted trie carries temporal metadata, so the declared struct's keys have to match it")
+
+    (t/is (every? #(= #{:min-valid-from :max-valid-from :min-valid-to :max-valid-to
+                        :min-system-from :max-system-from}
+                      (set (keys %)))
+                  (keep :temporal-metadata rows))
+          "every key the producer writes is declared, and every declared key is written")))
 
 (t/deftest test-multi-db
   (pgw-test/with-playground

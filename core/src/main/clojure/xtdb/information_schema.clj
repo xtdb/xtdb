@@ -143,15 +143,21 @@
                                indoption [:? :list :i32], indexprs [:? :utf8], indpred [:? :utf8]}}
         (update-vals map->vec-types)))
 
+  ;; A declared type must determine the Arrow layout on its own: ADBC/FlightSQL publish a schema
+  ;; before the first page, then load each page into a root built from it - so a struct declared
+  ;; without its keys is fatal as soon as a producer writes any (#5881).
   (def ^:private xt-derived-tables
     (-> '{xt/trie_stats {schema_name :utf8, table_name :utf8, trie_key :utf8, level :i32, recency [:? :date :day],
-                         trie_state :utf8, data_file_size :i64, row_count [:? :i64], temporal_metadata [:? :struct]}
+                         trie_state :utf8, data_file_size :i64, row_count [:? :i64],
+                         temporal_metadata [:? :struct {min_valid_from :instant, max_valid_from :instant,
+                                                        min_valid_to :instant, max_valid_to :instant,
+                                                        min_system_from :instant, max_system_from :instant}]}
 
           xt/live_tables {schema_name :utf8, table_name :utf8, row_count :i64}
 
           xt/live_columns {schema_name :utf8, table_name :utf8, col_name :utf8, col_type :utf8}
 
-          xt/metrics_timers {name :utf8, tags :struct
+          xt/metrics_timers {name :utf8, tags [:map [:struct {key :utf8, value :utf8}]]
                              count :i64,
                              mean_time [:? :duration :nano],
                              p75_time [:? :duration :nano]
@@ -160,8 +166,8 @@
                              p999_time [:? :duration :nano]
                              max_time [:? :duration :nano]}
 
-          xt/metrics_gauges {name :utf8, tags :struct, value :f64}
-          xt/metrics_counters {name :utf8, tags :struct, count :f64}}
+          xt/metrics_gauges {name :utf8, tags [:map [:struct {key :utf8, value :utf8}]], value :f64}
+          xt/metrics_counters {name :utf8, tags [:map [:struct {key :utf8, value :utf8}]], count :f64}}
         (update-vals map->vec-types)))
 
   (def derived-tables
