@@ -334,4 +334,60 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
             }
         }
     }
+
+    /** Logical decoding from a standby has worked since PG16 and a plain slot creates there fine —
+     * this is a limitation of always creating failover slots, not of standbys. */
+    @Test
+    fun `a source cannot read from a standby`() = runTest(timeout = 600.seconds) {
+        val slot = unique("xtdb_slot")
+        val pub = unique("xtdb_pub")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
+
+        HaPair(haImage).use { ha ->
+            ha.start()
+
+            pgExecute(
+                ha.primary,
+                "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO widgets (_id, name) VALUES (1, 'snapshot-row')",
+                "CREATE PUBLICATION $pub FOR TABLE widgets",
+            )
+
+            // waited for, or the source fails its publication check first and this passes off the
+            // back of the wrong error
+            eventually(60.seconds) {
+                assertEquals(
+                    listOf("1"),
+                    pgColumn(ha.standbyHost, ha.standbyPort, "SELECT count(*) FROM pg_publication WHERE pubname = '$pub'"),
+                    "publication replicated to the standby",
+                )
+            }
+
+            openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
+                attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
+
+                val cdc = (node as XtdbInternal).dbCatalog
+                val error = eventually(30.seconds) {
+                    assertNotNull(cdc["cdc"]?.ingestionError, "a source pointed at a standby must fail, not stream")
+                }
+
+                val rendered = error.stackTraceToString()
+                assertTrue(
+                    rendered.contains("cannot enable failover for a replication slot created on the standby"),
+                    "expected Postgres' standby refusal, got: $rendered",
+                )
+
+                assertEquals(
+                    emptyList<String?>(),
+                    pgColumn(ha.standbyHost, ha.standbyPort, "SELECT slot_name FROM pg_replication_slots"),
+                    "and the refused create leaves no slot behind",
+                )
+
+                assertPrimaryDbHealthy(node)
+            }
+        }
+    }
 }
