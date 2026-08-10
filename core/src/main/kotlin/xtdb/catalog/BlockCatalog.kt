@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import xtdb.api.log.LeaderTerm
+import xtdb.api.tx.BlockDetails
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.types.MessageId
@@ -25,41 +26,23 @@ import xtdb.util.asPath
 import java.nio.file.Path
 import kotlin.io.path.extension
 
-/**
- * What a persisted block carries, as a Kotlin value.
- *
- * The proto remains the storage format; this is the in-memory truth, so a field that a block may
- * not carry is ordinary nullability rather than a `hasX()` call at each read.
- */
-data class BlockDetails(
-    val blockIndex: BlockIndex,
-    val latestCompletedTx: TransactionKey?,
-    val latestProcessedMsgId: MessageId?,
-    val boundaryReplicaMsgId: MessageId?,
-    // Default NONE for blocks written before term-fencing. See #5817.
-    val termId: Long,
-    val externalSourceToken: ExternalSourceToken?,
-    val tableNames: List<TableRef>,
-    val secondaryDatabases: Map<String, DatabaseConfig>,
-) {
-    companion object {
-        fun fromProto(block: Block) = BlockDetails(
-            blockIndex = block.blockIndex,
-            latestCompletedTx = block.takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx
-                ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) },
-            latestProcessedMsgId = block.latestProcessedMsgId.takeIf { block.hasLatestProcessedMsgId() },
-            boundaryReplicaMsgId = block.boundaryReplicaMsgId.takeIf { block.hasBoundaryReplicaMsgId() },
-            termId = block.termId,
-            externalSourceToken = block.takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
-            tableNames = block.tableNamesList.map { fromSchemaAndTable(it) },
-            secondaryDatabases = block.secondaryDatabasesMap,
-        )
-    }
-}
+// The proto is the storage format, so this is the only place that reads its presence flags: everything
+// downstream sees ordinary Kotlin nullability.
+private fun Block.asBlockDetails() = BlockDetails(
+    blockIndex = blockIndex,
+    latestCompletedTx = takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx
+        ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) },
+    latestProcessedMsgId = latestProcessedMsgId.takeIf { hasLatestProcessedMsgId() },
+    boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
+    termId = termId,
+    externalSourceToken = takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
+    tableNames = tableNamesList.map { fromSchemaAndTable(it) },
+    secondaryDatabases = secondaryDatabasesMap,
+)
 
 class BlockCatalog(initialBlock: Block?) {
 
-    private val _latestBlock = MutableStateFlow(initialBlock?.let(BlockDetails::fromProto))
+    private val _latestBlock = MutableStateFlow(initialBlock?.asBlockDetails())
 
     /**
      * The latest block this catalog knows to be in object storage, advancing on [refresh] — which the
@@ -100,7 +83,7 @@ class BlockCatalog(initialBlock: Block?) {
 
     fun refresh(block: Block?) {
         if (block != null && block.blockIndex == currentBlockIndex) return
-        _latestBlock.value = block?.let(BlockDetails::fromProto)
+        _latestBlock.value = block?.asBlockDetails()
     }
 
     fun buildBlock(

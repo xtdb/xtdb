@@ -1,6 +1,7 @@
 package xtdb.api.tx
 
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.flow.StateFlow
 import xtdb.api.TransactionResult
 import java.time.Instant
 
@@ -15,6 +16,20 @@ import java.time.Instant
  * whether the caller waits for the result.
  */
 interface TxIndexer {
+
+    /**
+     * The latest block this database has durable in object storage, or null before its first block.
+     *
+     * This advances only once the block's file has landed in storage, so a source may treat the emitted
+     * [BlockDetails.externalSourceToken] as the furthest position it is safe to confirm upstream.
+     * Confirming past it tells the upstream to discard data that exists only in the replica log and the
+     * leader's live index — which the upstream cannot then re-send.
+     *
+     * Note this necessarily lags [submitTx]'s durability handle, which completes once the transaction is
+     * replicated and applied. A source that acknowledges per-transaction is therefore acknowledging a
+     * position storage does not yet hold.
+     */
+    val latestBlock: StateFlow<BlockDetails?>
 
     /** The outcome a [writer] returns: commit or abort, plus optional `userMetadata` recorded on the `xt/txs` table. */
     sealed interface TxResult {

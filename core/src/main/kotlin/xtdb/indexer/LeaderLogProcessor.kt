@@ -73,6 +73,8 @@ internal class LeaderLogProcessor(
     private val blockCatalog = partitionState.blockCatalog
     private val trieCatalog = partitionState.trieCatalog
 
+    override val latestBlock get() = blockCatalog.latestBlock
+
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
     // into the live index. Driven only from the persister coroutine, and freed in close() once that job is
