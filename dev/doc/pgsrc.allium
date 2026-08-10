@@ -1,0 +1,315 @@
+-- allium: 3
+-- pgsrc.allium
+--
+-- Scope: what the Postgres external source may confirm to its upstream.
+--   Confirming is an instruction to discard, not a progress report, so the only
+--   question is which positions are safe to give.
+-- Includes: the positions tracked and their ordering; the confirmation rule;
+--   the re-delivery skip; the effect of a failed import.
+-- Excludes: XTDB's processing model (see db.allium); row and type mapping;
+--   TOAST and replica-identity constraints; slot and publication creation.
+--
+-- Split with db.allium:
+--   db.allium owns the property in XTDB's vocabulary — an external source
+--   confirms only as far as the last durable block. This spec owns the
+--   mechanism in the upstream's vocabulary, and carries the exception:
+--   confirmation may exceed the durable position over WAL holding nothing of
+--   ours.
+
+---- Given
+
+given {
+    source: PgSource
+    xtdb: XtdbTarget
+}
+
+---- External Entities
+
+external entity XtdbTarget {
+    -- Null until the target first flushes — a cadence, not a startup step.
+    durable_lsn: Integer?
+}
+
+external entity PgSlot {
+    confirmed_lsn: Integer
+}
+
+---- Contracts
+
+contract UpstreamWalSemantics {
+    -- What Postgres owes us.
+
+    deliver: (lsn: Integer) -> Boolean
+    keepalive: () -> Integer
+
+    @invariant RetainsEverythingAboveConfirmed
+        -- WAL above confirmed_lsn remains readable, and WAL below it may be
+        -- discarded at any moment.
+        -- - Retention is per-server, not per-publication: our slot holds every
+        --   database's WAL above our confirmed position.
+
+    @invariant ResendsFromConfirmed
+        -- On reconnection, delivery resumes from confirmed_lsn.
+        -- - So a torn-down stream costs a re-read, never a gap.
+        -- - And confirmed_lsn can lag a position we already imported, which is
+        --   what the re-delivery skip exists for.
+
+    @invariant IgnoresRetrogradeConfirmations
+        -- A confirmation below confirmed_lsn has no effect.
+        -- - So the confirmed position is monotonic whether or not we track it.
+
+    @invariant ReceivedTrailsUndeliveredCommits
+        -- The received position never reaches the commit LSN of a transaction whose
+        -- commit the upstream has not delivered.
+        -- - So nothing at or below it awaits delivery, whether it last advanced on
+        --   a keepalive or part-way through a transaction still in flight.
+        -- - The received branch of confirmable_lsn rests on this and on nothing
+        --   else about the upstream's position.
+        -- - Postgres additionally pins restart_lsn at the start of an in-progress
+        --   transaction, so one is always re-sent in full.
+
+    @invariant CopiesOnlyAdvancingSlots
+        -- A slot is copied to a standby only while its position advances.
+        -- - So upstream failover depends on our flush cadence.
+}
+
+contract TargetDurability {
+    -- What the target owes us: the meaning of durable_lsn.
+
+    submit: (lsn: Integer) -> Boolean
+    durable_position: () -> Integer
+
+    @invariant DurableIsRecoverableUnaided
+        -- Everything at or below durable_lsn is recoverable from the target's
+        -- storage alone, without the upstream.
+
+    @invariant DurableCoversOnlySubmitted
+        -- durable_lsn never names a position we did not submit.
+        -- - Violation means the two describe different slots, or a token
+        --   survived a re-snapshot it should not have.
+
+    @invariant DurableIsMonotonic
+        -- durable_lsn never retreats.
+        -- - A retreat would make an already-confirmed position unrecoverable.
+
+    @invariant NoDurableExtentMeansResnapshot
+        -- With no durable extent, recovery is a re-snapshot of the upstream's
+        -- current tables, and reads no WAL.
+        -- - no_incremental_recovery confirms over WAL on the strength of this
+        --   alone. If the target would instead recover incrementally from a log
+        --   that outlived its storage, that branch loses transactions.
+}
+
+contract ConfirmablePosition {
+    -- What we owe the upstream.
+
+    confirm: (lsn: Integer) -> Boolean
+
+    @invariant ConfirmedIsRecoverable
+        -- Every confirmed position is one the target can recover to unaided.
+        -- - After losing everything but storage, resuming there loses nothing.
+
+    @invariant SoleConfirmer
+        -- At most one party confirms a given slot.
+        -- - Two would race to a position neither could justify, each knowing
+        --   only its own durable extent.
+}
+
+---- Entities and Variants
+
+entity PgSource {
+    slot: PgSlot
+
+    -- Recovered, not chosen. Deliberately unordered against durable_lsn: it can
+    -- lead, being recovered from state a storage-only recovery would lose.
+    start_lsn: Integer
+
+    -- The furthest position the target holds, whether or not its storage has it.
+    -- Opens at start_lsn rather than at nothing, because recovery has already put
+    -- the target past it — see SourceOpensStream.
+    held_lsn: Integer
+
+    -- Advances on every record the upstream sends, so it can sit above the last
+    -- commit and below the commit of a transaction still arriving.
+    received_lsn: Integer
+
+    -- Everything the target holds is on the far side of an existing recovery point.
+    all_held_durable: xtdb.durable_lsn != null and held_lsn <= xtdb.durable_lsn
+
+    -- No recovery point exists, so there is no incremental path to protect. Per
+    -- TargetDurability.NoDurableExtentMeansResnapshot the alternative reads no WAL.
+    no_incremental_recovery: xtdb.durable_lsn = null
+
+    -- Two distinct reasons, one bound: in neither case would a recovery we would
+    -- actually take read the WAL above our durable extent.
+    may_confirm_received: all_held_durable or no_incremental_recovery
+
+    confirmable_lsn: if may_confirm_received: received_lsn else: xtdb.durable_lsn
+
+    has_unconfirmed: confirmable_lsn > slot.confirmed_lsn
+
+    invariant ConfirmedWithinReceived {
+        slot.confirmed_lsn <= received_lsn
+    }
+
+    invariant ConfirmedWithinDurableWhenBehind {
+        -- #5867: transactions above the durable extent exist only inside the
+        -- target, and only the upstream could re-supply them.
+        not may_confirm_received implies slot.confirmed_lsn <= xtdb.durable_lsn
+    }
+
+    invariant HeldWithinReceived {
+        held_lsn <= received_lsn
+    }
+
+    invariant StartWithinHeld {
+        -- The target does not give back what recovery handed it, so the WAL
+        -- below start_lsn stays unconfirmable until a block covers it.
+        start_lsn <= held_lsn
+    }
+}
+
+---- Rules
+
+rule SourceOpensStream {
+    -- The resume position comes from the target, not from the slot. The two are
+    -- recovered from different places and the slot's is normally the lower, so
+    -- nothing here licenses an inference about slot.confirmed_lsn.
+    when: StreamOpened(upstream, source, resume_lsn)
+
+    ensures:
+        source.start_lsn = resume_lsn
+
+        -- Not nothing-held: the transactions between the durable extent and
+        -- resume_lsn exist only inside the target, so confirming over them would
+        -- discard the upstream's copy of the only WAL a storage-only recovery
+        -- would need.
+        source.held_lsn = resume_lsn
+
+        source.received_lsn = resume_lsn
+}
+
+rule SourceReceivesTransaction {
+    when: PgTransactionReceived(upstream, source, tx_lsn)
+
+    ensures:
+        source.received_lsn = tx_lsn
+
+        -- Skipped below start_lsn: per ResendsFromConfirmed the upstream may
+        -- re-send what we already hold, and re-importing would record a second
+        -- version of it.
+        if tx_lsn > source.start_lsn:
+            SubmitToTarget(source, tx_lsn)
+            source.held_lsn = tx_lsn
+}
+
+rule SourceReceivesKeepalive {
+    when: PgKeepaliveReceived(upstream, source, upstream_lsn)
+    requires: upstream_lsn > source.received_lsn
+
+    ensures:
+        source.received_lsn = upstream_lsn
+}
+
+rule SourceConfirmsPosition {
+    -- The position moves when the target flushes or the upstream reports
+    -- progress, neither of which is a delivery.
+    when: source: PgSource.has_unconfirmed
+    requires: source.confirmable_lsn > source.slot.confirmed_lsn
+
+    ensures:
+        source.slot.confirmed_lsn = source.confirmable_lsn
+
+    @guidance
+        -- A tracked lower bound on slot.confirmed_lsn is enough to skip a
+        -- confirmation that would change nothing, and per
+        -- IgnoresRetrogradeConfirmations a bound that is too low costs only the
+        -- redundant call. It MUST NOT be seeded from start_lsn, which is normally
+        -- the higher of the two.
+}
+
+rule ImportFailureTearsDownStream {
+    -- Not confirmed, and not skipped: leaving the slot put makes the upstream
+    -- re-send, per ResendsFromConfirmed.
+    when: TargetImportFailed(target, source, error)
+
+    ensures:
+        StreamTornDown(source)
+}
+
+---- Invariants
+
+invariant DurableExtentIsWithinHeld {
+    for s in PgSources:
+        s.xtdb.durable_lsn != null implies s.xtdb.durable_lsn <= s.held_lsn
+}
+
+---- Actor Declarations
+
+actor Upstream {
+    identified_by: PgSlot where true
+}
+
+actor Target {
+    identified_by: XtdbTarget where true
+}
+
+---- Surfaces
+
+surface UpstreamReplication {
+    facing upstream: Upstream
+
+    context source: PgSource
+
+    provides:
+        StreamOpened(upstream, source, resume_lsn)
+        PgTransactionReceived(upstream, source, tx_lsn)
+        PgKeepaliveReceived(upstream, source, upstream_lsn)
+
+    contracts:
+        demands UpstreamWalSemantics
+        fulfils ConfirmablePosition
+
+    @guarantee ConfirmationLagsFlushNotIndexing
+        -- The confirmed position tracks the target's flush cadence, not its
+        -- indexing rate.
+        -- - An operator sizes WAL retention against the former; the latter does
+        --   not bound how much the upstream must keep.
+
+    @guarantee QuietPublicationDoesNotPinUnrelatedWal
+        -- An idle source keeps releasing WAL, so it does not retain other
+        -- databases' records on a busy server.
+        -- - This is what the caught-up branch buys, and why the rule is not
+        --   simply "confirm the durable extent".
+
+    @guarantee SlotAdvancesBeforeFirstBlock
+        -- A source confirms a position before its target has cut any block.
+        -- - So CopiesOnlyAdvancingSlots is satisfied from the start, and upstream
+        --   failover does not wait on the target's flush cadence.
+
+    @guarantee NoGapOnFailure
+        -- No failure path advances the confirmed position past a transaction the
+        -- target did not import.
+}
+
+surface TargetIngestion {
+    facing target: Target
+
+    context source: PgSource
+
+    provides:
+        TargetImportFailed(target, source, error)
+
+    contracts:
+        demands TargetDurability
+
+    @guarantee SubmissionIsOrdered
+        -- Transactions are submitted in lsn order, so submitted_lsn is a
+        -- watermark rather than a maximum.
+}
+
+---- Open Questions
+
+open question "Is ReceivedTrailsUndeliveredCommits true on the server side — can a keepalive carry a position ahead of a commit still being decoded for our publication? The client half holds: pgjdbc sets the receive position from each record's own header, which for a transaction in flight is below its commit. If the server half fails, the received branch of confirmable_lsn is unsafe; if Postgres instead recycles unrelated WAL unasked, the branch is unnecessary and confirmable_lsn collapses to the durable extent."
+
+open question "Is TargetDurability.NoDurableExtentMeansResnapshot true — with no block, does the target re-snapshot rather than recover incrementally from a log that outlived its storage? If it recovers incrementally, no_incremental_recovery loses transactions and the bound must be nothing-confirmable until the first block."

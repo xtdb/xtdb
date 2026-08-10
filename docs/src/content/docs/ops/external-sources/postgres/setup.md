@@ -8,6 +8,7 @@ To do so we will:
 
 1. Create a role with the appropriate permissions on Postgres
 1. Create a publication on Postgres
+1. Size WAL retention on Postgres
 1. Configure Postgres credentials on the XTDB node and redeploy
 1. Run `ATTACH DATABASE` in XTDB
 
@@ -56,6 +57,40 @@ Adding a non-empty table to the publication after attaching leaves it in an inco
 Rows that existed before the `ALTER PUBLICATION` are never snapshotted, only later changes are captured.
 
 Tracked in [this ticket](https://github.com/xtdb/xtdb/issues/5497)
+:::
+
+## Size WAL retention
+
+XTDB creates a replication slot, and Postgres retains WAL for that slot until XTDB confirms it.
+XTDB confirms only as far as the last block it has written to object storage, so the WAL that Postgres must retain is sized by XTDB's *block cadence*, not by how quickly it indexes each transaction.
+
+Two [node settings](/ops/config) drive that cadence, whichever comes first:
+
+`rowsPerBlock` (default `102400`)
+
+: A busy database reaches this long before any timeout, so retention tracks throughput.
+
+`flushDuration` (default `PT4H`)
+
+: A quiet database cuts a block on this timer instead.
+  On the default it sets the worst case: up to four hours of WAL.
+
+Size `max_slot_wal_keep_size` to cover the peak WAL rate over that worst case, plus headroom:
+
+```sql
+-- e.g. 20 MB/s peak × 4h flushDuration ≈ 280 GB, plus headroom
+ALTER SYSTEM SET max_slot_wal_keep_size = '400GB';
+SELECT pg_reload_conf();
+```
+
+Lowering `flushDuration` lowers the retention floor proportionally, at the cost of more, smaller blocks.
+
+:::caution[Exceeding the limit invalidates the slot]
+`max_slot_wal_keep_size` does not apply back-pressure to XTDB — when a slot's retained WAL exceeds it, Postgres invalidates the slot and its `wal_status` becomes `lost`.
+The only recovery is to drop the XTDB database and re-attach it, which re-snapshots from scratch.
+
+Leaving it at the default of `-1` means unlimited retention, which trades that failure for the Postgres disk filling up instead.
+Either way, monitor the slot — see [troubleshooting](/ops/external-sources/postgres/troubleshooting#the-replication-slot-keeps-growing).
 :::
 
 ## Deploy the Postgres credentials

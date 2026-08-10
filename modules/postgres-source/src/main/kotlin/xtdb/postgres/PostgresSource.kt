@@ -298,27 +298,38 @@ class PostgresSource(
             // indexer; `submitTx`'s bounded hand-off buffer suspends us under backpressure, keeping this bounded.
             val awaitingDurability = ArrayDeque<Pair<PostgresDriver.Transaction, Deferred<TransactionResult>>>()
 
-            // Highest LSN we've durably imported, and the highest we've confirmed to Postgres. Postgres recycles
-            // WAL up to the confirmed-flush LSN, so `confirmedFlushLsn` MUST NOT exceed `durablyImportedLsn`.
-            var durablyImportedLsn = startLsn
-            var confirmedFlushLsn = startLsn
+            // Confirmation is specified in dev/doc/pgsrc.allium; the names below are its names.
 
-            suspend fun confirmFlushUpTo(lsn: Long) {
-                if (lsn > confirmedFlushLsn) {
+            // held_lsn — opens at startLsn per SourceOpensStream, not at nothing.
+            var heldLsn = startLsn
+
+            // A lower bound on slot.confirmed_lsn, per SourceConfirmsPosition's @guidance.
+            var confirmedLsn = 0L
+
+            fun durableLsn(): Long? =
+                txIndexer.latestBlock.value?.externalSourceToken
+                    ?.let { PostgresSourceToken.parseFrom(it).latestCommittedLsn }
+
+            fun confirmableLsn(): Long {
+                val durable = durableLsn()
+                return if (durable == null || durable >= heldLsn) stream.walEnd else durable
+            }
+
+            suspend fun confirm() {
+                val lsn = confirmableLsn()
+                if (lsn > confirmedLsn) {
                     stream.acknowledge(lsn)
-                    confirmedFlushLsn = lsn
+                    confirmedLsn = lsn
                 }
             }
 
-            // Promote every awaiting tx whose durability handle has completed, in order, advancing
-            // `durablyImportedLsn`. `await()` on a completed handle returns immediately, or rethrows an ingest
-            // failure — tearing down the stream so Postgres re-sends from the confirmed-flush LSN. Metrics are
-            // recorded here, at the point the tx is durable ("successful apply"), so a replayed tx isn't double-counted.
-            suspend fun promoteDurable() {
+            // Drains the completed prefix rather than awaiting the head, so a slow tx can't stall the poll
+            // loop. `await()` rethrows an ingest failure, which unwinds past `use` — ImportFailureTearsDownStream.
+            // The metrics land here so a re-delivered tx isn't counted twice.
+            suspend fun drainApplied() {
                 while (awaitingDurability.firstOrNull()?.second?.isCompleted == true) {
                     val (tx, handle) = awaitingDurability.removeFirst()
                     handle.await()
-                    durablyImportedLsn = tx.lsn
                     eventsCounter?.increment(tx.ops.size.toDouble())
                     commitsCounter?.increment()
                     lastEventEpochSeconds.set(tx.commitTime.epochSecond)
@@ -328,15 +339,13 @@ class PostgresSource(
                 }
             }
 
-            // Everything up to `startLsn` is already durable (the recovered resume token, or the snapshot's
-            // consistent point). Postgres re-sends from its confirmed-flush LSN — which lags `startLsn` whenever a
-            // crash landed between durable import and ack — so confirm `startLsn` up front to shrink that window,
-            // and skip any tx it still re-delivers at or below it (re-importing would write a redundant
-            // system-time version).
-            stream.acknowledge(startLsn)
-
             try {
                 while (currentCoroutineContext().isActive) {
+                    // SourceConfirmsPosition. Ahead of the first poll too: per ResendsFromConfirmed the
+                    // re-delivery window is measured from the confirmed position, so the sooner the better.
+                    confirm()
+
+                    // SourceReceivesTransaction.
                     stream.poll()?.let { tx ->
                         if (tx.lsn <= startLsn) {
                             LOG.debug { "[$dbName] Skipping re-delivered tx at LSN ${LogSequenceNumber.valueOf(tx.lsn)} (<= resume LSN)" }
@@ -353,16 +362,10 @@ class PostgresSource(
                             TxResult.Committed()
                         }
                         awaitingDurability.addLast(tx to handle)
+                        heldLsn = tx.lsn
                     }
 
-                    promoteDurable()
-                    // Confirm only as far as we've durably imported — except when nothing awaits durability, when
-                    // the whole received prefix (through walEnd) is durable and idle/unrelated WAL can be recycled
-                    // (see [ChangeStream.walEnd]).
-                    confirmFlushUpTo(
-                        if (awaitingDurability.isEmpty()) maxOf(durablyImportedLsn, stream.walEnd)
-                        else durablyImportedLsn
-                    )
+                    drainApplied()
                 }
             } finally {
                 connectionState.set(0)

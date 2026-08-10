@@ -641,7 +641,11 @@ variant NoOpMessage : ReplicaMessage {
 ---- Config
 
 config {
-    flush_timeout: Duration = 5.minutes
+    -- 4h, not the 5 minutes on LogProcessor's own constructor parameter: Database always
+    -- passes IndexerConfig.flushDuration, so that parameter default is unreachable outside
+    -- tests. It matters which one is written here, because this is the worst-case interval
+    -- over which an external source's upstream must retain its log.
+    flush_timeout: Duration = 4.hours
     rows_per_block: Integer = 102400
 }
 
@@ -1188,6 +1192,11 @@ rule LeaderUploadsBlockOnBoundary {
         block_uploader.uploadBlock(record.msg_id, log_processor.leader_term, record)
         log_processor.pending_block = null
 
+        -- uploadBlock has returned, so this block's files are in object storage. Announcing
+        -- that as its own event is what lets an external source confirm its upstream
+        -- position without reaching into the uploader.
+        BlockBecameDurable(database, record.external_source_token)
+
         watchers.notifyMsg(record.latest_processed_msg_id)
 
         BlockGcSignalled()
@@ -1508,6 +1517,32 @@ rule ClientOpensSnapshot {
         )
 }
 
+rule ExternalSourceLearnsDurableExtent {
+    -- Confirming a resume token tells the upstream it may discard everything behind it, so a
+    -- confirmed position is a claim that we can recover without it. Only a durable block
+    -- backs that claim: between apply and the next block the sole copies are the replica log
+    -- and the leader's live index, and the upstream cannot re-send what we told it to drop.
+    --
+    -- So this token, and not the applied position, is the source's licence to confirm. It is
+    -- also not watchers.external_source_token, which is the one that may run ahead —
+    -- replica-log replay advances it past block boundaries — which is why
+    -- ExternalSourceAssigned's after_token is not a position we are entitled to confirm.
+    --
+    -- What a source does with the licence is its own rule: it may confirm further where the
+    -- log above the extent demonstrably holds nothing we would need. See pgsrc.allium.
+    --
+    -- The gap this opens is the block cadence: a database whose blocks stop landing pins the
+    -- upstream's log while ingestion and queries stay healthy. That is a monitoring
+    -- obligation, not a correctness one (#5867).
+    when: BlockBecameDurable(database, external_source_token)
+    requires: log_processor.mode = Leader
+    requires: database.external_source != null
+    requires: external_source_token != null
+
+    ensures:
+        log_processor.external_source.durableExtentAdvanced(external_source_token)
+}
+
 ---- Rules: Error Handling
 
 rule ProcessingErrorHaltsNode {
@@ -1522,6 +1557,37 @@ rule ProcessingErrorHaltsNode {
     ensures:
         watchers.notifyError(error)
         NodeMarkedUnhealthy()
+}
+
+---- Contracts
+
+contract ExternalSourceConfirmation {
+    -- Obligations on an ExternalSource that confirms progress upstream. These are about the
+    -- ordering of confirmations against block durability over time, so they cannot be
+    -- expressed as single-snapshot invariants over entity state.
+
+    @invariant ConfirmedPositionIsRecoverable
+        -- Everything the upstream has been told it may discard is recoverable without it, so
+        -- recovery is the last block plus the upstream resumed from the token that block
+        -- carries — one artefact, not two.
+        -- - Ordinarily this bounds the confirmed position by the last durable block's token.
+        --   A source MAY confirm beyond it over a range that holds nothing of ours; that is
+        --   the source's rule to state and to justify, per pgsrc.allium.
+
+    @invariant ConfirmationNeverNamesAnUnappliedTransaction
+        -- No confirmed position covers a transaction that has not been applied.
+        -- - Below the durable extent this holds by construction rather than by a check: a
+        --   BlockBoundary is appended after the transactions it covers, so by the time a
+        --   block is durable every transaction its token names has already been applied.
+        --   The gate can therefore only hold confirmation back, never push it past apply.
+        -- - Above the extent it holds because the only positions a source may confirm there
+        --   are ones it has established name no transaction at all.
+
+    @invariant ConfirmationIsLeaderOnly
+        -- Only the leader for a database holds its ExternalSource, so only the leader
+        -- confirms. A follower has no upstream connection and no position of its own — it
+        -- reads watchers.latest_source_msg_id — so a leadership handover cannot produce two
+        -- nodes confirming different positions to the same upstream.
 }
 
 ---- Actor Declarations
