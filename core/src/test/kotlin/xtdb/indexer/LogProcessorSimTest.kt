@@ -178,7 +178,7 @@ class LogProcessorSimTest : SimulationTestBase() {
             LogProcessor(
                 allocator, nodeBase, crashLogger,
                 partitionStorage, partitionState, dbName, watchers,
-                BlockUploader(partitionStorage, partitionState, mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
+                BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
                 mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
                 externalSourceFactory = object : ExternalSource.Factory {
                     override fun open(

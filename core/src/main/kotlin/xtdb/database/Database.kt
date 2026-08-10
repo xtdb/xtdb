@@ -349,7 +349,7 @@ class Database(
             })
 
             val logProcessor = if (indexerConfig.enabled) {
-                val blockUploader = BlockUploader(storage, state, compactorForDb, dbCatalog, base.meterRegistry, scope)
+                val blockUploader = BlockUploader(storage, state, dbName, compactorForDb, dbCatalog, base.meterRegistry, scope)
 
                 LogProcessor(
                     allocator, base, crashLogger,

@@ -98,7 +98,7 @@ class LeaderLogProcessorTest {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, uploadDispatcher)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, uploadDispatcher)
         val driver = wrapDriver(
             RealLeaderDriver(
                 partitionStorage, partitionState, blockUploader
@@ -175,7 +175,7 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
             partitionStorage, partitionState, blockUploader
         )
@@ -248,7 +248,7 @@ class LeaderLogProcessorTest {
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
             partitionStorage, partitionState, blockUploader
         )
@@ -621,7 +621,7 @@ class LeaderLogProcessorTest {
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val blockUploader = BlockUploader(partitionStorage, partitionState, compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
             partitionStorage, partitionState, blockUploader
         )
