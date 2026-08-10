@@ -102,7 +102,7 @@ For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, n
 
 Before you run a test, or delegate a test run to a sub-agent, you MUST invoke the `xtdb-testing` skill.
 
-It is the single home for every XTDB-specific testing rule and mechanism — delegation to the `gradle-tests` agent, serialising Gradle runs across worktrees, test tasks and filters, iteration counts, the simulation tests that `./gradlew test` cannot reach, diagnosing a failure, and regenerating arrow-edn golden fixtures.
+It is the single home for every XTDB-specific testing rule and mechanism — delegation to the `gradle-tests` agent, the mid-run edit freeze, test tasks and filters, iteration counts, the simulation tests that `./gradlew test` cannot reach, diagnosing a failure, and regenerating arrow-edn golden fixtures.
 Do not reconstruct any of it from memory: the `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace) and carries none of this knowledge itself, so it is yours to pass on.
 
 ## GitHub project board, milestones, labels
