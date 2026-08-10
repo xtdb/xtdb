@@ -59,7 +59,7 @@ services:
     command: start-dev
 
   postgres:
-    image: postgres:16
+    image: postgres:17
     ports:
       - "5433:5432"
     environment:
