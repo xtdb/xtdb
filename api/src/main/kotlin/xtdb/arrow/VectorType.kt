@@ -31,6 +31,11 @@ fun schema(vararg fields: Field) = Schema(fields.asIterable())
 
 const val LIST_ELS_NAME = $$"$data$"
 
+// the Arrow spec fixes the names of a map's entries struct and its two children
+const val MAP_ENTRIES_NAME = "entries"
+const val MAP_KEYS_NAME = "key"
+const val MAP_VALUES_NAME = "value"
+
 sealed class VectorType {
     abstract val arrowType: ArrowType
     abstract val nullable: Boolean
@@ -83,7 +88,9 @@ sealed class VectorType {
     }
 
     data class Listy(override val arrowType: ArrowType, val elType: VectorType) : Mono() {
-        override val children get() = mapOf(LIST_ELS_NAME to elType)
+        override val children get() = mapOf(elsName to elType)
+
+        private val elsName get() = if (arrowType is ArrowType.Map) MAP_ENTRIES_NAME else LIST_ELS_NAME
 
         override fun toString() = "[<$arrowType> $elType]"
     }
@@ -284,6 +291,16 @@ sealed class VectorType {
 
         fun setTypeOf(el: VectorType) = Listy(SetType, el)
 
+        /**
+         * A map's Arrow layout is fixed by its key and value types, independently of which keys are
+         * present — so this is what to declare for a dictionary of arbitrary keys, where a [Struct]
+         * would have to enumerate them up front.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun mapTypeOf(keyType: VectorType, valType: VectorType, keysSorted: Boolean = false) =
+            Listy(ArrowType.Map(keysSorted), structOf(MAP_KEYS_NAME to keyType, MAP_VALUES_NAME to valType))
+
         @JvmStatic
         fun field(name: FieldName, type: VectorType) = type.toField(name)
 
@@ -302,7 +319,8 @@ sealed class VectorType {
                 // a non-nullable NULL field is the lattice bottom (Nothing), not the nullable Null marker -
                 // so a declared-but-empty column survives a block flush without polluting to Null/Maybe
                 NULL_TYPE -> if (isNullable) Null else Nothing
-                LIST_TYPE, SetType, TsTzRangeType, is ArrowType.FixedSizeList -> Listy(type, children.single().asType)
+                LIST_TYPE, SetType, TsTzRangeType, is ArrowType.FixedSizeList, is ArrowType.Map ->
+                    Listy(type, children.single().asType)
                 STRUCT_TYPE -> Struct(children.associate { it.name to it.asType })
                 is ArrowType.Union -> fromLegs(children.map { it.asType })
                 else -> Scalar(type)

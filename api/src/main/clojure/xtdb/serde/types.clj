@@ -351,6 +351,7 @@
                          :else
                          [(->field* (case ctx
                                       (:set :list) "$data$"
+                                      :map "entries"
                                       nil)
                                     child-spec)]))))))
 
@@ -373,6 +374,11 @@
                   [arrow-type-head & more-opts] more-opts]
               (case arrow-type-head
                 :union [#xt.arrow/type :union false (->child-fields more-opts arrow-type-head)]
+
+                ;; the element type is always last - see the `:map` note in `->type`
+                :map [(->arrow-type [:map (when (> (count more-opts) 1) (first more-opts))])
+                      nullable?
+                      (->child-fields [(last more-opts)] :map)]
 
                 (:set :list :struct :sparse-union :tstz-range)
                 [(->arrow-type arrow-type-head) nullable? (->child-fields more-opts arrow-type-head)]
@@ -442,6 +448,12 @@
                                                                                 [(str k) (->type v)])))))
 
                               :tstz-range VectorType/TSTZ_RANGE
+
+                              ;; `[:map el]`, or `[:map {:sorted? bool} el]` as `render-type` emits it -
+                              ;; the element type is always last
+                              :map (VectorType/listy (->arrow-type [:map (when (> (count more-opts) 1)
+                                                                           (first more-opts))])
+                                                     (->type (last more-opts)))
 
                               (:set :list :fixed-size-list)
                               (VectorType/listy (->arrow-type arrow-type-head) (->type (first more-opts)))
