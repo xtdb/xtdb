@@ -11,6 +11,7 @@ import org.apache.arrow.flight.FlightClient
 import org.apache.arrow.flight.FlightDescriptor
 import org.apache.arrow.flight.FlightInfo
 import org.apache.arrow.flight.FlightRuntimeException
+import org.apache.arrow.flight.FlightStatusCode
 import org.apache.arrow.flight.CallHeaders
 import org.apache.arrow.flight.CallInfo
 import org.apache.arrow.flight.CallStatus
@@ -768,6 +769,81 @@ class FlightSqlAdbcTest {
             runCatching { fsqlClient.rollback(tx2, *emptyCallOpts) }
             throw t
         }
+    }
+
+    // -- SQL transaction & session control --
+    //
+    // Driven through a session-bound client: BEGIN/SET are connection state, and only a session cookie
+    // ties a client to its own connection (a cookieless caller shares one per database).
+
+    private fun sessionClient(): FlightSqlClient =
+        cookieAwareClient().also { it.setSessionOptions(catalogOpt("xtdb"), *emptyCallOpts) }
+
+    @Test
+    fun `SQL BEGIN with SYSTEM_TIME backfills at the requested system-time`() {
+        sessionClient().use { client ->
+            client.executeUpdate("BEGIN READ WRITE WITH (SYSTEM_TIME TIMESTAMP '2021-08-03T00:00:00Z')", *emptyCallOpts)
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'backfill'}", *emptyCallOpts)
+            client.executeUpdate("COMMIT", *emptyCallOpts)
+        }
+
+        assertEquals(
+            listOf(
+                mapOf(
+                    "_id" to 1L, "v" to "backfill",
+                    "_system_from" to ZonedDateTime.parse("2021-08-03T00:00Z[UTC]")
+                )
+            ),
+            fsqlClient.execute("SELECT _id, v, _system_from FROM docs", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `SQL ROLLBACK discards the transaction's writes`() {
+        fsqlClient.executeUpdate("INSERT INTO docs RECORDS {_id: 1}", *emptyCallOpts)
+
+        sessionClient().use { client ->
+            client.executeUpdate("BEGIN READ WRITE", *emptyCallOpts)
+            client.executeUpdate("INSERT INTO docs RECORDS {_id: 2}", *emptyCallOpts)
+            client.executeUpdate("ROLLBACK", *emptyCallOpts)
+        }
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L)),
+            fsqlClient.execute("SELECT _id FROM docs ORDER BY _id", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
+    fun `SET TIME ZONE is reflected by SHOW timezone on the same session`() {
+        sessionClient().use { client ->
+            client.executeUpdate("SET TIME ZONE 'America/New_York'", *emptyCallOpts)
+
+            assertEquals(
+                listOf(mapOf("timezone" to "America/New_York")),
+                client.execute("SHOW timezone", *emptyCallOpts).readRows(client)
+            )
+        }
+
+        assertEquals(
+            listOf(mapOf("timezone" to "Z")),
+            fsqlClient.execute("SHOW timezone", *emptyCallOpts).readRows(),
+            "the session's zone doesn't leak to another connection"
+        )
+    }
+
+    // Transaction control has no result set, so the ExecuteQuery route can't carry it — but it must say
+    // so as INVALID_ARGUMENT rather than failing inside the planner. See #5856.
+    @Test
+    fun `SQL BEGIN through the query path is rejected as an argument error`() {
+        val ex = assertThrows(FlightRuntimeException::class.java) {
+            fsqlClient.execute("BEGIN READ WRITE", *emptyCallOpts)
+        }
+        assertEquals(FlightStatusCode.INVALID_ARGUMENT, ex.status().code())
+        assertTrue(
+            ex.message?.contains("not a preparable query") == true,
+            "expected message containing 'not a preparable query', got: ${ex.message}"
+        )
     }
 
     // -- executeSchema --

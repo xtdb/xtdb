@@ -1,7 +1,7 @@
 package xtdb.flight_sql
 
+import xtdb.InternalApi
 import xtdb.query.ParsedStatement
-import xtdb.query.parseStatement
 import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.ByteString
 import com.google.protobuf.Message
@@ -34,7 +34,6 @@ import xtdb.api.error.*
 import xtdb.api.error.Anomaly.Companion.toAnomaly
 import xtdb.arrow.Relation
 import xtdb.asBytes
-import xtdb.tx.TxOp
 import xtdb.util.closeAll
 import xtdb.util.closeOnCatch
 import xtdb.util.logger
@@ -72,7 +71,14 @@ private fun StreamListener<PutResult>.sendDoPutUpdateRes(allocator: BufferAlloca
     onCompleted()
 }
 
-private fun isDml(sql: String): Boolean = parseStatement(sql) is ParsedStatement.Dml
+/**
+ * Whether this statement is DML, as the connection classified it when the SQL was set.
+ *
+ * Asked of the statement rather than re-parsed here, so the producer's routing decisions and the
+ * connection's dispatch can't disagree about what a statement is.
+ */
+@OptIn(InternalApi::class)
+private val Xtdb.Statement.isDml get() = parsedStatement is ParsedStatement.Dml
 
 /**
  * Translate a throwable into a [FlightRuntimeException] carrying the XTDB anomaly's
@@ -250,8 +256,16 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         allocator.close()
     }
 
-    private fun execDml(op: TxOp, ctx: CallContext?, txHandle: TxHandle?) {
-        txOrSessionConnection(ctx, txHandle).executeTxOp(op)
+    /**
+     * Run a non-query statement on the connection's own statement, so it is classified and dispatched
+     * there (DML, transaction control, the session `SET` surface) rather than submitted as a raw SQL
+     * op — which only DML is.
+     */
+    private fun execUpdate(sql: String, ctx: CallContext?, txHandle: TxHandle?) {
+        txOrSessionConnection(ctx, txHandle).createStatement().use { stmt ->
+            stmt.setSqlQuery(sql)
+            stmt.executeUpdate()
+        }
     }
 
     override fun acceptPutStatement(
@@ -261,8 +275,8 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         ackStream: StreamListener<PutResult>
     ): Runnable = Runnable {
         ackStream.reportingErrors {
-            execDml(
-                TxOp.Sql(cmd.query),
+            execUpdate(
+                cmd.query,
                 ctx,
                 if (cmd.hasTransactionId()) cmd.transactionId else null
             )
@@ -362,15 +376,15 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
         val sql = cmd.queryBytes.toStringUtf8()
         val dbName = resolveDb(ctx)
 
-        // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
-        if (isDml(sql)) {
-            throw CallStatus.INVALID_ARGUMENT
-                .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
-                .toRuntimeException()
-        }
         val ticketHandle = newHandle()
         val reader = connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
+
+            // see #5082 — Python ADBC's cursor.execute() routes DML through the query path
+            if (stmt.isDml) throw CallStatus.INVALID_ARGUMENT
+                .withDescription("DML statements should be submitted via executeUpdate, not executeQuery (in Python ADBC, use cursor.executescript())")
+                .toRuntimeException()
+
             stmt.executeQuery().reader
         }
         reader.closeOnCatch { rdr ->
@@ -450,7 +464,7 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
                     ByteString.copyFrom(xtdbStmt.parameterSchema.serializeAsMessageInterruptibly())
                 )
 
-            if (!isDml(sql)) {
+            if (!xtdbStmt.isDml) {
                 resultBuilder.setDatasetSchema(
                     ByteString.copyFrom(xtdbStmt.executeSchema().serializeAsMessageInterruptibly())
                 )
@@ -474,13 +488,13 @@ class XtdbProducer(private val node: Xtdb) : NoOpFlightSqlProducer(), AutoClosea
     ): SchemaResult = flightCall {
         val sql = cmd.query
         val dbName = resolveDb(ctx)
-        if (isDml(sql)) {
-            throw CallStatus.INVALID_ARGUMENT
-                .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
-                .toRuntimeException()
-        }
         connectionFor(ctx, dbName).createStatement().use { stmt ->
             stmt.setSqlQuery(sql)
+
+            if (stmt.isDml) throw CallStatus.INVALID_ARGUMENT
+                .withDescription("executeSchema only supports queries (DML returns a row count, not a schema)")
+                .toRuntimeException()
+
             stmt.prepare()
             SchemaResult(stmt.executeSchema())
         }
