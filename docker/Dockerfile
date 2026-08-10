@@ -21,7 +21,8 @@ LABEL usage="For custom logging: \
 --volume .:/config --env JDK_JAVA_OPTIONS='-Dlog4j2.configurationFile=/config/log4j2.xml'"
 
 # For healthcheck
-RUN apk add --no-cache wget gcompat
+# wget: healthcheck, gcompat: glibc compat, libgcc: needed by netty-tcnative
+RUN apk add --no-cache wget gcompat libgcc
 
 COPY --from=jlink /opt/java /opt/java
 ENV PATH="/opt/java/bin:$PATH"
