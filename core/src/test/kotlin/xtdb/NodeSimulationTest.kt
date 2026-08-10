@@ -184,7 +184,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             blockCatalog.refresh(block)
         }
 
@@ -242,7 +242,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             blockCatalog.refresh(block)
         }
 
@@ -319,7 +319,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             blockCatalog.refresh(block)
         }
 
@@ -390,7 +390,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.blockCatalog.refresh(block)
             }
         }
@@ -462,7 +462,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.blockCatalog.refresh(block)
             }
         }
@@ -557,7 +557,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
             blockCatalog.refresh(block)
         }
 
@@ -608,7 +608,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.blockCatalog.refresh(block)
             }
         }
@@ -698,7 +698,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObject(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
                 db.blockCatalog.refresh(block)
             }
         }

@@ -11,7 +11,6 @@ import com.azure.storage.blob.models.BlobStorageException
 import com.azure.storage.blob.models.ListBlobsOptions
 import com.azure.storage.common.StorageSharedKeyCredential
 import kotlinx.coroutines.*
-import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -41,12 +40,13 @@ import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Path
 import java.util.*
 import java.util.UUID.randomUUID
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CompletableFuture.completedFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.deleteIfExists
-import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
+
+// elastic, unlike a `Dispatchers.Default` view: it draws on an unbounded pool rather than IO's own
+// permits, so a stalled store can't starve them. 64 matches IO's default width.
+private val defaultIoDispatcher = Dispatchers.IO.limitedParallelism(64, "azure-blob")
 
 /**
  * Used to set configuration options for Azure Blob Storage, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -78,7 +78,8 @@ class BlobStorage(
     private val prefix: Path,
     private val connectionString: String?,
     private val storageAccountKey: String?,
-    coroutineContext: CoroutineContext = Dispatchers.IO
+    // the SDK is synchronous - each operation holds a thread from here for its duration.
+    private val ioContext: CoroutineContext = defaultIoDispatcher
 ) : ObjectStore, SupportsMultipart<String> {
 
     private val client =
@@ -104,12 +105,10 @@ class BlobStorage(
             buildClient()
         }.getBlobContainerClient(factory.container).also { it.createIfNotExists() }
 
-    private val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-
-    override fun getObject(k: Path) = scope.future {
+    override suspend fun getObject(k: Path): ByteBuffer =
         try {
             unwrappingReactorException {
-                runInterruptible {
+                runInterruptible(ioContext) {
                     client.getBlobClient(prefix.resolve(k).toString())
                         .downloadContent()
                         .toByteBuffer()
@@ -126,26 +125,25 @@ class BlobStorage(
             LOGGER.log(WARNING, "Exception thrown when getting object $k", e)
             throw e
         }
-    }
 
-    override fun getObject(k: Path, outPath: Path) = scope.future {
+    override suspend fun getObject(k: Path, outPath: Path): Path {
         try {
             outPath.deleteIfExists()
             unwrappingReactorException {
-                runInterruptible {
+                runInterruptible(ioContext) {
                     client.getBlobClient(prefix.resolve(k).toString())
                         .downloadToFile(outPath.toString())
                 }
             }
 
-            outPath
+            return outPath
         } catch (e: UncheckedIOException) {
             if (e.cause !is FileAlreadyExistsException) {
                 LOGGER.log(WARNING, "Exception thrown when getting object $k", e)
                 throw e
             }
 
-            return@future outPath
+            return outPath
         } catch (e: BlobStorageException) {
             if (e.statusCode == 404) throwMissingKey(k)
 
@@ -159,20 +157,20 @@ class BlobStorage(
         }
     }
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<String>> = scope.future {
+    override suspend fun startMultipart(k: Path): IMultipartUpload<String> {
         val prefixedKey = prefix.resolve(k).toString()
         val blockBlobClient = client.getBlobClient(prefixedKey).blockBlobClient
 
-        object : IMultipartUpload<String> {
+        return object : IMultipartUpload<String> {
 
             private val b64 = Base64.getEncoder()
             private val newBlockId get() = randomUUID().asBytes.let { b64.encodeToString(it) }
 
-            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<String> = scope.future {
-                try {
+            override suspend fun uploadPart(idx: Int, buf: ByteBuffer): String {
+                return try {
                     unwrappingReactorException {
                         val blockId = newBlockId
-                        runInterruptible { blockBlobClient.stageBlock(blockId, BinaryData.fromByteBuffer(buf)) }
+                        runInterruptible(ioContext) { blockBlobClient.stageBlock(blockId, BinaryData.fromByteBuffer(buf)) }
                         blockId
                     }
                 } catch (e: InterruptedException) {
@@ -183,10 +181,10 @@ class BlobStorage(
                 }
             }
 
-            override fun complete(parts: List<String>) = scope.future<Unit> {
+            override suspend fun complete(parts: List<String>) {
                 try {
                     unwrappingReactorException {
-                        runInterruptible { blockBlobClient.commitBlockList(parts) }
+                        runInterruptible(ioContext) { blockBlobClient.commitBlockList(parts) }
                     }
                 } catch (e: BlobStorageException) {
                     if (e.statusCode == 409)
@@ -203,12 +201,12 @@ class BlobStorage(
                 }
             }
 
-            override fun abort() = completedFuture(Unit)
+            override suspend fun abort() {}
         }
     }
 
-    override fun putObject(k: Path, buf: ByteBuffer) = scope.future {
-        runInterruptible {
+    override suspend fun putObject(k: Path, buf: ByteBuffer) {
+        runInterruptible(ioContext) {
             val prefixedKey = prefix.resolve(k).toString()
             try {
                 unwrappingReactorException {
@@ -269,10 +267,10 @@ class BlobStorage(
             .asIterable()
     }
 
-    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
+    override suspend fun copyObject(src: Path, dest: Path) {
         try {
             unwrappingReactorException {
-                runInterruptible {
+                runInterruptible(ioContext) {
                     val srcBlobClient = client.getBlobClient(prefix.resolve(src).normalize().toString())
                     val destBlobClient = client.getBlobClient(prefix.resolve(dest).normalize().toString())
                     destBlobClient.copyFromUrl(srcBlobClient.blobUrl)
@@ -286,10 +284,10 @@ class BlobStorage(
         }
     }
 
-    override fun deleteIfExists(k: Path): CompletableFuture<Unit> = scope.future<Unit> {
+    override suspend fun deleteIfExists(k: Path) {
         val prefixedKey = prefix.resolve(k).toString()
 
-        runInterruptible {
+        runInterruptible(ioContext) {
             try {
                 unwrappingReactorException {
                     client.getBlobClient(prefixedKey).deleteIfExists()
@@ -301,10 +299,6 @@ class BlobStorage(
                 throw e
             }
         }
-    }
-
-    override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
     }
 
     companion object {
@@ -343,7 +337,7 @@ class BlobStorage(
         var userManagedIdentityClientId: String? = null,
         var storageAccountEndpoint: String? = null,
         var remote: RemoteAlias? = null,
-        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.IO
+        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = defaultIoDispatcher
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }

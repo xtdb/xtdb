@@ -9,7 +9,6 @@ import com.google.cloud.storage.Storage.BlobListOption
 import com.google.cloud.storage.StorageException
 import com.google.cloud.storage.StorageOptions
 import kotlinx.coroutines.*
-import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.UseSerializers
@@ -26,10 +25,12 @@ import xtdb.gcp.proto.gcsObjectStoreConfig
 import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
+
+// elastic, unlike a `Dispatchers.Default` view: it draws on an unbounded pool rather than IO's own
+// permits, so a stalled bucket can't starve them. 64 matches IO's default width.
+private val defaultIoDispatcher = Dispatchers.IO.limitedParallelism(64, "gcs")
 
 /**
  * Used to set configuration options for a Google Cloud Storage Object Store, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
@@ -58,15 +59,14 @@ class CloudStorage(
     private val projectId: String,
     private val bucket: String,
     private val prefix: Path,
-    coroutineContext: CoroutineContext = Dispatchers.IO
+    // the SDK is synchronous - each operation holds a thread from here for its duration.
+    private val ioContext: CoroutineContext = defaultIoDispatcher
 ) : ObjectStore {
 
     private val client = StorageOptions.newBuilder().run { setProjectId(projectId); build() }.service
 
-    private val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-
-    override fun getObject(k: Path) = scope.future {
-        runInterruptible {
+    override suspend fun getObject(k: Path): ByteBuffer =
+        runInterruptible(ioContext) {
             val prefixedKey = prefix.resolve(k).toString()
 
             try {
@@ -82,10 +82,9 @@ class CloudStorage(
                 )
             }
         }
-    }
 
-    override fun putObject(k: Path, buf: ByteBuffer) = scope.future {
-        runInterruptible {
+    override suspend fun putObject(k: Path, buf: ByteBuffer) {
+        runInterruptible(ioContext) {
             val resolvedPath = prefix.resolve(k).toString()
             try {
                 client.writer(BlobInfo.newBuilder(bucket, resolvedPath).build(), Storage.BlobWriteOption.doesNotExist())
@@ -104,8 +103,8 @@ class CloudStorage(
         }
     }
 
-    override fun deleteIfExists(k: Path) = scope.future<Unit> {
-        runInterruptible {
+    override suspend fun deleteIfExists(k: Path) {
+        runInterruptible(ioContext) {
             client.delete(bucket, prefix.resolve(k).toString())
         }
     }
@@ -127,8 +126,8 @@ class CloudStorage(
             .filter { it.key > afterKey }
     }
 
-    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
-        runInterruptible {
+    override suspend fun copyObject(src: Path, dest: Path) {
+        runInterruptible(ioContext) {
             val srcKey = prefix.resolve(src).normalize().toString()
             val destKey = prefix.resolve(dest).normalize().toString()
             
@@ -151,7 +150,6 @@ class CloudStorage(
     }
 
     override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         client.close()
     }
 
@@ -177,7 +175,7 @@ class CloudStorage(
         val projectId: String,
         val bucket: String,
         var prefix: Path? = null,
-        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.IO
+        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = defaultIoDispatcher
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }

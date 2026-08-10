@@ -100,7 +100,10 @@ class LeaderDriverSimTest : SimulationTestBase() {
         val tableCatalog = TableCatalog(bufferPool)
         val trieCatalog = createTrieCatalog()
         val liveIndex =
-            LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, IndexerConfig(rowsPerBlock = rowsPerBlock))
+            LiveIndex.open(
+                allocator, blockCatalog, tableCatalog, trieCatalog,
+                IndexerConfig(rowsPerBlock = rowsPerBlock), ioDispatcher = dispatcher
+            )
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)

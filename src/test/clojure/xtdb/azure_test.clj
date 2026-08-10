@@ -14,7 +14,7 @@
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (java.nio.file Files)
-           (xtdb.api.storage ObjectStore Storage)
+           (xtdb.api.storage ObjectStore ObjectStoreSync Storage)
            (xtdb.azure BlobStorage)
            (xtdb.multipart IMultipartUpload SupportsMultipart)
            (xtdb.storage RemoteBufferPool)))
@@ -65,11 +65,11 @@
 
         (let [out-path (.resolve local-disk-cache "alice.edn")]
           (t/testing "first get successful"
-            (t/is (= out-path @(.getObject os alice-key out-path)))
+            (t/is (= out-path (ObjectStoreSync/getObject os alice-key out-path)))
             (t/is (= alice (read-string (Files/readString out-path)))))
 
           (t/testing "second get successful & doesn't throw"
-            (t/is (= out-path @(.getObject os alice-key out-path)))
+            (t/is (= out-path (ObjectStoreSync/getObject os alice-key out-path)))
             (t/is (= alice (read-string (Files/readString out-path))))))))))
 
 (defn start-kafka-node [local-disk-cache prefix]
@@ -149,36 +149,36 @@
 (t/deftest ^:azure multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
     (t/testing "Call to start multipart should work/return an object"
-      (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-created"))]
+      (let [multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-multi-created"))]
         (t/is multipart-upload)
 
         (t/testing "Uploading a part should create an uncomitted blob"
           (= #{"test-multi-created"} (set (.listUncommittedBlobs os))))
 
         (t/testing "Call to abort a multipart upload should work - no file comitted"
-          @(.abort multipart-upload)
+          (ObjectStoreSync/abort multipart-upload)
           (t/is (= #{} (set (.listAllObjects os)))))))))
 
 (t/deftest ^:azure multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+    (let [multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-multi-put"))
           part-size 500
           file-part-1 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
           file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
 
           parts [;; Uploading parts to multipart upload
-                 @(.uploadPart multipart-upload 0 file-part-1)
-                 @(.uploadPart multipart-upload 1 file-part-2)]]
+                 (ObjectStoreSync/uploadPart multipart-upload 0 file-part-1)
+                 (ObjectStoreSync/uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
-        @(.complete multipart-upload parts)
+        (ObjectStoreSync/complete multipart-upload parts)
         (t/is (empty? (.listUncommittedBlobs os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
                  (vec (.listAllObjects ^ObjectStore os))))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer (ObjectStoreSync/getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
@@ -212,23 +212,23 @@
 
 (t/deftest ^:azure multipart-uploads-with-more-parts-work-correctly
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-larger-multi-put"))
+    (let [multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-larger-multi-put"))
           part-size 500
           parts (doall
                  (for [i (range 20)]
                    (let [buf ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
                      {:buf buf
-                      :!part (.uploadPart multipart-upload i buf)})))]
+                      :!part (ObjectStoreSync/uploadPart multipart-upload i buf)})))]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
-        @(.complete multipart-upload (mapv (comp deref :!part) parts))
+        (ObjectStoreSync/complete multipart-upload (mapv :!part parts))
         (t/is (empty? (.listUncommittedBlobs os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-larger-multi-put") (* 20 part-size))]
                  (vec (.listAllObjects ^ObjectStore os))))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer (ObjectStoreSync/getObject ^ObjectStore os (util/->path "test-larger-multi-put"))]
           (t/testing "capacity should be equal to total of 20 parts"
             (t/is (= (* 20 part-size) (.capacity uploaded-buffer)))))))))
 
@@ -237,13 +237,13 @@
     (let [part-size 500]
 
       (t/testing "Initial multipart works correctly"
-        (let [initial-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))
+        (let [initial-multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-multipart"))
               parts (doall
                      (for [_ (range 2)]
                        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-                         (.uploadPart initial-multipart-upload 0 file-part))))]
+                         (ObjectStoreSync/uploadPart initial-multipart-upload 0 file-part))))]
 
-          @(.complete initial-multipart-upload (mapv deref parts))
+          (ObjectStoreSync/complete initial-multipart-upload parts)
 
           (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
                    (vec (.listAllObjects ^ObjectStore os))))
@@ -251,13 +251,13 @@
           (t/is (empty? (.listUncommittedBlobs os)))))
 
       (t/testing "Attempt to multipart upload to an existing object shouldn't throw, should abort and remove uncomitted blobs"
-        (let [second-multipart-upload ^IMultipartUpload @(.startMultipart os (util/->path "test-multipart"))
+        (let [second-multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-multipart"))
               parts (doall
                      (for [i (range 3)]
                        (let [file-part ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
-                         (.uploadPart second-multipart-upload i file-part))))]
+                         (ObjectStoreSync/uploadPart second-multipart-upload i file-part))))]
 
-          @(.complete second-multipart-upload (mapv deref parts))
+          (ObjectStoreSync/complete second-multipart-upload parts)
 
           (t/is (empty? (.listUncommittedBlobs os)))))
 
@@ -265,7 +265,7 @@
         (t/is (= [(os/->StoredObject (util/->path "test-multipart") (* 2 part-size))]
                  (vec (.listAllObjects ^ObjectStore os))))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multipart"))]
+        (let [^ByteBuffer uploaded-buffer (ObjectStoreSync/getObject ^ObjectStore os (util/->path "test-multipart"))]
           (t/testing "capacity should be equal to total of 2 parts (ie, initial upload)"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 
@@ -276,7 +276,7 @@
                          (fn []
                            (try
                              ;; Start the multipart upload
-                             (SupportsMultipart/uploadMultipartBuffers os (util/->path "multipart-interrupted") parts)
+                             (ObjectStoreSync/uploadMultipartBuffers os (util/->path "multipart-interrupted") parts)
                              (catch InterruptedException _
                                (log/warn "Upload was interrupted")))))]
       ;; Start the upload thread

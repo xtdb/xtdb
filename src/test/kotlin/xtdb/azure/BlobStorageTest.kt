@@ -3,7 +3,6 @@ package xtdb.azure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -69,16 +68,16 @@ class BlobStorageTest : ObjectStoreTest() {
     fun `multipart put test`() = runTest(timeout = 10.seconds) {
         val objectStore = this@BlobStorageTest.objectStore as BlobStorage
 
-        val multipart = objectStore.startMultipart("test-multipart".asPath).await()
+        val multipart = objectStore.startMultipart("test-multipart".asPath)
         val part1 = randomByteBuffer(500)
         val part2 = randomByteBuffer(500)
 
         val parts = awaitAll(
-            async { multipart.uploadPart(0, part1).await() },
-            async { multipart.uploadPart(1, part2).await() }
+            async { multipart.uploadPart(0, part1) },
+            async { multipart.uploadPart(1, part2) }
         )
 
-        multipart.complete(parts).await()
+        multipart.complete(parts)
         assertTrue { objectStore.listUncommittedBlobs().toList().isEmpty() }
 
         assertEquals(
@@ -86,7 +85,7 @@ class BlobStorageTest : ObjectStoreTest() {
             objectStore.listAllObjects().map { it.key.toString() }.toSet()
         )
 
-        val downloaded = objectStore.getObject("test-multipart".asPath).await()
+        val downloaded = objectStore.getObject("test-multipart".asPath)
         assertEquals(part1.capacity() + part2.capacity(), downloaded.capacity())
     }
 
@@ -96,7 +95,7 @@ class BlobStorageTest : ObjectStoreTest() {
     fun `test 20 parts`() = runTest(timeout = 10.seconds) {
         val objectStore = this@BlobStorageTest.objectStore as BlobStorage
 
-        val upload = objectStore.startMultipart("test-20-parts".asPath).await()
+        val upload = objectStore.startMultipart("test-20-parts".asPath)
 
         val parts = (0 until 20).map { randomByteBuffer(1024) }
         val totalSize = parts.sumOf { it.capacity().toLong() }
@@ -109,11 +108,11 @@ class BlobStorageTest : ObjectStoreTest() {
         val uploadedParts = parts.mapIndexed { idx, it ->
             async(dispatcher) {
                 Thread.sleep(Random.nextLong(100L..200L))
-                upload.uploadPart(idx, it).await()
+                upload.uploadPart(idx, it)
             }
         }
 
-        upload.complete(uploadedParts.awaitAll()).await()
+        upload.complete(uploadedParts.awaitAll())
 
         assertTrue(objectStore.listUncommittedBlobs().toList().isEmpty(), "no uncommitted blobs")
 
@@ -122,14 +121,14 @@ class BlobStorageTest : ObjectStoreTest() {
             objectStore.listAllObjects().toList()
         )
 
-        val downloaded = objectStore.getObject("test-20-parts".asPath).await()
+        val downloaded = objectStore.getObject("test-20-parts".asPath)
         assertEquals(totalSize, downloaded.capacity().toLong())
         assertEquals(allParts, downloaded)
     }
 
-    private fun roundTrip(objectStore: BlobStorage, key: String, payload: ByteBuffer) {
-        objectStore.putObject(key.asPath, payload.duplicate()).get()
-        val downloaded = objectStore.getObject(key.asPath).get()
+    private suspend fun roundTrip(objectStore: BlobStorage, key: String, payload: ByteBuffer) {
+        objectStore.putObject(key.asPath, payload.duplicate())
+        val downloaded = objectStore.getObject(key.asPath)
         assertEquals(payload, downloaded)
         assertTrue(
             objectStore.listAllObjects().map { it.key.toString() }.toSet().contains(key),
@@ -138,7 +137,7 @@ class BlobStorageTest : ObjectStoreTest() {
     }
 
     @Test
-    fun `remote alias — connectionString`() {
+    fun `remote alias — connectionString`() = runTest {
         val remotes = mapOf<RemoteAlias, Remote>(
             "az" to AzureRemote(connectionString = azuriteConnectionString(), storageAccountKey = null),
         )
@@ -154,7 +153,7 @@ class BlobStorageTest : ObjectStoreTest() {
     }
 
     @Test
-    fun `remote alias — storageAccountKey`() {
+    fun `remote alias — storageAccountKey`() = runTest {
         val remotes = mapOf<RemoteAlias, Remote>(
             "az" to AzureRemote(connectionString = null, storageAccountKey = AZURITE_KEY),
         )

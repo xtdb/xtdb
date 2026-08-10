@@ -56,7 +56,7 @@ internal class MemoryStorage(
         }
     }
 
-    override fun putObject(key: Path, buffer: ByteBuffer) {
+    override suspend fun putObject(key: Path, buffer: ByteBuffer) {
         synchronized(memoryStore) {
             memoryStore.put(key, buffer.openArrowBufView(allocator))?.close()
         }
@@ -74,7 +74,7 @@ internal class MemoryStorage(
                 .map { StoredObject(it.key, it.value.capacity()) }
         }
 
-    override fun copyObject(src: Path, dest: Path) =
+    override suspend fun copyObject(src: Path, dest: Path) =
         throw Unsupported("copyObject unsupported on MemoryStorage")
 
     private fun deleteAllObjects() {
@@ -84,7 +84,7 @@ internal class MemoryStorage(
         }
     }
 
-    override fun deleteIfExists(key: Path): Unit =
+    override suspend fun deleteIfExists(key: Path): Unit =
         synchronized(memoryStore) {
             memoryStore.remove(key)?.also { it.close() }
         }
@@ -98,7 +98,7 @@ internal class MemoryStorage(
                         unloader.writePage()
                     }
 
-                    override fun end(): FileSize {
+                    override suspend fun end(): FileSize {
                         unloader.end()
                         writeChannel.close()
                         val bytes = baos.toByteArray()

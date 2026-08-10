@@ -26,15 +26,15 @@ class PrefixedObjectStore(
 
     private fun StoredObject.relativized() = StoredObject(prefix.relativize(key), size)
 
-    override fun getObject(k: Path): CompletableFuture<ByteBuffer> = delegate.getObject(prefix.resolve(k))
+    override suspend fun getObject(k: Path): ByteBuffer = delegate.getObject(prefix.resolve(k))
 
-    override fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
+    override suspend fun getObject(k: Path, outPath: Path): Path =
         delegate.getObject(prefix.resolve(k), outPath)
 
-    override fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit> =
+    override suspend fun putObject(k: Path, buf: ByteBuffer) =
         delegate.putObject(prefix.resolve(k), buf)
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> =
+    override suspend fun startMultipart(k: Path): IMultipartUpload<ByteBuffer> =
         delegate.startMultipart(prefix.resolve(k))
 
     override fun listAllObjects(): Iterable<StoredObject> =
@@ -46,10 +46,10 @@ class PrefixedObjectStore(
     override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
         delegate.listAfter(prefix.resolve(dir), prefix.resolve(afterKey)).map { it.relativized() }
 
-    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> =
+    override suspend fun copyObject(src: Path, dest: Path) =
         delegate.copyObject(prefix.resolve(src), prefix.resolve(dest))
 
-    override fun deleteIfExists(k: Path): CompletableFuture<Unit> = delegate.deleteIfExists(prefix.resolve(k))
+    override suspend fun deleteIfExists(k: Path) = delegate.deleteIfExists(prefix.resolve(k))
 
     override fun close() {}
 }

@@ -24,7 +24,7 @@ class DataFileWriter(
         dataRel.clear()
     }
 
-    fun end(): FileSize = dataFileWriter.end()
+    suspend fun end(): FileSize = dataFileWriter.end()
 
     override fun close() {
         dataFileWriter.close()

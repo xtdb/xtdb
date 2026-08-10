@@ -1,5 +1,7 @@
 package xtdb.api.storage
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.multipart.IMultipartUpload
 import java.nio.ByteBuffer
@@ -29,6 +31,26 @@ class InMemoryBucket(
     val buffers: NavigableMap<Path, ByteBuffer> = ConcurrentSkipListMap()
 ) {
 
+    /**
+     * A store that has accepted a write it will never answer (#5850).
+     *
+     * [cancelled] completes when the stalled call is cancelled, which is what distinguishes a bound
+     * that tore the request down from one that merely stopped waiting on it.
+     */
+    class Stall {
+        val cancelled = CompletableDeferred<Unit>()
+
+        suspend fun hang(): Nothing =
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled.complete(Unit)
+            }
+    }
+
+    @Volatile
+    var stall: Stall? = null
+
     private fun copyByteBuffer(buffer: ByteBuffer) =
         ByteBuffer.allocate(buffer.remaining()).put(buffer.duplicate()).flip()
 
@@ -39,21 +61,21 @@ class InMemoryBucket(
         return buffer.flip()
     }
 
-    fun getObject(k: Path): CompletableFuture<ByteBuffer> =
-        completedFuture(buffers[k])
+    suspend fun getObject(k: Path): ByteBuffer =
+        buffers[k] ?: throw IllegalStateException("Object $k doesn't exist")
 
-    fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
-        buffers[k]?.let { buffer ->
-            val bytes = ByteArray(buffer.remaining())
-            buffer.duplicate().get(bytes)
-            outPath.toFile().writeBytes(bytes)
-            completedFuture(outPath)
-        } ?: failedFuture(IllegalStateException("Object $k doesn't exist"))
+    suspend fun getObject(k: Path, outPath: Path): Path {
+        val buffer = buffers[k] ?: throw IllegalStateException("Object $k doesn't exist")
+        val bytes = ByteArray(buffer.remaining())
+        buffer.duplicate().get(bytes)
+        outPath.toFile().writeBytes(bytes)
+        return outPath
+    }
 
-    fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit> {
+    suspend fun putObject(k: Path, buf: ByteBuffer) {
+        stall?.hang()
         buffers[k] = buf
         calls.add(StoreOperation.PUT)
-        return completedFuture(Unit)
     }
 
     fun listAllObjects() = buffers.map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
@@ -68,36 +90,30 @@ class InMemoryBucket(
             .takeWhile { it.key.startsWith(dir) }
             .map { (key, buffer) -> StoredObject(key, buffer.capacity().toLong()) }
 
-    fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> {
-        val srcBuffer = buffers[src] ?: return failedFuture(IllegalStateException("Object $src doesn't exist"))
+    suspend fun copyObject(src: Path, dest: Path) {
+        val srcBuffer = buffers[src] ?: throw IllegalStateException("Object $src doesn't exist")
         buffers[dest] = copyByteBuffer(srcBuffer)
-        return completedFuture(Unit)
     }
 
-    fun deleteIfExists(k: Path): CompletableFuture<Unit> {
+    suspend fun deleteIfExists(k: Path) {
         buffers.remove(k)
-        return completedFuture(Unit)
     }
 
-    fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<ByteBuffer>> {
-        val upload = object : IMultipartUpload<ByteBuffer> {
-            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<ByteBuffer> {
+    suspend fun startMultipart(k: Path): IMultipartUpload<ByteBuffer> =
+        object : IMultipartUpload<ByteBuffer> {
+            override suspend fun uploadPart(idx: Int, buf: ByteBuffer): ByteBuffer {
+                stall?.hang()
                 calls.add(StoreOperation.UPLOAD)
-                return completedFuture(copyByteBuffer(buf))
+                return copyByteBuffer(buf)
             }
 
-            override fun complete(parts: List<ByteBuffer>): CompletableFuture<Unit> {
+            override suspend fun complete(parts: List<ByteBuffer>) {
                 calls.add(StoreOperation.COMPLETE)
                 buffers[k] = concatByteBuffers(parts)
-                return completedFuture(Unit)
             }
 
-            override fun abort(): CompletableFuture<Unit> {
+            override suspend fun abort() {
                 calls.add(StoreOperation.ABORT)
-                return completedFuture(Unit)
             }
         }
-
-        return completedFuture(upload)
-    }
 }

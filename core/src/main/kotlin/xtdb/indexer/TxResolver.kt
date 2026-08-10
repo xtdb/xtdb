@@ -229,7 +229,7 @@ internal class TxResolver(
     private fun indexSkippedTx(msgId: MessageId, msgTimestamp: Instant, payload: ByteArray): ResolvedTx {
         LOG.warn("[$dbName] Skipping transaction id $msgId - within XTDB_SKIP_TXS")
 
-        bufferPool.putObject("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
+        bufferPool.putObjectSync("skipped-txs/${msgId.asLexDec}".asPath, ByteBuffer.wrap(payload))
 
         return indexSourceLogTx(msgId, msgTimestamp, null, null, null, null, null)
     }

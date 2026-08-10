@@ -16,7 +16,7 @@
            (java.nio.file Path)
            (org.apache.arrow.vector.types.pojo Schema)
            (xtdb.api.storage ObjectStore ObjectStore$Factory Storage Storage$Factory)
-           (xtdb.api.storage PrefixedObjectStore InMemoryBucket StoreOperation)
+           (xtdb.api.storage PrefixedObjectStore InMemoryBucket StoreOperation UnusedObjectStore$Factory)
            xtdb.arrow.Relation
            (xtdb.cache DiskCache MemoryCache)
            (xtdb.storage BufferPool BufferPoolKt RemoteBufferPool)))
@@ -97,13 +97,13 @@
       (with-open [bp (-> (Storage/remote (prefixing-obj-store-factory bucket))
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
         (t/testing "if <= min part size, putObject is used"
-          (.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
+          (.putObjectSync bp (util/->path "min-part-put") (utf8-buf "12"))
           (t/is (= [StoreOperation/PUT] (.getCalls bucket)))
           (test-get-object bp (util/->path "min-part-put") (utf8-buf "12")))))))
 
 (defn open-mem-cache-entry [^BufferPool bp k len]
   (let [^ByteBuffer buf (utf8-buf (apply str (repeat len "a")))]
-    (.putObject bp k buf)
+    (.putObjectSync bp k buf)
     (.getPinnedObject bp k)))
 
 (defn file-info [^Path dir]
@@ -111,7 +111,7 @@
     {:file-count (count files) :file-names (set (map #(.getName ^File %) files))}))
 
 (defn insert-utf8-to-local-cache [^BufferPool bp k len]
-  (.putObject bp k (utf8-buf (apply str (repeat len "a"))))
+  (.putObjectSync bp k (utf8-buf (apply str (repeat len "a"))))
   ;; Add to local disk cache
   (.getByteArray bp k))
 
@@ -137,17 +137,6 @@
         (Thread/sleep 100)
         (t/is (= 2 (:file-count (file-info *disk-cache-dir*))))))))
 
-(defn no-op-object-store-factory []
-  (reify ObjectStore$Factory
-    (openObjectStore [_ _storage-root _remotes]
-      (reify ObjectStore
-        (getObject [_ _k] (throw (UnsupportedOperationException. "foo")))
-        (getObject [_ _ _k] (throw (UnsupportedOperationException. "foo")))
-        (putObject [_ _k _v] (throw (UnsupportedOperationException. "foo")))
-        (listAllObjects [_] (throw (UnsupportedOperationException. "foo")))
-        (listAllObjects [_ _] (throw (UnsupportedOperationException. "foo")))
-        (deleteIfExists [_ _k] (throw (UnsupportedOperationException. "foo")))))))
-
 (t/deftest local-disk-cache-with-previous-values
   (let [obj-store-factory (prefixing-obj-store-factory (InMemoryBucket.))
         path-a (util/->path "a")
@@ -162,7 +151,7 @@
 
       ;; Starting a new buffer pool - should load buffers correctly from disk (can be sure its grabbed from disk since using a memory cache and memory object store)
       ;; passing a no-op object store to ensure objects are not loaded from object store and instead only the cache is under test.
-      (with-open [bp (-> (Storage/remote (no-op-object-store-factory))
+      (with-open [bp (-> (Storage/remote UnusedObjectStore$Factory/INSTANCE)
                          (.open tu/*allocator* *mem-cache* *disk-cache* "xtdb" 0 1 nil Storage/VERSION {}))]
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-a)))))
         (t/is (= 0 (util/compare-nio-buffers-unsigned (utf8-buf "aaaa") (ByteBuffer/wrap (.getByteArray bp path-b)))))))))
@@ -186,7 +175,7 @@
 
 (defn put-edn [^BufferPool buffer-pool ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
-    (.putObject buffer-pool k buf)))
+    (.putObjectSync buffer-pool k buf)))
 
 (defn test-list-objects [^BufferPool buffer-pool]
   (put-edn buffer-pool (util/->path "bar/alice") :alice)
@@ -223,10 +212,10 @@
 
 (defn test-latest-available-block [^BufferPool buffer-pool]
   ;; block keys: b00.binpb = block 0, b01.binpb = block 1, etc.
-  (.putObject buffer-pool (util/->path "blocks/b00.binpb") (ByteBuffer/wrap (byte-array 10)))
-  (.putObject buffer-pool (util/->path "blocks/b01.binpb") (ByteBuffer/wrap (byte-array 10)))
-  (.putObject buffer-pool (util/->path "blocks/b02.binpb") (ByteBuffer/wrap (byte-array 10)))
-  (.putObject buffer-pool (util/->path "blocks/b03.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObjectSync buffer-pool (util/->path "blocks/b00.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObjectSync buffer-pool (util/->path "blocks/b01.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObjectSync buffer-pool (util/->path "blocks/b02.binpb") (ByteBuffer/wrap (byte-array 10)))
+  (.putObjectSync buffer-pool (util/->path "blocks/b03.binpb") (ByteBuffer/wrap (byte-array 10)))
   (Thread/sleep 1000)
 
   (t/testing "full listing finds latest block"
@@ -304,7 +293,7 @@
               ^ByteBuffer v1 (utf8-buf "aaa")
               ^ByteBuffer v2 (utf8-buf "bbb")]
           (t/testing "read side"
-            (.putObject bp k1 v1)
+            (.putObjectSync bp k1 v1)
 
             (t/is (= 0.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.read")))))
 
@@ -320,6 +309,6 @@
 
             (t/is (= 3.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))
 
-            (.putObject bp k2 v2)
+            (.putObjectSync bp k2 v2)
 
             (t/is (= 6.0 (.count ^Counter (.counter (.find registry "buffer-pool.network.write")))))))))))

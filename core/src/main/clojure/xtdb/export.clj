@@ -99,7 +99,7 @@
                      (try
                        (let [dest-path (.resolve export-root path)]
                          (log/debugf "Copying %s -> %s" path dest-path)
-                         (.copyObject buffer-pool path dest-path))
+                         (.copyObjectSync buffer-pool path dest-path))
                        (catch Exception e
                          (log/errorf e "Failed to copy %s" path)
                          (throw e))))

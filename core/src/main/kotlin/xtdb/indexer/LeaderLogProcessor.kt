@@ -532,6 +532,7 @@ internal class LeaderLogProcessor(
                 } catch (t: Throwable) {
                     // A genuine term fault (e.g. an append-pump commit fault) surfaces to queries as a
                     // failed term. Idempotent — the apply arm may already have notified for its own faults.
+                    LOG.error(t) { "[$dbName] leader term failed" }
                     cause = t
                     watchers.notifyError(t)
                 } finally {

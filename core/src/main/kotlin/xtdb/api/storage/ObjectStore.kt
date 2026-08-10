@@ -49,21 +49,21 @@ interface ObjectStore : AutoCloseable {
     data class StoredObject(val key: Path, val size: Long)
 
     /**
-     * Asynchronously returns the given object in a ByteBuffer.
+     * Returns the given object in a ByteBuffer.
      *
-     * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
+     * If the object doesn't exist, throws an IllegalStateException.
      */
-    fun getObject(k: Path): CompletableFuture<ByteBuffer>
+    suspend fun getObject(k: Path): ByteBuffer
 
     /**
-     * Asynchronously writes the object to the given path.
+     * Writes the object to the given path.
      *
      * Replaces any existing file at the given path.
      *
-     * If the object doesn't exist, the CompletableFuture completes with an IllegalStateException.
+     * If the object doesn't exist, throws an IllegalStateException.
      */
-    fun getObject(k: Path, outPath: Path): CompletableFuture<Path> =
-        getObject(k).thenApply { buf ->
+    suspend fun getObject(k: Path, outPath: Path): Path =
+        getObject(k).let { buf ->
             FileChannel.open(outPath, CREATE, WRITE, TRUNCATE_EXISTING).use { it.write(buf) }
             outPath
         }
@@ -73,7 +73,7 @@ interface ObjectStore : AutoCloseable {
      *
      * The provided ByteBuffer must not be modified during the execution of this method.
      */
-    fun putObject(k: Path, buf: ByteBuffer): CompletableFuture<Unit>
+    suspend fun putObject(k: Path, buf: ByteBuffer)
 
     /**
      * Recursively lists all objects in the object store.
@@ -97,12 +97,12 @@ interface ObjectStore : AutoCloseable {
     fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
         listAllObjects(dir).filter { it.key > afterKey }
 
-    fun copyObject(src: Path, dest: Path): CompletableFuture<Unit>
+    suspend fun copyObject(src: Path, dest: Path)
 
     /**
      * Deletes the object with the given path from the object store.
      */
-    fun deleteIfExists(k: Path): CompletableFuture<Unit>
+    suspend fun deleteIfExists(k: Path)
 
     override fun close() {
     }

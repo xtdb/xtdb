@@ -25,8 +25,8 @@ class SimulationTestUtils {
         fun addTriesToBufferPool(bufferPool: BufferPool, tableRef: TableRef, tries: List<TrieDetails>) {
             tries.forEach { trie ->
                 val trieKey = trie.trieKey
-                bufferPool.putObject(tableRef.dataFilePath(trieKey), ByteBuffer.allocate(1))
-                bufferPool.putObject(tableRef.metaFilePath(trieKey), ByteBuffer.allocate(1))
+                bufferPool.putObjectSync(tableRef.dataFilePath(trieKey), ByteBuffer.allocate(1))
+                bufferPool.putObjectSync(tableRef.metaFilePath(trieKey), ByteBuffer.allocate(1))
             }
         }
 

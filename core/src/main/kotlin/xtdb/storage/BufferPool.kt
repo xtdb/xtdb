@@ -47,7 +47,16 @@ interface BufferPool : AutoCloseable {
 
     suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch
 
-    fun putObject(key: Path, buffer: ByteBuffer)
+    /**
+     * Stores an object in the buffer pool.
+     *
+     * Suspends: for a remote pool this is a network write, and holding a dispatcher thread across it
+     * is what let one stalled upload take a node down (#5857). [putObjectSync] is the blocking bridge.
+     */
+    suspend fun putObject(key: Path, buffer: ByteBuffer)
+
+    /** For callers that aren't coroutine-native — see [putObject]. */
+    fun putObjectSync(key: Path, buffer: ByteBuffer) = runBlocking { putObject(key, buffer) }
 
     /**
      * Recursively lists all objects in the buffer pool
@@ -66,9 +75,15 @@ interface BufferPool : AutoCloseable {
     fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> =
         listAllObjects(dir).filter { it.key > afterKey }
 
-    fun copyObject(src: Path, dest: Path)
+    suspend fun copyObject(src: Path, dest: Path)
 
-    fun deleteIfExists(key: Path)
+    /** For callers that aren't coroutine-native — see [copyObject]. */
+    fun copyObjectSync(src: Path, dest: Path) = runBlocking { copyObject(src, dest) }
+
+    suspend fun deleteIfExists(key: Path)
+
+    /** For callers that aren't coroutine-native — see [deleteIfExists]. */
+    fun deleteIfExistsSync(key: Path) = runBlocking { deleteIfExists(key) }
 
     fun openArrowWriter(key: Path, rel: Relation): ArrowWriter
 
@@ -81,11 +96,11 @@ interface BufferPool : AutoCloseable {
             override fun getByteArray(key: Path) = unsupported("getByteArray")
             override fun getFooter(key: Path) = unsupported("getFooter")
             override suspend fun getRecordBatch(key: Path, idx: Int) = unsupported("getRecordBatch")
-            override fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
+            override suspend fun putObject(key: Path, buffer: ByteBuffer) = unsupported("putObject")
             override fun listAllObjects() = unsupported("listAllObjects")
             override fun listAllObjects(dir: Path) = unsupported("listAllObjects")
-            override fun copyObject(src: Path, dest: Path) = unsupported("copyObject")
-            override fun deleteIfExists(key: Path) = unsupported("deleteIfExists")
+            override suspend fun copyObject(src: Path, dest: Path) = unsupported("copyObject")
+            override suspend fun deleteIfExists(key: Path) = unsupported("deleteIfExists")
             override fun openArrowWriter(key: Path, rel: Relation) = unsupported("openArrowWriter")
 
             override fun close() = Unit
@@ -138,7 +153,7 @@ class ReadOnlyBufferPool(private val delegate: BufferPool) : BufferPool {
 
     override suspend fun getRecordBatch(key: Path, idx: Int): ArrowRecordBatch = delegate.getRecordBatch(key, idx)
 
-    override fun putObject(key: Path, buffer: ByteBuffer) {
+    override suspend fun putObject(key: Path, buffer: ByteBuffer) {
         throw Fault("Attempted write to read-only storage: $key")
     }
 
@@ -148,11 +163,11 @@ class ReadOnlyBufferPool(private val delegate: BufferPool) : BufferPool {
 
     override fun listAfter(dir: Path, afterKey: Path): Iterable<StoredObject> = delegate.listAfter(dir, afterKey)
 
-    override fun copyObject(src: Path, dest: Path) {
+    override suspend fun copyObject(src: Path, dest: Path) {
         throw Fault("Attempted copy in read-only storage: $src -> $dest")
     }
 
-    override fun deleteIfExists(key: Path) {
+    override suspend fun deleteIfExists(key: Path) {
         throw Fault("Attempted delete from read-only storage: $key")
     }
 
