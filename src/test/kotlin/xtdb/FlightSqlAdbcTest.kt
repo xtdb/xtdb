@@ -1115,6 +1115,16 @@ class FlightSqlAdbcTest {
     }
 
     @Test
+    fun `a polymorphic column round-trips over FlightSQL`() {
+        fsqlClient.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'str'}, {_id: 2, v: 42}", *emptyCallOpts)
+
+        assertEquals(
+            listOf(mapOf("_id" to 1L, "v" to "str"), mapOf("_id" to 2L, "v" to 42L)),
+            fsqlClient.execute("SELECT _id, v FROM docs ORDER BY _id", *emptyCallOpts).readRows()
+        )
+    }
+
+    @Test
     fun `test FlightSQL bulk ingest streams multiple batches`() {
         multiBatchIngest("users", listOf(
             listOf(1L to 10L, 2L to 20L),
@@ -1180,6 +1190,28 @@ class FlightSqlAdbcTest {
 
             val tableSchema = schemaBytes.deserialiseArrowSchema()
             assertEquals(setOf("_id", "name"), tableSchema.fields.map { it.name }.toSet())
+        }
+    }
+
+    @Test
+    fun `getTables includeSchema returns a polymorphic column a client can build a root from`() {
+        fsqlClient.executeUpdate("INSERT INTO docs RECORDS {_id: 1, v: 'str'}, {_id: 2, v: 42}", *emptyCallOpts)
+
+        val info = fsqlClient.getTables(null, null, "docs", null, true, *emptyCallOpts)
+        fsqlClient.getStream(info.endpoints.first().ticket, *emptyCallOpts).use { stream ->
+            assertTrue(stream.next())
+            val root = stream.root
+
+            val schemaVec = root.getVector("table_schema") as VarBinaryVector
+            val rowIdx = (0 until root.rowCount).first {
+                (root.getVector("table_name").getObject(it) as? Text)?.toString() == "docs"
+            }
+            val tableSchema = (schemaVec.getObject(rowIdx) ?: error("table_schema bytes were null"))
+                .deserialiseArrowSchema()
+
+            VectorSchemaRoot.create(tableSchema, al).use {
+                assertEquals(setOf("_id", "v"), it.schema.fields.map { f -> f.name }.toSet())
+            }
         }
     }
 

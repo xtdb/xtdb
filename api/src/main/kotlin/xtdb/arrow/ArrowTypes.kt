@@ -15,6 +15,7 @@ import org.apache.arrow.vector.types.Types.MinorType
 import org.apache.arrow.vector.types.pojo.ArrowType
 import org.apache.arrow.vector.types.pojo.ArrowType.ArrowTypeVisitor
 import org.apache.arrow.vector.types.pojo.Field
+import org.apache.arrow.vector.types.pojo.FieldType
 import xtdb.arrow.extensions.IntervalMDMType
 import xtdb.arrow.extensions.KeywordType
 import xtdb.arrow.extensions.OidType
@@ -64,6 +65,34 @@ val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
 
 @JvmField
 val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
+
+/**
+ * This field, with `typeIds` declared explicitly on every union in its tree — `0 until childCount`.
+ *
+ * Only for schemas bound for an Arrow Java consumer. Absent `typeIds` already means positional, so the fields
+ * XTDB stores are correct without them, and declaring them there would grow every Arrow file we write —
+ * shifting log offsets, and tx-ids with them. Arrow Java can't read its own absent form back off the wire,
+ * though: its IPC reader rebuilds it as `int[0]`, which `DenseUnionVector.registerNewTypeId` then indexes
+ * (#5863, apache/arrow-java#414).
+ */
+fun Field.withUnionTypeIds(): Field {
+    val newChildren = children.map { it.withUnionTypeIds() }
+    val unionType = type as? ArrowType.Union
+
+    return when {
+        unionType != null -> Field(
+            name,
+            FieldType(
+                isNullable, ArrowType.Union(unionType.mode, IntArray(newChildren.size) { it }),
+                fieldType.dictionary, metadata
+            ),
+            newChildren
+        )
+
+        newChildren == children -> this
+        else -> Field(name, fieldType, newChildren)
+    }
+}
 
 @JvmField
 val IID_TYPE: ArrowType = ArrowType.FixedSizeBinary(16)

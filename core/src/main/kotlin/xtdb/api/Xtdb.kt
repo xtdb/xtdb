@@ -395,7 +395,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
                 override fun executeSchema(paramFields: List<Field>): Schema {
                     val pq = preparedQuery ?: throw Incorrect("call prepare() first", "xtdb.adbc/not-prepared")
-                    return Schema(pq.getColumnFields(paramFields))
+                    return Schema(pq.getColumnFields(paramFields).map { it.withUnionTypeIds() })
                 }
 
                 override fun bind(root: VectorSchemaRoot) {
@@ -1074,7 +1074,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         }
 
         private fun ResultCursor.toArrowReader(): ArrowReader {
-            val schema = Schema(resultTypes.map { (name, type) -> type.toField(name) })
+            val schema = Schema(resultTypes.map { (name, type) -> type.toField(name).withUnionTypeIds() })
 
             return object : ArrowReader(allocator) {
                 override fun readSchema() = schema
@@ -1187,7 +1187,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
         private fun getTableSchema(catalog: DatabaseName, table: TableRef): Schema {
             val types = dbCat.databaseOrNull(catalog)?.getColumnTypes(table) ?: return Schema(emptyList())
-            return Schema(types.entries.map { (name, type) -> type.toField(name) })
+            return Schema(types.entries.map { (name, type) -> type.toField(name).withUnionTypeIds() })
         }
 
         override fun getObjects(
