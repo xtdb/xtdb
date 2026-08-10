@@ -11,12 +11,11 @@
             [xtdb.node :as xtn]
             [xtdb.util :as util])
   (:import (io.micrometer.prometheusmetrics PrometheusMeterRegistry)
-           [java.lang AutoCloseable]
            [java.net InetAddress]
-           org.eclipse.jetty.server.Server
+           (org.eclipse.jetty.server NetworkConnector Server)
            (xtdb.api Xtdb$Config)
            (xtdb.api.log SourceMessage$FlushBlock)
-           (xtdb.api.metrics HealthzConfig)
+           (xtdb.api.metrics Healthz HealthzConfig)
            xtdb.api.Xtdb$Config
            (xtdb.database Database Database$Catalog)
            xtdb.NodeBase
@@ -174,9 +173,9 @@
   "Starts the healthz server against `base`'s meter registry and the databases in `db-cat`.
 
   `extra-handler-opts` are merged into each request seen by the endpoint handlers."
-  (^AutoCloseable [base db-cat config] (open-server base db-cat config {}))
+  (^Healthz [base db-cat config] (open-server base db-cat config {}))
 
-  (^AutoCloseable [^NodeBase base ^Database$Catalog db-cat ^HealthzConfig config extra-handler-opts]
+  (^Healthz [^NodeBase base ^Database$Catalog db-cat ^HealthzConfig config extra-handler-opts]
    (let [^InetAddress host (.getHost config)
          initial-target-message-ids (into {}
                                           (for [^String db-name (.getDatabaseNames db-cat)
@@ -188,12 +187,20 @@
                                              :db-cat db-cat
                                              :initial-target-message-ids initial-target-message-ids}
                                             extra-handler-opts))
-                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port (.getPort config), :async? true, :join? false}))]
+                            (j/run-jetty {:host (some-> host (.getHostAddress)), :port (.getPort config), :async? true, :join? false}))
 
-     (log/info "Healthz server started at" (str (.getURI server))
-               "- startup targets:" (pr-str initial-target-message-ids))
+         ;; `run-jetty` has bound by the time it returns, so the connector carries the resolved port.
+         ;; Captured here rather than read on demand, so it outlives `.stop`. `Server.getURI` is the
+         ;; obvious read but resolves the local hostname to fill in a wildcard-host connector, and
+         ;; returns nil if that lookup throws.
+         port (.getLocalPort ^NetworkConnector (first (.getConnectors server)))]
 
-     (reify AutoCloseable
+     (log/infof "Healthz server started at http://%s:%d - startup targets: %s"
+                (if host (.getHostAddress host) "*") port (pr-str initial-target-message-ids))
+
+     (reify Healthz
+       (getPort [_] port)
+
        (close [_]
          (.stop server)
          (log/info "Healthz server stopped."))))))

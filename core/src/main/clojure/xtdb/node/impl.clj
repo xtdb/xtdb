@@ -20,7 +20,7 @@
            xtdb.NodeBase
            xtdb.XtdbInternal
            (xtdb.api DataSource Xtdb Xtdb$CompactorNode Xtdb$Config Xtdb$Connection)
-           (xtdb.api.metrics ConnectionMetrics)
+           (xtdb.api.metrics ConnectionMetrics Healthz)
            xtdb.api.module.XtdbModule$Factory
            (xtdb.database Database$Catalog)
            (xtdb.query IQuerySource SqlPlanner)
@@ -122,6 +122,11 @@
   (getFlightSqlPort [this]
     (if-let [fsql (util/component this :xtdb.flight-sql/server)]
       (.getPort ^xtdb.api.FlightSql fsql)
+      -1))
+
+  (getHealthzPort [this]
+    (if-let [healthz (util/component this :xtdb/healthz)]
+      (.getPort ^Healthz healthz)
       -1))
 
   (getDatabaseNames [_] (.getDatabaseNames db-cat))

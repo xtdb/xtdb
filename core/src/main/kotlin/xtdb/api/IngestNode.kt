@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.metrics.Healthz
 import xtdb.api.metrics.HealthzConfig
 import xtdb.cache.DiskCache
 import xtdb.cache.MemoryCache
@@ -38,9 +39,12 @@ class IngestNode internal constructor(
     private val base: NodeBase,
     private val databases: Map<DatabaseName, Database>,
     private val rootJob: Job,
-    private val healthzServer: AutoCloseable?,
+    private val healthzServer: Healthz?,
 ) : AutoCloseable {
     private val closing = AtomicBoolean(false)
+
+    /** The port the healthz server bound to, or -1 if healthz isn't configured on this node. */
+    val healthzPort: Int get() = healthzServer?.port ?: -1
 
     /**
      * The running [Database] for [name], if configured — lets an embedder reach the live database,
@@ -155,13 +159,13 @@ class IngestNode internal constructor(
                 val rootJob = SupervisorJob()
                 val rootScope = CoroutineScope(rootJob)
                 val openedDbs = LinkedHashMap<DatabaseName, Database>()
-                val healthzServer: AutoCloseable?
+                val healthzServer: Healthz?
                 try {
                     for ((dbName, dbConfig) in databases)
                         openedDbs[dbName] = Database.open(base, dbName, dbConfig, base.compactor, rootScope)
 
                     healthzServer = healthz?.let {
-                        openHealthzServer.invoke(base, FixedDbCatalog(openedDbs), it) as AutoCloseable
+                        openHealthzServer.invoke(base, FixedDbCatalog(openedDbs), it) as Healthz
                     }
                 } catch (t: Throwable) {
                     // Cancel the job tree (Phase 1) before freeing the already-opened databases
