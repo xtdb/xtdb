@@ -2,7 +2,7 @@
 antlr = "4.13.2"
 arrow = "19.0.0"
 arrow-adbc = "0.23.0"
-aws-sdk = "2.42.30"
+aws-sdk = "2.51.3"
 azure = "1.13.1"
 azure-storage = "12.33.3"
 clojure = "1.12.0"
@@ -145,8 +145,8 @@ log4j-layout-template-json = { group = "org.apache.logging.log4j", name = "log4j
 aws-s3 = { group = "software.amazon.awssdk", name = "s3", version.ref = "aws-sdk" }
 aws-cloudwatch = { group = "software.amazon.awssdk", name = "cloudwatch", version.ref = "aws-sdk" }
 aws-sts = { group = "software.amazon.awssdk", name = "sts", version.ref = "aws-sdk" }
-aws-sso = { group = "software.amazon.awssdk", name = "sso", version = "2.16.76" }
-aws-ssooidc = { group = "software.amazon.awssdk", name = "ssooidc", version = "2.16.76" }
+aws-sso = { group = "software.amazon.awssdk", name = "sso", version.ref = "aws-sdk" }
+aws-ssooidc = { group = "software.amazon.awssdk", name = "ssooidc", version.ref = "aws-sdk" }
 
 # Azure
 azure-storage-blob = { group = "com.azure", name = "azure-storage-blob", version.ref = "azure-storage" }
