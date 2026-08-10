@@ -303,12 +303,11 @@
                                            instant-source-for-non-tx-msgs? storage-epoch default-tz tracer
                                            skip-dbs]
                                     :or {buffers-dir "objects"
-                                         healthz-port 8080
+                                         healthz-port 0
                                          instant-source-for-non-tx-msgs? false
                                          storage-epoch 0
                                          default-tz (ZoneId/of "Europe/London")}}]
-  (let [instant-src (or instant-src (->mock-clock))
-        healthz-port (if (util/port-free? healthz-port) healthz-port (util/free-port))]
+  (let [instant-src (or instant-src (->mock-clock))]
     (xtn/start-node (cond-> {:healthz {:port healthz-port
                                        :host "*"}
                              :log [:local {:path (.resolve node-dir "log"), :instant-src instant-src

@@ -79,6 +79,9 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
     val serverReadOnlyPort: Int
     val flightSqlPort: Int
 
+    /** The port the healthz server bound to, or -1 if healthz isn't configured on this node. */
+    val healthzPort: Int
+
     /** The names of the databases this node currently serves. */
     val databaseNames: Collection<DatabaseName>
 

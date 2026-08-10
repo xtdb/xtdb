@@ -18,9 +18,8 @@
 
 (t/deftest test-healthz-endpoints
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [_node (tu/->local-node {:node-dir local-path
-                                          :healthz-port port})]
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)]
         (t/testing "started endpoint"
           (let [resp (clj-http/get (->healthz-url port "started"))]
             (t/is (= 200 (:status resp)))
@@ -38,16 +37,15 @@
 
 (t/deftest test-started-catchup-4273
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [node (tu/->local-node {:node-dir local-path
-                                         :compactor-threads 0})]
-        (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :foo 1}]]
-                       {:default-tz #xt/zone "Asia/Kolkata"})
-        (tu/flush-block! node))
+    (with-open [node (tu/->local-node {:node-dir local-path
+                                       :compactor-threads 0})]
+      (xt/execute-tx node [[:put-docs :docs {:xt/id 1, :foo 1}]]
+                     {:default-tz #xt/zone "Asia/Kolkata"})
+      (tu/flush-block! node))
 
-      (with-open [_node (tu/->local-node {:node-dir local-path
-                                          :healthz-port port
-                                          :compactor-threads 0})]
+    (with-open [node (tu/->local-node {:node-dir local-path
+                                       :compactor-threads 0})]
+      (let [port (.getHealthzPort node)]
         (t/testing "started endpoint"
           (let [timeout-at-ms (+ (System/currentTimeMillis) 1000)]
             (loop []
@@ -65,9 +63,8 @@
 
 (t/deftest test-indexer-error
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [_node (tu/->local-node {:node-dir local-path
-                                          :healthz-port port})]
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)]
         (t/testing "alive endpoint - non errored indexer"
           (t/is (= 200 (:status (clj-http/get (->healthz-url port "alive"))))))
 
@@ -79,9 +76,8 @@
 
 (t/deftest test-error-response
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [_node (tu/->local-node {:node-dir local-path
-                                          :healthz-port port})]
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)]
         (t/testing "server thrown error responds with reasonable message"
           (with-redefs [healthz/get-ingestion-error (fn [_] (throw (Exception. "Some server error.")))]
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
@@ -89,10 +85,10 @@
               (t/is (re-find #"Exception when calling endpoint - java.lang.Exception: Some server error." (:body resp))))))))))
 
 (t/deftest test-block-lag-healthy-4364
-  (let [port (tu/free-port)]
-    (with-open [_node (xtn/start-node {:log [:in-memory]
-                                       :storage [:in-memory]
-                                       :healthz {:port port}})]
+  (with-open [node (xtn/start-node {:log [:in-memory]
+                                    :storage [:in-memory]
+                                    :healthz {}})]
+    (let [port (.getHealthzPort node)]
       (t/testing "block lag health"
         (letfn [(alive-resp []
                   (let [{:keys [status headers]} (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
@@ -107,126 +103,122 @@
 
 (t/deftest test-block-lag-uses-list-after
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [node (tu/->local-node {:node-dir local-path
-                                         :healthz-port port
-                                         :compactor-threads 0})]
-        (let [db (db/primary-db node)
-              bp (.getBufferPool db)
-              block-cat (.getBlockCatalog db)]
+    (with-open [node (tu/->local-node {:node-dir local-path
+                                       :compactor-threads 0})]
+      (let [port (.getHealthzPort node)
+            db (db/primary-db node)
+            bp (.getBufferPool db)
+            block-cat (.getBlockCatalog db)]
 
-          (t/testing "no blocks yet"
-            (t/is (nil? (.getCurrentBlockIndex block-cat)))
-            (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp nil)))
-            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-              (t/is (= 200 (:status resp)))))
+        (t/testing "no blocks yet"
+          (t/is (nil? (.getCurrentBlockIndex block-cat)))
+          (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp nil)))
+          (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 200 (:status resp)))))
 
-          (xt/execute-tx node [[:put-docs :foo {:xt/id :foo}]])
-          (tu/flush-block! node)
+        (xt/execute-tx node [[:put-docs :foo {:xt/id :foo}]])
+        (tu/flush-block! node)
 
-          (t/testing "after first block, block-lag is zero"
-            (t/is (= 0 (.getCurrentBlockIndex block-cat)))
-            (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp 0)))
-            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-              (t/is (= 200 (:status resp)))))
+        (t/testing "after first block, block-lag is zero"
+          (t/is (= 0 (.getCurrentBlockIndex block-cat)))
+          (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp 0)))
+          (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 200 (:status resp)))))
 
-          (xt/execute-tx node [[:put-docs :foo {:xt/id :bar}]])
-          (tu/flush-block! node)
+        (xt/execute-tx node [[:put-docs :foo {:xt/id :bar}]])
+        (tu/flush-block! node)
 
-          (t/testing "after second block, listAfter from first finds it"
-            ;; invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
-            (BufferPoolKt/invalidateLatestAvailableBlockCache bp)
-            (t/is (= 1 (.getCurrentBlockIndex block-cat)))
-            (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 0))
-                  "listing after block 0 finds block 1")
-            (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 1))
-                  "listing after block 1 returns block 1 (no new blocks)")
-            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-              (t/is (= 200 (:status resp))))))))))
+        (t/testing "after second block, listAfter from first finds it"
+          ;; invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
+          (BufferPoolKt/invalidateLatestAvailableBlockCache bp)
+          (t/is (= 1 (.getCurrentBlockIndex block-cat)))
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 0))
+                "listing after block 0 finds block 1")
+          (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 1))
+                "listing after block 1 returns block 1 (no new blocks)")
+          (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 200 (:status resp)))))))))
 
 (t/deftest test-finish-block-endpoint
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [node (tu/->local-node {:node-dir local-path
-                                         :healthz-port port})]
-        (let [block-cat (.getBlockCatalog (db/primary-db node))]
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)
+            block-cat (.getBlockCatalog (db/primary-db node))]
 
-          (t/testing "no latest completed tx"
-            (clj-http/post (->system-url port "finish-block") {:throw-exceptions false}))
+        (t/testing "no latest completed tx"
+          (clj-http/post (->system-url port "finish-block") {:throw-exceptions false}))
+
+        (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
+
+        (t/is (= nil (:tx-id (.getLatestCompletedTx block-cat))))
+
+        (let [first-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
+                                                              [:put-docs :bar {:xt/id "bar2"}]
+                                                              [:put-docs :bar {:xt/id "bar3"}]]))]
+
+          (t/testing "successful block flush"
+            (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp)))))
 
           (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-          (t/is (= nil (:tx-id (.getLatestCompletedTx block-cat))))
+          (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))
 
-          (let [first-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
-                                                                [:put-docs :bar {:xt/id "bar2"}]
-                                                                [:put-docs :bar {:xt/id "bar3"}]]))]
+        (let [second-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar7"}]
+                                                               [:put-docs :bar {:xt/id "bar8"}]
+                                                               [:put-docs :bar {:xt/id "bar9"}]]))]
 
-            (t/testing "successful block flush"
-              (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
-                (t/is (= 200 (:status resp)))))
+          (t/testing "second successful block flush"
+            (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
+              (t/is (= 200 (:status resp)))))
 
-            (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
+          (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-            (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))
-
-          (let [second-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar7"}]
-                                                                 [:put-docs :bar {:xt/id "bar8"}]
-                                                                 [:put-docs :bar {:xt/id "bar9"}]]))]
-
-            (t/testing "second successful block flush"
-              (let [resp (clj-http/post (->system-url port "finish-block") {:throw-exceptions false})]
-                (t/is (= 200 (:status resp)))))
-
-            (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
-
-            (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat))))))))))
+          (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))))))
 
 ;; --- multi-db tests ---
 
 (t/deftest test-alive-critical-secondary
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [node (tu/->local-node {:node-dir local-path
-                                         :healthz-port port})]
-        (let [^Database$Catalog db-cat (db/<-node node)]
-          (.attach db-cat "critical-db"
-                   (-> (Database$Config.)
-                       (.critical true)))
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)
+            ^Database$Catalog db-cat (db/<-node node)]
+        (.attach db-cat "critical-db"
+                 (-> (Database$Config.)
+                     (.critical true)))
 
-          (.attach db-cat "non-critical-db"
-                   (Database$Config.))
+        (.attach db-cat "non-critical-db"
+                 (Database$Config.))
 
-          (t/testing "all healthy"
-            (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-              (t/is (= 200 (:status resp)))
-              (t/is (= "3" (get-in resp [:headers "X-XTDB-Databases-Checked"])))))
+        (t/testing "all healthy"
+          (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+            (t/is (= 200 (:status resp)))
+            (t/is (= "3" (get-in resp [:headers "X-XTDB-Databases-Checked"])))))
 
-          (t/testing "non-critical secondary ingestion error does not affect liveness"
-            (let [orig-fn healthz/get-ingestion-error]
-              (with-redefs [healthz/get-ingestion-error (fn [^Database db]
-                                                          (if (= "non-critical-db" (.getName db))
-                                                            (Exception. "Non-critical error")
-                                                            (orig-fn db)))]
-                (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-                  (t/is (= 200 (:status resp)))
-                  (t/is (= "1" (get-in resp [:headers "X-XTDB-Databases-Unhealthy"])))))))
+        (t/testing "non-critical secondary ingestion error does not affect liveness"
+          (let [orig-fn healthz/get-ingestion-error]
+            (with-redefs [healthz/get-ingestion-error (fn [^Database db]
+                                                        (if (= "non-critical-db" (.getName db))
+                                                          (Exception. "Non-critical error")
+                                                          (orig-fn db)))]
+              (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+                (t/is (= 200 (:status resp)))
+                (t/is (= "1" (get-in resp [:headers "X-XTDB-Databases-Unhealthy"])))))))
 
-          (t/testing "critical secondary ingestion error triggers 503"
-            (let [orig-fn healthz/get-ingestion-error]
-              (with-redefs [healthz/get-ingestion-error (fn [^Database db]
-                                                          (if (= "critical-db" (.getName db))
-                                                            (Exception. "Critical error")
-                                                            (orig-fn db)))]
-                (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
-                  (t/is (= 503 (:status resp)))
-                  (t/is (re-find #"critical-db" (:body resp))))))))))))
+        (t/testing "critical secondary ingestion error triggers 503"
+          (let [orig-fn healthz/get-ingestion-error]
+            (with-redefs [healthz/get-ingestion-error (fn [^Database db]
+                                                        (if (= "critical-db" (.getName db))
+                                                          (Exception. "Critical error")
+                                                          (orig-fn db)))]
+              (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
+                (t/is (= 503 (:status resp)))
+                (t/is (re-find #"critical-db" (:body resp)))))))))))
 
 (t/deftest test-alive-primary-always-critical
   (util/with-tmp-dirs #{local-path}
-    (let [port (tu/free-port)]
-      (with-open [_node (tu/->local-node {:node-dir local-path
-                                          :healthz-port port})]
+    (with-open [node (tu/->local-node {:node-dir local-path})]
+      (let [port (.getHealthzPort node)]
         (t/testing "primary database ingestion error triggers 503"
           (with-redefs [healthz/get-ingestion-error (fn [_] (Exception. "Primary error"))]
             (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]

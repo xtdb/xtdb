@@ -7,19 +7,20 @@ These include a **Healthz Server** for health checks, **Metrics** for performanc
 
 ## Healthz Server
 
-The Healthz Server is a lightweight HTTP server that runs by default on all XTDB nodes.
-It provides health indicators, making it useful for monitoring in containerized and orchestrated environments.
+The Healthz Server is a lightweight HTTP server that provides health indicators and metrics, making it useful for monitoring in containerized and orchestrated environments.
+It runs on a node that has a `healthz` block in its configuration.
 
 ### Configuration
-
-The Healthz Server can be configured to run on a custom port:
 
 ``` yaml
 healthz:
   # Port to run the Healthz Server on.
-  # Default: 8080 (can be set as an !Env value).
+  # Default: 0, i.e. an available port chosen at startup (can be set as an !Env value).
   port: 8080
 ```
+
+Anything that needs to reach the Healthz Server at a known address — a container health check, a Kubernetes probe, a Prometheus scrape target — needs the port set explicitly.
+The XTDB container images and Helm charts set it to 8080.
 
 ### Health Routes
 
