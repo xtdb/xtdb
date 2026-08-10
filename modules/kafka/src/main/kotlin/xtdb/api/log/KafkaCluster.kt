@@ -401,15 +401,15 @@ class KafkaCluster(
                         if (subscriptions.isNotEmpty()) {
                             @OptIn(ExperimentalCoroutinesApi::class)
                             onTimeout(0.milliseconds) {
-                                consumer.pollRecords()?.let { consumerRecords ->
-                                    for ((topic, recs) in consumerRecords.groupBy { it.topic() }) {
-                                        val sub = checkNotNull(subscriptions[topic]) {
-                                            "Received records for unsubscribed topic $topic"
-                                        }
+                                val recsByTopic = consumer.pollRecords().groupBy { it.topic() }
 
-                                        sub.processRecords(recs)
-                                    }
+                                check(subscriptions.keys.containsAll(recsByTopic.keys)) {
+                                    "Received records for unsubscribed topics: ${recsByTopic.keys - subscriptions.keys}"
                                 }
+
+                                // the empty batch matters: it's what ticks the leader's block-flush timeout
+                                for ((topic, sub) in subscriptions.toList())
+                                    sub.processRecords(recsByTopic[topic].orEmpty())
                             }
                         }
                     }

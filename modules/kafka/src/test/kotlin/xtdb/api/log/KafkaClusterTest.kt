@@ -653,6 +653,32 @@ class KafkaClusterTest {
     }
 
     @Test
+    fun `a database with a quiet source log still cuts a block on the flush timeout`() = runBlocking {
+        val topicName = "test-quiet-flush-${UUID.randomUUID()}"
+
+        Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", topicName))
+            indexer { flushDuration = Duration.ofSeconds(1) }
+        }.use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt -> stmt.execute("INSERT INTO foo (_id) VALUES ('a')") }
+            }
+
+            // one row is far short of rowsPerBlock, so the row-count path can't cut this block
+            val blockCatalog = (node as XtdbInternal).dbCatalog.primary.blockCatalog
+
+            assertNotNull(
+                withTimeoutOrNull(30.seconds) {
+                    while (blockCatalog.currentBlockIndex == null) delay(100.milliseconds)
+                },
+                "flush timeout cuts a block",
+            )
+        }
+    }
+
+    @Test
     fun `shared consumer survives all databases unsubscribing then new one subscribing`() =
         runTest(timeout = 60.seconds) {
             val topic1 = "test-shared-drain-${UUID.randomUUID()}"
