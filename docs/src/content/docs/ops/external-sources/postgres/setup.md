@@ -22,7 +22,12 @@ As with other [external sources](/ops/external-sources/overview) you will need:
 Ensure that you have a transaction log and object store that do not conflict with other databases.
 :::
 
-Additionally you will need to ensure that Postgres is configured with [`wal_level=logical`](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL).
+Additionally you will need:
+
+- PostgreSQL 17 or later.
+- Postgres configured with [`wal_level=logical`](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-WAL-LEVEL).
+
+If the upstream is an HA pair, see [surviving a Postgres failover](/ops/external-sources/postgres/reference#surviving-a-postgres-failover) for what it needs configured in order for the replication slot to survive a promotion.
 
 ## Create the Postgres role
 
