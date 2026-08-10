@@ -53,4 +53,6 @@ For full details about epochs, see [Epochs](/ops/config/log#epochs).
 - Always take a backup of storage before making epoch changes.
 - The new epoch marks a clean slate for the log but does **not** delete any existing storage files.
 - All nodes must use the same epoch value.
-  Mismatched epochs will cause startup failures.
+- Epochs only move forwards.
+  A node whose log is at an earlier epoch than its indexed storage will fail to start with the error above, naming both epochs.
+  Choosing an epoch *lower* than the current one is not a way to undo a bump: restore the storage backup that matches the log instead.

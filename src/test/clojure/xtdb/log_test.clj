@@ -246,6 +246,27 @@
       (t/testing "can finish another block"
         (t/is (nil? (tu/flush-block! node)))))))
 
+(t/deftest test-local-log-rejects-an-earlier-epoch-than-storage
+  (util/with-tmp-dirs #{node-dir}
+    (let [storage [:local {:path (.resolve node-dir "objects")}]
+          old-log [:local {:path (.resolve node-dir "log")}]
+          new-log [:local {:path (.resolve node-dir "new-log") :epoch 1}]]
+
+      (with-open [node (xtn/start-node {:log old-log, :storage storage})]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id :foo}]])
+        (t/is (nil? (tu/flush-block! node))))
+
+      (with-open [node (xtn/start-node {:log new-log, :storage storage})]
+        (xt/execute-tx node [[:put-docs :docs {:xt/id :bar}]])
+        (t/is (nil? (tu/flush-block! node))))
+
+      (t/is
+        (thrown-with-msg?
+          IllegalStateException
+          #"Database 'xtdb' failed to start due to an invalid transaction log state \(epoch=0, offset=\d+\) that does not correspond with the latest processed message \(epoch=1 and offset=\d+\)"
+          (xtn/start-node {:log old-log, :storage storage}))
+        "a log left behind at the previous epoch is rejected, not mistaken for a new one"))))
+
 (t/deftest test-local-log-starts-at-correct-point-after-block-cut
   (util/with-tmp-dirs #{node-dir}
     (t/testing "Start a node, write a number of transactions to the log - ensure block is cut"
