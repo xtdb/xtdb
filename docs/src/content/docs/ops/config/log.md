@@ -5,6 +5,17 @@ title: Log
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: earlier epochs rejected at startup
+
+: A node whose log is at an *earlier* epoch than its indexed storage now refuses to start, pointing at [Out of Sync Log & Intact Storage](/ops/backup-and-restore/out-of-sync-log).
+  See [Epochs](#epochs).
+
+  Previously any epoch difference — in either direction — was treated as the start of a new epoch, logged at INFO, and offset validation was skipped.
+  That is only safe going forwards.
+  Because a message id packs the epoch above the offset, every id on an earlier-epoch log sorts below the storage watermark, so the log replayed as entirely stale and transactions submitted afterwards were acknowledged and then discarded without ever committing or aborting.
+
+  To upgrade: nothing to do, unless a node is already running against an earlier epoch than its storage — in which case it will now fail to start, and the recovery is to restore the storage backup that matches the log, or to move forwards to a higher epoch.
+
 v2.2: source/replica log split
 
 : Each database now uses two logs under the hood — a source log (client writes) and a replica log (the indexing leader's output) — to support [single-writer indexing](/about/dbs-in-xtdb#database-architecture).
@@ -90,6 +101,9 @@ Where:
 - `<new-epoch>` is a positive integer greater than the previous epoch.
 
 All nodes within the same cluster **must** use an identical epoch value at startup.
+
+Epochs only move forwards.
+A node started with an epoch *below* the one its storage has already indexed refuses to start, and points at [Out of Sync Log & Intact Storage](/ops/backup-and-restore/out-of-sync-log) — there is no way to reconcile the two, because everything on the earlier log ranks below what storage has already processed.
 
 #### Bumping an Epoch
 

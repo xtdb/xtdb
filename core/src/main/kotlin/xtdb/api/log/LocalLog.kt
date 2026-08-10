@@ -390,6 +390,8 @@ class LocalLog<M> @JvmOverloads constructor(
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {
                 this.path = this@Factory.path.toString()
+                this.epoch = this@Factory.epoch
+                this.termEpoch = this@Factory.termEpoch
             }
         }
     }

@@ -197,10 +197,11 @@ class Database(
     }
 
     companion object {
-        private fun logNewEpoch() {
+        private fun logNewEpoch(logEpoch: Int, processedEpoch: Int) {
             LOG.info(
-                "Starting node with a log that has a different epoch than the latest processed message " +
-                        "(this is expected if you are starting a new epoch) " +
+                "Starting node with a log at a later epoch than the latest processed message " +
+                        "(log epoch=$logEpoch, latest processed message epoch=$processedEpoch) " +
+                        "- this is expected if you are starting a new epoch " +
                         "- skipping offset validation."
             )
         }
@@ -233,10 +234,18 @@ class Database(
             val logEpoch = log.epoch
             val latestSubmittedOffset = log.latestSubmittedOffset()
 
+            // Epochs are monotonic (see /ops/config/log#epochs), and the direction matters.
+            // Skipping offset validation is only safe on a later epoch, where the log is
+            // genuinely new and there's nothing to validate against.
+            //
+            // A log at an earlier epoch is the opposite case. Msg-ids pack the epoch above the
+            // offset, so every id on it sorts below the storage watermark: replay would discard
+            // the whole log, and transactions submitted afterwards would be acked and then
+            // dropped as stale - never committing, never aborting.
             when {
-                processedEpoch != logEpoch -> logNewEpoch()
+                logEpoch > processedEpoch -> logNewEpoch(logEpoch, processedEpoch)
 
-                latestSubmittedOffset < processedOffset ->
+                logEpoch < processedEpoch || latestSubmittedOffset < processedOffset ->
                     throwIllegalLogState(dbName, latestSubmittedOffset, logEpoch, processedEpoch, processedOffset)
             }
         }

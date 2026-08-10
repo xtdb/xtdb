@@ -59,7 +59,10 @@ class InMemoryLog<M> @JvmOverloads constructor(
             ReadOnlyLog(openReplicaLog(remotes, partitions))
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
-            dbConfig.inMemoryLog = inMemoryLog { }
+            dbConfig.inMemoryLog = inMemoryLog {
+                this.epoch = this@Factory.epoch
+                this.termEpoch = this@Factory.termEpoch
+            }
         }
     }
 

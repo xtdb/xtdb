@@ -57,8 +57,14 @@ interface Log<M> : AutoCloseable {
 
             internal fun fromProto(config: DatabaseConfig): Factory =
                 when (config.logCase) {
-                    IN_MEMORY_LOG -> inMemoryLog
-                    LOCAL_LOG -> localLog(config.localLog.path.asPath)
+                    IN_MEMORY_LOG -> config.inMemoryLog.let {
+                        inMemoryLog.epoch(it.epoch).termEpoch(it.termEpoch)
+                    }
+
+                    LOCAL_LOG -> config.localLog.let {
+                        localLog(it.path.asPath).epoch(it.epoch).termEpoch(it.termEpoch)
+                    }
+
                     OTHER_LOG -> config.otherLog.let {
                         (otherLogs[it.typeUrl] ?: error("unknown log")).fromProto(it)
                     }
