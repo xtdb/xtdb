@@ -63,7 +63,7 @@
         (when pinned?
           (.rollbackTx conn))))))
 
-(defn- reduce-page
+(defn reduce-page
   "Reduces `f`/`acc` over one page's rows, preserving a `reduced` short-circuit so the cursor loop
   stops (`transduce` can't — it unwraps `reduced` per page, so early termination wouldn't cross a
   page boundary). `->clj` turns the decode's java.util list/struct/set collections into Clojure
