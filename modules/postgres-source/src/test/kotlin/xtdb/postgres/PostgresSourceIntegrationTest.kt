@@ -80,8 +80,8 @@ class PostgresSourceIntegrationTest {
 
     private fun pgExecute(vararg statements: String) = postgres.executeSql(*statements)
 
-    private fun newDedicatedPostgres(): PostgreSQLContainer =
-        PostgreSQLContainer("postgres:17-alpine")
+    private fun newDedicatedPostgres(image: String = "postgres:17-alpine"): PostgreSQLContainer =
+        PostgreSQLContainer(image)
             .withNetwork(network)
             .withDatabaseName("testdb")
             .withUsername("testuser")
@@ -583,6 +583,71 @@ class PostgresSourceIntegrationTest {
             }
         } finally {
             runCatching { dedicatedPg.stop() }
+        }
+    }
+
+    @Test
+    fun `slots are created with failover enabled`() = runTest(timeout = 60.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_failover (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_failover (_id, name) VALUES (1, 'Alice')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_failover",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+            awaitTxs(node, 2, db = "cdc")
+
+            assertEquals(true, pgSlotFailover(slotName), "slot created with failover enabled")
+            assertEquals(setOf("Alice"),
+                xtQueryDb(node, "cdc", "SELECT name FROM public.pg_failover").map { it["name"] }.toSet(),
+                "a failover slot snapshots and streams like any other")
+        }
+    }
+
+    @Test
+    fun `postgres before 17 is unsupported, and says so`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        val pg16 = newDedicatedPostgres("postgres:16-alpine")
+        Startables.deepStart(pg16).join()
+
+        try {
+            pg16.executeSql(
+                "CREATE TABLE pg_old (_id INT PRIMARY KEY, name TEXT)",
+                "CREATE PUBLICATION $pubName FOR TABLE pg_old",
+            )
+
+            openNode(sourceTopic, pgContainer = pg16).use { node ->
+                attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+
+                val cdc = (node as XtdbInternal).dbCatalog
+                eventually(30.seconds) {
+                    assertTrue(cdc["cdc"]?.ingestionError != null, "cdc surfaces ingestionError on a pre-17 server")
+                }
+
+                val chain = generateSequence(cdc["cdc"]?.ingestionError as Throwable?) { it.cause }.toList()
+                assertTrue(
+                    chain.any { it.message?.contains("needs PostgreSQL 17 or later") == true },
+                    "we name the requirement, since Postgres doesn't: " +
+                            chain.joinToString { "${it::class.simpleName}: ${it.message}" },
+                )
+                assertTrue(
+                    chain.any { it.message?.contains("unrecognized option: failover") == true },
+                    "and Postgres' own message survives: " +
+                            chain.joinToString { "${it::class.simpleName}: ${it.message}" },
+                )
+
+                assertPrimaryDbHealthy(node)
+            }
+        } finally {
+            runCatching { pg16.stop() }
         }
     }
 
@@ -1213,6 +1278,15 @@ class PostgresSourceIntegrationTest {
             }
         }
     }
+
+    private fun pgSlotFailover(slotName: String): Boolean? =
+        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT failover FROM pg_replication_slots WHERE slot_name = '$slotName'").use { rs ->
+                    if (rs.next()) rs.getBoolean("failover") else null
+                }
+            }
+        }
 
     private fun pgSlotConfirmedFlushLsn(slotName: String): Long =
         DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->

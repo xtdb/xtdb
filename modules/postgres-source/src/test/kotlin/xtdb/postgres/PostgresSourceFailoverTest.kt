@@ -11,7 +11,6 @@ import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
-import org.postgresql.PGProperty
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.postgres.proto.PostgresSourceToken
@@ -19,7 +18,6 @@ import java.nio.file.Files
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Duration
-import java.util.Properties
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -139,23 +137,6 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     private fun pgExec(host: String, port: Int, sql: String) =
         conn(host, port).use { c -> c.createStatement().use { it.execute(sql) } }
 
-    /** `ALTER_REPLICATION_SLOT` isn't SQL — it's only accepted on a connection started with
-     * `replication=database`. Simple query mode goes with it: such connections reject the extended
-     * query protocol pgjdbc otherwise defaults to. */
-    private fun replicationCommand(host: String, port: Int, command: String) {
-        val props = Properties().apply {
-            PGProperty.USER.set(this, "testuser")
-            PGProperty.PASSWORD.set(this, "testpass")
-            PGProperty.REPLICATION.set(this, "database")
-            PGProperty.ASSUME_MIN_SERVER_VERSION.set(this, "9.4")
-            PGProperty.PREFER_QUERY_MODE.set(this, "simple")
-        }
-
-        DriverManager.getConnection("jdbc:postgresql://$host:$port/testdb", props).use { c ->
-            c.createStatement().use { it.execute(command) }
-        }
-    }
-
     private fun latestToken(node: Xtdb): PostgresSourceToken? =
         (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
             ?.let { PostgresSourceToken.parseFrom(it) }
@@ -274,7 +255,7 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     }
 
     @Test
-    fun `an operator-enabled failover slot survives promotion`() = runTest(timeout = 600.seconds) {
+    fun `a failover slot survives promotion`() = runTest(timeout = 600.seconds) {
         val slot = unique("xtdb_slot")
         val pub = unique("xtdb_pub")
         val logDir = Files.createTempDirectory("sync-log")
@@ -306,37 +287,17 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 awaitStreaming(node)
 
                 assertEquals(
-                    listOf("f"),
+                    listOf("t"),
                     pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                    "test precondition: XTDB creates its slot without failover",
+                    "test precondition: the source creates a failover slot",
                 )
-            }
 
-            // ALTER_REPLICATION_SLOT blocks on an active slot rather than erroring, so the source
-            // has to be stopped first — an unclean disconnect can hold it until wal_sender_timeout
-            eventually(90.seconds) {
-                assertEquals(
-                    listOf("f"),
-                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT active FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                    "slot released once the node closed",
-                )
-            }
-
-            replicationCommand(ha.primaryHost, ha.primaryPort, "ALTER_REPLICATION_SLOT $slot (FAILOVER true)")
-
-            assertEquals(
-                listOf("t"),
-                pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                "the operator's ALTER took effect",
-            )
-
-            openNode(logDir, storageDir, ha.primaryHost, ha.primaryPort).use { node ->
                 // consuming keeps restart_lsn moving with the standby; a frozen slot can't be copied
-                pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'after-alter')")
+                pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'streamed-row')")
                 eventually(30.seconds) {
                     assertTrue(
                         xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 2").isNotEmpty(),
-                        "source resumed against the upgraded slot",
+                        "streamed row mirrored",
                     )
                 }
 
@@ -352,7 +313,7 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 listOf("t", "t"),
                 pgColumn(ha.standbyHost, ha.standbyPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'") +
                     pgColumn(ha.standbyHost, ha.standbyPort, "SELECT synced FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                "the slot survived promotion, unlike the unflagged one",
+                "the slot survived promotion, unlike a slot without the flag",
             )
 
             openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->

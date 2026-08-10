@@ -55,9 +55,9 @@ private fun Connection.createLogicalSlot(slotName: String): CreatedSlot =
     createStatement().use { stmt ->
         val created =
             try {
-                stmt.executeQuery("CREATE_REPLICATION_SLOT $slotName LOGICAL pgoutput (SNAPSHOT 'export')")
+                stmt.executeQuery("CREATE_REPLICATION_SLOT $slotName LOGICAL pgoutput (SNAPSHOT 'export', FAILOVER)")
             } catch (e: PSQLException) {
-                val data = mapOf("slot-name" to slotName)
+                val data = mapOf("slot-name" to slotName, "psql/state" to e.sqlState)
 
                 throw if (e.sqlState == SQLSTATE_DUPLICATE_OBJECT)
                     Conflict(
@@ -66,7 +66,8 @@ private fun Connection.createLogicalSlot(slotName: String): CreatedSlot =
                     )
                 else
                     Incorrect(
-                        "Failed to create replication slot '$slotName': ${e.message}",
+                        "Failed to create replication slot '$slotName' with failover enabled" +
+                                " — postgres-source needs PostgreSQL 17 or later, connected to a primary: ${e.message}",
                         "xtdb.postgres/slot-creation-failed", data, e,
                     )
             }
