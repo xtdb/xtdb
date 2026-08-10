@@ -44,6 +44,10 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.deleteIfExists
 import com.google.protobuf.Any as ProtoAny
 
+// elastic, unlike a `Dispatchers.Default` view: it draws on an unbounded pool rather than IO's own
+// permits, so a stalled store can't starve them. 64 matches IO's default width.
+private val defaultIoDispatcher = Dispatchers.IO.limitedParallelism(64, "azure-blob")
+
 /**
  * Used to set configuration options for Azure Blob Storage, which can be used as implementation of an [object store][xtdb.api.storage.Storage.RemoteStorageFactory.objectStore].
  *
@@ -74,9 +78,8 @@ class BlobStorage(
     private val prefix: Path,
     private val connectionString: String?,
     private val storageAccountKey: String?,
-    // these SDK calls are synchronous, so each operation holds a thread for its duration -
-    // this is the dispatcher that thread comes from.
-    private val ioContext: CoroutineContext = Dispatchers.IO
+    // the SDK is synchronous - each operation holds a thread from here for its duration.
+    private val ioContext: CoroutineContext = defaultIoDispatcher
 ) : ObjectStore, SupportsMultipart<String> {
 
     private val client =
@@ -334,7 +337,7 @@ class BlobStorage(
         var userManagedIdentityClientId: String? = null,
         var storageAccountEndpoint: String? = null,
         var remote: RemoteAlias? = null,
-        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = Dispatchers.IO
+        @kotlinx.serialization.Transient var coroutineContext: CoroutineContext = defaultIoDispatcher
     ) : ObjectStore.Factory {
 
         fun prefix(prefix: Path) = apply { this.prefix = prefix }
