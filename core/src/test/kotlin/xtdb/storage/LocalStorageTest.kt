@@ -54,8 +54,8 @@ class LocalStorageTest : PartitionedStorageTest() {
     fun `partitioned pools nest under a parts-N marker on disk`() {
         openPartitionedStorage(0, 2).use { p0 ->
             openPartitionedStorage(1, 2).use { p1 ->
-                p0.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
-                p1.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
+                p0.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
+                p1.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
             }
         }
 
@@ -67,7 +67,7 @@ class LocalStorageTest : PartitionedStorageTest() {
     @Test
     fun `single-partition pool keeps the unmarked on-disk layout`() {
         openPartitionedStorage(0, 1).use { bp ->
-            bp.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
+            bp.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
         }
 
         assertTrue(
@@ -85,10 +85,10 @@ class LocalStorageTest : PartitionedStorageTest() {
         val outsidePath = "../outside/external-copy.txt".asPath
         
         // Put original object
-        localStorage.putObject(srcPath, ByteBuffer.wrap(testData))
+        localStorage.putObjectSync(srcPath, ByteBuffer.wrap(testData))
         
         // Test copying within root directory
-        localStorage.copyObject(srcPath, destPath)
+        localStorage.copyObjectSync(srcPath, destPath)
         
         // Verify both files exist on disk
         val rootPath = localStorage.rootPath
@@ -105,7 +105,7 @@ class LocalStorageTest : PartitionedStorageTest() {
         assertEquals(testData.contentToString(), destContent.contentToString())
         
         // Test copying outside root directory (using .. to go up)
-        localStorage.copyObject(srcPath, outsidePath)
+        localStorage.copyObjectSync(srcPath, outsidePath)
         
         // Verify the file exists outside root
         val outsideFile = rootPath.resolve(outsidePath).normalize()

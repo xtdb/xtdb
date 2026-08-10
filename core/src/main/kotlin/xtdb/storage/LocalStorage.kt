@@ -115,7 +115,7 @@ internal class LocalStorage(
         }
     }
 
-    override fun putObject(key: Path, buffer: ByteBuffer) {
+    override suspend fun putObject(key: Path, buffer: ByteBuffer) {
         try {
             val tmpPath = rootPath.createTempUploadFile()
             buffer.writeToPath(tmpPath)
@@ -136,14 +136,14 @@ internal class LocalStorage(
     override fun listAllObjects(): Iterable<StoredObject> = rootPath.listAll()
     override fun listAllObjects(dir: Path) = rootPath.resolve(dir).listAll()
 
-    override fun copyObject(src: Path, dest: Path) {
+    override suspend fun copyObject(src: Path, dest: Path) {
         Files.copy(
             rootPath.resolve(src).normalize(),
             rootPath.resolve(dest).normalize().also { it.createParentDirectories() }
         )
     }
 
-    override fun deleteIfExists(key: Path) {
+    override suspend fun deleteIfExists(key: Path) {
         rootPath.resolve(key).deleteIfExists()
     }
 

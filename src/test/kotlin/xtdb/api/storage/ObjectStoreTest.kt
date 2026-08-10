@@ -1,6 +1,5 @@
 package xtdb.api.storage
 
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.test.runTest
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -33,11 +32,11 @@ abstract class ObjectStoreTest {
     }
 
     private suspend fun ObjectStore.putString(k: String, v: String) {
-        putObject(k.asPath, ByteBuffer.wrap(v.encodeToByteArray())).await()
+        putObject(k.asPath, ByteBuffer.wrap(v.encodeToByteArray()))
     }
 
     private suspend fun ObjectStore.getString(k: String): String =
-        getObject(k.asPath).await()
+        getObject(k.asPath)
             .let { buffer ->
                 val bytes = ByteArray(buffer.remaining())
                 buffer.get(bytes)
@@ -58,15 +57,15 @@ abstract class ObjectStoreTest {
 
         val tempDir = createTempDirectory()
         try {
-            val outPath = objectStore.getObject("alice".asPath, tempDir.resolve("alice.edn")).await()
+            val outPath = objectStore.getObject("alice".asPath, tempDir.resolve("alice.edn"))
             outPath.readText().also { assertEquals(aliceData, it) }
         } finally {
             tempDir.deleteRecursively()
         }
 
-        objectStore.deleteIfExists("alice".asPath).await()
-        objectStore.deleteIfExists("alice".asPath).await()
-        objectStore.deleteIfExists("missing".asPath).await()
+        objectStore.deleteIfExists("alice".asPath)
+        objectStore.deleteIfExists("alice".asPath)
+        objectStore.deleteIfExists("missing".asPath)
 
         assertFailsWith(IllegalStateException::class) { objectStore.getString("alice") }
     }
@@ -165,15 +164,15 @@ abstract class ObjectStoreTest {
         objectStore.putString("original", originalData)
         
         // Test copying within root directory
-        objectStore.copyObject("original".asPath, "copy1".asPath).await()
+        objectStore.copyObject("original".asPath, "copy1".asPath)
         assertEquals(originalData, objectStore.getString("copy1"))
-        
+
         // Test copying to subdirectory
-        objectStore.copyObject("original".asPath, "subdir/copy2".asPath).await()
+        objectStore.copyObject("original".asPath, "subdir/copy2".asPath)
         assertEquals(originalData, objectStore.getString("subdir/copy2"))
-        
+
         // Test copying to path outside of root directory using relative path
-        objectStore.copyObject("original".asPath, "../other-dir/copy3".asPath).await()
+        objectStore.copyObject("original".asPath, "../other-dir/copy3".asPath)
 
         // Verify objects within root show up in allObjects
         val allObjects = objectStore.allObjects()

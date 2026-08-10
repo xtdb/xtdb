@@ -85,8 +85,8 @@ class RemoteStorageTest : PartitionedStorageTest() {
     fun `partitioned pools scope object keys under parts-N`() {
         openPartitionedStorage(0, 2).use { p0 ->
             openPartitionedStorage(1, 2).use { p1 ->
-                p0.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
-                p1.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
+                p0.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(3)))
+                p1.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(7)))
             }
         }
 
@@ -104,7 +104,7 @@ class RemoteStorageTest : PartitionedStorageTest() {
     @Test
     fun `single-partition pool keeps the unmarked key-space`() {
         openPartitionedStorage(0, 1).use { bp ->
-            bp.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
+            bp.putObjectSync("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
         }
 
         assertEquals(
@@ -126,8 +126,8 @@ class RemoteStorageTest : PartitionedStorageTest() {
         openPartitionedStorage(0, 2).use { p0 ->
             openPartitionedStorage(1, 2).use { p1 ->
                 val key = "blocks/b00.binpb".asPath
-                p0.putObject(key, ByteBuffer.wrap(ByteArray(3)))
-                p1.putObject(key, ByteBuffer.wrap(ByteArray(7)))
+                p0.putObjectSync(key, ByteBuffer.wrap(ByteArray(3)))
+                p1.putObjectSync(key, ByteBuffer.wrap(ByteArray(7)))
 
                 // p0 reads first, seeding the shared cache under this key
                 assertEquals(3, p0.getByteArray(key).size, "partition 0 reads its own bytes")

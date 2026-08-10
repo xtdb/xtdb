@@ -137,7 +137,7 @@
 
               (doseq [file-key compacted-file-keys]
                 (log/debugf "Deleting file: %s" file-key)
-                (.deleteIfExists bp file-key)
+                (.deleteIfExistsSync bp file-key)
                 (log/debugf "Deleted file: %s" file-key))
 
               (log/info "Compacted files deleted - you can now upgrade the nodes."))))))))

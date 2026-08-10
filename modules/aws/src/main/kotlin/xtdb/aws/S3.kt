@@ -5,7 +5,6 @@ package xtdb.aws
 import com.google.protobuf.Any as ProtoAny
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
-import kotlinx.coroutines.future.future
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -38,10 +37,8 @@ import xtdb.util.asPath
 import java.net.URI
 import java.nio.ByteBuffer
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 import java.util.function.Consumer
 import kotlin.coroutines.CoroutineContext
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Used to set configuration options for an S3 Object Store, which can be used as implementation of objectStore within a [xtdb.api.storage.Storage.RemoteStorageFactory].
@@ -73,10 +70,7 @@ class S3(
     coroutineContext: CoroutineContext = Dispatchers.IO
 ) : ObjectStore, SupportsMultipart<CompletedPart> {
 
-    private val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-
     override fun close() {
-        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         client.close()
     }
 
@@ -88,7 +82,7 @@ class S3(
             // (couldn't achive this effect by S3 client configuration)
             .let(AsyncRequestBody::fromPublisher)
 
-    override fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<CompletedPart>> = scope.future {
+    override suspend fun startMultipart(k: Path): IMultipartUpload<CompletedPart> {
         val s3Key = prefix.resolve(k).toString()
         val initResp = client.createMultipartUpload {
             it.bucket(bucket)
@@ -97,7 +91,7 @@ class S3(
 
         val uploadId = initResp.uploadId()
 
-        object : IMultipartUpload<CompletedPart> {
+        return object : IMultipartUpload<CompletedPart> {
             fun S3AsyncClient.uploadPart(body: AsyncRequestBody, configure: Consumer<UploadPartRequest.Builder>) =
                 uploadPart(configure, body)
 
@@ -105,26 +99,25 @@ class S3(
              * part-numbers have to be in ascending order, so we increment the counter synchronously.
              * caller therefore needs to call this method in order.
              */
-            override fun uploadPart(idx: Int, buf: ByteBuffer): CompletableFuture<CompletedPart> =
-                scope.future {
-                    val contentLength = buf.remaining().toLong()
-                    val partNum = idx + 1
+            override suspend fun uploadPart(idx: Int, buf: ByteBuffer): CompletedPart {
+                val contentLength = buf.remaining().toLong()
+                val partNum = idx + 1
 
-                    val partResp = client.uploadPart(efficientAsyncRequestBody(buf)) {
-                        it.bucket(bucket)
-                        it.key(s3Key)
-                        it.uploadId(uploadId)
-                        it.partNumber(partNum)
-                        it.contentLength(contentLength)
-                    }.await()
+                val partResp = client.uploadPart(efficientAsyncRequestBody(buf)) {
+                    it.bucket(bucket)
+                    it.key(s3Key)
+                    it.uploadId(uploadId)
+                    it.partNumber(partNum)
+                    it.contentLength(contentLength)
+                }.await()
 
-                    CompletedPart.builder().apply {
-                        partNumber(partNum)
-                        eTag(partResp.eTag())
-                    }.build()
-                }
+                return CompletedPart.builder().apply {
+                    partNumber(partNum)
+                    eTag(partResp.eTag())
+                }.build()
+            }
 
-            override fun complete(parts: List<CompletedPart>) = scope.future {
+            override suspend fun complete(parts: List<CompletedPart>) {
                 client.completeMultipartUpload { req ->
                     req.bucket(bucket)
                     req.key(s3Key)
@@ -135,7 +128,7 @@ class S3(
                 Unit
             }
 
-            override fun abort() = scope.future {
+            override suspend fun abort() {
                 client.abortMultipartUpload {
                     it.bucket(bucket)
                     it.key(s3Key)
@@ -161,41 +154,39 @@ class S3(
                 if (it is NoSuchKeyException || it.cause is NoSuchKeyException) throwMissingKey(k) else throw it
             }
 
-    override fun getObject(k: Path) = scope.future {
+    override suspend fun getObject(k: Path): ByteBuffer =
         getObject(k, AsyncResponseTransformer.toBytes()).await().asByteBuffer()
-    }
 
-    override fun getObject(k: Path, outPath: Path) = scope.future {
+    override suspend fun getObject(k: Path, outPath: Path): Path {
         getObject(k, AsyncResponseTransformer.toFile(outPath, FileTransformerConfiguration.defaultCreateOrReplaceExisting())).await()
-        outPath
+        return outPath
     }
 
     private fun S3AsyncClient.putObject(body: AsyncRequestBody, configure: Consumer<PutObjectRequest.Builder>) =
         putObject(configure, body)
 
-    override fun putObject(k: Path, buf: ByteBuffer) =
-        scope.future {
-            val s3Key = prefix.resolve(k).toString()
-            val headResp = runCatching {
-                client.headObject {
-                    it.bucket(bucket)
-                    it.key(s3Key)
-                    configurator.configureHead(it)
-                }.await()
-            }.exceptionOrNull()
-
-            if (headResp == null) return@future
-            if (headResp !is NoSuchKeyException && headResp.cause !is NoSuchKeyException) throw headResp
-
-            val contentLength = buf.remaining().toLong()
-
-            client.putObject(efficientAsyncRequestBody(buf)) {
+    override suspend fun putObject(k: Path, buf: ByteBuffer) {
+        val s3Key = prefix.resolve(k).toString()
+        val headResp = runCatching {
+            client.headObject {
                 it.bucket(bucket)
                 it.key(s3Key)
-                it.contentLength(contentLength)
-                configurator.configurePut(it)
+                configurator.configureHead(it)
             }.await()
-        }
+        }.exceptionOrNull()
+
+        if (headResp == null) return
+        if (headResp !is NoSuchKeyException && headResp.cause !is NoSuchKeyException) throw headResp
+
+        val contentLength = buf.remaining().toLong()
+
+        client.putObject(efficientAsyncRequestBody(buf)) {
+            it.bucket(bucket)
+            it.key(s3Key)
+            it.contentLength(contentLength)
+            configurator.configurePut(it)
+        }.await()
+    }
 
     private fun listAllObjects0(listPrefix: Path) =
         sequence {
@@ -244,7 +235,7 @@ class S3(
     override fun listAfter(dir: Path, afterKey: Path) =
         listAfter0(prefix.resolve(dir).normalize(), afterKey)
 
-    override fun copyObject(src: Path, dest: Path): CompletableFuture<Unit> = scope.future {
+    override suspend fun copyObject(src: Path, dest: Path) {
         client.copyObject {
             it.sourceBucket(bucket)
             it.sourceKey(prefix.resolve(src).normalize().toString())
@@ -264,7 +255,7 @@ class S3(
             .toSet()
     }
 
-    override fun deleteIfExists(k: Path) = scope.future<Unit> {
+    override suspend fun deleteIfExists(k: Path) {
         client.deleteObject {
             it.bucket(bucket)
             it.key(prefix.resolve(k).toString())

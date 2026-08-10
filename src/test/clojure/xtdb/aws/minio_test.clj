@@ -13,7 +13,7 @@
            [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse]
-           [xtdb.api.storage ObjectStore Storage]
+           [xtdb.api.storage ObjectStore ObjectStoreSync Storage]
            [xtdb.aws S3]
            [xtdb.multipart IMultipartUpload SupportsMultipart]
            [xtdb.storage RemoteBufferPool]))
@@ -100,27 +100,27 @@
 (t/deftest ^:minio multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
     (let [multipart-key (util/->path "test-multi-created")
-          multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)]
+          multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os multipart-key)]
 
       ;; MinIO doesn't seem to support listing incomplete uploads
 
       (t/testing "Call to abort a multipart upload should work"
-        (t/is @(.abort multipart-upload))))))
+        (t/is (ObjectStoreSync/abort multipart-upload))))))
 
 (t/deftest ^:minio multipart-put-test
   (with-open [os (object-store (random-uuid))]
     (let [prefix (:prefix os)
-          ^IMultipartUpload multipart-upload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+          ^IMultipartUpload multipart-upload (ObjectStoreSync/startMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)
 
           parts [;; Uploading parts to multipart upload
-                 (.uploadPart multipart-upload 0 file-part-1)
-                 (.uploadPart multipart-upload 1 file-part-2)]]
+                 (ObjectStoreSync/uploadPart multipart-upload 0 file-part-1)
+                 (ObjectStoreSync/uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
-        @(.complete multipart-upload (mapv deref parts))
+        (ObjectStoreSync/complete multipart-upload parts)
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
                                                                           (.bucket bucket)
@@ -134,7 +134,7 @@
                                      (* 2 part-size))]
                  (.listAllObjects ^ObjectStore os)))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer (ObjectStoreSync/getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 

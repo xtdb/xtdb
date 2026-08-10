@@ -41,7 +41,7 @@ abstract class PartitionedStorageTest : StorageTest() {
                 assertEquals(1L, p1.latestAvailableBlockIndex(), "block discovery is per-partition")
 
                 // delete is GC's primitive — a partition's GC must never touch a sibling's files
-                p0.deleteIfExists("blocks/b${0L.asLexHex}.binpb".asPath)
+                p0.deleteIfExistsSync("blocks/b${0L.asLexHex}.binpb".asPath)
 
                 assertEquals(emptyList<StoredObject>(), p0.listAllObjects().toList())
                 assertEquals(2, p1.listAllObjects().count(), "partition 1 unaffected by partition 0's delete")

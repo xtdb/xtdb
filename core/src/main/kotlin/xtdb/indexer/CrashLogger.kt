@@ -67,11 +67,11 @@ class CrashLogger @JvmOverloads constructor(
 
         LOG.warn("writing crash log: $crashDir")
 
-        bufferPool.putObject(crashDir.resolve("crash.edn"), ByteBuffer.wrap(crashEdn.toByteArray()))
+        bufferPool.putObjectSync(crashDir.resolve("crash.edn"), ByteBuffer.wrap(crashEdn.toByteArray()))
 
         val liveTable = liveIndex.table(table) ?: return
 
-        bufferPool.putObject(
+        bufferPool.putObjectSync(
             crashDir.resolve("live-trie.binpb"),
             ByteBuffer.wrap(liveTable.liveTrie.asProto)
         )
@@ -82,7 +82,7 @@ class CrashLogger @JvmOverloads constructor(
 
         writeArrow(crashDir.resolve("open-tx-table.arrow"), openTxTable.txRelation)
 
-        bufferPool.putObject(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.trie.asProto))
+        bufferPool.putObjectSync(crashDir.resolve("open-tx-trie.binpb"), ByteBuffer.wrap(openTxTable.trie.asProto))
 
         queryRel?.let { writeArrow(crashDir.resolve("query-rel.arrow"), it) }
         txOpsRdr?.let { writeTxOpsToArrow(crashDir.resolve("tx-ops.arrow"), it) }

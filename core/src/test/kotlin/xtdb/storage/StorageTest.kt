@@ -29,9 +29,9 @@ abstract class StorageTest {
     @Test
     fun listObjectTests_3545() {
         val storage = storage().apply {
-            putObject("a/b/c".asPath, ByteBuffer.wrap(ByteArray(10)))
-            putObject("a/b/d".asPath, ByteBuffer.wrap(ByteArray(10)))
-            putObject("a/e".asPath, ByteBuffer.wrap(ByteArray(10)))
+            putObjectSync("a/b/c".asPath, ByteBuffer.wrap(ByteArray(10)))
+            putObjectSync("a/b/d".asPath, ByteBuffer.wrap(ByteArray(10)))
+            putObjectSync("a/e".asPath, ByteBuffer.wrap(ByteArray(10)))
         }
 
         Thread.sleep(100)
@@ -49,7 +49,7 @@ abstract class StorageTest {
     }
 
     protected fun BufferPool.writeBlock(blockIndex: Long, size: Int = 10) {
-        putObject("blocks/b${blockIndex.asLexHex}.binpb".asPath, ByteBuffer.wrap(ByteArray(size)))
+        putObjectSync("blocks/b${blockIndex.asLexHex}.binpb".asPath, ByteBuffer.wrap(ByteArray(size)))
     }
 
     @Test

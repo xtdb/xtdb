@@ -35,7 +35,7 @@ class BlockGarbageCollectorTest {
             this.tableNames.addAll(tableNames)
         }
         val bytes = ByteBuffer.wrap(block.toByteArray())
-        basePaths.forEach { bufferPool.putObject(it.resolve("b${index.asLexHex}.binpb"), bytes.duplicate()) }
+        basePaths.forEach { bufferPool.putObjectSync(it.resolve("b${index.asLexHex}.binpb"), bytes.duplicate()) }
     }
 
     private fun assertBlockCount(bufferPool: BufferPool, path: Path, expected: Int) {

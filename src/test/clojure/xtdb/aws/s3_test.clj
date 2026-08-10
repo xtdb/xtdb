@@ -11,7 +11,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
-           [xtdb.api.storage ObjectStore Storage]
+           [xtdb.api.storage ObjectStore ObjectStoreSync Storage]
            [xtdb.aws S3]
            [xtdb.multipart IMultipartUpload SupportsMultipart]
            [xtdb.storage RemoteBufferPool]))
@@ -99,33 +99,33 @@
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
     (let [multipart-key (util/->path "test-multi-created")
-          multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)]
+          multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os multipart-key)]
 
       (t/is (= #{multipart-key} (set (.listUploads os))) "multipart upload should be present in the list")
 
       (t/testing "Call to abort a multipart upload should work - should be removed from the upload list"
-        @(.abort multipart-upload)
+        (ObjectStoreSync/abort multipart-upload)
         (t/is (empty? (.listUploads os)))))))
 
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
+    (let [multipart-upload ^IMultipartUpload (ObjectStoreSync/startMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)
           parts [;; Uploading parts to multipart upload
-                 (.uploadPart multipart-upload 0 file-part-1)
-                 (.uploadPart multipart-upload 1 file-part-2)]]
+                 (ObjectStoreSync/uploadPart multipart-upload 0 file-part-1)
+                 (ObjectStoreSync/uploadPart multipart-upload 1 file-part-2)]]
 
       (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
-        @(.complete multipart-upload (mapv deref parts))
+        (ObjectStoreSync/complete multipart-upload parts)
         (t/is (empty? (.listUploads os))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= [(os/->StoredObject (util/->path "test-multi-put") (* 2 part-size))]
                  (vec (.listAllObjects ^ObjectStore os))))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer (ObjectStoreSync/getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
 

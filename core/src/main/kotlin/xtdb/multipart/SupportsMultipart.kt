@@ -1,20 +1,20 @@
 package xtdb.multipart
 
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.future.await
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import xtdb.api.storage.ObjectStore
 import xtdb.storage.RemoteBufferPool
 import xtdb.util.logger
 import xtdb.util.warn
 import java.nio.ByteBuffer
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 
 interface SupportsMultipart<Part> : ObjectStore {
-    fun startMultipart(k: Path): CompletableFuture<IMultipartUpload<Part>>
+    suspend fun startMultipart(k: Path): IMultipartUpload<Part>
 
     companion object {
 
@@ -22,31 +22,37 @@ interface SupportsMultipart<Part> : ObjectStore {
 
         private val LOGGER = RemoteBufferPool::class.logger
 
+        // bounds the number of parts in flight, and hence the buffers pinned for them. Note that a
+        // `limitedParallelism` view of `Dispatchers.IO` is *elastic* — it draws on an unbounded pool
+        // rather than IO's own permits — so this caps concurrency, not thread supply.
         private val multipartUploadDispatcher =
             IO.limitedParallelism(MAX_CONCURRENT_PART_UPLOADS, "upload-multipart")
 
-        @JvmStatic
-        fun <P> SupportsMultipart<P>.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>): Unit = runBlocking {
-            val upload = startMultipart(key).await()
+        suspend fun <P> SupportsMultipart<P>.uploadMultipartBuffers(key: Path, nioBuffers: List<ByteBuffer>): Unit =
+            coroutineScope {
+                val upload = startMultipart(key)
 
-            try {
-                val waitingParts = nioBuffers.mapIndexed { idx, it ->
-                    async(multipartUploadDispatcher) {
-                        upload.uploadPart(idx, it).await()
-                    }
-                }
-
-                upload.complete(waitingParts.awaitAll()).await()
-            } catch (e: Throwable) {
                 try {
-                    LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
-                    upload.abort().get()
-                } catch (abortError: Throwable) {
-                    LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
-                    e.addSuppressed(abortError)
+                    val waitingParts = nioBuffers.mapIndexed { idx, it ->
+                        async(multipartUploadDispatcher) { upload.uploadPart(idx, it) }
+                    }
+
+                    upload.complete(waitingParts.awaitAll())
+                } catch (e: Throwable) {
+                    // NonCancellable because the common reason for getting here is that our scope was
+                    // cancelled — a request timeout, say. Aborting is itself a suspending call to the
+                    // store, so without this it would fail immediately and leave the parts orphaned.
+                    withContext(NonCancellable) {
+                        try {
+                            LOGGER.warn("Error caught in uploadMultipartBuffers - aborting multipart upload of $key")
+                            upload.abort()
+                        } catch (abortError: Throwable) {
+                            LOGGER.warn(abortError, "Throwable caught when aborting uploadMultipartBuffers")
+                            e.addSuppressed(abortError)
+                        }
+                    }
+                    throw e
                 }
-                throw e
             }
-        }
     }
 }

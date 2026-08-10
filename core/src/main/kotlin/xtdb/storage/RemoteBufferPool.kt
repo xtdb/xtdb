@@ -2,8 +2,16 @@ package xtdb.storage
 
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.future.future
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.seconds
 import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.ArrowFooter
@@ -45,6 +53,8 @@ internal class RemoteBufferPool(
 ) : BufferPool, IEvictBufferTest, Closeable {
 
     private val allocator = allocator.openChildAllocator("buffer-pool")
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val arrowFooterCache = arrowFooterCache()
 
@@ -96,20 +106,25 @@ internal class RemoteBufferPool(
         }
     }
 
-    private fun ObjectStore.uploadArrowFile(key: Path, tmpPath: Path) {
+    private suspend fun ObjectStore.uploadArrowFile(key: Path, tmpPath: Path) {
         val mmapBuffer = toMmapPath(tmpPath)
 
         if (this !is SupportsMultipart<*> || mmapBuffer.remaining() <= minMultipartPartSize) {
-            putObject(key, mmapBuffer).get()
+            putObject(key, mmapBuffer)
         } else {
             mmapBuffer.openArrowBufView(allocator).use { uploadMultipartBuffers(key, it.toParts()) }
         }
     }
 
+    // The one place object-store I/O crosses back out of coroutines. `DiskCache.Fetch` is a
+    // future-returning functional interface, so a suspending read has to be bridged for it; every other
+    // path through here stays suspending end-to-end. Cancellation does not cross this boundary — a read
+    // abandoned here leaves its request running, unlike a write.
     private fun getObject(key: Path, tmpFile: Path) =
-        objectStore.getObject(key, tmpFile).thenApply { path ->
-            networkRead?.increment(path.fileSize().toDouble())
-            path
+        scope.future {
+            objectStore.getObject(key, tmpFile).also { path ->
+                networkRead?.increment(path.fileSize().toDouble())
+            }
         }
 
     override fun getByteArray(key: Path): ByteArray = runBlocking {
@@ -158,9 +173,9 @@ internal class RemoteBufferPool(
     override fun listAllObjects() = objectStore.listAllObjects()
     override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
     override fun listAfter(dir: Path, afterKey: Path) = objectStore.listAfter(dir, afterKey)
-    override fun copyObject(src: Path, dest: Path): Unit = objectStore.copyObject(src, dest).get()
+    override suspend fun copyObject(src: Path, dest: Path) = objectStore.copyObject(src, dest)
 
-    override fun deleteIfExists(key: Path): Unit = runBlocking { objectStore.deleteIfExists(key).await() }
+    override suspend fun deleteIfExists(key: Path) = objectStore.deleteIfExists(key)
 
     override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
         val tmpPath = diskCache.createTempPath()
@@ -193,12 +208,13 @@ internal class RemoteBufferPool(
             }
     }
 
-    override fun putObject(key: Path, buffer: ByteBuffer) {
+    override suspend fun putObject(key: Path, buffer: ByteBuffer) {
         networkWrite?.increment(buffer.capacity().toDouble())
-        objectStore.putObject(key, buffer).get()
+        objectStore.putObject(key, buffer)
     }
 
     override fun close() {
+        runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         objectStore.close()
         allocator.close()
     }
