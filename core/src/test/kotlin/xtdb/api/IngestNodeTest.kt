@@ -13,7 +13,6 @@ import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
-import java.net.ServerSocket
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -105,19 +104,18 @@ class IngestNodeTest {
     fun `serves healthz endpoints when configured`() {
         val indexed = CountDownLatch(1)
         val source = CountingExternalSource.Factory(1, indexed, ConcurrentLinkedQueue())
-        val port = ServerSocket(0).use { it.localPort }
 
         IngestNode.Config()
             .database("orders", extDbConfig(source))
-            .healthz(HealthzConfig(port = port))
+            .healthz(HealthzConfig())
             .open()
-            .use {
+            .use { node ->
                 assertTrue(indexed.await(30, TimeUnit.SECONDS), "the source ran alongside healthz")
 
                 val client = HttpClient.newHttpClient()
                 fun get(path: String): HttpResponse<String> =
                     client.send(
-                        HttpRequest.newBuilder(URI("http://localhost:$port$path")).build(),
+                        HttpRequest.newBuilder(URI("http://localhost:${node.healthzPort}$path")).build(),
                         HttpResponse.BodyHandlers.ofString(),
                     )
 

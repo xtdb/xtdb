@@ -13,7 +13,7 @@
            io.netty.util.internal.PlatformDependent
            (java.io File IOException Writer)
            java.lang.AutoCloseable
-           (java.net MalformedURLException ServerSocket URI URL)
+           (java.net MalformedURLException URI URL)
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException ClosedByInterruptException FileChannel FileChannel$MapMode)
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
@@ -482,17 +482,6 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
-
-(defn port-free? [^long port]
-  (try
-    (.close (ServerSocket. port))
-    true
-    (catch java.net.BindException _e
-      false)))
-
-(defn free-port ^long []
-  (with-open [s (ServerSocket. 0)]
-    (.getLocalPort s)))
 
 (defn seeded-gensym
   ([] (seeded-gensym "" 0))
