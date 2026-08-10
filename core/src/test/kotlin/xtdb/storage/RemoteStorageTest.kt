@@ -4,19 +4,26 @@ import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.Timeout.ThreadMode.SEPARATE_THREAD
 import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.api.io.TempDir
+import java.util.concurrent.TimeUnit.SECONDS
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
+import xtdb.api.error.Unavailable
 import xtdb.api.storage.InMemoryBucket
 import xtdb.api.storage.ObjectStore
 import xtdb.api.storage.PrefixedObjectStore
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.remote
+import xtdb.api.storage.StoreOperation.ABORT
 import xtdb.api.storage.StoreOperation.COMPLETE
 import xtdb.api.storage.StoreOperation.UPLOAD
 import xtdb.arrow.Relation
@@ -30,6 +37,7 @@ import xtdb.util.asPath
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import kotlin.io.path.listDirectoryEntries
+import kotlin.time.Duration.Companion.milliseconds
 import com.google.protobuf.Any as ProtoAny
 
 @ExtendWith(AllocatorResolver::class)
@@ -171,6 +179,56 @@ class RemoteStorageTest : PartitionedStorageTest() {
             val rel = Relation.fromRecordBatch(al, footer.schema, rb)
             rel.close()
         }
+    }
+
+    /**
+     * The bound asserted here is the production [requestTimeout]: everything stays on the test
+     * dispatcher, so runTest's virtual clock skips it for free and there's nothing to rig. That also
+     * makes runTest's own timeout the hang-protection — a regression cancels cleanly and fails the test.
+     */
+    @Test
+    fun `a write to a store that never answers fails rather than hanging`() = runTest {
+        val stall = InMemoryBucket.Stall().also { xtdbBucket.stall = it }
+
+        assertInstanceOf(
+            Unavailable::class.java,
+            runCatching {
+                remoteBufferPool.putObject("blocks/b00.binpb".asPath, ByteBuffer.wrap(ByteArray(10)))
+            }.exceptionOrNull(),
+            "the write failed rather than hanging"
+        )
+
+        assertTrue(stall.cancelled.isCompleted, "the stalled request was cancelled, not merely abandoned")
+    }
+
+    /**
+     * No runTest here: parts upload on a real dispatcher, outside the test scheduler, so the bound is
+     * real-clock and has to be shortened by hand. SEPARATE_THREAD because a regression would then wedge
+     * the run rather than fail it, and the default thread mode only checks the clock after the fact.
+     */
+    @Test
+    @Timeout(value = 30, unit = SECONDS, threadMode = SEPARATE_THREAD)
+    fun `a stalled part upload aborts the multipart upload`(al: BufferAllocator) {
+        val stall = InMemoryBucket.Stall().also { xtdbBucket.stall = it }
+
+        val prevTimeout = requestTimeout
+        requestTimeout = 100.milliseconds
+
+        try {
+            Relation(al, "a" ofType I32).use { relation ->
+                remoteBufferPool.openArrowWriter(Path.of("aw"), relation).use { writer ->
+                    val v = relation["a"]
+                    for (i in 0 until 10) v.writeInt(i)
+                    writer.writePage()
+                    assertThrows(Unavailable::class.java) { writer.endSync() }
+                }
+            }
+        } finally {
+            requestTimeout = prevTimeout
+        }
+
+        assertTrue(stall.cancelled.isCompleted, "the stalled part upload was cancelled")
+        assertEquals(listOf(ABORT), xtdbBucket.calls, "the parts were aborted rather than left orphaned")
     }
 
     @Test

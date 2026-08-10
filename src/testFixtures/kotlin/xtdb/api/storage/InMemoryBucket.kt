@@ -1,5 +1,7 @@
 package xtdb.api.storage
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import xtdb.api.storage.ObjectStore.StoredObject
 import xtdb.multipart.IMultipartUpload
 import java.nio.ByteBuffer
@@ -29,6 +31,26 @@ class InMemoryBucket(
     val buffers: NavigableMap<Path, ByteBuffer> = ConcurrentSkipListMap()
 ) {
 
+    /**
+     * A store that has accepted a write it will never answer (#5850).
+     *
+     * [cancelled] completes when the stalled call is cancelled, which is what distinguishes a bound
+     * that tore the request down from one that merely stopped waiting on it.
+     */
+    class Stall {
+        val cancelled = CompletableDeferred<Unit>()
+
+        suspend fun hang(): Nothing =
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled.complete(Unit)
+            }
+    }
+
+    @Volatile
+    var stall: Stall? = null
+
     private fun copyByteBuffer(buffer: ByteBuffer) =
         ByteBuffer.allocate(buffer.remaining()).put(buffer.duplicate()).flip()
 
@@ -51,6 +73,7 @@ class InMemoryBucket(
     }
 
     suspend fun putObject(k: Path, buf: ByteBuffer) {
+        stall?.hang()
         buffers[k] = buf
         calls.add(StoreOperation.PUT)
     }
@@ -79,6 +102,7 @@ class InMemoryBucket(
     suspend fun startMultipart(k: Path): IMultipartUpload<ByteBuffer> =
         object : IMultipartUpload<ByteBuffer> {
             override suspend fun uploadPart(idx: Int, buf: ByteBuffer): ByteBuffer {
+                stall?.hang()
                 calls.add(StoreOperation.UPLOAD)
                 return copyByteBuffer(buf)
             }

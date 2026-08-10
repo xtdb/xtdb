@@ -110,21 +110,22 @@ internal class RemoteBufferPool(
         val mmapBuffer = toMmapPath(tmpPath)
 
         if (this !is SupportsMultipart<*> || mmapBuffer.remaining() <= minMultipartPartSize) {
-            putObject(key, mmapBuffer)
+            withRequestTimeout("putObject $key") { putObject(key, mmapBuffer) }
         } else {
             mmapBuffer.openArrowBufView(allocator).use { uploadMultipartBuffers(key, it.toParts()) }
         }
     }
 
-    // The one place object-store I/O crosses back out of coroutines. `DiskCache.Fetch` is a
-    // future-returning functional interface, so a suspending read has to be bridged for it; every other
-    // path through here stays suspending end-to-end. Cancellation does not cross this boundary — a read
-    // abandoned here leaves its request running, unlike a write.
+    // The one place object-store I/O crosses back out of coroutines: `DiskCache.Fetch` is a
+    // future-returning functional interface, because the disk cache is a Caffeine `AsyncCache`.
+    //
+    // The timeout therefore has to go on the inside of the bridge. That's also the only correct place
+    // for it: the future is shared between every concurrent reader of the key, so a bound owned by one
+    // awaiter would tear down a fetch the others are still waiting on.
     private fun getObject(key: Path, tmpFile: Path) =
         scope.future {
-            objectStore.getObject(key, tmpFile).also { path ->
-                networkRead?.increment(path.fileSize().toDouble())
-            }
+            withRequestTimeout("getObject $key") { objectStore.getObject(key, tmpFile) }
+                .also { path -> networkRead?.increment(path.fileSize().toDouble()) }
         }
 
     override fun getByteArray(key: Path): ByteArray = runBlocking {
@@ -173,9 +174,11 @@ internal class RemoteBufferPool(
     override fun listAllObjects() = objectStore.listAllObjects()
     override fun listAllObjects(dir: Path) = objectStore.listAllObjects(dir)
     override fun listAfter(dir: Path, afterKey: Path) = objectStore.listAfter(dir, afterKey)
-    override suspend fun copyObject(src: Path, dest: Path) = objectStore.copyObject(src, dest)
+    override suspend fun copyObject(src: Path, dest: Path) =
+        withRequestTimeout("copyObject $src -> $dest") { objectStore.copyObject(src, dest) }
 
-    override suspend fun deleteIfExists(key: Path) = objectStore.deleteIfExists(key)
+    override suspend fun deleteIfExists(key: Path) =
+        withRequestTimeout("deleteIfExists $key") { objectStore.deleteIfExists(key) }
 
     override fun openArrowWriter(key: Path, rel: Relation): ArrowWriter {
         val tmpPath = diskCache.createTempPath()
@@ -210,7 +213,7 @@ internal class RemoteBufferPool(
 
     override suspend fun putObject(key: Path, buffer: ByteBuffer) {
         networkWrite?.increment(buffer.capacity().toDouble())
-        objectStore.putObject(key, buffer)
+        withRequestTimeout("putObject $key") { objectStore.putObject(key, buffer) }
     }
 
     override fun close() {
