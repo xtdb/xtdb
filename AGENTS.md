@@ -126,9 +126,9 @@ Treat a hit from another project as "already tracked, leave it alone".
 
 When you open an issue *or* PR, work out whether it's standalone or part of a surrounding issue, then:
 
-- **There's a surrounding issue** (the PR closes, advances, or is otherwise scoped by an open issue): the **issue** carries the board card and, if the work is end-user-visible, the milestone.
+- **There's a surrounding issue** (the PR closes, advances, or is otherwise scoped by an open issue): the **issue** carries the board card, and the milestone if it passes both tests in [Milestones](#milestones) below.
   The PR does not go on the board and does not get a milestone — it inherits them through the issue.
-- **It's a standalone PR** (no surrounding issue, e.g. a small fix, cleanup, or dependency bump worth noting in release notes): the **PR** goes on the board and on the milestone directly.
+- **It's a standalone PR** (no surrounding issue, e.g. a small fix, cleanup, or dependency bump worth noting in release notes): the **PR** goes on the board directly, and takes the milestone on the same two tests.
 
 This mirrors how the release notes are written — one entry per issue-or-standalone-PR, never both.
 Applies to docs-only and meta/repo-admin work too (1.x work is the only category that doesn't go on the 2.x board, and there's very little of that these days).
@@ -148,9 +148,40 @@ Flattening everything onto the umbrella out of habit loses the dependency struct
 
 ### Milestones
 
-A milestone is the release-notes scope, so it carries a narrower test than the board does: set one only when the work is **end-user-visible**.
-Internal refactors, module-author-facing SPI tightening, test-infra and infrastructure cleanup go on the board with an appropriate `Stream` but MUST NOT go on `2-NEXT` or any other milestone, however large they are.
-End users don't read about interface tightening; putting it on the milestone clutters the release notes with internal noise.
+A milestone means two different things depending on the card's state, and both readings have to keep working:
+
+- **Open on the milestone** means *the release is waiting for this* — the open list is the "what's left before we can ship?" queue.
+- **Closed on the milestone** means *this shipped in the release* — the closed list is the release-notes scope.
+
+So setting a milestone **when you create a card** requires it to pass two tests, not one:
+
+- **End-user-visible.**
+  Internal refactors, module-author-facing SPI tightening, test-infra and infrastructure cleanup go on the board with an appropriate `Stream` but MUST NOT go on `2-NEXT` or any other milestone, however large they are — not at creation, and not at close either.
+  End users don't read about interface tightening; putting it on the milestone clutters the release notes with internal noise.
+- **Blocking the next release** — would we hold the release for this?
+  If not, leave the milestone off at creation and **set it when you close the card**.
+  By then it has definitely landed in the release, so it earns its release-notes entry without ever having claimed to be a blocker.
+
+You MAY add the milestone to an open card mid-flight, once it's decided the work is going into this release after all.
+That is the same move as setting it at close, just earlier, and it is the only reason an open card should gain one.
+
+The rule follows from what the open list is for.
+Every card on it asserts the release is waiting, so a non-blocker dilutes exactly the signal the list exists to carry, and "is this milestone still accurate?" stops being answerable at a glance.
+
+**Bugs are not automatically blockers.**
+It is tempting to treat every bug as a showstopper.
+Most are not, and reaching for the milestone by reflex is how the open list fills up with work nobody intends to hold the release for.
+
+- **A pre-existing bug is presumptively not a blocker**: if the last release shipped with it, this one can too.
+  What overrides that is a change in the bug's *situation* rather than its existence — it got worse, it became reachable on a path this release adds, or something else shipping this release makes it materially more likely to be hit.
+- **Severity is the test, not the issue type.**
+  A `Bug` type and a `fix:` prefix say nothing about whether the release waits for it.
+  Silent data loss or corruption usually does qualify, as does wedging a node or a database with no operator route out; a wrong error message on a narrow edge case usually doesn't.
+- **Wrong observability can be load-bearing for something else on the milestone.**
+  A metric that reads healthy when it knows nothing is ordinarily its own card, and becomes a blocker when a change already in the release makes that metric the signal an operator is told to rely on.
+
+When you can't tell, ask rather than defaulting.
+Defaulting *on* is the more expensive mistake here: an absent milestone is caught when the card closes, whereas a wrong one quietly misrepresents the release scope until someone audits it.
 
 The open milestone is always named `2-NEXT`.
 Look up its current REST number by name+state rather than caching it:
@@ -159,7 +190,8 @@ Look up its current REST number by name+state rather than caching it:
 gh api '/repos/xtdb/xtdb/milestones?state=open' --jq '.[] | select(.title=="2-NEXT") | .number'
 ```
 
-Set it on an issue or PR with `gh issue edit N --milestone 2-NEXT` / `gh pr edit N --milestone 2-NEXT`.
+Set it on an issue or PR with `gh issue edit N --milestone 2-NEXT` / `gh pr edit N --milestone 2-NEXT`, and take it off with `gh issue edit N --remove-milestone` / `gh pr edit N --remove-milestone`.
+Removing a milestone leaves the board card and its fields untouched, so it is the right move for a card that turned out not to be blocking — it drops out of the release scope and stays tracked.
 
 ### Labels
 
