@@ -4,6 +4,34 @@ title: Troubleshooting a Postgres external source
 
 If a source's ingestion has stopped, you can make the database dormant — see [Skipping Databases](/ops/troubleshooting#skipping-databases-v22) in the general troubleshooting guide.
 
+## Ingestion won't start on PostgreSQL 16 or earlier
+
+**Symptom:**
+Ingestion never starts, and the database reports an error containing `unrecognized option: failover`.
+
+**Cause:**
+XTDB creates its replication slot with the `failover` option, which was introduced in PostgreSQL 17.
+Earlier versions reject the whole command, so no slot is created and nothing is left behind on the upstream.
+
+**Resolution:**
+Upgrade the upstream to PostgreSQL 17 or later.
+There is no configuration that makes an earlier version work — see [prerequisites](/ops/external-sources/postgres/reference#prerequisites).
+
+If you need to run against an earlier version, please [raise an issue](https://github.com/xtdb/xtdb/issues/new) — supporting one is something we would consider.
+
+## Ingestion won't start against a standby
+
+**Symptom:**
+Ingestion never starts, and the database reports an error containing `cannot enable failover for a replication slot created on the standby`.
+
+**Cause:**
+The source is pointed at a standby rather than a primary.
+Postgres allows logical decoding from a standby, but rejects the `failover` option on a slot created there, and XTDB always sets it.
+
+**Resolution:**
+Point the source at the primary.
+If you were reading from a standby to keep decoding load off the primary, note that this is not currently supported.
+
 ## Recovering from a failed initial snapshot
 
 **Symptom:**

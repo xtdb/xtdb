@@ -11,7 +11,6 @@ import org.testcontainers.images.builder.ImageFromDockerfile
 import org.testcontainers.lifecycle.Startables
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
-import org.postgresql.PGProperty
 import xtdb.XtdbInternal
 import xtdb.api.Xtdb
 import xtdb.postgres.proto.PostgresSourceToken
@@ -19,7 +18,6 @@ import java.nio.file.Files
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Duration
-import java.util.Properties
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -139,23 +137,6 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     private fun pgExec(host: String, port: Int, sql: String) =
         conn(host, port).use { c -> c.createStatement().use { it.execute(sql) } }
 
-    /** `ALTER_REPLICATION_SLOT` isn't SQL — it's only accepted on a connection started with
-     * `replication=database`. Simple query mode goes with it: such connections reject the extended
-     * query protocol pgjdbc otherwise defaults to. */
-    private fun replicationCommand(host: String, port: Int, command: String) {
-        val props = Properties().apply {
-            PGProperty.USER.set(this, "testuser")
-            PGProperty.PASSWORD.set(this, "testpass")
-            PGProperty.REPLICATION.set(this, "database")
-            PGProperty.ASSUME_MIN_SERVER_VERSION.set(this, "9.4")
-            PGProperty.PREFER_QUERY_MODE.set(this, "simple")
-        }
-
-        DriverManager.getConnection("jdbc:postgresql://$host:$port/testdb", props).use { c ->
-            c.createStatement().use { it.execute(command) }
-        }
-    }
-
     private fun latestToken(node: Xtdb): PostgresSourceToken? =
         (node as XtdbInternal).dbCatalog["cdc"]?.watchers?.externalSourceToken
             ?.let { PostgresSourceToken.parseFrom(it) }
@@ -178,18 +159,13 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     fun `resuming against a promoted standby surfaces an ingestion error`() = runTest(timeout = 600.seconds) {
         val slot = unique("xtdb_slot")
         val pub = unique("xtdb_pub")
-        val logDir = Files.createTempDirectory("failover-log")
-        val storageDir = Files.createTempDirectory("failover-storage")
-        val cdcLog = Files.createTempDirectory("failover-cdc-log")
-        val cdcStorage = Files.createTempDirectory("failover-cdc-storage")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
 
         HaPair(haImage).use { ha ->
             ha.start()
-
-            val primaryHost = ha.primary.host
-            val primaryPort = ha.primary.firstMappedPort
-            val standbyHost = ha.standby.host
-            val standbyPort = ha.standby.getMappedPort(5432)
 
             pgExecute(
                 ha.primary,
@@ -200,12 +176,12 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
 
             eventually(60.seconds) {
                 assertEquals(
-                    listOf("t"), pgColumn(standbyHost, standbyPort, "SELECT pg_is_in_recovery()"),
+                    listOf("t"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"),
                     "standby is up and in recovery",
                 )
             }
 
-            openNode(logDir, storageDir, primaryHost, primaryPort).use { node ->
+            openNode(logDir, storageDir, ha.primaryHost, ha.primaryPort).use { node ->
                 attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
                 awaitStreaming(node)
 
@@ -219,38 +195,39 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                     )
                 }
 
-                assertTrue(latestToken(node)?.snapshotCompleted == true, "test precondition: resume path")
                 assertEquals(
-                    listOf(slot),
-                    pgColumn(primaryHost, primaryPort, "SELECT slot_name FROM pg_replication_slots WHERE slot_type = 'logical'"),
-                    "test precondition: our slot exists before the failover",
+                    listOf("t"),
+                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
+                    "test precondition: the source creates a failover slot",
                 )
+                assertTrue(latestToken(node)?.snapshotCompleted == true, "test precondition: resume path")
 
-                // the lagging-standby case is a different failure, blocked on #5828
+                // the one difference from `a failover slot survives promotion`: the slot is never
+                // synced, so the standby holds no copy of it
                 ha.promote()
                 ha.primary.stop()
             }
 
             // asserted so the test can't pass off the back of a different failure — a missing
             // publication throws `Incorrect` from another path and would look the same outside
-            assertEquals(listOf("f"), pgColumn(standbyHost, standbyPort, "SELECT pg_is_in_recovery()"))
+            assertEquals(listOf("f"), pgColumn(ha.standbyHost, ha.standbyPort, "SELECT pg_is_in_recovery()"))
             assertEquals(
                 listOf("1", "2"),
-                pgColumn(standbyHost, standbyPort, "SELECT _id FROM widgets ORDER BY _id"),
+                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT _id FROM widgets ORDER BY _id"),
                 "rows survive the failover — Postgres loses no committed data",
             )
             assertEquals(
                 listOf("1"),
-                pgColumn(standbyHost, standbyPort, "SELECT count(*) FROM pg_publication WHERE pubname = '$pub'"),
+                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT count(*) FROM pg_publication WHERE pubname = '$pub'"),
                 "the publication survives — ordinary catalog, physically replicated",
             )
             assertEquals(
                 emptyList<String?>(),
-                pgColumn(standbyHost, standbyPort, "SELECT slot_name FROM pg_replication_slots"),
+                pgColumn(ha.standbyHost, ha.standbyPort, "SELECT slot_name FROM pg_replication_slots"),
                 "but no slot does — pg_replslot is neither WAL-logged nor base-backed-up",
             )
 
-            openNode(logDir, storageDir, standbyHost, standbyPort).use { node ->
+            openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
                 val dbs = (node as XtdbInternal).dbCatalog
 
                 // the disabled `slot recreation silently drops changes` in
@@ -274,13 +251,13 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
     }
 
     @Test
-    fun `an operator-enabled failover slot survives promotion`() = runTest(timeout = 600.seconds) {
+    fun `a failover slot survives promotion`() = runTest(timeout = 600.seconds) {
         val slot = unique("xtdb_slot")
         val pub = unique("xtdb_pub")
-        val logDir = Files.createTempDirectory("sync-log")
-        val storageDir = Files.createTempDirectory("sync-storage")
-        val cdcLog = Files.createTempDirectory("sync-cdc-log")
-        val cdcStorage = Files.createTempDirectory("sync-cdc-storage")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
 
         HaPair(haImage).use { ha ->
             ha.start()
@@ -305,41 +282,24 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
                 awaitStreaming(node)
 
-                assertEquals(
-                    listOf("f"),
-                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                    "test precondition: XTDB creates its slot without failover",
-                )
-            }
-
-            // ALTER_REPLICATION_SLOT blocks on an active slot rather than erroring, so the source
-            // has to be stopped first — an unclean disconnect can hold it until wal_sender_timeout
-            eventually(90.seconds) {
-                assertEquals(
-                    listOf("f"),
-                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT active FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                    "slot released once the node closed",
-                )
-            }
-
-            replicationCommand(ha.primaryHost, ha.primaryPort, "ALTER_REPLICATION_SLOT $slot (FAILOVER true)")
-
-            assertEquals(
-                listOf("t"),
-                pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                "the operator's ALTER took effect",
-            )
-
-            openNode(logDir, storageDir, ha.primaryHost, ha.primaryPort).use { node ->
-                // consuming keeps restart_lsn moving with the standby; a frozen slot can't be copied
-                pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'after-alter')")
+                // advances the token past the snapshot's consistent point, so the reopen below
+                // takes the resume path rather than re-snapshotting
+                pgExecute(ha.primary, "INSERT INTO widgets (_id, name) VALUES (2, 'streamed-row')")
                 eventually(30.seconds) {
                     assertTrue(
                         xtQuery(node, "cdc", "SELECT _id FROM public.widgets WHERE _id = 2").isNotEmpty(),
-                        "source resumed against the upgraded slot",
+                        "streamed row mirrored",
                     )
                 }
 
+                assertEquals(
+                    listOf("t"),
+                    pgColumn(ha.primaryHost, ha.primaryPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'"),
+                    "test precondition: the source creates a failover slot",
+                )
+                assertTrue(latestToken(node)?.snapshotCompleted == true, "test precondition: resume path")
+
+                // consuming above kept restart_lsn moving with the standby; a frozen slot can't be copied
                 eventually(60.seconds) {
                     assertEquals(listOf(slot), ha.syncSlots(), "slot copied to the standby")
                 }
@@ -352,7 +312,7 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                 listOf("t", "t"),
                 pgColumn(ha.standbyHost, ha.standbyPort, "SELECT failover FROM pg_replication_slots WHERE slot_name = '$slot'") +
                     pgColumn(ha.standbyHost, ha.standbyPort, "SELECT synced FROM pg_replication_slots WHERE slot_name = '$slot'"),
-                "the slot survived promotion, unlike the unflagged one",
+                "the slot survived promotion, unlike a slot without the flag",
             )
 
             openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
@@ -370,6 +330,62 @@ class PostgresSourceFailoverTest : PostgresSourceTestBase() {
                     (node as XtdbInternal).dbCatalog["cdc"]?.ingestionError,
                     "the source resumed cleanly against the promoted standby",
                 )
+                assertPrimaryDbHealthy(node)
+            }
+        }
+    }
+
+    /** Logical decoding from a standby has worked since PG16 and a plain slot creates there fine —
+     * this is a limitation of always creating failover slots, not of standbys. */
+    @Test
+    fun `a source cannot read from a standby`() = runTest(timeout = 600.seconds) {
+        val slot = unique("xtdb_slot")
+        val pub = unique("xtdb_pub")
+        val logDir = Files.createTempDirectory("ha-log")
+        val storageDir = Files.createTempDirectory("ha-storage")
+        val cdcLog = Files.createTempDirectory("ha-cdc-log")
+        val cdcStorage = Files.createTempDirectory("ha-cdc-storage")
+
+        HaPair(haImage).use { ha ->
+            ha.start()
+
+            pgExecute(
+                ha.primary,
+                "CREATE TABLE widgets (_id INT PRIMARY KEY, name TEXT)",
+                "INSERT INTO widgets (_id, name) VALUES (1, 'snapshot-row')",
+                "CREATE PUBLICATION $pub FOR TABLE widgets",
+            )
+
+            // waited for, or the source fails its publication check first and this passes off the
+            // back of the wrong error
+            eventually(60.seconds) {
+                assertEquals(
+                    listOf("1"),
+                    pgColumn(ha.standbyHost, ha.standbyPort, "SELECT count(*) FROM pg_publication WHERE pubname = '$pub'"),
+                    "publication replicated to the standby",
+                )
+            }
+
+            openNode(logDir, storageDir, ha.standbyHost, ha.standbyPort).use { node ->
+                attachCdc(node, "cdc", cdcLog, cdcStorage, slot, pub)
+
+                val cdc = (node as XtdbInternal).dbCatalog
+                val error = eventually(30.seconds) {
+                    assertNotNull(cdc["cdc"]?.ingestionError, "a source pointed at a standby must fail, not stream")
+                }
+
+                val rendered = error.stackTraceToString()
+                assertTrue(
+                    rendered.contains("cannot enable failover for a replication slot created on the standby"),
+                    "expected Postgres' standby refusal, got: $rendered",
+                )
+
+                assertEquals(
+                    emptyList<String?>(),
+                    pgColumn(ha.standbyHost, ha.standbyPort, "SELECT slot_name FROM pg_replication_slots"),
+                    "and the refused create leaves no slot behind",
+                )
+
                 assertPrimaryDbHealthy(node)
             }
         }

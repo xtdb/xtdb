@@ -4,6 +4,8 @@ title: Postgres External Source
 
 ## Prerequisites
 
+PostgreSQL 17 or later.
+
 A [role](https://www.postgresql.org/docs/current/user-manag.html) with the following attributes and privileges:
 - The [`LOGIN`](https://www.postgresql.org/docs/current/role-attributes.html) attribute. Allows opening a session in Postgres.
 - The [`REPLICATION`](https://www.postgresql.org/docs/current/role-attributes.html) attribute. Allows opening a replication-mode connection to Postgres.
@@ -23,6 +25,7 @@ Doing so will leave the table in an inconsistent state in XTDB.
 This feature is tracked [here](https://github.com/xtdb/xtdb/issues/5497)
 :::
 
+If the upstream is an HA pair, see [surviving a Postgres failover](#surviving-a-postgres-failover) for what it needs configured in order for the replication slot to survive a promotion.
 
 ## Configuration
 
@@ -91,6 +94,19 @@ The system time of rows depends on the phase of the Postgres External Source.
 | --- | --- |
 | Snapshot | XTDB's internal system time (i.e. it is unrelated to the upstream Postgres' system clock) |
 | Streaming | The timestamp of the Postgres transaction (the timestamp on the `commit` message) |
+
+
+## Surviving a Postgres failover
+
+XTDB relies on PostgreSQL 17's [slot synchronisation](https://www.postgresql.org/docs/17/logical-replication-failover.html) to keep its replication slot across a failover of the upstream.
+It sets `failover` on the slot it creates, which makes that slot eligible to be copied to a standby.
+
+This requires XTDB to be pointed at the primary, and the following configuration options on Postgres:
+- On the standby
+  - `sync_replication_slots = on`  - run the worker that copies eligible slots
+  - `hot_standby_feedback = on` - the primary retains what the copy still needs
+- On the primary
+  - `synchronized_standby_slots = '<standby's physical slot>'` - to hold decoding back until it confirms receipt
 
 
 ## Indexers

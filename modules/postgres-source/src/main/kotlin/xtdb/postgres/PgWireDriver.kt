@@ -10,6 +10,8 @@ import org.postgresql.PGProperty
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.replication.PGReplicationStream
 import org.postgresql.util.PSQLException
+import xtdb.api.error.Conflict
+import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.pgwire.PgType
 import xtdb.util.debug
@@ -44,6 +46,46 @@ private val IDLE_POLL_PAUSE = 50.milliseconds
  */
 private fun coerceText(text: String, typeOid: Int): Any? =
     PgType.fromOid(typeOid)?.readText(text.toByteArray()) ?: text
+
+private const val SQLSTATE_DUPLICATE_OBJECT = "42710"
+
+private data class CreatedSlot(val consistentPoint: Long, val snapshotName: String)
+
+private fun Connection.createLogicalSlot(slotName: String): CreatedSlot =
+    createStatement().use { stmt ->
+        val created =
+            try {
+                stmt.executeQuery("CREATE_REPLICATION_SLOT $slotName LOGICAL pgoutput (SNAPSHOT 'export', FAILOVER)")
+            } catch (e: PSQLException) {
+                val data = mapOf("slot-name" to slotName, "psql/state" to e.sqlState)
+
+                throw if (e.sqlState == SQLSTATE_DUPLICATE_OBJECT)
+                    Conflict(
+                        "Replication slot '$slotName' already exists: ${e.message}",
+                        "xtdb.postgres/slot-exists", data, e,
+                    )
+                else
+                    Incorrect(
+                        "Failed to create replication slot '$slotName' with failover enabled" +
+                                " — postgres-source needs PostgreSQL 17 or later, connected to a primary: ${e.message}",
+                        "xtdb.postgres/slot-creation-failed", data, e,
+                    )
+            }
+
+        created.use { rs ->
+            if (!rs.next())
+                throw Fault(
+                    "CREATE_REPLICATION_SLOT returned no row for slot '$slotName'",
+                    errorCode = "xtdb.postgres/slot-creation-no-result",
+                    data = mapOf("slot-name" to slotName),
+                )
+
+            CreatedSlot(
+                consistentPoint = LogSequenceNumber.valueOf(rs.getString("consistent_point")).asLong(),
+                snapshotName = rs.getString("snapshot_name"),
+            )
+        }
+    }
 
 /** @suppress */
 class PgWireDriver(
@@ -85,23 +127,13 @@ class PgWireDriver(
 
         val replConn = openReplicationConnection()
         try {
-            val pgReplConn = replConn.unwrap(PGConnection::class.java)
-
             LOG.debug { "[$dbName] Creating replication slot '$slotName' with pgoutput" }
 
-            val slotInfo = pgReplConn.replicationAPI
-                .createReplicationSlot()
-                .logical()
-                .withSlotName(slotName)
-                .withOutputPlugin("pgoutput")
-                .make()
+            val slot = replConn.createLogicalSlot(slotName)
 
-            val snapshotName = slotInfo.snapshotName!!
-            val slotLsn = slotInfo.consistentPoint.asLong()
+            LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slot.consistentPoint)}, snapshot=${slot.snapshotName}")
 
-            LOG.info("[$dbName] Created slot '$slotName' at LSN ${LogSequenceNumber.valueOf(slotLsn)}, snapshot=$snapshotName")
-
-            return PgWireSnapshotReader(replConn, snapshotName, slotLsn)
+            return PgWireSnapshotReader(replConn, slot.snapshotName, slot.consistentPoint)
         } catch (e: Throwable) {
             replConn.close()
             throw e
