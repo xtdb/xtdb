@@ -26,7 +26,7 @@ We take great inspiration from the principle of 'making illegal states unreprese
     Internal refactors (e.g. changing internal types like `TransactionResult`, `Watchers`) are not breaking even if the types are technically `public` in Kotlin.
     The surface MUST also have **shipped in a release**.
     Changing a public API that was added but never released breaks no existing user, so it's a plain `fix:`/`feat:` — no `!`, and no `breaking change` label.
-  * You MUST use the commit skill for writing commit messages.
+  * Where chalk is available you MUST write commit messages with `chalk:commit` — see [Using chalk](#using-chalk).
 * For file operations (reading, searching, editing, writing), you SHOULD use the built-in tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`).
 * For REPL evaluation, use the `clj-nrepl-eval` command via Bash or the `/clojure-eval` skill.
 
@@ -78,7 +78,6 @@ Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec aga
 * There MUST NOT be any reflection or boxed math warnings.
 * For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
 * Verify: all changes committed AND pushed
-  You MUST use the commit skill to create commit messages.
 * Hand off: provide context for next session
 
 For user-visible features:
@@ -87,8 +86,7 @@ For user-visible features:
 ## Style
 
 You MUST use sentence-per-line in documentation files - this makes diffs cleaner and easier to review.
-For commit messages, defer to the chalk commit skill's line-break convention, if loaded.
-You MUST use the commit skill to create commit messages.
+For commit messages, defer to the chalk commit skill's line-break convention where it's loaded — see [Using chalk](#using-chalk).
 
 For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
 
@@ -133,7 +131,7 @@ When you open an issue *or* PR, work out whether it's standalone or part of a su
 This mirrors how the release notes are written — one entry per issue-or-standalone-PR, never both.
 Applies to docs-only and meta/repo-admin work too (1.x work is the only category that doesn't go on the 2.x board, and there's very little of that these days).
 
-Board `Status` is set automatically on item creation — you don't need to manage it.
+Board `Status` is set automatically on item creation, so you don't need to set it when you file — but you do when you pick the card up, per [Starting work on a card](#starting-work-on-a-card).
 `Stream` is preferable to have set, but don't make one up: set it when the right category is obvious, otherwise ask, or leave it blank and let a human classify it.
 Note that a sub-issue does NOT inherit its parent's stream — the parent's category says nothing about a child whose subject is something else — so "obvious from the parent" is not obvious.
 When that's the only reason you'd have a candidate, ask.
@@ -204,10 +202,23 @@ We don't make heavy use of labels, but two conventions matter for release notes:
   Apply when a single area is obviously the subject.
   Fetch the current list with `gh api '/repos/xtdb/xtdb/labels?per_page=100' --jq '.[].name'` rather than guessing.
 
-### Assignment
+### Starting work on a card
 
-`@me` iff you're *about to work on it* — per link:dev/GIT.adoc[] the assignee is whoever is currently responsible for moving the item forward.
-The chalk `github` agent already assigns `@me` when creating a chalk comment or a PR; if you're creating an issue or PR that you're not starting immediately, leave it unassigned.
+When you pick up an issue or PR, say so on the card *before* you start working on it.
+Two edits, and they're the whole of it:
+
+- **Assign it to yourself.**
+  Per link:dev/GIT.adoc[] the assignee is whoever is currently responsible for moving the item forward, so `@me` iff you're *about to work on it*.
+  An issue or PR you're filing but not starting immediately stays unassigned.
+  `gh issue edit N --add-assignee @me` / `gh pr edit N --add-assignee @me`.
+- **Set board `Status` to `🏗 In progress`.**
+  `gh project item-edit --id <item-id> --project-id PVT_kwDOBNKmUs4AJUwS --field-id PVTSSF_lADOBNKmUs4AJUwSzgFuIbk --single-select-option-id 1ef0eeb9`
+  Get `<item-id>` from `gh project item-list 13 --owner xtdb --format json`, matching on the issue number — it's the *project item's* id, not the issue's.
+
+The board is where everybody else sees who is on what, and for anyone outside your session it's the only place they can see it.
+An unassigned card sitting in `🔖 Selected` while somebody is halfway through the work is how two people start the same thing.
+
+The chalk skills do both of these for you, which is exactly why it's easy to forget when they aren't in use — see [Using chalk](#using-chalk).
 
 ### IDs (so you don't have to look them up)
 
@@ -237,9 +248,16 @@ Issue types (org-level, set on the issue itself rather than the project board):
 - `Feature` — a request, idea, or new functionality: `IT_kwDOBNKmUs4A3DI7`
 - `Epic` — larger projects that require breaking down: `IT_kwDOBNKmUs4BnRe4`
 
-### Delegating to the chalk `github` agent
+### Using chalk
 
-All GitHub interaction — issue creation, comments, PR creation, project-board updates, issue-type assignment, label changes, blocked-by/sub-issue wiring — goes through the chalk `github` agent.
+**Where the chalk plugin is available, use it** — `chalk:issue` for issues, `chalk:pr` for pull requests, `chalk:commit` for commit messages, and the `chalk` skill to track a piece of work against an issue.
+It carries the voice and structure those artefacts are held to, and its `github` agent does the board, assignee and issue-type mechanics for you.
+
+**Where it isn't available, the conventions still hold.**
+Write the artefacts to the conventions in this file, and make the board and assignee edits with plain `gh`.
+Chalk is the convenient route to the conventions rather than the source of them, so "chalk wasn't loaded" is not a reason for an unassigned card, a card left in `🔖 Selected`, or an issue body with no *why*.
+
+With chalk in use, all the GitHub interaction it covers — issue creation, comments, PR creation, project-board updates, issue-type assignment, label changes, blocked-by/sub-issue wiring — goes through its `github` agent rather than raw `gh`, so the voice guidance in the calling skill doesn't get bypassed.
 
 The chalk skill is deliberately generic; its own instructions specify that callers pass project-specific conventions (project IDs, field IDs, option IDs, issue-type IDs, labels, reviewers) verbatim in the prompt.
 When delegating for anything board- or issue-type-related, paste the relevant IDs from this file directly into the agent's prompt.
