@@ -22,8 +22,10 @@ import xtdb.api.tx.OpenTx
 class Snapshot(
     val txBasis: TransactionKey?,
     val trieCatSnap: TrieCatalog.Snap,
-    // Each table can have multiple TableSnapshots once dual-slot LiveTable lands;
-    // for now the list is always size 0 or 1, but readers must iterate.
+    // A table already has several of these on a transaction snapshot - the live-index segment, one
+    // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
+    // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
+    // changes that, adding a second *durable* slot for as long as block N is uploading.
     private val tableSnaps: Map<TableRef, List<TableSnapshot>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
