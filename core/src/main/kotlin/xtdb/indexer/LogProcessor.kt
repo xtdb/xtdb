@@ -43,7 +43,7 @@ class LogProcessor(
     private val externalSourceFactory: ExternalSource.Factory?,
     private val scope: CoroutineScope,
     private val skipTxs: Set<MessageId> = emptySet(),
-    private val flushTimeout: Duration = Duration.ofMinutes(5),
+    private val flushTimeout: Duration,
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 

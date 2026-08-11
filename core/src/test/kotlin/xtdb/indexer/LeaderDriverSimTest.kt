@@ -96,13 +96,14 @@ class LeaderDriverSimTest : SimulationTestBase() {
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ) : AutoCloseable {
 
+        private val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
+
         val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bufferPool)
         val trieCatalog = createTrieCatalog()
         val liveIndex =
             LiveIndex.open(
-                allocator, blockCatalog, tableCatalog, trieCatalog,
-                IndexerConfig(rowsPerBlock = rowsPerBlock), ioDispatcher = dispatcher
+                allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher
             )
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
@@ -128,6 +129,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.
             leaderTerm = termId,
+            flushTimeout = indexerConfig.flushDuration,
             scope = scope, gcDispatcher = dispatcher,
         )
 

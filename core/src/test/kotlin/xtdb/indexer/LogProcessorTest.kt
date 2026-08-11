@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
+import xtdb.api.IndexerConfig
 import xtdb.api.error.Incorrect
 import org.junit.jupiter.api.Timeout
 import org.apache.arrow.memory.BufferAllocator
@@ -68,6 +69,7 @@ class LogProcessorTest {
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
         externalSourceFactory = null,
         scope = scope,
+        flushTimeout = IndexerConfig().flushDuration,
     )
 
     @Test

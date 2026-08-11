@@ -27,6 +27,7 @@ import xtdb.database.DatabaseLogs
 import xtdb.database.DatabasePartition
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.api.IndexerConfig
 import xtdb.api.error.Incorrect
 import xtdb.indexer.BlockUploader
 import xtdb.indexer.CrashLogger
@@ -130,7 +131,9 @@ class ExternalSourceTest {
             allocator, nodeBase, partitionStorage, crashLogger,
             partitionState, "test", driver, watchers, extSource,
             skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1, scope = backgroundScope
+            afterReplicaMsgId = -1,
+            flushTimeout = IndexerConfig().flushDuration,
+            scope = backgroundScope
         ).also(leadersToClose::add)
     }
 

@@ -70,16 +70,16 @@ Two [node settings](/ops/config) drive that cadence, whichever comes first:
 
 : A busy database reaches this long before any timeout, so retention tracks throughput.
 
-`flushDuration` (default `PT4H`)
+`flushDuration` (default `PT15M`)
 
 : A quiet database cuts a block on this timer instead.
-  On the default it sets the worst case: up to four hours of WAL.
+  On the default it sets the worst case: up to fifteen minutes of WAL.
 
 Size `max_slot_wal_keep_size` to cover the peak WAL rate over that worst case, plus headroom:
 
 ```sql
--- e.g. 20 MB/s peak × 4h flushDuration ≈ 280 GB, plus headroom
-ALTER SYSTEM SET max_slot_wal_keep_size = '400GB';
+-- e.g. 20 MB/s peak × 15m flushDuration ≈ 18 GB, plus headroom
+ALTER SYSTEM SET max_slot_wal_keep_size = '32GB';
 SELECT pg_reload_conf();
 ```
 

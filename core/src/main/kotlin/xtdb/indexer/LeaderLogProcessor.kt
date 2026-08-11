@@ -54,7 +54,7 @@ internal class LeaderLogProcessor(
     afterReplicaMsgId: MessageId,
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
-    flushTimeout: Duration = Duration.ofMinutes(5),
+    flushTimeout: Duration,
     scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,

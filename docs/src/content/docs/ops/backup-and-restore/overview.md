@@ -123,7 +123,7 @@ As a result, the storage module acts as a form of backup for the log --- capturi
 Flush behavior is controlled by:
 
 - A threshold number of transactions.
-- A maximum time interval between flushes (this defaults to 4 hours)
+- A maximum time interval between flushes (this defaults to 15 minutes)
 
 These settings define your effective **Recovery Point Objective (RPO)** --- that is, how much recent data you could lose in the event of log failure.
 

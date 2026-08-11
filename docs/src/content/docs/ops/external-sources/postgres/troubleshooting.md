@@ -92,7 +92,7 @@ Two causes, distinguished by whether the block index is advancing:
 1. Check when this database last cut a block, via the `xtdb.block.last_upload_time` gauge — epoch seconds, tagged `db`.
    A value that stops advancing while the slot keeps growing is the signal to act on.
 
-2. If blocks *are* being cut, the retention is the WAL written since the last one — up to `flushDuration`'s worth, four hours on the default.
+2. If blocks *are* being cut, the retention is the WAL written since the last one — up to `flushDuration`'s worth, fifteen minutes on the default.
    This is working as intended.
    Either size retention for it, per [Size WAL retention](/ops/external-sources/postgres/setup#size-wal-retention), or lower `flushDuration` to trade more, smaller blocks for a lower retention floor.
 

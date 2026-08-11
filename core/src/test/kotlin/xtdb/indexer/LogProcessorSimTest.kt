@@ -155,7 +155,7 @@ class LogProcessorSimTest : SimulationTestBase() {
     private inner class SimNode(
         private val dbName: String,
         val bp: MemoryStorage,
-        indexerConfig: IndexerConfig,
+        private val indexerConfig: IndexerConfig,
         private val simExtSource: SimExtSource,
     ) : AutoCloseable {
 
@@ -188,6 +188,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                     ) = simExtSource
                 },
                 scope = scope,
+                flushTimeout = indexerConfig.flushDuration,
                 gcDispatcher = dispatcher,
             ).also { logProcessor = it }
 

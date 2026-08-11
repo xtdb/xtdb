@@ -13,7 +13,7 @@ data class IndexerConfig(
     var logLimit: Long = 64L,
     var pageLimit: Long = 1024L,
     var rowsPerBlock: Long = 102400L,
-    var flushDuration: Duration = Duration.ofHours(4),
+    var flushDuration: Duration = Duration.ofMinutes(15),
     var skipTxs: List<MessageId> = System.getenv("XTDB_SKIP_TXS")?.let(::parseSkipTxsEnv).orEmpty(),
     var enabled: Boolean = true
 ) {

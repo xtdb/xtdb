@@ -112,6 +112,7 @@ class LeaderLogProcessorTest {
             skipTxs = skipTxs, dbCatalog = null,
             afterReplicaMsgId = -1,
             leaderTerm = leaderTerm,
+            flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
         ).also(leadersToClose::add)
     }
@@ -187,6 +188,7 @@ class LeaderLogProcessorTest {
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
+            flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 
@@ -260,6 +262,7 @@ class LeaderLogProcessorTest {
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
+            flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 
@@ -632,6 +635,7 @@ class LeaderLogProcessorTest {
             extSource = null,
             skipTxs = setOf(10), dbCatalog = null,
             afterReplicaMsgId = -1,
+            flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
         ).also(leadersToClose::add)
 

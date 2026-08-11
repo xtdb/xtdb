@@ -213,7 +213,7 @@ Leader (v2.2+)
   A leader:
 
   - consumes the source log, resolves each transaction, and publishes the result to the replica log.
-  - at the end of each block (~100k rows/4 hours), writes the block to the object store.
+  - at the end of each block (~100k rows/15 minutes), writes the block to the object store.
 
 Follower (v2.2+)
 

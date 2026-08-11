@@ -5,6 +5,18 @@ title: Configuration
 <details>
 <summary>Changelog (last updated v2.2)</summary>
 
+v2.2: blocks are flushed every 15 minutes
+
+: A database too quiet to fill a block still writes one within 15 minutes — see [Indexer](#indexer).
+
+  Previously `indexer.flushDuration` defaulted to `PT4H`.
+  That interval bounds how much recent data lives only in the log, how long a starting node spends replaying the tail behind the last block, how stale a reader pointed at another deployment's storage can be, and — for an [external source](/ops/external-sources/overview) — how much upstream log its server has to retain.
+  Four hours was a loose bound on all four.
+
+  No upgrade steps: config that sets `flushDuration` explicitly is honoured unchanged.
+  Expect more, smaller blocks on quiet databases, and correspondingly more compaction work.
+  A database busy enough to reach `rowsPerBlock` is unaffected — it cuts on row count long before the timer fires.
+
 v2.2: garbage collection is on by default
 
 : Superseded object-store files are reclaimed without any configuration — see [Garbage Collector](#garbage-collector).
@@ -235,7 +247,7 @@ indexer:
 
   # ISO-8601 duration after which the current block is finished even if it
   # hasn't reached `rowsPerBlock`
-  flushDuration: PT4H # default
+  flushDuration: PT15M # default
 
   # Transaction ids to skip during indexing
   # Useful to work around a transaction that crashes the indexer.

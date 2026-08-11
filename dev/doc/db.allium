@@ -641,11 +641,9 @@ variant NoOpMessage : ReplicaMessage {
 ---- Config
 
 config {
-    -- 4h, not the 5 minutes on LogProcessor's own constructor parameter: Database always
-    -- passes IndexerConfig.flushDuration, so that parameter default is unreachable outside
-    -- tests. It matters which one is written here, because this is the worst-case interval
-    -- over which an external source's upstream must retain its log.
-    flush_timeout: Duration = 4.hours
+    -- The worst-case interval over which an external source's upstream must retain its log,
+    -- so the value bounds more than block cadence.
+    flush_timeout: Duration = 15.minutes
     rows_per_block: Integer = 102400
 }
 
