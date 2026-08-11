@@ -67,6 +67,43 @@ Delete everything under the location set in the `storage` block of the `ATTACH` 
 
 6. Re-run the [setup guide](/ops/external-sources/postgres/setup) from the beginning
 
+## The replication slot keeps growing
+
+**Symptom:**
+Retained WAL for the XTDB slot grows steadily, while XTDB itself looks healthy — rows are queryable, and `healthz` is green.
+
+```sql
+SELECT slot_name, wal_status,
+       pg_size_pretty(pg_current_wal_lsn() - confirmed_flush_lsn) AS retained
+FROM pg_replication_slots WHERE slot_name = 'xtdb';
+```
+
+The same figure is exported as the `xtdb.postgres_source.wal_lag_bytes` gauge.
+
+**Why this happens:**
+Where a transaction has been indexed but the block carrying it is not yet in object storage, Postgres is the only place it can be re-read from, so XTDB holds `confirmed_flush_lsn` at the last durable block and the WAL behind it stays.
+Retention therefore builds up over a block, and falls back to nothing each time one lands.
+
+That makes a growing slot a signal about *blocks*, not about ingestion.
+Two causes, distinguished by whether the block index is advancing:
+
+**Resolution:**
+
+1. Check when this database last cut a block, via the `xtdb.block.last_upload_time` gauge — epoch seconds, tagged `db`.
+   A value that stops advancing while the slot keeps growing is the signal to act on.
+
+2. If blocks *are* being cut, the retention is the WAL written since the last one — up to `flushDuration`'s worth, four hours on the default.
+   This is working as intended.
+   Either size retention for it, per [Size WAL retention](/ops/external-sources/postgres/setup#size-wal-retention), or lower `flushDuration` to trade more, smaller blocks for a lower retention floor.
+
+3. If blocks are *not* being cut, block flushing is stuck and the slot will grow without bound.
+   Check the node logs for object-store write failures, and check that some node holds leadership for this database.
+
+:::caution
+Do not confirm the slot by hand with `pg_replication_slot_advance` to reclaim space.
+That tells Postgres to discard WAL that XTDB has not persisted, and any transaction in the discarded range is lost — it exists only in the replica log and the leader's in-memory index, and cannot be re-sent.
+:::
+
 ## Ingestion halted on an unchanged TOASTed column
 
 **Symptom:**

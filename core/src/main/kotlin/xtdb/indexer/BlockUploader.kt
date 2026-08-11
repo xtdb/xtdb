@@ -1,9 +1,11 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import java.nio.ByteBuffer
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
@@ -36,6 +38,7 @@ private val defaultBlockUploadDispatcher = IO.limitedParallelism(MAX_CONCURRENT_
 class BlockUploader(
     partitionStorage: PartitionStorage,
     partitionState: PartitionState,
+    dbName: String,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
     private val meterRegistry: MeterRegistry?,
@@ -53,6 +56,22 @@ class BlockUploader(
         Timer.builder("block.upload.timer")
             .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
             .register(it)
+    }
+
+    // A timer records uploads that happened; this records the absence of one. An external source
+    // confirms its upstream position only as far as the last durable block, so a database whose blocks
+    // have quietly stopped landing pins the upstream's log while ingestion, queries and healthz all stay
+    // green — time-since-last-block is what makes that visible (#5867).
+    private val lastUploadEpochSeconds = AtomicLong(0)
+
+    init {
+        meterRegistry?.let { reg ->
+            Gauge.builder("xtdb.block.last_upload_time", lastUploadEpochSeconds) { it.get().toDouble() }
+                .description("epoch seconds at which this database's most recent block landed in object storage")
+                .baseUnit("seconds")
+                .tag("db", dbName)
+                .register(reg)
+        }
     }
 
     suspend fun uploadBlock(
@@ -107,6 +126,7 @@ class BlockUploader(
 
         bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
         blockCatalog.refresh(block)
+        lastUploadEpochSeconds.set(Instant.now().epochSecond)
 
         // Now signal followers that the block is available.
         val uploadedMsgId = replicaLog.appendMessage(

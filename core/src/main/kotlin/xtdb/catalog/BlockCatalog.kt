@@ -1,7 +1,11 @@
 package xtdb.catalog
 
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import xtdb.api.log.LeaderTerm
+import xtdb.api.tx.BlockDetails
 import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.TransactionKey
 import xtdb.types.MessageId
@@ -22,9 +26,33 @@ import xtdb.util.asPath
 import java.nio.file.Path
 import kotlin.io.path.extension
 
-class BlockCatalog(
-    @field:Volatile private var latestBlock: Block?
-) {
+// The proto is the storage format, so this is the only place that reads its presence flags: everything
+// downstream sees ordinary Kotlin nullability.
+private fun Block.asBlockDetails() = BlockDetails(
+    blockIndex = blockIndex,
+    latestCompletedTx = takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx
+        ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) },
+    latestProcessedMsgId = latestProcessedMsgId.takeIf { hasLatestProcessedMsgId() },
+    boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
+    termId = termId,
+    externalSourceToken = takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
+    tableNames = tableNamesList.map { fromSchemaAndTable(it) },
+    secondaryDatabases = secondaryDatabasesMap,
+)
+
+class BlockCatalog(initialBlock: Block?) {
+
+    private val _latestBlock = MutableStateFlow(initialBlock?.asBlockDetails())
+
+    /**
+     * The latest block this catalog knows to be in object storage, advancing on [refresh] — which the
+     * leader calls once the block file has landed, and a follower once it has read the block back.
+     *
+     * A collector is therefore observing durability, not resolution: anything this emits is recoverable
+     * from storage alone. That is what lets an external source use the emitted `externalSourceToken` as
+     * the furthest position it may confirm upstream.
+     */
+    val latestBlock: StateFlow<BlockDetails?> = _latestBlock.asStateFlow()
 
     companion object {
         private val blocksPath = "blocks".asPath
@@ -55,7 +83,7 @@ class BlockCatalog(
 
     fun refresh(block: Block?) {
         if (block != null && block.blockIndex == currentBlockIndex) return
-        latestBlock = block
+        _latestBlock.value = block?.asBlockDetails()
     }
 
     fun buildBlock(
@@ -90,30 +118,22 @@ class BlockCatalog(
         }
     }
 
-    val currentBlockIndex get() = latestBlock?.blockIndex
+    val currentBlockIndex: BlockIndex? get() = _latestBlock.value?.blockIndex
 
-    val latestCompletedTx: TransactionKey?
-        get() = latestBlock
-            ?.takeIf { it.hasLatestCompletedTx() }
-            ?.latestCompletedTx
-            ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) }
+    val latestCompletedTx: TransactionKey? get() = _latestBlock.value?.latestCompletedTx
 
     val latestProcessedMsgId: MessageId?
-        get() = latestBlock?.let { block -> block.latestProcessedMsgId.takeIf { block.hasLatestProcessedMsgId() } }
-            ?: latestCompletedTx?.txId
+        get() = _latestBlock.value?.latestProcessedMsgId ?: latestCompletedTx?.txId
 
-    val boundaryReplicaMsgId: MessageId?
-        get() = latestBlock?.let { block -> block.boundaryReplicaMsgId.takeIf { block.hasBoundaryReplicaMsgId() } }
+    val boundaryReplicaMsgId: MessageId? get() = _latestBlock.value?.boundaryReplicaMsgId
 
     // the leader term that produced the latest block's boundary; a follower seeds its read-side term
     // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
-    val boundaryTermId: Long
-        get() = latestBlock?.termId ?: LeaderTerm.NONE
+    val boundaryTermId: Long get() = _latestBlock.value?.termId ?: LeaderTerm.NONE
 
-    val externalSourceToken: ExternalSourceToken?
-        get() = latestBlock?.takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray()
+    val externalSourceToken: ExternalSourceToken? get() = _latestBlock.value?.externalSourceToken
 
-    val allTables: List<TableRef> get() = latestBlock?.tableNamesList.orEmpty().map { fromSchemaAndTable(it) }
+    val allTables: List<TableRef> get() = _latestBlock.value?.tableNames.orEmpty()
 
-    val secondaryDatabases: Map<String, DatabaseConfig> get() = latestBlock?.secondaryDatabasesMap.orEmpty()
+    val secondaryDatabases: Map<String, DatabaseConfig> get() = _latestBlock.value?.secondaryDatabases.orEmpty()
 }

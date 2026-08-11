@@ -57,18 +57,18 @@ interface PostgresDriver : AutoCloseable {
 
         /**
          * The latest server WAL position received on the stream (advances on commits and protocol keepalives), used
-         * to let Postgres recycle unrelated WAL while our slot is idle. Safe to [acknowledge] ONLY when nothing read
-         * via [poll] is still awaiting durability: this position is the physical receive LSN, always below the commit
-         * LSN of any transaction whose Commit hasn't arrived yet, and — since the caller submits a transaction the
-         * moment [poll] returns it — "nothing awaiting durability" means no already-committed change sits unimported
-         * at or below it. (Postgres also holds `restart_lsn` at the start of any in-progress transaction regardless
-         * of the confirmed-flush LSN, so an un-committed transaction is always re-sent in full.)
+         * to let Postgres recycle unrelated WAL while our slot is idle. Safe to [acknowledge] ONLY once everything at
+         * or below it is recoverable without the upstream: this position is the physical receive LSN, always below
+         * the commit LSN of any transaction whose Commit hasn't arrived yet, so the caller need only account for the
+         * transactions [poll] has already returned. (Postgres also holds `restart_lsn` at the start of any
+         * in-progress transaction regardless of the confirmed-flush LSN, so an un-committed transaction is always
+         * re-sent in full.)
          */
         val walEnd: Long
 
         /**
-         * Advances the slot's confirmed-flush LSN to [lsn] and sends a standby status update. [lsn] MUST NOT exceed
-         * the highest LSN the caller has durably imported — PG recycles WAL up to it.
+         * Advances the slot's confirmed-flush LSN to [lsn] and sends a standby status update. PG recycles WAL up to
+         * it, so [lsn] MUST NOT exceed a position the caller can recover to without the upstream.
          */
         suspend fun acknowledge(lsn: Long)
     }

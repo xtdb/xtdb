@@ -9,6 +9,7 @@ import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.postgres.proto.PostgresSourceToken
 import org.postgresql.replication.LogSequenceNumber
@@ -33,6 +34,7 @@ import java.time.ZonedDateTime
 import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import io.kotest.assertions.nondeterministic.continually
 import io.kotest.assertions.nondeterministic.eventually
 
 @Tag("integration")
@@ -256,6 +258,96 @@ class PostgresSourceIntegrationTest {
             assertEquals("Alice", rows[0]["name"])
             assertEquals("Bob", rows[1]["name"])
             assertEquals("Charlie", rows[2]["name"])
+        }
+    }
+
+    @Test
+    fun `slot advances before the first block is cut`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_no_block (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_no_block (_id, name) VALUES (1, 'snapshot-row')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_no_block",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+            awaitTxs(node, 2, db = "cdc")
+
+            val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
+            assertNull(cdc.blockCatalog.currentBlockIndex, "test precondition: no block cut")
+
+            val atAttach = pgSlotConfirmedFlushLsn(slotName)
+
+            pgExecute("INSERT INTO pg_no_block (_id, name) VALUES (2, 'streamed-two')")
+            eventually(30.seconds) {
+                assertEquals(2, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_no_block").size, "streamed row applied")
+            }
+
+            eventually(30.seconds) {
+                assertTrue(
+                    pgSlotConfirmedFlushLsn(slotName) > atAttach,
+                    "slot advances with no block to gate on, so Postgres can recycle unrelated WAL and copy the slot to a standby",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `slot is confirmed only as far as the last durable block`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_confirm (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_confirm (_id, name) VALUES (1, 'snapshot-row')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_confirm",
+        )
+
+        openNode(sourceTopic).use { node ->
+            attachPostgresSource(node, slotName = slotName, publicationName = pubName)
+            awaitTxs(node, 2, db = "cdc")
+
+            val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
+
+            cdc.sendFlushBlockMessage()
+            eventually(30.seconds) { assertTrue(cdc.blockCatalog.currentBlockIndex != null, "first block persisted") }
+            val blockLsn = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+
+            pgExecute(
+                "INSERT INTO pg_confirm (_id, name) VALUES (2, 'streamed-two')",
+                "INSERT INTO pg_confirm (_id, name) VALUES (3, 'streamed-three')",
+            )
+            eventually(30.seconds) {
+                assertEquals(3, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_confirm").size, "streamed rows applied")
+            }
+
+            // Applied but unblocked, so the leader has imported past the block — which also rules out the
+            // idle walEnd advance, since that requires everything imported to be in a block. Confirming
+            // further here would tell Postgres to recycle WAL for transactions whose only copies are the
+            // replica log and the leader's live index.
+            //
+            // `continually`, not a single read: the ack reaches the slot asynchronously, so one sample taken
+            // straight after the rows apply passes whether or not the gate is there. Holding the invariant
+            // over a window is what makes it fail when confirmation tracks apply.
+            continually(5.seconds) {
+                val confirmed = pgSlotConfirmedFlushLsn(slotName)
+                assertTrue(confirmed <= blockLsn, "slot confirmed at $confirmed, past the last durable block at $blockLsn")
+            }
+
+            cdc.sendFlushBlockMessage()
+            eventually(30.seconds) {
+                val persisted = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+                assertTrue(persisted > blockLsn, "second block's token covers the streamed rows")
+            }
+
+            eventually(30.seconds) {
+                assertTrue(pgSlotConfirmedFlushLsn(slotName) > blockLsn, "slot advances once the block is durable")
+            }
         }
     }
 

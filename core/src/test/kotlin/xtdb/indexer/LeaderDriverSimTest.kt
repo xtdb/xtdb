@@ -117,7 +117,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
                     RealLeaderDriver(
                         partitionStorage, partitionState,
                         BlockUploader(
-                            partitionStorage, partitionState, mockk<Compactor.ForDatabase>(relaxed = true),
+                            partitionStorage, partitionState, "xtdb", mockk<Compactor.ForDatabase>(relaxed = true),
                             null, null, scope, uploadDispatcher = dispatcher
                         )
                     )

@@ -22,6 +22,13 @@ typealias ExternalSourceToken = ByteArray
  *
  * XTDB drives the source via [onPartitionAssigned] and persists the per-tx [ExternalSourceToken]
  * so the source can resume after the last indexed event.
+ *
+ * A source that also *confirms* progress upstream — advancing a Postgres replication slot, committing a
+ * consumer-group offset — must gate that on [TxIndexer.latestBlock] rather than on a transaction's own
+ * durability handle. Confirmation tells the upstream it may discard everything behind the confirmed
+ * position, so confirming a transaction that is only on the replica log leaves XTDB the sole holder of
+ * data nobody can re-send. Resuming is different: resume from the furthest position indexed, which may
+ * legitimately be ahead of the last block.
  */
 interface ExternalSource : AutoCloseable {
 
