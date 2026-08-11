@@ -234,23 +234,23 @@
                   :schema-name schema-name
                   :schema-owner "xtdb"})))))
 
-(defn tables [db-name schema-info]
-  (for [^TableRef table (keys schema-info)]
+(defn tables [db-name table-refs]
+  (for [^TableRef table table-refs]
     {:table-catalog db-name
      :table-name (.getTableName table)
      :table-schema (.getSchemaName table)
      :table-type (if (views (table/ref->schema+table table)) "VIEW" "BASE TABLE")}))
 
-(defn pg-tables [schema-info]
-  (for [^TableRef table (keys schema-info)
+(defn pg-tables [table-refs]
+  (for [^TableRef table table-refs
         :let [schema-name (.getSchemaName table)]]
     {:schemaname schema-name
      :tablename (.getTableName table)
      :tableowner "xtdb"
      :tablespace nil}))
 
-(defn pg-class [schema-info]
-  (for [^TableRef table (keys schema-info)]
+(defn pg-class [table-refs]
+  (for [^TableRef table table-refs]
     {:oid (name->oid (table/ref->schema+table table))
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
      :relnamespace (name->oid (.getSchemaName table))
@@ -376,8 +376,8 @@
      :datallowconn true
      :datistemplate false}))
 
-(defn pg-stat-user-tables [schema-info]
-  (for [^TableRef table (keys schema-info)]
+(defn pg-stat-user-tables [table-refs]
+  (for [^TableRef table table-refs]
     {:relid (name->oid (table/ref->schema+table table))
      :relname (.getTableName table)
      :schemaname (.getSchemaName table)
@@ -522,35 +522,43 @@
             db-state (.getQueryState db)
             db-name (.getName db)
             trie-catalog (.getTrieCatalog db-state)
-            schema-info (-> (into {} (map (fn [[table col-types]] [table (into {} col-types)]))
-                                  (.getAllColumnTypes ^Snapshot snap))
-                            (merge meta-table-schemas)
-                            (update-keys (fn [k]
-                                           (cond
-                                             (instance? TableRef k) k
-                                             (symbol? k) (table/->ref k)))))]
+            ->table-ref (fn [k] (cond (instance? TableRef k) k, (symbol? k) (table/->ref k)))
+
+            ;; Same key set `schema-info` has, without deriving a single type: `allColumnTypes` is
+            ;; `tableInfo.keys.associateWith { … }`, so their key sets are equal by construction.
+            table-refs (into (set (keys (.getTableInfo ^Snapshot snap)))
+                             (map ->table-ref)
+                             (keys meta-table-schemas))
+
+            ;; delayed: only `columns` and `pg_attribute` need types, and this is bound ahead of the
+            ;; dispatch — eagerly, the other 32 tables would each derive every column of every table.
+            ;; Values stay as the Kotlin maps `allColumnTypes` returns; every consumer reads them as
+            ;; entry seqs, and only the outer map has to be Clojure for `merge` to take a `conj`.
+            schema-info (delay (-> (into {} (.getAllColumnTypes ^Snapshot snap))
+                                   (merge meta-table-schemas)
+                                   (update-keys ->table-ref)))]
 
         (util/with-close-on-catch [out-rel (Relation. ^BufferAllocator allocator
                                                       ^Map (update-keys derived-table-schema str))]
 
           (.writeRows out-rel (->> (case (table/ref->schema+table table)
-                                     information_schema/tables (tables db-name schema-info)
-                                     information_schema/columns (columns db-name (schema-info->col-rows schema-info))
+                                     information_schema/tables (tables db-name table-refs)
+                                     information_schema/columns (columns db-name (schema-info->col-rows @schema-info))
                                      information_schema/schemata (schemas db-name)
                                      information_schema/table_constraints nil
                                      information_schema/key_column_usage nil
                                      information_schema/constraint_column_usage nil
-                                     pg_catalog/pg_tables (pg-tables schema-info)
+                                     pg_catalog/pg_tables (pg-tables table-refs)
                                      pg_catalog/pg_type (pg-type)
-                                     pg_catalog/pg_class (pg-class schema-info)
+                                     pg_catalog/pg_class (pg-class table-refs)
                                      pg_catalog/pg_description nil
                                      pg_catalog/pg_views nil
                                      pg_catalog/pg_matviews nil
-                                     pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows schema-info))
+                                     pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows @schema-info))
                                      pg_catalog/pg_namespace (pg-namespace)
                                      pg_catalog/pg_proc (pg-proc)
                                      pg_catalog/pg_database (pg-database (.getDatabaseNames db-cat))
-                                     pg_catalog/pg_stat_user_tables (pg-stat-user-tables schema-info)
+                                     pg_catalog/pg_stat_user_tables (pg-stat-user-tables table-refs)
                                      pg_catalog/pg_settings (pg-settings)
                                      pg_catalog/pg_range (pg-range)
                                      pg_catalog/pg_am (pg-am)
