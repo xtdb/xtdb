@@ -4,8 +4,8 @@ import clojure.java.api.Clojure
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import kotlinx.coroutines.test.runTest
-import org.jetbrains.exposed.sql.Database.Companion.connect
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.Database.Companion.connect
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll

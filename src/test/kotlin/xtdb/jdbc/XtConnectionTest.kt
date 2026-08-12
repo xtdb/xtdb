@@ -1,8 +1,8 @@
 package xtdb.jdbc
 
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
@@ -20,12 +20,12 @@ import kotlin.test.assertTrue
 @ExtendWith(NodeResolver::class)
 class XtConnectionTest {
 
-    private fun Transaction.execForOne(sql: String) = exec(sql) { it.next(); it.getObject(1) }
+    private fun JdbcTransaction.execForOne(sql: String) = exec(sql) { it.next(); it.getObject(1) }
 
-    private fun <T> Transaction.execForOne(sql: String, c: Class<T>) =
+    private fun <T> JdbcTransaction.execForOne(sql: String, c: Class<T>) =
         exec(sql) { it.next(); it.getObject(1, c) }
 
-    private fun Transaction.execForOneTimestamp(sql: String) = exec(sql) { it.next(); it.getTimestamp(1) }
+    private fun JdbcTransaction.execForOneTimestamp(sql: String) = exec(sql) { it.next(); it.getTimestamp(1) }
 
     @Test
     fun testDateStyle(node: Xtdb) {
