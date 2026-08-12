@@ -352,6 +352,144 @@ class PostgresSourceIntegrationTest {
     }
 
     /**
+     * Postgres forwards a start position below `confirmed_flush_lsn` up to the slot's own without
+     * erroring, so the block's token is a lower bound on where we resume rather than the resume
+     * point — `ConfirmedIsRecoverable` in `dev/doc/pgsrc.allium`.
+     */
+    @Test
+    fun `storage-only recovery re-reads the rows the confirmed position skipped`() = runTest(timeout = 300.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val storageDir = Files.createTempDirectory("pg-recover-storage")
+        val logDirs = listOf(
+            Files.createTempDirectory("pg-recover-log-0"),
+            Files.createTempDirectory("pg-recover-log-1"),
+        )
+
+        // Fresh primary source topic per phase so phase one's ATTACH isn't replayed — it would
+        // re-attach cdc at epoch 0, and `DatabaseCatalog.attach` rejects the second attempt.
+        fun attachCdc(node: Xtdb, epoch: Int) {
+            node.getConnection().use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute(
+                        """
+                        ATTACH DATABASE cdc WITH $$
+                            storage: !Local
+                              path: $storageDir
+                            log: !Local
+                              path: ${logDirs[epoch]}
+                              epoch: $epoch
+                            externalSource: !Postgres
+                              remote: pg
+                              slotName: $slotName
+                              publicationName: $pubName
+                              indexer: !DirectMirror {}
+                        $$""".trimIndent()
+                    )
+                }
+            }
+        }
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_recover_in (_id INT PRIMARY KEY, name TEXT)",
+            "CREATE TABLE IF NOT EXISTS pg_recover_out (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_recover_in (_id, name) VALUES (1, 'snapshot-row')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_recover_in",
+        )
+
+        try {
+            val (durableLsn, unflushedLsn) = openNode("test-topic-${UUID.randomUUID()}").use { node ->
+                attachCdc(node, epoch = 0)
+                awaitTxs(node, 2, db = "cdc")
+
+                val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
+
+                pgExecute("INSERT INTO pg_recover_in (_id, name) VALUES (2, 'durable-row')")
+                eventually(30.seconds) {
+                    assertEquals(2, xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_recover_in").size, "durable row applied")
+                }
+
+                cdc.sendFlushBlockMessage()
+                eventually(30.seconds) { assertNotNull(cdc.blockCatalog.currentBlockIndex, "block persisted for cdc") }
+                val durableLsn = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+
+                // Writing inside the poll, not a batch up front: the received position rides on the
+                // walsender's keepalives, which it sends as it works through new WAL, so a single
+                // batch can leave it parked.
+                var noise = 0
+                eventually(60.seconds) {
+                    pgExecute("INSERT INTO pg_recover_out (_id, name) VALUES (${noise++}, 'unpublished')")
+                    assertTrue(
+                        pgSlotConfirmedFlushLsn(slotName) > durableLsn,
+                        "slot confirms past the durable block over WAL holding nothing of ours",
+                    )
+                }
+
+                pgExecute("INSERT INTO pg_recover_in (_id, name) VALUES (3, 'unflushed-row')")
+                eventually(30.seconds) {
+                    assertEquals(
+                        listOf("unflushed-row"),
+                        xtQueryDb(node, "cdc", "SELECT name FROM public.pg_recover_in WHERE _id = 3").map { it["name"] },
+                        "unflushed row is queryable before the restart",
+                    )
+                }
+
+                assertEquals(
+                    durableLsn,
+                    PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn,
+                    "test precondition: no block covers the unflushed row, so the replica log and the live index are its only copies",
+                )
+
+                val appliedLsn = latestPostgresToken(node).latestCommittedLsn
+                assertTrue(
+                    appliedLsn > pgSlotConfirmedFlushLsn(slotName),
+                    "test precondition: the unflushed row sits above the confirmed position, so Postgres still holds it",
+                )
+                durableLsn to appliedLsn
+            }
+
+            // At the same epoch `validateOffsets` rejects a log whose latest offset sits below the
+            // block's watermark and the node won't start — /ops/backup-and-restore/out-of-sync-log.
+            openNode("test-topic-${UUID.randomUUID()}").use { node ->
+                attachCdc(node, epoch = 1)
+
+                assertEquals(
+                    durableLsn,
+                    PostgresSourceToken.parseFrom(
+                        (node as XtdbInternal).dbCatalog["cdc"]!!.blockCatalog.externalSourceToken!!
+                    ).latestCommittedLsn,
+                    "resumed from the block cut before the restart — a block flushed on shutdown would make the unflushed row durable and void everything below",
+                )
+
+                eventually(60.seconds) {
+                    assertEquals(
+                        listOf(1, 2, 3),
+                        xtQueryDb(node, "cdc", "SELECT _id FROM public.pg_recover_in ORDER BY _id")
+                            .map { (it["_id"] as Number).toInt() },
+                        "the row that was never blocked is re-read from the upstream",
+                    )
+                }
+
+                assertEquals(
+                    listOf("durable-row"),
+                    xtQueryDb(node, "cdc", "SELECT name FROM public.pg_recover_in FOR ALL VALID_TIME WHERE _id = 2")
+                        .map { it["name"] },
+                    "resumed rather than re-snapshotted — three rows alone wouldn't tell them apart, a re-snapshot would write a second version of the blocked row",
+                )
+
+                assertEquals(
+                    unflushedLsn, latestPostgresToken(node).latestCommittedLsn,
+                    "resumed to the unflushed row and no further",
+                )
+
+                assertPrimaryDbHealthy(node)
+            }
+        } finally {
+            (logDirs + storageDir).forEach { it.toFile().deleteRecursively() }
+        }
+    }
+
+    /**
      * Records how we behave when a replication slot is dropped and recreated under a running source.
      * This is **not supported** and users MUST NOT rely on it — it's written down so that we know what
      * happens, not because we're committing to it continuing to happen.
