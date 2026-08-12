@@ -20,9 +20,9 @@
            xtdb.authz.RoleMembership
            (xtdb.arrow Relation RelationReader VectorType VectorReader)
            xtdb.pgwire.PgType
-           (xtdb.indexer Snapshot TableSnapshot)
+           (xtdb.indexer DatabaseSnapshot Snapshot TableSnapshot)
            xtdb.operator.SelectionSpec
-           (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
+           (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase IQuerySource$QueryPartition)
            xtdb.api.TableRef
            xtdb.trie.TrieCatalog))
 
@@ -427,14 +427,25 @@
      :trie-key trie-key, :level (int level), :recency recency, :data-file-size data-file-size
      :trie-state (name state), :row-count row-count, :temporal-metadata (some-> trie-meta (dissoc :row-count))}))
 
-(defn live-tables [^Snapshot snap]
-  (for [^TableRef table (.getTables snap)]
-    {:schema-name (.getSchemaName table)
-     :table-name (.getTableName table)
-     :row-count (long (transduce (map (fn [^TableSnapshot ts]
-                                        (.getRowCount (.getRelation ts))))
-                                 + 0
-                                 (.table snap table)))}))
+;; a table's live rows are spread across its database's partitions, so this sums over them the same
+;; way it already sums over a partition's individual live-table slots.
+;; rows come out in first-encounter order rather than the sum map's: at one partition that's the
+;; per-snapshot order this has always emitted, and a Clojure map stops preserving insertion order
+;; past eight entries.
+(defn live-tables [part-snaps]
+  (let [row-counts (reduce (fn [acc [table row-count]]
+                             (update acc table (fnil + 0) row-count))
+                           {}
+                           (for [^Snapshot snap part-snaps
+                                 ^TableRef table (.getTables snap)]
+                             [table (long (transduce (map (fn [^TableSnapshot ts]
+                                                            (.getRowCount (.getRelation ts))))
+                                                     + 0
+                                                     (.table snap table)))]))]
+    (for [^TableRef table (distinct (mapcat #(.getTables ^Snapshot %) part-snaps))]
+      {:schema-name (.getSchemaName table)
+       :table-name (.getTableName table)
+       :row-count (get row-counts table)})))
 
 (defn live-columns [^Snapshot snap]
   (for [^TableRef table (.getTables snap)
@@ -507,26 +518,29 @@
     (some-> out-rel util/close)))
 
 (defprotocol InfoSchema
-  (->cursor [info-schema allocator db db-cat query-source snapshot derived-table-schema
+  (->cursor [info-schema allocator db db-cat query-source db-snap derived-table-schema
              table col-names col-preds
              schema params]))
 
 (defn ->info-schema [_allocator metrics-registry ^Authenticator$Factory authn]
   (reify InfoSchema
-    (->cursor [_ allocator db db-cat query-source snap derived-table-schema
+    (->cursor [_ allocator db db-cat query-source db-snap derived-table-schema
                table col-names col-preds
                schema params]
       ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
       ;; should be types/merge-types as per scan-vec-types
       (let [^IQuerySource$QueryDatabase db db
             ^IQuerySource$QueryCatalog db-cat db-cat
-            db-state (.getQueryState db)
+            ^DatabaseSnapshot db-snap db-snap
             db-name (.getName db)
-            table-catalog (.getTableCatalog db-state)
-            trie-catalog (.getTrieCatalog db-state)
+            table-catalog (.getTableCatalog db)
+            ;; these two lists come from different objects but describe the same partitions, in the
+            ;; same order — the scan checks their lengths agree before dispatching here
+            part-snaps (.getPartitions db-snap)
+            trie-catalogs (map #(.getTrieCatalog (.getState ^IQuerySource$QueryPartition %)) (.getPartitions db))
             schema-info (-> (merge-with merge
                                         (update-vals (into {} (.getTypes table-catalog)) #(into {} %))
-                                        (.getAllColumnTypes ^Snapshot snap))
+                                        (.getAllColumnTypes db-snap))
                             (merge meta-table-schemas)
                             (update-keys (fn [k]
                                            (cond
@@ -565,9 +579,12 @@
                                      pg_catalog/pg_user (pg-user authn)
                                      pg_catalog/pg_roles (pg-roles authn query-source db-cat)
                                      pg_catalog/pg_auth_members (pg-auth-members query-source db-cat)
-                                     xt/trie_stats (trie-stats trie-catalog)
-                                     xt/live_tables (live-tables snap)
-                                     xt/live_columns (live-columns snap)
+                                     ;; a trie key is only unique within its partition, so above one
+                                     ;; partition these rows need a `partition` column to be told
+                                     ;; apart — #5849
+                                     xt/trie_stats (mapcat trie-stats trie-catalogs)
+                                     xt/live_tables (live-tables part-snaps)
+                                     xt/live_columns (mapcat live-columns part-snaps)
                                      xt/metrics_timers (metrics-timers metrics-registry)
                                      xt/metrics_gauges (metrics-gauges metrics-registry)
                                      xt/metrics_counters (metrics-counters metrics-registry)

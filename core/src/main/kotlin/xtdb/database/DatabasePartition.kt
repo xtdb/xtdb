@@ -8,17 +8,18 @@ import xtdb.indexer.LiveIndex
 import xtdb.indexer.LogProcessor
 import xtdb.indexer.Snapshot
 import xtdb.metadata.PageMetadata
+import xtdb.query.IQuerySource
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import java.time.Instant
 
 class DatabasePartition(
-    val storage: PartitionStorage,
-    val state: PartitionState,
+    override val storage: PartitionStorage,
+    override val state: PartitionState,
     val watchers: Watchers,
     val compactorOrNull: Compactor.ForDatabase? = null,
     val logProcessor: LogProcessor? = null,
-) : AutoCloseable {
+) : IQuerySource.QueryPartition, AutoCloseable {
 
     // the storage view owns the partition index; delegate rather than store a second copy so the two can't disagree
     val partition: Int get() = storage.partition

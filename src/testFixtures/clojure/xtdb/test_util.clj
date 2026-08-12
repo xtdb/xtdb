@@ -35,7 +35,7 @@
            (xtdb.test.log RecordingLog$Factory)
            xtdb.api.query.IKeyFn
            (xtdb.arrow Relation RelationReader Vector VectorReader VectorType)
-           [xtdb.database Database Database$Catalog]
+           [xtdb.database Database Database$Catalog DatabasePartition]
            xtdb.database.Database$Catalog
            (xtdb.api.tx OpenTx)
            (xtdb.indexer LiveTable)
@@ -386,8 +386,10 @@
   (^OpenTx [^xtdb.api.Xtdb node ^TransactionKey tx-key]
    (->open-tx (.getAllocator node) node tx-key))
   (^OpenTx [^BufferAllocator allocator node ^TransactionKey tx-key]
-   (let [db (db/primary-db node)]
-     (OpenTx. allocator (util/node-base node) (.getStorage db) (.getQueryState db) (.getName db) tx-key nil nil))))
+   (let [db (db/primary-db node)
+         ;; a tx is always scoped to one partition — see OpenTx.queryCatalog
+         ^DatabasePartition part (first (.getPartitions db))]
+     (OpenTx. allocator (util/node-base node) (.getStorage part) (.getState part) (.getName db) tx-key nil nil))))
 
 (defn open-put-log-rel
   "Builds a log-data relation of put ops via the public log-data writer - the same relation

@@ -901,7 +901,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
                     dbCat.awaitAll(awaitToken, awaitTimeout)
                     dbCat.databaseNames.flatMap { dbName ->
                         val db = dbCat.databaseOrNull(dbName) ?: return@flatMap emptyList()
-                        db.partitions.toSortedMap().map { (part, partition) ->
+                        db.partitions.mapIndexed { part, partition ->
                             mapOf("db_name" to dbName, "part" to part) + read(db, partition)
                         }
                     }

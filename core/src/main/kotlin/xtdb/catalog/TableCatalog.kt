@@ -148,6 +148,23 @@ class TableCatalog(
                 }
             }
 
+        /**
+         * Merges one table's column types across a database's partitions; null if no partition has
+         * the table. A null entry is "this partition doesn't have the table" — distinct from an
+         * empty map, and distinct again from a partition that has the table without some column,
+         * which [mergeVecTypes] widens to nullable.
+         */
+        internal fun mergeTypeMaps(perPartition: List<Map<ColumnName, VectorType>?>) =
+            perPartition.filterNotNull().reduceOrNull { l, r -> mergeVecTypes(l, r) }
+
+        /** As [mergeTypeMaps], across every table each partition knows about. */
+        internal fun mergeTypesByTable(perPartition: List<Map<TableRef, Map<ColumnName, VectorType>>>) =
+            buildMap {
+                for (partition in perPartition)
+                    for ((table, types) in partition)
+                        put(table, mergeVecTypes(get(table), types))
+            }
+
         internal fun mergeHlls(old: Map<ColumnName, HLL>?, new: Map<ColumnName, HLL>?): Map<ColumnName, HLL> =
             when {
                 old == null -> new.orEmpty()
