@@ -138,6 +138,7 @@ class PostgresSourceIntegrationTest {
         node: Xtdb,
         storagePath: Path,
         dbName: String = "cdc",
+        logTopic: String = "test-replica-${UUID.randomUUID()}",
         slotName: String = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}",
         publicationName: String = "test_pub",
     ) {
@@ -150,12 +151,30 @@ class PostgresSourceIntegrationTest {
                           path: $storagePath
                         log: !Kafka
                           cluster: kafka
-                          topic: test-replica-${UUID.randomUUID()}
+                          topic: $logTopic
                         externalSource: !Postgres
                           remote: pg
                           slotName: $slotName
                           publicationName: $publicationName
                           indexer: !DirectMirror {}
+                    $$""".trimIndent()
+                )
+            }
+        }
+    }
+
+    private fun attachReadOnlyReplica(node: Xtdb, dbName: String, logTopic: String, storagePath: Path) {
+        node.getConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute(
+                    """
+                    ATTACH DATABASE $dbName WITH $$
+                        storage: !Local
+                          path: $storagePath
+                        log: !Kafka
+                          cluster: kafka
+                          topic: $logTopic
+                        mode: read-only
                     $$""".trimIndent()
                 )
             }
@@ -642,6 +661,70 @@ class PostgresSourceIntegrationTest {
                 }
 
                 assertPrimaryDbHealthy(node)
+            }
+        } finally {
+            storageDir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `read-only replica of a CDC database survives a block flush`() = runTest(timeout = 180.seconds) {
+        val pubName = "test_pub_${UUID.randomUUID().toString().replace("-", "_")}"
+        val slotName = "test_slot_${UUID.randomUUID().toString().replace("-", "_")}"
+        val sourceTopic = "test-topic-${UUID.randomUUID()}"
+        // a shared Kafka log and local storage are what let 'ro' follow 'cdc' from one node
+        val cdcTopic = "cdc-log-${UUID.randomUUID()}"
+        val storageDir = Files.createTempDirectory("pg-cdc-ro-storage")
+
+        pgExecute(
+            "CREATE TABLE IF NOT EXISTS pg_ro (_id INT PRIMARY KEY, name TEXT)",
+            "INSERT INTO pg_ro (_id, name) VALUES (1, 'Alice')",
+            "CREATE PUBLICATION $pubName FOR TABLE pg_ro",
+        )
+
+        try {
+            openNode(sourceTopic).use { node ->
+                attachPostgresSourceWithLocalStorage(
+                    node, storageDir,
+                    logTopic = cdcTopic, slotName = slotName, publicationName = pubName,
+                )
+
+                // 1 table batch + 1 completion marker = 2 txs
+                awaitTxs(node, 2, db = "cdc")
+
+                attachReadOnlyReplica(node, "ro", cdcTopic, storageDir)
+
+                val dbCatalog = (node as XtdbInternal).dbCatalog
+                val cdc = dbCatalog["cdc"]!!
+                val ro = dbCatalog["ro"]!!
+
+                eventually(30.seconds) {
+                    assertTrue(xtQueryDb(node, "ro", "SELECT _id FROM public.pg_ro WHERE _id = 1").isNotEmpty(),
+                        "ro replays the CDC snapshot")
+                }
+
+                cdc.sendFlushBlockMessage()
+                eventually(30.seconds) {
+                    assertNotNull(cdc.blockCatalog.currentBlockIndex, "block persisted for cdc")
+                }
+
+                // the boundary carries cdc's source-log watermark, which stays low while the CDC
+                // txIds climb — 'ro' only survives it by tracking that watermark itself (#5680)
+                pgExecute("INSERT INTO pg_ro (_id, name) VALUES (2, 'Bob')")
+
+                // ingestionError first: `eventually` reports the *last* failure, so a regression
+                // names the IngestionStoppedException rather than timing out anonymously
+                eventually(30.seconds) {
+                    assertNull(ro.ingestionError, "ro ingestion must survive cdc's block flush")
+                    assertTrue(xtQueryDb(node, "ro", "SELECT _id FROM public.pg_ro WHERE _id = 2").isNotEmpty(),
+                        "ro follows cdc past the block boundary")
+                }
+
+                assertEquals(
+                    setOf(1, 2),
+                    xtQueryDb(node, "ro", "SELECT _id FROM public.pg_ro").map { it["_id"] }.toSet(),
+                    "ro sees both the pre-flush snapshot row and the post-flush streamed row",
+                )
             }
         } finally {
             storageDir.toFile().deleteRecursively()
