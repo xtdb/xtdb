@@ -650,9 +650,6 @@ dependencies {
     testImplementation(libs.testcontainers.minio)
     testImplementation(libs.minio)
 
-    devImplementation(libs.nippy)
-    testImplementation(libs.nippy)
-
     // hato uses cheshire for application/json encoding
     testImplementation(libs.cheshire)
 
