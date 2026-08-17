@@ -8,21 +8,39 @@ java {
     }
 }
 
-// To re-run:
-// 1) ./gradlew :docker:standalone:shadowJar
-// 2) jdeps --ignore-missing-deps --print-module-deps docker/standalone/build/libs/xtdb-standalone.jar
-// NOTE: You'll likely want to run these for each of the jars we build
+// One JRE serves all four docker variants, so the list is the *union* of what each needs
+// and regenerating it means running jdeps over every variant's jar. Checking one is what
+// hid the missing jdk.net (aws-only) until an S3 node fell over on it — see #5903.
+//
+//   ./gradlew :docker:standalone:shadowJar :docker:aws:shadowJar :docker:azure:shadowJar :docker:google-cloud:shadowJar
+//   for v in standalone aws azure google-cloud; do
+//     jdeps --ignore-missing-deps --multi-release 21 --print-module-deps \
+//       docker/$v/build/libs/xtdb-$v.jar
+//   done
+//
+// jdeps is static analysis, so it reports a module whether or not the referencing code is
+// ever entered — take everything it names, because "that path looks dead" is a judgement
+// the next dependency bump can quietly invalidate.
 val jlinkModules = listOf(
     // from jdeps
     "java.base", "java.compiler", "java.desktop", "java.instrument",
-    "java.naming", "java.prefs", "java.security.jgss", "java.security.sasl",
-    "java.sql", "jdk.httpserver", "jdk.jdi", "jdk.management", "jdk.unsupported",
+    "java.naming", "java.prefs", "java.rmi", "java.scripting",
+    "java.security.jgss", "java.security.sasl", "java.sql",
+    "jdk.httpserver", "jdk.management", "jdk.unsupported",
+
+    // jdk.net: HttpClient5's DefaultHttpClientConnectionOperator initialises jdk.net.Sockets.
+    // Reached on an S3 node through the *sync* client the credential chain builds (STS web
+    // identity on EKS), never through S3AsyncClient — which is why every test, all of which
+    // supply static credentials, sails past it.
+    "jdk.net",
 
     // manual additions
     "java.logging",
     "java.net.http",
     "jdk.crypto.ec",
     "jdk.crypto.cryptoki",
+    // -PdebugJvm, which needs the jdk.jdwp.agent that jdk.jdi pulls in
+    "jdk.jdi",
     // clojureRepl
     "jdk.compiler",
     "jdk.javadoc",
