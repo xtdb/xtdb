@@ -177,7 +177,12 @@ class KafkaCluster(
         private val commandCh = Channel<GroupCommand>(Channel.UNLIMITED)
 
         private val consumer: KafkaConsumer<Unit, ByteArray> =
-            kafkaConfigMap.plus(mapOf("group.id" to groupId)).openConsumer()
+            // Committed offsets are a group keepalive, never read back — the coordinator deletes a
+            // memberless group that has committed no offsets, resetting the generationId the leader
+            // term rides on (#5904). Only legal alongside a group id, so it belongs here rather than
+            // on openConsumer, whose other callers are group-less.
+            kafkaConfigMap.plus(mapOf("group.id" to groupId, "enable.auto.commit" to "true"))
+                .openConsumer()
 
         inner class TopicSubscription<M>(
             val codec: MessageCodec<M>,

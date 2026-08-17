@@ -264,11 +264,12 @@ rule LaunchTransition {
         -- therefore another leader's, and every reader would discard what this leader
         -- wrote -- so it must not take leadership. In practice a higher term means
         -- the election counter regressed underneath us: the coordinator deletes a
-        -- consumer group once it is empty with no committed offsets (we commit none),
-        -- and a local log's counter dies with its process. term_epoch is the
-        -- operator-declared value that keeps post-reset terms above pre-reset ones,
-        -- and the refusal names it. Refusing costs liveness only, never safety, so it
-        -- is sound to decide from whatever the follower happens to have read.
+        -- consumer group once it is memberless and its committed offsets have expired
+        -- (offsets.retention.minutes past the group emptying), and a local log's counter
+        -- dies with its process. term_epoch is the operator-declared value that keeps
+        -- post-reset terms above pre-reset ones, and the refusal names it. Refusing
+        -- costs liveness only, never safety, so it is sound to decide from whatever
+        -- the follower happens to have read.
         --
         -- Ordering: after step 2, because it depends on the claim having been read
         -- back, and before step 3, because the follower must still be alive to answer

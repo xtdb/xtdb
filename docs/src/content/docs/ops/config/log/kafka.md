@@ -218,10 +218,12 @@ So at most one leader's writes are ever confirmed for a given database, even acr
 A term is not that generation number alone: it pairs it with a `termEpoch`, which orders one incarnation of the consumer group against the next.
 The generation orders elections *within* one incarnation; the epoch is what survives the group being recreated.
 
-`generationId` restarts at 1 whenever that happens, and Kafka recreates the group more readily than you might expect: the coordinator deletes any consumer group that is empty and has no committed offsets, and XTDB commits none (the source-log position lives in the replica log instead).
-A cluster stopped for longer than the broker's `offsets.retention.check.interval.ms` — ten minutes by default — therefore comes back to a fresh group at generation 1, below the terms already on the replica log.
+`generationId` restarts at 1 whenever the group is recreated, below the terms already on the replica log.
+The broker deletes a consumer group once it has no members left and its committed offsets have expired, so how long a group survives with every XTDB node down is governed by the broker's `offsets.retention.minutes` — seven days by default.
+This turns on *members*, not traffic: a cluster that is up with no writes flowing keeps its group indefinitely, however long it idles.
 
-Raise `termEpoch` on the log config whenever that happens, and whenever you change `groupId` or otherwise recreate the group deliberately:
+Raise `offsets.retention.minutes` on the broker if you plan outages longer than that.
+Raise `termEpoch` on the log config whenever the group is recreated anyway — an outage past the retention period, a `groupId` change, or a group you delete deliberately:
 
 ``` yaml
 log: !Kafka

@@ -7,11 +7,10 @@ package xtdb.api.log
  * The election counter in the low bits comes from the transport's leader election — a Kafka
  * consumer-group `generationId`, or an in-process counter for the local logs — so it orders elections
  * *within* one incarnation of that election mechanism, but does not survive the mechanism being reset.
- * Kafka's coordinator deletes a consumer group once it is empty with no committed offsets, and we
- * commit none (the source-log position lives in the replica log, not in Kafka), so a cluster stopped
- * for longer than the coordinator's sweep interval comes back to a group whose first generation is 1.
- * The local logs' counter dies with the process. The epoch is the operator's declaration that such a
- * reset has happened.
+ * On Kafka that means the consumer group being deleted and recreated, which committed offsets hold off
+ * for `offsets.retention.minutes` past the group emptying but do not prevent (#5904); the local logs'
+ * counter dies with the process. The epoch is the operator's declaration that such a reset has
+ * happened.
  *
  * It has to be *declared* rather than derived from the log. The leader this fence exists to stop is
  * precisely one that can still reach the log while being out of touch with whatever elects leaders —
