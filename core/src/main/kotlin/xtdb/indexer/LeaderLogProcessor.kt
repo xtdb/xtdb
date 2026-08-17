@@ -690,8 +690,8 @@ internal class LeaderLogProcessor(
     }
 
     private suspend fun maybeFlushBlock() {
-        if (blockFlusher.checkBlockTimeout(blockCatalog, liveIndex))
-            blockFlusher.flushedTxId = driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
+        if (blockFlusher.checkBlockTimeout(blockCatalog))
+            driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
     }
 
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {

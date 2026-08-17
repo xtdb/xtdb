@@ -11,40 +11,53 @@ class BlockFlusherTest {
     private fun inst(day: Int) =
         LocalDate.of(2020, 1, day).atStartOfDay().toInstant(ZoneOffset.UTC)
 
-    private fun flusher(prevBlockTxId: Long, flushedTxId: Long) = BlockFlusher(
+    private fun flusher(prevBlockTxId: Long) = BlockFlusher(
         Duration.ofDays(2),
         inst(1),
-        previousBlockTxId = prevBlockTxId,
-        flushedTxId = flushedTxId
+        previousBlockTxId = prevBlockTxId
     )
 
     @Test
-    fun `test checkBlockTimeout`() {
-        flusher(prevBlockTxId = -1, flushedTxId = -1).run {
-            assertFalse(
-                checkBlockTimeout(inst(2), currentBlockTxId = -1, latestCompletedTxId = 0),
-                "checked recently, don't check again"
-            )
-
-            assertEquals(inst(1), lastFlushCheck, "don't update lastFlushCheck")
+    fun `does not check again within the timeout`() {
+        flusher(prevBlockTxId = -1).run {
+            assertFalse(checkBlockTimeout(inst(2), currentBlockTxId = -1))
+            assertEquals(inst(1), lastFlushCheck, "lastFlushCheck untouched")
         }
+    }
 
-        flusher(prevBlockTxId = 10, flushedTxId = 32).run {
-            assertTrue(
-                checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 40),
-                "we've not flushed recently, we have new txs, submit msg"
-            )
-
+    @Test
+    fun `cuts a block once the timeout has elapsed`() {
+        flusher(prevBlockTxId = 10).run {
+            assertTrue(checkBlockTimeout(inst(4), currentBlockTxId = 10))
             assertEquals(inst(4), lastFlushCheck)
         }
+    }
 
-        flusher(prevBlockTxId = 10, flushedTxId = 32).run {
+    @Test
+    fun `re-arms rather than cutting straight after a block landed by another route`() {
+        flusher(prevBlockTxId = 10).run {
             assertFalse(
-                checkBlockTimeout(inst(4), currentBlockTxId = 10, latestCompletedTxId = 32),
-                "we've not flushed recently, no new txs, don't submit msg"
+                checkBlockTimeout(inst(4), currentBlockTxId = 32),
+                "a block landed since the last check — don't immediately cut another"
             )
+            assertEquals(inst(4), lastFlushCheck)
+            assertEquals(32, previousBlockTxId)
 
-            assertEquals(inst(1), lastFlushCheck)
+            assertTrue(
+                checkBlockTimeout(inst(7), currentBlockTxId = 32),
+                "and cut on the timeout after that"
+            )
+        }
+    }
+
+    @Test
+    fun `keeps cutting blocks on a database that never advances`() {
+        // The keep-alive #5778 depends on: nothing is being written, so the block catalog's
+        // latest-completed-tx never moves, and the timeout must fire every interval regardless.
+        flusher(prevBlockTxId = 10).run {
+            assertTrue(checkBlockTimeout(inst(4), currentBlockTxId = 10))
+            assertTrue(checkBlockTimeout(inst(7), currentBlockTxId = 10))
+            assertTrue(checkBlockTimeout(inst(10), currentBlockTxId = 10))
         }
     }
 }
