@@ -79,18 +79,13 @@ class PostgresSource(
     // 1 while a replication stream is open, 0 otherwise
     private val connectionState = AtomicInteger(0)
 
-    // Last successful WAL-lag read; null until first query.
-    // Retained on failure so a transient query blip doesn't reset the gauge to 0.
-    @Volatile private var lastKnownWalLagBytes: Long? = null
-
-    private fun walLagBytes(): Long? {
+    private fun walLagBytes(): Double =
         try {
-            driver.queryWalLagBytes()?.let { lastKnownWalLagBytes = it }
+            driver.queryWalLagBytes()?.toDouble() ?: Double.NaN
         } catch (e: Exception) {
             LOG.debug(e) { "[$dbName] Failed to query WAL lag" }
+            Double.NaN
         }
-        return lastKnownWalLagBytes
-    }
 
     init {
         meterRegistry?.let { reg ->
@@ -105,8 +100,8 @@ class PostgresSource(
                 .tags(tags)
                 .register(reg)
 
-            Gauge.builder("xtdb.postgres_source.wal_lag_bytes", this) { walLagBytes()?.toDouble() ?: 0.0 }
-                .description("WAL bytes between pg_current_wal_lsn and our slot's confirmed_flush_lsn")
+            Gauge.builder("xtdb.postgres_source.wal_lag_bytes", this) { it.walLagBytes() }
+                .description("WAL bytes between pg_current_wal_lsn and our slot's confirmed_flush_lsn; NaN if we can't read it")
                 .baseUnit("bytes")
                 .tags(tags)
                 .register(reg)

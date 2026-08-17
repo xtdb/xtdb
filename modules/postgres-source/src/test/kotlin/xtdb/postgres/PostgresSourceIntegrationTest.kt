@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import xtdb.postgres.proto.PostgresSourceToken
 import org.postgresql.replication.LogSequenceNumber
 import org.testcontainers.containers.Network
@@ -769,10 +770,10 @@ class PostgresSourceIntegrationTest {
                 assertTrue((metric("xtdb.postgres_source.commits.total").counter()?.count() ?: 0.0) >= 1.0, "commits.total counted the streamed commit")
             }
 
-            // Confirms the pg_replication_slots query path works against real Postgres —
-            // the gauge pulls on read so this should be populated immediately after streaming.
-            assertTrue((metric("xtdb.postgres_source.wal_lag_bytes").gauge()?.value() ?: -1.0) >= 0.0,
-                "wal_lag_bytes should be readable from pg_replication_slots once streaming")
+            // The gauge reads on scrape, so it's populated as soon as we're streaming.
+            val walLag = (metric("xtdb.postgres_source.wal_lag_bytes").gauge() ?: fail("wal_lag_bytes not registered")).value()
+            assertFalse(walLag.isNaN(), "wal_lag_bytes should be readable from pg_replication_slots once streaming")
+            assertTrue(walLag >= 0.0, "wal_lag_bytes should be non-negative")
         }
     }
 
