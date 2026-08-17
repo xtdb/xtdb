@@ -1065,4 +1065,88 @@ class KafkaClusterTest {
             )
         }
     }
+
+    private fun truncateThrough(topic: String, msgId: MessageId) {
+        AdminClient.create(mapOf<String, Any>("bootstrap.servers" to container.bootstrapServers)).use { admin ->
+            admin.deleteRecords(
+                mapOf(
+                    TopicPartition(topic, 0) to
+                            RecordsToDelete.beforeOffset(MsgIdUtil.msgIdToOffset(msgId) + 1)
+                )
+            ).all().get()
+        }
+    }
+
+    @Test
+    @Timeout(value = 180, unit = java.util.concurrent.TimeUnit.SECONDS)
+    fun `idle database keeps its block anchors ahead of a truncated log`(
+        @TempDir storageDir: Path, @TempDir cacheDir1: Path, @TempDir cacheDir2: Path,
+    ) {
+        val sourceTopic = "idle-keepalive-${UUID.randomUUID()}"
+        val replicaTopic = "$sourceTopic-replica"
+
+        fun openNode(cacheDir: Path) = Xtdb.openNode {
+            server { port = 0 }; flightSql = null
+            diskCache(DiskCache.factory(cacheDir))
+            logCluster("kafka", KafkaCluster.ClusterFactory(container.bootstrapServers))
+            log(KafkaCluster.LogFactory("kafka", sourceTopic))
+            storage(Storage.local(storageDir))
+            compactor { threads(0) }
+            // short enough that a handful of idle flushes fit inside the test's budget
+            indexer { flushDuration = Duration.ofSeconds(1) }
+        }
+
+        val (srcAnchor, replicaAnchor) = openNode(cacheDir1).use { node ->
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('a', 1)")
+                }
+            }
+
+            val blockCat = (node as XtdbInternal).dbCatalog.primary.blockCatalog
+            val deadline = System.currentTimeMillis() + 120_000
+
+            while (blockCat.boundaryReplicaMsgId == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            assertNotNull(blockCat.boundaryReplicaMsgId, "the flush timeout must have cut a block")
+            val src0 = blockCat.latestProcessedMsgId!!
+            val replica0 = blockCat.boundaryReplicaMsgId!!
+
+            // Not another write from here — only the flush timeout can move these on. This is what
+            // makes a finite `retention.ms` safe on a database nobody is writing to: the anchors stay
+            // near the head of both logs, so retention only ever reclaims what a block already covers.
+            while (System.currentTimeMillis() < deadline &&
+                (blockCat.latestProcessedMsgId!! <= src0 || blockCat.boundaryReplicaMsgId!! <= replica0)
+            ) Thread.sleep(100)
+
+            val src1 = blockCat.latestProcessedMsgId!!
+            val replica1 = blockCat.boundaryReplicaMsgId!!
+            assertTrue(src1 > src0, "idle source anchor must keep advancing (was $src0, now $src1)")
+            assertTrue(replica1 > replica0, "idle replica anchor must keep advancing (was $replica0, now $replica1)")
+
+            src1 to replica1
+        }
+
+        // Retention, modelled at its most aggressive: reclaim every record up to and including the
+        // anchors, so the earliest available offset is exactly where a restart wants to resume.
+        truncateThrough(sourceTopic, srcAnchor)
+        truncateThrough(replicaTopic, replicaAnchor)
+
+        openNode(cacheDir2).use { node ->
+            val primary = (node as XtdbInternal).dbCatalog.primary
+            node.connection.use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.execute("INSERT INTO foo (_id, x) VALUES ('b', 2)")
+                    stmt.executeQuery("SELECT _id, x FROM foo ORDER BY _id").use { rs ->
+                        assertTrue(rs.next()); assertEquals("a", rs.getString("_id")); assertEquals(1, rs.getInt("x"))
+                        assertTrue(rs.next()); assertEquals("b", rs.getString("_id")); assertEquals(2, rs.getInt("x"))
+                        assertTrue(!rs.next())
+                    }
+                }
+            }
+            assertEquals(
+                null, primary.ingestionError,
+                "the block covers every reclaimed record, so ingestion must resume cleanly"
+            )
+        }
+    }
 }
