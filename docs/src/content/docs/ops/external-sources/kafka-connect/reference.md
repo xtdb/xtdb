@@ -117,12 +117,12 @@ Converters
 
 Transforms
 :   Single Message Transforms that modify each record before it is indexed — implement `org.apache.kafka.connect.transforms.Transformation<SinkRecord>`.
-    XTDB bundles those that ship with [Kafka Connect 4.1.1](https://kafka.apache.org/41/kafka-connect/user-guide/#included-transformations).
+    XTDB bundles those that ship with [Kafka Connect 4.3.1](https://kafka.apache.org/43/kafka-connect/user-guide/#included-transformations).
     The target table is set by the [indexer](#indexers), so a transform that changes a record's topic has no effect on where it is written.
 
 Predicates
 :   Predicates that gate whether a transform applies to a record — implement `org.apache.kafka.connect.transforms.predicates.Predicate<SinkRecord>`.
-    XTDB bundles those that ship with [Kafka Connect 4.1.1](https://kafka.apache.org/41/kafka-connect/user-guide/#predicates).
+    XTDB bundles those that ship with [Kafka Connect 4.3.1](https://kafka.apache.org/43/kafka-connect/user-guide/#predicates).
 
 ## Indexers
 
