@@ -77,7 +77,7 @@ interface PostgresDriver : AutoCloseable {
 
     /**
      * `pg_current_wal_lsn() − confirmed_flush_lsn` for our slot on the source DB.
-     * Returns null if the slot is not (yet) visible.
+     * Returns null if the slot is not (yet) visible, or has no confirmed-flush LSN.
      */
     fun queryWalLagBytes(): Long?
 

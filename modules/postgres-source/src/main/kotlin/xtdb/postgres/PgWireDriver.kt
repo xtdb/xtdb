@@ -428,7 +428,7 @@ class PgWireDriver(
                 """
                 SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::bigint AS lag_bytes
                 FROM pg_replication_slots
-                WHERE slot_name = :slot
+                WHERE slot_name = :slot AND confirmed_flush_lsn IS NOT NULL
                 """.trimIndent()
             )
                 .bind("slot", slotName)
