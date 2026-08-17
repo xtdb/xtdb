@@ -16,8 +16,10 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -224,8 +226,9 @@ class KafkaConnectSourceIntegrationTest {
                 "last_event_time should be the record timestamp, not 0")
             assertTrue((metric("xtdb.kafka_connect_source.current_offset").gauge()?.value() ?: -1.0) >= 1.0,
                 "current_offset should reach the last consumed offset (1)")
-            assertTrue((metric("xtdb.kafka_connect_source.records_lag").gauge()?.value() ?: -1.0) >= 0.0,
-                "records_lag should be a non-negative gauge read from the consumer")
+            val recordsLag = (metric("xtdb.kafka_connect_source.records_lag").gauge() ?: fail("records_lag not registered")).value()
+            assertFalse(recordsLag.isNaN(), "records_lag should be read from the consumer once fetching")
+            assertTrue(recordsLag >= 0.0, "records_lag should be non-negative")
         }
     }
 

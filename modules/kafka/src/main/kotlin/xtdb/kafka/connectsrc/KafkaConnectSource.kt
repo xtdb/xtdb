@@ -213,7 +213,7 @@ class KafkaConnectSource internal constructor(
                                 // thread is safe.
                                 val lagGauge = meterRegistry?.let { reg ->
                                     Gauge.builder("xtdb.kafka_connect_source.records_lag", consumer) { recordsLag(it) }
-                                        .description("consumer fetch lag in records for this partition")
+                                        .description("consumer fetch lag in records for this partition; NaN until the first fetch")
                                         .tags(tags)
                                         .register(reg)
                                 }
@@ -326,11 +326,11 @@ class KafkaConnectSource internal constructor(
         return connectHeaders
     }
 
-    // instantaneous per-partition fetch lag; 0 until the first fetch creates the metric
+    // instantaneous per-partition fetch lag; the Kafka metric doesn't exist until the first fetch
     private fun recordsLag(consumer: KafkaConsumer<*, *>): Double =
         consumer.metrics().entries
             .firstOrNull { it.key.name() == "records-lag" && it.key.group() == "consumer-fetch-manager-metrics" }
-            ?.value?.metricValue() as? Double ?: 0.0
+            ?.value?.metricValue() as? Double ?: Double.NaN
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
