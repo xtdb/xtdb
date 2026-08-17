@@ -219,6 +219,11 @@ rule DeleteGarbageRule {
     -- Per source path-set: keep only files older than the current block by
     -- more than `blocks_to_keep`, never the current block itself, then DELETE.
     -- DELETEs are idempotent — a re-DELETE on a 404 is fine.
+    --
+    -- The threshold is absolute and database-wide: it compares each file's own
+    -- block index against the database's current one, with no notion of "the
+    -- newest file in this directory". For the per-table sweep that is sound
+    -- only under BlockGcLeaderOnly's EveryTableBlockAtCurrentIndex.
     when: DeleteGarbage(paths)
 
     let latest_block_index = block_catalog.current_block_index
@@ -248,6 +253,20 @@ contract BlockGcLeaderOnly {
     @invariant CurrentBlockNeverDeleted
         -- The block at block_catalog.current_block_index is never DELETEd by
         -- this collector, even if `blocks_to_keep` is misconfigured.
+
+    @invariant EveryTableBlockAtCurrentIndex
+        -- Every table in block_catalog.all_tables has a per-table block file
+        -- at block_catalog.current_block_index. The block upload writes one
+        -- per known table rather than only for the tables that took rows in
+        -- that block (db.allium, uploadBlock step 3), so a table's newest
+        -- per-table block file never lags the database's current index.
+        --
+        -- DeleteGarbageRule's threshold is absolute, so without this a table
+        -- that had gone quiet for more than `blocks_to_keep` blocks would
+        -- have its newest — and possibly only — per-table block file deleted,
+        -- and CurrentBlockNeverDeleted would not catch it: that clause
+        -- excludes the database's current index, which none of that table's
+        -- files carries. See #4992.
 
     @invariant NoReplicaLogCoordination
         -- Block-file GC produces no replica-log messages. Block files are

@@ -330,9 +330,13 @@ entity BlockUploader {
     -- TransitionLogProcessor (for completing interrupted blocks during transition).
     --
     -- uploadBlock(boundaryMsgId, termId, boundaryMessage):
-    --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries
+    --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries — one per
+    --      table that took rows in this block, and none at all for a table that took none.
+    --      A block cut with no transactions in it therefore writes no tries whatsoever
     --   2. Registers those L0 tries in the trie catalog
-    --   3. Finishes table catalog, uploads per-table block files
+    --   3. Finishes table catalog, uploads one per-table block file for EVERY table the
+    --      table catalog knows — not only the tables from step 1. Block GC's per-table
+    --      sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
     --   4. Builds and persists the block file — carrying termId, which is what seeds a
     --      restarted follower's fence
     --   5. Refreshes the block catalog, then appends BlockUploaded to the replica log
