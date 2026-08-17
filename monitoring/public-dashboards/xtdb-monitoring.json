@@ -3105,7 +3105,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Bytes between pg_current_wal_lsn() and the slot's confirmed_flush_lsn on the source database, read lazily on every Prometheus scrape (so cadence matches your scrape interval). The most accurate freshness signal — it doesn't depend on us receiving events, so a stalled slot will show growing lag here even if commit_lag_seconds looks fine. A small steady value (a few hundred KB at most) is normal; a sustained climb means we're falling behind the source's write rate.",
+          "description": "Bytes between pg_current_wal_lsn() and the slot's confirmed_flush_lsn on the source database, read lazily on every Prometheus scrape (so cadence matches your scrape interval). The most accurate freshness signal — it doesn't depend on us receiving events, so a stalled slot will show growing lag here even if commit_lag_seconds looks fine. A small steady value (a few hundred KB at most) is normal; a sustained climb means we're falling behind the source's write rate. A gap means we have no reading — the slot isn't visible, or the query is failing.",
           "fieldConfig": {
             "defaults": {
               "color": {
