@@ -67,28 +67,8 @@ See ['Database architecture'](/about/dbs-in-xtdb#database-architecture) for the 
 2. On your Kafka cluster, XTDB requires **two topics per database** — a source log and a replica log:
     - Both can be created manually and provided to the node config, or XTDB can create them automatically.
     - If allowing XTDB to create the topics **automatically**, ensure that the connection properties supplied to the XTDB node have the appropriate permissions to create topics — XTDB will create each with the expected configuration values (single partition, `LogAppendTime` timestamps).
-3. Both topics should be configured with the following properties:
-    - **A single partition** — this ensures that the log is strictly ordered, and single-writer leader election (see [below](#leader-election-and-fencing)) relies on Kafka assigning the single partition to a single consumer at a time.
-    - `message.timestamp.type` set to `LogAppendTime` — ensures the timestamp of the message is the time it was appended to the log, rather than the time it was sent by the producer.
-    - The XTDB log is generally set up using the default values for configuration.
-      A few key values to consider:
-        - `retention.ms`: as messages are not required to be
-    permanently on the log, this value does not need to be
-    particularly high. The default value of **1 day** is
-    sufficient for most use cases. When extra precaution should
-    be taken to prevent any data loss on certain environments, a
-    larger value is recommended, with **1 week** as a starting
-    point.
-
-        - `max.message.bytes`: generally, this is using the default
-    value of **1MB**, which is fit for purpose for most log
-    messages. This will depend on the overall size of
-    transactions that are being sent into XTDB.
-
-        - `cleanup.policy`: The Kafka module within XTDB does not make
-    use of compacted messages, so it is recommended that the
-    topic cleanup policy should use the default value of
-            **delete**.
+      Auto-created topics are **unreplicated**, so create them yourself for production.
+3. Configure the topics and the broker — see [Settings](#settings) for which of these XTDB sets for you and which are yours.
 
 4. XTDB should be configured to use the topics, and the Kafka cluster they're hosted on.
   It should also be authorised to perform all of the necessary operations on both.
@@ -96,6 +76,27 @@ See ['Database architecture'](/about/dbs-in-xtdb#database-architecture) for the 
       See the [example configuration](#auth_example) below.
     - If the Kafka cluster is using **ACLs**, the XTDB node needs:
         - `Describe` / `Read` / `Write` on **both** the source and replica topics.
+
+## Settings
+
+Both topics — source and replica — take the same settings.
+
+XTDB applies the topic settings it depends on only when it creates a topic itself (`autoCreateTopic: true`), so a topic you pre-create is entirely yours to configure.
+The one setting it verifies on a topic that already exists is the partition count; the node refuses to start otherwise.
+
+| Setting | Scope | Set by | Value |
+| --- | --- | --- | --- |
+| partition count | topic | XTDB on create, **verified** on an existing topic | Exactly `1`. A single partition is what makes the log strictly ordered and lets leader election assign it to one consumer at a time. |
+| `message.timestamp.type` | topic | XTDB on create, **not** verified afterwards | `LogAppendTime`, so a record's timestamp is when the broker appended it rather than when a producer sent it. Set it yourself on a pre-created topic. |
+| replication factor | topic | XTDB creates with `1` | Pre-create the topic with `3` or more for production — auto-create is unreplicated. |
+| `min.insync.replicas` | topic | You | `> 1`, to make writes quorum-acknowledged. |
+| `retention.ms` | topic | You | Messages need not live on the log permanently. The default of 1 day suits most deployments; 1 week is a reasonable starting point where extra caution against data loss is wanted. |
+| `max.message.bytes` | topic | You | The 1MB default is fit for purpose unless your transactions are larger. |
+| `cleanup.policy` | topic | You | Leave at the default `delete` — XTDB never reads compacted messages. |
+| `offsets.retention.minutes` | **broker, cluster-wide** | You | Governs how long the leader-election consumer group survives with every XTDB node down, after which `termEpoch` has to be raised — see ['Recreating the consumer group'](#recreating-the-consumer-group-v22). Seven days by default. This is not a per-topic setting, it applies to every consumer group on the cluster, and managed Kafka services often fix it. |
+
+XTDB also sets its own producer and consumer properties — idempotent, `acks=all` writes, `read_committed` reads, `auto.offset.reset=none`, cooperative sticky assignment, and offset commits that keep the leader-election group alive.
+`propertiesMap` and `propertiesFile` can override these, but they are chosen deliberately and overriding them can break leader election.
 
 ## Configuration
 
@@ -222,7 +223,7 @@ The generation orders elections *within* one incarnation; the epoch is what surv
 The broker deletes a consumer group once it has no members left and its committed offsets have expired, so how long a group survives with every XTDB node down is governed by the broker's `offsets.retention.minutes` — seven days by default.
 This turns on *members*, not traffic: a cluster that is up with no writes flowing keeps its group indefinitely, however long it idles.
 
-Raise `offsets.retention.minutes` on the broker if you plan outages longer than that.
+`offsets.retention.minutes` is a broker setting rather than a topic one, so raising it for longer planned outages affects every consumer group on the cluster — and managed Kafka services often fix it.
 Raise `termEpoch` on the log config whenever the group is recreated anyway — an outage past the retention period, a `groupId` change, or a group you delete deliberately:
 
 ``` yaml
@@ -260,13 +261,8 @@ Kafka-backed logs offer strong durability, but require tuning and backup strateg
 
 ### Recommended Kafka Settings
 
-To minimize the risk of data loss:
-
-- **Replicate the topic** - set a replication factor of `3+` for fault tolerance
-- **Enforce quorum writes** - use `min.insync.replicas > 1`
-- **Tune retention** - ensure `retention.ms` and/or `retention.bytes` keep unindexed messages long enough to allow for safe backup or flushing
-
-XTDB sets safe producer defaults, but you must verify your topic-level configs.
+The replication factor, `min.insync.replicas` and `retention.ms` are the three that bear on data loss, and all three are yours rather than XTDB's — see [Settings](#settings).
+Size `retention.ms` and `retention.bytes` so that unindexed messages survive long enough to be backed up or flushed.
 
 See [Apache Kafka documentation](https://kafka.apache.org/documentation/) for details.
 
