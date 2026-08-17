@@ -224,11 +224,13 @@ class LeaderLogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val finishedBlock = LiveTable.FinishedBlock(
             vecTypes = emptyMap(),
-            trieKey = "test-trie",
-            dataFileSize = 42,
             rowCount = 10,
-            trieMetadata = trieMetadata {},
-            hllDeltas = emptyMap()
+            hllDeltas = emptyMap(),
+            writtenTrie = LiveTable.FinishedBlock.WrittenTrie(
+                trieKey = "test-trie",
+                dataFileSize = 42,
+                trieMetadata = trieMetadata {}
+            )
         )
         val tableRef = fromSchemaAndTable("public/foo")
 

@@ -70,12 +70,24 @@ class LiveTable @JvmOverloads constructor(
 
     data class FinishedBlock(
         val vecTypes: Map<FieldName, VectorType>,
-        val trieKey: TrieKey,
-        val dataFileSize: FileSize,
         val rowCount: Int,
-        val trieMetadata: TrieMetadata,
-        val hllDeltas: Map<FieldName, HLL>
-    )
+        val hllDeltas: Map<FieldName, HLL>,
+        /**
+         * Null exactly when [rowCount] is zero.
+         *
+         * A table can be staged by a transaction without taking any rows from it — `CREATE TABLE`,
+         * or DML whose predicate matched nothing — and it still has to reach the table catalog so
+         * that its declared columns survive. It has no trie to write, though, and an empty L0 costs
+         * two objects and a trie-catalog entry for nothing.
+         */
+        val writtenTrie: WrittenTrie?
+    ) {
+        data class WrittenTrie(
+            val trieKey: TrieKey,
+            val dataFileSize: FileSize,
+            val trieMetadata: TrieMetadata
+        )
+    }
 
     /** For callers that aren't coroutine-native — see [finishBlock]. */
     fun finishBlockSync(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock =
@@ -83,18 +95,25 @@ class LiveTable @JvmOverloads constructor(
 
     suspend fun finishBlock(bp: BufferPool, blockIdx: BlockIndex): FinishedBlock {
         val rowCount = liveRelation.rowCount
+        val vecTypes = liveRelation.logRelTypes.orEmpty()
+        val hllDeltas = computeHlls(opVec, 0, rowCount)
+
+        if (rowCount == 0) return FinishedBlock(vecTypes, rowCount, hllDeltas, writtenTrie = null)
+
         val trieKey = Trie.l0Key(blockIdx).toString()
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
             val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
             FinishedBlock(
-                vecTypes = liveRelation.logRelTypes.orEmpty(),
-                trieKey = trieKey,
-                dataFileSize = dataFileSize,
+                vecTypes = vecTypes,
                 rowCount = rowCount,
-                trieMetadata = trieMetadataCalculator.build(),
-                hllDeltas = computeHlls(opVec, 0, rowCount)
+                hllDeltas = hllDeltas,
+                writtenTrie = FinishedBlock.WrittenTrie(
+                    trieKey = trieKey,
+                    dataFileSize = dataFileSize,
+                    trieMetadata = trieMetadataCalculator.build()
+                )
             )
         }
     }

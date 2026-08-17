@@ -85,13 +85,17 @@ class BlockUploader(
 
         val finishedBlocks = liveIndex.finishBlock(bufferPool, blockIdx)
 
+        // A table staged with no rows has no trie — see LiveTable.FinishedBlock.writtenTrie. It still
+        // reaches the table catalog below, so its declared columns survive.
         val addedTries =
-            finishedBlocks.map { (table, fb) ->
+            finishedBlocks.mapNotNull { (table, fb) ->
+                val writtenTrie = fb.writtenTrie ?: return@mapNotNull null
+
                 val trieDetails = TrieDetails.newBuilder()
                     .setTableName(table.schemaAndTable)
-                    .setTrieKey(fb.trieKey)
-                    .setDataFileSize(fb.dataFileSize)
-                    .also { fb.trieMetadata.let { tm -> it.setTrieMetadata(tm) } }
+                    .setTrieKey(writtenTrie.trieKey)
+                    .setDataFileSize(writtenTrie.dataFileSize)
+                    .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
                     .build()
 
                 // NOTE: side-effect here.

@@ -119,6 +119,22 @@
     (t/is (= [] (xt/q node "SELECT * FROM foo"))
           "still queryable, empty, read back from the block catalog")))
 
+(t/deftest empty-table-writes-no-trie
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "CREATE TABLE foo"]])
+    (xt/execute-tx node [[:sql "INSERT INTO bar (_id) VALUES (1)"]])
+    (tu/flush-block! node)
+
+    (letfn [(tries [table]
+              (xt/q node ["SELECT trie_key FROM xt.table_block_file_tries
+                           WHERE table_name = ? AND block_idx = ?" table "00"]))]
+
+      (t/is (= [] (tries "public/foo"))
+            "a table staged by a transaction that wrote no rows to it gets no L0")
+
+      (t/is (= 1 (count (tries "public/bar")))
+            "a table that did take rows still gets one"))))
+
 (t/deftest empty-table-propagates-to-a-follower
   (let [node-dir (util/->path "target/create-table-test/follower")]
     (util/delete-dir node-dir)

@@ -330,11 +330,12 @@ class LiveIndexTest {
 
                 // drive the BlockUploader flow up to (but not including) nextBlock
                 for ((t, fb) in runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }) {
+                    val writtenTrie = fb.writtenTrie ?: continue
                     val trieDetails = TrieDetails.newBuilder()
                         .setTableName(t.schemaAndTable)
-                        .setTrieKey(fb.trieKey)
-                        .setDataFileSize(fb.dataFileSize)
-                        .also { it.setTrieMetadata(fb.trieMetadata) }
+                        .setTrieKey(writtenTrie.trieKey)
+                        .setDataFileSize(writtenTrie.dataFileSize)
+                        .also { it.setTrieMetadata(writtenTrie.trieMetadata) }
                         .build()
                     db.trieCatalog.addTries(t, listOf(trieDetails), Instant.now())
                 }
