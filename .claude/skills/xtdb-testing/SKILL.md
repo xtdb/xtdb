@@ -13,7 +13,7 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 ## The rules you MUST NOT get wrong
 
 1. You MUST NOT run tests yourself — delegate to the `gradle-tests` agent.
-2. You MUST NOT edit source files in a worktree that has a test run in flight.
+2. You MUST NOT edit files the build compiles in a worktree that has a test run in flight.
 3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 
@@ -35,10 +35,12 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
 
 ## Edits are frozen while a run is in flight
 
-The freeze is scoped to the worktree the run is compiling from.
-
+The freeze is scoped to the worktree the run is compiling from, and within it to **the files that run compiles** — Kotlin, Java and Clojure sources, build scripts, and anything on the test resource path.
 Recompiling under a running build produces **bogus cross-language type errors and cascading failures** that look exactly like real breakage, and chasing them costs far more than waiting did.
 If you have already edited mid-run, discard that run's results entirely and re-run once the tree is stable — do not try to reason about which failures were real.
+
+Everything the build never reads is outside the freeze, and you SHOULD carry on with it rather than idling: `.allium` specs, `docs/`, `dev/`, `README`s, `.claude/`.
+A comment-only change still counts as a source edit — the compiler doesn't know it was only a comment.
 
 Runs in other worktrees do not concern you, and you MUST NOT check for them or wait on them.
 Each worktree has its own `build/` and `.gradle/`, and Gradle takes cross-process locks over the shared `~/.gradle` caches, so a build elsewhere on the machine cannot corrupt yours.
