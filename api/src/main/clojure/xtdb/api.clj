@@ -277,7 +277,13 @@
   opts (map):
    - :database (keyword/string)
      the database to execute the transaction on, defaults to `:xtdb`
-     throws if the database does not exist or
+     throws if the database does not exist, or if a Connection is provided (because the database is already selected)
+
+     The transaction resolves table names only within this database - unlike a query, which may name another:
+       - `a.b` is schema `a` of this database, never a database,
+         so `INSERT INTO other_db.foo` writes to schema `other_db` here
+       - a table in another database is unreachable;
+         referring to one reports that the table was not found
 
    - :system-time
      overrides system-time for the transaction,
@@ -332,6 +338,12 @@
    - :database (keyword/string)
      the database to execute the transaction on, defaults to `:xtdb`
      throws if the database does not exist or if a Connection is provided (because the database is already selected)
+
+     The transaction resolves table names only within this database - unlike a query, which may name another:
+       - `a.b` is schema `a` of this database, never a database,
+         so `INSERT INTO other_db.foo` writes to schema `other_db` here
+       - a table in another database is unreachable;
+         referring to one reports that the table was not found
 
    - :system-time
      overrides system-time for the transaction,

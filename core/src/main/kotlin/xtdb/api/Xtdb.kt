@@ -101,12 +101,21 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
 
     data class SubmittedTx(val txId: MessageId)
 
+    /** The transaction goes to [TxOpts.dbName], defaulting to the primary database `xtdb`, and may only refer to tables within it — see [Connection]. */
     fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx
 
     data class ExecutedTx(val txId: MessageId, val systemTime: Instant, val committed: Boolean, val error: Throwable?)
 
+    /** The transaction goes to [TxOpts.dbName], defaulting to the primary database `xtdb`, and may only refer to tables within it — see [Connection]. */
     fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx
 
+    /**
+     * A statement on a [Connection].
+     *
+     * DML run here is submitted as a transaction against [Connection.dbName], with no per-statement override, so
+     * it resolves tables only within that database — a narrower scope than a query on the same connection, and
+     * one the SQL text doesn't distinguish. See [Connection].
+     */
     interface Statement : AdbcStatement {
         /** @suppress */
         @InternalApi
@@ -135,6 +144,37 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         fun bind(rel: RelationReader): Unit = unsupported("bind(RelationReader) not supported")
     }
 
+    /**
+     * A connection to one database, [dbName].
+     *
+     * A query and a transaction run through the same connection resolve table names differently, and nothing in
+     * the SQL text distinguishes the two.
+     *
+     * **A query may reach any attached database:**
+     *
+     * - `db.schema.table` — that table, in that database.
+     * - `a.b` — matched against *both* readings: schema `a` of [dbName], and table `b` in the `public` schema of
+     *   a database `a`. It resolves to whichever exists, and is an `Ambiguous table reference` when both do.
+     *   The database reading only reaches `public`, so another schema of another database needs all three parts.
+     * - `b` — table `b` in the `public` schema of [dbName].
+     *
+     * **A transaction resolves only its own database:**
+     *
+     * - `a.b` — schema `a` of that database, never a database. So `INSERT INTO other_db.foo` creates `foo` in
+     *   schema `other_db` of the transaction's own database.
+     * - `b` — table `b` in the `public` schema of that database.
+     * - A table in another database is unreachable, and referring to one reports that the table was not found,
+     *   naming the transaction's database.
+     *
+     * **The transaction's database is:**
+     *
+     * - [dbName] — for SQL DML through a [Statement], and for a `BEGIN` … `COMMIT` block. Neither can address
+     *   another database.
+     * - [TxOpts.dbName], defaulting to [dbName] — for [submitTx] and [executeTx].
+     *
+     * The narrowing is deliberate: XTDB guarantees serializability within a database and not between databases,
+     * so a transaction that read across them would have no consistent basis to read at.
+     */
     class Connection(
         val allocator: BufferAllocator,
         private val dbCat: Database.Catalog,
@@ -258,9 +298,11 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
             }
         }
 
+        /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
         fun submitTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): SubmittedTx =
             metrics?.txSubmitTimer.timed { doSubmit(ops, opts) }.record(opts.dbName ?: dbName)
 
+        /** The transaction goes to [TxOpts.dbName] (default [dbName]) and may only refer to tables within it — see [Connection]. */
         fun executeTx(ops: List<TxOp>, opts: TxOpts = TxOpts()): ExecutedTx =
             metrics?.txExecuteTimer.timed {
                 val txId = doSubmit(ops, opts).txId

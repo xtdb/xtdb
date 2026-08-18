@@ -63,6 +63,13 @@ Given this variance, let's define what this means in XTDB:
 - Transactions are submitted to one database and may only refer to tables within that database.
 
   XTDB [guarantees serializability](/about/txs-in-xtdb) within a single database, but not between databases.
+
+  A two-part name means different things either side of that boundary.
+  In a query, `new_db.bar` may name a database - `bar` in the `public` schema of `new_db`.
+  In DML (`INSERT`, `UPDATE`, `DELETE`, `ERASE`, `PATCH`) it always means `schema.table` within the database you connected to, so `INSERT INTO new_db.foo` creates `foo` in schema `new_db` of your own database, and `UPDATE new_db.bar` reports that the table was not found.
+
+  Creating a table that way leaves the two-part query name ambiguous, because schema `new_db` of your database and database `new_db` then both match it.
+  Use the three-part `database.schema.table` form for cross-database queries whose shorter form could be read either way.
   
 ## What does this mean for me?
 
