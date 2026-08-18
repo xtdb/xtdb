@@ -66,6 +66,9 @@ val STRUCT_TYPE: ArrowType = MinorType.STRUCT.type
 @JvmField
 val UNION_TYPE: ArrowType = MinorType.DENSEUNION.type
 
+@JvmField
+val RUN_END_ENCODED_TYPE: ArrowType = ArrowType.RunEndEncoded.INSTANCE
+
 /**
  * This field, with `typeIds` declared explicitly on every union in its tree — `0 until childCount`.
  *

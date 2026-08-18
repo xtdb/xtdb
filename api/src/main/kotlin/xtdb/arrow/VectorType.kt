@@ -36,6 +36,10 @@ const val MAP_ENTRIES_NAME = "entries"
 const val MAP_KEYS_NAME = "key"
 const val MAP_VALUES_NAME = "value"
 
+// likewise a run-end encoded vector's two children, which the spec also fixes in this order
+const val REE_RUN_ENDS_NAME = "run_ends"
+const val REE_VALUES_NAME = "values"
+
 sealed class VectorType {
     abstract val arrowType: ArrowType
     abstract val nullable: Boolean
@@ -323,6 +327,14 @@ sealed class VectorType {
                     Listy(type, children.single().asType)
                 STRUCT_TYPE -> Struct(children.associate { it.name to it.asType })
                 is ArrowType.Union -> fromLegs(children.map { it.asType })
+
+                // run-end encoding is a layout rather than a type: a column of run-encoded i64s is a
+                // column of i64s, and merging it against a plain one must not produce a union
+                is ArrowType.RunEndEncoded -> {
+                    require(children.size == 2) { "run-end encoded fields have exactly two children" }
+                    children[1].asType
+                }
+
                 else -> Scalar(type)
             }.let { maybe(it, isNullable) }
     }

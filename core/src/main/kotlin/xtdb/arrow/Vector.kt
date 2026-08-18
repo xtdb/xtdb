@@ -203,7 +203,10 @@ sealed class Vector : VectorReader, VectorWriter {
 
                 override fun visit(type: Duration) = DurationVector(al, name, nullable, type.unit)
 
-                override fun visit(p0: RunEndEncoded?) = TODO("Not yet implemented")
+                override fun visit(type: RunEndEncoded): Vector {
+                    require(children.size == 2) { "run-end encoded fields have exactly two children" }
+                    return RunEndEncodedVector(name, children[0], children[1])
+                }
 
                 override fun visit(type: ExtensionType): Vector = when (type) {
                     KeywordType -> KeywordVector(Utf8Vector(al, name, nullable))
@@ -235,7 +238,7 @@ sealed class Vector : VectorReader, VectorWriter {
                 if (vec is ArrowNullVector) NullVector(vec.name, vec.field.isNullable)
                 else vec.allocator.openVector(vec.field)
 
-            return vector.apply { loadFromArrow(vec) }
+            return vector.closeOnCatch { it.apply { loadFromArrow(vec) } }
         }
 
         @JvmStatic
