@@ -10,12 +10,12 @@ FlightSQL; DuckDB receives them directly with no serialise/deserialise step.
 
 Requires:
     docker run --rm -d --name xtdb-duckdb-demo \\
-        -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+        -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
     pip install adbc-driver-flightsql pyarrow duckdb psycopg
 
 Run:
     python main.py
-    python main.py grpc://localhost:9832 postgresql://localhost:5432/xtdb
+    python main.py grpc://localhost:3000 postgresql://localhost:5432/xtdb
 """
 
 import sys
@@ -27,7 +27,7 @@ import psycopg
 import adbc_driver_flightsql.dbapi as flight_sql
 
 # ── connection defaults (override via argv) ───────────────────────────────────
-FSQL_URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:9832"
+FSQL_URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:3000"
 PG_URI   = sys.argv[2] if len(sys.argv) > 2 else "postgresql://localhost:5432/xtdb"
 
 # ── 1. Seed XTDB with bitemporal trade data ───────────────────────────────────

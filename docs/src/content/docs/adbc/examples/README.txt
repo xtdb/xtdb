@@ -12,10 +12,10 @@ required `title` frontmatter. A README.md here would break the docs build.
 Prereqs
 -------
 
-A running XTDB node with the FlightSQL listener on localhost:9832.
+A running XTDB node with the FlightSQL listener on localhost:3000.
 The standalone Docker image enables this by default:
 
-    docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 
 The Python examples need:
 

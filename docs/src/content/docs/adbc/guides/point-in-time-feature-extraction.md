@@ -37,7 +37,7 @@ A naive join would feed *both* of those post-default snapshots into training row
 Start a node with the FlightSQL listener:
 
 ```bash
-docker run --rm -d --name xtdb -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -d --name xtdb -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow pandas
 ```
 
@@ -50,7 +50,7 @@ import adbc_driver_flightsql.dbapi as flight_sql
 # own writes. The dbapi defaults to manual-commit (PEP 249) now that the
 # server advertises transaction support, so without this the uncommitted
 # seed rows would be invisible to subsequent queries on the same connection.
-conn = flight_sql.connect("grpc://localhost:9832", autocommit=True)
+conn = flight_sql.connect("grpc://localhost:3000", autocommit=True)
 ```
 
 ## Seeding features as a temporal timeline

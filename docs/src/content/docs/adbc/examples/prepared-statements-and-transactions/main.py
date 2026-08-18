@@ -11,11 +11,11 @@ Shows the full ADBC statement lifecycle over FlightSQL:
   6.  Same-connection write-then-read visibility
 
 Requirements:
-    docker run --rm -d --name xtdb -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    docker run --rm -d --name xtdb -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
     pip install adbc-driver-flightsql pyarrow
 
 Run:
-    python main.py [grpc://localhost:9832]
+    python main.py [grpc://localhost:3000]
 """
 
 import sys
@@ -28,7 +28,7 @@ import adbc_driver_manager
 
 warnings.filterwarnings("ignore")
 
-URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:9832"
+URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:3000"
 
 
 def section(title: str) -> None:

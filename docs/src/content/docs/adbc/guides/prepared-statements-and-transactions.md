@@ -15,15 +15,15 @@ The runnable companion script exercises every section in order:
 ## Prerequisites
 
 ```bash
-docker run --rm -d --name xtdb -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -d --name xtdb -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow
 ```
 
-All examples connect to `grpc://localhost:9832`.
+All examples connect to `grpc://localhost:3000`.
 Adjust the port if you mapped it differently.
 
 :::note
-Use the `nightly` image for ADBC/FlightSQL work: it enables the FlightSQL listener on port 9832 by default.
+Use the `nightly` image for ADBC/FlightSQL work: it enables the FlightSQL listener on port 3000 by default.
 (Stable images from 2.2.0 onwards enable it too.)
 :::
 
@@ -61,7 +61,7 @@ The dbapi `execute()` call handles scalar parameters inline:
 ```python
 import adbc_driver_flightsql.dbapi as flight_sql
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT _id, name, price FROM products WHERE _id = ?",
@@ -84,7 +84,7 @@ import adbc_driver_flightsql
 import adbc_driver_manager
 import pyarrow as pa
 
-db = adbc_driver_flightsql.connect("grpc://localhost:9832")
+db = adbc_driver_flightsql.connect("grpc://localhost:3000")
 conn = adbc_driver_manager.AdbcConnection(db)
 stmt = adbc_driver_manager.AdbcStatement(conn)
 
@@ -132,7 +132,7 @@ param_batch = pa.record_batch({
     "v3": pa.array([75, 120, 30],                        type=pa.int64()),
 })
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO products (_id, name, price, stock)"
@@ -168,7 +168,7 @@ Use the connection-level transaction API:
 ```python
 import adbc_driver_flightsql.dbapi as flight_sql
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     # Switch off autocommit; opens a FlightSQL BeginTransaction action.
     conn.adbc_connection.set_autocommit(False)
 
@@ -211,7 +211,7 @@ Use the nightly image or build from main.
 ### ROLLBACK empties pending writes
 
 ```python
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     conn.adbc_connection.set_autocommit(False)
 
     with conn.cursor() as cur:
@@ -255,7 +255,7 @@ Writes on a connection are visible to subsequent reads on that **same** connecti
 The connection tracks its own write tokens and threads them through the planner:
 
 ```python
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO products (_id, name, price, stock)"

@@ -10,9 +10,9 @@ Shows type fidelity for:
 Prerequisites:
     pip install adbc-driver-flightsql pyarrow pandas polars
 
-XTDB nightly running with FlightSQL on localhost:9832 (adjust URIs as needed):
+XTDB nightly running with FlightSQL on localhost:3000 (adjust URIs as needed):
     docker run --rm -d --name xtdb-g2 \\
-        -p 5444:5432 -p 9844:9832 \\
+        -p 5444:5432 -p 9844:3000 \\
         ghcr.io/xtdb/xtdb:nightly
 
 Then run:
@@ -32,7 +32,7 @@ import pandas as pd
 import polars as pl
 import adbc_driver_flightsql.dbapi as flight_sql
 
-FLIGHT_URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:9832"
+FLIGHT_URI = sys.argv[1] if len(sys.argv) > 1 else "grpc://localhost:3000"
 
 SEP = "─" * 60
 

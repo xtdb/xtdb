@@ -61,7 +61,7 @@ let mut driver = ManagedDriver::load_dynamic_from_filename(
     AdbcVersion::default(),
 )?;
 let database = driver
-    .new_database_with_opts([(OptionDatabase::Uri, "grpc://localhost:9832".into())])?;
+    .new_database_with_opts([(OptionDatabase::Uri, "grpc://localhost:3000".into())])?;
 let mut conn = database.new_connection()?;
 ```
 
@@ -153,11 +153,11 @@ A few Rust-specific corners worth knowing about:
 
 ## Running it
 
-This needs the FlightSQL listener, which the `nightly` image enables by default on port 9832 (stable images from 2.2.0 onwards do too):
+This needs the FlightSQL listener, which the `nightly` image enables by default on port 3000 (stable images from 2.2.0 onwards do too):
 
 ```sh
 docker run --rm -d --name xtdb-g6 \
-    -p 5432:5432 -p 9832:9832 \
+    -p 5432:5432 -p 3000:3000 \
     ghcr.io/xtdb/xtdb:nightly
 
 cd docs/src/content/docs/adbc/examples/rust-arrow-pipeline

@@ -8,8 +8,8 @@ demonstrates the full happy path and the error cases from the how-to guide.
 Requirements:
     pip install adbc-driver-flightsql pyarrow
 
-Running XTDB (FlightSQL on 9832):
-    docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+Running XTDB (FlightSQL on 3000):
+    docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 
 Run:
     python main.py
@@ -24,7 +24,7 @@ import pyarrow.parquet as pq
 import adbc_driver_flightsql.dbapi as flight_sql
 from adbc_driver_manager import DatabaseError
 
-XTDB_URI = os.environ.get("XTDB_URI", "grpc://localhost:9832")
+XTDB_URI = os.environ.get("XTDB_URI", "grpc://localhost:3000")
 
 
 # ---------------------------------------------------------------------------

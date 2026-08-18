@@ -66,7 +66,7 @@ pip install adbc-driver-flightsql pyarrow
 ```python
 import adbc_driver_flightsql.dbapi as flight_sql
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.execute("SELECT 1")
         print(cur.fetch_arrow_table())

@@ -9,7 +9,7 @@ Requirements:
     pip install adbc-driver-flightsql pyarrow pandas
 
 Running against the Docker standalone image:
-    docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
     python main.py
 
 Override the FlightSQL URL:
@@ -33,7 +33,7 @@ import adbc_driver_flightsql.dbapi as flight_sql
 # cursor.execute/executemany would instead need conn.commit() or autocommit=True.
 warnings.filterwarnings("ignore", message="Cannot disable autocommit")
 
-XTDB_URL = os.environ.get("XTDB_ARROW_URL", "grpc://localhost:9832")
+XTDB_URL = os.environ.get("XTDB_ARROW_URL", "grpc://localhost:3000")
 
 
 # ── data ────────────────────────────────────────────────────────────────────

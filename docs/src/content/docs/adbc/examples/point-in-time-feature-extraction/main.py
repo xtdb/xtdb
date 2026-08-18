@@ -11,9 +11,9 @@ The job is to build a training matrix where each label sees the features
 *as they were known at observed_at*, with no later updates leaking in.
 
 Run:
-    docker run --rm -d --name xtdb-pit -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    docker run --rm -d --name xtdb-pit -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
     pip install adbc-driver-flightsql pyarrow pandas
-    python main.py                          # defaults to grpc://localhost:9832
+    python main.py                          # defaults to grpc://localhost:3000
     python main.py grpc://localhost:9842    # override the FlightSQL URL
     docker rm -f xtdb-pit
 
@@ -32,7 +32,7 @@ import pyarrow as pa
 
 XTDB_URI = (
     sys.argv[1] if len(sys.argv) > 1
-    else os.environ.get("XTDB_URI", "grpc://localhost:9832")
+    else os.environ.get("XTDB_URI", "grpc://localhost:3000")
 )
 
 

@@ -8,12 +8,12 @@ The worked scenario: take a bitemporal trade snapshot from XTDB as of Q4 2024 an
 
 ## Prerequisites
 
-A running XTDB node with the FlightSQL listener on port 9832 and the pgwire server on port 5432.
+A running XTDB node with the FlightSQL listener on port 3000 and the pgwire server on port 5432.
 The nightly Docker image enables both by default:
 
 ```sh
 docker run --rm -d --name xtdb-duckdb-demo \
-    -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 ```
 
 Install the Python dependencies:
@@ -78,7 +78,7 @@ SNAPSHOT_SQL = """\
      ORDER BY _id
 """
 
-FSQL_URI = "grpc://localhost:9832"
+FSQL_URI = "grpc://localhost:3000"
 
 with flight_sql.connect(FSQL_URI) as conn:
     with conn.cursor() as cur:
@@ -217,7 +217,7 @@ A self-contained script that runs the full scenario is in
 [`examples/streaming-into-duckdb/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/streaming-into-duckdb/main.py).
 
 ```sh
-docker run --rm -d --name xtdb-g5 -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -d --name xtdb-g5 -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow duckdb psycopg
 python docs/src/content/docs/adbc/examples/streaming-into-duckdb/main.py
 docker rm -f xtdb-g5

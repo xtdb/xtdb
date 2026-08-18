@@ -66,7 +66,7 @@ xtdbConfig:
 
     flightSql:
       host: '*'
-      port: 9832
+      port: 3000
 
     logClusters:
       kafkaCluster: !Kafka
@@ -126,9 +126,9 @@ xtdbService:
     servicePort: 5432
   flightSqlServer:
     # Port of the Flight SQL server on the nodes
-    targetPort: 9832
+    targetPort: 3000
     # Port exposed by the service
-    servicePort: 9832
+    servicePort: 3000
   healthzServer:
     # Port of the healthz server on the nodes
     targetPort: 8080

@@ -187,7 +187,7 @@ server:
 
 ### Flight SQL Server
 
-By default a Flight SQL server is started on localhost:9832.
+By default a Flight SQL server is started on localhost, on a port the server picks; the XTDB Docker images pin it to 3000.
 
 ``` yaml
 flightSql:
@@ -200,7 +200,7 @@ flightSql:
   # Port on which to start the FLight SQL server.
   #
   # Default is 0, to have the server choose an available port.
-  # (In the XTDB Docker images, this is defaulted to 9832.)
+  # (In the XTDB Docker images, this is defaulted to 3000.)
   # Set to -1 to not start a Flight SQL server.
   port: 0
 ```

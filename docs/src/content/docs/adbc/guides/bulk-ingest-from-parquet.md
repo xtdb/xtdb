@@ -8,10 +8,10 @@ This guide shows that minimal path and the variations that come up in practice: 
 
 ## Prerequisites
 
-XTDB running with the FlightSQL listener on port `9832`, which the Docker standalone image does by default:
+XTDB running with the FlightSQL listener on port `3000`, which the Docker standalone image does by default:
 
 ```bash
-docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 ```
 
 Install the Python dependencies:
@@ -28,7 +28,7 @@ import adbc_driver_flightsql.dbapi as flight_sql
 
 table = pq.read_table("orders.parquet")
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.adbc_ingest("orders", table, mode="create_append")
 ```
@@ -94,7 +94,7 @@ For files larger than available RAM, use `pq.ParquetFile` to iterate over row gr
 import pyarrow.parquet as pq
 import adbc_driver_flightsql.dbapi as flight_sql
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         pf = pq.ParquetFile("large-orders.parquet")
         for batch in pf.iter_batches(batch_size=100_000):
@@ -122,7 +122,7 @@ import pyarrow as pa
 import adbc_driver_flightsql.dbapi as flight_sql
 from adbc_driver_manager import DatabaseError
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         table = pa.table({
             "_id": ["alice"],
@@ -170,7 +170,7 @@ A self-contained script that writes a Parquet fixture and bulk-loads it is in th
 [`docs/adbc/examples/bulk-ingest-from-parquet/main.py`](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/bulk-ingest-from-parquet/main.py).
 
 ```bash
-docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 pip install adbc-driver-flightsql pyarrow
 python docs/src/content/docs/adbc/examples/bulk-ingest-from-parquet/main.py
 ```

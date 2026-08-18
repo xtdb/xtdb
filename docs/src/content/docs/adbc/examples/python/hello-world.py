@@ -2,10 +2,10 @@
 """
 Minimal XTDB-via-ADBC hello world.
 
-Requires a running XTDB node with the FlightSQL listener on localhost:9832.
+Requires a running XTDB node with the FlightSQL listener on localhost:3000.
 The standalone Docker image enables this by default:
 
-    docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+    docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 
 Run:
     pip install adbc-driver-flightsql pyarrow
@@ -17,7 +17,7 @@ import pyarrow as pa
 
 
 def main() -> None:
-    with flight_sql.connect("grpc://localhost:9832") as conn:
+    with flight_sql.connect("grpc://localhost:3000") as conn:
         with conn.cursor() as cur:
             # 1. Bulk-ingest an Arrow table: one round trip, no row shredding.
             users = pa.table({

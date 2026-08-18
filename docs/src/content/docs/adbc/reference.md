@@ -34,15 +34,15 @@ Xtdb.openNode().use { node ->
 
 ### Over the wire (FlightSQL)
 
-Enable the FlightSQL listener in your node config; the [Docker standalone image](/intro/installation-via-docker) does this by default on port `9832`:
+Enable the FlightSQL listener in your node config; the [Docker standalone image](/intro/installation-via-docker) does this by default on port `3000`:
 
 ```yaml
 flightSql:
   host: '*'
-  port: 9832
+  port: 3000
 ```
 
-Then connect with any ADBC FlightSQL driver pointed at `grpc://localhost:9832`.
+Then connect with any ADBC FlightSQL driver pointed at `grpc://localhost:3000`.
 Connection setup is driver-specific: see the connection snippet on the [Python](/drivers/python#arrow-native-access-via-adbc), [Java](/drivers/java#arrow-native-access-via-adbc), [Kotlin](/drivers/kotlin#arrow-native-access-via-adbc), or [Go](/drivers/go#arrow-native-access-via-adbc) driver page, or the [Apache ADBC driver matrix](https://arrow.apache.org/adbc/current/driver/flight_sql.html) for other languages.
 
 TLS and authentication are not applied to the FlightSQL listener (XTDB's [authentication](/ops/config/authentication) covers the pgwire listener only); front it with a TLS-terminating proxy in production.

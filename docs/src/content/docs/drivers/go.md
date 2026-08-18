@@ -71,7 +71,7 @@ Users:
 ## Arrow-native access via ADBC
 
 For Arrow-native workloads (query results as Arrow batches, bulk-ingesting an Arrow table in one round trip), XTDB also exposes [ADBC](https://arrow.apache.org/adbc/) over its FlightSQL listener.
-From Go that's the [`flightsql`](https://pkg.go.dev/github.com/apache/arrow-adbc/go/adbc/driver/flightsql) ADBC driver, pointed at `grpc://localhost:9832`:
+From Go that's the [`flightsql`](https://pkg.go.dev/github.com/apache/arrow-adbc/go/adbc/driver/flightsql) ADBC driver, pointed at `grpc://localhost:3000`:
 
 ```go
 import (
@@ -82,7 +82,7 @@ import (
 
 drv := flightsql.NewDriver(memory.DefaultAllocator)
 db, _ := drv.NewDatabase(map[string]string{
-    adbc.OptionKeyURI: "grpc://localhost:9832",
+    adbc.OptionKeyURI: "grpc://localhost:3000",
 })
 conn, _ := db.Open(ctx)
 defer conn.Close()

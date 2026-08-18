@@ -1,10 +1,10 @@
 //! XTDB → ADBC (FlightSQL) → DataFusion → Parquet, end-to-end, in Rust.
 //!
 //! Prereq: a running XTDB node with the FlightSQL listener reachable at
-//!     grpc://localhost:9832
+//!     grpc://localhost:3000
 //! e.g.
 //!     docker run --rm -d --name xtdb-g6 \
-//!         -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+//!         -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 //!
 //! Run with:
 //!     ADBC_FLIGHTSQL_VERSION=1.11.0 cargo run --release
@@ -24,7 +24,7 @@ use datafusion::prelude::SessionContext;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
-const FLIGHT_URI: &str = "grpc://localhost:9832";
+const FLIGHT_URI: &str = "grpc://localhost:3000";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

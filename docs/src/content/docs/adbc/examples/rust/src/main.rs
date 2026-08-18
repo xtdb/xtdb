@@ -5,10 +5,10 @@
 //! crate downloads that library from the official PyPI wheel and exposes its
 //! on-disk path as `DRIVER_PATH`.
 //!
-//! Requires a running XTDB node with the FlightSQL listener on localhost:9832.
+//! Requires a running XTDB node with the FlightSQL listener on localhost:3000.
 //! The standalone Docker image enables this by default:
 //!
-//!     docker run --rm -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+//!     docker run --rm -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 //!
 //! Run with:
 //!     ADBC_FLIGHTSQL_VERSION=1.11.0 cargo run
@@ -28,7 +28,7 @@ use adbc_driver_manager::ManagedDriver;
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 
-const FLIGHT_URI: &str = "grpc://localhost:9832";
+const FLIGHT_URI: &str = "grpc://localhost:3000";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load the native FlightSQL driver and open an ADBC connection.

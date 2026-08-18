@@ -17,10 +17,10 @@ You need a Python 3.10+ environment and Docker.
 
 ```bash
 pip install adbc-driver-flightsql pyarrow pandas
-docker run --rm -d --name xtdb -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -d --name xtdb -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 ```
 
-The standalone Docker image starts both the PostgreSQL wire server (port 5432) and the FlightSQL gRPC server (port 9832).
+The standalone Docker image starts both the PostgreSQL wire server (port 5432) and the FlightSQL gRPC server (port 3000).
 The `nightly` image enables FlightSQL by default, as do stable images from 2.2.0 onwards.
 
 ## 2. Connecting
@@ -28,7 +28,7 @@ The `nightly` image enables FlightSQL by default, as do stable images from 2.2.0
 ```python
 import adbc_driver_flightsql.dbapi as flight_sql
 
-conn = flight_sql.connect("grpc://localhost:9832")
+conn = flight_sql.connect("grpc://localhost:3000")
 ```
 
 The connection string is a standard gRPC URI.
@@ -170,7 +170,7 @@ The result is still a `pyarrow.Table`: the type system is unaffected by the para
 The dbapi defaults to manual-commit, so for ingest-and-query scripts connect with `autocommit=True` and each statement commits as it runs:
 
 ```python
-conn = flight_sql.connect("grpc://localhost:9832", autocommit=True)
+conn = flight_sql.connect("grpc://localhost:3000", autocommit=True)
 ```
 
 `adbc_ingest` commits atomically on its own regardless of commit mode, which is why the ingests in this tutorial are visible without any extra step.

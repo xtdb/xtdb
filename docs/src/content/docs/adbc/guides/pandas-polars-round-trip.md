@@ -14,10 +14,10 @@ The same round-trip through psycopg or JDBC widens timestamps, turns nullable Ar
 
 ```bash
 pip install adbc-driver-flightsql pyarrow pandas polars
-docker run --rm -d --name xtdb -p 5432:5432 -p 9832:9832 ghcr.io/xtdb/xtdb:nightly
+docker run --rm -d --name xtdb -p 5432:5432 -p 3000:3000 ghcr.io/xtdb/xtdb:nightly
 ```
 
-All examples below connect to `grpc://localhost:9832`.
+All examples below connect to `grpc://localhost:3000`.
 The [runnable companion script](https://github.com/xtdb/xtdb/tree/main/docs/src/content/docs/adbc/examples/pandas-polars-round-trip/main.py) exercises every code block in order.
 
 ## The dataset
@@ -43,7 +43,7 @@ Connect and fetch a query result as an Arrow table:
 import pyarrow as pa
 import adbc_driver_flightsql.dbapi as flight_sql
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.execute("SELECT _id, ts, severity, value, label FROM events ORDER BY ts")
         arrow_table = cur.fetch_arrow_table()
@@ -152,7 +152,7 @@ arrow_from_pd = pa.Table.from_pandas(df, preserve_index=False)
 # polars → Arrow (near-zero-copy)
 arrow_from_pl = df_pl.to_arrow()
 
-with flight_sql.connect("grpc://localhost:9832") as conn:
+with flight_sql.connect("grpc://localhost:3000") as conn:
     with conn.cursor() as cur:
         cur.adbc_ingest("events", arrow_from_pd, mode="create_append")
         cur.adbc_ingest("events", arrow_from_pl, mode="create_append")
