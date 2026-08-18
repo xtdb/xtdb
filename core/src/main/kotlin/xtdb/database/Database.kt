@@ -534,6 +534,7 @@ class Database(
             @JvmField
             val EMPTY = object : Catalog {
                 override val databaseNames: Collection<DatabaseName> = emptySet()
+                override val txScoped = false
 
                 override fun databaseOrNull(dbName: DatabaseName) = null
 

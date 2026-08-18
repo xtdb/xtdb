@@ -165,6 +165,7 @@ class OpenTx
             return object : IQuerySource.QueryCatalog {
                 override val databaseNames: Collection<DatabaseName> get() = setOf(dbName)
                 override fun databaseOrNull(dbName: DatabaseName) = queryDb.takeIf { dbName == this@OpenTx.dbName }
+                override val txScoped get() = true
             }
         }
 

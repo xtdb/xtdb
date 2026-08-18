@@ -70,6 +70,7 @@ class IngestNode internal constructor(
     // so it hands healthz a fixed, read-only view over the databases opened at boot.
     private class FixedDbCatalog(private val dbs: Map<DatabaseName, Database>) : Database.Catalog {
         override val databaseNames get() = dbs.keys
+        override val txScoped = false
         override fun databaseOrNull(dbName: DatabaseName) = dbs[dbName]
 
         override fun attach(dbName: DatabaseName, config: Database.Config?): Unit =

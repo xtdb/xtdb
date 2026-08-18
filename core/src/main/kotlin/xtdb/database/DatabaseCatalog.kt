@@ -50,6 +50,8 @@ class DatabaseCatalog @JvmOverloads constructor(
     override val databaseNames: Collection<DatabaseName>
         get() = databases.entries.asSequence().filter { !it.value.isClosing }.map { it.key }.toSet()
 
+    override val txScoped = false
+
     override fun databaseOrNull(dbName: DatabaseName): Database? =
         databases[dbName]?.takeUnless { it.isClosing }
 

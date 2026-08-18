@@ -15,6 +15,20 @@ interface IQuerySource : AutoCloseable {
     interface QueryCatalog {
         val databaseNames: Collection<DatabaseName>
         fun databaseOrNull(dbName: DatabaseName): QueryDatabase?
+
+        /**
+         * True for a transaction's narrowed catalog, which resolves only the transaction's own database.
+         *
+         * The planner reads this solely to *explain* a table that didn't resolve: a qualified name that would
+         * have named another database from a connection reports "not found" here, which is true of this
+         * catalog and misleading about the node.
+         *
+         * It MUST NOT gate resolution. The set of attached databases is node-local — `XTDB_SKIP_DBS`, and an
+         * `ATTACH` that some nodes have processed and others haven't — and a resolved-but-unappended tx is
+         * re-resolved by the next leader, so a resolution decision taken on this would make the same
+         * source-log message abort on one node and write rows on another.
+         */
+        val txScoped: Boolean
     }
 
     interface QueryDatabase : DatabaseSnapshot.Source {

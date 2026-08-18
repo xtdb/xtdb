@@ -38,6 +38,47 @@
     (t/is (= [{:_id "new-db"} {:_id "xtdb"}]
              (jdbc/execute! xtdb-conn ["SELECT _id FROM new_db.foo UNION ALL SELECT _id FROM foo"])))))
 
+(t/deftest cross-db-refs-in-dml-5831
+  (with-open [pg (pgw/open-playground)
+              xtdb-conn (.build (.createConnectionBuilder pg))
+              new-db-conn (.build (-> (.createConnectionBuilder pg)
+                                      (.database "new_db")))]
+    (jdbc/execute! new-db-conn ["INSERT INTO bar RECORDS {_id: 'remote-bar'}"])
+
+    (t/is (= [{:_id "remote-bar"}]
+             (jdbc/execute! xtdb-conn ["SELECT _id FROM new_db.bar"]))
+          "a query resolves the two-part name as a database")
+
+    (let [tx-scope-msg #"Table not found: new_db\.bar - a transaction resolves tables only within its own database \('xtdb'\), reading a two-part name as schema\.table"]
+      (t/is (thrown-with-msg? PSQLException tx-scope-msg
+                              (jdbc/execute! xtdb-conn ["INSERT INTO dst SELECT _id FROM new_db.bar"]))
+            "the same name in a DML source doesn't, and says so rather than claiming the table is missing")
+
+      (t/is (thrown-with-msg? PSQLException tx-scope-msg
+                              (jdbc/execute! xtdb-conn ["UPDATE new_db.bar SET x = 1"]))))
+
+    (let [{:keys [message]} (pgw-test/reading-ex
+                             (jdbc/execute! xtdb-conn ["UPDATE nope SET x = 1"]))]
+      (t/is (re-find #"Table not found: nope" message))
+      (t/is (not (re-find #"a transaction resolves tables" message))
+            "an unqualified miss is an ordinary missing table, with nothing to explain"))
+
+    (t/testing "a two-part DML target is schema.table"
+      (jdbc/execute! new-db-conn ["INSERT INTO foo RECORDS {_id: 'remote-foo'}"])
+      (jdbc/execute! xtdb-conn ["INSERT INTO new_db.foo RECORDS {_id: 'local-schema-foo'}"])
+
+      (t/is (= [{:_id "remote-foo"}]
+               (jdbc/execute! new-db-conn ["SELECT _id FROM foo"]))
+            "the other database is untouched")
+
+      (t/is (= [{:_id "local-schema-foo"}]
+               (jdbc/execute! xtdb-conn ["SELECT _id FROM xtdb.new_db.foo"]))
+            "the write lands in schema new_db of the connection's own database")
+
+      (t/is (thrown-with-msg? PSQLException #"Ambiguous table reference: new_db\.foo"
+                              (jdbc/execute! xtdb-conn ["SELECT _id FROM new_db.foo"]))
+            "having created it, the two-part read that used to reach the other database is now ambiguous"))))
+
 (t/deftest two-databases-with-same-files
   (let [node-dir (util/->path "target/multi-db/overlapping-caches")]
     (util/delete-dir node-dir)

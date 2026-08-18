@@ -304,7 +304,7 @@
   PQuerySource
   (-plan-query [_ parsed-query query-opts table-info]
     (.get plan-cache [parsed-query (-> query-opts
-                                       (select-keys [:default-db :db-names :decorrelate? :explain? :explain-analyze? :arg-fields])
+                                       (select-keys [:default-db :db-names :tx-scoped? :decorrelate? :explain? :explain-analyze? :arg-fields])
                                        (update :decorrelate? (fnil boolean true))
                                        (assoc :table-info table-info))]
           (fn [[parsed-query query-opts]]
@@ -342,7 +342,8 @@
           {:keys [default-tz query-text] :as query-opts} (-> (->prepare-opts-map query-opts)
                                                               (update :default-tz (fnil identity expr/*default-tz*))
                                                               (cond-> qtext (assoc :query-text qtext))
-                                                              (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))))]
+                                                              (assoc :db-names (vec (sort (.getDatabaseNames db-cat)))
+                                                                     :tx-scoped? (.getTxScoped db-cat)))]
       ;; min-basis is {db-name [system-time per partition]} — the caller's already-awaited read basis, so the
       ;; live index can hand back its cached snapshot when it's fresh enough. nil = "don't care" (schema/prepare).
       (letfn [(open-snaps [min-basis]

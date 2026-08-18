@@ -109,12 +109,22 @@
   PlanError
   (error-string [_] (format "Ambiguous column reference: %s" (str/join "." (reverse chain)))))
 
-(defrecord BaseTableNotFound [table-chain]
+(defrecord BaseTableNotFound [table-chain tx-db-name]
   PlanError
-  (error-string [_] (format "Table not found: %s" (str/join "." (filter some? table-chain)))))
+  (error-string [_]
+    (let [written (filter some? table-chain)]
+      (cond-> (format "Table not found: %s" (str/join "." written))
+        ;; unqualified inside a tx is an ordinary missing table; it's the qualified miss that reads as a
+        ;; database reference, and reporting only "not found" for one sends the user hunting for a table
+        ;; that exists.
+        (and tx-db-name (> (count written) 1))
+        (str (format " - a transaction resolves tables only within its own database ('%s'), reading a two-part name as schema.table"
+                     tx-db-name))))))
 
+;; `table-chain` is the name as the user wrote it, so an unqualified target renders unqualified rather than
+;; carrying the `public` the resolver filled in - and doesn't trip the qualified-name hint above.
 (defn- table-not-found! [env table-chain]
-  (add-err! env (->BaseTableNotFound table-chain)))
+  (add-err! env (->BaseTableNotFound table-chain (when (:tx-scoped? env) (:default-db env)))))
 
 (defrecord AmbiguousTableReference [table-chain table-chains]
   PlanError
@@ -3130,9 +3140,9 @@
 
   (visitUpdateStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
-          table-name (identifier-sym (.targetTable ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
-          table-name (util/with-default-schema table-name)
+          written-table-name (identifier-sym (.targetTable ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> written-table-name name symbol))
+          table-name (util/with-default-schema written-table-name)
           table (table/->ref table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
@@ -3144,7 +3154,7 @@
           table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
-                         (table-not-found! env [(namespace table-name) (name table-name)])
+                         (table-not-found! env [(namespace written-table-name) (name written-table-name)])
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -3197,9 +3207,9 @@
 
   (visitDeleteStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols (mapv ->col-sym '[_iid _valid_from _valid_to])
-          table-name (identifier-sym (.targetTable ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
-          table-name (util/with-default-schema table-name)
+          written-table-name (identifier-sym (.targetTable ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> written-table-name name symbol))
+          table-name (util/with-default-schema written-table-name)
           table (table/->ref table-name)
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
@@ -3211,7 +3221,7 @@
           table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
-                         (table-not-found! env [(namespace table-name) (name table-name)])
+                         (table-not-found! env [(namespace written-table-name) (name written-table-name)])
                          #{}))
 
           dml-scope (->DmlTableRef env table-name table-alias unique-table-alias for-valid-time table-cols
@@ -3238,17 +3248,17 @@
 
   (visitEraseStatement [{{:keys [!id-count table-info default-db]} :env} ctx]
     (let [internal-cols '[_iid]
-          table-name (identifier-sym (.targetTable ctx))
-          table-alias (or (identifier-sym (.correlationName ctx)) (-> table-name name symbol))
+          written-table-name (identifier-sym (.targetTable ctx))
+          table-alias (or (identifier-sym (.correlationName ctx)) (-> written-table-name name symbol))
           unique-table-alias (symbol (str table-alias "." (swap! !id-count inc)))
-          table-name (util/with-default-schema table-name)
+          table-name (util/with-default-schema written-table-name)
           table (table/->ref table-name)
           aliased-cols (mapv (fn [col] {col (->col-sym (str unique-table-alias) (str col))}) internal-cols)
 
           table-cols (if-let [cols (get table-info [default-db table])]
                        cols
                        (do
-                         (table-not-found! env [(namespace table-name) (name table-name)])
+                         (table-not-found! env [(namespace written-table-name) (name written-table-name)])
                          #{}))
 
           dml-scope (->EraseTableRef env table-name table-alias unique-table-alias table-cols
@@ -3355,7 +3365,7 @@
 
 (defn ->env
   ([] (->env {}))
-  ([{:keys [table-info default-db db-names], :or {default-db "xtdb"}}]
+  ([{:keys [table-info default-db db-names tx-scoped?], :or {default-db "xtdb"}}]
    (let [db-names (or db-names [default-db])
          table-info (xform-table-info table-info db-names default-db)]
      {:!errors (atom [])
@@ -3363,6 +3373,7 @@
       :!id-count (atom 0)
       :!param-count (atom 0)
       :default-db default-db
+      :tx-scoped? tx-scoped?
       :table-info table-info
       :table-chains (->table-chains (keys table-info) db-names default-db)})))
 
@@ -3437,7 +3448,7 @@
         (-plan-query opts)))
 
   Sql$DirectlyExecutableStatementContext
-  (-plan-query [ctx {:keys [default-db scope table-info db-names arg-fields]
+  (-plan-query [ctx {:keys [default-db scope table-info db-names arg-fields tx-scoped?]
                      :or {default-db "xtdb"}}]
     (let [db-names (or db-names [default-db])
           table-info (xform-table-info table-info db-names default-db)
@@ -3445,6 +3456,7 @@
           !warnings (atom [])
           !param-count (atom 0)
           env {:default-db default-db
+               :tx-scoped? tx-scoped?
                :!errors !errors
                :!warnings !warnings
                :!id-count (atom 0)
