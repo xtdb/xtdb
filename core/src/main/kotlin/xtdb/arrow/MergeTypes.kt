@@ -71,7 +71,8 @@ data class MergeTypes(
          * [mergeTypes] with `Nothing` restored as the identity.
          *
          * `⊔` is not idempotent at the bottom today - `mergeTypes(Nothing, Nothing)` returns `Null` (#5871) -
-         * so a join over sources that all have nothing to say reports a dataless column as nullable.
+         * so a join over sources that all have nothing to say reports a dataless column as nullable. Both the
+         * read path and the block merge need the law to hold, hence one repair rather than a copy at each.
          *
          * Delete this and call [mergeTypes] directly once `fromLegs(∅)` returns the bottom.
          */

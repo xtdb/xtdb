@@ -2,11 +2,10 @@ package xtdb.catalog
 
 import com.google.protobuf.ByteString
 import org.apache.arrow.vector.types.pojo.Schema
-import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.MergeTypes.Companion.joinContributions
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.field
-import xtdb.arrow.VectorType.Null
 import xtdb.block.proto.Partition
 import xtdb.block.proto.TableBlock
 import xtdb.indexer.LiveTable
@@ -155,6 +154,15 @@ class TableCatalog(
             }
         }
 
+        /**
+         * Folds a block's types into the accumulated catalog.
+         *
+         * Each side is a partial map read as a total function - its recorded type where it has one, and its
+         * [VectorType.absentContribution] everywhere else. Substituting `Null` unconditionally would be right
+         * only for a side that holds put rows; for one with none (delete-only, or a `CREATE TABLE` declaring
+         * a column and writing nothing) it widens every column that side failed to mention, and since types
+         * only ever widen and this result is serialised into the block file, that would never heal (#5911).
+         */
         internal fun mergeVecTypes(
             old: Map<ColumnName, VectorType>?, new: Map<ColumnName, VectorType>?
         ): Map<ColumnName, VectorType> =
@@ -162,8 +170,12 @@ class TableCatalog(
                 old == null -> new.orEmpty()
                 new == null -> old
                 else -> {
-                    val allCols = old.keys + new.keys
-                    allCols.associateWith { col -> mergeTypes(old[col] ?: Null, new[col] ?: Null) }
+                    val oldAbsent = VectorType.absentContribution(old)
+                    val newAbsent = VectorType.absentContribution(new)
+
+                    (old.keys + new.keys).associateWith { col ->
+                        joinContributions(listOf(old[col] ?: oldAbsent, new[col] ?: newAbsent))
+                    }
                 }
             }
 

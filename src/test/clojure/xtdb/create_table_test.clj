@@ -157,3 +157,35 @@ $$"])
                  (xt/q secondary "SELECT table_name FROM information_schema.tables WHERE table_name = 'foo'"
                        {:database :shared_db}))
               "an empty table created on the primary propagates to the read-only follower")))))
+
+(defn- col-type [node table col]
+  (xt/q node ["SELECT data_type, is_nullable FROM information_schema.columns
+               WHERE table_name = ? AND column_name = ?" table col]))
+
+;; `TableCatalog/mergeVecTypes` folds each block's types into the catalog, reading each side as a total
+;; function: its recorded type where it has one, and what it contributes for a column it lacks elsewhere.
+;; A block with no put rows carries no columns, so it must widen nothing. Getting that wrong is durable -
+;; types only ever widen, and the result is serialised into the block file - hence a test per trigger (#5911).
+(t/deftest delete-only-block-does-not-widen-column-types
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "INSERT INTO foo (_id, v) VALUES (1, 42)"]])
+    (tu/flush-block! node)
+
+    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+          "baseline: one non-null i64")
+
+    (xt/execute-tx node [[:sql "DELETE FROM foo WHERE _id = 1"]])
+    (tu/flush-block! node)
+
+    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+          "a delete ends a version rather than producing one, so it carries no columns and must not widen `v`")))
+
+(t/deftest declaring-a-column-does-not-widen-the-others
+  (with-open [node (xtn/start-node)]
+    (xt/execute-tx node [[:sql "INSERT INTO foo (_id, v) VALUES (1, 42)"]])
+    (tu/flush-block! node)
+    (xt/execute-tx node [[:sql "CREATE TABLE foo (w)"]])
+    (tu/flush-block! node)
+
+    (t/is (= [{:data-type ":i64", :is-nullable "NO"}] (col-type node "foo" "v"))
+          "declaring `w` writes no rows, so it must not widen `v`")))
