@@ -1,31 +1,31 @@
 package xtdb.bitemporal
 
-import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.trie.EventRowPointer
 import xtdb.util.TemporalBounds
 
 class PolygonCalculator(private val queryBounds: TemporalBounds? = null) {
-    companion object {
-        private fun ArrowBufPointer.setFrom(src: ArrowBufPointer) = apply { set(src.buf, src.offset, src.length) }
-    }
-
-    private val skipIidPtr = ArrowBufPointer()
-    private val prevIidPtr = ArrowBufPointer()
-    val currentIidPtr = ArrowBufPointer()
-
     private val ceiling = Ceiling()
     private val polygon = Polygon()
+
+    // the iid we're currently resolving, and whether we've seen an erase for it.
+    // the initial (0, 0) needn't be distinguishable from a genuine iid: the most it can cost us is the
+    // ceiling reset on the first row, and the ceiling is constructed already reset.
+    private var iidHigh = 0L
+    private var iidLow = 0L
+    private var erased = false
 
     fun reset() = ceiling.reset()
 
     fun calculate(erp: EventRowPointer): Polygon? {
-        // after an erase, we don't process any more rows
-        if (skipIidPtr == erp.getIidPointer(currentIidPtr)) return null
-
-        if (prevIidPtr != currentIidPtr) {
+        if (erp.iidHigh != iidHigh || erp.iidLow != iidLow) {
+            iidHigh = erp.iidHigh
+            iidLow = erp.iidLow
+            erased = false
             ceiling.reset()
-            prevIidPtr.setFrom(currentIidPtr)
         }
+
+        // after an erase, we don't process any more rows
+        if (erased) return null
 
         val isErase = erp.op == "erase"
 
@@ -40,10 +40,8 @@ class PolygonCalculator(private val queryBounds: TemporalBounds? = null) {
         polygon.calculateFor(ceiling, validFrom, validTo)
         ceiling.applyLog(systemFrom, validFrom, validTo)
 
-        if (isErase) {
-            skipIidPtr.setFrom(currentIidPtr)
-        }
-        
+        if (isErase) erased = true
+
         return polygon
     }
 }

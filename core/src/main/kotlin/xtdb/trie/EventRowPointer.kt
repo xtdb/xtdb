@@ -14,8 +14,11 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
 
     private val opReader = relReader["op"]
 
-    private var iidHigh: Long = -1
-    private var iidLow: Long = -1
+    var iidHigh: Long = -1
+        private set
+
+    var iidLow: Long = -1
+        private set
 
     private fun indexOf(path: ByteArray): Int {
         var left = 0
