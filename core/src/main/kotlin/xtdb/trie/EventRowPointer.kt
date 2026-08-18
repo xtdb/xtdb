@@ -20,6 +20,9 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     var iidLow: Long = -1
         private set
 
+    var systemFrom: Long = -1
+        private set
+
     private fun indexOf(path: ByteArray): Int {
         var left = 0
         var right = relReader.rowCount
@@ -39,6 +42,7 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
             if (value < relReader.rowCount) {
                 iidHigh = iidReader.getLongLongHigh(value)
                 iidLow = iidReader.getLongLongLow(value)
+                systemFrom = sysFromReader.getLong(value)
             }
         }
 
@@ -53,12 +57,13 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
 
     fun getIidPointer(reuse: ArrowBufPointer) = iidReader.getPointer(index, reuse)
 
-    val systemFrom get() = sysFromReader.getLong(index)
     val validFrom get() = validFromReader.getLong(index)
     val validTo get() = validToReader.getLong(index)
     val op get() = opReader.getLeg(index)!!
 
     fun isValid(): Boolean = index < maxIndex
+
+    fun sameIidAs(iidHigh: Long, iidLow: Long) = this.iidHigh == iidHigh && this.iidLow == iidLow
 
     companion object {
         @JvmStatic
@@ -67,5 +72,16 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
             compareUnsigned(l.iidLow, r.iidLow).takeIf { it != 0 }?.let { return@Comparator it }
             r.systemFrom.compareTo(l.systemFrom)
         }
+
+        /** Orders pages by the iid each is currently sitting on. */
+        @JvmStatic
+        fun iidComparator(): Comparator<in EventRowPointer> = Comparator { l, r ->
+            compareUnsigned(l.iidHigh, r.iidHigh).takeIf { it != 0 } ?: compareUnsigned(l.iidLow, r.iidLow)
+        }
+
+        /** Orders one entity's events, newest system-time first. */
+        @JvmStatic
+        fun systemFromComparator(): Comparator<in EventRowPointer> =
+            Comparator { l, r -> r.systemFrom.compareTo(l.systemFrom) }
     }
 }

@@ -63,7 +63,10 @@ class ScanCursor(
         while (mergeTasks.hasNext()) {
             val task = mergeTasks.next()
             val taskPath = task.path
-            val mergeQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.comparator()))
+            // outer: one entry per page, ordered by the iid that page is currently on.
+            // inner: the pages sitting on the entity being resolved, newest system-time first.
+            val iidQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.iidComparator()))
+            val eventQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.systemFromComparator()))
             val polygonCalculator = PolygonCalculator(temporalBounds)
 
             // we're not in coroutine land here, so it's a good boundary for runBlocking
@@ -78,39 +81,52 @@ class ScanCursor(
             leafReaders.forEachIndexed { idx, leafReader ->
                 val evPtr = EventRowPointer(leafReader, taskPath)
                 if (!evPtr.isValid()) return@forEachIndexed
-                mergeQueue.add(LeafPointer(evPtr, idx))
+                iidQueue.add(LeafPointer(evPtr, idx))
             }
 
             BitemporalConsumer.open(al, leafReaders, colNames).use { bitemporalConsumer ->
                 while (true) {
-                    val leafPtr = mergeQueue.poll() ?: break
-                    val evPtr = leafPtr.evPtr
+                    val firstOfIid = iidQueue.poll() ?: break
 
-                    polygonCalculator.calculate(evPtr)
-                        ?.takeIf { evPtr.op == "put" }
-                        ?.let { polygon ->
-                            val sysFrom = evPtr.systemFrom
-                            val idx = evPtr.index
+                    // the entity we're resolving, captured before its own pointer advances past it
+                    val iidHigh = firstOfIid.evPtr.iidHigh
+                    val iidLow = firstOfIid.evPtr.iidLow
 
-                            repeat(polygon.validTimeRangeCount) { i ->
-                                val validFrom = polygon.getValidFrom(i)
-                                val validTo = polygon.getValidTo(i)
-                                val sysTo = polygon.getSystemTo(i)
+                    eventQueue.add(firstOfIid)
+                    while (iidQueue.peek()?.evPtr?.sameIidAs(iidHigh, iidLow) == true)
+                        eventQueue.add(iidQueue.poll())
 
-                                if (
-                                    temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
-                                    && validFrom != validTo && sysFrom != sysTo
-                                ) {
-                                    val outValidFrom = if (clampValidTime) max(validFrom, vtLower) else validFrom
-                                    val outValidTo = if (clampValidTime) min(validTo, vtUpper) else validTo
-                                    bitemporalConsumer.accept(leafPtr.relIdx, idx, outValidFrom, outValidTo, sysFrom, sysTo)
+                    while (true) {
+                        val leafPtr = eventQueue.poll() ?: break
+                        val evPtr = leafPtr.evPtr
+
+                        polygonCalculator.calculate(evPtr)
+                            ?.takeIf { evPtr.op == "put" }
+                            ?.let { polygon ->
+                                val sysFrom = evPtr.systemFrom
+                                val idx = evPtr.index
+
+                                repeat(polygon.validTimeRangeCount) { i ->
+                                    val validFrom = polygon.getValidFrom(i)
+                                    val validTo = polygon.getValidTo(i)
+                                    val sysTo = polygon.getSystemTo(i)
+
+                                    if (
+                                        temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
+                                        && validFrom != validTo && sysFrom != sysTo
+                                    ) {
+                                        val outValidFrom = if (clampValidTime) max(validFrom, vtLower) else validFrom
+                                        val outValidTo = if (clampValidTime) min(validTo, vtUpper) else validTo
+                                        bitemporalConsumer.accept(leafPtr.relIdx, idx, outValidFrom, outValidTo, sysFrom, sysTo)
+                                    }
                                 }
                             }
-                        }
 
-                    evPtr.nextIndex()
+                        evPtr.nextIndex()
 
-                    if (evPtr.isValid()) mergeQueue.add(leafPtr)
+                        if (evPtr.isValid())
+                            (if (evPtr.sameIidAs(iidHigh, iidLow)) eventQueue else iidQueue).add(leafPtr)
+                    }
                 }
 
                 val colPreds = colPreds.entries
