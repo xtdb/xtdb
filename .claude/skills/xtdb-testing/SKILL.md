@@ -13,7 +13,7 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 ## The rules you MUST NOT get wrong
 
 1. You MUST NOT run tests yourself — delegate to the `gradle-tests` agent.
-2. You MUST NOT edit files the build compiles in a worktree that has a test run in flight.
+2. You MUST NOT edit files the build compiles while a run in that worktree is still compiling them — see [The build phase is what is frozen](#the-build-phase-is-what-is-frozen).
 3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
 
@@ -33,11 +33,34 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
   Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
 - You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
 
-## Edits are frozen while a run is in flight
+## The build phase is what is frozen
 
 The freeze is scoped to the worktree the run is compiling from, and within it to **the files that run compiles** — Kotlin, Java and Clojure sources, build scripts, and anything on the test resource path.
 Recompiling under a running build produces **bogus cross-language type errors and cascading failures** that look exactly like real breakage, and chasing them costs far more than waiting did.
-If you have already edited mid-run, discard that run's results entirely and re-run once the tree is stable — do not try to reason about which failures were real.
+If you have already edited mid-compile, discard that run's results entirely and re-run once the tree is stable — do not try to reason about which failures were real.
+
+Compilation is the part a concurrent edit corrupts, so when you already know you want to keep working, run the build phase yourself first and delegate only the execution:
+
+1. `./gradlew :testClasses`, or `:xtdb-core:testClasses` for a module run.
+   That is the entire compile phase behind the root `test` task: every module's `compileKotlin` and `jar`, plus `compileTestClojure` and `compileTestFixturesClojure`, which AOT-compile the Clojure test and fixture namespaces into `build/clojure/`.
+   This is a compile, not a test run, so rule 1 does not apply and you MAY run it yourself — but the freeze does apply while it is in flight.
+2. Delegate the test run as normal.
+   Its compile tasks are up-to-date and clear in a few seconds on a warm daemon, and nothing is compiled after that.
+3. Edit from that point on.
+
+Unsplit, the freeze covers however long the run takes to build — minutes, after a Kotlin change or a cold `build/`.
+Split, it is the few seconds at the top of the test invocation.
+
+Two things the split does not buy:
+
+- **The report describes the tree you compiled, not the tree you now have.**
+  Anything edited after step 1 is untested until the next run, whatever the report says, so you MUST NOT report green for a file you edited during the run that produced it.
+  The split lets you get on with the *next* increment while a run confirms the last one; it does not let you fix a failure and claim the same run vindicates the fix.
+- **A module test run keeps that module's `src/main/clojure` live on the classpath.**
+  A Clojure source set that isn't AOT-compiled has its source directory as its `sourceSet.output`, so `:xtdb-core:test` loads `core/src/main/clojure` from source as each namespace is first required.
+  An edit therefore lands in the running JVM and the run executes a mixture of old and new — silently, with no compile error to give it away.
+  Root `:test` is not exposed to this, because module Clojure reaches it through the jars built in step 1 and its own test and fixture namespaces are AOT-compiled.
+  So `.clj` edits stay frozen for the duration of a module run, however you split it.
 
 Everything the build never reads is outside the freeze, and you SHOULD carry on with it rather than idling: `.allium` specs, `docs/`, `dev/`, `README`s, `.claude/`.
 A comment-only change still counts as a source edit — the compiler doesn't know it was only a comment.
@@ -123,9 +146,10 @@ Budget for compilation and reporting overhead as well as the tests themselves.
 
 ## What a run does not prove
 
-- **`./gradlew :compileClojure` is not a cheap syntax check.**
-  No namespaces are configured for AOT, so every `compileClojure` task reports `SKIPPED` and the build goes green without loading a line of Clojure.
-  To find out whether a Clojure change compiles at all, run a focused test over a namespace that requires it.
+- **`:compileTestClojure` is the cheap Clojure check; `:compileClojure` is not.**
+  The root project has no `src/main/clojure` at all, so `:compileClojure` has nothing to compile and goes green without loading a line.
+  `:compileTestClojure` and `:compileTestFixturesClojure` AOT-compile every test and fixture namespace — no `--tests` filter applies — which loads everything those namespaces require, module Clojure included, so a namespace that no longer loads fails there.
+  Module `main` Clojure is not AOT-compiled and nothing checks it in its own right; a test namespace requiring it is what catches it.
 - **A green run does not prove absence of reflection.**
   The Gradle build never sets `*warn-on-reflection*` — only the dev REPL does, via `src/dev/clojure/user.clj`.
   If reflection is the question, answer it in the REPL; don't add type hints speculatively on a reviewer's say-so.
