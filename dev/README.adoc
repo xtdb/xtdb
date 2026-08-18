@@ -179,7 +179,7 @@ The leaking allocator's name identifies the subsystem - e.g. `leader-log-process
 The `monitoring/` directory contains a Docker Compose stack for local observability:
 
 * *Prometheus* - metrics collection (scrapes `:8081/metrics`)
-* *Grafana* - visualization with preloaded dashboards (http://localhost:3000, login `admin/admin`)
+* *Grafana* - visualization with preloaded dashboards (http://localhost:3300, login `admin/admin`)
 * *Tempo* - distributed tracing backend for OpenTelemetry traces
 
 Starting it from root:

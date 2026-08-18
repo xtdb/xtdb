@@ -52,9 +52,9 @@ Start the stack with:
 docker-compose up -d
 ----
 
-If you then go to http://localhost:3000/dashboards - you can log in (`admin/admin`) and work on/use the dashboards.
+If you then go to http://localhost:3300/dashboards - you can log in (`admin/admin`) and work on/use the dashboards.
 
-To view traces, use Grafana's Explore view with the Tempo data source at http://localhost:3000/explore.
+To view traces, use Grafana's Explore view with the Tempo data source at http://localhost:3300/explore.
 
 === Configuring XTDB Tracing
 
