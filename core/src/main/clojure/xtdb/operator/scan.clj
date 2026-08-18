@@ -198,20 +198,17 @@
         (test [_ path]
           (not (.isEmpty (.filterIidsForPath bucketer iid-set path))))))))
 
-(defn scan-vec-types [^IQuerySource$QueryCatalog db-catalog, snaps, scan-cols]
+(defn scan-vec-types [snaps, scan-cols]
   (letfn [(->vec-type [[db-name ^TableRef table col-name]]
             (let [col-name (str col-name)]
               (or (types/temporal-vec-types col-name)
                   (-> (info-schema/derived-table table)
                       (get (symbol col-name)))
-                  (let [state (.getQueryState (.databaseOrNull db-catalog db-name))
-                        table-catalog (.getTableCatalog state)
-                        ^DatabaseSnapshot db-snap (get snaps db-name)
-                        ;; TODO (#5835) reduce types/merge-types over per-partition live
-                        ;; types here; for now we only allow single-partition databases.
+                  (let [^DatabaseSnapshot db-snap (get snaps db-name)
+                        ;; TODO (#5835) join across every partition's snapshot;
+                        ;; for now we only allow single-partition databases.
                         ^Snapshot snap (first (.getPartitions db-snap))]
-                    (types/merge-types (.getType table-catalog table col-name)
-                                       (.columnType snap table col-name))))))]
+                    (get (.columnTypes snap table [col-name]) col-name)))))]
     (->> scan-cols
          (into {} (map (juxt identity ->vec-type))))))
 

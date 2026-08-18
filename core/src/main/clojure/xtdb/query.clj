@@ -185,7 +185,7 @@
 (defn- emit-query [{:keys [conformed-plan scan-cols col-names ^Cache emit-cache, explain-analyze?]},
                    scan-emitter, db-cat, snaps
                    param-types, {:keys [default-tz]}]
-  (.get emit-cache {:scan-vec-types (scan/scan-vec-types db-cat snaps scan-cols)
+  (.get emit-cache {:scan-vec-types (scan/scan-vec-types snaps scan-cols)
 
                     ;; this one is just to reset the cache for up-to-date stats
                     ;; probably over-zealous

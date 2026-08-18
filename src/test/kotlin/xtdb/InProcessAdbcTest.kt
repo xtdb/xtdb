@@ -19,10 +19,16 @@ import org.junit.jupiter.api.Test
 import xtdb.api.Xtdb
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I64
+import xtdb.arrow.VectorType.Companion.UTF8
+import xtdb.arrow.VectorType.Companion.asType
+import xtdb.arrow.VectorType.Companion.fromLegs
+import xtdb.arrow.VectorType.Companion.maybe
 import xtdb.arrow.VectorType.Companion.ofType
 import xtdb.database.Database
 import xtdb.database.encodeTimeBasisToken
+import xtdb.test.flushBlock
 import java.time.Instant
 import java.util.UUID
 
@@ -943,6 +949,117 @@ class InProcessAdbcTest {
                 assertEquals(0, rdr.vectorSchemaRoot.rowCount)
             }
         }
+    }
+
+    private fun advertisedType(table: String, col: String) =
+        xtdb.connect().use { conn ->
+            conn.getTableSchema(null, "public", table).fields.single { it.name == col }.asType
+        }
+
+    /**
+     * The type the query's own result schema reports. A separate client-visible answer from
+     * [advertisedType]'s, reached through `scan-vec-types` rather than `getColumnTypes` — so a client that
+     * reads the table schema and then executes against it sees both, and they have to agree.
+     */
+    private fun queriedType(table: String, col: String) =
+        xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT $col FROM $table")
+                stmt.prepare()
+                stmt.executeSchema().fields.single { it.name == col }.asType
+            }
+        }
+
+    @Test
+    fun `getTableSchema admits null for a column only the historical rows have`() {
+        insertData("INSERT INTO w1 RECORDS {_id: 1, v: 1}")
+        xtdb.flushBlock()
+        insertData("INSERT INTO w1 RECORDS {_id: 2}")
+
+        assertEquals(
+            maybe(I64), advertisedType("w1", "v"),
+            "row 2 has no `v` and so reads as null - advertising a non-nullable i64 licenses a consumer to omit the validity buffer"
+        )
+
+        assertEquals(
+            advertisedType("w1", "v"), queriedType("w1", "v"),
+            "getTableSchema and the query's result schema must agree - a client reads one then executes against the other"
+        )
+    }
+
+    /**
+     * `Nothing.toField` is a NULL field marked non-nullable, which looks like the hazard the tests above
+     * guard against and isn't: the bottom is reached only when no source has put rows, so no rows are
+     * emitted and there are no cells to describe. `declares-bare-columns` pins that companion half.
+     */
+    @Test
+    fun `a declared but unwritten column is the bottom on every surface`() {
+        insertData("CREATE TABLE decl (v)")
+
+        assertEquals(VectorType.Nothing, queriedType("decl", "v"))
+        assertEquals(advertisedType("decl", "v"), queriedType("decl", "v"))
+    }
+
+    /** But once the table has rows, they read null for it — the bottom is for a column with no cells. */
+    @Test
+    fun `a column declared on a populated table is advertised nullable`() {
+        insertData("INSERT INTO pop RECORDS {_id: 1, v: 1}")
+        xtdb.flushBlock()
+        insertData("CREATE TABLE pop (w)")
+
+        assertEquals(VectorType.Null, advertisedType("pop", "w"))
+    }
+
+    @Test
+    fun `a delete-only segment does not widen the advertised type`() {
+        insertData("INSERT INTO del RECORDS {_id: 1, v: 1}")
+        xtdb.flushBlock()
+        insertData("DELETE FROM del WHERE _id = 1")
+
+        assertEquals(
+            I64, advertisedType("del", "v"),
+            "a delete carries no columns, so it cannot make `v` nullable"
+        )
+    }
+
+    @Test
+    fun `getTableSchema unions a column's historical and live types`() {
+        insertData("INSERT INTO baz RECORDS {_id: 1, v: 1}")
+        xtdb.flushBlock()
+        insertData("INSERT INTO baz RECORDS {_id: 2, v: 'hello'}")
+
+        assertEquals(
+            fromLegs(I64, UTF8), advertisedType("baz", "v"),
+            "the table holds both an i64 and a utf8; advertising either alone is a type the other row isn't"
+        )
+
+        assertEquals(
+            advertisedType("baz", "v"), queriedType("baz", "v"),
+            "getTableSchema and the query's result schema must agree - a client reads one then executes against the other"
+        )
+    }
+
+    /**
+     * `[:list :null]` rather than the more accurate `[:list :nothing]` is #5871 — `mergeTypes` rewrites a
+     * nested lattice bottom. What this pins is that all three surfaces say the *same* thing; the value they
+     * agree on gets more accurate when that lands.
+     */
+    @Test
+    fun `an empty list column reports the same type on every surface`() {
+        insertData("INSERT INTO el RECORDS {_id: 1, v: []}")
+
+        val advertised = advertisedType("el", "v")
+
+        assertEquals(advertised, queriedType("el", "v"), "getTableSchema and the query's result schema must agree")
+
+        val infoSchema = xtdb.connect().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.setSqlQuery("SELECT data_type FROM information_schema.columns WHERE table_name = 'el' AND column_name = 'v'")
+                queryRows(stmt).single()["data_type"].toString()
+            }
+        }
+
+        assertEquals("[:list :null]", infoSchema, "information_schema must agree with both")
     }
 
     @Test

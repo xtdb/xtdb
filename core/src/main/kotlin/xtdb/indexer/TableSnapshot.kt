@@ -12,14 +12,27 @@ import xtdb.api.tx.OpenTx
 
 class TableSnapshot(
     val table: TableRef,
-    val columnTypes: Map<ColumnName, VectorType>,
+    private val columnTypes: Map<ColumnName, VectorType>,
     val segment: MemorySegment
 ) : AutoCloseable {
     val relation get() = segment.rel
     val trie get() = segment.trie
 
-    fun columnType(col: ColumnName): VectorType = columnTypes[col] ?: VectorType.Null
+    // A constant of the segment: `columnTypes` is fixed at construction, so what this segment
+    // contributes for a column it doesn't hold is fixed too. Held rather than recomputed because
+    // `Snapshot.columnTypes` asks per column, and a wide table asks many times.
+    private val absentContribution by lazy { VectorType.absentContribution(columnTypes) }
 
+    /** The live half's contribution — its recorded type for [col], or [VectorType.absentContribution]. */
+    fun contributedType(col: ColumnName): VectorType = columnTypes[col] ?: absentContribution
+
+    /**
+     * The raw record of what this one segment physically holds — no rule applied and nothing joined in.
+     * A column's *declared* type is [xtdb.indexer.Snapshot.columnTypes]; this is only an input to it.
+     *
+     * Public for `xt.live_columns`, which reports the live index as it stands and would be defeated by
+     * merging — the merged question is what `information_schema.columns` answers.
+     */
     val types: Map<ColumnName, VectorType> get() = columnTypes
 
     override fun close() {

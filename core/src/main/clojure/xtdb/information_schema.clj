@@ -516,17 +516,14 @@
     (->cursor [_ allocator db db-cat query-source snap derived-table-schema
                table col-names col-preds
                schema params]
-      ;; TODO should use the schema passed to it, but also regular merge is insufficient here for colFields
-      ;; should be types/merge-types as per scan-vec-types
+      ;; TODO should use the schema passed to it
       (let [^IQuerySource$QueryDatabase db db
             ^IQuerySource$QueryCatalog db-cat db-cat
             db-state (.getQueryState db)
             db-name (.getName db)
-            table-catalog (.getTableCatalog db-state)
             trie-catalog (.getTrieCatalog db-state)
-            schema-info (-> (merge-with merge
-                                        (update-vals (into {} (.getTypes table-catalog)) #(into {} %))
-                                        (.getAllColumnTypes ^Snapshot snap))
+            schema-info (-> (into {} (map (fn [[table col-types]] [table (into {} col-types)]))
+                                  (.getAllColumnTypes ^Snapshot snap))
                             (merge meta-table-schemas)
                             (update-keys (fn [k]
                                            (cond

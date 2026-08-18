@@ -218,18 +218,18 @@
           (cpb/check-pbuf (.toPath (io/file expected-dir "pbuf")) node-dir))
 
         (let [db (db/primary-db node)
-              tc (.getTableCatalog db)]
+              tc-types (.getTypes (.snapshot (.getTableCatalog db)))]
           (t/is (= #xt/type #{:utf8 :keyword :i64}
-                   (.getType tc #xt/table xt_docs "_id")))
+                   (get-in tc-types [#xt/table xt_docs "_id"])))
 
           (t/is (= #xt/type [:? :list #{:f64 :utf8 :instant :bool}]
-                   (.getType tc #xt/table xt_docs "list")))
+                   (get-in tc-types [#xt/table xt_docs "list"])))
 
           (t/is (= #xt/type [:? :struct {"a" #{:i64 :bool},
                                          "b" #{:utf8
                                                ;; TODO these shouldn't be optional strings, really. #4988
                                                [:struct {"c" [:? :utf8], "d" [:? :utf8]}]}}]
-                   (.getType tc #xt/table xt_docs "struct"))))))))
+                   (get-in tc-types [#xt/table xt_docs "struct"]))))))))
 
 (t/deftest drops-nils-on-round-trip
   (xt/submit-tx tu/*node* [[:put-docs :xt_docs {:xt/id "nil-bar", :foo "foo", :bar nil}]
@@ -415,7 +415,7 @@
                                                                 (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/l00.+?\.arrow" %) objs))))))
 
                                                             (t/is (= #xt/type :utf8
-                                                                     (.getType tc #xt/table device_readings "_id")))
+                                                                     (get-in (.getTypes (.snapshot tc)) [#xt/table device_readings "_id"])))
 
                                                             (let [{second-half-tx-id :tx-id} (->> (partition-all 100 second-half-tx-ops)
                                                                                                   (reduce (fn [_ tx-ops]
@@ -428,7 +428,7 @@
                                                                         second-half-tx-id))
 
                                                               (t/is (= #xt/type :utf8
-                                                                       (.getType tc #xt/table device_info "_id")))
+                                                                       (get-in (.getTypes (.snapshot tc)) [#xt/table device_info "_id"])))
 
                                                               [second-half-tx-id second-half-await-token])))]
 
@@ -456,7 +456,7 @@
               (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/l00-.+.arrow" %) objs)))))
 
             (t/is (= #xt/type :utf8
-                     (.getType tc #xt/table device_info "_id")))))))))
+                     (get-in (.getTypes (.snapshot tc)) [#xt/table device_info "_id"])))))))))
 
 
 (t/deftest merges-column-fields-on-restart
@@ -472,7 +472,7 @@
         (tu/flush-block! node1)
 
         (t/is (= #xt/type :utf8
-                 (.getType tc1 #xt/table xt_docs "v")))
+                 (get-in (.getTypes (.snapshot tc1)) [#xt/table xt_docs "v"])))
 
         (xt/execute-tx node1 [[:put-docs :xt_docs {:xt/id 1, :v :bar}]
                               [:put-docs :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -481,7 +481,7 @@
         (tu/flush-block! node1)
 
         (t/is (= #xt/type #{:utf8 :keyword :uuid :transit}
-                 (.getType tc1 #xt/table xt_docs "v")))))
+                 (get-in (.getTypes (.snapshot tc1)) [#xt/table xt_docs "v"])))))
 
     (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [tc2 (.getTableCatalog (db/primary-db node2))]
@@ -491,7 +491,7 @@
         ;; very annoying.
         ;; so we render the type to compare.
         (t/is (= #{:utf8 :keyword :uuid :transit}
-                 (st/render-type (.getType tc2 #xt/table xt_docs "v"))))))))
+                 (st/render-type (get-in (.getTypes (.snapshot tc2)) [#xt/table xt_docs "v"]))))))))
 
 (t/deftest test-indexes-sql-insert
   (binding [c/*ignore-signal-block?* true]

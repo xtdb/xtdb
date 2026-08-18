@@ -2,7 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
-import xtdb.arrow.MergeTypes.Companion.mergeTypes
+import xtdb.arrow.MergeTypes.Companion.joinContributions
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.api.TableRef
@@ -19,9 +19,17 @@ import kotlin.collections.component2
 import kotlin.collections.iterator
 import xtdb.api.tx.OpenTx
 
+/**
+ * A frozen view of **one partition** at a point in time — see [DatabaseSnapshot] for the whole database.
+ *
+ * It pins the in-memory segments, the trie catalog and the historical table metadata, so a reader is not
+ * combining pinned data with a catalog read live at call time. The two catalog captures are not atomic with
+ * respect to each other, though — see [open].
+ */
 class Snapshot(
     val txBasis: TransactionKey?,
     val trieCatSnap: TrieCatalog.Snap,
+    val tableCatSnap: TableCatalog.Snap,
     // A table already has several of these on a transaction snapshot - the live-index segment, one
     // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
     // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
@@ -36,16 +44,34 @@ class Snapshot(
     fun table(table: TableRef): List<TableSnapshot> = tableSnaps[table].orEmpty()
     val tables get() = tableSnaps.keys
 
-    fun columnType(table: TableRef, column: ColumnName): VectorType? {
-        val snaps = table(table)
-        if (snaps.isEmpty()) return null
-        return mergeTypes(snaps.map { it.columnType(column) })
-    }
-
-    val allColumnTypes by lazy { tableSnaps.mapValues { (_, snaps) -> snaps.mergeTypes() } }
-
     /** The frozen per-table trie-cat state for [table], for downstream `current-tries` planning. */
     fun trieTableState(table: TableRef): Any? = trieCatSnap.tableState(table)
+
+    /**
+     * The declared type of each of [cols] in [table] - the historical half joined with the live half.
+     *
+     * Takes the columns it is asked about rather than returning whatever it finds. A column can belong to the
+     * table while being absent from one half — recorded historically, missing from a live segment — and that
+     * half still has an answer: its rows read null for it. Indexing into a found-columns map would make that
+     * a lookup miss, and the caller would have to invent what a miss means.
+     */
+    fun columnTypes(table: TableRef, cols: Iterable<ColumnName>): Map<ColumnName, VectorType> {
+        val liveSnaps = table(table)
+
+        return cols.associateWith { col ->
+            joinContributions(
+                liveSnaps.map { it.contributedType(col) } + tableCatSnap.contributedType(table, col)
+            )
+        }
+    }
+
+    /** [tableInfo] is the one enumeration of a table's columns - typing whatever it lists keeps them agreeing. */
+    fun columnTypes(table: TableRef): Map<ColumnName, VectorType> =
+        columnTypes(table, tableInfo[table].orEmpty())
+
+    val allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>> by lazy {
+        tableInfo.keys.associateWith { columnTypes(it) }
+    }
 
     private val refCount = AtomicInteger(1)
 
@@ -58,27 +84,18 @@ class Snapshot(
     }
 
     companion object {
-        private fun List<TableSnapshot>.mergeTypes(): Map<ColumnName, VectorType> =
-            when {
-                isEmpty() -> emptyMap()
-                size == 1 -> first().types
-                else -> {
-                    val allCols = flatMapTo(mutableSetOf()) { it.types.keys }
-                    allCols.associateWith { col -> mergeTypes(map { it.columnType(col) }) }
-                }
-            }
-
+        /** Column *names* only - [tableInfo] answers which columns a table has; [columnTypes] answers their types. */
         @JvmStatic
-        private fun TableCatalog.buildTableInfo(
-            allColumnTypes: Map<TableRef, Map<ColumnName, VectorType>>?
+        private fun TableCatalog.Snap.buildTableInfo(
+            liveColumnNames: Map<TableRef, Set<ColumnName>>
         ): Map<TableRef, Set<ColumnName>> {
             val tableInfo = HashMap<TableRef, MutableSet<ColumnName>>()
 
             for ((table, types) in types)
                 tableInfo.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
 
-            for ((table, types) in allColumnTypes.orEmpty())
-                tableInfo.getOrPut(table) { mutableSetOf() }.addAll(types.keys)
+            for ((table, colNames) in liveColumnNames)
+                tableInfo.getOrPut(table) { mutableSetOf() }.addAll(colNames)
 
             return tableInfo
         }
@@ -126,13 +143,21 @@ class Snapshot(
             // must carry every staged table's declared columns *including* 0-row ones (e.g. `CREATE TABLE`),
             // which openSnapshot drops from `byTable` (empty relation), so a tx resolving behind a freshly
             // created empty table in the same batch still sees it exists.
-            val colTypes = LinkedHashMap<TableRef, MutableMap<ColumnName, VectorType>>()
-            for ((table, snaps) in byTable) colTypes.getOrPut(table) { LinkedHashMap() }.putAll(snaps.mergeTypes())
-            for (t in stagedTables) colTypes.getOrPut(t.ref) { LinkedHashMap() }.putAll(t.columnTypes)
+            val liveColumnNames = LinkedHashMap<TableRef, MutableSet<ColumnName>>()
+            for ((table, snaps) in byTable)
+                snaps.flatMapTo(liveColumnNames.getOrPut(table) { linkedSetOf() }) { it.types.keys }
+            for (t in stagedTables) liveColumnNames.getOrPut(t.ref) { linkedSetOf() }.addAll(t.columnTypes.keys)
 
-            val tableInfo = tableCat.buildTableInfo(colTypes)
+            // Captured last, deliberately: a block lands as `addTries` then `finishBlock`, and a table is
+            // invisible to both halves only if the trie-cat capture falls after the first and this one
+            // before the second, so the wider the gap the narrower that window. Pinning still widens the
+            // exposure overall - consumers used to read the catalog live at query time, strictly later
+            // than here. See #5873.
+            val tableCatSnap = tableCat.snapshot()
 
-            Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, byTable, tableInfo)
+            val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
+
+            Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap, byTable, tableInfo)
         }
     }
 }

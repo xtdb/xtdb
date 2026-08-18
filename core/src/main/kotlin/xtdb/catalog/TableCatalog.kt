@@ -28,7 +28,10 @@ class TableCatalog(
         val vecTypes: Map<ColumnName, VectorType>,
         val rowCount: Long,
         val hlls: Map<ColumnName, HLL>
-    )
+    ) {
+        /** @see xtdb.indexer.TableSnapshot.contributedType — the historical side of the same memo. */
+        val absentContribution by lazy { VectorType.absentContribution(vecTypes) }
+    }
 
     private data class State(
         val blockIdx: Long?,
@@ -40,14 +43,30 @@ class TableCatalog(
 
     fun rowCount(table: TableRef): Long? = state.tables[table]?.rowCount
 
-    fun getType(table: TableRef, columnName: ColumnName): VectorType? =
-        state.tables[table]?.vecTypes?.get(columnName)
+    /**
+     * A pinned read surface over one version of the per-table metadata.
+     *
+     * The freezing is the map's doing, not the [Snap]'s: `state` is replaced wholesale on every write and the
+     * map it holds is immutable, so this is a single reference copy and later writes cannot affect it. What
+     * [Snap] adds is one `state` read rather than one per accessor call, so two reads a query apart cannot
+     * see two versions - which is the guarantee its callers actually need.
+     */
+    fun snapshot(): Snap = Snap(state.tables)
 
-    fun getTypes(table: TableRef): Map<ColumnName, VectorType>? =
-        state.tables[table]?.vecTypes
+    /** @see snapshot */
+    class Snap internal constructor(private val tables: Map<TableRef, TableMeta>) {
+        // Copies the outer map on each read - the per-table maps are shared references, not copies. Cheap
+        // where it is used: `buildTableInfo` reads it once per `Snapshot.open`. Worth knowing before
+        // reaching for it per column.
+        val types: Map<TableRef, Map<ColumnName, VectorType>>
+            get() = tables.mapValues { (_, meta) -> meta.vecTypes }
 
-    val types: Map<TableRef, Map<ColumnName, VectorType>>
-        get() = state.tables.mapValues { (_, meta) -> meta.vecTypes }
+        fun rowCount(table: TableRef): Long? = tables[table]?.rowCount
+
+        /** The historical half's contribution — an unknown table has written nothing. */
+        fun contributedType(table: TableRef, col: ColumnName): VectorType =
+            tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing
+    }
 
     /**
      * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty

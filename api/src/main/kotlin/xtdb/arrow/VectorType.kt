@@ -164,6 +164,36 @@ sealed class VectorType {
 
     companion object {
 
+        /**
+         * What a source contributes for a column it does not record — the input to the join that produces
+         * the column's declared type.
+         *
+         * A source states only the columns it has values for, but a scan needs an answer for every column
+         * it projects, so a source's map is read as a total function: its recorded type where there is one,
+         * and this everywhere else. Callers index [recorded] themselves and hold this alongside it, because
+         * it is constant for a fixed [recorded] while the lookup is per column.
+         *
+         * The question is not "do you hold this column" but "what will your rows read for it", so it turns
+         * on whether the source has any *put* rows: put rows lacking the column read as null, and no put
+         * rows means no cells at all.
+         *
+         * Derived from [recorded] rather than carried alongside it, because nothing carries a put-row count:
+         * every row count we keep includes deletes and erases, which is the distinction being drawn. Nor
+         * does put-leg presence answer it — declaring a column materialises the leg without writing a row.
+         * What does: `CREATE TABLE` records its declared columns as `Nothing` (`declareColumns` writes
+         * `NULL_TYPE, nullable = false`), deletes and erases never materialise a put leg at all, and any
+         * value written through a put makes its column non-`Nothing`. So a non-`Nothing` entry means some
+         * put wrote a value.
+         *
+         * That direction is unconditional. The converse holds only while every put leaves at least one
+         * non-`Nothing` doc column — true of SQL, XTQL and `writePut`, which all fold `_id` into the doc,
+         * but not of a hand-built put with an empty doc struct. #5919 records the count rather than
+         * inferring it, which reduces this to a comparison and retires the caveat.
+         */
+        @JvmStatic
+        fun absentContribution(recorded: Map<String, VectorType>): VectorType =
+            if (recorded.values.any { it != Nothing }) Null else Nothing
+
         @JvmStatic
         @JvmOverloads
         fun maybe(type: VectorType, nullable: Boolean = true): VectorType {

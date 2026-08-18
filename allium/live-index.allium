@@ -168,6 +168,15 @@ external entity MemorySegment {}
     -- unaffected by subsequent writes to the source relation.
     -- See: xtdb.segment.MemorySegment, memory-hash-trie.allium.
 
+external entity TrieCatalogSnap {}
+    -- Frozen per-table trie-catalog state: which tries exist on disk, and the
+    -- highest L0 block index per table. See: xtdb.trie.TrieCatalog.Snap.
+
+external entity TableCatalogSnap {}
+    -- Frozen per-table metadata for everything already flushed: each table's
+    -- column types and its count of rows ever written. The historical half of
+    -- a column's declared type. See: xtdb.catalog.TableCatalog.Snap.
+
 -- A per-tx durability handle: a deferred completed with the tx's result once the tx
 -- has been CONSUMED BACK and imported into the durable live tables (durably replicated
 -- AND confirmed unfenced — Raft's ReadIndex). Carried by external-source txs only
@@ -391,16 +400,30 @@ entity LiveTableTx {
 ------------------------------------------------------------
 -- Snapshots (visibility)
 --
--- A Snapshot is a point-in-time view over the live index. It is composed of
+-- A Snapshot is a point-in-time view over one partition. It is composed of
 -- per-table TableSnapshots, each holding a MemorySegment: a sliced live
 -- relation plus the MemoryHashTrie indexing it. When opened from within an
 -- active transaction, a TableSnapshot also layers an optional tx segment
 -- (sliced from the OpenTx.Table's txRelation) on top of the live segment, so
 -- queries inside the tx see committed rows + their own uncommitted rows.
 --
+-- A Snapshot also pins the two catalogs a reader needs alongside those
+-- segments: the trie catalog, which locates the historical tries on disk, and
+-- the table catalog's per-table metadata (column types and row counts for
+-- everything already flushed). All three are captured together, so a reader
+-- sees one vintage of the whole partition rather than pinned data combined
+-- with catalog state read live at the moment it happens to ask.
+--
+-- That matters for a column's declared type, which is the join of what the
+-- table catalog knows (flushed blocks) with what the segments know
+-- (unflushed). Both halves must come from the same capture, or the column set
+-- and the types resolving it can disagree.
+--
 -- Consistency guarantees:
 --   - A snapshot's underlying segments are sliced at creation and do not
 --     observe later writes
+--   - Its captured catalogs are likewise frozen: writes landing afterwards
+--     have no effect on it
 --   - Commits are atomic: all tx rows become visible together, or none
 --   - Multiple snapshots can be held concurrently without interference
 --   - Writes don't block reads: a shared external snapshot is rebuilt lazily on
@@ -419,6 +442,12 @@ entity Snapshot {
     basis_tx: TransactionKey?
 
     table_snapshots: TableSnapshot with snapshot = this
+
+    -- Frozen catalog state, captured with the segments above. The trie catalog
+    -- locates the historical tries; the table catalog carries their column
+    -- types and row counts.
+    trie_catalog_snap: TrieCatalogSnap
+    table_catalog_snap: TableCatalogSnap
 
     -- External snapshots are shared and reference-counted; concurrent
     -- readers each hold one retention on the current shared snapshot.

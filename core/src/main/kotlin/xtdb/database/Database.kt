@@ -98,13 +98,14 @@ class Database(
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
     internal fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? {
-        val historical = tableCatalog.getTypes(table)
-        // TODO (#5835) iterate the snapshot's partitions and merge per-partition live types;
-        // for now single-partition is the only allowed shape, so pick the only Snapshot.
         // gate on the current basis so a just-committed table's columns are visible (getTableSchema awaits first).
-        val live = openSnapshot(currentBasis()).use { it.partitions.first().allColumnTypes[table] }
-        return if (historical == null && live == null) null
-        else (historical ?: emptyMap()) + (live ?: emptyMap())
+        return openSnapshot(currentBasis()).use { dbSnap ->
+            // TODO (#5835) join across every partition's snapshot, not just partition 0's.
+            val snap = dbSnap.partitions.first()
+
+            // null means "no such table" - distinct from a known table with no columns yet
+            if (table in snap.tableInfo) snap.columnTypes(table) else null
+        }
     }
     val trieCatalog: TrieCatalog get() = partition0.trieCatalog
     val liveIndex: LiveIndex get() = partition0.liveIndex

@@ -45,8 +45,8 @@ object RoleMembership {
         val primary = dbCat.databaseOrNull(PRIMARY_DB) ?: return emptyList()
         val tableRef = TableRef("xt", "role_membership")
 
-        val exists = primary.queryState.tableCatalog.getTypes(tableRef) != null ||
-                primary.openSnapshot(null).use { it.tableInfo().containsKey(tableRef) }
+        // tableInfo already unions the catalog's tables with the live ones, so it answers this on its own
+        val exists = primary.openSnapshot(null).use { it.tableInfo().containsKey(tableRef) }
         if (!exists) return emptyList()
 
         val now = Instant.now()
