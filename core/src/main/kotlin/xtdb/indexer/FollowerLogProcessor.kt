@@ -122,12 +122,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
 
-    // Read-side term fence: the highest leader term seen so far, seeded from the last persisted block
-    // boundary. A record below this was written by a superseded leader and is discarded — its consume
+    // A record below the fence was written by a superseded leader and is discarded — its consume
     // position still advances, so a transition catch-up never hangs on a fenced no-op. See #5817.
-    // Volatile: `checkTermUnfenced` reads it from the transition coroutine, not the processing one.
-    @Volatile
-    private var maxLeaderTerm: Long = blockCatalog.boundaryTermId
+    private val termFence = partitionState.termFence
 
     /**
      * Refuse a leader term the replica log has already moved past: a claim stamped with it would be
@@ -140,7 +137,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
      * whatever we happen to have read.
      */
     fun checkTermUnfenced(term: Long) {
-        val maxTerm = maxLeaderTerm
+        val maxTerm = termFence.highest
         if (maxTerm > term)
             throw Incorrect(
                 "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
@@ -294,19 +291,15 @@ class FollowerLogProcessor @JvmOverloads constructor(
         for (record in records) {
             try {
                 val term = record.message.termId
-                // Never fence the unset term, so a not-yet-upgraded leader's writes are still applied
-                // during a mixed-version window; only stamped terms fence each other. See #5817.
-                if (term != LeaderTerm.NONE && term < maxLeaderTerm) {
+                if (termFence.admit(term)) handleRecord(record)
+                else {
                     // Fenced: a higher-term leader has superseded this message's writer. Discard it,
                     // but still advance the consume position below (discard suppresses application,
                     // not consumption) so a transition catch-up can't hang on a fenced no-op.
                     LOG.debug {
                         "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(maxLeaderTerm)})"
+                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
                     }
-                } else {
-                    maxLeaderTerm = maxOf(maxLeaderTerm, term)
-                    handleRecord(record)
                 }
                 replicaState.value = ReplicaState.Active(record.msgId)
             } catch (e: CancellationException) {

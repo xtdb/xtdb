@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.IndexerConfig
@@ -239,6 +240,40 @@ class LogProcessorTest {
         verify { liveIndex.commitTx(any(), any()) }
 
         // Teardown: cancel+join the scope reaps the subscription and the live term, then free it.
+        scope.coroutineContext.job.cancelAndJoin()
+        logProc.close()
+        sourceLog.close()
+        replicaLog.close()
+    }
+
+    @Test
+    fun `a term already on the replica log still fences after a demote`() = runTest {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockBufferPool()
+        val partitionState = newPartitionState()
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+
+        val scope = CoroutineScope(SupervisorJob())
+        val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
+
+        val highTerm = LeaderTerm.of(0, 9)
+        logProc.launchTransition(0, highTerm).await()
+        logProc.commitLeader(0)
+
+        // Nothing has been flushed, so the persisted boundary still carries no term at all — which is
+        // what a fence re-seeded on the new follower would fall back to.
+        logProc.demoteLeader(0)
+
+        assertEquals(
+            highTerm, partitionState.termFence.highest,
+            "the demote does not lower what the log has been seen to reach"
+        )
+
+        assertThrows<Incorrect> { logProc.launchTransition(0, LeaderTerm.of(0, 5)).await() }
+
         scope.coroutineContext.job.cancelAndJoin()
         logProc.close()
         sourceLog.close()
