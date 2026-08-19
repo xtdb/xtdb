@@ -6,6 +6,7 @@ import clojure.lang.Keyword
 import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNotSame
@@ -32,6 +33,7 @@ import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
 import xtdb.api.query.IKeyFn.KeyFn.SNAKE_CASE_STRING
 import xtdb.arrow.Relation
+import xtdb.arrow.VectorType.Companion.I64
 import xtdb.api.error.Incorrect
 import xtdb.trie.Bucketer
 import java.nio.ByteBuffer
@@ -282,6 +284,49 @@ class LiveIndexTest {
             db.liveIndex.nextBlock()
 
             assertNull(db.liveIndex.table(table))
+        }
+    }
+
+    /**
+     * Stops between `BlockUploader`'s two steps — `trieCatalog.addTries` has run, `tableCatalog.finishBlock`
+     * deliberately has not. The L0's rows are scannable by then and the catalog can't yet type them, which
+     * leaves the live table as the only source that can. See #5873.
+     */
+    @Test
+    fun `a live table superseded by its L0 still declares its column types`() {
+        TestDb().use { db ->
+            val table = TableRef("public", "docs")
+
+            db.openTx(0, Instant.parse("2020-01-01T00:00:00Z")).use { tx ->
+                tx.table(table).writePut(mapOf("_id" to UUID.randomUUID(), "v" to 1L))
+                db.commitTx(tx)
+            }
+
+            val writtenTrie = runBlocking { db.liveIndex.finishBlock(db.bp, 0L) }.getValue(table).writtenTrie!!
+
+            db.trieCatalog.addTries(
+                table,
+                listOf(
+                    TrieDetails.newBuilder()
+                        .setTableName(table.schemaAndTable)
+                        .setTrieKey(writtenTrie.trieKey)
+                        .setDataFileSize(writtenTrie.dataFileSize)
+                        .setTrieMetadata(writtenTrie.trieMetadata)
+                        .build()
+                ),
+                Instant.parse("2020-01-01T00:00:00Z")
+            )
+
+            db.openTx(1, Instant.parse("2020-01-02T00:00:00Z")).use { tx ->
+                db.liveIndex.openSnapshot(emptyList(), tx).use { snap ->
+                    // the two symptoms are independent - assertAll so a regression in either is reported,
+                    // rather than the table-level one masking the column-level one
+                    assertAll(
+                        { assertTrue(table in snap.tableInfo, "the table is still resolvable") },
+                        { assertEquals(mapOf("v" to I64), snap.columnTypes(table, listOf("v"))) }
+                    )
+                }
+            }
         }
     }
 

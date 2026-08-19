@@ -5,6 +5,7 @@ import xtdb.api.TransactionKey
 import xtdb.arrow.MergeTypes.Companion.joinContributions
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
+import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
@@ -35,6 +36,10 @@ class Snapshot(
     // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
     // changes that, adding a second *durable* slot for as long as block N is uploading.
     private val tableSnaps: Map<TableRef, List<TableSnapshot>>,
+    // Live tables whose rows a published L0 already covers — see [open] for why their types outlive
+    // their rows. A type map rather than the TableSnapshot itself, so the excluded rows stay
+    // unreachable from here.
+    private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
     interface Source {
@@ -57,10 +62,17 @@ class Snapshot(
      */
     fun columnTypes(table: TableRef, cols: Iterable<ColumnName>): Map<ColumnName, VectorType> {
         val liveSnaps = table(table)
+        val superseded = supersededLiveTypes[table]
+        // Hoisted for the same reason TableSnapshot and TableMeta hold theirs: constant for a fixed map,
+        // and this loop asks once per column. Doubles as the no-superseded-table answer, since a table
+        // that never had one contributes the bottom too.
+        val supersededAbsent = superseded?.let { VectorType.absentContribution(it) } ?: VectorType.Nothing
 
         return cols.associateWith { col ->
             joinContributions(
-                liveSnaps.map { it.contributedType(col) } + tableCatSnap.contributedType(table, col)
+                liveSnaps.map { it.contributedType(col) }
+                        + (superseded?.get(col) ?: supersededAbsent)
+                        + tableCatSnap.contributedType(table, col)
             )
         }
     }
@@ -113,17 +125,23 @@ class Snapshot(
         ): Snapshot = safelyOpening {
             val trieCatSnap = trieCatalog.snapshot()
 
-            val liveIndexSnaps = openAll {
-                liveIndex.tableRefs
-                    .mapNotNull { liveIndex.table(it) }
+            // Live-tables already covered by a published L0 contribute no *rows* — they'd duplicate the
+            // L0's data. The watermark is monotonic, so once L0_N exists we drop the live-table-N entry
+            // for good (its rows are now in L0_N).
+            //
+            // Their *types* we keep. `addTries` and `tableCatalog.finishBlock` are separate steps, and
+            // between them the L0 is readable while the catalog still holds the pre-block types — so
+            // dropping the live half outright would leave nobody able to answer, declaring a narrower
+            // type than the rows about to be scanned. The write path keeps both copies alive across that
+            // gap (`nextBlock` runs after the catalog update on the leader and follower paths alike);
+            // this keeps the read path inside it. See #5873.
+            val (liveTables, supersededTables) = liveIndex.tableRefs
+                .mapNotNull { liveIndex.table(it) }
+                .partition { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
 
-                    // Skip live-tables already covered by a published L0 — they'd duplicate the
-                    // L0's data. The watermark is monotonic, so once L0_N exists we drop the
-                    // live-table-N entry from this snapshot for good (its rows are now in L0_N).
-                    .filter { it.blockIdx > trieCatSnap.l0MaxBlockIdx(it.table) }
+            val liveIndexSnaps = openAll { liveTables.safeMap { TableSnapshot.open(al, it) } }
 
-                    .safeMap { TableSnapshot.open(al, it) }
-            }
+            val supersededLiveTypes = supersededTables.associate { it.table to it.liveRelation.logRelTypes.orEmpty() }
 
             val stagedTables = resolvedTxs.flatMap { it.allTables }
 
@@ -147,17 +165,19 @@ class Snapshot(
             for ((table, snaps) in byTable)
                 snaps.flatMapTo(liveColumnNames.getOrPut(table) { linkedSetOf() }) { it.types.keys }
             for (t in stagedTables) liveColumnNames.getOrPut(t.ref) { linkedSetOf() }.addAll(t.columnTypes.keys)
+            for ((table, types) in supersededLiveTypes) liveColumnNames.getOrPut(table) { linkedSetOf() }.addAll(types.keys)
 
-            // Captured last, deliberately: a block lands as `addTries` then `finishBlock`, and a table is
-            // invisible to both halves only if the trie-cat capture falls after the first and this one
-            // before the second, so the wider the gap the narrower that window. Pinning still widens the
-            // exposure overall - consumers used to read the catalog live at query time, strictly later
-            // than here. See #5873.
+            // Captured after the trie-cat and the live tables, deliberately: the type view must not lag the
+            // data view. A declared type narrower than the rows being scanned is unsound; a wider one is
+            // always safe, so a catalog read that's newer than the tries it covers errs in the safe direction.
             val tableCatSnap = tableCat.snapshot()
 
             val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
 
-            Snapshot(ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap, byTable, tableInfo)
+            Snapshot(
+                ownTx?.txKey ?: liveIndex.latestCompletedTx, trieCatSnap, tableCatSnap,
+                byTable, supersededLiveTypes, tableInfo
+            )
         }
     }
 }
