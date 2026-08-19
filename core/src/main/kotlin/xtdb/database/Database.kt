@@ -122,6 +122,9 @@ class Database(
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
     val ingestionError: IngestionStoppedException? get() = watchers.exception
 
+    /** Whether an ingestion error here should take the whole node out of service. */
+    val isCritical: Boolean get() = name == "xtdb" || config.critical
+
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
             check(isIndexing) { "log processor not initialised" }
