@@ -37,7 +37,7 @@
 (defn- all-databases
   "Returns all currently attached databases from the catalog."
   [^Database$Catalog db-cat]
-  (into [] (map (fn [^String db-name] (.databaseOrNull db-cat db-name)))
+  (into [] (keep (fn [^String db-name] (.databaseOrNull db-cat db-name)))
         (.getDatabaseNames db-cat)))
 
 (def index-html-str
