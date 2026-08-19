@@ -551,6 +551,10 @@ class Database(
         override val databaseNames: Collection<DatabaseName>
         override fun databaseOrNull(dbName: DatabaseName): Database?
 
+        fun databaseOrThrow(dbName: DatabaseName): Database =
+            databaseOrNull(dbName)
+                ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
+
         operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
 
         val primary: Database get() = databaseOrNull("xtdb")!!
