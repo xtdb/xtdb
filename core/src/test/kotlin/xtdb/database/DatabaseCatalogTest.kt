@@ -21,9 +21,9 @@ class DatabaseCatalogTest {
     fun `reattach during detach returns transient conflict (#5613)`() {
         NodeBase.openBase(openMeterRegistry = false).use { base ->
             // Pin the closer to a single-thread dispatcher whose one thread we hold with `gate`, so the
-            // detaching database is held mid-teardown (isClosing, not yet removed) for as long as we need
-            // to observe the conflict. The teardown otherwise completes on a background thread and would
-            // race the re-attach to win the observation.
+            // detaching database is held mid-teardown for as long as we need to observe the conflict.
+            // The teardown otherwise completes on a background thread and would race the re-attach to
+            // win the observation.
             val gate = CountDownLatch(1)
             val closerExecutor = Executors.newSingleThreadExecutor()
             try {
@@ -34,8 +34,8 @@ class DatabaseCatalogTest {
                 DatabaseCatalog.open(base, closerExecutor.asCoroutineDispatcher()).use { catalog ->
                     catalog.attach("test_db", Database.Config())
                     try {
-                        // The teardown coroutine is queued behind the gate, so the database stays in
-                        // `databases` with isClosing = true and the re-attach sees the transient conflict.
+                        // The teardown coroutine is queued behind the gate, so the entry stays Detaching
+                        // and the re-attach sees the transient conflict.
                         catalog.detach("test_db")
 
                         val ex = assertThrows<Conflict> {
