@@ -89,7 +89,8 @@ The one setting it verifies on a topic that already exists is the partition coun
 | partition count | topic | XTDB on create, **verified** on an existing topic | Exactly `1`. A single partition is what makes the log strictly ordered and lets leader election assign it to one consumer at a time. |
 | `message.timestamp.type` | topic | XTDB on create, **not** verified afterwards | `LogAppendTime`, so a record's timestamp is when the broker appended it rather than when a producer sent it. Set it yourself on a pre-created topic. |
 | replication factor | topic | XTDB creates with `1` | Pre-create the topic with `3` or more for production — auto-create is unreplicated. |
-| `min.insync.replicas` | topic | You | `> 1`, to make writes quorum-acknowledged. |
+| `min.insync.replicas` | topic | You | `> 1`, to make writes quorum-acknowledged. XTDB warns on startup if a topic with more than one replica leaves this at `1`, since `acks=all` then means only the partition leader. |
+| `unclean.leader.election.enable` | topic or broker | You | `false`, which is Kafka's own default. `true` lets an out-of-sync replica become leader and truncate records XTDB has already been told are durable. XTDB warns on startup if a topic with more than one replica permits it. |
 | `retention.ms` | topic | You | Messages need not live on the log permanently. The default of 1 day suits most deployments; 1 week is a reasonable starting point where extra caution against data loss is wanted. |
 | `max.message.bytes` | topic | You | The 1MB default is fit for purpose unless your transactions are larger. |
 | `cleanup.policy` | topic | You | Leave at the default `delete` — XTDB never reads compacted messages. |
@@ -97,6 +98,9 @@ The one setting it verifies on a topic that already exists is the partition coun
 
 XTDB also sets its own producer and consumer properties — idempotent, `acks=all` writes, `read_committed` reads, `auto.offset.reset=none`, cooperative sticky assignment, and offset commits that keep the leader-election group alive.
 `propertiesMap` and `propertiesFile` can override these, but they are chosen deliberately and overriding them can break leader election.
+
+`acks` is the exception: XTDB applies `acks=all` last, so an entry in `propertiesMap` or `propertiesFile` is logged as disregarded rather than honoured.
+A write acknowledged before any follower holds it can be truncated away afterwards, which would let two nodes reach different conclusions about which of them leads a database — see [Leader election and fencing](#leader-election-and-fencing).
 
 ## Configuration
 

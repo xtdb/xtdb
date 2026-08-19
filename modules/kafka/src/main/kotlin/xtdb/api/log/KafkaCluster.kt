@@ -29,6 +29,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.errors.InterruptException
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import org.apache.kafka.common.errors.WakeupException
@@ -78,17 +79,39 @@ private object UnitDeserializer : Deserializer<Unit> {
     override fun deserialize(topic: String?, data: ByteArray) = Unit
 }
 
-private fun KafkaConfigMap.openProducer() =
-    KafkaProducer(
-        mapOf(
-            "enable.idempotence" to "true",
-            "acks" to "all",
-            "compression.type" to "snappy",
-            "linger.ms" to "0",
-        ) + this,
-        UnitSerializer,
-        ByteArraySerializer()
-    )
+/**
+ * The producer properties this log is opened with, given an operator's own properties.
+ *
+ * `acks` is applied last, so an operator property cannot weaken it. `AcceptedRecordsAreNeverWithdrawn`
+ * (allium/log-processor-lifecycle.allium) makes that a safety requirement rather than a durability
+ * preference: a leader's term reaches every reader only as a record on the replica log, so withdrawing an
+ * acknowledged record after another node has read it lets the two disagree about which term the log has
+ * reached, and the fence is nothing but that agreement. Under `acks=1` the partition leader acknowledges
+ * before any follower holds the record, which is exactly such a withdrawal.
+ *
+ * Everything else stays overridable, `enable.idempotence` included — without it a retried append can be
+ * written twice, and a duplicated term-stamped no-op is inert, because a reader takes the highest term it
+ * has seen and a second copy of one it already holds moves nothing.
+ */
+internal fun KafkaConfigMap.producerConfig(): KafkaConfigMap =
+    mapOf(
+        "enable.idempotence" to "true",
+        "compression.type" to "snappy",
+        "linger.ms" to "0",
+    ) + this + mapOf("acks" to "all")
+
+private fun KafkaConfigMap.openProducer(): KafkaProducer<Unit, ByteArray> {
+    // -1 is Kafka's synonym for all, and asks for the same thing.
+    this["acks"]?.takeUnless { it == "all" || it == "-1" }?.let {
+        LOG.warn(
+            "Kafka 'acks' is set to '$it' in this cluster's properties and is being disregarded: XTDB's " +
+                    "logs require 'all', because an acknowledgement a truncation can withdraw lets two " +
+                    "nodes reach different conclusions about which of them leads a database."
+        )
+    }
+
+    return KafkaProducer(producerConfig(), UnitSerializer, ByteArraySerializer())
+}
 
 private fun KafkaConsumer<*, *>.seekToAfterMsgId(tp: TopicPartition, epoch: Int, afterMsgId: MessageId) {
     val previousOffset = afterMsgIdToOffset(epoch, afterMsgId)
@@ -124,6 +147,7 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     when {
         desc != null -> {
             check(desc.partitions().size == 1) { "Topic $topic must have exactly one partition" }
+            warnIfTruncatable(topic, desc.partitions().single().replicas().size)
         }
 
         autoCreate -> {
@@ -137,6 +161,49 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
     }
 }
 
+/**
+ * Reports the two topic settings which leave an acknowledged record truncatable in spite of `acks=all`.
+ *
+ * Warned rather than corrected, unlike [producerConfig]: this is the operator's cluster rather than
+ * XTDB's own configuration, so saying loudly what is wrong is the whole of what we can do about it — and
+ * what `DurabilityIsConfiguredNotHoped` (allium/log-processor-lifecycle.allium) asks for wherever the log
+ * can report its own settings.
+ *
+ * Single-replica topics are skipped entirely. Neither setting has anything to act on without a second
+ * replica to fail over to, and one replica is what [ensureTopicExists] itself creates, so checking would
+ * mean warning about our own default on every dev node.
+ */
+private fun AdminClient.warnIfTruncatable(topic: String, replicas: Int) {
+    if (replicas < 2) return
+
+    val resource = ConfigResource(ConfigResource.Type.TOPIC, topic)
+
+    // Reading a topic's configuration needs DescribeConfigs, which a narrowly-scoped principal may well
+    // not hold. This check is advisory, so being refused it MUST NOT stop the node connecting.
+    val config =
+        try {
+            describeConfigs(listOf(resource)).all().get()[resource]
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            LOG.warn(e, "could not read $topic's configuration to check XTDB's durability requirements")
+            null
+        } ?: return
+
+    val minIsr = config.get("min.insync.replicas")?.value()?.toIntOrNull()
+    if (minIsr != null && minIsr < 2)
+        LOG.warn(
+            "Topic $topic has $replicas replicas but min.insync.replicas=$minIsr, so a write is " +
+                    "acknowledged once the partition leader alone holds it, and is lost if that broker " +
+                    "fails. Set min.insync.replicas to at least 2."
+        )
+
+    if (config.get("unclean.leader.election.enable")?.value() == "true")
+        LOG.warn(
+            "Topic $topic permits unclean leader election, which can truncate records XTDB has already " +
+                    "been told are durable. Set unclean.leader.election.enable=false."
+        )
+}
 
 class KafkaCluster(
     val kafkaConfigMap: KafkaConfigMap,
