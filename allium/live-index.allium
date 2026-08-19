@@ -410,20 +410,47 @@ entity LiveTableTx {
 -- A Snapshot also pins the two catalogs a reader needs alongside those
 -- segments: the trie catalog, which locates the historical tries on disk, and
 -- the table catalog's per-table metadata (column types and row counts for
--- everything already flushed). All three are captured together, so a reader
--- sees one vintage of the whole partition rather than pinned data combined
--- with catalog state read live at the moment it happens to ask.
+-- everything already flushed). Pinning them is what stops a reader combining
+-- pinned data with catalog state read live at the moment it happens to ask.
+--
+-- The three captures are NOT atomic with respect to one another. They are
+-- taken in order — trie catalog, then segments, then table catalog — so a
+-- block landing concurrently can fall between them. The table catalog is taken
+-- last deliberately: a type view newer than the data view over-approximates,
+-- which is always safe, whereas an older one would declare a narrower type
+-- than the rows being scanned, which is not.
 --
 -- That matters for a column's declared type, which is the join of what the
--- table catalog knows (flushed blocks) with what the segments know
--- (unflushed). Both halves must come from the same capture, or the column set
--- and the types resolving it can disagree.
+-- table catalog knows (flushed blocks), what the segments know (unflushed),
+-- and what the superseded live tables know. The column set and the types
+-- resolving it come from one capture, or they can disagree.
+--
+-- L0 supersession:
+--   After a block is flushed its rows exist twice — in the live table that
+--   produced them, and in the L0 trie written from it. A snapshot therefore
+--   excludes any live table the trie catalog's L0 watermark has reached, so
+--   those rows are read once, from the L0.
+--
+--   Their column TYPES are retained regardless. A block becomes visible in
+--   two steps: the L0 reaches the trie catalog first, the block's column types
+--   reach the table catalog second. A snapshot taken between the two would
+--   otherwise have no source for those types at all — declaring a narrower
+--   type than the rows it is about to scan, and failing to resolve a
+--   brand-new table entirely. Retaining the types bridges that gap, and is
+--   safe because the join is idempotent: once the catalog catches up the
+--   answer is unchanged, whatever order the writers ran in.
+--
+--   The live table outlives the gap in both directions — it is cleared only
+--   after the table catalog has been updated — so a source is always
+--   available while the gap is open.
 --
 -- Consistency guarantees:
 --   - A snapshot's underlying segments are sliced at creation and do not
 --     observe later writes
 --   - Its captured catalogs are likewise frozen: writes landing afterwards
 --     have no effect on it
+--   - Those captures are ordered, not simultaneous: a concurrently-landing block
+--     can fall between them, which is what "L0 supersession" above covers
 --   - Commits are atomic: all tx rows become visible together, or none
 --   - Multiple snapshots can be held concurrently without interference
 --   - Writes don't block reads: a shared external snapshot is rebuilt lazily on
@@ -453,8 +480,27 @@ entity Snapshot {
     -- readers each hold one retention on the current shared snapshot.
     ref_count: Integer
 
-    -- Derived: which tables are visible in this snapshot
-    visible_tables: table_snapshots.map(ts => ts.table_ref)
+    -- Tables the pinned table catalog knows about: everything already flushed,
+    -- plus the data-backed system tables seeded when the partition opens
+    -- (xt.txs, xt.role_membership). A table here resolves with no segment at all.
+    catalog_tables: Set<TableRef>
+
+    -- Live tables kept out of table_snapshots because a published L0 already
+    -- covers their rows, but whose column types are still needed until the table
+    -- catalog records them. See "L0 supersession" above.
+    --
+    -- Supersession applies to the DURABLE live table only, so this does not
+    -- partition against segment_tables: a superseded table that the resolving tx
+    -- or a staged tx also writes to appears in both, and contributes through both.
+    superseded_tables: Set<TableRef>
+
+    -- The tables carrying a segment in this snapshot.
+    segment_tables: table_snapshots -> table_ref
+
+    -- Derived: which tables resolve in this snapshot. Base-table resolution reads
+    -- this, and a table can resolve without a segment — via the catalog, or via
+    -- supersession — so the segments alone do not answer it.
+    visible_tables: catalog_tables + superseded_tables + segment_tables
 }
 
 entity TableSnapshot {
