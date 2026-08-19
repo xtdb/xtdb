@@ -40,9 +40,12 @@
 --     catching up are one act, not two (AConferredClaimantHoldsThePrefix).
 --   - What no quorum can buy, we go without.
 --     Nothing here can refuse a claim that should not have been made. The defences
---     are local -- claim only from the tail of the log, and only if eligible to lead
---     -- and the residual is a needless change of leader: liveness, never safety,
---     and cheap, because a resigning leader keeps the state it built.
+--     are local -- a participant claims only if it is eligible to lead, and only a
+--     participant whose reads are arriving can claim at all -- and the residual is a
+--     needless change of leader: liveness, never safety, and cheap, because a
+--     resigning leader keeps the state it built. What bounds the damage a
+--     persistently mistaken claimant can do is that it cannot claim faster than it
+--     abandons (ALoserCannotStarveTheElection, section 5).
 --
 -- == One stopwatch ==
 --
@@ -54,6 +57,10 @@
 --   against reads turns the participant's own slowness into a conclusion about
 --   somebody else's health, whichever direction it is pointed
 --   (QuietIsMeasuredByLookingNotByWaiting, section 5).
+--   It is also what lets the log off having to describe its own extent. A participant
+--   that is not being delivered to cannot advance any of the three thresholds, so
+--   being unfed is not a route to claiming, and no guard has to ask how far the log
+--   reaches beyond what it handed over (NothingHereNeedsATailPosition, section 1).
 --
 -- == Sections ==
 --
@@ -114,16 +121,12 @@ external entity ReplicaLog {
     -- writes. See: db.allium.
     database: Database
     records: ReplicaRecord with log = this
-
-    -- The furthest position the log will deliver to a fully caught-up reader.
-    latest_position: Position
 }
 
 contract DurableTotalOrder {
     -- What the log must supply for election over it to be sound.
     append: (log: ReplicaLog, term: Integer) -> Position
     read_from: (log: ReplicaLog, after: Position) -> List<ReplicaRecord>
-    end_position: (log: ReplicaLog) -> Position
 
     @invariant AppendReturnsItsOwnPosition
         -- An accepted append tells its author the position the record now occupies.
@@ -156,12 +159,20 @@ contract DurableTotalOrder {
         --   claimant silently handed a gap finds its own claim unopposed and concludes
         --   it won an election it lost.
 
-    @invariant EndPositionIsTheDeliverableTail
-        -- The end position is one a caught-up reader can actually reach.
-        --   Not every position a writer has been assigned is one a reader is
-        --   delivered; a log reporting an end position that counted those would leave
-        --   every reader permanently short of it, and no node would ever claim. See:
-        --   db.allium, which records the same distinction for a leader's own catch-up.
+    @invariant NothingHereNeedsATailPosition
+        -- A participant is never asked how far the log extends beyond what it has been
+        -- delivered, only whether a read brought anything back.
+        --   Deliberate, and the alternative was tried: a claim guard requiring the
+        --   claimant to be at the log's end. No log can answer it honestly. Not every
+        --   position a writer is assigned is one a reader is delivered -- a log whose
+        --   end position counts the undeliverable ones leaves every reader permanently
+        --   short of it, so the guard stops being a filter and becomes a veto on all
+        --   election. See: db.allium, which records the same distinction for a leader's
+        --   own catch-up.
+        --   What the guard was thought to protect is covered without it, by the shape
+        --   of the stopwatch: it advances only across reads, so a participant that is
+        --   not being delivered to cannot reach its timeout at all
+        --   (QuietIsMeasuredByLookingNotByWaiting, section 5).
 
     @invariant QuietIsReported
         -- A read that found nothing says so, rather than blocking until something
@@ -183,10 +194,13 @@ contract DurableTotalOrder {
         -- Records at or after the persisted boundary's position are retained;
         -- reclaiming those below it is expected.
         --   This is what puts a floor under the term, so that no claim is ever
-        --   adjudicated against a prefix cut away beneath it. A claimant is at the
-        --   tail when it claims, and the tail is at or above the boundary, so the
-        --   records its verdict turns on are not eligible for reclamation while it is
-        --   still waiting on them.
+        --   adjudicated against a prefix cut away beneath it.
+        --   The records a claimant's verdict turns on sit above the boundary it
+        --   resumed from, and it holds its claim for at most claim_timeout before
+        --   abandoning it (AbandonOverdueClaim, section 5) -- so the window in which
+        --   reclamation could change a verdict under it is bounded by that timeout,
+        --   which is orders of magnitude below any retention horizon worth
+        --   configuring.
 }
 
 actor Log {
@@ -215,11 +229,13 @@ surface ReplicaLogBoundary {
         demands DurableTotalOrder
 
     @guarantee ElectionNeedsNothingBeyondAnOrderedLog
-        -- Append, read in order, be told an append's own position, and be told where
-        -- the deliverable tail is. That is all.
-        --   No membership protocol, no coordination service, and no counter kept
-        --   anywhere but in the records. So any durable ordered log can back
-        --   leadership, whether or not it offers an election mechanism of its own.
+        -- Append, be told the append's own position, and read forward in order --
+        -- including being told when a read found nothing. That is all.
+        --   No membership protocol, no coordination service, no counter kept anywhere
+        --   but in the records, and nothing a log has to know about its own extent
+        --   beyond what it hands over (NothingHereNeedsATailPosition, section 1). So
+        --   any durable ordered log can back leadership, whether or not it offers an
+        --   election mechanism of its own.
 
     @guarantee TheLogDoesNotInitiateRoleChanges
         -- The log never asks a participant to lead or to stand down, and is told
@@ -322,6 +338,14 @@ entity Participant {
     --   not stop them claiming together once, which adjudication handles.
     election_timeout: Duration
 
+    -- How many claims in a row this participant abandoned without reaching a verdict.
+    --   Widens the range the next timeout is drawn from
+    --   (ALoserCannotStarveTheElection, section 5). Back to zero as soon as a claim
+    --   reaches a verdict, winning or losing: losing means the claim came back, which
+    --   is evidence that reads are arriving, and arriving reads are the only thing
+    --   being backed away from here.
+    abandoned_claims: Integer
+
     -- When this leader last appended.
     --   Rate-limits its assertions independently of whether anything is coming back,
     --   so a leader whose reads have stopped does not assert on every empty read.
@@ -349,15 +373,6 @@ entity Participant {
     -- Derived: this leader has been reading long enough that its own appends should
     -- have come back.
     read_back_stalled: quiet_for >= config.acknowledgement_timeout
-
-    -- Derived: has read everything the log will currently deliver.
-    --   Not implied by quiet_for. A participant whose DELIVERY has stalled reads
-    --   nothing while a healthy leader appends steadily: its term is current, so its
-    --   claim would sit above every record before it and confer, and a healthy leader
-    --   is evicted because one follower stopped being fed. Consulting the log's own
-    --   end position is what tells that apart from a genuinely quiet log; no reading
-    --   of an empty read can.
-    at_log_tail: replica_position.offset >= log.latest_position.offset
 }
 
 invariant ARoleIsBackedByItsPipeline {
@@ -546,6 +561,25 @@ contract ClaimDiscipline {
         --   over, more readily the busier it gets. A leader timing on wall-clock
         --   resigns because it was slow, discarding writes the log had accepted, and a
         --   single pause becomes a write outage.
+        --   It carries a second load, which is why no claim guard consults the log's
+        --   extent (NothingHereNeedsATailPosition, section 1): a participant that is
+        --   not being delivered to cannot reach any of the three thresholds, because
+        --   nothing advances them. Being unfed is therefore not a route to claiming.
+
+    @invariant ALoserCannotStarveTheElection
+        -- A participant that keeps claiming and never wins cannot stop the others
+        -- electing.
+        --   It matters because a claim is a record, and every record read resets every
+        --   participant's stopwatch. So a node claiming in a tight loop would hold all
+        --   its peers permanently short of their own timeouts, and a database whose
+        --   leader had genuinely died would never get another one -- the failure mode
+        --   is total, and caused by a node that is merely wrong rather than malicious.
+        --   Two things bound it. A claimant holds its claim until claim_timeout before
+        --   abandoning it, and claim_timeout exceeds election_timeout_max, so it can
+        --   inject at most one record per claim and always leaves a quiet window longer
+        --   than any peer's timeout. And an abandoned claim widens the range the next
+        --   timeout is drawn from (AbandonOverdueClaim, this section), so several such
+        --   nodes interleaving thin out rather than compounding.
 }
 
 config {
@@ -566,7 +600,17 @@ config {
     -- How long a claimant keeps reading for its own claim before giving up on it.
     --   Generous relative to the election timeout: the claim is one record on a log
     --   that had been quiet, so the ordinary case is immediate.
+    --   It MUST exceed election_timeout_max, and that relation is load-bearing rather
+    --   than merely comfortable: it is what stops a claimant whose reads are not
+    --   arriving from resetting its peers' stopwatches faster than they can run down
+    --   (ALoserCannotStarveTheElection, above).
     claim_timeout: Duration = 30.seconds
+
+    -- How far the election-timeout range widens after a claim is abandoned.
+    --   Each successive abandonment scales the drawn range by this factor, so a
+    --   participant that cannot reach a verdict backs away from the log instead of
+    --   returning on the same cadence.
+    abandon_backoff_factor: Integer = 2
 }
 
 rule ClaimLeadership {
@@ -581,10 +625,6 @@ rule ClaimLeadership {
     -- Claiming is the only way into leadership, so eligibility is decided here and
     -- nowhere else.
     requires: participant.database.may_lead
-
-    -- The local stand-in for a quorum refusing to elect a node that is behind. It
-    -- cannot stop a node that is at the tail but should not be challenging.
-    requires: participant.at_log_tail
 
     -- One above everything seen, so the claim is adjudicated against a prefix that
     -- cannot already contain its term.
@@ -644,6 +684,7 @@ rule AbandonLostClaim {
     ensures:
         participant.claim = null
         participant.state = following
+        participant.abandoned_claims = 0
         participant.last_read_at = now
         participant.last_record_at = now
         participant.election_timeout =
@@ -662,13 +703,20 @@ rule AbandonOverdueClaim {
 
     requires: participant.state = claiming
 
+    -- Widened for each successive abandonment, so a participant that cannot reach a
+    -- verdict returns to the log less and less often rather than on a fixed cadence.
+    let abandonments = participant.abandoned_claims + 1
+    let scale = 1 + config.abandon_backoff_factor * abandonments
+
     ensures:
         participant.claim = null
         participant.state = following
+        participant.abandoned_claims = abandonments
         participant.last_read_at = now
         participant.last_record_at = now
         participant.election_timeout =
-            RandomTimeout(config.election_timeout_min, config.election_timeout_max)
+            RandomTimeout(config.election_timeout_min * scale,
+                          config.election_timeout_max * scale)
 }
 
 ------------------------------------------------------------
@@ -728,6 +776,7 @@ rule TakeLeadership {
         )
         participant.follower = null
         participant.claim = null
+        participant.abandoned_claims = 0
         participant.state = leading
         participant.last_appended_at = now
 }
@@ -748,6 +797,9 @@ rule RecoverFollowerOnFailedTakeover {
             resume_from: participant.replica_position
         )
         participant.claim = null
+        -- The claim did come back and did confer, so reads are arriving; what failed
+        -- was the swap. Nothing to back off from.
+        participant.abandoned_claims = 0
         participant.state = following
         participant.last_read_at = now
         participant.last_record_at = now
@@ -981,6 +1033,7 @@ rule OpenParticipant {
 
             last_read_at: now,
             last_record_at: now,
+            abandoned_claims: 0,
             election_timeout:
                 RandomTimeout(config.election_timeout_min, config.election_timeout_max),
             follower: FollowerPipeline.created(resume_from: database.boundary.position)
@@ -1049,5 +1102,7 @@ open question "Leadership balance across nodes. Randomised timeouts choose a lea
 open question "Election granularity beyond the database. This spec elects one leader per database, matching a replica log that is a single ordered sequence. If a database's log is later split into several independently ordered parts, each part is separately electable and a node could lead one and follow another. Is per-part election the intended model, or should a database keep a single leader across all its parts -- and if the latter, which part's ordering adjudicates the claim?"
 
 open question "A leader that cannot make progress but reads and appends happily. Every self-eviction here turns on the leader's own reads and appends, so a leader partitioned from its source of work still asserts leadership, no follower times out, no election runs, and no client transaction gets through. The same shape covers a leader whose block flush fails permanently: it reads its own writes back, asserts on time, and cannot be displaced by anyone. Should a leader that cannot complete a cycle of work stand down, whatever the reason -- and how is that distinguished from a genuinely idle database?"
+
+open question "A participant whose reads succeed but bring back nothing that exists. The stopwatch stops a participant that is not being read to from claiming, because nothing advances it -- but not one whose reads complete and are served nothing while records are in fact being appended: a lost partition assignment, a subscription to the wrong part of the log, a visibility split that reaches the reader and not the writer. Such a participant claims on a current term, evicts a healthy leader, then cannot read its own claim back and abandons, so the cost is a needless failover roughly every claim_timeout for as long as it stays broken -- bounded (ALoserCannotStarveTheElection) rather than prevented. The mechanism that would prevent it is a probe: a fresh reader started at the claimant's own position, an empty first read being the only honest answer to whether anything deliverable follows, and immune to the accounting that made a tail position unusable (NothingHereNeedsATailPosition). Not built, because the residual is narrow and a reader per election attempt buys little. What would tell us it had started to bite, given that a needless failover and a legitimate one look the same from every node?"
 
 open question "Observing that a database has no leader. Every leaderless failure presents identically from outside -- every participant in following -- and that is also what a healthy database looks like from any node that is not its leader. So no node can tell locally whether the role is vacant, and none of AtLeastOneNodeMayLead unmet, a claimant whose reads have stopped, or a reader that has stopped reporting empty reads is visible as an absence of leadership. What should carry that signal: the log's own quiet, aggregated across nodes, or something a leader publishes whose absence is the alarm?"

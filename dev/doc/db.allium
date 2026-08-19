@@ -178,9 +178,8 @@ entity LogProcessor {
     -- Transitions are driven by the transport's group subscription:
     --   launchTransition → TransitionToLeader (off the serialization point)
     --   demoteLeader     → TransitionToFollower (at the serialization point)
-    -- The intermediate Prepared role — a built-but-uncommitted leader — is modelled in
-    -- log-processor-lifecycle.allium, which owns the committed-role state machine; `mode`
-    -- here is the coarser view db.allium's rules need.
+    -- log-processor-lifecycle.allium owns the role state machine and the election that
+    -- drives it; `mode` here is the coarser view db.allium's rules need.
     -- For local log, the single node is always immediately assigned.
     mode: Leader | Follower | Transition
     latest_replica_msg_id: MessageId
@@ -738,9 +737,8 @@ config {
 
 rule TransitionToLeader {
     -- db.allium's view of the transition: what it means for THIS database's pipeline.
-    -- log-processor-lifecycle.allium owns the five steps, the off-serialization-point
-    -- split, the Prepared role and the cancellation-recovery path; don't duplicate them
-    -- here.
+    -- log-processor-lifecycle.allium owns the claim and its adjudication, the pipeline
+    -- swap and the cancellation-recovery path; don't duplicate them here.
     when: LaunchTransition(database, term)
     requires: log_processor.mode = Follower
 
