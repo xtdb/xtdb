@@ -77,6 +77,7 @@ Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec aga
   All tests pass on `main`, so a failure is yours — see [Running tests](#running-tests) for how to handle one.
 * There MUST NOT be any reflection or boxed math warnings.
 * For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
+  That pass MUST cover the diff's comments against `chalk:code-comments`, not only its code.
 * Verify: all changes committed AND pushed
 * Hand off: provide context for next session
 
@@ -88,7 +89,9 @@ For user-visible features:
 You MUST use sentence-per-line in documentation files - this makes diffs cleaner and easier to review.
 For commit messages, defer to the chalk commit skill's line-break convention where it's loaded — see [Using chalk](#using-chalk).
 
-For comments, see the "Comments" section in @dev/README.adoc - focus on the 'why', not the 'what'.
+For comments, you MUST load the `chalk:code-comments` skill — early in any session that will write or change code, and again when reviewing a diff.
+Load it before you decide a comment is worth writing, not after: the comment that needs stopping reads as diligence rather than as difficulty, so by then you've already decided to keep it.
+The "Comments" section in @dev/README.adoc carries the XTDB-specific instances.
 
 For test comments specifically: the test name and assertion ARE the documentation.
 Don't add a comment restating intent or citing an issue number when the test name already encodes them — e.g. a test named `test-foo-bug-1234` doesn't need a comment citing #1234.

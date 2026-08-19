@@ -359,32 +359,20 @@ When choosing valid-from for a CDC or indexer put, ask "when did this become tru
 
 === Comments
 
-Comments that merely restate the code add visual noise without value.
-Assume your reader is a senior developer familiar with XTDB and its codebase, Clojure/Kotlin, and the principles in this section.
+**Comment rules are the `chalk:code-comments` skill's** - the reader model, the counter-intuition rule, the test, and where the rejected material belongs instead.
 
-**Don't write:**
+* **Load it at two moments, both earlier than feels necessary**
+** Early in any session that will write or change code, rather than at the moment you decide a comment is tricky.
+   The one that needs stopping reads as diligence rather than as difficulty, so by then it has already been kept.
+** Again when reviewing a diff, over its comments as well as its code, reporting a failing comment as a deletion rather than a rewrite - see <<_git,Git>> below.
 
-* Comments that repeat the function/variable name
-* Docstrings that describe obvious behaviour
-* Step-by-step narration of what code does
-* Caller lists on a function - "called by X to do Y", "the canonical caller is Z".
-  Document the function's own contract: what it does, its threading/locking discipline, its preconditions.
-  The contract is stable; the call graph isn't, so a caller list becomes either a lie or a maintenance chore.
-  If a *specific* call site needs explaining (unusual sequencing, a workaround), comment at that call site instead.
-* "Used to be" narration - "this used to use X", "mirrors the old mutex shape", "previously we did Z".
-  A comment that only lands as a contrast with the previous code rots at the next refactor.
-  Ask whether it would make sense to a reader with no knowledge of prior versions; if not, move it to the commit body and describe the current contract directly.
-* Re-narration of an established pattern at every site it's applied.
-  A `close()` that closes things needs no comment, nor a "Phase 2 of teardown" label.
-  Document the pattern once in its canonical place (e.g. link:doc/coroutines.adoc[] for two-phase teardown) and leave the instances bare, keeping only the genuinely non-obvious: a stated precondition, a real gotcha (Arrow won't close a parent allocator while a child buffer is live, so the allocator closes last), subtle correctness reasoning.
+* **In one line: don't answer questions the reader won't ask**
+  Our reader is a competent senior developer who knows XTDB, Clojure and Kotlin, so comments are for the counter-intuitive.
+  The test: cover the comment, read the code, and name what they'd get wrong; nothing → delete it.
 
-**Do write:**
-
-* Rationale for counter-intuitive choices ("This is for performance, because...")
-* Non-obvious constraints or invariants ("this might be mutated by...", "the obvious solution is X but this doesn't work because Y")
-* Gotchas and edge cases ("this can be null if...")
-* Links to issues or external context ("see #1234", "per RFC 7231 §6.5.1")
-* Warnings about subtle behaviour that could trip up future developers
+* **Two XTDB instances of documenting a pattern once rather than at every site it's applied**
+** Two-phase teardown is described in link:doc/coroutines.adoc[], so a `close()` that closes things needs no comment, and no "phase 2 of teardown" label.
+** Allocator ordering is the kind of gotcha that *does* earn one at its site: Arrow won't close a parent allocator while a child buffer is live, so the allocator closes last.
 
 === Errors
 
@@ -512,6 +500,9 @@ For show and ask changes, run a code-review pass over the diff before raising th
 Ship changes don't need it.
 Whether the findings block the commit/PR or are merely noted is a judgement call on their severity and the cost to address: fix what's cheap and clearly right, and raise the rest rather than sitting on it.
 Since show and ask normally go through plan mode, this review MUST appear as an explicit step in the plan, ahead of the commit/PR step (alongside the chalk and chill steps).
+
+The review MUST cover the diff's comments as well as its code, against the `chalk:code-comments` skill (see <<_comments,Comments>>), and MUST report a failing comment as a deletion rather than a rewrite.
+Deleting one costs nothing at review time and never happens afterwards.
 
 NOTE: AI agents working in this repo — if you're not sure which path applies, ask the human you're paired with rather than guessing.
 
