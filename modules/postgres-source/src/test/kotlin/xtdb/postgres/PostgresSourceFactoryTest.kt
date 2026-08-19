@@ -30,13 +30,25 @@ class PostgresSourceFactoryTest {
         assertTrue(restored.indexer is DirectMirror.Factory)
     }
 
-    // fix: DETACH the database, then re-ATTACH with an indexer in the config
     @Test
-    fun `config persisted without an indexer is rejected`() {
+    fun `config persisted without an indexer defaults to DirectMirror`() {
         val legacy = xtdb.postgres.proto.postgresSourceConfig {
             remote = "pg"; slotName = "s"; publicationName = "p"
         }
         val any = com.google.protobuf.Any.pack(legacy, "proto.xtdb.com")
+
+        val factory = PostgresSource.Factory.Registration().fromProto(any)
+
+        assertTrue(factory.indexer is DirectMirror.Factory)
+    }
+
+    @Test
+    fun `unknown persisted indexer is still rejected`() {
+        val config = xtdb.postgres.proto.postgresSourceConfig {
+            remote = "pg"; slotName = "s"; publicationName = "p"
+            indexer = com.google.protobuf.Any.newBuilder().setTypeUrl("proto.xtdb.com/nope.Nope").build()
+        }
+        val any = com.google.protobuf.Any.pack(config, "proto.xtdb.com")
 
         assertThrows(IllegalStateException::class.java) {
             PostgresSource.Factory.Registration().fromProto(any)
@@ -60,6 +72,18 @@ class PostgresSourceFactoryTest {
         assertEquals("my_slot", factory.slotName)
         assertEquals("my_pub", factory.publicationName)
         assertTrue(factory.indexer is DirectMirror.Factory)
+    }
+
+    @Test
+    fun `YAML without an indexer is rejected`() {
+        val yaml = """
+            externalSource: !Postgres
+              remote: pg
+              slotName: my_slot
+              publicationName: my_pub
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) { Database.Config.fromYaml(yaml) }
     }
 
     @Test

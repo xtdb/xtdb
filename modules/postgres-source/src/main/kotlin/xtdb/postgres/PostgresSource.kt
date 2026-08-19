@@ -165,7 +165,11 @@ class PostgresSource(
                     remote = config.remote,
                     slotName = config.slotName,
                     publicationName = config.publicationName,
-                    indexer = PgIndexer.Factory.fromProto(config.indexer),
+                    // Configs persisted before `indexer` was a required field were all effectively using
+                    // DirectMirror, so we default to it here — new databases must say which indexer they want.
+                    indexer =
+                        if (config.hasIndexer()) PgIndexer.Factory.fromProto(config.indexer)
+                        else DirectMirror.Factory(),
                 )
             }
 
