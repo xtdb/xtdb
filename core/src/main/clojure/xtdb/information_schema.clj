@@ -522,12 +522,11 @@
             db-state (.getQueryState db)
             db-name (.getName db)
             trie-catalog (.getTrieCatalog db-state)
-            ->table-ref (fn [k] (cond (instance? TableRef k) k, (symbol? k) (table/->ref k)))
 
             ;; Same key set `schema-info` has, without deriving a single type: `allColumnTypes` is
             ;; `tableInfo.keys.associateWith { … }`, so their key sets are equal by construction.
             table-refs (into (set (keys (.getTableInfo ^Snapshot snap)))
-                             (map ->table-ref)
+                             (map table/->ref)
                              (keys meta-table-schemas))
 
             ;; delayed: only `columns` and `pg_attribute` need types, and this is bound ahead of the
@@ -536,7 +535,7 @@
             ;; entry seqs, and only the outer map has to be Clojure for `merge` to take a `conj`.
             schema-info (delay (-> (into {} (.getAllColumnTypes ^Snapshot snap))
                                    (merge meta-table-schemas)
-                                   (update-keys ->table-ref)))]
+                                   (update-keys table/->ref)))]
 
         (util/with-close-on-catch [out-rel (Relation. ^BufferAllocator allocator
                                                       ^Map (update-keys derived-table-schema str))]
