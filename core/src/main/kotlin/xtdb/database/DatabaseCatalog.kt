@@ -118,22 +118,25 @@ class DatabaseCatalog @JvmOverloads constructor(
         if (dbName == "xtdb")
             throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to dbName))
 
+        fun noSuchDb(): Nothing =
+            throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
+
         val open = when (val entry = entries[dbName]) {
             is Entry.Skipped -> {
-                entries.remove(dbName, entry); return
+                if (!entries.remove(dbName, entry)) noSuchDb()
+                return
             }
 
             is Entry.Open -> entry
 
-            is Entry.Detaching, null ->
-                throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
+            is Entry.Detaching, null -> noSuchDb()
         }
 
         // Close off the persister's stack — see #5613. `cancelAndJoin` suspends rather than parking a
         // thread in `runBlocking`, so the detach can't deadlock against another thread-parking
         // teardown on a constrained dispatcher.
         val detaching = Entry.Detaching(open.db)
-        entries[dbName] = detaching
+        if (!entries.replace(dbName, open, detaching)) noSuchDb()
 
         closerScope.launch {
             // NonCancellable: once teardown starts it must run to completion. Node shutdown cancels
