@@ -10,7 +10,7 @@ Read this before you rebase a branch, resolve a conflict, or merge a branch back
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 
 This skill covers what happens to a *branch*.
-Commit messages are `chalk:commit`'s; ship/show/ask and the code-review pass are in the `=== Git` section of `dev/README.adoc`; issues, PRs and the board are the `xtdb-github` skill's.
+Commit messages are `chalk:commit`'s; ship/show/ask and the code-review pass are in the `=== Git` section of `dev/CODING.adoc`; issues, PRs and the board are the `xtdb-github` skill's.
 
 ## Prefer a linear history
 

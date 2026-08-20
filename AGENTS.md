@@ -4,7 +4,7 @@ NOTE to humans: keep this file to instructions for AI agents; if it'd be useful 
 
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, etc. per RFC 2119.
 
-See developer documentation in `/dev` in this repo, particularly @dev/README.adoc.
+See developer documentation in `/dev` in this repo — @dev/CODING.adoc carries the conventions your code is held to, and `dev/README.adoc` the human-facing setup, tooling and release material.
 `dev/doc/*.adoc` describe the high level architecture of XTDB - read those too.
 
 For editing or adding pages to the user-facing documentation site (`docs/src/content/docs/`), see the "Writing docs" section in `docs/README.md` — it covers the Diataxis mapping, voice, changelog conventions, and a few patterns that trip agents up (properties vs mechanism, per-database scoping, theme-neutral diagrams, mining commits for context).
@@ -80,7 +80,7 @@ That commentary belongs in the commit body and the PR, which are read once aroun
   CI will run integration and property tests regardless, but `./gradlew test` is the minimum.
   All tests pass on `main`, so a failure is yours — see [Running tests](#running-tests) for how to handle one.
 * There MUST NOT be any reflection or boxed math warnings.
-* For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/README.adoc (ship changes are exempt).
+* For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/CODING.adoc (ship changes are exempt).
   That pass MUST cover the diff's comments against `chalk:code-comments`, and any spec prose against `chalk:allium-voice`, not only its code.
 * Verify: all changes committed AND pushed
 * Hand off: provide context for next session
@@ -97,13 +97,13 @@ For commit messages, defer to the chalk commit skill's line-break convention whe
 
 For comments, you MUST load the `chalk:code-comments` skill — early in any session that will write or change code, and again when reviewing a diff.
 Load it before you decide a comment is worth writing, not after: the comment that needs stopping reads as diligence rather than as difficulty, so by then you've already decided to keep it.
-The "Comments" section in @dev/README.adoc carries the XTDB-specific instances.
+The "Comments" section in @dev/CODING.adoc carries the XTDB-specific instances.
 
 For test comments specifically: the test name and assertion ARE the documentation.
 Don't add a comment restating intent or citing an issue number when the test name already encodes them — e.g. a test named `test-foo-bug-1234` doesn't need a comment citing #1234.
 Trust the test body to show the rest.
 
-For errors, see the "Errors" section in @dev/README.adoc — use `xtdb.error`, not raw Java exceptions.
+For errors, see the "Errors" section in @dev/CODING.adoc — use `xtdb.error`, not raw Java exceptions.
 
 ## Running tests
 
