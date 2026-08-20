@@ -57,34 +57,22 @@ class LogProcessor(
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
-    // `close` MUST follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
-    private sealed interface SubSystem : AutoCloseable {
-        suspend fun cancelAndJoin()
-    }
-
-    private class LeaderSystem(val proc: LeaderLogProcessor) : SubSystem {
-        override suspend fun cancelAndJoin() = proc.cancelAndJoin()
-        override fun close() = proc.close()
-    }
-
-    private class FollowerSystem(val proc: FollowerLogProcessor) : SubSystem {
-        override suspend fun cancelAndJoin() = proc.cancelAndJoin()
-        override fun close() = proc.close()
-    }
-
     // The committed-role state machine — see allium/log-processor-lifecycle.allium.
     // `state` is written from two places: the transport's serialization point (commitLeader /
     // demoteLeader) and the off-thread transition coroutine (cutoverToLeader → Prepared, or its catch
     // → Following). They don't race: a revoke cancel-and-joins the transition before demoteLeader reads
     // `state`, and the transport commits a leader only for the transition instance it still holds — so the
     // *committed* role change still happens only at the serialization point.
+    //
+    // The leader and the follower process different message types, so the only thing a state can offer
+    // without narrowing to its variant is the teardown.
     private sealed interface State {
-        val system: SubSystem
+        val proc: AutoCloseable
     }
 
-    private class Following(override val system: FollowerSystem) : State
-    private class Prepared(override val system: LeaderSystem, val resumeAfterMsgId: MessageId) : State
-    private class Leading(override val system: LeaderSystem) : State
+    private class Following(override val proc: FollowerLogProcessor) : State
+    private class Prepared(override val proc: LeaderLogProcessor, val resumeAfterMsgId: MessageId) : State
+    private class Leading(override val proc: LeaderLogProcessor) : State
 
     private fun openLeader(
         afterReplicaMsgId: MessageId,
@@ -112,15 +100,7 @@ class LogProcessor(
             termId = termId,
         )
 
-    private fun openFollower(pendingBlock: PendingBlock?): FollowerLogProcessor =
-        FollowerLogProcessor(
-            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock, scope,
-            hasExternalSource = hasExternalSource,
-            meterRegistry = base.meterRegistry,
-        )
-
-    private fun openFollowerSystem(pendingBlock: PendingBlock? = null): FollowerSystem {
+    private fun openFollower(pendingBlock: PendingBlock? = null): FollowerLogProcessor {
         LOG.info {
             buildString {
                 append("[$dbName] starting follower: ")
@@ -130,11 +110,16 @@ class LogProcessor(
             }
         }
 
-        return FollowerSystem(openFollower(pendingBlock))
+        return FollowerLogProcessor(
+            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
+            dbCatalog, pendingBlock, scope,
+            hasExternalSource = hasExternalSource,
+            meterRegistry = base.meterRegistry,
+        )
     }
 
     @Volatile
-    private var state: State = Following(openFollowerSystem())
+    private var state: State = Following(openFollower())
 
     init {
         base.meterRegistry?.let { reg ->
@@ -148,18 +133,17 @@ class LogProcessor(
     override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
         // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
         // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
-        val followerSys = (state as? Following)?.system
+        val followerProc = (state as? Following)?.proc
             ?: throw Fault("[$dbName] launchTransition while not following (${state::class.simpleName})", "xtdb/log-prepare-not-following")
 
         // Launched on the database scope (not the caller's): the transition is a child of the db job
         // tree, so the transport joins/cancels this handle while db teardown cancels-and-joins it
         // before close(). See dev/doc/coroutines.adoc and allium/log-processor-lifecycle.allium.
-        return scope.async { runTransition(followerSys, termId) }
+        return scope.async { runTransition(followerProc, termId) }
     }
 
-    private suspend fun runTransition(followerSys: FollowerSystem, termId: Long) {
+    private suspend fun runTransition(followerProc: FollowerLogProcessor, termId: Long) {
         try {
-            val followerProc = followerSys.proc
             // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
             // before we cut over, and the leader's consume pump tails from it. A plain append now — the
             // term on read-back is the fence, replacing the transactional producer (#5817).
@@ -170,7 +154,7 @@ class LogProcessor(
             // Our own claim is now read back, so the follower's max term is the log's — anything above
             // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
             followerProc.checkTermUnfenced(termId)
-            cutoverToLeader(followerSys, replayTarget, termId)
+            cutoverToLeader(followerProc, replayTarget, termId)
         } catch (e: Throwable) {
             // Cutover already restored a live `state` if it had to; here we only report.
             if (!e.isShutdownSignal) {
@@ -191,17 +175,16 @@ class LogProcessor(
     // cleanly once teardown begins, whatever the cancellation (bounded: the follower's coroutines just
     // unwind). Watermark/pendingBlock stay readable after close (not allocator-backed).
     private suspend fun cutoverToLeader(
-        followerSys: FollowerSystem,
+        followerProc: FollowerLogProcessor,
         replayTarget: MessageId,
         termId: Long,
     ) {
-        val followerProc = followerSys.proc
         val pendingBlock = followerProc.pendingBlock
         try {
-            LOG.debug("[$dbName] transition: closing follower system")
+            LOG.debug("[$dbName] transition: closing follower")
             withContext(NonCancellable) {
-                followerSys.cancelAndJoin()
-                followerSys.close()
+                followerProc.cancelAndJoin()
+                followerProc.close()
             }
 
             openTransition(termId).use { transition ->
@@ -220,9 +203,9 @@ class LogProcessor(
 
             // Built, not committed: `state` moves to Prepared but no records flow as leader until
             // commitLeader installs it at the serialization point.
-            state = Prepared(LeaderSystem(openLeader(replayTarget, termId)), resumeAfterMsgId)
+            state = Prepared(openLeader(replayTarget, termId), resumeAfterMsgId)
         } catch (e: Throwable) {
-            state = Following(openFollowerSystem(pendingBlock))
+            state = Following(openFollower(pendingBlock))
             throw e
         }
     }
@@ -230,33 +213,33 @@ class LogProcessor(
     override fun commitLeader(partition: Int): Log.TailSpec<SourceMessage> {
         val prepared = (state as? Prepared)
             ?: throw Fault("[$dbName] commitLeader without a prepared leader (${state::class.simpleName})", "xtdb/log-commit-not-prepared")
-        state = Leading(prepared.system)
+        state = Leading(prepared.proc)
         LOG.info("[$dbName] leader startup complete, resuming after ${prepared.resumeAfterMsgId}")
-        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.system.proc)
+        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.proc)
     }
 
     override suspend fun demoteLeader(partition: Int) {
         // Genuine revoke (Leading) and abandoning an uncommitted leader (Prepared) tear down the
         // same way; an already-following listener is a no-op.
-        val leaderSys = when (val s = state) {
+        val leaderProc = when (val s = state) {
             is Following -> {
                 LOG.debug("[$dbName] demote — already follower, no transition needed")
                 return
             }
 
-            is Prepared -> s.system
-            is Leading -> s.system
+            is Prepared -> s.proc
+            is Leading -> s.proc
         }
 
         LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
         // Cancel first: `pendingBlock` stays readable after the cancel/close — it isn't allocator-backed
         // — so we free the old term before reading it to seed the follower.
-        leaderSys.cancelAndJoin()
-        leaderSys.close()
-        state = Following(openFollowerSystem(leaderSys.proc.pendingBlock))
+        leaderProc.cancelAndJoin()
+        leaderProc.close()
+        state = Following(openFollower(leaderProc.pendingBlock))
     }
 
-    override fun close() = state.system.close()
+    override fun close() = state.proc.close()
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
@@ -264,7 +247,7 @@ class LogProcessor(
      * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
      */
     fun gcAll() {
-        val proc = (state as? Leading)?.system?.proc ?: return
+        val proc = (state as? Leading)?.proc ?: return
         proc.blockGc.awaitNoGarbageBlocking()
         proc.trieGc.awaitNoGarbageBlocking()
     }
