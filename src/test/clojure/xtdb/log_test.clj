@@ -357,7 +357,7 @@
           (t/is (= 0 (.getLatestSourceMsgId watchers))
                 "watermark advances to txId on a non-ext-source db"))))))
 
-;; DetachDatabase substitutes for a regular Tx — same notifyTx path, no Arrow payload.
+;; DetachDatabase substitutes for a regular Tx — same apply path, no Arrow payload.
 ;; See #5586.
 (t/deftest no-srcmsgid-replay-leader-transition-clean-5586
   (let [source-log (InMemoryLog. (InstantSource/system) 0)

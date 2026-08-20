@@ -50,6 +50,8 @@ class TransitionLogProcessor(
             is ReplicaMessage.TriesDeleted -> false
         }
 
+    // Notifies with no consume position: the transition replays records the follower had already read
+    // and counted, from a replay target behind where it got to, so the position must not move here.
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
         val msgId = record.msgId
         when (val msg = record.message) {
@@ -90,7 +92,7 @@ class TransitionLogProcessor(
                 // Handling for pre-`f3eb8d7d9` ResolvedTx records — see #5586.
                 val effectiveSrcMsgId = msg.srcMsgId
                     ?: if (hasExternalSource) watchers.latestSourceMsgId else msg.txId
-                watchers.notifyTx(result, effectiveSrcMsgId, msg.externalSourceToken)
+                watchers.notifyApplied(null, effectiveSrcMsgId, result, msg.externalSourceToken)
             }
 
             is ReplicaMessage.TriesAdded -> {
@@ -103,22 +105,22 @@ class TransitionLogProcessor(
                         )
                     }
                 }
-                watchers.notifyMsg(msg.sourceMsgId)
+                watchers.notifyApplied(null, msg.sourceMsgId)
             }
 
             is ReplicaMessage.BlockBoundary -> {
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=$msgId")
                 blockUploader.uploadBlock(msgId, termId, msg)
-                watchers.notifyMsg(msg.latestProcessedMsgId)
+                watchers.notifyApplied(null, msg.latestProcessedMsgId)
             }
 
             // previously I errored here, but we need to just ignore them -
             // the transition proc submits a BlockUploaded as part of finishing the BlockBoundary messages.
             is ReplicaMessage.BlockUploaded -> {
-                watchers.notifyMsg(msg.latestProcessedMsgId)
+                watchers.notifyApplied(null, msg.latestProcessedMsgId)
             }
 
-            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
+            is ReplicaMessage.NoOp -> watchers.notifyApplied(null, msg.srcMsgId)
 
             is ReplicaMessage.TriesDeleted -> {
                 trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)

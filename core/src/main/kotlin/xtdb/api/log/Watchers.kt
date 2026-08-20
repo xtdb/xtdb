@@ -73,26 +73,41 @@ class Watchers(
 
     // --- notify methods ---
 
-    fun notifyTx(result: TransactionResult, srcMsgId: MessageId, externalSourceToken: ExternalSourceToken?) {
-        val txId = result.txKey.txId
-        state.updateIfActive {
-            check(txId > it.latestTxId) { "txId $txId <= latestTxId ${it.latestTxId}" }
-            // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
-            // when the block was triggered by isFull() (no FlushBlock in between)
-            check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
-            it.copy(
-                latestSourceMsgId = srcMsgId, latestTxId = txId, latestTxResult = result,
-                externalSourceToken = externalSourceToken ?: it.externalSourceToken,
-            )
-        }
-    }
+    /**
+     * One replica record applied, moving every watermark its contents imply in one update — so nothing
+     * observes a transaction committed at a consume position that has not reached the record carrying it.
+     *
+     * [replicaMsgId] is null where the caller has no consume position of its own: a record held during a
+     * block and replayed once the block lands, whose position was counted when it was first read, or a
+     * term replaying what the outgoing follower had already read.
+     *
+     * The position is unchecked where the source watermark is checked: it regresses when a term opens at
+     * its replay target, below where the outgoing follower had read. The records in between are the
+     * superseded leader's, fenced by our own claim sitting before them, so re-reading applies nothing.
+     */
+    fun notifyApplied(
+        replicaMsgId: MessageId?,
+        srcMsgId: MessageId? = null,
+        txResult: TransactionResult? = null,
+        extSourceToken: ExternalSourceToken? = null,
+    ) {
+        val txId = txResult?.txKey?.txId
 
-    fun notifyMsg(srcMsgId: MessageId) {
         state.updateIfActive {
+            if (txId != null) check(txId > it.latestTxId) { "txId $txId <= latestTxId ${it.latestTxId}" }
             // >= not >: BlockBoundary can carry the same source msgId as the preceding ResolvedTx
             // when the block was triggered by isFull() (no FlushBlock in between)
-            check(srcMsgId >= it.latestSourceMsgId) { "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}" }
-            it.copy(latestSourceMsgId = srcMsgId)
+            if (srcMsgId != null) check(srcMsgId >= it.latestSourceMsgId) {
+                "srcMsgId $srcMsgId < latestSourceMsgId ${it.latestSourceMsgId}"
+            }
+
+            it.copy(
+                latestSourceMsgId = srcMsgId ?: it.latestSourceMsgId,
+                latestTxId = txId ?: it.latestTxId,
+                latestReplicaMsgId = replicaMsgId ?: it.latestReplicaMsgId,
+                latestTxResult = txResult ?: it.latestTxResult,
+                externalSourceToken = extSourceToken ?: it.externalSourceToken,
+            )
         }
     }
 
@@ -107,13 +122,6 @@ class Watchers(
                 exception = exception as? IngestionStoppedException ?: IngestionStoppedException(null, exception),
             )
         }
-    }
-
-    // Unchecked, where its siblings are checked: the position regresses when a term opens at its
-    // replay target, below where the outgoing follower had read. The records in between are the
-    // superseded leader's, fenced by our own claim sitting before them, so re-reading applies nothing.
-    fun notifyReplicaMsg(msgId: MessageId) {
-        state.updateIfActive { it.copy(latestReplicaMsgId = msgId) }
     }
 
     suspend fun awaitReplicaMsg(msgId: MessageId) {

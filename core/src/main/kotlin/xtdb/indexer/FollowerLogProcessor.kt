@@ -21,6 +21,7 @@ import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Incorrect
 import xtdb.types.LogTimestamp
+import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
@@ -150,7 +151,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 is ReplicaMessage.TriesDeleted -> false
             }
 
-    private suspend fun processRecord(record: Log.Record<ReplicaMessage>) {
+    private suspend fun processRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
                 val systemTime = msg.systemTime
@@ -192,20 +193,20 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 // Handling for pre-`f3eb8d7d9` ResolvedTx records — see #5586.
                 val effectiveSrcMsgId = msg.srcMsgId
                     ?: if (hasExternalSource) watchers.latestSourceMsgId else msg.txId
-                watchers.notifyTx(result, effectiveSrcMsgId, msg.externalSourceToken)
+                watchers.notifyApplied(replicaMsgId, effectiveSrcMsgId, result, msg.externalSourceToken)
             }
 
             is ReplicaMessage.TriesAdded -> triesAddedTimer.timed {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
 
-                watchers.notifyMsg(msg.sourceMsgId)
+                watchers.notifyApplied(replicaMsgId, msg.sourceMsgId)
             }
 
             is ReplicaMessage.BlockBoundary -> blockBoundaryTimer.timed {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
-                watchers.notifyMsg(msg.latestProcessedMsgId)
+                watchers.notifyApplied(replicaMsgId, msg.latestProcessedMsgId)
                 blockBufferStartSample = meterRegistry?.let { Timer.start(it) }
             }
 
@@ -213,16 +214,17 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 "BlockUploaded should be handled by handleRecord, never reaching processRecord directly. msgId=${record.msgId}, blockIndex=${msg.blockIndex.asLexHex}, latestProcessedMsgId=${msg.latestProcessedMsgId}"
             )
 
-            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
+            is ReplicaMessage.NoOp -> watchers.notifyApplied(replicaMsgId, msg.srcMsgId)
 
             is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
                 trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
+                watchers.notifyApplied(replicaMsgId)
             }
         }
 
     }
 
-    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>) {
+    private suspend fun handleRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
         val msg = record.message
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 
@@ -251,34 +253,36 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     bufferedRecords
                 }
 
-                // replay buffered records — their typed notifications advance the watermarks
-                bufferedRecords.forEach { handleRecord(it) }
+                // Replayed with no consume position: the position counted these when they were first
+                // read and held, so re-notifying it here would walk it backwards.
+                bufferedRecords.forEach { held -> handleRecord(held, null) }
             } else {
                 LOG.trace { "[$dbName] follower: buffering message ${record.msgId} (${msg::class.simpleName}) during pending block b${pendingBlockIdx} (${pendingBlock.bufferedRecords.size + 1} buffered)" }
                 pendingBlock += record
             }
 
+            watchers.notifyApplied(replicaMsgId)
             return
         }
 
-        if (!msg.stale) processRecord(record)
+        if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
     }
 
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
                 val term = record.message.termId
-                if (termFence.admit(term)) handleRecord(record)
+                if (termFence.admit(term)) handleRecord(record, record.msgId)
                 else {
-                    // Fenced: a higher-term leader has superseded this message's writer. Discard it,
-                    // but still advance the consume position below (discard suppresses application,
-                    // not consumption) so a transition catch-up can't hang on a fenced no-op.
+                    // Fenced: a higher-term leader has superseded this message's writer. Discard it, but
+                    // still advance the consume position (discard suppresses application, not consumption)
+                    // so a transition catch-up can't hang on a fenced no-op.
                     LOG.debug {
                         "[$dbName] follower: discarding fenced record ${record.msgId} " +
                                 "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
                     }
+                    watchers.notifyApplied(record.msgId)
                 }
-                watchers.notifyReplicaMsg(record.msgId)
             } catch (e: Throwable) {
                 if (e.isShutdownSignal) throw e
 

@@ -29,7 +29,7 @@ class WatchersTest {
     }
 
     @Test
-    fun `notifyTx resumes tx watchers`() = runTest(timeout = 1.seconds) {
+    fun `an applied tx resumes tx watchers`() = runTest(timeout = 1.seconds) {
         val watchers = Watchers(latestTxId = 3, latestSourceMsgId = 3, latestReplicaMsgId = -1)
         val await5 = async { watchers.awaitTx(5) }
         val await4 = async { watchers.awaitTx(4) }
@@ -38,13 +38,13 @@ class WatchersTest {
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await4.await() } }
 
         val res4 = TransactionResult.Committed(TransactionKey(4, Instant.parse("2021-01-01T00:00:00Z")))
-        watchers.notifyTx(res4, 4, null)
+        watchers.notifyApplied(null, 4, res4)
 
         assertThrows<TimeoutCancellationException> { withTimeout(50) { await5.await() } }
         assertEquals(res4, await4.await())
 
         val res5 = TransactionResult.Aborted(TransactionKey(5, Instant.parse("2021-01-02T00:00:00Z")), Exception("test"))
-        watchers.notifyTx(res5, 5, null)
+        watchers.notifyApplied(null, 5, res5)
 
         assertEquals(res5, await5.await())
     }
@@ -61,24 +61,22 @@ class WatchersTest {
 
         val tx6 = TransactionResult.Committed(TransactionKey(6, Instant.parse("2026-05-01T00:00:00Z")))
         // ext-source path: srcMsgId stays at the prior latestSourceMsgId.
-        watchers.notifyTx(tx6, watchers.latestSourceMsgId, null)
+        watchers.notifyApplied(null, watchers.latestSourceMsgId, tx6)
 
         assertEquals(tx6, watchers.awaitTx(6))
     }
 
     @Test
-    fun `notifyMsg advances specified watermarks`() = runTest(timeout = 1.seconds) {
+    fun `an advance without a tx moves only the source watermark`() = runTest(timeout = 1.seconds) {
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        // source-only: advances source, not tx
         val awaitSource1 = async { watchers.awaitSource(5) }
-        watchers.notifyMsg(5)
+        watchers.notifyApplied(null, 5)
         awaitSource1.await()
         assertThrows<TimeoutCancellationException> { withTimeout(50) { watchers.awaitTx(5) } }
 
-        // both: advances source, not tx
         val awaitSource2 = async { watchers.awaitSource(8) }
-        watchers.notifyMsg(8)
+        watchers.notifyApplied(null, 8)
         awaitSource2.await()
         assertThrows<TimeoutCancellationException> { withTimeout(50) { watchers.awaitTx(8) } }
     }

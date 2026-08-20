@@ -174,7 +174,7 @@ internal class LeaderLogProcessor(
         // Below our term should not appear past our replay target; discard defensively, still advancing.
         if (term != 0L && term < leaderTerm) {
             LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $term < $leaderTerm)" }
-            watchers.notifyReplicaMsg(record.msgId)
+            watchers.notifyApplied(record.msgId)
             return
         }
 
@@ -191,7 +191,7 @@ internal class LeaderLogProcessor(
                     driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
                     // dbOp (attach/detach) was already applied on the resolve side (it had to run to
                     // produce the tx result); the follower/transition apply it on consume-back, we don't.
-                    watchers.notifyTx(head.txResult, head.srcMsgId, head.externalSourceToken)
+                    watchers.notifyApplied(record.msgId, head.srcMsgId, head.txResult, head.externalSourceToken)
                     head.pending?.complete(head.txResult)
                 } catch (e: Throwable) {
                     head.pending?.completeExceptionally(e)
@@ -202,7 +202,7 @@ internal class LeaderLogProcessor(
             }
 
             // Catalog already updated on the resolve side; here we only advance the source watermark.
-            is ReplicaMessage.TriesAdded -> watchers.notifyMsg(msg.sourceMsgId)
+            is ReplicaMessage.TriesAdded -> watchers.notifyApplied(record.msgId, msg.sourceMsgId)
 
             is BlockBoundary -> {
                 pendingBlock = PendingBlock(record.msgId, msg)
@@ -211,8 +211,8 @@ internal class LeaderLogProcessor(
                 driver.uploadBlock(record.msgId, leaderTerm, msg)
                 pendingBlock = null
 
-                // advance the source watermark to the block's covered position (as the follower does)
-                watchers.notifyMsg(msg.latestProcessedMsgId)
+                // the block's covered source position, as the follower does
+                watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
 
                 blockGc.signal()
                 trieGc.signal()
@@ -223,15 +223,13 @@ internal class LeaderLogProcessor(
 
             // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
             // but advance the watermark.
-            is ReplicaMessage.BlockUploaded -> watchers.notifyMsg(msg.latestProcessedMsgId)
+            is ReplicaMessage.BlockUploaded -> watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
 
-            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
+            is ReplicaMessage.NoOp -> watchers.notifyApplied(record.msgId, msg.srcMsgId)
 
             // Catalog already updated on the resolve side (see handleTriesDeleted); nothing to do here.
-            is ReplicaMessage.TriesDeleted -> {}
+            is ReplicaMessage.TriesDeleted -> watchers.notifyApplied(record.msgId)
         }
-
-        watchers.notifyReplicaMsg(record.msgId)
     }
 
     // ---- resolution ----
@@ -339,9 +337,9 @@ internal class LeaderLogProcessor(
 
             // TODO this one's going after 2.2
             is SourceMessage.BlockUploaded -> {
-                watchers.notifyMsg(msgId)
+                watchers.notifyApplied(null, msgId)
                 // Keep the resolve-side gauge in step with the watermark we just advanced, or a following
-                // block cut would carry a lower latestProcessedMsgId and regress `notifyMsg` on apply.
+                // block cut would carry a lower latestProcessedMsgId and regress it on apply.
                 lastResolvedSrcMsgId = msgId
             }
         }
@@ -351,7 +349,7 @@ internal class LeaderLogProcessor(
         // The stamped watermark must be the RESOLVE-side one (`lastResolvedSrcMsgId`), not `watchers.*`:
         // watchers advance on consume-back (apply), which lags resolution, so a source tx
         // resolved-and-appended ahead of this ext tx would apply first and push the watermark past a stale
-        // stamp — `notifyTx`'s monotonicity check would then fire (#5817).
+        // stamp — `notifyApplied`'s monotonicity check would then fire (#5817).
         val resolvedTx = txResolver.indexTx(task.msg, srcMsgId = lastResolvedSrcMsgId)
 
         task.msg.externalSourceToken?.let { lastResolvedExtToken = it }
