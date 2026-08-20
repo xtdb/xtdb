@@ -112,6 +112,13 @@ Before you run a test, or delegate a test run to a sub-agent, you MUST invoke th
 It is the single home for every XTDB-specific testing rule and mechanism — delegation to the `gradle-tests` agent, the mid-run edit freeze, test tasks and filters, iteration counts, the simulation tests that `./gradlew test` cannot reach, diagnosing a failure, and regenerating arrow-edn golden fixtures.
 Do not reconstruct any of it from memory: the `gradle-tests` agent is generic (from the `xtdb/claude-plugins` marketplace) and carries none of this knowledge itself, so it is yours to pass on.
 
+## Rebasing and merging
+
+Before you rebase a branch, resolve a conflict, or merge a branch back into `main`, you MUST invoke the `xtdb-git` skill.
+
+It carries why history stays linear, how to resolve a conflict without silently reverting a fix that landed on `main` after the branch forked, and the three merge patterns.
+Ship/show/ask and the code-review pass live in @dev/CODING.adoc; commit messages are `chalk:commit`'s.
+
 ## GitHub issues, PRs and the project board
 
 Before you open an issue or PR, add a card to the board, set a milestone or a label, or pick up a card, you MUST invoke the `xtdb-github` skill.
