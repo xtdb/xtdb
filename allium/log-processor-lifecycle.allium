@@ -41,10 +41,15 @@ external entity Database {
 }
 
 external entity FollowerTerm {
-    -- A live follower: consumes the replica log to build local queryable state.
-    -- It is the SOLE consumer of its node's replica log. Its catch-up (await up to
-    -- a target msg id) is the launched transition's only unbounded step. See:
-    -- live-index.allium.
+    -- A live follower: consumes the replica log to build local queryable state. Its
+    -- catch-up (await up to a target msg id) is the launched transition's only
+    -- unbounded step. See: live-index.allium.
+    --
+    -- Replica-log consumption belongs to whichever role is live rather than to the
+    -- follower alone: this is the sole consumer while the node follows, and the
+    -- leader's consume-back (LeaderTerm) is the sole consumer while it leads.
+    -- Ownership passes at the cutover, which is why the read position is handed from
+    -- one to the other rather than either starting afresh.
     replica_pos: MessageId
     mid_block: Boolean   -- true if an old leader died before uploading its block
 }
@@ -63,6 +68,12 @@ external entity LeaderTerm {
     -- us, and we resign (see live-index.allium, applyRecord). So there is no
     -- producer, no fencing token, no write-time failure -- the term stamp plus the
     -- consume-back check is the whole fence.
+    --
+    -- The highest term a node has seen is scoped to the partition for its whole life
+    -- rather than to a role: seeded once from the persisted boundary, and monotonic
+    -- from there. Held per role it would be reseeded from the boundary at every role
+    -- change, forgetting every term written since the last block flush -- so the same
+    -- term could be admitted twice, once either side of a demote.
     term: Integer
     replay_target: MessageId
 }
@@ -70,6 +81,14 @@ external entity LeaderTerm {
 external entity RecordProcessor {
     -- The record processor handed back when the leader is committed: the sink the
     -- transport feeds source-log records to once the leader is committed.
+}
+
+external entity ReplicaLog {
+    -- The database's replica log: the durable, totally-ordered sequence of records a
+    -- follower replays to build local state and a leader writes and reads back. It is
+    -- a party with obligations (DurableTotalOrder) rather than a participant in the
+    -- lifecycle -- who leads is the transport's decision, and the log neither knows
+    -- nor cares.
 }
 
 ------------------------------------------------------------
@@ -92,6 +111,73 @@ value TailSpec {
 ------------------------------------------------------------
 -- Contracts
 ------------------------------------------------------------
+
+contract DurableTotalOrder {
+    -- What the replica log must supply for a term to mean anything. Obligations on the
+    -- log rather than on whoever elects, so they hold however the role is decided.
+    --
+    -- append returns the position the record now occupies; read_after delivers the
+    -- records above a position and returns the position reached.
+    append: (log: ReplicaLog, term: Integer) -> MessageId
+    read_after: (log: ReplicaLog, after: MessageId) -> MessageId
+
+    @invariant AppendReturnsItsOwnPosition
+        -- An accepted append tells its author which position the record now occupies.
+        --   The launched transition stamps a no-op with its term and uses that record's
+        --   own position as its replay target: the follower catches up to it, and the
+        --   leader consumes back from it. Without the position coming back from the
+        --   append, the transition would need a second handshake to learn where its own
+        --   marker landed.
+
+    @invariant OneAcceptedAppendYieldsOneRecord
+        -- An accepted append puts exactly one record in the log, a refused one puts
+        -- none, and the author is told which happened.
+        --   A replay target that landed twice, or one whose outcome cannot be
+        --   established, leaves the transition catching up to a position other than the
+        --   one it stamped -- and cutting over believing it has read everything before
+        --   its own term.
+
+    @invariant OneOrderSeenByEveryReader
+        -- Every reader of a log sees the same records at the same positions.
+        --   The fence is nothing but readers agreeing on which term the log has reached.
+        --   Two readers disagreeing about the order could disagree about that, and a
+        --   superseded leader would go on confirming writes.
+
+    @invariant DeliveryFollowsPositionOrder
+        -- A reader is delivered records in position order, and reaching a position means
+        -- having been delivered everything below it.
+        --   Independent of OneOrderSeenByEveryReader, which fixes where each record sits
+        --   rather than the order a reader meets them in. Because the fence is applied
+        --   on consume-back, a leader silently handed a gap can miss the higher-term
+        --   record that supersedes it and confirm writes every other reader discards. A
+        --   read that would skip a position has to fail rather than proceed.
+
+    @invariant AcceptedRecordsAreNeverWithdrawn
+        -- Once an append is accepted, its record is never removed, replaced or moved
+        -- while it stays above the retention boundary.
+        --   Ordinarily a durability property; here a safety one, because a term reaches
+        --   another node only as a record. Withdrawing one after that node has read it
+        --   lets the two disagree about which term the log has reached, which is the one
+        --   thing the fence cannot survive.
+
+    @invariant RetentionKeepsEverythingAboveTheBoundary
+        -- Records at or above the persisted boundary's position are retained; reclaiming
+        -- those below it is expected.
+        --   A term is seeded from the boundary and monotonic from there, so this is both
+        --   what lets a starting node catch up at all and what puts a floor under the
+        --   fence. Reclaiming a record that still sits above the boundary would unmoor
+        --   the highest term seen from the log it is meant to describe.
+
+    @invariant DurabilityIsConfiguredNotHoped
+        -- Expected of the operator: AcceptedRecordsAreNeverWithdrawn has to hold in the
+        -- DEPLOYED configuration, and nothing in here can enforce it.
+        --   Settings that let an accepted append be lost -- acknowledging before the
+        --   record is held widely enough to survive a failure, or letting a replica that
+        --   never received it take over -- withdraw a record the log has already
+        --   promised. Where the log can report its own settings they are worth checking
+        --   as the database connects: caught at startup this is an error message, caught
+        --   later it is two nodes disagreeing about the term.
+}
 
 contract SubscriptionListener {
     -- The obligation the LogProcessor fulfils toward the transport. The three
@@ -497,6 +583,10 @@ surface SubscriptionListenerInterface {
         -- only when it reads that write back at its own term. Reading back a higher
         -- term means a newer leader has superseded it, so it resigns without
         -- confirming its outstanding writes (see I2).
+        --   Which is why the log's own obligations are stated in this module at all:
+        --   the fence is nothing but readers agreeing on which term the log has
+        --   reached, so it holds exactly as far as DurableTotalOrder does and no
+        --   further.
 }
 
 surface TransportGuarantees {
