@@ -113,7 +113,7 @@ When you pick up an issue or PR, say so on the card *before* you start working o
 Two edits, and they're the whole of it:
 
 - **Assign it to yourself.**
-  Per `dev/GIT.adoc` the assignee is whoever is currently responsible for moving the item forward, so `@me` iff you're *about to work on it*.
+  The assignee is whoever is currently responsible for moving the item forward (see [The assignee owns progression](#the-assignee-owns-progression) below), so `@me` iff you're *about to work on it*.
   An issue or PR you're filing but not starting immediately stays unassigned.
   `gh issue edit N --add-assignee @me` / `gh pr edit N --add-assignee @me`.
 - **Set board `Status` to `🏗 In progress`.**
@@ -183,3 +183,24 @@ Re-fetch IDs if the tables above look stale:
 
 - Project fields/options: `gh project field-list 13 --owner xtdb`, then `gh api graphql -f query='query { node(id: "<field-id>") { ... on ProjectV2SingleSelectField { options { id name } } } }'`.
 - Issue types: `gh api graphql -f query='query { organization(login: "xtdb") { issueTypes(first: 20) { nodes { id name } } } }'`.
+
+## The assignee owns progression
+
+**The assignee is whoever is currently responsible for moving the item forward, end-to-end.**
+That means chasing whoever needs chasing, unblocking what needs unblocking, replying to whoever needs replying to, and working out what needs doing.
+It doesn't mean doing all of it yourself — delegate where that helps — but the coordination is yours.
+
+- **Keep the card description accurate as the work changes.**
+  Journaling comments are welcome on top, but the description is what lets a reader understand the current state without reducing over the comment history. Where chalk is tracking the issue, this is `chalk:issue`'s job and the comments are `chalk`'s.
+
+- **Keep `Status` correct.**
+  Awaiting review means the reviewer is actually on the PR; needing a re-review means pressing the re-review button, so they're notified.
+
+- **On a PR, the assignee holds the lock on the branch.**
+
+**Fix the assignee whenever it's wrong** — if it's you and it shouldn't be, or it's not you and it should be, change it, including to nobody.
+That's the more common case, and it costs nothing.
+
+## Branches live on your fork
+
+Work from a fork of `xtdb/xtdb` rather than pushing branches to the main repo, so branch cleanup is yours rather than everyone's.

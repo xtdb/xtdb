@@ -4,7 +4,7 @@ NOTE to humans: keep this file to instructions for AI agents; if it'd be useful 
 
 Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, etc. per RFC 2119.
 
-See developer documentation in `/dev` in this repo, particularly @dev/README.adoc and @dev/GIT.adoc.
+See developer documentation in `/dev` in this repo, particularly @dev/README.adoc.
 `dev/doc/*.adoc` describe the high level architecture of XTDB - read those too.
 
 For editing or adding pages to the user-facing documentation site (`docs/src/content/docs/`), see the "Writing docs" section in `docs/README.md` — it covers the Diataxis mapping, voice, changelog conventions, and a few patterns that trip agents up (properties vs mechanism, per-database scoping, theme-neutral diagrams, mining commits for context).

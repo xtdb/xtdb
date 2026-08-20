@@ -7,7 +7,7 @@ All of the below commands should be run in the *root* of the XT2 repo.
 
 * https://github.com/orgs/xtdb/projects/13/views/1[Kanban board^]
 * https://github.com/xtdb/xtdb/actions[Github Actions (CI)^]
-* link:GIT.adoc[Git practices in XTDB]
+* link:../.claude/skills/xtdb-git/SKILL.md[Git practices in XTDB] (branch-level: linear history, rebase conflicts, merge patterns)
 * link:./doc[Developer documentation]
 
 == Prerequisites
@@ -303,7 +303,6 @@ Tidy first::
 +
 We develop using https://tidyfirst.substack.com/[tidy-first] methodology — separate equivalence changes (refactorings that don't affect runtime behaviour, changes that increase our options) from changes that advance behaviour.
 Even on feature branches, a tidying change gets its own commit and is often cherry-picked to `main` independently, so that the resulting PR is easier to review.
-See link:GIT.adoc[] for more on how this works in practice.
 
 Intentional defaults::
 +
@@ -506,4 +505,5 @@ Deleting one costs nothing at review time and never happens afterwards.
 
 NOTE: AI agents working in this repo — if you're not sure which path applies, ask the human you're paired with rather than guessing.
 
-See link:GIT.adoc[] for further details on git practices in XTDB.
+For branch-level practices — linear history, resolving a rebase conflict, the merge patterns — see the `xtdb-git` skill (`.claude/skills/xtdb-git/`).
+For issues, PRs and the project board, see `xtdb-github`.
