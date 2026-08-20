@@ -13,10 +13,10 @@
 --     LeaderLogProcessor's persister coroutine, applying on consume-back — the
 --     same coroutine whether or not the database is CDC-sourced, since an
 --     external source is an optional collaborator of the leader rather than a
---     processor of its own; on a follower, the FollowerLogProcessor applying
---     ReplicaMessages; during promotion, the TransitionLogProcessor. All
---     variants are single-threaded writers against the live index, so the
---     concurrency model below is the same regardless of which variant is in play.
+--     processor of its own; and without leadership -- on a follower, and during
+--     promotion -- the ReplicaApplier applying ReplicaMessages. All variants are
+--     single-threaded writers against the live index, so the concurrency model
+--     below is the same regardless of which variant is in play.
 --   - Multiple concurrent readers: snapshots can be held and read concurrently
 --   - Writes don't block reads: a shared, reference-counted snapshot is a lazily-
 --     advanced cache, rebuilt on read only when a reader demands a basis it does
@@ -77,9 +77,9 @@
 --   apply: it is a lazily-advanced cache, rebuilt on the next demanding read (see
 --   RefreshSharedSnapshot).
 --
---   Followers and the transition processor have no resolver (hence no queue) and no
---   consume-back: the messages they import are already durable, so they advance
---   LiveIndex.latest_completed_tx directly.
+--   A reader without leadership -- a follower, or the promotion catch-up -- has no
+--   resolver (hence no queue) and no consume-back: the messages it imports are
+--   already durable, so it advances LiveIndex.latest_completed_tx directly.
 --
 --   Block cut — resolve-side gauge, then PAUSE:
 --   The block boundary is cut off a RESOLVE-side row gauge (rows_since_block),
@@ -278,7 +278,7 @@ entity TxResolver {
     -- once its persister coroutine is joined (see CloseResolver). The resolver is driven
     -- only from that persister coroutine, its sole accessor, so it is single-threaded by
     -- confinement and needs no lock. Seeded at the durable head when created; absent on
-    -- followers and the transition processor, which only import already-durable messages.
+    -- a reader without leadership, which only imports already-durable messages.
     --
     -- The resolver OWNS its staged txs — their table relations. Each is freed at APPLY
     -- (RemoveHead — once imported) or at TEARDOWN (close). The append pump only borrows

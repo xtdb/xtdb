@@ -48,9 +48,9 @@
 --   check, because a source tx resolved behind an external-source tx applies first and
 --   pushes the watermark past the stale stamp (#5817).
 --
--- Followers and the transition processor have no resolver and no consume-back: every
--- message they import is already durable, so they import straight into the durable live
--- index and advance the watchers as they go.
+-- A reader without leadership -- a follower, or the promotion catch-up -- has no resolver
+-- and no consume-back: every message it imports is already durable, so it imports straight
+-- into the durable live index and advances the watchers as it goes.
 --
 -- A query MUST NEVER see a tx the leader has not read back: external snapshots open at
 -- the durable LiveIndex.latest_completed_tx.
@@ -247,11 +247,12 @@ variant Transition : LogProcessor {
     -- transition rather than looping on its own.
     -- Used to replay buffered records from a pending block and any BlockBoundary messages
     -- encountered during the replay.
-    -- On BlockBoundary: directly calls blockUploader.uploadBlock() (unlike the follower,
-    -- which enters pending mode and waits for BlockUploaded).
+    -- Applies each record by the ordinary path, and holds leadership for one hook only:
+    -- taking the cut. So on BlockBoundary it uploads directly, where a follower enters
+    -- pending mode and waits for BlockUploaded.
     -- Appends under the INCOMING term, not the term that cut the boundary — see
     -- BlockUploader.
-    -- See: indexer/TransitionLogProcessor.kt
+    -- See: indexer/LogProcessor.kt (CatchUpLeadership), indexer/ReplicaApplier.kt
     term_id: Integer
 }
 
@@ -326,8 +327,8 @@ entity Watchers {
 }
 
 entity BlockUploader {
-    -- Shared class used by both LeaderLogProcessor (for normal block finishing) and
-    -- TransitionLogProcessor (for completing interrupted blocks during transition).
+    -- Shared class, reached through whichever Leadership is taking the cut: the leader's own
+    -- for normal block finishing, the transition's for completing an interrupted block.
     --
     -- uploadBlock(boundaryMsgId, termId, boundaryMessage):
     --   1. Finishes live index block (liveIndex.finishBlock), yielding L0 tries — one per
@@ -720,9 +721,9 @@ config {
 
 -- == Staleness ==
 --
--- Both FollowerLogProcessor and TransitionLogProcessor skip a replica message whose effect
--- has already been applied. Each kind is compared against the watermark that actually
--- records its effect, rather than against a single source-log position:
+-- The ReplicaApplier skips a replica message whose effect has already been applied. Each
+-- kind is compared against the watermark that actually records its effect, rather than
+-- against a single source-log position:
 --   ResolvedTx:     stale if tx_id <= watchers.latest_tx_id
 --   TriesAdded:     stale if source_msg_id <= watchers.latest_source_msg_id
 --   BlockBoundary:  stale if block_index <= block_catalog.current_block_index

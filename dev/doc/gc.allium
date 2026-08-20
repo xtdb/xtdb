@@ -20,7 +20,7 @@
 -- See:
 --   garbage_collector/TrieGarbageCollector.kt
 --   indexer/LeaderLogProcessor.kt (commitTriesDeleted callback, finishBlock signal)
---   indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt (TriesDeleted replay)
+--   indexer/ReplicaApplier.kt (TriesDeleted replay)
 --   api/log/ReplicaMessage.kt (TriesDeleted)
 --   api/GarbageCollectorConfig.kt
 
@@ -373,8 +373,9 @@ rule CommitTriesDeletedRule {
 ------------------------------------------------------------
 
 rule FollowerReplaysTriesDeleted {
-    -- Both the FollowerLogProcessor and the TransitionLogProcessor handle
-    -- TriesDeleted by removing the keys from their local trie catalog.
+    -- A reader without leadership handles TriesDeleted by removing the keys from
+    -- its local trie catalog. A leader has already removed them on its resolve
+    -- side, so it answers for the record itself and does not remove them twice.
     --
     -- Replay is unconditionally non-stale — `trieCatalog.deleteTries` is
     -- set-removal and therefore idempotent, so even a redundant replay is
@@ -382,8 +383,8 @@ rule FollowerReplaysTriesDeleted {
     -- BlockUploaded, each of which has a staleness guard against the watermark
     -- that records its own effect — see db.allium "Staleness".)
     --
-    -- See: indexer/FollowerLogProcessor.kt + TransitionLogProcessor.kt
-    --      (TriesDeleted handler), api/log/ReplicaMessage.kt (TriesDeleted)
+    -- See: indexer/ReplicaApplier.kt (TriesDeleted handler),
+    --      api/log/ReplicaMessage.kt (TriesDeleted)
     -- Fires when a follower (or transition processor) parses a TriesDeleted
     -- record off the replica log into a TriesDeletedMessage entity.
     when: msg: TriesDeletedMessage.created

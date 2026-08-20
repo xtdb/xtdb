@@ -54,7 +54,7 @@ Use the `allium:tend` skill to edit a spec and `allium:weed` to check a spec aga
 | Spec | Covers |
 | --- | --- |
 | `allium/live-index.allium` | In-memory staging of transactions before block flush — `LiveIndex`/`LiveTable`, transaction lifecycle, snapshot visibility, and the leader's resolve/append/consume-back/apply pipeline. |
-| `allium/log-processor-lifecycle.allium` | Per-database leader election in the `LogProcessor` — the Following/Prepared/Leading state machine, the term fence that keeps one confirmed leader per database, and the split between launching a transition and committing the role. |
+| `allium/log-processor-lifecycle.allium` | Per-database log processing on one node — the single loop that runs for the participant's whole life, the writing side that leading adds to it through two named hooks, the term fence that keeps one leader's writes acknowledged, and the transport boundary that hands the role out. |
 | `allium/memory-hash-trie.allium` | The immutable in-memory hash trie indexing rows by IID within a `LiveTable` — bucketing, leaf ordering, log compaction, splitting. |
 | `dev/doc/db.allium` | The processing model of one database end to end — submit → log processing → block flush → query, the source/replica log message types, the block and table catalogs, and the compaction message flow. |
 | `dev/doc/tx.allium` | The connection-level transaction model sitting above `db.allium` — begin/buffer/commit, access-mode resolution, read basis, and pgwire/ADBC frontend parity. |

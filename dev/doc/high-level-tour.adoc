@@ -134,21 +134,26 @@ So at most one leader's writes are ever confirmed for a database, without relyin
 
 === Three LogProcessor states
 
-`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through three `Log.SubscriptionListener` operations — `launchTransition`, `commitLeader`, `demoteLeader`:
+`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through three `Log.SubscriptionListener` operations — `launchTransition`, `commitLeader`, `demoteLeader`.
+
+Applying a `ReplicaMessage` to local state is `ReplicaApplier`'s, and is the same work in all three.
+What leading adds to it is a `Leadership` with two hooks: `applyAuthored`, which commits a record this node produced from the transaction it still holds rather than re-materialising it from the record, and `takeCut`, which writes out the block cut for a boundary this node wrote.
+Absent a `Leadership` both have an ordinary answer, so what differs between the three states is which hooks are answered — not how any kind of record is handled.
 
 Follower (`FollowerLogProcessor`)::
 The default state for a node that isn't currently leader.
 Tails the replica log and applies each `ReplicaMessage` to its live index.
-It does not consume the source log at all.
+It does not consume the source log at all, and answers neither hook.
 
 Leader (`LeaderLogProcessor`)::
 Consumes the source log via the consumer-group subscription, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
 Only the leader writes L0 files to the object store.
 
-Transition (`TransitionLogProcessor`)::
+Transition (`LogProcessor.CatchUpLeadership`)::
 An ephemeral state entered during follower→leader promotion.
 The incoming leader may have a partially-filled in-memory block (from its time as a follower) that is not yet reflected on the replica log — the previous leader died before flushing it.
-The transition processor finishes that pending block — uploading it to the object store and replaying the buffered records through the leader's pipeline — before the leader starts accepting new source-log messages.
+The catch-up finishes that pending block — uploading it to the object store and replaying the buffered records — before the leader starts accepting new source-log messages.
+It holds leadership for `takeCut` alone: it authored none of those records, but it has read every record below the boundary, so its own state at that cut is the state the previous leader would have written.
 This keeps the replica log the single source of truth for what's committed: by the time `LeaderLogProcessor` starts, the replica log agrees with what every follower has in its live index.
 
 === Watchers and poisoning
