@@ -107,7 +107,7 @@ class LeaderLogProcessorTest {
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
+            partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = skipTxs, dbCatalog = null,
             afterReplicaMsgId = -1,
@@ -184,7 +184,7 @@ class LeaderLogProcessorTest {
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
+            partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
@@ -260,7 +260,7 @@ class LeaderLogProcessorTest {
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
+            partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
@@ -633,7 +633,7 @@ class LeaderLogProcessorTest {
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
+            partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = setOf(10), dbCatalog = null,
             afterReplicaMsgId = -1,

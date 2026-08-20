@@ -124,7 +124,8 @@ class LeaderDriverSimTest : SimulationTestBase() {
                     )
                 )
             ),
-            watchers, extSource = null, skipTxs = emptySet(), dbCatalog = null,
+            mockk<Compactor.ForDatabase>(relaxed = true), watchers,
+            extSource = null, skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = afterReplicaMsgId,
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.

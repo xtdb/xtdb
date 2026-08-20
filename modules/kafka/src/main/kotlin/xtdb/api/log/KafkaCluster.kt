@@ -166,8 +166,8 @@ private fun AdminClient.ensureTopicExists(topic: String, autoCreate: Boolean) {
  *
  * Warned rather than corrected, unlike [producerConfig]: this is the operator's cluster rather than
  * XTDB's own configuration, so saying loudly what is wrong is the whole of what we can do about it — and
- * what `DurabilityIsConfiguredNotHoped` (allium/log-processor-lifecycle.allium) asks for wherever the log
- * can report its own settings.
+ * what `DurabilityComesFromDeployedConfiguration` (allium/log-processor-lifecycle.allium) asks for
+ * wherever the log can report its own settings.
  *
  * Single-replica topics are skipped entirely. Neither setting has anything to act on without a second
  * replica to fail over to, and one replica is what [ensureTopicExists] itself creates, so checking would

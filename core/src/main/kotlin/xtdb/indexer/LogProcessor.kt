@@ -91,7 +91,7 @@ class LogProcessor(
         LeaderLogProcessor(
             allocator, base, partitionStorage, crashLogger, partitionState, dbName,
             RealLeaderDriver(partitionStorage, partitionState, blockUploader),
-            watchers,
+            compactor, watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             skipTxs, dbCatalog,
             afterReplicaMsgId,
@@ -101,16 +101,37 @@ class LogProcessor(
             gcDispatcher = gcDispatcher,
         )
 
-    private fun openTransition(
+    /**
+     * Leadership for the catch-up that finishes a predecessor's block: the cut, and nothing else.
+     *
+     * This node has read every record below the boundary, so its own state at that cut is the state the
+     * predecessor would have written — which is why a node that never resolved any of those transactions
+     * can still take their cut. It authors no records, so [applyAuthored] answers for none: everything in
+     * the catch-up is applied from the records, exactly as a node that stays following would apply them.
+     */
+    private class CatchUpLeadership(
+        override val term: Long,
+        private val blockUploader: BlockUploader,
+    ) : Leadership {
+        override suspend fun applyAuthored(record: Log.Record<ReplicaMessage>) = false
+
+        override suspend fun takeCut(record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockBoundary): Boolean {
+            blockUploader.uploadBlock(record.msgId, term, msg)
+            return true
+        }
+    }
+
+    private fun openCatchUp(
         afterReplicaMsgId: MessageId,
         termId: Long,
-    ): TransitionLogProcessor =
-        TransitionLogProcessor(
-            allocator, partitionStorage.bufferPool, partitionState, dbName, partitionState.liveIndex,
-            blockUploader, watchers, dbCatalog,
-            afterReplicaMsgId,
+    ): ReplicaApplier =
+        ReplicaApplier(
+            allocator, "catch-up-log-processor", partitionStorage.bufferPool, partitionState, dbName,
+            compactor, watchers, dbCatalog,
+            leadership = CatchUpLeadership(termId, blockUploader),
+            afterReplicaMsgId = afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
-            termId = termId,
+            meterRegistry = base.meterRegistry,
         )
 
     private fun openFollower(
@@ -211,14 +232,14 @@ class LogProcessor(
                 followerSys.close()
             }
 
-            openTransition(followerProc.latestReplicaMsgId, termId).use { transition ->
-                if (pendingBlock != null) {
+            if (pendingBlock != null) {
+                openCatchUp(followerProc.latestReplicaMsgId, termId).use { catchUp ->
                     LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                     blockUploader.uploadBlock(
                         pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
                     )
-                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                    transition.processRecords(pendingBlock.bufferedRecords)
+                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records")
+                    for (record in pendingBlock.bufferedRecords) catchUp.apply(record)
                 }
             }
 

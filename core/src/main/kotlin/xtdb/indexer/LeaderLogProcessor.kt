@@ -13,6 +13,7 @@ import xtdb.api.log.*
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
+import xtdb.compactor.Compactor
 import xtdb.database.*
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Interrupted
@@ -32,13 +33,6 @@ import xtdb.types.MessageId
 
 private val LOG = LeaderLogProcessor::class.logger
 
-/**
- * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
- * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
- * the transport re-follows on the next rebalance. See #5817.
- */
-private class LeaderSupersededException(message: String) : RuntimeException(message)
-
 internal class LeaderLogProcessor(
     allocator: BufferAllocator,
     private val nodeBase: NodeBase,
@@ -47,6 +41,7 @@ internal class LeaderLogProcessor(
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val driver: LeaderDriver,
+    private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
     private val extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
@@ -58,7 +53,7 @@ internal class LeaderLogProcessor(
     scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : LogProcessor.Processor<SourceMessage>, TxIndexer {
+) : LogProcessor.Processor<SourceMessage>, TxIndexer, Leadership {
 
     init {
         require((dbCatalog != null) == (dbName == "xtdb")) {
@@ -82,13 +77,21 @@ internal class LeaderLogProcessor(
     private val txResolver =
         TxResolver(allocator, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs, instantSource)
 
-    var pendingBlock: PendingBlock? = null
-        private set
+    // The one apply path, shared with a node that is not leading. `leadership = this` is what leading
+    // adds to it, and it reaches the applier through the two hooks below and nowhere else.
+    private val applier = ReplicaApplier(
+        allocator, "leader-log-processor", bufferPool, partitionState, dbName, compactor, watchers,
+        dbCatalog, leadership = this,
+        afterReplicaMsgId = afterReplicaMsgId,
+        hasExternalSource = extSource != null,
+        meterRegistry = nodeBase.meterRegistry,
+    )
+
+    val pendingBlock: PendingBlock? get() = applier.pendingBlock
 
     // The consume-back position: the last replica-log record we have read back and applied. Advances
     // in the apply loop; on demote it seeds the re-opened follower (with `pendingBlock`).
-    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
-        private set
+    override val latestReplicaMsgId: MessageId get() = applier.latestReplicaMsgId
 
     // Where the consume pump starts tailing (the transition replay-target). Distinct from the advancing
     // `latestReplicaMsgId` — the tail is opened once, from here.
@@ -139,7 +142,8 @@ internal class LeaderLogProcessor(
     // Serialize each ResolvedTx (the costly Arrow-IPC step, kept off the resolver) and append it, in
     // order, through the driver. Plain (non-transactional) appends: the sole fence on a zombie leader is
     // now the term check on consume-back — a higher-term record read back means we've been superseded and
-    // resign (see applyRecord) — replacing the Kafka transactional producer that fenced at commit (#5817).
+    // resign (see ReplicaApplier.apply) — replacing the Kafka transactional producer that fenced at
+    // commit (#5817).
     // An append failure propagates and tears the term down. Never frees a borrowed ResolvedTx — the
     // resolver owns it.
     private suspend fun appendPump() {
@@ -159,83 +163,84 @@ internal class LeaderLogProcessor(
         driver.tailReplica(replayFrom) { records -> records.forEach { replicaMsgs.send(it) } }
     }
 
-    // ---- apply loop (consume-back) ----
+    // ---- the two hooks (see Leadership) ----
 
-    // Apply one record read back off our own replica log. By term:
-    //  - term > ours: a newer leader has superseded us → resign (fail the term).
-    //  - term < ours: shouldn't appear past our replay target; discard defensively, still advancing.
-    //  - term == ours (the common case; terms are unique per leader, so an equal-term record IS our own):
-    //      - ResolvedTx  → import from the resolver's head (we still hold its relations — no re-materialisation).
-    //      - BlockBoundary → trigger the block upload (liveIndex now holds exactly this block's txs).
-    //      - everything else mirrors the follower.
-    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
-        val msg = record.message
-        val term = msg.termId
+    override val term get() = leaderTerm
 
-        if (term > leaderTerm)
-            throw LeaderSupersededException("[$dbName] superseded: read term $term > our term $leaderTerm at ${record.msgId}")
-
-        // Below our term should not appear past our replay target; discard defensively, still advancing.
-        if (term != 0L && term < leaderTerm) {
-            LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $term < $leaderTerm)" }
-            latestReplicaMsgId = record.msgId
-            return
-        }
-
-        when (msg) {
+    /**
+     * Everything we resolved in order to produce a record, answered from what we still hold rather than
+     * re-derived from the record we get back.
+     *
+     * A boundary is the other hook's, and a `NoOp` carries nothing we hold — both fall through to the
+     * ordinary path, which for a `NoOp` is the same watermark advance a non-leading node makes.
+     */
+    override suspend fun applyAuthored(record: Log.Record<ReplicaMessage>): Boolean =
+        when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> {
-                val head = txResolver.removeHead()
-                // check is inside the try: head is already off the queue, so teardown's failPending can't
-                // reach it — the catch must fail its handle and the finally must free it, on ANY throw here
-                // (a queue-head mismatch included), or we leak Arrow buffers and hang an awaiting executeTx.
-                try {
-                    check(head.txKey.txId == msg.txId) {
-                        "[$dbName] queue head ${head.txKey.txId} != consumed tx ${msg.txId}"
-                    }
-                    driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
-                    // dbOp (attach/detach) was already applied on the resolve side (it had to run to
-                    // produce the tx result); the follower/transition apply it on consume-back, we don't.
-                    watchers.notifyTx(head.txResult, head.srcMsgId, head.externalSourceToken)
-                    head.pending?.complete(head.txResult)
-                } catch (e: Throwable) {
-                    head.pending?.completeExceptionally(e)
-                    throw e
-                } finally {
-                    head.close()
-                }
+                commitResolvedHead(msg); true
             }
 
             // Catalog already updated on the resolve side; here we only advance the source watermark.
-            is ReplicaMessage.TriesAdded -> watchers.notifyMsg(msg.sourceMsgId)
-
-            is BlockBoundary -> {
-                pendingBlock = PendingBlock(record.msgId, msg)
-                // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
-                // append BlockUploaded and roll the index — all inside uploadBlock.
-                driver.uploadBlock(record.msgId, leaderTerm, msg)
-                pendingBlock = null
-
-                // advance the source watermark to the block's covered position (as the follower does)
-                watchers.notifyMsg(msg.latestProcessedMsgId)
-
-                blockGc.signal()
-                trieGc.signal()
-
-                blockInProgress = false
-                resumeCh.trySend(Unit) // resume a source batch stashed by the pause, if any
+            is TriesAdded -> {
+                watchers.notifyMsg(msg.sourceMsgId); true
             }
 
-            // Our own BlockUploaded, read back after uploadBlock already rolled the index — nothing to do
-            // but advance the watermark.
-            is ReplicaMessage.BlockUploaded -> watchers.notifyMsg(msg.latestProcessedMsgId)
+            // Our own upload, read back after uploadBlock already rolled the index — nothing to do but
+            // advance the watermark.
+            is ReplicaMessage.BlockUploaded -> {
+                watchers.notifyMsg(msg.latestProcessedMsgId); true
+            }
 
-            is ReplicaMessage.NoOp -> msg.srcMsgId?.let { watchers.notifyMsg(it) }
+            // Catalog already updated on the resolve side (see handleTriesDeleted).
+            is ReplicaMessage.TriesDeleted -> true
 
-            // Catalog already updated on the resolve side (see handleTriesDeleted); nothing to do here.
-            is ReplicaMessage.TriesDeleted -> {}
+            is BlockBoundary, is ReplicaMessage.NoOp -> false
         }
 
-        latestReplicaMsgId = record.msgId
+    // Commit the transaction at the head of the resolver's queue — this record, by construction: we
+    // append in resolution order and read back in position order, so the two are the same order. Its
+    // relations are still ours, so nothing is re-materialised from the record.
+    private suspend fun commitResolvedHead(msg: ReplicaMessage.ResolvedTx) {
+        val head = txResolver.removeHead()
+        // The check is inside the try: head is already off the queue, so teardown's failPending can't
+        // reach it — the catch must fail its handle and the finally must free it, on ANY throw here
+        // (a queue-head mismatch included), or we leak Arrow buffers and hang an awaiting executeTx.
+        try {
+            check(head.txKey.txId == msg.txId) {
+                "[$dbName] queue head ${head.txKey.txId} != consumed tx ${msg.txId}"
+            }
+            driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
+            // dbOp (attach/detach) was already applied on the resolve side (it had to run to produce
+            // the tx result), so it is ours to skip here and the applier's to do for everyone else.
+            watchers.notifyTx(head.txResult, head.srcMsgId, head.externalSourceToken)
+            head.pending?.complete(head.txResult)
+        } catch (e: Throwable) {
+            head.pending?.completeExceptionally(e)
+            throw e
+        } finally {
+            head.close()
+        }
+    }
+
+    /**
+     * Take the cut, unconditionally: every boundary we read is one we wrote.
+     *
+     * The fence has already discarded anything below our term, and anything above it superseded us
+     * before reaching here — so a boundary that is not ours is one we are no longer leading to see.
+     * Declining is what a node with no leadership expresses by not having this hook at all.
+     */
+    override suspend fun takeCut(record: Log.Record<ReplicaMessage>, msg: BlockBoundary): Boolean {
+        // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
+        // append BlockUploaded and roll the index — all inside uploadBlock.
+        driver.uploadBlock(record.msgId, leaderTerm, msg)
+
+        blockGc.signal()
+        trieGc.signal()
+
+        blockInProgress = false
+        resumeCh.trySend(Unit) // resume a source batch stashed by the pause, if any
+
+        return true
     }
 
     // ---- resolution ----
@@ -330,7 +335,8 @@ internal class LeaderLogProcessor(
                 //  - callers see the effect promptly (the compactor/GC read the catalog synchronously);
                 //  - it stays a projection of the fenced log anyway — the block-cut pause serialises trie
                 //    mutations against boundaries, so no block snapshot straddles this add.
-                // We skip re-applying it on our own consume-back (see applyRecord); the follower applies it.
+                // We answer for it on our own consume-back (see applyAuthored); a node that did not
+                // write it applies it from the record.
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     msg.tries.groupBy { it.tableName }.forEach { (tableName, tries) ->
                         trieCatalog.addTries(fromSchemaAndTable(tableName), tries, record.logTimestamp)
@@ -367,7 +373,8 @@ internal class LeaderLogProcessor(
         // the GC's `commitTriesDeleted` await returns with the catalog already updated (its contract; the
         // GC has already deleted the files). Safe as a fenced-log projection for the same reason as
         // TriesAdded: the block-cut pause serialises this against any boundary, and gcCh is excluded while a
-        // block is in progress. Skipped on our own consume-back (see applyRecord); the follower applies it.
+        // block is in progress. We answer for it on our own consume-back (see applyAuthored); a node that
+        // did not write it applies it from the record.
         trieCatalog.deleteTries(task.tableName, task.trieKeys)
         awaitingAppend.send(
             ControlItem(ReplicaMessage.TriesDeleted(task.tableName.schemaAndTable, task.trieKeys, termId = leaderTerm))
@@ -592,7 +599,7 @@ internal class LeaderLogProcessor(
                 // The apply loop is where a supersession fails the term; let it propagate (interrupts too).
                 is Apply ->
                     try {
-                        applyRecord(work.record)
+                        applier.apply(work.record)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: LeaderSupersededException) {
@@ -711,6 +718,7 @@ internal class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         driver.close()
+        applier.close()
         // Frees every resolved-but-not-applied tx — safe now that cancelAndJoin has joined the persister
         // and the pumps.
         txResolver.close()

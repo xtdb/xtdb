@@ -129,7 +129,7 @@ class ExternalSourceTest {
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, watchers, extSource,
+            partitionState, "test", driver, compactor, watchers, extSource,
             skipTxs = emptySet(), dbCatalog = null,
             afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
