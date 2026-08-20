@@ -96,8 +96,7 @@ Existing specs converge as they're edited; don't reflow a file you aren't otherw
 For commit messages, defer to the chalk commit skill's line-break convention where it's loaded — see the `xtdb-github` skill.
 
 For comments, you MUST load the `chalk:code-comments` skill — early in any session that will write or change code, and again when reviewing a diff.
-Load it before you decide a comment is worth writing, not after: the comment that needs stopping reads as diligence rather than as difficulty, so by then you've already decided to keep it.
-The "Comments" section in @dev/CODING.adoc carries the XTDB-specific instances.
+The "Comments" section in @dev/CODING.adoc carries why that timing matters, and the XTDB-specific instances.
 
 For test comments specifically: the test name and assertion ARE the documentation.
 Don't add a comment restating intent or citing an issue number when the test name already encodes them — e.g. a test named `test-foo-bug-1234` doesn't need a comment citing #1234.
