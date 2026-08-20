@@ -81,7 +81,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
@@ -103,7 +103,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)
@@ -130,7 +130,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // a previous incarnation of the counter reached 9
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
@@ -161,7 +161,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState(liveIndex = liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
@@ -192,7 +192,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState(liveIndex = liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // Pre-populate the replica log with a transaction
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
@@ -225,7 +225,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState(liveIndex = liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // Pre-populate the replica log
         replicaLog.appendMessage(ReplicaMessage.ResolvedTx(1, java.time.Instant.now(), true, null, emptyMap()))
@@ -254,7 +254,7 @@ class LogProcessorTest {
         val partitionState = newPartitionState()
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, backgroundScope)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val scope = CoroutineScope(SupervisorJob())
         val logProc = logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope)

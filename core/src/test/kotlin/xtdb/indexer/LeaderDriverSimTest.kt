@@ -108,7 +108,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),

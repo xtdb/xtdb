@@ -61,7 +61,7 @@ class FollowerLogProcessorTest {
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
         partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // The processor self-launches its replica tail; park it so it idles while the test drives
         // processRecords directly — a relaxed mock would return immediately and tear the proc down.
@@ -84,7 +84,7 @@ class FollowerLogProcessorTest {
     ) =
         FollowerLogProcessor(
             allocator, PartitionLog(replicaLog, 0), bufferPool, partitionState, "test", compactor,
-            watchers, null, null, afterReplicaMsgId = -1L, backgroundScope,
+            watchers, null, null, backgroundScope,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
@@ -108,7 +108,7 @@ class FollowerLogProcessorTest {
 
     @Test
     fun `ResolvedTx skips already-applied transactions`() = runTest {
-        watchers = Watchers(latestTxId = 42, latestSourceMsgId = 42)
+        watchers = Watchers(latestTxId = 42, latestSourceMsgId = 42, latestReplicaMsgId = -1)
         val proc = makeProcessor()
 
         val tx40 = ReplicaMessage.ResolvedTx(40, Instant.now(), true, null, emptyMap(), srcMsgId = 40)
@@ -136,7 +136,7 @@ class FollowerLogProcessorTest {
         verify(exactly = 0) { liveIndex.commitTx(match { it.txId == 2L }, any()) }
 
         // the fenced record is not applied, but the consume position still advances past it
-        assertEquals(1L, proc.latestReplicaMsgId)
+        assertEquals(1L, watchers.latestReplicaMsgId)
     }
 
     @Test
@@ -204,7 +204,7 @@ class FollowerLogProcessorTest {
         val startBlock = block { blockIndex = 5 }
         blockCatalog = BlockCatalog(startBlock)
         partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
+        watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000, latestReplicaMsgId = -1)
         val proc = makeProcessor()
 
         val staleRecords = listOf(
@@ -247,7 +247,7 @@ class FollowerLogProcessorTest {
 
     @Test
     fun `processes messages after skipping stale ones`() = runTest {
-        watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000)
+        watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000, latestReplicaMsgId = -1)
         val proc = makeProcessor()
 
         val tx1001 = ReplicaMessage.ResolvedTx(1001, Instant.now(), true, null, emptyMap(), srcMsgId = 1001)

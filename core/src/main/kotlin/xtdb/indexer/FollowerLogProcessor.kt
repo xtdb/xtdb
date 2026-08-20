@@ -7,8 +7,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
@@ -23,7 +21,6 @@ import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Incorrect
 import xtdb.types.LogTimestamp
-import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
@@ -46,7 +43,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
-    afterReplicaMsgId: MessageId,
     scope: CoroutineScope,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
@@ -97,24 +93,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     var pendingBlock: PendingBlock? = pendingBlock
         private set
-
-    private sealed interface ReplicaState {
-        data class Active(val msgId: MessageId) : ReplicaState
-        data class Failed(val msgId: MessageId, val exception: Throwable) : ReplicaState
-    }
-
-    private val replicaState = MutableStateFlow<ReplicaState>(ReplicaState.Active(afterReplicaMsgId))
-
-    private fun ReplicaState.activeOrThrow(): ReplicaState.Active = when (this) {
-        is ReplicaState.Active -> this
-        is ReplicaState.Failed -> throw exception
-    }
-
-    override val latestReplicaMsgId: MessageId
-        get() = when (val s = replicaState.value) {
-            is ReplicaState.Active -> s.msgId
-            is ReplicaState.Failed -> s.msgId
-        }
 
     private val blockCatalog = partitionState.blockCatalog
     private val tableCatalog = partitionState.tableCatalog
@@ -300,7 +278,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                                 "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
                     }
                 }
-                replicaState.value = ReplicaState.Active(record.msgId)
+                watchers.notifyReplicaMsg(record.msgId)
             } catch (e: Throwable) {
                 if (e.isShutdownSignal) throw e
 
@@ -308,31 +286,20 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     e,
                     "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"
                 )
-                replicaState.value = ReplicaState.Failed(record.msgId, e)
                 watchers.notifyError(e)
                 throw e
             }
         }
     }
 
-    suspend fun awaitReplicaMsgId(target: MessageId) {
-        LOG.debug("[$dbName] transition: awaiting replica watcher catch-up to $target")
-        replicaState.first { it.activeOrThrow().msgId >= target }
-        LOG.debug("[$dbName] transition: replica watchers caught up to $target")
-    }
-
-    private fun notifyError(e: Throwable) {
-        replicaState.value = ReplicaState.Failed(latestReplicaMsgId, e)
-    }
-
     // Launched last so every field the tail touches is initialised before the first record.
     private val job = scope.launch {
         try {
-            replicaLog.tailAll(afterReplicaMsgId, this@FollowerLogProcessor)
+            replicaLog.tailAll(watchers.latestReplicaMsgId, this@FollowerLogProcessor)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            notifyError(e); throw e
+            watchers.notifyError(e); throw e
         }
     }
 

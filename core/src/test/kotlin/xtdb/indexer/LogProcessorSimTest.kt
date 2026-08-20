@@ -167,7 +167,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
 
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
             .also { simExtSource.watch(it) }
         val partitionStorage = PartitionStorage(DatabaseLogs(srcLog, replicaLog), bp, null)
         val crashLogger = CrashLogger(allocator, bp, "sim-node")

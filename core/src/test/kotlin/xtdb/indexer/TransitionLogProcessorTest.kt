@@ -39,7 +39,7 @@ class TransitionLogProcessorTest {
         tableCatalog = mockk(relaxed = true)
         trieCatalog = mockk(relaxed = true)
         partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
-        watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         every { bufferPool.epoch } returns 1
     }
@@ -53,7 +53,7 @@ class TransitionLogProcessorTest {
         TransitionLogProcessor(
             allocator, bufferPool, partitionState, "test", liveIndex,
             blockUploader,
-            watchers, null, afterReplicaMsgId = -1L,
+            watchers, null,
             hasExternalSource = hasExternalSource,
         )
 

@@ -85,13 +85,9 @@ internal class LeaderLogProcessor(
     var pendingBlock: PendingBlock? = null
         private set
 
-    // The consume-back position: the last replica-log record we have read back and applied. Advances
-    // in the apply loop; on demote it seeds the re-opened follower (with `pendingBlock`).
-    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
-        private set
-
-    // Where the consume pump starts tailing (the transition replay-target). Distinct from the advancing
-    // `latestReplicaMsgId` — the tail is opened once, from here.
+    // Where the consume pump starts tailing: the transition's replay target, which can sit below where
+    // the outgoing follower had read. Everything in between is the superseded leader's, written after
+    // our own claim and therefore fenced, so re-reading it applies nothing.
     private val replayFrom: MessageId = afterReplicaMsgId
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
@@ -178,7 +174,7 @@ internal class LeaderLogProcessor(
         // Below our term should not appear past our replay target; discard defensively, still advancing.
         if (term != 0L && term < leaderTerm) {
             LOG.debug { "[$dbName] leader: discarding stale-term record ${record.msgId} (term $term < $leaderTerm)" }
-            latestReplicaMsgId = record.msgId
+            watchers.notifyReplicaMsg(record.msgId)
             return
         }
 
@@ -235,7 +231,7 @@ internal class LeaderLogProcessor(
             is ReplicaMessage.TriesDeleted -> {}
         }
 
-        latestReplicaMsgId = record.msgId
+        watchers.notifyReplicaMsg(record.msgId)
     }
 
     // ---- resolution ----

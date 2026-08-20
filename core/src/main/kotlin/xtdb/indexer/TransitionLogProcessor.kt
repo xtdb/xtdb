@@ -6,7 +6,6 @@ import xtdb.api.TransactionKey
 import xtdb.api.TransactionResult
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
-import xtdb.types.MessageId
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -32,13 +31,9 @@ class TransitionLogProcessor(
     private val blockUploader: BlockUploader,
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
-    afterReplicaMsgId: MessageId,
     private val hasExternalSource: Boolean,
     private val termId: Long = 0,
 ) : LogProcessor.Processor<ReplicaMessage> {
-
-    override var latestReplicaMsgId: MessageId = afterReplicaMsgId
-        private set
 
     private val blockCatalog = partitionState.blockCatalog
     private val trieCatalog = partitionState.trieCatalog
@@ -140,8 +135,6 @@ class TransitionLogProcessor(
 
             try {
                 if (!record.message.stale) processRecord(record)
-
-                latestReplicaMsgId = msgId
             } catch (e: InterruptedException) {
                 throw e
             } catch (e: Interrupted) {

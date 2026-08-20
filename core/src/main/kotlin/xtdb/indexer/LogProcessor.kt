@@ -52,9 +52,7 @@ class LogProcessor(
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
-    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable {
-        val latestReplicaMsgId: MessageId
-    }
+    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable
 
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
@@ -106,48 +104,37 @@ class LogProcessor(
             gcDispatcher = gcDispatcher,
         )
 
-    private fun openTransition(
-        afterReplicaMsgId: MessageId,
-        termId: Long,
-    ): TransitionLogProcessor =
+    private fun openTransition(termId: Long): TransitionLogProcessor =
         TransitionLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, partitionState.liveIndex,
             blockUploader, watchers, dbCatalog,
-            afterReplicaMsgId,
             hasExternalSource = hasExternalSource,
             termId = termId,
         )
 
-    private fun openFollower(
-        pendingBlock: PendingBlock?,
-        afterReplicaMsgId: MessageId,
-    ): FollowerLogProcessor =
+    private fun openFollower(pendingBlock: PendingBlock?): FollowerLogProcessor =
         FollowerLogProcessor(
             allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock, afterReplicaMsgId, scope,
+            dbCatalog, pendingBlock, scope,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
 
-    private fun openFollowerSystem(
-        latestReplicaMsgId: MessageId,
-        pendingBlock: PendingBlock? = null,
-    ): FollowerSystem {
+    private fun openFollowerSystem(pendingBlock: PendingBlock? = null): FollowerSystem {
         LOG.info {
             buildString {
                 append("[$dbName] starting follower: ")
                 append("pending block: ${pendingBlock != null}, ")
                 append("src: ${watchers.latestSourceMsgId}, ")
-                append("replica: $latestReplicaMsgId")
+                append("replica: ${watchers.latestReplicaMsgId}")
             }
         }
 
-        return FollowerSystem(openFollower(pendingBlock, latestReplicaMsgId))
+        return FollowerSystem(openFollower(pendingBlock))
     }
 
     @Volatile
-    private var state: State =
-        Following(openFollowerSystem(partitionState.blockCatalog.boundaryReplicaMsgId ?: -1))
+    private var state: State = Following(openFollowerSystem())
 
     init {
         base.meterRegistry?.let { reg ->
@@ -177,7 +164,9 @@ class LogProcessor(
             // before we cut over, and the leader's consume pump tails from it. A plain append now — the
             // term on read-back is the fence, replacing the transactional producer (#5817).
             val replayTarget = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = termId)).msgId
-            followerProc.awaitReplicaMsgId(replayTarget)
+            LOG.debug("[$dbName] transition: awaiting replica catch-up to $replayTarget")
+            watchers.awaitReplicaMsg(replayTarget)
+            LOG.debug("[$dbName] transition: replica caught up to $replayTarget")
             // Our own claim is now read back, so the follower's max term is the log's — anything above
             // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
             followerProc.checkTermUnfenced(termId)
@@ -215,7 +204,7 @@ class LogProcessor(
                 followerSys.close()
             }
 
-            openTransition(followerProc.latestReplicaMsgId, termId).use { transition ->
+            openTransition(termId).use { transition ->
                 if (pendingBlock != null) {
                     LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
                     blockUploader.uploadBlock(
@@ -233,7 +222,7 @@ class LogProcessor(
             // commitLeader installs it at the serialization point.
             state = Prepared(LeaderSystem(openLeader(replayTarget, termId)), resumeAfterMsgId)
         } catch (e: Throwable) {
-            state = Following(openFollowerSystem(followerProc.latestReplicaMsgId, pendingBlock))
+            state = Following(openFollowerSystem(pendingBlock))
             throw e
         }
     }
@@ -260,11 +249,11 @@ class LogProcessor(
         }
 
         LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
-        // Cancel first: the watermark fields stay readable after the cancel/close — they're not
-        // allocator-backed — so we free the old term before reading them to seed the follower.
+        // Cancel first: `pendingBlock` stays readable after the cancel/close — it isn't allocator-backed
+        // — so we free the old term before reading it to seed the follower.
         leaderSys.cancelAndJoin()
         leaderSys.close()
-        state = Following(openFollowerSystem(leaderSys.proc.latestReplicaMsgId, leaderSys.proc.pendingBlock))
+        state = Following(openFollowerSystem(leaderSys.proc.pendingBlock))
     }
 
     override fun close() = state.system.close()

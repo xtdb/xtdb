@@ -90,7 +90,7 @@ class LeaderLogProcessorTest {
         blockCatalog: BlockCatalog = BlockCatalog(null),
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
-        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         skipTxs: Set<MessageId> = emptySet(),
         leaderTerm: Long = 1,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
@@ -135,7 +135,7 @@ class LeaderLogProcessorTest {
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val trieCatalog = mockk<TrieCatalog>(relaxed = true)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog, watchers = watchers)
 
         val tries = listOf(
@@ -180,7 +180,7 @@ class LeaderLogProcessorTest {
         val driver = RealLeaderDriver(
             partitionStorage, partitionState, blockUploader
         )
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
@@ -207,7 +207,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `FlushBlock ignored when CAS does not match`() = runTest {
         val liveIndex = liveIndexMock()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
 
         val now = Instant.now()
@@ -256,7 +256,7 @@ class LeaderLogProcessorTest {
         val driver = RealLeaderDriver(
             partitionStorage, partitionState, blockUploader
         )
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val lp = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, mockk(relaxed = true),
@@ -296,7 +296,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `a slow append does not stall resolution`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
@@ -332,7 +332,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `executeTx returns only once its tx is durable`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
@@ -358,7 +358,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `closing the leader term fails an awaiting executeTx rather than hanging`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // Gate that is never opened — the append will stall indefinitely unless the term is cancelled.
         val gate = CompletableDeferred<Unit>()
@@ -420,7 +420,7 @@ class LeaderLogProcessorTest {
     fun `closing the leader term fails a buffered, never-received source-log batch`() = runTest(timeout = 5.seconds) {
         val writerEntered = CompletableDeferred<Unit>()
         val writerGate = CompletableDeferred<Unit>()
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers)
 
@@ -470,7 +470,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `a slow append pipelines subsequent ext-source txs`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
@@ -509,7 +509,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `a higher-term record read back resigns the leader`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // Gate our own append so this leader's tx never lands: the only record on the log will be the
         // higher-term one injected below, so consume-back reaches it. Term fencing on read-back is the sole
@@ -557,7 +557,7 @@ class LeaderLogProcessorTest {
     @Test
     fun `resigning cancels in-flight source batches rather than surfacing the supersession`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         // Never opened. The BlockBoundary's append hangs here, so the cut never reads back and resolution
         // stays paused — which is what makes this deterministic: batch #1 parks as `pausedBatch` and batch #2
@@ -622,7 +622,7 @@ class LeaderLogProcessorTest {
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val blockCatalog = BlockCatalog(null)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)

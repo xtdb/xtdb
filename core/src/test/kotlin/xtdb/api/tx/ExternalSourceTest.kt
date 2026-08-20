@@ -107,7 +107,7 @@ class ExternalSourceTest {
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         liveIndex: LiveIndex = this@ExternalSourceTest.liveIndex,
-        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+        watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         extSource: ExternalSource = InMemoryExternalSource(),
         afterToken: ExternalSourceToken? = null,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
@@ -210,7 +210,7 @@ class ExternalSourceTest {
 
     @Test
     fun `execute threads resumeToken to watchers`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val extSource = InMemoryExternalSource()
         leaderProc(watchers = watchers, extSource = extSource)
 
@@ -226,7 +226,7 @@ class ExternalSourceTest {
 
     @Test
     fun `error in external source propagates to watchers`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         val failingSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(
@@ -247,7 +247,7 @@ class ExternalSourceTest {
 
     @Test
     fun `fault in the commit pipeline tips watchers into Failed`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         }
@@ -285,7 +285,7 @@ class ExternalSourceTest {
 
     @Test
     fun `submit surfaces an unrecoverable failure to the caller on a later submit`() = runTest {
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val liveIndex = mockk<LiveIndex>(relaxed = true) {
             every { commitTx(any(), any()) } throws RuntimeException("commit pipeline fault")
         }
@@ -362,7 +362,7 @@ class ExternalSourceTest {
             }
         }
 
-        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val thrown = CompletableDeferred<Throwable>()
         val extSource = object : ExternalSource {
             override suspend fun onPartitionAssigned(
@@ -399,7 +399,7 @@ class ExternalSourceTest {
         val partition = DatabasePartition(
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
             state = PartitionState(null, null, null, null),
-            watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1),
+            watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         )
         val db = Database(
             allocator = allocator,
