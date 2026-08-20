@@ -80,7 +80,7 @@ That commentary belongs in the commit body and the PR, which are read once aroun
   CI will run integration and property tests regardless, but `./gradlew test` is the minimum.
   All tests pass on `main`, so a failure is yours — see [Running tests](#running-tests) for how to handle one.
 * There MUST NOT be any reflection or boxed math warnings.
-* For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `=== Git` in @dev/CODING.adoc (ship changes are exempt).
+* For show/ask changes, you MUST run a code-review pass over the diff before raising the commit/PR — see the code-review note under `== Git` in @dev/CODING.adoc (ship changes are exempt).
   That pass MUST cover the diff's comments against `chalk:code-comments`, and any spec prose against `chalk:allium-voice`, not only its code.
 * Verify: all changes committed AND pushed
 * Hand off: provide context for next session

@@ -94,7 +94,7 @@ Back-dating valid-from to the period a fact describes asserts that we held the f
 An instantaneous measure differs — an as-of balance is true as of its `period_end`.
 When choosing valid-from for a CDC or indexer put, ask "when did this become true or known?", not "what date does it refer to?".
 
-=== Comments
+== Comments
 
 **Comment rules are the `chalk:code-comments` skill's** - the reader model, the counter-intuition rule, the test, and where the rejected material belongs instead.
 
@@ -111,7 +111,7 @@ When choosing valid-from for a CDC or indexer put, ask "when did this become tru
 ** Two-phase teardown is described in link:doc/coroutines.adoc[], so a `close()` that closes things needs no comment, and no "phase 2 of teardown" label.
 ** Allocator ordering is the kind of gotcha that *does* earn one at its site: Arrow won't close a parent allocator while a child buffer is live, so the allocator closes last.
 
-=== Errors
+== Errors
 
 Use `xtdb.error` (aliased as `err`) for throwing errors — not raw Java exceptions.
 We're migrating the codebase to this convention; new code should always use it.
@@ -125,7 +125,7 @@ Choose the appropriate anomaly category:
 
 See `api/src/main/clojure/xtdb/error.clj` for the full set of categories and their semantics.
 
-=== Internal-but-public declarations
+== Internal-but-public declarations
 
 Some Kotlin declarations have to stay `public` without being public API — they're called from Clojure over interop, or from another module.
 Kotlin `internal` isn't an option for either: it name-mangles the JVM symbol (so Clojure can't resolve it) and it doesn't cross module boundaries.
@@ -141,7 +141,7 @@ The declaration stays public — Clojure and cross-module callers are untouched 
 So an internal-but-public member carries both.
 `grep @InternalApi` enumerates the whole surface; each site SHOULD carry a comment saying what would have to change for it to become genuinely `internal` (see `OpenTx`'s constructor for the shape).
 
-=== Clojure style
+== Clojure style
 
 Type-hint at the source, not at the call sites::
 +
@@ -166,7 +166,7 @@ Pass a plain `fn` where a Java functional interface is expected::
 Clojure 1.12 coerces a `fn` to a `@FunctionalInterface` at an interop site where the compiler knows the target parameter type, so prefer `(.tryAdvance cursor (fn [^RelationReader rel] ...))` over a `reify` of `Consumer` — it drops the boilerplate and the import.
 It needs the receiver hinted (`^ResultCursor cursor`) for the overload, and its own param hinted to keep calls against that param out of reflection.
 
-=== Writing tests
+== Writing tests
 
 (For *running* tests, invoke the `xtdb-testing` skill.)
 
@@ -209,7 +209,7 @@ A test that needs one has to be a Kotlin test in the same module; the corollary 
 `core/src/test/kotlin/xtdb/indexer/LiveIndexTest.kt` stands up a real `LiveIndex`, catalogs, storage and `OpenTx` without a node — copy its `TestDb` fixture rather than reaching for a full node.
 Ingest-and-inspect and on-disk format cases can stay in Clojure at node level (`xt/execute-tx`).
 
-=== Git
+== Git
 
 We follow https://martinfowler.com/articles/ship-show-ask.html[Ship/Show/Ask] — classify each change by how much pre-merge scrutiny it needs:
 
