@@ -46,6 +46,7 @@ internal class LeaderLogProcessor(
     private val extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
+    private val applier: ReplicaApplier,
     afterReplicaMsgId: MessageId,
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
@@ -77,20 +78,8 @@ internal class LeaderLogProcessor(
     private val txResolver =
         TxResolver(allocator, nodeBase, partitionStorage, partitionState, dbName, crashLogger, skipTxs, instantSource)
 
-    // The one apply path, shared with a node that is not leading. `leadership = this` is what leading
-    // adds to it, and it reaches the applier through the two hooks below and nowhere else.
-    private val applier = ReplicaApplier(
-        allocator, "leader-log-processor", bufferPool, partitionState, dbName, compactor, watchers,
-        dbCatalog, leadership = this,
-        afterReplicaMsgId = afterReplicaMsgId,
-        hasExternalSource = extSource != null,
-        meterRegistry = nodeBase.meterRegistry,
-    )
-
-    val pendingBlock: PendingBlock? get() = applier.pendingBlock
-
-    // The consume-back position: the last replica-log record we have read back and applied. Advances
-    // in the apply loop; on demote it seeds the re-opened follower (with `pendingBlock`).
+    // The consume-back position: the last replica-log record we have read back and applied. The applier
+    // is the partition's, so this outlives the term and there is nothing to hand over on demote.
     override val latestReplicaMsgId: MessageId get() = applier.latestReplicaMsgId
 
     // Where the consume pump starts tailing (the transition replay-target). Distinct from the advancing
@@ -599,7 +588,7 @@ internal class LeaderLogProcessor(
                 // The apply loop is where a supersession fails the term; let it propagate (interrupts too).
                 is Apply ->
                     try {
-                        applier.apply(work.record)
+                        applier.apply(work.record, leadership = this@LeaderLogProcessor)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: LeaderSupersededException) {
@@ -718,7 +707,6 @@ internal class LeaderLogProcessor(
     override fun close() {
         extSource?.close()
         driver.close()
-        applier.close()
         // Frees every resolved-but-not-applied tx — safe now that cancelAndJoin has joined the persister
         // and the pumps.
         txResolver.close()

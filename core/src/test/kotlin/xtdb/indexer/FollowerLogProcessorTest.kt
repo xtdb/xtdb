@@ -83,11 +83,15 @@ class FollowerLogProcessorTest {
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            allocator, PartitionLog(replicaLog, 0), bufferPool, partitionState, "test", compactor,
-            watchers, null, null, afterReplicaMsgId = -1L, backgroundScope,
-            hasExternalSource = hasExternalSource,
-            meterRegistry = meterRegistry,
-            maxBufferedRecords = maxBufferedRecords,
+            PartitionLog(replicaLog, 0), partitionState, "test", watchers,
+            ReplicaApplier(
+                allocator, bufferPool, partitionState, "test", compactor, watchers, dbCatalog = null,
+                afterReplicaMsgId = -1L,
+                hasExternalSource = hasExternalSource,
+                meterRegistry = meterRegistry,
+                maxBufferedRecords = maxBufferedRecords,
+            ).also(followersToClose::add),
+            backgroundScope,
         ).also(followersToClose::add)
 
     private fun <M> record(offset: Long, message: M) =

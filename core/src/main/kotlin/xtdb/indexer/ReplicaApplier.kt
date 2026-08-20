@@ -32,28 +32,26 @@ private val LOG = ReplicaApplier::class.logger
  * Applying one partition's replica log to local state: the term fence, the block hold, and the effects
  * each kind of record has.
  *
- * The one apply path, whether or not this node is leading. [leadership] is what leading adds, and it
- * reaches this class through its two hooks and nowhere else. See
- * `allium/log-processor-lifecycle.allium`.
+ * One of these per partition, for the whole life of the participant — so the read position and the block
+ * hold below are the partition's, and a role change hands them over rather than copying them. Leading is
+ * passed in per record, and reaches this class through the two hooks on [Leadership] and nowhere else.
+ * See `allium/log-processor-lifecycle.allium`.
  */
 internal class ReplicaApplier(
     allocator: BufferAllocator,
-    allocatorName: String,
     private val bufferPool: BufferPool,
     partitionState: PartitionState,
     private val dbName: DatabaseName,
     private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
-    private val leadership: Leadership?,
-    pendingBlock: PendingBlock? = null,
     afterReplicaMsgId: MessageId,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
 ) : AutoCloseable {
 
-    private val allocator = allocator.newChildAllocator(allocatorName, 0, Long.MAX_VALUE)
+    private val allocator = allocator.newChildAllocator("replica-applier", 0, Long.MAX_VALUE)
 
     private val blockCatalog = partitionState.blockCatalog
     private val tableCatalog = partitionState.tableCatalog
@@ -64,8 +62,20 @@ internal class ReplicaApplier(
     var latestReplicaMsgId: MessageId = afterReplicaMsgId
         private set
 
-    var pendingBlock: PendingBlock? = pendingBlock
+    var pendingBlock: PendingBlock? = null
         private set
+
+    /**
+     * Give up the hold on a block this participant has uploaded itself.
+     *
+     * The ordinary release ([releaseHeldBlock]) is driven by reading somebody's `BlockUploaded` back; an
+     * author has no upload to wait for. The buffering timer is dropped rather than recorded for the same
+     * reason — nothing was waited for, and leaving it running would date the next hold's measurement.
+     */
+    fun releaseHeldBlockAsAuthor() {
+        pendingBlock = null
+        blockBufferStartSample = null
+    }
 
     // ---- metrics ----
 
@@ -135,7 +145,7 @@ internal class ReplicaApplier(
 
     // ---- applying a record ----
 
-    private suspend fun applyFromRecord(record: Log.Record<ReplicaMessage>) {
+    private suspend fun applyFromRecord(record: Log.Record<ReplicaMessage>, leadership: Leadership?) {
         when (val msg = record.message) {
             is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
                 val txKey = TransactionKey(msg.txId, msg.systemTime)
@@ -215,7 +225,10 @@ internal class ReplicaApplier(
 
     // The cut we were waiting on has landed — so it was taken by whoever wrote the boundary, which was
     // not us.
-    private suspend fun releaseHeldBlock(held: PendingBlock, record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded) {
+    private suspend fun releaseHeldBlock(
+        held: PendingBlock, record: Log.Record<ReplicaMessage>, msg: ReplicaMessage.BlockUploaded,
+        leadership: Leadership?,
+    ) {
         LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${held.bufferedRecords.size} buffered)")
 
         val heldRecords = blockUploadedTimer.timed {
@@ -235,10 +248,10 @@ internal class ReplicaApplier(
             heldRecords
         }
 
-        for (heldRecord in heldRecords) applyRecord(heldRecord)
+        for (heldRecord in heldRecords) applyRecord(heldRecord, leadership)
     }
 
-    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
+    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>, leadership: Leadership?) {
         val msg = record.message
         LOG.trace { "[$dbName] replica: message ${record.msgId} (${msg::class.simpleName})" }
 
@@ -247,7 +260,7 @@ internal class ReplicaApplier(
                 && msg.blockIndex == held.blockIdx
                 && msg.storageVersion == Storage.VERSION
                 && msg.storageEpoch == bufferPool.epoch
-            ) releaseHeldBlock(held, record, msg)
+            ) releaseHeldBlock(held, record, msg, leadership)
             else {
                 LOG.trace { "[$dbName] replica: holding message ${record.msgId} (${msg::class.simpleName}) during block b${held.blockIdx} (${held.bufferedRecords.size + 1} held)" }
                 held += record
@@ -261,7 +274,7 @@ internal class ReplicaApplier(
         // already had, whatever a watermark comparison would say of it.
         if (leadership?.applyAuthored(record) == true) return
 
-        if (!msg.stale) applyFromRecord(record)
+        if (!msg.stale) applyFromRecord(record, leadership)
     }
 
     /**
@@ -270,7 +283,7 @@ internal class ReplicaApplier(
      * A record below the fence is discarded rather than applied — it was written by a leader the log has
      * since moved past — but the position still advances, so a catch-up can't hang on a fenced record.
      */
-    suspend fun apply(record: Log.Record<ReplicaMessage>) {
+    suspend fun apply(record: Log.Record<ReplicaMessage>, leadership: Leadership?) {
         val term = record.message.termId
 
         if (termFence.admit(term)) {
@@ -281,7 +294,7 @@ internal class ReplicaApplier(
                     throw LeaderSupersededException("[$dbName] superseded: read term $term > our term ${it.term} at ${record.msgId}")
             }
 
-            applyRecord(record)
+            applyRecord(record, leadership)
         } else {
             LOG.debug {
                 "[$dbName] replica: discarding fenced record ${record.msgId} " +

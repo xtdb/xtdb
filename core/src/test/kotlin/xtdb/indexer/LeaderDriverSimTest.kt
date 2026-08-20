@@ -110,6 +110,12 @@ class LeaderDriverSimTest : SimulationTestBase() {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1)
 
+        private val applier = ReplicaApplier(
+            allocator, bufferPool, partitionState, "test-db",
+            mockk<Compactor.ForDatabase>(relaxed = true), watchers,
+            dbCatalog = null, afterReplicaMsgId = afterReplicaMsgId, hasExternalSource = false,
+        )
+
         val proc = LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),
             partitionState, "test-db",
@@ -126,6 +132,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
             ),
             mockk<Compactor.ForDatabase>(relaxed = true), watchers,
             extSource = null, skipTxs = emptySet(), dbCatalog = null,
+            applier = applier,
             afterReplicaMsgId = afterReplicaMsgId,
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.
@@ -156,6 +163,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
         override fun close() {
             proc.close()
+            applier.close()
             partitionState.close()
         }
     }

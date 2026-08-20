@@ -1,22 +1,17 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.MeterRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.DatabaseName
 import xtdb.api.log.*
-import xtdb.compactor.Compactor
-import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Incorrect
 import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
-import xtdb.storage.BufferPool
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.logger
@@ -27,36 +22,20 @@ private val LOG = FollowerLogProcessor::class.logger
  * Reading one partition's replica log while this node is not leading: the tail, and the position
  * everything else waits on.
  *
- * Applying is [ReplicaApplier]'s, and is the same work a leader does on read-back — this class opens it
- * with no [Leadership], which is the whole of the difference.
+ * Applying is the [ReplicaApplier]'s, which belongs to the partition rather than to this term — so this
+ * class neither seeds it nor closes it. It passes no [Leadership], which is the whole of the difference
+ * from a leader's read-back.
  */
-class FollowerLogProcessor @JvmOverloads constructor(
-    allocator: BufferAllocator,
+internal class FollowerLogProcessor(
     replicaLog: PartitionLog<ReplicaMessage>,
-    bufferPool: BufferPool,
     partitionState: PartitionState,
     private val dbName: DatabaseName,
-    compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
-    dbCatalog: Database.Catalog?,
-    pendingBlock: PendingBlock?,
-    afterReplicaMsgId: MessageId,
+    private val applier: ReplicaApplier,
     scope: CoroutineScope,
-    hasExternalSource: Boolean,
-    meterRegistry: MeterRegistry? = null,
-    maxBufferedRecords: Int = 1024,
 ) : LogProcessor.Processor<ReplicaMessage> {
 
-    private val applier = ReplicaApplier(
-        allocator, "follower-log-processor", bufferPool, partitionState, dbName, compactor, watchers,
-        dbCatalog, leadership = null,
-        pendingBlock = pendingBlock, afterReplicaMsgId = afterReplicaMsgId,
-        hasExternalSource = hasExternalSource,
-        meterRegistry = meterRegistry,
-        maxBufferedRecords = maxBufferedRecords,
-    )
-
-    val pendingBlock: PendingBlock? get() = applier.pendingBlock
+    private val afterReplicaMsgId = applier.latestReplicaMsgId
 
     private val termFence = partitionState.termFence
 
@@ -104,7 +83,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
-                applier.apply(record)
+                applier.apply(record, leadership = null)
                 replicaState.value = ReplicaState.Active(record.msgId)
             } catch (e: CancellationException) {
                 // The owner cancelled the term — not a processing failure, so don't poison the
@@ -149,5 +128,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     suspend fun cancelAndJoin() = job.cancelAndJoin()
 
-    override fun close() = applier.close()
+    override fun close() {
+    }
 }

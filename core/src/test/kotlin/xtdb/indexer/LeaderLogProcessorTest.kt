@@ -81,6 +81,16 @@ class LeaderLogProcessorTest {
             configure()
         }
 
+    // The applier belongs to the partition rather than to the leader term, so a test builds one
+    // alongside the leader and closes it with everything else.
+    private fun applierFor(
+        partitionStorage: PartitionStorage, partitionState: PartitionState,
+        compactor: Compactor.ForDatabase, watchers: Watchers,
+    ) = ReplicaApplier(
+        allocator, partitionStorage.bufferPool, partitionState, "test", compactor, watchers,
+        dbCatalog = null, afterReplicaMsgId = -1, hasExternalSource = false,
+    ).also(leadersToClose::add)
+
     private fun TestScope.leaderProc(
         uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -110,6 +120,7 @@ class LeaderLogProcessorTest {
             partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = skipTxs, dbCatalog = null,
+            applier = applierFor(partitionStorage, partitionState, compactor, watchers),
             afterReplicaMsgId = -1,
             leaderTerm = leaderTerm,
             flushTimeout = IndexerConfig().flushDuration,
@@ -187,6 +198,7 @@ class LeaderLogProcessorTest {
             partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
+            applier = applierFor(partitionStorage, partitionState, compactor, watchers),
             afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
@@ -263,6 +275,7 @@ class LeaderLogProcessorTest {
             partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = emptySet(), dbCatalog = null,
+            applier = applierFor(partitionStorage, partitionState, compactor, watchers),
             afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,
@@ -636,6 +649,7 @@ class LeaderLogProcessorTest {
             partitionState, "test", driver, compactor, watchers,
             extSource = null,
             skipTxs = setOf(10), dbCatalog = null,
+            applier = applierFor(partitionStorage, partitionState, compactor, watchers),
             afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope,

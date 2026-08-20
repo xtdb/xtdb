@@ -35,6 +35,7 @@ import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
+import xtdb.indexer.ReplicaApplier
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import xtdb.util.closeAll
@@ -131,6 +132,10 @@ class ExternalSourceTest {
             allocator, nodeBase, partitionStorage, crashLogger,
             partitionState, "test", driver, compactor, watchers, extSource,
             skipTxs = emptySet(), dbCatalog = null,
+            applier = ReplicaApplier(
+                allocator, partitionStorage.bufferPool, partitionState, "test", compactor, watchers,
+                dbCatalog = null, afterReplicaMsgId = -1, hasExternalSource = true,
+            ).also(leadersToClose::add),
             afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
             scope = backgroundScope

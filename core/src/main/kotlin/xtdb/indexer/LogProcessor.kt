@@ -54,6 +54,16 @@ class LogProcessor(
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
+    // The partition's, not a role's: seeded once from the persisted boundary and handed to whichever
+    // processor is current, so a role change copies no position and no block hold. Closed here, after the
+    // sub-system that was using it. See allium/log-processor-lifecycle.allium.
+    private val applier = ReplicaApplier(
+        allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers, dbCatalog,
+        afterReplicaMsgId = partitionState.blockCatalog.boundaryReplicaMsgId ?: -1,
+        hasExternalSource = hasExternalSource,
+        meterRegistry = base.meterRegistry,
+    )
+
     // `close` MUST follow a returned `cancelAndJoin`. See dev/doc/coroutines.adoc.
     private sealed interface SubSystem : AutoCloseable {
         suspend fun cancelAndJoin()
@@ -94,6 +104,7 @@ class LogProcessor(
             compactor, watchers,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             skipTxs, dbCatalog,
+            applier,
             afterReplicaMsgId,
             leaderTerm = termId,
             flushTimeout = flushTimeout,
@@ -121,49 +132,23 @@ class LogProcessor(
         }
     }
 
-    private fun openCatchUp(
-        afterReplicaMsgId: MessageId,
-        termId: Long,
-    ): ReplicaApplier =
-        ReplicaApplier(
-            allocator, "catch-up-log-processor", partitionStorage.bufferPool, partitionState, dbName,
-            compactor, watchers, dbCatalog,
-            leadership = CatchUpLeadership(termId, blockUploader),
-            afterReplicaMsgId = afterReplicaMsgId,
-            hasExternalSource = hasExternalSource,
-            meterRegistry = base.meterRegistry,
-        )
-
-    private fun openFollower(
-        pendingBlock: PendingBlock?,
-        afterReplicaMsgId: MessageId,
-    ): FollowerLogProcessor =
-        FollowerLogProcessor(
-            allocator, partitionStorage.replicaLog, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock, afterReplicaMsgId, scope,
-            hasExternalSource = hasExternalSource,
-            meterRegistry = base.meterRegistry,
-        )
-
-    private fun openFollowerSystem(
-        latestReplicaMsgId: MessageId,
-        pendingBlock: PendingBlock? = null,
-    ): FollowerSystem {
+    private fun openFollowerSystem(): FollowerSystem {
         LOG.info {
             buildString {
                 append("[$dbName] starting follower: ")
-                append("pending block: ${pendingBlock != null}, ")
+                append("pending block: ${applier.pendingBlock != null}, ")
                 append("src: ${watchers.latestSourceMsgId}, ")
-                append("replica: $latestReplicaMsgId")
+                append("replica: ${applier.latestReplicaMsgId}")
             }
         }
 
-        return FollowerSystem(openFollower(pendingBlock, latestReplicaMsgId))
+        return FollowerSystem(
+            FollowerLogProcessor(partitionStorage.replicaLog, partitionState, dbName, watchers, applier, scope)
+        )
     }
 
     @Volatile
-    private var state: State =
-        Following(openFollowerSystem(partitionState.blockCatalog.boundaryReplicaMsgId ?: -1))
+    private var state: State = Following(openFollowerSystem())
 
     init {
         base.meterRegistry?.let { reg ->
@@ -223,8 +208,6 @@ class LogProcessor(
         replayTarget: MessageId,
         termId: Long,
     ) {
-        val followerProc = followerSys.proc
-        val pendingBlock = followerProc.pendingBlock
         try {
             LOG.debug("[$dbName] transition: closing follower system")
             withContext(NonCancellable) {
@@ -232,15 +215,16 @@ class LogProcessor(
                 followerSys.close()
             }
 
-            if (pendingBlock != null) {
-                openCatchUp(followerProc.latestReplicaMsgId, termId).use { catchUp ->
-                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                    blockUploader.uploadBlock(
-                        pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
-                    )
-                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records")
-                    for (record in pendingBlock.bufferedRecords) catchUp.apply(record)
-                }
+            // Uploaded before the hold is dropped, so a throw here leaves the block still held and the
+            // catch below re-opens a follower that is still waiting for it.
+            applier.pendingBlock?.let { held ->
+                LOG.debug("[$dbName] transition: finishing pending block b${held.blockIdx} with ${held.bufferedRecords.size} buffered records")
+                blockUploader.uploadBlock(held.boundaryMsgId, termId, held.boundaryMessage)
+                applier.releaseHeldBlockAsAuthor()
+
+                LOG.debug("[$dbName] transition: replaying ${held.bufferedRecords.size} buffered records")
+                val catchUp = CatchUpLeadership(termId, blockUploader)
+                for (record in held.bufferedRecords) applier.apply(record, catchUp)
             }
 
             LOG.debug("[$dbName] transition: building leader processor")
@@ -250,7 +234,7 @@ class LogProcessor(
             // commitLeader installs it at the serialization point.
             state = Prepared(LeaderSystem(openLeader(replayTarget, termId)), resumeAfterMsgId)
         } catch (e: Throwable) {
-            state = Following(openFollowerSystem(followerProc.latestReplicaMsgId, pendingBlock))
+            state = Following(openFollowerSystem())
             throw e
         }
     }
@@ -281,10 +265,15 @@ class LogProcessor(
         // allocator-backed — so we free the old term before reading them to seed the follower.
         leaderSys.cancelAndJoin()
         leaderSys.close()
-        state = Following(openFollowerSystem(leaderSys.proc.latestReplicaMsgId, leaderSys.proc.pendingBlock))
+        state = Following(openFollowerSystem())
     }
 
-    override fun close() = state.system.close()
+    // The applier last: it owns a child allocator, and Arrow will not close a parent while a child buffer
+    // is live, so whatever was using it has to be closed first.
+    override fun close() {
+        state.system.close()
+        applier.close()
+    }
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for
