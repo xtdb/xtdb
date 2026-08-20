@@ -22,7 +22,6 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Incorrect
-import xtdb.api.error.Interrupted
 import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
@@ -302,15 +301,9 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     }
                 }
                 replicaState.value = ReplicaState.Active(record.msgId)
-            } catch (e: CancellationException) {
-                // The owner cancelled the term — not a processing failure, so don't poison the
-                // shared watchers via notifyError.
-                throw e
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Interrupted) {
-                throw e
             } catch (e: Throwable) {
+                if (e.isShutdownSignal) throw e
+
                 LOG.error(
                     e,
                     "[$dbName] follower: failed to process log record with msgId ${record.msgId} (${record.message::class.simpleName})"

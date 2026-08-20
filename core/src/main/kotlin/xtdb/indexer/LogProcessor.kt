@@ -29,6 +29,11 @@ import java.time.Duration
 
 private val LOG = LogProcessor::class.logger
 
+// Shutdown, not a fault. MUST NOT reach `Watchers.notifyError`: `Failed` is absorbing, so a clean
+// revoke or a node teardown would leave the database unqueryable until the process restarts.
+internal val Throwable.isShutdownSignal
+    get() = this is CancellationException || this is InterruptedException || this is Interrupted
+
 class LogProcessor(
     private val allocator: BufferAllocator,
     private val base: NodeBase,
@@ -178,9 +183,8 @@ class LogProcessor(
             followerProc.checkTermUnfenced(termId)
             cutoverToLeader(followerSys, replayTarget, termId)
         } catch (e: Throwable) {
-            // Cutover already restored a live `state` if it had to; here we only report. Cancellation and
-            // interruption aren't leader-prep failures, so they don't poison watchers — only a genuine one.
-            if (e !is CancellationException && e !is InterruptedException && e !is Interrupted) {
+            // Cutover already restored a live `state` if it had to; here we only report.
+            if (!e.isShutdownSignal) {
                 LOG.error(e, "[$dbName] transition: failed to prepare leader")
                 watchers.notifyError(e)
             }
