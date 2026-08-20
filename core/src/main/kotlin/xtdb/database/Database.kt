@@ -78,7 +78,7 @@ class Database(
         // database's vector is partition N — so `openSnapshot`, `currentBasis`, `latestCompletedTxs`
         // and `awaitAll` all index partitions and basis slots against one another.
         partitions.forEachIndexed { idx, part ->
-            require(part.partition == idx) { "partition ${part.partition} at index $idx" }
+            check(part.partition == idx) { "partitions must be in index order: partition ${part.partition} at index $idx" }
         }
     }
 
