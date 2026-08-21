@@ -54,7 +54,6 @@ import io.micrometer.core.instrument.MeterRegistry
 import java.time.Duration
 import java.time.Instant
 import java.util.*
-import kotlin.concurrent.Volatile
 import xtdb.api.tx.ExternalSource
 
 private val LOG = Database::class.logger
@@ -123,9 +122,8 @@ class Database(
     val latestProcessedMsgId: MessageId get() = watchers.latestSourceMsgId
     val ingestionError: IngestionStoppedException? get() = watchers.exception
 
-    @Volatile
-    var isClosing: Boolean = false
-        internal set
+    /** Whether an ingestion error here should take the whole node out of service. */
+    val isCritical: Boolean get() = name == "xtdb" || config.critical
 
     fun awaitTxBlocking(txId: Long, timeout: Duration? = null): TransactionResult? =
         runBlocking {
@@ -552,6 +550,10 @@ class Database(
 
         override val databaseNames: Collection<DatabaseName>
         override fun databaseOrNull(dbName: DatabaseName): Database?
+
+        fun databaseOrThrow(dbName: DatabaseName): Database =
+            databaseOrNull(dbName)
+                ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
 
         operator fun get(dbName: DatabaseName) = databaseOrNull(dbName)
 

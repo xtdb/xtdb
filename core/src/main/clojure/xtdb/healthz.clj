@@ -30,14 +30,10 @@
     (max 0 (- (or latest-available -1)
               (or current-block -1)))))
 
-(defn- critical? [^Database db]
-  (or (= "xtdb" (.getName db))
-      (.getCritical (.getConfig db))))
-
 (defn- all-databases
   "Returns all currently attached databases from the catalog."
   [^Database$Catalog db-cat]
-  (into [] (map (fn [^String db-name] (.databaseOrNull db-cat db-name)))
+  (into [] (keep (fn [^String db-name] (.databaseOrNull db-cat db-name)))
         (.getDatabaseNames db-cat)))
 
 (def index-html-str
@@ -88,7 +84,7 @@
                                           (let [dbs (all-databases db-cat)
                                                 problems (for [^Database db dbs
                                                                :let [db-name (.getName db)
-                                                                     critical (critical? db)
+                                                                     critical (.isCritical db)
                                                                      ingestion-error (get-ingestion-error db)
                                                                      block-lag (->block-lag db)
                                                                      block-lag-healthy? (<= block-lag 5)]

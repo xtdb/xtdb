@@ -33,8 +33,23 @@ class DatabaseCatalog @JvmOverloads constructor(
     closerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Database.Catalog, AutoCloseable {
 
-    private val databases = ConcurrentHashMap<DatabaseName, Database>()
-    private val dormantDatabases = ConcurrentHashMap<DatabaseName, DatabaseConfig>()
+    // A block records the whole secondary list and replaces the previous one, so an entry left out
+    // of `serialisedSecondaryDatabases` while a block is cut is erased rather than skipped.
+    private sealed interface Entry {
+        val config: Database.Config
+
+        class Open(val db: Database) : Entry {
+            override val config get() = db.config
+        }
+
+        class Skipped(override val config: Database.Config) : Entry
+
+        class Detaching(val db: Database) : Entry {
+            override val config get() = db.config
+        }
+    }
+
+    private val entries = ConcurrentHashMap<DatabaseName, Entry>()
 
     // Parent of every database's job tree. A SupervisorJob so one database's failure is contained
     // here (on the common parent) rather than cancelling its siblings; node shutdown cancels this
@@ -42,46 +57,44 @@ class DatabaseCatalog @JvmOverloads constructor(
     private val dbJob = SupervisorJob()
     private val dbScope = CoroutineScope(dbJob)
 
-    // Detaching databases tear down off the caller's thread on this scope, and stay in `databases`
+    // Detaching databases tear down off the caller's thread on this scope, and keep their entry
     // until that completes — see #5613. Nested under `dbJob` so node shutdown's single cancel covers it.
     private val closerJob = SupervisorJob(dbJob)
     private val closerScope = CoroutineScope(closerJob + closerDispatcher)
 
     override val databaseNames: Collection<DatabaseName>
-        get() = databases.entries.asSequence().filter { !it.value.isClosing }.map { it.key }.toSet()
+        get() = entries.entries.asSequence().filter { it.value is Entry.Open }.map { it.key }.toSet()
 
     override val txScoped = false
 
-    override fun databaseOrNull(dbName: DatabaseName): Database? =
-        databases[dbName]?.takeUnless { it.isClosing }
+    override fun databaseOrNull(dbName: DatabaseName): Database? = (entries[dbName] as? Entry.Open)?.db
 
     override val serialisedSecondaryDatabases: Map<DatabaseName, DatabaseConfig>
-        get() {
-            val active = this.filterNot { it.name == "xtdb" }
-                .associate { db -> db.name to db.config.serializedConfig }
-            return active + dormantDatabases
-        }
+        get() = entries.entries
+            .filter { it.key != "xtdb" && it.value !is Entry.Detaching }
+            .associate { (dbName, entry) -> dbName to entry.config.serializedConfig }
 
     private val skipDbs: Set<String> get() = base.config.skipDbs
 
     override fun attach(dbName: DatabaseName, config: Database.Config?) {
-        databases[dbName]?.let { existing ->
-            if (existing.isClosing)
-                throw Conflict(
-                    "Database is still being detached — retry once the previous detach has completed",
-                    "xtdb/db-being-detached",
-                    mapOf("db-name" to dbName)
-                )
-            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
+        when (entries[dbName]) {
+            is Entry.Detaching -> throw Conflict(
+                "Database is still being detached — retry once the previous detach has completed",
+                "xtdb/db-being-detached",
+                mapOf("db-name" to dbName)
+            )
+
+            is Entry.Open, is Entry.Skipped ->
+                throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
+
+            null -> {}
         }
-        if (dormantDatabases.containsKey(dbName))
-            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to dbName))
 
         val dbConfig = config ?: Database.Config()
 
         if (dbName in skipDbs) {
             LOG.warn { "Skipping database '$dbName' (XTDB_SKIP_DBS) — database is dormant. Remove from XTDB_SKIP_DBS and restart to re-enable, or DETACH DATABASE to remove permanently." }
-            dormantDatabases[dbName] = dbConfig.serializedConfig
+            entries[dbName] = Entry.Skipped(dbConfig)
             return
         }
 
@@ -97,7 +110,7 @@ class DatabaseCatalog @JvmOverloads constructor(
         }
 
         db.closeOnCatch {
-            databases[dbName] = db
+            entries[dbName] = Entry.Open(db)
         }
     }
 
@@ -105,30 +118,38 @@ class DatabaseCatalog @JvmOverloads constructor(
         if (dbName == "xtdb")
             throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to dbName))
 
-        if (dormantDatabases.remove(dbName) != null) return
-
-        val db = databases[dbName]
-            ?: throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
-
-        if (db.isClosing)
+        fun noSuchDb(): Nothing =
             throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
+
+        val open = when (val entry = entries[dbName]) {
+            is Entry.Skipped -> {
+                if (!entries.remove(dbName, entry)) noSuchDb()
+                return
+            }
+
+            is Entry.Open -> entry
+
+            is Entry.Detaching, null -> noSuchDb()
+        }
 
         // Close off the persister's stack — see #5613. `cancelAndJoin` suspends rather than parking a
         // thread in `runBlocking`, so the detach can't deadlock against another thread-parking
         // teardown on a constrained dispatcher.
-        db.isClosing = true
+        val detaching = Entry.Detaching(open.db)
+        if (!entries.replace(dbName, open, detaching)) noSuchDb()
+
         closerScope.launch {
             // NonCancellable: once teardown starts it must run to completion. Node shutdown cancels
             // `dbJob` (this coroutine's ancestor); without the shield a detach caught mid-cancelAndJoin
-            // would skip `db.close()` yet still remove the database from the map — leaking its state.
+            // would skip `db.close()` yet still drop the entry — leaking its state.
             withContext(NonCancellable) {
                 try {
-                    db.cancelAndJoin()
-                    db.close()
+                    open.db.cancelAndJoin()
+                    open.db.close()
                 } catch (t: Throwable) {
                     LOG.error(t) { "Failed to close detaching database '$dbName'" }
                 } finally {
-                    databases.remove(dbName, db)
+                    entries.remove(dbName, detaching)
                 }
             }
         }
@@ -147,7 +168,13 @@ class DatabaseCatalog @JvmOverloads constructor(
             throw Fault("database catalog did not shut down in time", "xtdb/db-close-timeout")
         }
 
-        databases.values.closeAll()
+        entries.values.mapNotNull {
+            when (it) {
+                is Entry.Open -> it.db
+                is Entry.Detaching -> it.db
+                is Entry.Skipped -> null
+            }
+        }.closeAll()
     }
 
     companion object {

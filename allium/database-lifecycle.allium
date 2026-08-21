@@ -1,0 +1,370 @@
+-- allium: 3
+-- database-lifecycle.allium
+--
+-- The lifecycle of a database on one node: how it becomes a member of the node's set, how it stops being one, and what resolves by name in between.
+--
+-- Scope: one node's set of databases, and the transitions between the states below.
+-- Excludes: everything that happens INSIDE a running database.
+-- Transaction processing, block flushing and query execution are db.allium's; leader election is log-processor-lifecycle.allium's.
+-- Here a running database is opaque: it either resolves by name or it does not.
+--
+-- Three words recur, and they nest.
+--
+-- - HOLD -- a record for this name exists on this node.
+--   What `holds` tests.
+--   A held name is occupied: no instruction can put a second record under it.
+--
+-- - MEMBER -- the node carries this database in the set it hands to the recorder.
+--   The recorder replaces the durable membership record with that set, wholesale.
+--   That record outlives every node, so membership is what keeps a database in existence.
+--   Dropping one from the set -- deliberately, or by losing track of it -- deletes it.
+--
+-- - RUN -- the database is working: indexing, and resolvable by name.
+--
+-- A running database is a member, and a member is held; neither converse holds.
+-- Each of the three states below drops exactly one of the three words.
+--
+-- The MEMBER axis only exists where a node writes the record back, and `membership_source` says which kind of node this is.
+-- A durable_record node reads its set at startup and hands it to the recorder thereafter.
+-- A fixed node is given its whole set by the operator and never writes one.
+-- HOLD and RUN apply to both.
+-- The membership instructions and the membership surface exist only on the first, and a fixed node reaches only `open`.
+--
+-- Attach and detach are cluster-wide instructions -- every node receives them and applies them to its own set independently.
+-- This spec describes what ONE node does with them; how an instruction reaches the node belongs to db.allium.
+--
+-- Three states a held name can be in, of which only the first is reachable on a fixed node.
+--
+-- - open -- held, a member, running.
+--
+-- - skipped -- held and a member, not running.
+--   The operator has designated that this node must not run it, and it stays in the set all the same.
+--
+-- - detaching -- held only.
+--   No longer a member, so already gone from the durable record, but still occupying its name until its resources are released.
+--
+-- A name this node has no entry for is ABSENT.
+-- The node stores nothing for it, and cannot tell a name it was never told to admit from one it has finished removing.
+-- Two things follow.
+--
+-- - The name is free, so an instruction to admit it is accepted.
+--
+-- - It is in no set the node hands over, which tells the recorder no such database exists.
+--
+-- Each of the two states that do not run keeps one of the other two words.
+-- Skipped stays a member because a node that declined to run a database and dropped it from its set would delete it.
+-- Detaching stays held because a database's resources have to be fully released before anything may take its place.
+-- Its record keeps the name occupied for as long as that takes, while the removal itself has already taken effect.
+
+------------------------------------------------------------
+-- External Entities
+------------------------------------------------------------
+
+external entity DatabaseConfig {
+    -- The durable description of a database: where its log and storage live, and how it is to be run.
+    -- Opaque here -- this spec carries it from instruction to entry and hands it back in the membership set, and never inspects it.
+}
+
+external entity Cluster {
+    -- The cluster-wide agreement about which databases exist.
+    -- Instructions to admit or to remove reach every node from here; how they travel is db.allium's.
+}
+
+external entity Caller {
+    -- Anything that asks this node to resolve a database by name: a query, a transaction submission, an operator tool.
+}
+
+external entity MembershipRecord {
+    -- The cluster's durable record of which databases exist.
+    -- It is rewritten wholesale from a node's membership set rather than amended.
+    -- It is the only account of membership that survives every node, so it is also what a node reads its set back from when it starts.
+}
+
+------------------------------------------------------------
+-- Value Types
+------------------------------------------------------------
+
+value ConfiguredDatabase {
+    -- One entry in the set an operator hands a fixed node when it starts.
+    name: String
+    config: DatabaseConfig
+}
+
+------------------------------------------------------------
+-- Given
+------------------------------------------------------------
+
+given {
+    catalog: DatabaseCatalog
+}
+
+------------------------------------------------------------
+-- Entities and Variants
+------------------------------------------------------------
+
+entity DatabaseCatalog {
+    -- The records one node holds.
+    -- There is exactly one catalog per node.
+
+    -- Where this node's set comes from, and whether it writes one back.
+    -- A durable_record catalog reads its set when the node starts and hands it to the recorder from then on.
+    -- A fixed catalog is given its whole set at startup and never writes one, so the MEMBER axis does not apply to it.
+    -- It cannot delete a database by omission, because it never overwrites the record.
+    membership_source: durable_record | fixed
+
+    entries: DatabaseEntry with catalog = this
+
+    -- Projections
+    resolvable: entries where lifecycle = open
+    members: entries where lifecycle in {open, skipped}
+
+    -- Derived
+    -- Whether this node holds a record for a name, in any state.
+    -- Its negation is the whole of what the node knows about an absent database: nothing.
+    holds(db_name): entries.any(e => e.name = db_name)
+}
+
+entity DatabaseEntry {
+    -- This node's record of a database: its name, the config it would run under, and whether it is running.
+    -- A record exists whether or not anything runs behind it -- a skipped entry is a name and a config and nothing more.
+
+    catalog: DatabaseCatalog
+    name: String
+    config: DatabaseConfig
+    lifecycle: open | detaching | skipped
+
+    transitions lifecycle {
+        open -> detaching
+        terminal: detaching, skipped
+    }
+}
+
+------------------------------------------------------------
+-- Config
+------------------------------------------------------------
+
+config {
+    -- Databases the operator has designated this node must not run.
+    -- Named rather than removed, so that they stay members.
+    skipped_databases: Set<String> = {}
+
+    -- The database every node has as a member, and the only one that cannot be removed.
+    primary_database: String = "xtdb"
+
+    -- A fixed node's whole set, supplied by the operator when the node starts.
+    -- Empty on a durable_record node, which reads its set instead.
+    fixed_databases: Set<ConfiguredDatabase> = {}
+}
+
+------------------------------------------------------------
+-- Rules
+------------------------------------------------------------
+
+---- Entries coming into being
+
+rule StartupCreatesFixedSet {
+    -- A fixed node's whole set arrives at once, when the node starts.
+    -- There is no instruction to respond to and no record to read.
+    -- The operator supplies the set, and it does not change for as long as the node runs.
+    when: NodeStarted()
+    requires: catalog.membership_source = fixed
+
+    for configured in config.fixed_databases:
+        ensures: DatabaseEntry.created(
+            catalog: catalog, name: configured.name, config: configured.config,
+            lifecycle: open
+        )
+}
+
+rule AdmitInstructionCreatesEntry {
+    -- An instruction naming something this node does not hold makes it a member: the record comes into being and joins the set either way.
+    -- It runs too, unless the operator has designated it as one to skip.
+    -- A skipped name is still a member, because membership is what keeps a database in existence.
+    when: NodeInstructedToAdmit(db_name, db_config)
+    requires: catalog.membership_source = durable_record
+    requires: not catalog.holds(db_name)
+
+    ensures:
+        if db_name in config.skipped_databases:
+            DatabaseEntry.created(
+                catalog: catalog, name: db_name, config: db_config, lifecycle: skipped
+            )
+        else:
+            DatabaseEntry.created(
+                catalog: catalog, name: db_name, config: db_config, lifecycle: open
+            )
+}
+
+rule AdmitRefusedWhenAlreadyHeld {
+    -- A name identifies at most one database per node, so an instruction naming one this node already holds is refused rather than replacing it.
+    -- This holds however the held database is faring: one that has already ceased to be a member still occupies its name until it is gone.
+    when: NodeInstructedToAdmit(db_name, db_config)
+    requires: catalog.membership_source = durable_record
+    requires: catalog.holds(db_name)
+
+    ensures: AdmitRefused(db_name: db_name)
+}
+
+---- Entries going away
+
+rule PrimaryCannotBeRemoved {
+    -- Every node has the primary as a member, and no instruction removes it.
+    -- It is the one entry whose presence anything reading this node may assume.
+    when: NodeInstructedToRemove(db_name)
+    requires: catalog.membership_source = durable_record
+    requires: db_name = config.primary_database
+
+    ensures: RemoveRefused(db_name: db_name)
+}
+
+rule RemoveRefusedForAbsentName {
+    -- An instruction naming something this node does not hold has nothing to act on.
+    -- The node cannot tell whether it never held the name or has already finished removing it; either way there is nothing here to remove.
+    when: NodeInstructedToRemove(db_name)
+    requires: catalog.membership_source = durable_record
+    requires: db_name != config.primary_database
+    requires: not catalog.holds(db_name)
+
+    ensures: RemoveRefused(db_name: db_name)
+}
+
+rule RemoveBeginsTeardown {
+    -- A running database is torn down before it goes.
+    -- It stops running and stops being a member the moment the instruction arrives, so it is already out of the durable record.
+    -- It goes on being held while its resources are released.
+    when: NodeInstructedToRemove(db_name)
+    let entry = DatabaseEntry{catalog, name: db_name}
+    requires: catalog.membership_source = durable_record
+    requires: db_name != config.primary_database
+    requires: exists entry
+    requires: entry.lifecycle = open
+
+    ensures: entry.lifecycle = detaching
+}
+
+rule RemoveDropsSkippedEntry {
+    -- A skipped database is running nothing, so it has nothing to release and goes straight out.
+    when: NodeInstructedToRemove(db_name)
+    let entry = DatabaseEntry{catalog, name: db_name}
+    requires: catalog.membership_source = durable_record
+    requires: db_name != config.primary_database
+    requires: exists entry
+    requires: entry.lifecycle = skipped
+
+    ensures: not exists entry
+}
+
+rule RemoveRefusedWhileTearingDown {
+    -- Already on its way out; a second instruction has nothing left to do.
+    when: NodeInstructedToRemove(db_name)
+    let entry = DatabaseEntry{catalog, name: db_name}
+    requires: catalog.membership_source = durable_record
+    requires: db_name != config.primary_database
+    requires: exists entry
+    requires: entry.lifecycle = detaching
+
+    ensures: RemoveRefused(db_name: db_name)
+}
+
+rule TeardownCompletesRemoval {
+    -- The record goes only once the database has released its resources.
+    -- Until then it occupies its name, which is what stops a re-admission racing its own teardown.
+    when: TeardownCompleted(entry)
+    requires: entry.lifecycle = detaching
+
+    ensures: not exists entry
+}
+
+------------------------------------------------------------
+-- Invariants
+------------------------------------------------------------
+
+invariant OneEntryPerNamePerNode {
+    -- Within a node a name identifies at most one record.
+    -- Across nodes the same name recurs by design: every node holds the primary, and a database is normally a member everywhere.
+    for a in DatabaseEntries:
+        for b in DatabaseEntries:
+            a != b and a.catalog = b.catalog implies a.name != b.name
+}
+
+------------------------------------------------------------
+-- Actor Declarations
+------------------------------------------------------------
+
+actor Client {
+    identified_by: Caller where true
+}
+
+actor ClusterControl {
+    identified_by: Cluster where true
+}
+
+actor Recorder {
+    identified_by: MembershipRecord where true
+}
+
+------------------------------------------------------------
+-- Surfaces
+------------------------------------------------------------
+
+surface MembershipInstructions {
+    facing cluster: ClusterControl
+
+    provides:
+        NodeInstructedToAdmit(cluster, db_name, db_config)
+        NodeInstructedToRemove(cluster, db_name)
+
+    @guarantee OnlyRecordBackedNodesTakeInstructions
+        -- Instructions reach only a catalog whose `membership_source` is durable_record.
+        -- A fixed node is given its set at startup and takes none.
+
+    @guarantee EveryNodeDecidesForItself
+        -- An instruction reaches every node and each applies it to its own set.
+        -- A node that refuses one does not thereby refuse it on any other node's behalf.
+
+    @guarantee RefusalLeavesTheSetUnchanged
+        -- Refusing an instruction leaves this node's set exactly as it was.
+}
+
+surface DatabaseResolution {
+    facing caller: Client
+
+    context node_catalog: DatabaseCatalog
+
+    exposes:
+        for entry in node_catalog.resolvable:
+            entry.name
+
+    provides:
+        ResolveDatabase(caller, db_name)
+
+    @guarantee OnlyRunningDatabasesResolve
+        -- A name resolves only while the database behind it runs.
+        -- A caller sees nothing at all of a detaching or skipped one: not its name, not that it exists.
+        -- It therefore cannot tell either from a name this node never held.
+}
+
+surface Membership {
+    facing recorder: Recorder
+
+    context node_catalog: DatabaseCatalog where membership_source = durable_record
+
+    exposes:
+        for entry in node_catalog.members:
+            entry.name
+            entry.config
+
+    @guarantee DeclinedDatabasesStayMembers
+        -- The membership set carries every database this node knows of and has not been told to remove, including ones it has declined to run.
+
+    @guarantee AbsenceAssertsNonExistence
+        -- Handing over a set without a name in it asserts that no such database exists.
+        -- The recorder takes the set as the whole truth and replaces the previous record with it.
+        -- A node that has merely lost track of one -- rather than been told to remove it -- erases it by doing so.
+        -- Nothing later restores it, because the record it overwrote is the only one that survives the node.
+
+    @guarantee MembershipEndsOnInstruction
+        -- A database under instruction to be removed leaves the membership set when the instruction arrives, not when its teardown finishes.
+        -- The instruction is what decides membership.
+        -- How long this node then takes to release resources is local to it, and does not reach the durable record.
+}

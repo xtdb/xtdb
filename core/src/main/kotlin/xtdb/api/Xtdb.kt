@@ -246,9 +246,7 @@ interface Xtdb : DataSource, AdbcDatabase, AutoCloseable {
         var defaultAccessMode: ParsedStatement.AccessMode? = null
             private set
 
-        private fun db(dbName: DatabaseName): Database =
-            dbCat.databaseOrNull(dbName)
-                ?: throw Incorrect("Unknown database: $dbName", "xtdb/unknown-db", mapOf("db-name" to dbName))
+        private fun db(dbName: DatabaseName): Database = dbCat.databaseOrThrow(dbName)
 
         private fun recordTx(dbName: DatabaseName, txId: MessageId) {
             awaitToken = mergeTxBasisTokens(awaitToken, mapOf(dbName to listOf(txId)).encodeTxBasisToken())

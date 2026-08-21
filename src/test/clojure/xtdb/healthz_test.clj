@@ -215,6 +215,13 @@
                 (t/is (= 503 (:status resp)))
                 (t/is (re-find #"critical-db" (:body resp)))))))))))
 
+(t/deftest test-listed-but-unresolvable-database-is-skipped
+  (let [db-cat (reify Database$Catalog
+                 (getDatabaseNames [_] #{"vanished"})
+                 (databaseOrNull [_ _] nil))]
+    (t/is (= [] (#'healthz/all-databases db-cat))
+          "a name that no longer resolves must not reach the callers that dereference it")))
+
 (t/deftest test-alive-primary-always-critical
   (util/with-tmp-dirs #{local-path}
     (with-open [node (tu/->local-node {:node-dir local-path})]

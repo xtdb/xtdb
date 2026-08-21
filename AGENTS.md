@@ -58,6 +58,7 @@ That commentary belongs in the commit body and the PR, which are read once aroun
 | Spec | Covers |
 | --- | --- |
 | `allium/live-index.allium` | In-memory staging of transactions before block flush — `LiveIndex`/`LiveTable`, transaction lifecycle, snapshot visibility, and the leader's resolve/append/consume-back/apply pipeline. |
+| `allium/database-lifecycle.allium` | The lifecycle of a database on one node — how it becomes a member of the node's set, how it stops being one, and what resolves by name in between. Node-level; treats a running database as opaque. |
 | `allium/log-processor-lifecycle.allium` | Per-database leader election in the `LogProcessor` — the Following/Prepared/Leading state machine, the term fence that keeps one confirmed leader per database, and the split between launching a transition and committing the role. |
 | `allium/memory-hash-trie.allium` | The immutable in-memory hash trie indexing rows by IID within a `LiveTable` — bucketing, leaf ordering, log compaction, splitting. |
 | `dev/doc/db.allium` | The processing model of one database end to end — submit → log processing → block flush → query, the source/replica log message types, the block and table catalogs, and the compaction message flow. |

@@ -1652,8 +1652,10 @@ deferred ResolveFailedDbOp           -- tx_resolver.indexFailedDbOp: resolve an 
                                      -- mutation failed with a caller fault, as an ABORTED ResolvedTx
                                      -- carrying that error
 deferred ApplyAttachToCatalog        -- dbCatalog.attach(dbName, config), returning the caller fault if it
-                                     -- failed. Runs on the resolve side, before the tx is resolved
-deferred ApplyDetachToCatalog        -- dbCatalog.detach(dbName), as above
+                                     -- failed. Runs on the resolve side, before the tx is resolved.
+                                     -- See: database-lifecycle.allium AdmitInstructionCreatesEntry
+deferred ApplyDetachToCatalog        -- dbCatalog.detach(dbName), as above.
+                                     -- See: database-lifecycle.allium RemoveBeginsTeardown
 deferred TakeResolvedHead            -- tx_resolver.removeHead(): remove and return the OLDEST staged tx,
                                      -- passing ownership to the caller — which must then import it and
                                      -- close it, or fail its durability handle and free it, on every path.

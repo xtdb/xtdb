@@ -40,6 +40,7 @@ class ConnectionTest {
 
         dbCat = mockk(relaxed = true)
         every { dbCat.databaseOrNull(any()) } returns db
+        every { dbCat.databaseOrThrow(any()) } returns db
         every { dbCat.primary } returns db
 
         return Xtdb.Connection(
