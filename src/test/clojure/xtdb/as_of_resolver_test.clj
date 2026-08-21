@@ -50,8 +50,12 @@
 
 (defn- full-resolution-rows
   "The same question routed through the polygon resolver: widening valid time to ALL takes it off the
-   as-of path, while the system-time bound and the basis stay exactly as the as-of query has them, so
-   both see the same events and treat an erase above the bound alike."
+   as-of path, while the system-time bound and the basis stay as the as-of query has them, so both see
+   the same events and treat an erase above the bound alike.
+
+   Widening system time instead would not be an oracle — the polygon resolver returns before applyLog
+   for events above the system bound, so an all-system-time query cuts the same winner into more
+   segments carrying a non-null _system_to."
   [node v s]
   (set (xt/q node (format "SELECT %s FROM docs
                            FOR ALL VALID_TIME
@@ -63,7 +67,10 @@
 (defn- ->node [] (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock)}]
                                  :compactor {:threads 0}}))
 
-(t/deftest ^:property as-of-resolution-agrees-with-full-resolution
+;; The resolvers are compared against each other directly in xtdb.operator.scan.AsOfResolverTest, which
+;; can reach them — they're `internal`. What only a node can reach is everything around them: the
+;; planner's temporal defaults, which pages `filter-pages` admits, and the flushed-and-compacted layout.
+(t/deftest ^:property as-of-resolution-agrees-through-page-filtering-and-compaction
   (tu/run-property-test
    {:num-tests tu/property-test-iterations}
    (prop/for-all [ops (gen/vector op-gen 4 24)
