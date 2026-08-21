@@ -4,6 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer
 import xtdb.arrow.LongLongVectorReader
 import xtdb.arrow.RelationReader
 import java.lang.Long.compareUnsigned
+import kotlin.math.min
 
 class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     private val iidReader = relReader["_iid"] as LongLongVectorReader
@@ -54,6 +55,35 @@ class EventRowPointer(private val relReader: RelationReader, path: ByteArray) {
     val maxIndex: Int = Bucketer.DEFAULT.incrementPath(path)?.let { indexOf(it) } ?: relReader.rowCount
 
     fun nextIndex() = ++index
+
+    private fun sameIidAt(idx: Int, iidHigh: Long, iidLow: Long) =
+        iidReader.getLongLongHigh(idx) == iidHigh && iidReader.getLongLongLow(idx) == iidLow
+
+    /**
+     * Advances past every remaining row for the iid this pointer is on.
+     *
+     * Gallops before bisecting because an entity's run is short relative to the page: doubling finds
+     * the end of the run in log(run) reads, where bisecting `[index, maxIndex)` would take log(page).
+     */
+    fun skipToNextIid() {
+        val runIidHigh = iidHigh
+        val runIidLow = iidLow
+
+        var onRun = index
+        var step = 1
+        while (onRun + step < maxIndex && sameIidAt(onRun + step, runIidHigh, runIidLow)) {
+            onRun += step
+            step *= 2
+        }
+
+        var pastRun = min(onRun + step, maxIndex)
+        while (pastRun - onRun > 1) {
+            val mid = (onRun + pastRun) ushr 1
+            if (sameIidAt(mid, runIidHigh, runIidLow)) onRun = mid else pastRun = mid
+        }
+
+        index = pastRun
+    }
 
     fun getIidPointer(reuse: ArrowBufPointer) = iidReader.getPointer(index, reuse)
 
