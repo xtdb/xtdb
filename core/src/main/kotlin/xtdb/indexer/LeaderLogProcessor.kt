@@ -27,7 +27,7 @@ private val LOG = LeaderLogProcessor::class.logger
  * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
  * the transport re-follows on the next rebalance. See #5817.
  */
-private class LeaderSupersededException(message: String) : RuntimeException(message)
+internal class LeaderSupersededException(message: String) : RuntimeException(message)
 
 internal class LeaderLogProcessor(
     allocator: BufferAllocator,
@@ -73,24 +73,48 @@ internal class LeaderLogProcessor(
             instantSource
         )
 
-    var pendingBlock: PendingBlock? = null
-        private set
+    /**
+     * Where this term is in the block it is filling: `Filling` → `Cut` → `Uploading` → `Filling`.
+     *
+     * Resolution is armed only in [Filling], so no tx can interleave between a boundary and its upload —
+     * which keeps the follower's bounded pending-block buffer empty. That is also why the row gauge is
+     * [Filling]'s alone: outside it, nothing can move the gauge.
+     */
+    private sealed interface BlockState
 
-    // From the live index, not the node config: the two agree in production, but they are one value and
-    // the live index is what owns the block being filled — `blockRowCount` below seeds the gauge from it.
+    /**
+     * Accumulating rows towards the cut, [rows] of them so far.
+     *
+     * The boundary is cut off this rather than `liveIndex.isFull()`, which lags — it reflects only APPLIED
+     * (consume-back) txs. Seeded from the rows already applied into the open block, because a new leader
+     * inherits a partially-filled block from replay and must cut it where the old leader would have, or
+     * block sizes drift across restarts (the #5817 stop/start off-by-one).
+     */
+    private class Filling(val rows: Long) : BlockState
+
+    /** The boundary is queued for append, and has not been read back yet. */
+    private data object Cut : BlockState
+
+    /** The boundary has been applied and the upload is in flight. */
+    private class Uploading(val pendingBlock: PendingBlock) : BlockState
+
+    private var blockState: BlockState = Filling(liveIndex.blockRowCount)
+
+    /**
+     * The block this term would have to hand on, were it demoted right now.
+     *
+     * Read from the transport's serialization point rather than from the work loop, and after this term has
+     * been cancelled and closed — so it must not touch anything allocator-backed.
+     */
+    val pendingBlock: PendingBlock?
+        get() = when (val state = blockState) {
+            is Filling, Cut -> null
+            is Uploading -> state.pendingBlock
+        }
+
+    // From the live index, not the node config: the two agree in production, but they are one value and the
+    // live index is what owns the block being filled.
     private val rowsPerBlock = liveIndex.rowsPerBlock
-
-    // Rows in the current block so far (resolve-side gauge). The boundary is cut off this rather than
-    // liveIndex.isFull(), which lags (it only reflects APPLIED — consume-back — txs). Seeded from the rows
-    // already applied into the open block: on a leadership change the new leader inherits a partially-filled
-    // block from replay, and must cut it at the same point the old leader would have (else block sizes drift
-    // across restarts — the #5817 stop/start off-by-one). Reset when a boundary is injected.
-    private var rowsSinceBlock: Long = liveIndex.blockRowCount
-
-    // A block cut is in progress: the BlockBoundary has been appended but its BlockUploaded has not yet
-    // been produced. Resolution (source/ext/gc) is paused — excluded from the select — so no tx interleaves
-    // between the boundary and its upload, keeping the follower's bounded pending-block buffer empty.
-    private var blockInProgress: Boolean = false
 
     val gc = GarbageCollector(
         nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, gcDispatcher
@@ -171,18 +195,18 @@ internal class LeaderLogProcessor(
             is ReplicaMessage.TriesAdded -> watchers.notifyApplied(record.msgId, msg.sourceMsgId)
 
             is BlockBoundary -> {
-                pendingBlock = PendingBlock(record.msgId, msg)
+                blockState = Uploading(PendingBlock(record.msgId, msg))
                 // liveIndex now holds exactly this block's txs (by log order); snapshot, upload the files,
                 // append BlockUploaded and roll the index — all inside uploadBlock.
                 driver.uploadBlock(record.msgId, leaderTerm, msg)
-                pendingBlock = null
+                // Straight after the upload, so a demote landing here hands on nothing: the block is done.
+                blockState = Filling(0)
 
                 // the block's covered source position, as the follower does
                 watchers.notifyApplied(record.msgId, msg.latestProcessedMsgId)
 
                 gc.signal()
 
-                blockInProgress = false
                 srcLogProc.blockUploaded()
             }
 
@@ -200,24 +224,32 @@ internal class LeaderLogProcessor(
     // ---- resolution ----
 
     // Cut a block: inject the boundary (in resolution order, so it lands after this block's txs and before
-    // the next block's) and pause resolution until it is read back and uploaded. Reset the row gauge.
+    // the next block's) and pause resolution until it is read back and uploaded.
     private suspend fun cutBlock(latestProcessedMsgId: MessageId) {
         val boundary = BlockBoundary(
             (blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, txResolver.resolvedExtToken,
             termId = leaderTerm
         )
         replicaAppender.append(ControlItem(boundary))
-        blockInProgress = true
-        rowsSinceBlock = 0
+        blockState = Cut
     }
 
     // Hand a freshly-resolved tx to the append pump, cutting a block if this tx filled one — which the
     // caller is told about, because a source batch mid-flight has to stop where that happens.
     private suspend fun appendTx(resolvedTx: ResolvedTx): Boolean {
-        rowsSinceBlock += resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
+        val rows = when (val state = blockState) {
+            is Filling -> state.rows + resolvedTx.allTables.sumOf { it.relation.rowCount.toLong() }
+            // Only reachable from clauses this term arms in Filling alone, so getting here means the
+            // arm-set and this state have come apart — and the gauge it would feed no longer exists.
+            Cut, is Uploading -> error("[$dbName] tx resolved during a block cut")
+        }
+
         replicaAppender.append(TxItem(resolvedTx, leaderTerm))
 
-        if (rowsSinceBlock < rowsPerBlock) return false
+        if (rows < rowsPerBlock) {
+            blockState = Filling(rows)
+            return false
+        }
 
         cutBlock(txResolver.resolvedSrcMsgId)
         return true
@@ -244,7 +276,7 @@ internal class LeaderLogProcessor(
             }
         }
 
-        if (!blockInProgress) {
+        if (blockState is Filling) {
             with(srcLogProc) { selectWork() }
 
             extSrcProc?.onTask { task ->
@@ -259,66 +291,30 @@ internal class LeaderLogProcessor(
         }
     }
 
-    // Completed by [workFailed] with the cause. Write-once, and the only thing the term learns about the
-    // work it no longer runs.
-    private val termFailure = CompletableDeferred<Throwable>()
-
     /**
-     * End this term, because work it no longer runs has failed with [cause].
+     * Fail everything staged on this term, because it has ended with [cause].
      *
-     * The logging, the watchers and the sweep of everything staged are still the term's, and so is the
-     * distinction they turn on — a supersession is a clean resignation where an append fault is not — so
-     * the cause has to come back here to reach them.
-     */
-    override fun workFailed(cause: Throwable) {
-        termFailure.complete(cause)
-    }
-
-    /**
-     * Wait for this term to end, then fail everything staged on it.
+     * Nothing may be left awaiting the term once it has gone: whatever is staged, paused, or still queued
+     * gets failed here. Each task's own `abandon` picks the failure *kind*, so this is a flat sweep with no
+     * per-caller special-casing.
      *
-     * Cancelling the caller is what ends the term otherwise.
+     * Miss anything and the symptom is a hang, not an error — and for a source-log batch that hang is on
+     * the transport's poll thread (inside `processRecords`), which is also the sole servicer of the
+     * transport's unregister. So it wedges the whole subscription teardown and blows
+     * `DatabaseCatalog.close`'s bound (#5711 / #5817).
      */
-    suspend fun runTerm() {
-        var cause: Throwable? = null
-        try {
-            throw termFailure.await()
-        } catch (_: CancellationException) {
-            // term cancellation
-        } catch (e: LeaderSupersededException) {
-            // superseded by a newer leader — expected, not a query-facing fault; the transport
-            // re-follows on the next rebalance. Don't poison the watchers.
-            LOG.info("[$dbName] ${e.message}")
-            cause = e
-        } catch (t: Throwable) {
-            // A genuine term fault (e.g. an append fault) surfaces to queries as a failed term.
-            // Idempotent — the apply arm may already have notified for its own faults.
-            LOG.error(t) { "[$dbName] leader term failed" }
-            cause = t
-            watchers.notifyError(t)
-        } finally {
-            val pendingCause = cause ?: CancellationException("leader term closed")
+    fun shutdown(cause: Throwable) {
+        txResolver.failPending(cause)
+        srcLogProc.shutdown(cause)
+        extSrcProc?.shutdown(cause)
+        gc.shutdown(cause)
 
-            // Nothing may be left awaiting the term once it has gone: whatever is staged, paused, or
-            // still queued gets failed here. Each task's own `abandon` picks the failure *kind*, so this
-            // is a flat sweep with no per-caller special-casing.
-            //
-            // Miss anything and the symptom is a hang, not an error — and for a source-log batch that
-            // hang is on the transport's poll thread (inside `processRecords`), which is also the sole
-            // servicer of the transport's unregister. So it wedges the whole subscription teardown and
-            // blows DatabaseCatalog.close's bound (#5711 / #5817).
-            txResolver.failPending(pendingCause)
-            srcLogProc.shutdown(pendingCause)
-            extSrcProc?.shutdown(pendingCause)
-            gc.shutdown(pendingCause)
+        replicaAppender.shutdown(cause)
 
-            replicaAppender.shutdown(pendingCause)
-
-            // The partition's reader is suspended on a send here rather than awaiting a task, so a
-            // close is all it needs — as a cancellation, since it is the reader's own coroutine that
-            // sees it and a benign teardown must not poison the watchers.
-            replicaMsgs.close(pendingCause.asCancellation())
-        }
+        // The partition's reader is suspended on a send here rather than awaiting a task, so a close is
+        // all it needs — as a cancellation, since it is the reader's own coroutine that sees it and a
+        // benign teardown must not poison the watchers.
+        replicaMsgs.close(cause.asCancellation())
     }
 
     override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) =

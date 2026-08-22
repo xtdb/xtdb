@@ -36,7 +36,7 @@ import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
 import xtdb.indexer.ReplicaLogAppender
-import xtdb.indexer.drive
+import xtdb.indexer.runLeaderTerm
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import xtdb.util.closeAll
@@ -143,11 +143,9 @@ class ExternalSourceTest {
                         records.forEach { proc.queueReplicaMessage(it) }
                     }
                 }
-                launch { proc.drive() }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                launch { replicaAppender.run(proc::workFailed) }
-                proc.runTerm()
+                runLeaderTerm("test", watchers, proc, replicaAppender)
             }
         }
     }

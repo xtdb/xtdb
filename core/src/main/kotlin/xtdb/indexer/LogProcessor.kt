@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.selects.selectUnbiased
@@ -77,32 +78,70 @@ internal inline fun Watchers.runTaskGuarded(
  *
  * The split is between what the role decides and what it doesn't. Which work it will take *right now* is
  * the role's own — a leader arms fewer clauses mid-block-cut, so nothing interleaves between a boundary
- * and its upload — where running one unit at a time is the partition's.
+ * and its upload — where running one unit at a time, and what a failure means, are the partition's.
  */
 internal interface Role {
     /** Arm the work this role will take right now — one clause per kind, each doing that work when taken. */
     fun SelectBuilder<Unit>.selectWork()
+}
 
-    /** Work threw, so this role is finished. Report it however this role reports a failure. */
-    fun workFailed(cause: Throwable)
+/** Run a role's work, one unit at a time, until cancelled or until a unit of it throws. */
+internal suspend fun Role.drive() {
+    while (true) {
+        selectUnbiased { this.selectWork() }
+    }
 }
 
 /**
- * Run a role's work, one unit at a time, until cancelled or until the role fails.
+ * Run a leader term until it ends, then fail everything staged on it.
  *
- * A failure returns rather than propagating: it is the role's to report, and for a leader it may be a
- * clean resignation, which reaching the database scope's handler would turn into a poisoned watcher over
- * a node that is merely no longer the leader (#5817).
+ * The term's work and its append pump are structured together, so whichever fails first cancels the other
+ * and arrives here as the cause. Cancelling the caller is what ends a term that hasn't failed.
+ *
+ * Which failures reach the watchers is decided here rather than in the term, because the term is not the
+ * thing that knows a resignation from a fault: a supersession means this node is merely no longer the
+ * leader, and poisoning the watchers over it would leave a healthy database unqueryable (#5817).
  */
-internal suspend fun Role.drive() {
+internal suspend fun runLeaderTerm(
+    dbName: DatabaseName, watchers: Watchers, term: LeaderLogProcessor, appender: ReplicaLogAppender,
+) {
+    var cause: Throwable? = null
     try {
-        while (true) {
-            selectUnbiased { this.selectWork() }
+        coroutineScope {
+            launch(CoroutineName("$dbName-append-pump")) { appender.run() }
+            term.drive()
         }
+    } catch (_: CancellationException) {
+        // term cancellation
+    } catch (e: LeaderSupersededException) {
+        // superseded by a newer leader — expected, not a query-facing fault; the transport re-follows on
+        // the next rebalance.
+        LOG.info("[$dbName] ${e.message}")
+        cause = e
+    } catch (t: Throwable) {
+        // A genuine term fault (e.g. an append fault) surfaces to queries as a failed term. Idempotent —
+        // the apply arm may already have notified for its own faults.
+        LOG.error(t) { "[$dbName] leader term failed" }
+        cause = t
+        watchers.notifyError(t)
+    } finally {
+        term.shutdown(cause ?: CancellationException("leader term closed"))
+    }
+}
+
+/**
+ * Run a follower's work until it ends.
+ *
+ * A failure is already logged and on the watchers by the time it arrives — `FollowerLogProcessor` applies
+ * records inside `processRecords`, which reports before it throws — so there is nothing left to decide.
+ */
+internal suspend fun runFollower(follower: FollowerLogProcessor) {
+    try {
+        follower.drive()
     } catch (e: CancellationException) {
         throw e
-    } catch (e: Throwable) {
-        workFailed(e)
+    } catch (_: Throwable) {
+        // already reported
     }
 }
 
@@ -177,11 +216,9 @@ class LogProcessor(
         // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
         val termJob = scope.launch {
             launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
-            launch { proc.drive() }
             launch { proc.gc.runGc() }
             proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-            launch(CoroutineName("$dbName-append-pump")) { replicaAppender.run(proc::workFailed) }
-            proc.runTerm()
+            runLeaderTerm(dbName, watchers, proc, replicaAppender)
         }
 
         return Prepared(proc, termJob, resumeAfterMsgId)
@@ -228,7 +265,7 @@ class LogProcessor(
 
         return Following(proc, scope.launch {
             launch { tailReplica(proc::queueRecords) }
-            proc.drive()
+            runFollower(proc)
         })
     }
 

@@ -147,11 +147,9 @@ class LeaderDriverSimTest : SimulationTestBase() {
                         records.forEach { proc.queueReplicaMessage(it) }
                     }
                 }
-                launch { proc.drive() }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                launch { replicaAppender.run(proc::workFailed) }
-                proc.runTerm()
+                runLeaderTerm("test-db", watchers, proc, replicaAppender)
             }
         }
 
