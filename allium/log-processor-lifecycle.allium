@@ -36,14 +36,14 @@
 -- == Sections ==
 --
 --    1. The log we elect over       what it is, and what it must guarantee
---    2. The node's role            the three states, and what each one holds
+--    2. The node's role in one database  the three states, and what each one holds
 --    3. Reading the log            the one reader, and everything that keys off it
 --    4. The term                   where it comes from, and why it only climbs
 --    5. Claiming                   the claim, the adjudication, and losing
 --    6. Taking over                the pipeline swap, and its failure
 --    7. Leading, and standing down  asserting leadership, and the ways out
 --    8. What the node may rely on  every property group, in one place
---    9. What the deployment supplies  the obligations election cannot self-enforce
+--    9. What the deployment must supply  the obligations election cannot self-enforce
 --   10. Open questions
 --
 -- == Excludes ==
@@ -78,7 +78,7 @@ external entity ReplicaRecord {
     -- Derived: this record, read as a claim, conferred leadership -- no record before
     -- it carries its term or higher.
     --   At-or-above, not above: two nodes claiming the same term are settled by position, and the earliest wins.
-    --   This is the whole adjudication, and it is a property of the log rather than of any reader, so every reader reaches the same verdict.
+    --   The adjudication is a property of the log rather than of any reader, so every reader reaches the same verdict.
     --   No participant evaluates it in this form; it would have to retain the terms of records it read long ago.
     --   See TheLocalTestDecidesTheSameVerdict.
     confers: not log.records.any(r =>
@@ -403,8 +403,7 @@ contract TermDiscipline {
     @invariant TheTermIsDurableBelowAndMonotonicAbove
         -- A participant seeds its term from the persisted boundary and thereafter only
         -- ever raises it.
-        --   Together these are the whole of what keeps the term sound: nothing
-        --   restarting can put it below a term already established, and nothing
+        --   Nothing restarting can put it below a term already established, and nothing
         --   running can lower it, so no leader claims a term an earlier leader used.
         --   It is a property of each participant's own history, not a standing
         --   comparison against the boundary. The boundary is shared and advances with
@@ -442,7 +441,7 @@ invariant ConferringRecordsAreTermOrdered {
     -- increasing terms.
     --   Follows from the adjudication: a later record only confers if nothing before it held its term or higher, so two claims at the same term cannot both confer.
     --   This is what lets a leader treat a higher term read back as proof it has been superseded.
-    --   Stated over records rather than over live claims, so it holds of claims whose authors are long gone.
+    --   It holds of records whose authors are long gone.
     for a in ReplicaRecords:
         for b in ReplicaRecords:
             a.log = b.log and a.confers and b.confers
@@ -482,8 +481,7 @@ contract ClaimDiscipline {
         -- own reads, never the participant being busy.
         --   All three thresholds advance only across reads that came back with nothing.
         --   Time spent processing a record teaches a participant nothing about anyone's health, so its own slowness must not turn into a conclusion.
-        --   A follower timing on wall-clock instead claims because it was slow, and wins, since its claim carries a higher term and evicts a leader that was healthy throughout -- the node least able to lead takes over, more readily the busier it gets.
-        --   A leader timing on wall-clock resigns because it was slow, discarding writes the log had accepted, and a single pause becomes a write outage.
+        --   Violated, the participant's slowness becomes a verdict on somebody else's health, in both directions: a slow follower claims and wins, evicting a leader that was healthy throughout, and a slow leader resigns, discarding writes the log had accepted.
         --   A participant that is not being delivered to cannot reach any of the three thresholds, because nothing advances them -- so being unfed is not a route to claiming.
 
     @invariant ALoserCannotStarveTheElection
@@ -524,9 +522,7 @@ config {
     claim_timeout: Duration = 30.seconds
 
     -- How far the election-timeout range widens after a claim is abandoned.
-    --   Each successive abandonment scales the drawn range by this factor, so a
-    --   participant that cannot reach a verdict backs away from the log instead of
-    --   returning on the same cadence.
+    --   The drawn range widens by this factor again for each successive abandonment, so a participant that cannot reach a verdict backs away from the log instead of returning on the same cadence.
     abandon_backoff_factor: Integer = 2
 }
 
@@ -654,8 +650,7 @@ contract HandoverDiscipline {
         --   participant is nominally following a pipeline that cannot advance, and
         --   since reading the log is the only way it learns anything, it can neither
         --   serve reads nor reach a verdict on a later claim.
-        --   A pipeline that stops after the swap has completed is the same obligation
-        --   arriving later, which is what ResignOnPipelineFailure (section 7) is for.
+        --   A pipeline that stops outside the swap is the same obligation arriving at another moment: a leader's stops the role (ResignOnPipelineFailure, section 7), and a follower's fails the database (FailDatabaseOnFollowerPipelineFailure, section 7), so no state is left backed by a pipeline that cannot advance.
 
     @invariant TheFollowerStopsBeforeTheLeaderStarts
         -- Nothing is processed twice across the swap.
@@ -844,6 +839,19 @@ rule ResignOnPipelineFailure {
         participant.last_record_at = now
         participant.election_timeout =
             RandomTimeout(config.election_timeout_min, config.election_timeout_max)
+}
+
+rule FailDatabaseOnFollowerPipelineFailure {
+    -- The follower pipeline stopped running while the participant was following or claiming.
+    --   Reading the log is the only way the participant learns anything, so a dead follower freezes every threshold and the participant would sit wedged forever, in a state indistinguishable from a healthy quiet one.
+    --   The database fails rather than the follower being replaced: the leader's exit (ResignOnPipelineFailure) hands the role to a healthier node, but a follower has nobody to hand its reading to on the node it serves.
+    --   Tearing the database down tears the participant down with it (see Database).
+    when: PipelineFailed(_, participant)
+
+    requires: participant.state = following or participant.state = claiming
+
+    ensures:
+        DatabaseFailed(database: participant.database)
 }
 
 rule StandDownOnIneligibility {
