@@ -6,14 +6,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.SelectBuilder
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
 import xtdb.api.log.*
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.database.*
-import xtdb.api.error.Interrupted
 import xtdb.api.log.ReplicaMessage
 import xtdb.util.*
 import java.time.*
@@ -49,7 +47,7 @@ internal class LeaderLogProcessor(
     flushTimeout: Duration,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : LogProcessor.Processor<SourceMessage>, Role {
+) : AutoCloseable {
 
     init {
         require((dbCatalog != null) == (dbName == "xtdb")) {
@@ -154,7 +152,7 @@ internal class LeaderLogProcessor(
     //      - ResolvedTx  → import from the resolver's head (we still hold its relations — no re-materialisation).
     //      - BlockBoundary → trigger the block upload (liveIndex now holds exactly this block's txs).
     //      - everything else mirrors the follower.
-    private suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
+    suspend fun applyRecord(record: Log.Record<ReplicaMessage>) {
         val msg = record.message
         val term = msg.termId
 
@@ -255,41 +253,16 @@ internal class LeaderLogProcessor(
         return true
     }
 
-    // ---- work loop ----
+    /** A record read back off the replica log, for [applyRecord]. */
+    val onReplicaMsg get() = replicaMsgs.onReceive
 
-    override fun SelectBuilder<Unit>.selectWork() {
-        // Applying is where a supersession fails the term; let it propagate (interrupts too).
-        replicaMsgs.onReceive { rec ->
-            try {
-                applyRecord(rec)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: LeaderSupersededException) {
-                throw e
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Interrupted) {
-                throw e
-            } catch (e: Throwable) {
-                watchers.notifyError(e)
-                throw e
-            }
-        }
-
-        if (blockState is Filling) {
-            with(srcLogProc) { selectWork() }
-
-            extSrcProc?.onTask { task ->
-                watchers.runTaskGuarded(task.onComplete, extResult = task.msg.pending) {
-                    extSrcProc.handleTask(task)
-                }
-            }
-
-            gc.gcCh.onReceive { task ->
-                watchers.runTaskGuarded(task.onComplete) { gc.handleTask(task) }
-            }
-        }
-    }
+    /**
+     * Whether this term will take resolution work right now.
+     *
+     * False for the length of a block cut, so nothing interleaves between the boundary and its upload —
+     * which is what keeps the follower's bounded pending-block buffer empty.
+     */
+    val acceptingResolution get() = blockState is Filling
 
     /**
      * Fail everything staged on this term, because it has ended with [cause].
@@ -316,9 +289,6 @@ internal class LeaderLogProcessor(
         // benign teardown must not poison the watchers.
         replicaMsgs.close(cause.asCancellation())
     }
-
-    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) =
-        srcLogProc.processRecords(records)
 
     override fun close() {
         extSrcProc?.close()

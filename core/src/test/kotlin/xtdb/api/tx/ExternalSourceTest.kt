@@ -210,7 +210,7 @@ class ExternalSourceTest {
 
         val now = Instant.now()
 
-        lp.processRecords(
+        lp.srcLogProc.processRecords(
             listOf(
                 Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
             )

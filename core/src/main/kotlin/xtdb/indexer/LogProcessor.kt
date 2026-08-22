@@ -74,21 +74,45 @@ internal inline fun Watchers.runTaskGuarded(
 }
 
 /**
- * A live role, as the partition's loop sees it.
+ * Arm the work a leader term will take right now.
  *
- * The split is between what the role decides and what it doesn't. Which work it will take *right now* is
- * the role's own — a leader arms fewer clauses mid-block-cut, so nothing interleaves between a boundary
- * and its upload — where running one unit at a time, and what a failure means, are the partition's.
+ * Consume-back stays armed throughout: it is the only thing that acks a write, so a term that stopped
+ * applying while a block cut was in flight would never see the boundary land. Resolution is the part that
+ * pauses, which [LeaderLogProcessor.acceptingResolution] answers for.
  */
-internal interface Role {
-    /** Arm the work this role will take right now — one clause per kind, each doing that work when taken. */
-    fun SelectBuilder<Unit>.selectWork()
-}
+private fun SelectBuilder<Unit>.selectLeaderWork(watchers: Watchers, term: LeaderLogProcessor) {
+    // Applying is where a supersession fails the term; let it propagate (interrupts too).
+    term.onReplicaMsg { record ->
+        try {
+            term.applyRecord(record)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LeaderSupersededException) {
+            throw e
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Interrupted) {
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e)
+            throw e
+        }
+    }
 
-/** Run a role's work, one unit at a time, until cancelled or until a unit of it throws. */
-internal suspend fun Role.drive() {
-    while (true) {
-        selectUnbiased { this.selectWork() }
+    if (term.acceptingResolution) {
+        with(term.srcLogProc) { selectWork() }
+
+        term.extSrcProc?.let { extSrcProc ->
+            extSrcProc.onTask { task ->
+                watchers.runTaskGuarded(task.onComplete, extResult = task.msg.pending) {
+                    extSrcProc.handleTask(task)
+                }
+            }
+        }
+
+        term.gc.gcCh.onReceive { task ->
+            watchers.runTaskGuarded(task.onComplete) { term.gc.handleTask(task) }
+        }
     }
 }
 
@@ -109,7 +133,7 @@ internal suspend fun runLeaderTerm(
     try {
         coroutineScope {
             launch(CoroutineName("$dbName-append-pump")) { appender.run() }
-            term.drive()
+            while (true) selectUnbiased { selectLeaderWork(watchers, term) }
         }
     } catch (_: CancellationException) {
         // term cancellation
@@ -137,7 +161,7 @@ internal suspend fun runLeaderTerm(
  */
 internal suspend fun runFollower(follower: FollowerLogProcessor) {
     try {
-        follower.drive()
+        while (true) selectUnbiased { with(follower) { selectWork() } }
     } catch (e: CancellationException) {
         throw e
     } catch (_: Throwable) {
@@ -162,8 +186,6 @@ class LogProcessor(
     private val flushTimeout: Duration,
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
-
-    interface Processor<M> : Log.RecordProcessor<M>, AutoCloseable
 
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
@@ -368,7 +390,7 @@ class LogProcessor(
             )
         state = Leading(prepared.proc, prepared.job)
         LOG.info("[$dbName] leader startup complete, resuming after ${prepared.resumeAfterMsgId}")
-        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.proc)
+        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.proc.srcLogProc)
     }
 
     override suspend fun demoteLeader(partition: Int) {

@@ -44,7 +44,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
-) : LogProcessor.Processor<ReplicaMessage>, Role {
+) : AutoCloseable {
 
     private fun processTimer(msgType: String): Timer? = meterRegistry?.let {
         Timer.builder("xtdb.replica.process.timer")
@@ -272,11 +272,11 @@ class FollowerLogProcessor @JvmOverloads constructor(
     /** Hand a batch read off the replica log to whoever is driving this follower. */
     suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)
 
-    override fun SelectBuilder<Unit>.selectWork() {
+    fun SelectBuilder<Unit>.selectWork() {
         inbound.onReceive { records -> processRecords(records) }
     }
 
-    override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+    suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
                 val term = record.message.termId

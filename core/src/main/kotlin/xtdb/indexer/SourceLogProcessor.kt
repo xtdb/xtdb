@@ -48,7 +48,7 @@ internal class SourceLogProcessor(
 
     /** Inject a block boundary covering the source log up to [MessageId], pausing resolution behind it. */
     private val cutBlock: suspend (MessageId) -> Unit,
-) {
+) : Log.RecordProcessor<SourceMessage> {
 
     private val bufferPool = partitionStorage.bufferPool
     private val blockCatalog = partitionState.blockCatalog
@@ -202,7 +202,7 @@ internal class SourceLogProcessor(
     }
 
     /** The transport's edge: hand a poll batch over and await its resolution. */
-    suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
+    override suspend fun processRecords(records: List<Log.Record<SourceMessage>>) {
         maybeFlushBlock()
 
         // Await the batch through the persister rather than firing and returning:
