@@ -44,10 +44,12 @@ internal class GarbageCollector(
         )
     }
 
-    internal val gcCh = Channel<GcTask>(
+    private val gcCh = Channel<GcTask>(
         Channel.UNLIMITED,
         onUndeliveredElement = { it.abandon(CancellationException("leader term closed")) }
     )
+
+    val onTask get() = gcCh.onReceive
 
     private val trieGc = nodeBase.config.garbageCollector.let { cfg ->
         // Routed through the persister rather than applied inline: the catalog removal has to be serialised

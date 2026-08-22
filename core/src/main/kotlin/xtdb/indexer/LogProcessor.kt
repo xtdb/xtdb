@@ -110,7 +110,7 @@ private fun SelectBuilder<Unit>.selectLeaderWork(watchers: Watchers, term: Leade
             }
         }
 
-        term.gc.gcCh.onReceive { task ->
+        term.gc.onTask { task ->
             watchers.runTaskGuarded(task.onComplete) { term.gc.handleTask(task) }
         }
     }

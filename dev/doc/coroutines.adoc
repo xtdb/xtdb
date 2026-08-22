@@ -73,7 +73,7 @@ Two arguments look like reasons to split and aren't:
   Reach for a start method because the owner needs a handle, never to make readiness provable.
 * *Keeping `this` out of the constructor.*
   An initialiser only publishes a half-built object when the launched body needs `this` — a unit that is its own record processor, say.
-  Where the body touches only an already-constructed collaborator, a field initialiser is safe, and moving that collaborator's own loop to a `runTerm` is what made it so.
+  Where the body touches only an already-constructed collaborator, a field initialiser is safe.
 
 A fresh `SupervisorJob` marks a boundary a failure must not cross, which is a separate question from who launched the unit and from how many coroutines it runs.
 That boundary is the database scope: its Job is a supervisor and its handler is `watchers.notifyError`, so a role's fault is reported without cancelling the source-log subscription beside it.

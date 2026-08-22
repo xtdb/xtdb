@@ -87,7 +87,7 @@ class TrieGarbageCollector(
             .register(it)
     }
     
-    /** Collect on every trigger until cancelled. [signal] and [awaitNoGarbage] do nothing until this is running. */
+    /** Collect on every trigger until cancelled. Nothing is serviced until this is running: [signal] queues, and [awaitNoGarbage] suspends. */
     suspend fun run(): Unit = coroutineScope {
         LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
 

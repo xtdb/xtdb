@@ -45,10 +45,8 @@ external entity FollowerTerm {
     -- catch-up (await up to a target msg id) is the launched transition's only
     -- unbounded step. See: live-index.allium.
     --
-    -- Reading the replica log is the Listener's rather than a role's: one read feeds
-    -- whichever role is live, a follower building state and a leader confirming its
-    -- own writes alike. The position it has reached is the partition's, so a role
-    -- change continues from it rather than restarting.
+    -- Reading the replica log is the Listener's: one read feeds whichever role is live, a follower building state and a leader confirming its own writes alike.
+    -- The position it has reached is the partition's, so a role change continues from it rather than restarting.
     replica_pos: MessageId
     mid_block: Boolean   -- true if an old leader died before uploading its block
 }
@@ -122,10 +120,8 @@ contract DurableTotalOrder {
 
     @invariant AppendReturnsItsOwnPosition
         -- An accepted append tells its author which position the record now occupies.
-        --   The launched transition stamps a no-op with its term and uses that record's
-        --   own position as its replay target, which the follower catches up to. Without
-        --   the position coming back from the append, the transition would need a second
-        --   handshake to learn where its own marker landed.
+        --   The launched transition stamps a no-op with its term and uses that record's own position as its replay target, which the follower catches up to.
+        --   Without the position coming back from the append, the transition would need a second handshake to learn where its own marker landed.
 
     @invariant OneAcceptedAppendYieldsOneRecord
         -- An accepted append puts exactly one record in the log, a refused one puts
@@ -375,8 +371,7 @@ rule LaunchTransition {
             DanglingBlockFinished(follower_term: listener.follower_term)
 
         -- Step 5: build the leader term (uncommitted), carrying the fencing term.
-        -- Replica records reach it from the Listener's read, continuing from where the
-        -- follower left off.
+        -- Replica records reach it from the Listener's read, continuing from where the follower left off.
         listener.prepared_leader = LeaderTerm.created(
             term: term,
             replay_target: target

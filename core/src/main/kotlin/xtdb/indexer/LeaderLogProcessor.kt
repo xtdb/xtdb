@@ -253,7 +253,6 @@ internal class LeaderLogProcessor(
         return true
     }
 
-    /** A record read back off the replica log, for [applyRecord]. */
     val onReplicaMsg get() = replicaMsgs.onReceive
 
     /**
