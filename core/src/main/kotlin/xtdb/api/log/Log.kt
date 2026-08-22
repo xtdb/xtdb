@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
@@ -23,6 +22,8 @@ import xtdb.util.asPath
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -57,13 +58,9 @@ interface Log<M> : AutoCloseable {
 
             internal fun fromProto(config: DatabaseConfig): Factory =
                 when (config.logCase) {
-                    IN_MEMORY_LOG -> config.inMemoryLog.let {
-                        inMemoryLog.epoch(it.epoch).termEpoch(it.termEpoch)
-                    }
+                    IN_MEMORY_LOG -> config.inMemoryLog.let { inMemoryLog.epoch(it.epoch) }
 
-                    LOCAL_LOG -> config.localLog.let {
-                        localLog(it.path.asPath).epoch(it.epoch).termEpoch(it.termEpoch)
-                    }
+                    LOCAL_LOG -> config.localLog.let { localLog(it.path.asPath).epoch(it.epoch) }
 
                     OTHER_LOG -> config.otherLog.let {
                         (otherLogs[it.typeUrl] ?: error("unknown log")).fromProto(it)
@@ -75,10 +72,42 @@ interface Log<M> : AutoCloseable {
     }
 
     fun interface RecordProcessor<in M> {
+        /**
+         * Called once per read, with the records that read delivered — **including when it delivered
+         * none**. An empty list says "the log was read, and had nothing beyond what you have already
+         * seen", which is a distinct fact from not being called at all, and one that leader election
+         * depends on: see [TAIL_POLL_DURATION].
+         */
         suspend fun processRecords(records: List<Record<M>>)
     }
 
+    /**
+     * How long a tail waits for a record before reporting a read that found nothing.
+     *
+     * A participant measures quiet time across its own reads rather than against the clock, so a
+     * silent log still has to be seen to have been read — otherwise a node that is no longer being
+     * delivered to is indistinguishable from one whose database is merely idle, and the wrong one
+     * of the two claims leadership. See `allium/log-processor-lifecycle.allium`.
+     *
+     * The interval must stay well inside the range this log's election timeouts are drawn from
+     * ([electionConfig]). Two followers whose draws differ by less than one interval tip over on the
+     * same read, and the randomisation that separates them buys nothing — which is why the in-process
+     * logs, whose elections run in milliseconds, tick faster than the default.
+     */
+    val tailPollDuration: Duration get() = TAIL_POLL_DURATION
+
+    /**
+     * The election timeouts for leadership over this log.
+     *
+     * The log's to supply rather than the node's, because their right order of magnitude is a fact
+     * about the log: an in-process log can elect in milliseconds, where a shared log's timeouts have
+     * to absorb real scheduling and delivery delay.
+     */
+    val electionConfig: ElectionConfig get() = ElectionConfig()
+
     companion object {
+        val TAIL_POLL_DURATION: Duration = 1.seconds
+
         @JvmStatic
         val inMemoryLog get() = InMemoryLog.Factory()
 
@@ -130,27 +159,6 @@ interface Log<M> : AutoCloseable {
     fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
 
     suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>)
-    suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
-
-    /**
-     * The transport's handle on one partition's leader election, driven as a three-step state
-     * machine (follower → prepared → leading). See allium/log-processor-lifecycle.allium.
-     *
-     * [launchTransition] launches the follower→leader transition on the listener's *own* scope and
-     * returns its [Deferred] — it builds the leader term but does NOT commit the role, so it runs off the
-     * transport's thread (which joins/cancels the handle) and, because it runs under the listener's
-     * scope, is torn down by that scope's cancellation on shutdown. [commitLeader] installs the prepared
-     * leader and hands back the offset to resume from and the processor to feed; it (and [demoteLeader])
-     * are the only committers, run at the transport's serialization point. This split keeps the
-     * committed role single-writer while the unbounded catch-up runs off the poll thread.
-     */
-    interface SubscriptionListener<M> {
-        fun launchTransition(partition: Int, termId: Long): Deferred<Unit>
-        fun commitLeader(partition: Int): TailSpec<M>
-        suspend fun demoteLeader(partition: Int)
-    }
-
-    data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)
 
     class Record<out M>(
         val epoch: Int,

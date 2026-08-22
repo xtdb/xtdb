@@ -45,6 +45,7 @@ import java.util.*
 import kotlin.time.Duration.Companion.seconds
 import xtdb.api.tx.TxIndexer
 import xtdb.types.MessageId
+import java.time.InstantSource
 
 private val LOG = LogProcessorSimTest::class.logger
 
@@ -55,6 +56,52 @@ class LogProcessorSimTest : SimulationTestBase() {
     private lateinit var allocator: BufferAllocator
     private lateinit var srcLog: SimLog<SourceMessage>
     private lateinit var replicaLog: SimLog<ReplicaMessage>
+
+    /** The sim's clock: elections are timed off it, and it moves only when the sim ticks. */
+    private class SimClock : InstantSource {
+        private var at: java.time.Instant = java.time.Instant.parse("2026-01-01T00:00:00Z")
+        override fun instant() = at
+        fun advance(d: java.time.Duration) {
+            at = at.plus(d)
+        }
+    }
+
+    private val clock = SimClock()
+
+    private val tickDuration = java.time.Duration.ofMillis(100)
+
+    private val electionConfig = ElectionConfig(
+        electionTimeoutMin = java.time.Duration.ofMillis(200),
+        electionTimeoutMax = java.time.Duration.ofMillis(600),
+        claimTimeout = java.time.Duration.ofMillis(1200),
+        assertionInterval = java.time.Duration.ofMillis(100),
+    )
+
+    /** A quiet poll interval passes everywhere at once: the clock moves, and every reader is told. */
+    private fun tick() {
+        clock.advance(tickDuration)
+        srcLog.tick()
+        replicaLog.tick()
+    }
+
+    /**
+     * A rival's conferring claim, from a node this sim doesn't run: whoever leads reads it back and
+     * resigns, and the vacancy is filled by whichever node's timeout runs down first.
+     */
+    private suspend fun disruptLeadership() {
+        val maxTerm = replicaLog.topic.maxOfOrNull { it.message.termId } ?: 0L
+        LOG.debug("sim: disrupting leadership above term $maxTerm")
+        replicaLog.appendMessage(ReplicaMessage.NoOp(termId = maxTerm + 1))
+    }
+
+    /** Tick the sim to its fixed point, then on until [done] — elections need quiet to run on. */
+    private suspend fun driveUntil(done: () -> Boolean) {
+        while (true) {
+            awaitIdle()
+            if (done()) return
+            tick()
+        }
+    }
 
     @BeforeEach
     fun setUp() {
@@ -117,7 +164,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
         private val nextActionIdxState = MutableStateFlow(0)
 
-        suspend fun awaitQuiescence() = nextActionIdxState.first { it == actions.size }
+        val isDrained get() = nextActionIdxState.value == actions.size
 
         override suspend fun onPartitionAssigned(
             partition: Int,
@@ -188,7 +235,11 @@ class LogProcessorSimTest : SimulationTestBase() {
                     ) = simExtSource
                 },
                 scope = scope,
+                mayLead = true,
+                electionConfig = electionConfig,
                 flushTimeout = indexerConfig.flushDuration,
+                instantSource = clock,
+                electionRandom = kotlin.random.Random(rand.nextInt()),
                 gcDispatcher = dispatcher,
             ).also { logProcessor = it }
 
@@ -314,21 +365,19 @@ class LogProcessorSimTest : SimulationTestBase() {
                         launchSimLog(srcLog)
                         launchSimLog(replicaLog)
 
-                        launch { srcLog.openGroupSubscription(node.openLogProcessor(this)) }
+                        node.openLogProcessor(this)
 
                         launch {
                             repeat(srcLogEventCount) {
                                 yield()
-                                if (rand.nextInt(100) < 50) {
-                                    srcLog.rebalanceTrigger.send(Unit)
-                                } else {
-                                    srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                when (rand.nextInt(100)) {
+                                    in 0..24 -> disruptLeadership()
+                                    in 25..49 -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    else -> tick()
                                 }
                             }
-                            simExtSource.awaitQuiescence()
 
-                            replicaLog.awaitAllDelivered()
-                            awaitIdle()
+                            driveUntil { simExtSource.isDrained && srcLog.allDelivered && replicaLog.allDelivered }
                         }.invokeOnCompletion { cancel() }
                     }.join()
 
@@ -385,17 +434,19 @@ class LogProcessorSimTest : SimulationTestBase() {
                                 launchSimLog(srcLog)
                                 launchSimLog(replicaLog)
 
-                                launch { srcLog.openGroupSubscription(leader.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerA.openLogProcessor(this)) }
-                                launch { srcLog.openGroupSubscription(followerB.openLogProcessor(this)) }
+                                leader.openLogProcessor(this)
+                                followerA.openLogProcessor(this)
+                                followerB.openLogProcessor(this)
 
                                 launch {
                                     repeat(srcLogEventCount) {
                                         yield()
                                         srcLog.appendMessage(SourceMessage.FlushBlock(null))
                                     }
-                                    simExtSource.awaitQuiescence()
-                                    replicaLog.awaitAllDelivered()
+
+                                    driveUntil {
+                                        simExtSource.isDrained && srcLog.allDelivered && replicaLog.allDelivered
+                                    }
 
                                     // Anchor the per-node `latestTxId` to the latest replica tx so the
                                     // convergence assertions below see consistent state across nodes.
@@ -481,20 +532,22 @@ class LogProcessorSimTest : SimulationTestBase() {
                             launchSimLog(srcLog)
                             launchSimLog(replicaLog)
 
-                            launch { srcLog.openGroupSubscription(nodeA.openLogProcessor(this)) }
-                            launch { srcLog.openGroupSubscription(nodeB.openLogProcessor(this)) }
+                            nodeA.openLogProcessor(this)
+                            nodeB.openLogProcessor(this)
 
                             launch {
                                 repeat(srcLogEventCount) {
                                     yield()
-                                    if (rand.nextInt(100) < 50) {
-                                        srcLog.rebalanceTrigger.send(Unit)
-                                    } else {
-                                        srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                    when (rand.nextInt(100)) {
+                                        in 0..24 -> disruptLeadership()
+                                        in 25..49 -> srcLog.appendMessage(SourceMessage.FlushBlock(null))
+                                        else -> tick()
                                     }
                                 }
-                                simExtSource.awaitQuiescence()
-                                replicaLog.awaitAllDelivered()
+
+                                driveUntil {
+                                    simExtSource.isDrained && srcLog.allDelivered && replicaLog.allDelivered
+                                }
 
                                 // Anchor the per-node `latestTxId` to the latest replica tx so the
                                 // convergence assertions below see consistent state across nodes.

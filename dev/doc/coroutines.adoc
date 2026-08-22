@@ -18,7 +18,7 @@ We tear these down in two explicit phases:
 
 Phase 1 (stop)::
 Cancel-and-join the unit's Job.
-At the database level this is a single `job.cancelAndJoin()` over the whole tree (every term, the compactor and the source-log subscription run under that one `job`); at the role level it is a scoped cancel of just that role's Job (used on Kafka rebalance).
+At the database level this is a single `job.cancelAndJoin()` over the whole tree (every term, the compactor and the source-log subscription run under that one `job`); at the role level it is a scoped cancel of just that role's Job (used when a role changes).
 
 Phase 2 (free)::
 Call a synchronous `AutoCloseable.close()` on each unit, freeing its standing resources in allocator-parentage order — children before parents, which Arrow requires.
@@ -43,7 +43,7 @@ Implementation rules that keep this safe:
 
 * A unit's `close()` MUST be called only after its Job has been cancelled and joined.
   State this as a precondition on the method; it runs no cancellation itself.
-* `close()` MUST stay non-suspend, so a rebalance callback that closes a term mid-flight completes within the joined coroutine frame rather than suspending.
+* `close()` MUST stay non-suspend, so a role change that closes a term mid-flight completes within the joined coroutine frame rather than suspending.
 * Standing resources are acquired before the loop and freed by `close()`.
   Resources a coroutine acquires *itself* mid-flight still belong in `.use`/`try-finally` inside the body — they are not standing resources and are not Phase 2's concern.
 * A role is modelled as `(job, closeable)` (`LogProcessor.State`) so that a job-less or unfreeable role is unrepresentable.
@@ -81,7 +81,7 @@ Within a role, a plain `scope.launch` is what you want, because a role's corouti
 
 === Accepted behaviour: resources of a self-crashed unit are freed lazily
 
-Because freeing rides on the explicit teardown (rebalance or db close) rather than on Job completion, a unit that *crashes internally with no following rebalance* holds its resources until the next lifecycle event — a rebalance (which cancel-then-closes the old term) or database close.
+Because freeing rides on the explicit teardown (role change or db close) rather than on Job completion, a unit that *crashes internally with no following role change* holds its resources until the next lifecycle event — a role change (which cancel-then-closes the old term) or database close.
 This is by design.
 A self-crashed term has already poisoned `watchers` via `notifyError`, so the node is in an error state headed for shutdown; the window is "until close", not a leak; and wiring crash → close would re-introduce the completion-driven free path this model deliberately removes (see the gotchas below for why that path is hazardous).
 

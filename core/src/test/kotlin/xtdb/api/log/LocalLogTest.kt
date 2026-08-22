@@ -1,10 +1,10 @@
 package xtdb.api.log
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
@@ -159,20 +159,19 @@ class LocalLogTest {
     }
 
     @Test
-    fun `openGroupSubscription drives the listener lifecycle for every partition`() = runTest(timeout = 5.seconds) {
-        val log = LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap(), partitions = 3)
-        log.use {
-            val listener = RecordingListener<SourceMessage>()
+    fun `a quiet log reports that a read found nothing`() = runTest(timeout = 5.seconds) {
+        LocalLog.Factory(tempDir.resolve("log")).openSourceLog(emptyMap()).use { log ->
+            val emptyReads = Channel<Unit>(Channel.UNLIMITED)
 
-            val job = backgroundScope.launch { log.openGroupSubscription(listener) }
+            val job = backgroundScope.launch {
+                log.tailAll(0, -1) { records -> if (records.isEmpty()) emptyReads.send(Unit) }
+            }
 
-            while (listener.committed.size < 3) yield()
+            // Election is timed across a participant's own reads, so a log with nothing to say still
+            // has to say so — otherwise a node no longer being delivered to looks identical to an idle one.
+            withContext(Dispatchers.Default) { emptyReads.receive() }
 
             job.cancelAndJoin()
-
-            assertEquals(setOf(0, 1, 2), listener.transitioned.toSet())
-            assertEquals(setOf(0, 1, 2), listener.committed.toSet())
-            assertEquals(setOf(0, 1, 2), listener.demoted.toSet())
         }
     }
 
@@ -224,23 +223,4 @@ class LocalLogTest {
         }
     }
 
-    private class RecordingListener<M> : Log.SubscriptionListener<M> {
-        val transitioned = mutableListOf<Int>()
-        val committed = mutableListOf<Int>()
-        val demoted = mutableListOf<Int>()
-
-        override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
-            transitioned.add(partition)
-            return CompletableDeferred(Unit)
-        }
-
-        override fun commitLeader(partition: Int): Log.TailSpec<M> {
-            committed.add(partition)
-            return Log.TailSpec(-1L) { _ -> }
-        }
-
-        override suspend fun demoteLeader(partition: Int) {
-            demoted.add(partition)
-        }
-    }
 }

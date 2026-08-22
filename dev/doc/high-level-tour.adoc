@@ -84,9 +84,8 @@ Each database has two logs (separate Kafka topics, single-partition each):
   It carries already-resolved transactions (with tx-ids, system-times, and tries ready to be included in a block), plus block boundaries and trie-added notifications.
   Only the current leader writes to it.
 
-All indexer nodes in the cluster join a consumer group on the source log.
-Whichever node gets assigned the partition becomes the *leader* for that database; the others are *followers*.
-Kafka's consumer-group rebalance protocol drives the handover when a leader dies or a new node joins.
+All indexer nodes serving a database read its replica log, and elect that database's *leader* from it; the others are *followers*.
+Only the leader reads the source log.
 
 The leader consumes each `SourceMessage`, evaluates the transaction if required, indexes it into its live index, and appends the resulting `ReplicaMessage` to the replica log.
 It also uploads blocks of transactions (~100k rows) as files to the object store — these block files form the lowest level (L0) of the LSM tree.
@@ -123,26 +122,33 @@ This is a lifecycle in itself 😃
 
 (see `xtdb.indexer.LogProcessor`, `xtdb.api.log.Watchers`)
 
-Leadership is elected via Kafka consumer-group rebalancing — the standard Kafka protocol, no XTDB-level machinery on top.
-Every indexer subscribes to the source-log topic; whichever node gets assigned the partition is the leader.
-When the current leader stops heartbeating (crash, network partition, long GC pause) or a new node joins, Kafka triggers a rebalance and the partition assignment moves.
+Leadership is elected from the replica log, by the nodes that read it, with nothing outside the log consulted.
+A node that reads the log for longer than its election timeout without seeing a record appends a *claim* — an empty record one term above the highest it has read — and carries on reading.
+The claim confers leadership iff nothing at or above its term appears ahead of it, so two claims at the same term are settled by position and the earlier wins.
+A single-partition log is a total order every node agrees on, which is what makes the position enough: no coordinator, no vote, and every node reaching a verdict has read the prefix that verdict turns on.
+
+A leader's ordinary traffic is what holds its followers' election timeouts open; it appends an empty record of its own while the database is idle.
+A leader that crashes, partitions or pauses stops doing both, and the first follower whose timeout expires claims.
+Timeouts are drawn at random from a range so that nodes starting together don't all claim at once, and a claimant that cannot read its own claim back abandons it and backs off.
+See `allium/log-processor-lifecycle.allium`.
 
 Leaders are *fenced* by term (a Raft-ReadIndex-style check), not by Kafka transactions.
-Each record a leader writes to the replica log is stamped with its *term* — the Kafka consumer-group generation, which strictly increases every rebalance.
+Each record a leader writes to the replica log is stamped with its *term* — the term it claimed, which strictly increases across leaders because a claim is always one above the highest on the log.
 A leader applies and acknowledges a write only after it has read that write back from the replica log at its own term, with no higher-term record ahead of it; a superseded leader reads a higher-term record back, recognises it, and resigns without acknowledging its unconfirmed writes.
 So at most one leader's writes are ever confirmed for a database, without relying on Kafka's transactional producer.
 
 === Three LogProcessor states
 
-`xtdb.indexer.LogProcessor` is a small state machine, driven by the transport through three `Log.SubscriptionListener` operations — `launchTransition`, `commitLeader`, `demoteLeader`:
+`xtdb.indexer.LogProcessor` is a small state machine, driven by what its own reads of the replica log deliver:
 
 Follower (`FollowerLogProcessor`)::
 The default state for a node that isn't currently leader.
 Tails the replica log and applies each `ReplicaMessage` to its live index.
 It does not consume the source log at all.
+It is also where a claim is made and adjudicated — a claimant is still a follower until its claim comes back conferring.
 
 Leader (`LeaderLogProcessor`)::
-Consumes the source log via the consumer-group subscription, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
+Consumes the source log, resolves each transaction, appends the resulting `ReplicaMessage` to the replica log, and indexes it once it reads that message back at its own term.
 Only the leader writes L0 files to the object store.
 
 Transition (`TransitionLogProcessor`)::
@@ -167,7 +173,7 @@ Rather than continue with divergent state, we poison the watchers and let the no
 
 Some databases aren't fed by client `submitTx` at all — they mirror an external system via CDC (e.g. Postgres logical replication).
 
-There's no separate processor for these: an `ExternalSource` is an optional collaborator of `LeaderLogProcessor`, which implements `ExternalSource.TxIndexer` itself and hands that to the source on partition assignment.
+There's no separate processor for these: an `ExternalSource` is an optional collaborator of `LeaderLogProcessor`, which implements `ExternalSource.TxIndexer` itself and hands that to the source when a leader term begins.
 Flush, tries and block coordination are identical either way, and the leader still consumes the source log for them.
 The differences are confined to where a transaction enters and how its tx-id is assigned:
 

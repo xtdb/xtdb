@@ -15,19 +15,13 @@ enum DatabaseMode {
 
 message InMemoryLog {
     int32 epoch = 1 [default = 0];
-
-    // declares that the leader-election counter behind this log has been reset, so terms from
-    // before the reset order below terms from after it. See #5817.
-    int32 term_epoch = 2 [default = 0];
+    reserved 2; // was term_epoch; a term is derived from the replica log and cannot regress
 }
 
 message LocalLog {
     string path = 1;
     int32 epoch = 2 [default = 0];
-
-    // declares that the leader-election counter behind this log has been reset, so terms from
-    // before the reset order below terms from after it. See #5817.
-    int32 term_epoch = 3 [default = 0];
+    reserved 3; // was term_epoch; a term is derived from the replica log and cannot regress
 }
 
 message InMemoryStorage {

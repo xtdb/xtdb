@@ -2,18 +2,16 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.selects.selectUnbiased
@@ -28,19 +26,22 @@ import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.api.tx.ExternalSource
-import xtdb.api.error.Fault
 import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
 import xtdb.util.logger
+import xtdb.util.warn
 import java.time.Duration
+import java.time.InstantSource
+import kotlin.coroutines.coroutineContext
+import kotlin.random.Random
 
 private val LOG = LogProcessor::class.logger
 
 // Shutdown, not a fault. MUST NOT reach `Watchers.notifyError`: `Failed` is absorbing, so a clean
-// revoke or a node teardown would leave the database unqueryable until the process restarts.
+// resignation or a node teardown would leave the database unqueryable until the process restarts.
 internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
@@ -50,8 +51,8 @@ internal val Throwable.isShutdownSignal
  * watchers. A successful source batch completes its own handle, possibly deferred if a block cut paused it.
  */
 internal inline fun Watchers.runTaskGuarded(
-    onComplete: CompletableDeferred<Unit>,
-    extResult: CompletableDeferred<TransactionResult>? = null,
+    onComplete: kotlinx.coroutines.CompletableDeferred<Unit>,
+    extResult: kotlinx.coroutines.CompletableDeferred<TransactionResult>? = null,
     block: () -> Unit,
 ) {
     try {
@@ -138,8 +139,7 @@ internal suspend fun runLeaderTerm(
     } catch (_: CancellationException) {
         // term cancellation
     } catch (e: LeaderSupersededException) {
-        // superseded by a newer leader — expected, not a query-facing fault; the transport re-follows on
-        // the next rebalance.
+        // superseded by a newer leader — expected, not a query-facing fault; the owner re-follows.
         LOG.info("[$dbName] ${e.message}")
         cause = e
     } catch (t: Throwable) {
@@ -158,10 +158,16 @@ internal suspend fun runLeaderTerm(
  *
  * A failure is already logged and on the watchers by the time it arrives — `FollowerLogProcessor` applies
  * records inside `processRecords`, which reports before it throws — so there is nothing left to decide.
+ *
+ * [selectElection] arms whatever the follower's owner concludes from quiet, on this loop rather than a
+ * loop of its own, so a conclusion and the record that would have withdrawn it cannot be acted on at once.
  */
-internal suspend fun runFollower(follower: FollowerLogProcessor) {
+internal suspend fun runFollower(
+    follower: FollowerLogProcessor,
+    selectElection: SelectBuilder<Unit>.() -> Unit,
+) {
     try {
-        while (true) selectUnbiased { with(follower) { selectWork() } }
+        while (true) selectUnbiased { with(follower) { selectWork() }; selectElection() }
     } catch (e: CancellationException) {
         throw e
     } catch (_: Throwable) {
@@ -182,20 +188,29 @@ class LogProcessor(
     private val dbCatalog: Database.Catalog?,
     private val externalSourceFactory: ExternalSource.Factory?,
     private val scope: CoroutineScope,
+    private val mayLead: Boolean,
+    private val electionConfig: ElectionConfig,
     private val skipTxs: Set<MessageId> = emptySet(),
     private val flushTimeout: Duration,
+    private val instantSource: InstantSource = InstantSource.system(),
+    electionRandom: Random = Random.Default,
+    private val driver: ElectionDriver = QuietDriver(electionConfig, instantSource, electionRandom),
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
+) : AutoCloseable {
 
     private val replicaLog = partitionStorage.replicaLog
+    private val sourceLog = partitionStorage.sourceLog
     private val hasExternalSource = externalSourceFactory != null
 
-    // The committed-role state machine — see allium/log-processor-lifecycle.allium.
-    // `state` is written from two places: the transport's serialization point (commitLeader /
-    // demoteLeader) and the off-thread transition coroutine (cutoverToLeader → Prepared, or its catch
-    // → Following). They don't race: a revoke cancel-and-joins the transition before demoteLeader reads
-    // `state`, and the transport commits a leader only for the transition instance it still holds — so the
-    // *committed* role change still happens only at the serialization point.
+    // The role state machine — see allium/log-processor-lifecycle.allium. The spec's `claiming` covers
+    // both variants here: `Claiming` while the verdict is open, `TakingOver` once it has conferred and
+    // the pipeline swap is in flight.
+    //
+    // `state` has one writer at a time, by handoff rather than by lock: the elector (on the follower's
+    // work coroutine) writes while a follower runs, and stops the moment it publishes `TakingOver`; the
+    // takeover coroutine writes only from there, and joins that follower before it swaps; the leader's
+    // term job writes only the resignation back to `Following`, after every coroutine of the term it is
+    // ending has finished. Each writer creates the loop that will write next.
     //
     // The leader and the follower process different message types, so the only thing a state can offer
     // without narrowing to its variant is the teardown: a role is stopped by cancelling its job and freed
@@ -207,18 +222,137 @@ class LogProcessor(
 
     private class Following(override val proc: FollowerLogProcessor, override val job: Job) : State
 
-    // A built leader, committed or not.
-    private sealed interface Leader : State {
-        override val proc: LeaderLogProcessor
+    private class Claiming(
+        override val proc: FollowerLogProcessor, override val job: Job, val claim: Claim,
+    ) : State
+
+    // The claim conferred and the pipeline swap is in flight; the follower is still running until the
+    // takeover joins it. A separate variant so the verdict is reached exactly once — the elector has
+    // nothing left to decide on a state that carries no claim.
+    private class TakingOver(override val proc: FollowerLogProcessor, override val job: Job) : State
+
+    private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : State
+
+    // The elector reports reads and draws the one conclusion a *record* supports — a claim's verdict.
+    // Everything a stretch of quiet supports is the driver's to raise, and arrives at [onQuiet].
+    private val elector = object : Elector {
+        override suspend fun onRecord(termBefore: Long, msgId: MessageId) {
+            driver.onRecord()
+
+            val s = state
+            if (s is Claiming && msgId >= s.claim.msgId) {
+                // The verdict (see TheLocalTestDecidesTheSameVerdict in the spec): the claim conferred
+                // iff nothing at or above its term preceded it. `termBefore` rather than the fence's
+                // current value, which has already absorbed the claim's own term and would find every
+                // same-term rival conferring.
+                if (termBefore < s.claim.term) {
+                    LOG.info("[$dbName] claim at term ${s.claim.term} conferred leadership; taking over")
+                    driver.idle()
+                    state = TakingOver(s.proc, s.job)
+                    scope.launch { takeOver(s.proc, s.job, s.claim.term) }
+                } else {
+                    LOG.info("[$dbName] lost the election at term ${s.claim.term}; following")
+                    driver.await(Quiet.ELECTION)
+                    state = Following(s.proc, s.job)
+                }
+            }
+        }
+
+        override suspend fun onEmptyRead() = driver.onEmptyRead()
     }
 
-    private class Prepared(
-        override val proc: LeaderLogProcessor, override val job: Job, val resumeAfterMsgId: MessageId,
-    ) : Leader
+    /** The log stayed quiet for as long as this state was waiting on, so act on what the state was for. */
+    private suspend fun onQuiet() {
+        when (val s = state) {
+            is Following -> claim(s)
 
-    private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : Leader
+            is Claiming -> {
+                // Our reader is not delivering, so no verdict can be reached; holding the claim open on
+                // the strength of a prefix we are no longer being given helps nobody, least of all a
+                // deployment where we are the only eligible node.
+                LOG.warn("[$dbName] claim at term ${s.claim.term} not read back; abandoning")
+                driver.backOff()
+                state = Following(s.proc, s.job)
+            }
 
-    private fun openLeader(termId: Long, resumeAfterMsgId: MessageId): Prepared {
+            // Neither waits on quiet, so neither can be here.
+            is TakingOver, is Leading -> {}
+        }
+    }
+
+    /** Bid for leadership: one term above everything seen, adjudicated when the log hands it back. */
+    private suspend fun claim(following: Following) {
+        val term = partitionState.termFence.highest + 1
+
+        val claim = try {
+            Claim(term, replicaLog.appendMessage(ReplicaMessage.NoOp(termId = term)).msgId)
+        } catch (e: Throwable) {
+            if (e.isShutdownSignal) throw e
+            // A refused append wrote nothing, so there is nothing to adjudicate: wait afresh, so we
+            // don't re-claim on every read for as long as appends are refused.
+            LOG.warn(e, "[$dbName] claim append refused; holding off")
+            driver.await(Quiet.ELECTION)
+            return
+        }
+
+        LOG.info("[$dbName] claimed leadership at term ${term} (claim at ${claim.msgId})")
+        driver.await(Quiet.CLAIM_VERDICT)
+        state = Claiming(following.proc, following.job, claim)
+    }
+
+    /**
+     * Swap the follower for a leader, the claim having conferred.
+     *
+     * By the time the verdict is known the claim has been read back, so the follower has already caught
+     * up to it — there is no catch-up await left to do. Once the follower is stopped, `state` references
+     * a dead pipeline until Leading is published, so any early exit re-opens a live follower from the
+     * catch and `state` never keeps a corpse. NonCancellable guards the resource release — the follower's
+     * allocator must close cleanly once teardown begins, whatever the cancellation (bounded: the
+     * follower's coroutines just unwind). Watermark/pendingBlock stay readable after close (not
+     * allocator-backed).
+     */
+    private suspend fun takeOver(follower: FollowerLogProcessor, followerJob: Job, termId: Long) {
+        val pendingBlock = follower.pendingBlock
+        try {
+            LOG.debug("[$dbName] takeover: closing follower")
+            withContext(NonCancellable) {
+                followerJob.cancelAndJoin()
+                follower.close()
+            }
+
+            // The claim conferred against the prefix that preceded it, and the follower went on reading
+            // until we joined it just now. A higher term arriving in that window has already superseded
+            // this claim — leading under it would acknowledge writes every other node discards, and the
+            // consume-back cannot catch it, because this term would resume past the record that carries it.
+            if (partitionState.termFence.highest > termId) {
+                LOG.info("[$dbName] superseded at term ${partitionState.termFence.highest} before taking over at $termId; following")
+                state = openFollower(pendingBlock)
+                return
+            }
+
+            openTransition(termId).use { transition ->
+                if (pendingBlock != null) {
+                    LOG.debug("[$dbName] takeover: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
+                    blockUploader.uploadBlock(
+                        pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
+                    )
+                    LOG.debug("[$dbName] takeover: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
+                    transition.processRecords(pendingBlock.bufferedRecords)
+                }
+            }
+
+            LOG.debug("[$dbName] takeover: building leader")
+            state = openLeader(termId, watchers.latestSourceMsgId)
+        } catch (e: Throwable) {
+            state = openFollower(pendingBlock)
+            if (!e.isShutdownSignal) {
+                LOG.error(e, "[$dbName] takeover: failed to build leader")
+                watchers.notifyError(e)
+            }
+        }
+    }
+
+    private fun openLeader(termId: Long, resumeAfterMsgId: MessageId): Leading {
         // The leader term owns (and frees) its driver and its ext source.
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
         val replicaAppender = ReplicaLogAppender(driver)
@@ -233,19 +367,59 @@ class LogProcessor(
             gcDispatcher = gcDispatcher,
         )
 
-        // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
-        // back here. One job over all of them, so a read that fails cancels the term: consume-back is the
-        // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
-        val termJob = scope.launch {
-            launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
-            launch { proc.gc.runGc() }
-            proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-            runLeaderTerm(dbName, watchers, proc, replicaAppender)
+        // On the reader rather than the work loop, so an upload in flight cannot silence the leader —
+        // a leader that falls quiet exactly while it is doing the most is read as absent, and evicted.
+        val assertion = LeadershipAssertion(electionConfig.assertionInterval, instantSource) {
+            replicaAppender.append(ControlItem(ReplicaMessage.NoOp(termId = termId)))
         }
 
-        return Prepared(proc, termJob, resumeAfterMsgId)
+        // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
+        // back here. One scope over all of them, so a read that fails cancels the term: consume-back is
+        // the only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
+        val termJob = scope.launch {
+            try {
+                coroutineScope {
+                    launch {
+                        tailReplica { records ->
+                            if (records.isEmpty()) assertion.onEmptyRead()
+                            else {
+                                records.forEach { proc.queueReplicaMessage(it) }
+                                assertion.onRecord()
+                            }
+                        }
+                    }
+                    launch { proc.gc.runGc() }
+                    proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                    launch { tailSource(resumeAfterMsgId, proc.srcLogProc) }
+
+                    runLeaderTerm(dbName, watchers, proc, replicaAppender)
+
+                    // The term ended itself and reported its own cause; stop its reader and collectors.
+                    coroutineContext.job.cancelChildren()
+                }
+            } catch (e: CancellationException) {
+                // External teardown: whoever cancelled owns the state, and the database is going away.
+                throw e
+            } catch (e: Throwable) {
+                // A sibling of the term (its reader, its source tail, a collector) failed and cancelled
+                // it; the sibling reported before rethrowing.
+                LOG.error(e) { "[$dbName] leader term's pipeline failed" }
+            }
+
+            resignToFollower(proc)
+        }
+
+        return Leading(proc, termJob)
     }
 
+    // Resign, on the outgoing term's own coroutine: every coroutine of the term has finished by here, so
+    // closing the processor is safe, and `pendingBlock` stays readable after the close (not
+    // allocator-backed) to seed the follower.
+    private fun resignToFollower(proc: LeaderLogProcessor) {
+        LOG.info("[$dbName] leader term over; following")
+        proc.close()
+        state = openFollower(proc.pendingBlock)
+    }
 
     private fun openTransition(termId: Long): TransitionLogProcessor =
         TransitionLogProcessor(
@@ -268,6 +442,17 @@ class LogProcessor(
         }
     }
 
+    // Read the source log into the leader's source processor from where the last term left off.
+    private suspend fun tailSource(afterMsgId: MessageId, proc: SourceLogProcessor) {
+        try {
+            sourceLog.tailAll(afterMsgId, proc)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            watchers.notifyError(e); throw e
+        }
+    }
+
     private fun openFollower(pendingBlock: PendingBlock? = null): Following {
         LOG.info {
             buildString {
@@ -280,14 +465,18 @@ class LogProcessor(
 
         val proc = FollowerLogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
-            dbCatalog, pendingBlock,
+            elector, dbCatalog, pendingBlock,
             hasExternalSource = hasExternalSource,
             meterRegistry = base.meterRegistry,
         )
 
+        // Eligibility decides whether quiet means anything here at all: an ineligible node reads its log
+        // like any other follower, and there is no length of silence it is entitled to conclude from.
+        if (mayLead) driver.await(Quiet.ELECTION) else driver.idle()
+
         return Following(proc, scope.launch {
             launch { tailReplica(proc::queueRecords) }
-            runFollower(proc)
+            runFollower(proc) { driver.onTimeout { onQuiet() } }
         })
     }
 
@@ -301,116 +490,6 @@ class LogProcessor(
                 .tag("db", dbName)
                 .register(reg)
         }
-    }
-
-    override fun launchTransition(partition: Int, termId: Long): Deferred<Unit> {
-        // Transport contract: transition only from Following (see SubscriptionListener). A raw cast
-        // would surface an out-of-order call as a cryptic ClassCastException; name it instead.
-        val following = (state as? Following)
-            ?: throw Fault(
-                "[$dbName] launchTransition while not following (${state::class.simpleName})",
-                "xtdb/log-prepare-not-following"
-            )
-
-        // Launched on the database scope (not the caller's): the transition is a child of the db job
-        // tree, so the transport joins/cancels this handle while db teardown cancels-and-joins it
-        // before close(). See dev/doc/coroutines.adoc and allium/log-processor-lifecycle.allium.
-        return scope.async { runTransition(following, termId) }
-    }
-
-    private suspend fun runTransition(following: Following, termId: Long) {
-        try {
-            // Append a NoOp stamped with the new term as the replay target: the follower catches up to it
-            // before we cut over, and the leader's consume pump tails from it. A plain append now — the
-            // term on read-back is the fence, replacing the transactional producer (#5817).
-            val replayTarget = replicaLog.appendMessage(ReplicaMessage.NoOp(termId = termId)).msgId
-            LOG.debug("[$dbName] transition: awaiting replica catch-up to $replayTarget")
-            watchers.awaitReplicaMsg(replayTarget)
-            LOG.debug("[$dbName] transition: replica caught up to $replayTarget")
-            // Our own claim is now read back, so the follower's max term is the log's — anything above
-            // it fences us, and leading would index nothing. Refuse loudly instead (#5817).
-            following.proc.checkTermUnfenced(termId)
-            cutoverToLeader(following, termId)
-        } catch (e: Throwable) {
-            // Cutover already restored a live `state` if it had to; here we only report.
-            if (!e.isShutdownSignal) {
-                LOG.error(e, "[$dbName] transition: failed to prepare leader")
-                watchers.notifyError(e)
-            }
-            throw e
-        }
-    }
-
-    // The point of no return: stop the follower, finish its pending block, build the leader. Once the
-    // follower is stopped, `state` references a dead term until we publish Prepared — so any early exit
-    // (a revoke cancelling us mid-cutover) re-opens a live follower from the catch, seeded from where the
-    // follower got to, and `state` never keeps a corpse. Recovery is structural, not flag-guarded:
-    // reaching the catch *is* "the follower was stopped", and `state` is exclusively ours until Prepared
-    // (the transport writes it only at its serialization point, after joining us), so no staleness guard
-    // is needed. NonCancellable guards only the resource release — the follower's allocator must close
-    // cleanly once teardown begins, whatever the cancellation (bounded: the follower's coroutines just
-    // unwind). Watermark/pendingBlock stay readable after close (not allocator-backed).
-    private suspend fun cutoverToLeader(following: Following, termId: Long) {
-        val pendingBlock = following.proc.pendingBlock
-        try {
-            LOG.debug("[$dbName] transition: closing follower")
-            withContext(NonCancellable) {
-                following.job.cancelAndJoin()
-                following.proc.close()
-            }
-
-            openTransition(termId).use { transition ->
-                if (pendingBlock != null) {
-                    LOG.debug("[$dbName] transition: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
-                    blockUploader.uploadBlock(
-                        pendingBlock.boundaryMsgId, termId, pendingBlock.boundaryMessage,
-                    )
-                    LOG.debug("[$dbName] transition: replaying ${pendingBlock.bufferedRecords.size} buffered records through transition processor")
-                    transition.processRecords(pendingBlock.bufferedRecords)
-                }
-            }
-
-            LOG.debug("[$dbName] transition: building leader processor")
-            val resumeAfterMsgId = watchers.latestSourceMsgId
-
-            // Built, not committed: `state` moves to Prepared but no records flow as leader until
-            // commitLeader installs it at the serialization point.
-            state = openLeader(termId, resumeAfterMsgId)
-        } catch (e: Throwable) {
-            state = openFollower(pendingBlock)
-            throw e
-        }
-    }
-
-    override fun commitLeader(partition: Int): Log.TailSpec<SourceMessage> {
-        val prepared = (state as? Prepared)
-            ?: throw Fault(
-                "[$dbName] commitLeader without a prepared leader (${state::class.simpleName})",
-                "xtdb/log-commit-not-prepared"
-            )
-        state = Leading(prepared.proc, prepared.job)
-        LOG.info("[$dbName] leader startup complete, resuming after ${prepared.resumeAfterMsgId}")
-        return Log.TailSpec(prepared.resumeAfterMsgId, prepared.proc.srcLogProc)
-    }
-
-    override suspend fun demoteLeader(partition: Int) {
-        // Genuine revoke (Leading) and abandoning an uncommitted leader (Prepared) tear down the
-        // same way; an already-following listener is a no-op.
-        val leader = when (val s = state) {
-            is Following -> {
-                LOG.debug("[$dbName] demote — already follower, no transition needed")
-                return
-            }
-
-            is Leader -> s
-        }
-
-        LOG.info("[$dbName] demote — tearing down leader, re-opening follower")
-        // Cancel first: `pendingBlock` stays readable after the cancel/close — it isn't allocator-backed
-        // — so we free the old term before reading it to seed the follower.
-        leader.job.cancelAndJoin()
-        leader.proc.close()
-        state = openFollower(leader.proc.pendingBlock)
     }
 
     override fun close() = state.proc.close()

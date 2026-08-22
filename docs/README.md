@@ -164,7 +164,7 @@ Conceptual pages (`about/`, `concepts/`) describe *properties the system provide
 Plugin-specific pages (`ops/config/log/kafka.md`, `ops/config/storage.md`) describe *how those properties are enforced by this particular plugin*.
 
 e.g. `about/dbs-in-xtdb.md` says "exactly one leader per database at any given time, elected automatically".
-The Kafka page owns "via consumer-group rebalancing, fenced by term on the replica log".
+The Kafka page owns "by claiming a term on the replica topic, fenced by term on read-back".
 Don't leak Kafka jargon into the conceptual page.
 
 ### Name operator-visible concepts

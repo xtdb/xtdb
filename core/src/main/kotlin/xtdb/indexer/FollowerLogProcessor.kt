@@ -17,7 +17,6 @@ import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.api.error.Anomaly
-import xtdb.api.error.Incorrect
 import xtdb.types.LogTimestamp
 import xtdb.types.MessageId
 import xtdb.log.proto.TrieDetails
@@ -39,6 +38,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val dbName: DatabaseName,
     private val compactor: Compactor.ForDatabase,
     private val watchers: Watchers,
+    private val elector: Elector,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
     private val hasExternalSource: Boolean,
@@ -99,33 +99,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     // A record below the fence was written by a superseded leader and is discarded — its consume
     // position still advances, so a transition catch-up never hangs on a fenced no-op. See #5817.
     private val termFence = partitionState.termFence
-
-    /**
-     * Refuse a leader term the replica log has already moved past: a claim stamped with it would be
-     * discarded by every reader, so leading under it would index nothing.
-     *
-     * Call this once the claim itself has been read back, at which point it is expected to *be* the max
-     * — so a higher one is someone else's. In practice that means the election counter regressed
-     * underneath us, which is what the term's epoch is there to declare (see [LeaderTerm]). Refusing
-     * costs liveness only and never safety, so unlike the fence's ordering it is sound to decide from
-     * whatever we happen to have read.
-     */
-    fun checkTermUnfenced(term: Long) {
-        val maxTerm = termFence.highest
-        if (maxTerm > term)
-            throw Incorrect(
-                "[$dbName] leader term ${LeaderTerm.format(term)} is already fenced by " +
-                        "${LeaderTerm.format(maxTerm)} on the replica log — the leader-election counter " +
-                        "has regressed (a recreated Kafka consumer group, or a restarted local log), so " +
-                        "bump the log's termEpoch above ${LeaderTerm.epochOf(maxTerm)}",
-                "xtdb/leader-term-fenced",
-                mapOf(
-                    "db-name" to dbName,
-                    "term" to LeaderTerm.format(term),
-                    "fenced-by" to LeaderTerm.format(maxTerm),
-                ),
-            )
-    }
 
     private val allocator = allocator.newChildAllocator("follower-log-processor", 0, Long.MAX_VALUE)
 
@@ -225,6 +198,14 @@ class FollowerLogProcessor @JvmOverloads constructor(
         LOG.trace { "[$dbName] follower: message ${record.msgId} (${msg::class.simpleName})" }
 
         pendingBlock?.let { pendingBlock ->
+            // A no-op carrying no source position has no replay effect, so buffering it would spend the
+            // bounded buffer on nothing — and a leader asserts through no-ops for exactly as long as an
+            // upload keeps a block pending, so they must not be able to overflow it.
+            if (msg is ReplicaMessage.NoOp && msg.srcMsgId == null) {
+                watchers.notifyApplied(replicaMsgId)
+                return
+            }
+
             val pendingBlockIdx = pendingBlock.blockIdx
             if (msg is ReplicaMessage.BlockUploaded
                 && msg.blockIndex == pendingBlockIdx
@@ -276,9 +257,17 @@ class FollowerLogProcessor @JvmOverloads constructor(
     }
 
     suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+        if (records.isEmpty()) {
+            elector.onEmptyRead()
+            return
+        }
+
         for (record in records) {
             try {
                 val term = record.message.termId
+                // Captured before `admit` folds the record's own term in: a claim's verdict is against
+                // the highest term strictly before it, and this is the one place that value exists.
+                val termBefore = termFence.highest
                 if (termFence.admit(term)) handleRecord(record, record.msgId)
                 else {
                     // Fenced: a higher-term leader has superseded this message's writer. Discard it, but
@@ -286,10 +275,12 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     // so a transition catch-up can't hang on a fenced no-op.
                     LOG.debug {
                         "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
+                                "(term $term < ${termFence.highest})"
                     }
                     watchers.notifyApplied(record.msgId)
                 }
+
+                elector.onRecord(termBefore, record.msgId)
             } catch (e: Throwable) {
                 if (e.isShutdownSignal) throw e
 
