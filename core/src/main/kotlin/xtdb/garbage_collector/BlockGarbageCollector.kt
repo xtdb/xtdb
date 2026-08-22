@@ -36,8 +36,6 @@ private const val DEFAULT_DELETE_PARALLELISM = 64
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BlockGarbageCollector(
-    /** The owner's scope: supplies this collector's lifetime and the thread its loop runs on. Cancelling it stops the loop. */
-    scope: CoroutineScope,
     private val bufferPool: BufferPool,
     private val blockCatalog: BlockCatalog,
     private val blocksToKeep: Int,
@@ -46,7 +44,7 @@ class BlockGarbageCollector(
     private val meterRegistry: MeterRegistry? = null,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
-    /** Base for the parallel delete fan-out pools; the loop itself runs on [scope]. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
+    /** Base for the parallel delete fan-out pools; the loop itself runs on its caller's thread. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
     dbName: DatabaseName,
 ) {
@@ -77,36 +75,37 @@ class BlockGarbageCollector(
 
     init {
         require(blocksToKeep >= 1) { "blocksToKeep must be >= 1, got $blocksToKeep" }
+    }
 
+    /** Collect on every trigger until cancelled. [signal] and [awaitNoGarbage] do nothing until this is running. */
+    suspend fun run(): Unit = coroutineScope {
         LOGGER.debug("Starting BlockGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep)")
 
-        scope.launch {
-            while (isActive) {
-                val pending = mutableListOf<CompletableDeferred<Unit>>()
+        while (isActive) {
+            val pending = mutableListOf<CompletableDeferred<Unit>>()
 
-                // Wait for any trigger. Drain both channels each cycle so waiters arriving while
-                // a cycle is running see a cycle that *started* after their suspension — not just
-                // one that finished after it.
-                select {
-                    if (enabled) signalCh.onReceive { }
-                    awaitCh.onReceive { pending += it }
-                }
+            // Wait for any trigger. Drain both channels each cycle so waiters arriving while
+            // a cycle is running see a cycle that *started* after their suspension — not just
+            // one that finished after it.
+            select {
+                if (enabled) signalCh.onReceive { }
+                awaitCh.onReceive { pending += it }
+            }
 
-                try {
-                    do {
-                        signalCh.tryReceive()
-                        while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
-                        garbageCollectBlocks()
-                    } while (drainTriggers(pending))
+            try {
+                do {
+                    signalCh.tryReceive()
+                    while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
+                    garbageCollectBlocks()
+                } while (drainTriggers(pending))
 
-                    pending.forEach { it.complete(Unit) }
-                } catch (e: CancellationException) {
-                    pending.forEach { it.cancel() }
-                    throw e
-                } catch (e: Exception) {
-                    LOGGER.warn(e, "Block garbage collection cycle failed")
-                    pending.forEach { it.completeExceptionally(e) }
-                }
+                pending.forEach { it.complete(Unit) }
+            } catch (e: CancellationException) {
+                pending.forEach { it.cancel() }
+                throw e
+            } catch (e: Exception) {
+                LOGGER.warn(e, "Block garbage collection cycle failed")
+                pending.forEach { it.completeExceptionally(e) }
             }
         }
     }

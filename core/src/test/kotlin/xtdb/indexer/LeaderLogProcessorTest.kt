@@ -8,9 +8,15 @@ import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -81,6 +87,24 @@ class LeaderLogProcessorTest {
             configure()
         }
 
+    /**
+     * Start a term the way [LogProcessor] does: the term and the partition's replica-log reader launched
+     * into the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
+     */
+    private fun CoroutineScope.startTerm(partitionStorage: PartitionStorage, proc: LeaderLogProcessor) =
+        proc.also {
+            leadersToClose += it
+            launch {
+                launch {
+                    partitionStorage.replicaLog.tailAll(-1) { records ->
+                        records.forEach { proc.queueReplicaMessage(it) }
+                    }
+                }
+                launch { proc.drive() }
+                proc.runTerm()
+            }
+        }
+
     private fun TestScope.leaderProc(
         uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -94,6 +118,7 @@ class LeaderLogProcessorTest {
         skipTxs: Set<MessageId> = emptySet(),
         leaderTerm: Long = 1,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
+        termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
@@ -105,16 +130,19 @@ class LeaderLogProcessorTest {
             )
         )
 
-        return LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = skipTxs, dbCatalog = null,
-            afterReplicaMsgId = -1,
-            leaderTerm = leaderTerm,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + termJob
+
+        return termScope.startTerm(
+            partitionStorage,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers,
+                extSource = null,
+                skipTxs = skipTxs, dbCatalog = null,
+                leaderTerm = leaderTerm,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
     }
 
     // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
@@ -182,15 +210,17 @@ class LeaderLogProcessorTest {
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = termScope.startTerm(
+            partitionStorage,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers,
+                extSource = null,
+                skipTxs = emptySet(), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val now = Instant.now()
         lp.processRecords(listOf(
@@ -258,15 +288,17 @@ class LeaderLogProcessorTest {
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = termScope.startTerm(
+            partitionStorage,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers,
+                extSource = null,
+                skipTxs = emptySet(), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val now = Instant.now()
         lp.processRecords(listOf(
@@ -364,9 +396,11 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            termJob = termJob,
         )
 
         // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
@@ -386,7 +420,7 @@ class LeaderLogProcessorTest {
 
         // Cancel the leader term — the gate will never open, so without term-close propagation
         // executeTx would hang until the runTest timeout.
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // If executeTx hangs, thrown never completes and runTest's timeout fires — that's the hang guard.
         thrown.await()
@@ -397,7 +431,8 @@ class LeaderLogProcessorTest {
         val writerEntered = CompletableDeferred<Unit>()
         val writerGate = CompletableDeferred<Unit>()
 
-        val lp = leaderProc(StandardTestDispatcher(testScheduler))
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), termJob = termJob)
 
         // t1 parks the persister inside its writer, so t2's task sits buffered in the channel —
         // never received, so never staged: only the exit drain can unblock its caller.
@@ -408,7 +443,7 @@ class LeaderLogProcessorTest {
         val t2 = backgroundScope.async { lp.executeTx(null) { TxIndexer.TxResult.Committed() } }
         testScheduler.advanceUntilIdle()
 
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // t1 fails via the pre-stage catch (cancelled mid-writer); t2 via the buffered-task drain.
         // A hang on either fires runTest's timeout.
@@ -422,7 +457,8 @@ class LeaderLogProcessorTest {
         val writerGate = CompletableDeferred<Unit>()
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers)
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers, termJob = termJob)
 
         // Park the persister inside an ext-source writer, so the source batch below lands in sourceLogCh's
         // buffer and is never received.
@@ -451,7 +487,7 @@ class LeaderLogProcessorTest {
         }
         testScheduler.advanceUntilIdle()
 
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // A hang here fires runTest's timeout — that's the regression guard.
         val e = thrown.await()
@@ -631,15 +667,17 @@ class LeaderLogProcessorTest {
             partitionStorage, partitionState, blockUploader
         )
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = setOf(10), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = termScope.startTerm(
+            partitionStorage,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers,
+                extSource = null,
+                skipTxs = setOf(10), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val token = byteArrayOf(1, 2, 3)
 

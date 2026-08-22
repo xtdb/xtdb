@@ -3,10 +3,8 @@ package xtdb.indexer
 import io.micrometer.core.instrument.DistributionSummary
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.SelectBuilder
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionKey
@@ -36,7 +34,6 @@ private val LOG = FollowerLogProcessor::class.logger
 
 class FollowerLogProcessor @JvmOverloads constructor(
     allocator: BufferAllocator,
-    replicaLog: PartitionLog<ReplicaMessage>,
     private val bufferPool: BufferPool,
     private val partitionState: PartitionState,
     private val dbName: DatabaseName,
@@ -44,11 +41,10 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val watchers: Watchers,
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
-    scope: CoroutineScope,
     private val hasExternalSource: Boolean,
     private val meterRegistry: MeterRegistry? = null,
     private val maxBufferedRecords: Int = 1024,
-) : LogProcessor.Processor<ReplicaMessage> {
+) : LogProcessor.Processor<ReplicaMessage>, Role {
 
     private fun processTimer(msgType: String): Timer? = meterRegistry?.let {
         Timer.builder("xtdb.replica.process.timer")
@@ -268,6 +264,23 @@ class FollowerLogProcessor @JvmOverloads constructor(
         if (msg.stale) watchers.notifyApplied(replicaMsgId) else processRecord(record, replicaMsgId)
     }
 
+    // Batches read off the replica log, awaiting application. Rendezvous, so the read runs no further
+    // ahead than the loop has applied — a follower's consume position is what a transition's catch-up
+    // awaits, and buffering here would advance the read without advancing that.
+    private val inbound = Channel<List<Log.Record<ReplicaMessage>>>()
+
+    /** Hand a batch read off the replica log to whoever is driving this follower. */
+    suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)
+
+    override fun armWork(select: SelectBuilder<suspend () -> Unit>) {
+        with(select) {
+            inbound.onReceive { records -> { processRecords(records) } }
+        }
+    }
+
+    // `processRecords` has already logged and notified by the time it throws.
+    override fun workFailed(cause: Throwable) = Unit
+
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {
@@ -295,19 +308,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
             }
         }
     }
-
-    // Launched last so every field the tail touches is initialised before the first record.
-    private val job = scope.launch {
-        try {
-            replicaLog.tailAll(watchers.latestReplicaMsgId, this@FollowerLogProcessor)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            watchers.notifyError(e); throw e
-        }
-    }
-
-    suspend fun cancelAndJoin() = job.cancelAndJoin()
 
     override fun close() {
         allocator.close()
