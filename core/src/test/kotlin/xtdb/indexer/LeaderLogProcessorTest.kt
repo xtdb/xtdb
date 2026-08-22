@@ -186,7 +186,7 @@ class LeaderLogProcessorTest {
         )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
         ))
         watchers.awaitSource(0)
@@ -234,7 +234,7 @@ class LeaderLogProcessorTest {
         )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(0)
@@ -252,7 +252,7 @@ class LeaderLogProcessorTest {
         val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
         ))
         watchers.awaitSource(0)
@@ -313,7 +313,7 @@ class LeaderLogProcessorTest {
         )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(0)
@@ -360,7 +360,7 @@ class LeaderLogProcessorTest {
 
         // Resolution is decoupled from the append pump: the whole batch resolves and processRecords returns
         // even though the append is still stalled on the gate — reaching the assertions below is the proof.
-        lp.processRecords(records)
+        lp.srcLogProc.processRecords(records)
         appendStarted.await()
         assertFalse(gate.isCompleted, "sanity: nothing opened the append gate")
 
@@ -487,7 +487,7 @@ class LeaderLogProcessorTest {
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
             try {
-                lp.processRecords(listOf(
+                lp.srcLogProc.processRecords(listOf(
                     Log.Record(0, 0, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
                 ))
                 thrown.complete(AssertionError("processRecords returned normally"))
@@ -622,7 +622,7 @@ class LeaderLogProcessorTest {
         fun pollThread(msgId: Long) = CompletableDeferred<Throwable>().also { outcome ->
             backgroundScope.launch {
                 try {
-                    lp.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
+                    lp.srcLogProc.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
                     outcome.complete(AssertionError("processRecords returned normally"))
                 } catch (e: Throwable) {
                     outcome.complete(e)
@@ -701,13 +701,13 @@ class LeaderLogProcessorTest {
 
         // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
         // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
         ))
 
         // Force the cut with a FlushBlock: the block's last tx is the token-less source-log tx, so the
         // boundary must carry the earlier ext tx's token (the last non-null token seen), not a null one.
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 11, Instant.now(), SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(11)

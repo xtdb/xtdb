@@ -443,9 +443,8 @@ rule DemoteLeader {
 }
 
 rule AbandonPreparedLeader {
-    -- Abandon an uncommitted leader: same teardown, reached from Prepared. The
-    -- prepared leader term is torn down (its pumps + persister cancelled); leadership
-    -- is non-resumable, so a later promotion builds a fresh term at a higher term id.
+    -- Abandon an uncommitted leader: same teardown, reached from Prepared.
+    -- The prepared leader term is torn down; leadership is non-resumable, so a later promotion builds a fresh term at a higher term id.
     when: DemoteLeaderRequested(transport, listener)
 
     requires: listener.state = prepared
