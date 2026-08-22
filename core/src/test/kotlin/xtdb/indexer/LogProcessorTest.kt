@@ -185,6 +185,42 @@ class LogProcessorTest {
         }
     }
 
+    /**
+     * Slips a rival's higher-term claim in immediately behind this node's own, so both are on the log
+     * before the follower is joined — the window in which a claim that adjudicated as conferring has
+     * already been superseded.
+     */
+    private class RivalClaimsBehindUs(private val delegate: Log<ReplicaMessage>) : Log<ReplicaMessage> by delegate {
+        var rivalPending = true
+
+        override suspend fun appendMessage(message: ReplicaMessage, partition: Int): Log.MessageMetadata {
+            val metadata = delegate.appendMessage(message, partition)
+
+            if (rivalPending && message is ReplicaMessage.NoOp && message.termId != LeaderTerm.NONE) {
+                rivalPending = false
+                delegate.appendMessage(ReplicaMessage.NoOp(termId = message.termId + 1), partition)
+            }
+
+            return metadata
+        }
+    }
+
+    @Test
+    fun `a claim superseded before the takeover completes never leads at its term`() = runTest {
+        val replicaLog = RivalClaimsBehindUs(InMemoryLog(InstantSource.system(), 0))
+
+        fixture(replicaLog = replicaLog).use { fixture ->
+            // our claim takes term 1 and the rival's takes 2, both read before the follower is joined,
+            // so leading at 1 would acknowledge writes every other node discards
+            fixture.awaitLeaderProcessing()
+
+            assertTrue(
+                fixture.partitionState.termFence.highest > 2L,
+                "the term it leads under sits above the one that superseded its claim"
+            )
+        }
+    }
+
     @Test
     fun `a higher term read back resigns the leader cleanly, and it stands again`() = runTest {
         fixture().use { fixture ->

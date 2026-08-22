@@ -419,6 +419,19 @@ invariant ALeaderLeadsAtARecordedTerm {
         p.state = leading implies p.leader.term <= p.highest_term_seen
 }
 
+invariant ALeaderResumesBeforeAnythingThatSupersedesIt {
+    -- A leader term's resume position sits at or before every record carrying a higher term.
+    --   A leader discovers it has been superseded by READING the record that did it, so a term
+    --   beginning past such a record can never discover it, and would go on acknowledging writes
+    --   every other reader discards. ExactlyOneLeaderIsEverAcknowledged (section 7) rests on
+    --   this, and adjudication alone does not give it: a claim confers against the prefix that
+    --   PRECEDED it, while the follower goes on reading until it is stopped, so a higher term can
+    --   arrive between the verdict and the swap and land behind where the term would resume.
+    for p in Participants where p.state = leading:
+        for r in p.log.records where r.term > p.leader.term:
+            r.position >= p.leader.resume_from
+}
+
 ------------------------------------------------------------
 -- 5. Claiming
 --
@@ -664,7 +677,6 @@ contract HandoverDiscipline {
 
 rule TakeLeadership {
     -- The claim came back, and it conferred leadership.
-    --   Nothing from here on can change the verdict.
     when: RecordProcessed(participant, record, term_before)
 
     requires: participant.state = claiming
@@ -682,15 +694,29 @@ rule TakeLeadership {
         -- The window this opens is what RecoverFollowerOnFailedTakeover covers.
         FollowerStopped(follower: participant.follower)
 
-        participant.leader = LeaderPipeline.created(
-            term: participant.claim.term,
-            resume_from: participant.claim.position
-        )
-        participant.follower = null
-        participant.claim = null
-        participant.abandoned_claims = 0
-        participant.state = leading
-        participant.last_appended_at = now
+        -- The follower read on until it was stopped just now, so the highest term is only
+        -- settled here. A term above this claim's has superseded it, and the term would
+        -- resume past the record carrying it -- so return to following instead
+        -- (ALeaderResumesBeforeAnythingThatSupersedesIt, section 4).
+        if participant.highest_term_seen > participant.claim.term:
+            participant.follower = FollowerPipeline.created(
+                resume_from: participant.replica_position
+            )
+            participant.claim = null
+            participant.abandoned_claims = 0
+            participant.state = following
+        else:
+            -- Where the follower stopped, not the claim's position: the follower may have read
+            -- past its own claim, and re-delivering what it applied would apply it twice.
+            participant.leader = LeaderPipeline.created(
+                term: participant.claim.term,
+                resume_from: participant.replica_position
+            )
+            participant.follower = null
+            participant.claim = null
+            participant.abandoned_claims = 0
+            participant.state = leading
+            participant.last_appended_at = now
 }
 
 rule RecoverFollowerOnFailedTakeover {

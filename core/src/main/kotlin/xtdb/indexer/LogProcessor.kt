@@ -320,6 +320,16 @@ class LogProcessor(
                 follower.close()
             }
 
+            // The claim conferred against the prefix that preceded it, and the follower went on reading
+            // until we joined it just now. A higher term arriving in that window has already superseded
+            // this claim — leading under it would acknowledge writes every other node discards, and the
+            // consume-back cannot catch it, because this term would resume past the record that carries it.
+            if (partitionState.termFence.highest > termId) {
+                LOG.info("[$dbName] superseded at term ${partitionState.termFence.highest} before taking over at $termId; following")
+                state = openFollower(pendingBlock)
+                return
+            }
+
             openTransition(termId).use { transition ->
                 if (pendingBlock != null) {
                     LOG.debug("[$dbName] takeover: finishing pending block b${pendingBlock.blockIdx} with ${pendingBlock.bufferedRecords.size} buffered records")
