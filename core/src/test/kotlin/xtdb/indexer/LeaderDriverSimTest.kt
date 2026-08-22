@@ -40,6 +40,7 @@ import xtdb.storage.MemoryStorage
 import xtdb.types.MessageId
 import xtdb.util.closeAll
 import java.time.InstantSource
+import kotlin.time.Duration
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -73,8 +74,10 @@ class LeaderDriverSimTest : SimulationTestBase() {
         nodeBase = openBase(openMeterRegistry = false)
         allocator = nodeBase.allocator.newChildAllocator("test", 0, Long.MAX_VALUE)
         bufferPool = MemoryStorage(allocator, epoch = 0)
-        sourceLog = InMemoryLog(InstantSource.system(), 0)
-        replicaLog = InMemoryLog(InstantSource.system(), 0)
+        // This test opens its own leader terms rather than electing them, so it wants no empty reads:
+        // scheduling one would put a real timer inside a simulation whose dispatcher has no clock.
+        sourceLog = InMemoryLog(InstantSource.system(), 0, tailPollDuration = Duration.INFINITE)
+        replicaLog = InMemoryLog(InstantSource.system(), 0, tailPollDuration = Duration.INFINITE)
         latestTerm = 0L
     }
 

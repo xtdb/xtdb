@@ -20,13 +20,24 @@ import xtdb.types.MessageId
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
-import java.time.Duration as JDuration
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import java.time.Duration as JDuration
 
 class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
     override val epoch: Int,
     val partitions: Int = 1,
+    /**
+     * In-process, so exactly one participant exists: elections are uncontested and can run in
+     * milliseconds, so this is far shorter than a shared log's.
+     *
+     * A caller that drives its own leader rather than electing one SHOULD pass [Duration.INFINITE].
+     * Reporting an empty read means scheduling a timeout, and a scheduled timeout resumes on the
+     * coroutine machinery's own timer thread — which a test dispatcher that admits no cross-thread
+     * dispatch will refuse.
+     */
+    override val tailPollDuration: Duration = 10.milliseconds,
 ) : Log<M> {
 
     @SerialName("!InMemory")
@@ -61,10 +72,7 @@ class InMemoryLog<M> @JvmOverloads constructor(
         private const val REPLAY_BUFFER_SIZE = 4096
     }
 
-    // In-process, so exactly one participant exists: elections are uncontested and can run in
-    // milliseconds, and there is no follower elsewhere for an idle leader to reassure.
-    override val tailPollDuration = 10.milliseconds
-
+    // No follower elsewhere for an idle leader to reassure, hence no assertion interval.
     override val electionConfig =
         ElectionConfig(
             electionTimeoutMin = JDuration.ofMillis(50),
