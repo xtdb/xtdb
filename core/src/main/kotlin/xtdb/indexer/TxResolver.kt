@@ -77,9 +77,15 @@ internal class ExtSourceMessage(
  * Everything still queued is a read-your-writes predecessor for the next tx to resolve, which is why the
  * queue and resolution sit together: a tx resolving now must see every predecessor not yet applied.
  *
- * Two heads: [latestCompletedTx] here is the RESOLVED head (it drives resolution — the next external-source
- * tx-id and system-time smoothing), and it leads [LiveIndex.latestCompletedTx] (the durable/query basis) by
- * everything queued but not yet applied.
+ * ## The resolve-side watermarks
+ *
+ * [latestCompletedTx], [resolvedSrcMsgId] and [resolvedExtToken] are `Watchers`' triple as of the
+ * last-resolved tx. They lead the watchers' own — which advance on apply — by everything queued but not yet
+ * applied, so resolution reads them and not the watchers: the next external-source tx-id and its system-time
+ * smoothing come off [latestCompletedTx], and a block boundary cut on the resolve side carries
+ * [resolvedSrcMsgId] and [resolvedExtToken]. Stamping a boundary or an ext-source record from the watchers
+ * instead would let a tx resolved ahead of it apply first and push the watermark past the stamp, tripping
+ * `notifyApplied`'s monotonicity check (#5817).
  */
 internal class TxResolver(
     allocator: BufferAllocator,
@@ -89,6 +95,8 @@ internal class TxResolver(
     private val dbName: DatabaseName,
     crashLogger: CrashLogger,
     private val skipTxs: Set<MessageId>,
+    resolvedSrcMsgId: MessageId,
+    resolvedExtToken: ExternalSourceToken?,
     private val instantSource: InstantSource,
 ) : AutoCloseable {
 
@@ -104,6 +112,20 @@ internal class TxResolver(
 
     var latestCompletedTx: TransactionKey? = partitionState.liveIndex.latestCompletedTx
         private set
+
+    var resolvedSrcMsgId: MessageId = resolvedSrcMsgId
+        private set
+
+    var resolvedExtToken: ExternalSourceToken? = resolvedExtToken
+        private set
+
+    /**
+     * Move the source watermark on for a source message that resolves to something other than a tx — a block
+     * boundary, a trie add, a no-op — so the next boundary cut carries a position that covers it.
+     */
+    fun advanceSrcMsgId(srcMsgId: MessageId) {
+        this.resolvedSrcMsgId = srcMsgId
+    }
 
     private val queue = ArrayDeque<ResolvedTx>()
 
@@ -121,14 +143,20 @@ internal class TxResolver(
 
     /**
      * Take ownership of [openTx]'s written tables (a reference move — see `OpenTx.sealTables`), enqueue them,
-     * and advance the resolved head. The caller closes the (now table-less) [openTx].
+     * and advance every resolve-side watermark this tx implies. The caller closes the (now table-less)
+     * [openTx].
      */
     private fun stage(
         openTx: OpenTx, srcMsgId: MessageId, txResult: TransactionResult,
         dbOp: DbOp?, pending: CompletableDeferred<TransactionResult>?,
     ): ResolvedTx =
         ResolvedTx.stage(openTx, srcMsgId, txResult, dbOp, pending)
-            .also { queue.addLast(it); latestCompletedTx = openTx.txKey }
+            .also {
+                queue.addLast(it)
+                latestCompletedTx = openTx.txKey
+                resolvedSrcMsgId = srcMsgId
+                openTx.externalSourceToken?.let { token -> resolvedExtToken = token }
+            }
 
     private fun openTx(txKey: TransactionKey, externalSourceToken: ExternalSourceToken?) =
         OpenTx(allocator, nodeBase, partitionStorage, partitionState, dbName, txKey, externalSourceToken, tracer, resolvedTxs)
@@ -286,12 +314,12 @@ internal class TxResolver(
     /**
      * Run an external source's writer and stage the tx it produces.
      *
-     * [srcMsgId] is the source-log watermark to stamp on the replicated record. Ext-source txs carry no
-     * source-log position of their own — they track progress via `externalSourceToken` — but without the
-     * stamp a follower's `latestSourceMsgId` lags between block boundaries, and on promotion it resumes the
-     * source log from a stale point and replays an already-covered block boundary.
+     * The staged tx carries [resolvedSrcMsgId] unchanged. An ext-source tx has no source-log position of its
+     * own — it tracks progress via `externalSourceToken` — but stamping the replicated record with the
+     * current one anyway keeps a follower's `latestSourceMsgId` up to date between block boundaries, so on
+     * promotion it resumes the source log where the leader was rather than replaying a covered boundary.
      */
-    suspend fun indexTx(msg: ExtSourceMessage, srcMsgId: MessageId): ResolvedTx {
+    suspend fun indexTx(msg: ExtSourceMessage): ResolvedTx {
         val txKey = TransactionKey(
             (latestCompletedTx?.txId ?: -1) + 1,
             smoothSystemTime(msg.systemTime ?: instantSource.instant())
@@ -319,7 +347,7 @@ internal class TxResolver(
                     }
                 }
 
-                stage(openTx, srcMsgId, txResult, dbOp = null, pending = msg.pending)
+                stage(openTx, resolvedSrcMsgId, txResult, dbOp = null, pending = msg.pending)
             } catch (e: Throwable) {
                 // Writer, writeTxRow, or stage threw before the tx reached the queue, so nothing will ever
                 // settle it — complete the handle here, or a caller awaiting it hangs until the term closes.

@@ -2,9 +2,12 @@ package xtdb.indexer
 
 import io.micrometer.core.instrument.Gauge
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -16,6 +19,7 @@ import kotlinx.coroutines.selects.selectUnbiased
 import kotlinx.coroutines.withContext
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
+import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.compactor.Compactor
 import xtdb.api.DatabaseName
@@ -40,6 +44,35 @@ internal val Throwable.isShutdownSignal
     get() = this is CancellationException || this is InterruptedException || this is Interrupted
 
 /**
+ * Run a resolution task, routing failures onto its completion handle (and any external-source result) so
+ * that no caller hangs. Interrupts are shutdown signals, not ingestion faults, so they don't poison the
+ * watchers. A successful source batch completes its own handle, possibly deferred if a block cut paused it.
+ */
+internal inline fun Watchers.runTaskGuarded(
+    onComplete: CompletableDeferred<Unit>,
+    extResult: CompletableDeferred<TransactionResult>? = null,
+    block: () -> Unit,
+) {
+    try {
+        block()
+    } catch (e: CancellationException) {
+        if (!onComplete.isCompleted) onComplete.cancel(e)
+        throw e
+    } catch (e: InterruptedException) {
+        if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+        throw e
+    } catch (e: Interrupted) {
+        if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+        throw e
+    } catch (e: Throwable) {
+        notifyError(e)
+        if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
+        extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
+        throw e
+    }
+}
+
+/**
  * A live role, as the partition's loop sees it.
  *
  * The split is between what the role decides and what it doesn't. Which work it will take *right now* is
@@ -47,12 +80,8 @@ internal val Throwable.isShutdownSignal
  * and its upload — where running one unit at a time is the partition's.
  */
 internal interface Role {
-    /**
-     * Arm the work this role will take right now, each clause yielding that work as a thunk.
-     *
-     * A thunk rather than a description of the work, so what the work *is* never leaves the role.
-     */
-    fun armWork(select: SelectBuilder<suspend () -> Unit>)
+    /** Arm the work this role will take right now — one clause per kind, each doing that work when taken. */
+    fun SelectBuilder<Unit>.selectWork()
 
     /** Work threw, so this role is finished. Report it however this role reports a failure. */
     fun workFailed(cause: Throwable)
@@ -68,8 +97,7 @@ internal interface Role {
 internal suspend fun Role.drive() {
     try {
         while (true) {
-            val work = selectUnbiased<suspend () -> Unit> { armWork(this) }
-            work()
+            selectUnbiased { this.selectWork() }
         }
     } catch (e: CancellationException) {
         throw e
@@ -131,10 +159,12 @@ class LogProcessor(
 
     private fun openLeader(termId: Long, resumeAfterMsgId: MessageId): Prepared {
         // The leader term owns (and frees) its driver and its ext source.
+        val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
+        val replicaAppender = ReplicaLogAppender(driver)
+
         val proc = LeaderLogProcessor(
-            allocator, base, partitionStorage, crashLogger, partitionState, dbName,
-            RealLeaderDriver(partitionStorage, partitionState, blockUploader),
-            watchers,
+            allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
+            replicaAppender,
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             skipTxs, dbCatalog,
             leaderTerm = termId,
@@ -143,16 +173,20 @@ class LogProcessor(
         )
 
         // Reading is the partition's for a leader too — the term's own writes are confirmed by arriving
-        // back here. One job over all three, so a read that fails cancels the term: consume-back is the
+        // back here. One job over all of them, so a read that fails cancels the term: consume-back is the
         // only thing that acks a write, so a term outliving its reader hangs whatever is staged on it.
         val termJob = scope.launch {
             launch { tailReplica { records -> records.forEach { proc.queueReplicaMessage(it) } } }
             launch { proc.drive() }
+            launch { proc.gc.runGc() }
+            proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+            launch(CoroutineName("$dbName-append-pump")) { replicaAppender.run(proc::workFailed) }
             proc.runTerm()
         }
 
         return Prepared(proc, termJob, resumeAfterMsgId)
     }
+
 
     private fun openTransition(termId: Long): TransitionLogProcessor =
         TransitionLogProcessor(
@@ -327,9 +361,5 @@ class LogProcessor(
      * both. No-op unless leading — GC only runs on the leader. Bypasses the collectors'
      * `enabled` flag (which gates the auto-signal from the block-boundary path, not direct calls).
      */
-    fun gcAll() {
-        val proc = (state as? Leading)?.proc ?: return
-        proc.blockGc.awaitNoGarbageBlocking()
-        proc.trieGc.awaitNoGarbageBlocking()
-    }
+    fun awaitNoGarbageBlocking() = (state as? Leading)?.proc?.gc?.awaitNoGarbageBlocking()
 }
