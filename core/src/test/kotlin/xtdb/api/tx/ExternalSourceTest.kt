@@ -35,6 +35,7 @@ import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
+import xtdb.indexer.ReplicaLogAppender
 import xtdb.indexer.drive
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
@@ -127,10 +128,11 @@ class ExternalSourceTest {
         )
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
+        val replicaAppender = ReplicaLogAppender(driver)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, watchers, extSource,
+            partitionState, "test", driver, watchers, replicaAppender, extSource,
             skipTxs = emptySet(), dbCatalog = null,
             flushTimeout = IndexerConfig().flushDuration,
         ).also { proc ->
@@ -142,6 +144,9 @@ class ExternalSourceTest {
                     }
                 }
                 launch { proc.drive() }
+                launch { proc.gc.runGc() }
+                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                launch { replicaAppender.run(proc::workFailed) }
                 proc.runTerm()
             }
         }

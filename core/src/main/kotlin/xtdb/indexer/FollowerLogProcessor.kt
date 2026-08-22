@@ -272,10 +272,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
     /** Hand a batch read off the replica log to whoever is driving this follower. */
     suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)
 
-    override fun armWork(select: SelectBuilder<suspend () -> Unit>) {
-        with(select) {
-            inbound.onReceive { records -> { processRecords(records) } }
-        }
+    override fun SelectBuilder<Unit>.selectWork() {
+        inbound.onReceive { records -> processRecords(records) }
     }
 
     // `processRecords` has already logged and notified by the time it throws.
