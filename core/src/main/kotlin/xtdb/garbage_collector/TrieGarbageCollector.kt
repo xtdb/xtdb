@@ -51,8 +51,6 @@ private const val TRIES_DELETED_CHUNK_SIZE = 1024
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrieGarbageCollector(
-    /** The owner's scope: supplies this collector's lifetime and the thread its loop runs on. Cancelling it stops the loop. */
-    scope: CoroutineScope,
     private val bufferPool: BufferPool,
     partitionState: PartitionState,
     dbName: DatabaseName,
@@ -68,7 +66,7 @@ class TrieGarbageCollector(
     private val meterRegistry: MeterRegistry? = null,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
-    /** Base for the parallel delete fan-out pools; the loop itself runs on [scope]. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
+    /** Base for the parallel delete fan-out pools; the loop itself runs on its caller's thread. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
@@ -89,33 +87,32 @@ class TrieGarbageCollector(
             .register(it)
     }
     
-    init {
+    /** Collect on every trigger until cancelled. [signal] and [awaitNoGarbage] do nothing until this is running. */
+    suspend fun run(): Unit = coroutineScope {
         LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
 
-        scope.launch {
-            while (isActive) {
-                val pending = mutableListOf<CompletableDeferred<Unit>>()
+        while (isActive) {
+            val pending = mutableListOf<CompletableDeferred<Unit>>()
 
-                select<Unit> {
-                    if (enabled) signalCh.onReceive { }
-                    awaitCh.onReceive { pending += it }
-                }
+            select<Unit> {
+                if (enabled) signalCh.onReceive { }
+                awaitCh.onReceive { pending += it }
+            }
 
-                try {
-                    do {
-                        signalCh.tryReceive()
-                        while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
-                        garbageCollectTries()
-                    } while (drainTriggers(pending))
+            try {
+                do {
+                    signalCh.tryReceive()
+                    while (true) pending.add(awaitCh.tryReceive().getOrNull() ?: break)
+                    garbageCollectTries()
+                } while (drainTriggers(pending))
 
-                    pending.forEach { it.complete(Unit) }
-                } catch (e: CancellationException) {
-                    pending.forEach { it.cancel() }
-                    throw e
-                } catch (e: Exception) {
-                    LOGGER.warn(e, "Trie garbage collection cycle failed")
-                    pending.forEach { it.completeExceptionally(e) }
-                }
+                pending.forEach { it.complete(Unit) }
+            } catch (e: CancellationException) {
+                pending.forEach { it.cancel() }
+                throw e
+            } catch (e: Exception) {
+                LOGGER.warn(e, "Trie garbage collection cycle failed")
+                pending.forEach { it.completeExceptionally(e) }
             }
         }
     }

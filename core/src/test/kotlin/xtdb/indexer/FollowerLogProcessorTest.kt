@@ -3,11 +3,9 @@ package xtdb.indexer
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
-import kotlinx.coroutines.awaitCancellation
 import org.apache.arrow.memory.RootAllocator
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -16,7 +14,6 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import xtdb.api.log.Log
-import xtdb.api.log.PartitionLog
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
@@ -45,7 +42,6 @@ class FollowerLogProcessorTest {
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var partitionState: PartitionState
-    private lateinit var replicaLog: Log<ReplicaMessage>
 
     // runTest cancels and joins backgroundScope before tearDown, so the followers are quiescent here
     // and freed before `allocator` closes.
@@ -63,11 +59,6 @@ class FollowerLogProcessorTest {
         partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        // The processor self-launches its replica tail; park it so it idles while the test drives
-        // processRecords directly — a relaxed mock would return immediately and tear the proc down.
-        replicaLog = mockk(relaxed = true)
-        coEvery { replicaLog.tailAll(any(), any(), any()) } coAnswers { awaitCancellation() }
-
         every { bufferPool.epoch } returns 1
     }
 
@@ -77,14 +68,14 @@ class FollowerLogProcessorTest {
         allocator.close()
     }
 
-    private fun TestScope.makeProcessor(
+    private fun makeProcessor(
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
         meterRegistry: MeterRegistry? = null,
     ) =
         FollowerLogProcessor(
-            allocator, PartitionLog(replicaLog, 0), bufferPool, partitionState, "test", compactor,
-            watchers, null, null, backgroundScope,
+            allocator, bufferPool, partitionState, "test", compactor,
+            watchers, null, null,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,

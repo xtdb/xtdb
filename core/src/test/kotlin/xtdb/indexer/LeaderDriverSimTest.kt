@@ -4,6 +4,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
@@ -24,7 +25,6 @@ import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.SourceMessage
@@ -125,13 +125,26 @@ class LeaderDriverSimTest : SimulationTestBase() {
                 )
             ),
             watchers, extSource = null, skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = afterReplicaMsgId,
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.
             leaderTerm = termId,
             flushTimeout = indexerConfig.flushDuration,
-            scope = scope, gcDispatcher = dispatcher,
+            gcDispatcher = dispatcher,
         )
+
+        init {
+            scope.launch {
+                // From the claim record rather than the start of the log: a sim leader begins with empty
+                // catalogs and never replays, so anything before its claim is not its to apply.
+                launch {
+                    partitionStorage.replicaLog.tailAll(afterReplicaMsgId) { records ->
+                        records.forEach { proc.queueReplicaMessage(it) }
+                    }
+                }
+                launch { proc.drive() }
+                proc.runTerm()
+            }
+        }
 
         /** Fire-and-forget: the returned handle completes only once the tx is durably replicated. */
         suspend fun submitRows(rows: List<UUID>): Deferred<TransactionResult> =

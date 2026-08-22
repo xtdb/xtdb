@@ -4,7 +4,9 @@ package xtdb.indexer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.selects.selectUnbiased
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.SelectBuilder
+import kotlinx.coroutines.supervisorScope
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
@@ -51,14 +53,12 @@ internal class LeaderLogProcessor(
     private val extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
-    afterReplicaMsgId: MessageId,
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
-    scope: CoroutineScope,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
-) : LogProcessor.Processor<SourceMessage>, TxIndexer {
+) : LogProcessor.Processor<SourceMessage>, Role, TxIndexer {
 
     init {
         require((dbCatalog != null) == (dbName == "xtdb")) {
@@ -84,11 +84,6 @@ internal class LeaderLogProcessor(
 
     var pendingBlock: PendingBlock? = null
         private set
-
-    // Where the consume pump starts tailing: the transition's replay target, which can sit below where
-    // the outgoing follower had read. Everything in between is the superseded leader's, written after
-    // our own claim and therefore fenced, so re-reading it applies nothing.
-    private val replayFrom: MessageId = afterReplicaMsgId
 
     private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
 
@@ -129,7 +124,8 @@ internal class LeaderLogProcessor(
     // Backpressure comes from the block pause + the resolve-side row gauge, not channel capacity.
     private val awaitingAppend = Channel<AppendItem>(Channel.UNLIMITED)
 
-    // Records the consume pump has tailed back off the replica log, awaiting application.
+    // Records read back off the replica log, awaiting application. The partition's reader fills it
+    // through [queueReplicaMessage]; its capacity is what bounds how far that reader may run ahead.
     private val replicaMsgs = Channel<Log.Record<ReplicaMessage>>(capacity = 128)
 
     // Serialize each ResolvedTx (the costly Arrow-IPC step, kept off the resolver) and append it, in
@@ -148,12 +144,13 @@ internal class LeaderLogProcessor(
         }
     }
 
-    // Tail our own replica log from the replay target and post everything back to the apply loop. The
-    // same plain tail the follower uses — a separate consumer from the source-log group subscription that
-    // drives leader election, so this doesn't interfere with it.
-    private suspend fun consumePump() {
-        driver.tailReplica(replayFrom) { records -> records.forEach { replicaMsgs.send(it) } }
-    }
+    /**
+     * Hand a record read back off the replica log to the apply loop, suspending while the loop is behind.
+     *
+     * Confirmation, not delivery: a leader learns its own writes landed by reading them back (#5817), so
+     * every record reaches this — its own, and a superseding leader's alike.
+     */
+    suspend fun queueReplicaMessage(record: Log.Record<ReplicaMessage>) = replicaMsgs.send(record)
 
     // ---- apply loop (consume-back) ----
 
@@ -465,18 +462,8 @@ internal class LeaderLogProcessor(
     private class RunTask(val task: PersisterTask) : Work
     private data object Resume : Work
 
-    // The term handle: a supervisor child of the Database scope, owning the pumps + persister loop
-    // (launched in `init`) and the GCs. A term-internal failure surfaces via `notifyError` rather than
-    // cancelling the source-log subscription; `cancelAndJoin` reaps the whole term. See dev/doc/coroutines.adoc.
-    private val termJob = SupervisorJob(scope.coroutineContext.job)
-
-    // The GCs run under a SupervisorJob child of `termJob`, so one GC's failure cancels neither its sibling
-    // nor the persister; cancelling `termJob` reaps them all.
-    private val gcScope = scope + SupervisorJob(termJob)
-
     internal val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
-            gcScope,
             bufferPool, blockCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
@@ -495,7 +482,6 @@ internal class LeaderLogProcessor(
         }
 
         TrieGarbageCollector(
-            gcScope,
             bufferPool, partitionState, dbName,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
@@ -504,65 +490,56 @@ internal class LeaderLogProcessor(
         )
     }
 
-    // Launched last so every field the body reaches — e.g. blockGc/trieGc via the boundary path — is
-    // initialised before the first record. Runs under `termJob`, so `cancelAndJoin` reaps it.
-    init {
-        CoroutineScope(scope.coroutineContext + termJob).launch {
-            // Core: the append pump, the consume pump and the persister loop, structured together so any
-            // one failing cancels the others and surfaces the cause.
-            launch {
-                var cause: Throwable? = null
+    override fun armWork(select: SelectBuilder<suspend () -> Unit>) {
+        with(select) {
+            replicaMsgs.onReceive { r -> { runWork(Apply(r)) } }
+            if (!blockInProgress) {
+                if (pausedBatch != null) resumeCh.onReceive { { runWork(Resume) } }
+                driver.sourceBatches.onBatch { b -> { runWork(SourceWork(b)) } }
+                extSourceCh.onReceive { t -> { runWork(RunTask(t)) } }
+                gcCh.onReceive { t -> { runWork(RunTask(t)) } }
+            }
+        }
+    }
+
+    private suspend fun runWork(work: Work) {
+        when (work) {
+            // Applying is where a supersession fails the term; let it propagate (interrupts too).
+            is Apply ->
                 try {
-                    coroutineScope {
-                        launch(CoroutineName("$dbName-append-pump")) { appendPump() }
-                        launch(CoroutineName("$dbName-consume-pump")) { consumePump() }
-                        persisterLoop()
-                    }
-                } catch (_: CancellationException) {
-                    // term cancellation
+                    applyRecord(work.record)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: LeaderSupersededException) {
-                    // superseded by a newer leader — expected, not a query-facing fault; the transport
-                    // re-follows on the next rebalance. Don't poison the watchers.
-                    LOG.info("[$dbName] ${e.message}")
-                    cause = e
-                } catch (t: Throwable) {
-                    // A genuine term fault (e.g. an append-pump commit fault) surfaces to queries as a
-                    // failed term. Idempotent — the apply arm may already have notified for its own faults.
-                    LOG.error(t) { "[$dbName] leader term failed" }
-                    cause = t
-                    watchers.notifyError(t)
-                } finally {
-                    val pendingCause = cause ?: CancellationException("leader term closed")
-
-                    // Nothing may be left awaiting the persister once it has gone: whatever is staged,
-                    // paused, or still queued gets failed here. Each task's own `abandon` picks the failure
-                    // *kind*, so this is a flat sweep with no per-caller special-casing.
-                    //
-                    // Miss anything and the symptom is a hang, not an error — and for a source-log batch
-                    // that hang is on the transport's poll thread (inside `processRecords`), which is also
-                    // the sole servicer of the transport's unregister. So it wedges the whole subscription
-                    // teardown and blows DatabaseCatalog.close's bound (#5711 / #5817).
-                    txResolver.failPending(pendingCause)
-                    pausedBatch?.task?.abandon(pendingCause)
-
-                    // The source-log pipe lives on the driver; its shutdown applies the same close-and-drain,
-                    // and owns the must-be-a-cancellation rule (SourceBatch.abandon) because the poll thread
-                    // both awaits and sends there.
-                    driver.sourceBatches.shutdown(pendingCause)
-                    extSourceCh.shutdown(pendingCause)
-                    gcCh.shutdown(pendingCause)
+                    throw e
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Interrupted) {
+                    throw e
+                } catch (e: Throwable) {
+                    watchers.notifyError(e)
+                    throw e
                 }
+
+            is Resume -> {
+                val pb = pausedBatch ?: return
+                pausedBatch = null
+                runTaskGuarded(pb.task.onComplete) { runSourceBatch(pb.task, pb.nextIdx) }
             }
 
-            extSource?.let { source ->
-                supervisorScope {
-                    launch {
-                        try {
-                            source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Throwable) {
-                            watchers.notifyError(e)
+            // The batch completes its own onComplete (deferred, if a block cut pauses it).
+            is SourceWork ->
+                runTaskGuarded(work.batch.onComplete) { runSourceBatch(work.batch, 0) }
+
+            is RunTask -> {
+                val task = work.task
+                runTaskGuarded(task.onComplete, extResult = (task as? ExtSourceTask.IndexTx)?.msg?.pending) {
+                    when (task) {
+                        is ExtSourceTask.IndexTx -> {
+                            handleIndexTx(task); task.onComplete.complete(Unit)
+                        }
+                        is GcTask.TriesDeleted -> {
+                            handleTriesDeleted(task); task.onComplete.complete(Unit)
                         }
                     }
                 }
@@ -570,57 +547,92 @@ internal class LeaderLogProcessor(
         }
     }
 
-    private suspend fun persisterLoop() {
-        while (true) {
-            val work = selectUnbiased<Work> {
-                replicaMsgs.onReceive { Apply(it) }
-                if (!blockInProgress) {
-                    if (pausedBatch != null) resumeCh.onReceive { Resume }
-                    driver.sourceBatches.onBatch { SourceWork(it) }
-                    extSourceCh.onReceive { RunTask(it) }
-                    gcCh.onReceive { RunTask(it) }
-                }
-            }
+    // Completed by [workFailed] with the cause. Write-once, and the only thing the term learns about the
+    // loop it no longer runs.
+    private val termFailure = CompletableDeferred<Throwable>()
 
-            when (work) {
-                // The apply loop is where a supersession fails the term; let it propagate (interrupts too).
-                is Apply ->
+    /**
+     * End this term, because the work loop it no longer runs has failed with [cause].
+     *
+     * The logging, the watchers and the sweep of everything staged are still the term's, and so is the
+     * distinction they turn on — a supersession is a clean resignation where an append fault is not — so
+     * the cause has to come back here to reach them.
+     */
+    override fun workFailed(cause: Throwable) {
+        termFailure.complete(cause)
+    }
+
+    /**
+     * Run this term until it is cancelled or fails: the append pump, the collectors and the ext source.
+     * Cancelling the caller is what ends the term.
+     */
+    suspend fun runTerm(): Unit = coroutineScope {
+        launch {
+            supervisorScope {
+                launch { blockGc.run() }
+                launch { trieGc.run() }
+            }
+        }
+
+        // Core: the append pump, and the term's own end. Structured together so a pump failure and a
+        // loop failure both arrive here, and either cancels the other.
+        launch {
+            var cause: Throwable? = null
+            try {
+                coroutineScope {
+                    launch(CoroutineName("$dbName-append-pump")) { appendPump() }
+                    throw termFailure.await()
+                }
+            } catch (_: CancellationException) {
+                // term cancellation
+            } catch (e: LeaderSupersededException) {
+                // superseded by a newer leader — expected, not a query-facing fault; the transport
+                // re-follows on the next rebalance. Don't poison the watchers.
+                LOG.info("[$dbName] ${e.message}")
+                cause = e
+            } catch (t: Throwable) {
+                // A genuine term fault (e.g. an append-pump commit fault) surfaces to queries as a
+                // failed term. Idempotent — the apply arm may already have notified for its own faults.
+                LOG.error(t) { "[$dbName] leader term failed" }
+                cause = t
+                watchers.notifyError(t)
+            } finally {
+                val pendingCause = cause ?: CancellationException("leader term closed")
+
+                // Nothing may be left awaiting the persister once it has gone: whatever is staged,
+                // paused, or still queued gets failed here. Each task's own `abandon` picks the failure
+                // *kind*, so this is a flat sweep with no per-caller special-casing.
+                //
+                // Miss anything and the symptom is a hang, not an error — and for a source-log batch
+                // that hang is on the transport's poll thread (inside `processRecords`), which is also
+                // the sole servicer of the transport's unregister. So it wedges the whole subscription
+                // teardown and blows DatabaseCatalog.close's bound (#5711 / #5817).
+                txResolver.failPending(pendingCause)
+                pausedBatch?.task?.abandon(pendingCause)
+
+                // The source-log pipe lives on the driver; its shutdown applies the same close-and-drain,
+                // and owns the must-be-a-cancellation rule (SourceBatch.abandon) because the poll thread
+                // both awaits and sends there.
+                driver.sourceBatches.shutdown(pendingCause)
+                extSourceCh.shutdown(pendingCause)
+                gcCh.shutdown(pendingCause)
+
+                // The partition's reader is suspended on a send here rather than awaiting a task, so a
+                // close is all it needs — as a cancellation, since it is the reader's own coroutine that
+                // sees it and a benign teardown must not poison the watchers.
+                replicaMsgs.close(pendingCause.asCancellation())
+            }
+        }
+
+        extSource?.let { source ->
+            supervisorScope {
+                launch {
                     try {
-                        applyRecord(work.record)
+                        source.onPartitionAssigned(partition, watchers.externalSourceToken, this@LeaderLogProcessor)
                     } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: LeaderSupersededException) {
-                        throw e
-                    } catch (e: InterruptedException) {
-                        throw e
-                    } catch (e: Interrupted) {
                         throw e
                     } catch (e: Throwable) {
                         watchers.notifyError(e)
-                        throw e
-                    }
-
-                is Resume -> {
-                    val pb = pausedBatch ?: continue
-                    pausedBatch = null
-                    runTaskGuarded(pb.task.onComplete) { runSourceBatch(pb.task, pb.nextIdx) }
-                }
-
-                // The batch completes its own onComplete (deferred, if a block cut pauses it).
-                is SourceWork ->
-                    runTaskGuarded(work.batch.onComplete) { runSourceBatch(work.batch, 0) }
-
-                is RunTask -> {
-                    val task = work.task
-                    runTaskGuarded(task.onComplete, extResult = (task as? ExtSourceTask.IndexTx)?.msg?.pending) {
-                        when (task) {
-                            is ExtSourceTask.IndexTx -> {
-                                handleIndexTx(task); task.onComplete.complete(Unit)
-                            }
-                            is GcTask.TriesDeleted -> {
-                                handleTriesDeleted(task); task.onComplete.complete(Unit)
-                            }
-                        }
                     }
                 }
             }
@@ -700,13 +712,11 @@ internal class LeaderLogProcessor(
         if (records.isNotEmpty()) driver.sourceBatches.submit(records).await()
     }
 
-    suspend fun cancelAndJoin() = termJob.cancelAndJoin()
-
     override fun close() {
         extSource?.close()
         driver.close()
-        // Frees every resolved-but-not-applied tx — safe now that cancelAndJoin has joined the persister
-        // and the pumps.
+        // Frees every resolved-but-not-applied tx — safe only once the term's job has been joined, so the
+        // persister and the pumps are gone.
         txResolver.close()
     }
 }
