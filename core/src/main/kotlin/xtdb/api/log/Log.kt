@@ -23,6 +23,8 @@ import xtdb.util.asPath
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import com.google.protobuf.Any as ProtoAny
 
 
@@ -75,10 +77,42 @@ interface Log<M> : AutoCloseable {
     }
 
     fun interface RecordProcessor<in M> {
+        /**
+         * Called once per read, with the records that read delivered — **including when it delivered
+         * none**. An empty list says "the log was read, and had nothing beyond what you have already
+         * seen", which is a distinct fact from not being called at all, and one that leader election
+         * depends on: see [TAIL_POLL_DURATION].
+         */
         suspend fun processRecords(records: List<Record<M>>)
     }
 
+    /**
+     * How long a tail waits for a record before reporting a read that found nothing.
+     *
+     * A participant measures quiet time across its own reads rather than against the clock, so a
+     * silent log still has to be seen to have been read — otherwise a node that is no longer being
+     * delivered to is indistinguishable from one whose database is merely idle, and the wrong one
+     * of the two claims leadership. See `allium/log-processor-lifecycle.allium`.
+     *
+     * The interval must stay well inside the range this log's election timeouts are drawn from
+     * ([electionConfig]). Two followers whose draws differ by less than one interval tip over on the
+     * same read, and the randomisation that separates them buys nothing — which is why the in-process
+     * logs, whose elections run in milliseconds, tick faster than the default.
+     */
+    val tailPollDuration: Duration get() = TAIL_POLL_DURATION
+
+    /**
+     * The election timeouts for leadership over this log.
+     *
+     * The log's to supply rather than the node's, because their right order of magnitude is a fact
+     * about the log: an in-process log can elect in milliseconds, where a shared log's timeouts have
+     * to absorb real scheduling and delivery delay.
+     */
+    val electionConfig: ElectionConfig get() = ElectionConfig()
+
     companion object {
+        val TAIL_POLL_DURATION: Duration = 1.seconds
+
         @JvmStatic
         val inMemoryLog get() = InMemoryLog.Factory()
 

@@ -1,7 +1,6 @@
 package xtdb.indexer
 
-import kotlinx.coroutines.CompletableDeferred
-import xtdb.api.error.Incorrect
+import xtdb.api.log.ElectionConfig
 import xtdb.types.MessageId
 import java.time.Duration
 import java.time.Instant
@@ -9,51 +8,27 @@ import java.time.InstantSource
 import kotlin.random.Random
 
 /**
- * The timeouts leadership is decided by. See `allium/log-processor-lifecycle.allium` section 5 — what
- * the spec fixes is the *relations* between these rather than the values, and [claimTimeout] exceeding
- * [electionTimeoutMax] is the load-bearing one: it is what stops a claimant whose reads are not
- * arriving from resetting its peers' stopwatches faster than they can run down.
+ * Where the follower's read path reports what its replica log delivered, so the partition can decide
+ * leadership from it.
  *
- * The spread between min and max has to be comfortably wider than the interval at which empty reads
- * are reported ([xtdb.api.log.Log.TAIL_POLL_DURATION]), because the stopwatch advances one reporting
- * interval at a time — two followers whose draws differ by less than one interval tip over on the same
- * read however far apart their timeouts nominally are.
+ * Every conclusion about leadership is drawn from a read — one that found a record, or one that found
+ * nothing — so these two calls are the whole of what election needs from the reader. Both are made on
+ * the follower's own work coroutine, which is the serialization point every decision runs on.
  */
-data class ElectionConfig(
-    val electionTimeoutMin: Duration = Duration.ofSeconds(6),
-    val electionTimeoutMax: Duration = Duration.ofSeconds(12),
-    val claimTimeout: Duration = Duration.ofSeconds(30),
-    val abandonBackoffFactor: Int = 2,
-) {
-    init {
-        if (electionTimeoutMin <= Duration.ZERO)
-            throw Incorrect("election timeout minimum must be positive", "xtdb/election-timeout-invalid")
+interface Elector {
+    /**
+     * A record was read and has been handled. [termBefore] is the highest term seen strictly before it —
+     * a claim's verdict turns on the prefix strictly before the claim, so it has to be captured before
+     * the record's own term is folded in.
+     *
+     * MUST be called *after* the record is handled, not when it arrives: stamped on arrival, the time
+     * spent processing accumulates as quiet, and a follower that took longer over a record than its
+     * election timeout would claim against a leader that was healthy throughout.
+     */
+    suspend fun onRecord(termBefore: Long, msgId: MessageId)
 
-        if (electionTimeoutMax < electionTimeoutMin)
-            throw Incorrect("election timeout maximum is below its minimum", "xtdb/election-timeout-invalid")
-
-        if (claimTimeout <= electionTimeoutMax)
-            throw Incorrect(
-                "claim timeout must exceed the election timeout maximum, so that a claimant which " +
-                        "cannot read its claim back leaves a quiet window longer than any peer's timeout",
-                "xtdb/claim-timeout-invalid"
-            )
-
-        if (abandonBackoffFactor < 0)
-            throw Incorrect("abandon backoff factor cannot be negative", "xtdb/abandon-backoff-invalid")
-    }
-}
-
-/** The outcome of a claim, which is decided by the reader and acted on by the takeover. */
-sealed interface Verdict {
-    /** Nothing at or above the claim's term preceded it, so it conferred leadership. */
-    data object Conferred : Verdict
-
-    /** Something at or above the claim's term preceded it — an ordinary outcome, not a fault. */
-    data object Lost : Verdict
-
-    /** The claim did not come back within the claim timeout, so the claimant is no longer being read to. */
-    data object Abandoned : Verdict
+    /** A read came back with nothing, which is the only evidence the log is quiet. */
+    suspend fun onEmptyRead()
 }
 
 /**
@@ -61,11 +36,42 @@ sealed interface Verdict {
  *
  * Its position is its identity, which is why nothing has to be written into the record to tell claims
  * apart, and why a participant holding at most one at a time needs no token to check a verdict against.
- * [verdict] completes on the reader's own coroutine and is awaited by the takeover, which is the only
- * work that cannot run there.
  */
-class Claim(val term: Long, val msgId: MessageId) {
-    val verdict = CompletableDeferred<Verdict>()
+class Claim(val term: Long, val msgId: MessageId)
+
+/**
+ * Asserts leadership on an idle log, so a healthy leader's silence never reaches a follower's timeout.
+ *
+ * Runs on the leader's replica *reader* rather than its work loop, so an upload in flight cannot silence
+ * the leader — the assertion must not queue behind the leader's own indexing work, or a leader falls
+ * silent exactly while it is doing the most and is read as absent.
+ *
+ * Every record read is somebody's assertion already, so only quiet costs anything — and the interval is
+ * measured from this leader's own last append as well as from what it reads, so a leader whose reads
+ * have stopped does not assert on every empty read.
+ *
+ * [interval] is null for a log with a single participant: there is no follower to reassure.
+ */
+class LeadershipAssertion(
+    private val interval: Duration?,
+    private val instantSource: InstantSource,
+    private val assert: suspend () -> Unit,
+) {
+    private var lastSeenOrAssertedAt: Instant = instantSource.instant()
+
+    fun onRecord() {
+        lastSeenOrAssertedAt = instantSource.instant()
+    }
+
+    suspend fun onEmptyRead() {
+        if (interval == null) return
+
+        val now = instantSource.instant()
+        if (Duration.between(lastSeenOrAssertedAt, now) >= interval) {
+            assert()
+            lastSeenOrAssertedAt = now
+        }
+    }
 }
 
 /**
@@ -77,8 +83,8 @@ class Claim(val term: Long, val msgId: MessageId) {
  * why no guard has to ask how far the log extends beyond what it handed over: a participant that is not
  * being delivered to cannot advance any threshold, so being unfed is not a route to claiming.
  *
- * Not thread-safe, and does not need to be: it is read and written only from the node's single
- * replica-log reader.
+ * Not thread-safe, and does not need to be: whichever role is live, exactly one loop reads the partition's
+ * replica log at a time, and role changes join the old loop before the new one starts.
  */
 class QuietStopwatch(
     private val config: ElectionConfig,

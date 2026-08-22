@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.error.Incorrect
+import xtdb.api.log.ElectionConfig
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource

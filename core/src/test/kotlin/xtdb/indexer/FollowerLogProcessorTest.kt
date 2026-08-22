@@ -27,9 +27,8 @@ import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
+import xtdb.types.MessageId
 import xtdb.api.log.LeaderTerm
-import xtdb.api.error.Incorrect
-import org.junit.jupiter.api.assertDoesNotThrow
 
 class FollowerLogProcessorTest {
 
@@ -68,6 +67,22 @@ class FollowerLogProcessorTest {
         allocator.close()
     }
 
+    /** Records what the follower reports, so a test can assert on the observation itself. */
+    private class RecordingElector : Elector {
+        val records = mutableListOf<Pair<Long, MessageId>>()
+        var emptyReads = 0
+
+        override suspend fun onRecord(termBefore: Long, msgId: MessageId) {
+            records += termBefore to msgId
+        }
+
+        override suspend fun onEmptyRead() {
+            emptyReads++
+        }
+    }
+
+    private val elector = RecordingElector()
+
     private fun makeProcessor(
         maxBufferedRecords: Int = 1024,
         hasExternalSource: Boolean = false,
@@ -75,7 +90,7 @@ class FollowerLogProcessorTest {
     ) =
         FollowerLogProcessor(
             allocator, bufferPool, partitionState, "test", compactor,
-            watchers, null, null,
+            watchers, elector, null, null,
             hasExternalSource = hasExternalSource,
             meterRegistry = meterRegistry,
             maxBufferedRecords = maxBufferedRecords,
@@ -163,28 +178,40 @@ class FollowerLogProcessorTest {
     }
 
     @Test
-    fun `refuses a leader term the persisted boundary has moved past`() = runTest {
-        // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
-        // local log's process restarting — while the last block was cut at 9
-        blockCatalog = BlockCatalog(block { blockIndex = 0; termId = LeaderTerm.of(0, 9) })
-        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+    fun `an empty read is reported, and a record is reported with the term seen before it`() = runTest {
         val proc = makeProcessor()
 
-        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
-        assertDoesNotThrow("bumping the term epoch clears the regression") {
-            proc.checkTermUnfenced(LeaderTerm.of(1, 1))
-        }
+        proc.processRecords(emptyList())
+        assertEquals(1, elector.emptyReads, "an empty batch is the only evidence the log is quiet")
+
+        proc.processRecords(
+            listOf(
+                record(0, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 2))),
+                record(1, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 2))),
+            )
+        )
+
+        assertEquals(
+            listOf(LeaderTerm.NONE to 0L, LeaderTerm.of(0, 2) to 1L), elector.records,
+            "the second record's report carries the first one's term — the prefix strictly before it"
+        )
     }
 
     @Test
-    fun `refuses a leader term the replica log has moved past`() = runTest {
-        val proc = makeProcessor()
+    fun `a no-op with no source position is not buffered during a pending block`() = runTest {
+        val proc = makeProcessor(maxBufferedRecords = 1)
 
-        proc.processRecords(listOf(record(0, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))))
+        proc.processRecords(
+            listOf(
+                record(0, ReplicaMessage.BlockBoundary(0, 0)),
+                // a leader asserting through the upload: any number of these must fit
+                record(1, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 1))),
+                record(2, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 1))),
+                record(3, ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 1))),
+            )
+        )
 
-        // the transition checks its own claim once it's been read back, so the max *is* the claim
-        assertDoesNotThrow { proc.checkTermUnfenced(LeaderTerm.of(0, 9)) }
-        assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 8)) }
+        assertEquals(3L, watchers.latestReplicaMsgId, "the consume position still advances past them")
     }
 
     @Test

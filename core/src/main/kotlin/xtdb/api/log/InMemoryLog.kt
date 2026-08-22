@@ -20,7 +20,8 @@ import xtdb.types.MessageId
 import java.time.Instant
 import java.time.InstantSource
 import java.time.temporal.ChronoUnit.MICROS
-import kotlin.time.Duration.Companion.minutes
+import java.time.Duration as JDuration
+import kotlin.time.Duration.Companion.milliseconds
 
 class InMemoryLog<M> @JvmOverloads constructor(
     private val instantSource: InstantSource,
@@ -69,6 +70,18 @@ class InMemoryLog<M> @JvmOverloads constructor(
     companion object {
         private const val REPLAY_BUFFER_SIZE = 4096
     }
+
+    // In-process, so exactly one participant exists: elections are uncontested and can run in
+    // milliseconds, and there is no follower elsewhere for an idle leader to reassure.
+    override val tailPollDuration = 10.milliseconds
+
+    override val electionConfig =
+        ElectionConfig(
+            electionTimeoutMin = JDuration.ofMillis(50),
+            electionTimeoutMax = JDuration.ofMillis(150),
+            claimTimeout = JDuration.ofMillis(400),
+            assertionInterval = null,
+        )
 
     // A msgId embeds the epoch but not the partition — partition is implicit in *which partition it
     // came from*.
@@ -129,12 +142,15 @@ class InMemoryLog<M> @JvmOverloads constructor(
             .produceIn(this)
 
         while (isActive) {
-            val records = select {
-                ch.onReceiveCatching { if (it.isClosed) emptyList() else listOf(it.getOrThrow()) }
+            // A closed channel is not a read that found nothing: reported as one it would tell the
+            // reader its log was quiet, indefinitely and without ever suspending, from a tail that has
+            // in fact stopped. Hence null for closed, and an empty list only for a genuine timeout.
+            val records = select<List<Record<M>>?> {
+                ch.onReceiveCatching { if (it.isClosed) null else listOf(it.getOrThrow()) }
 
                 @OptIn(ExperimentalCoroutinesApi::class)
-                onTimeout(1.minutes) { emptyList() }
-            }
+                onTimeout(tailPollDuration) { emptyList() }
+            } ?: break
 
             processor.processRecords(records)
         }

@@ -23,7 +23,7 @@ private val LOG = LeaderLogProcessor::class.logger
 /**
  * A higher-term record read back on our own replica log: a newer leader has superseded us. Thrown from
  * the apply loop to fail the term cleanly (not a query-facing fault, so it doesn't poison the watchers);
- * the transport re-follows on the next rebalance. See #5817.
+ * the term's owner re-follows as the term ends. See #5817.
  */
 internal class LeaderSupersededException(message: String) : RuntimeException(message)
 

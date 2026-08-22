@@ -34,10 +34,11 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption.*
 import java.time.Instant
 import java.time.InstantSource
+import java.time.Duration as JDuration
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
@@ -55,6 +56,19 @@ class LocalLog<M> @JvmOverloads constructor(
 ) : Log<M> {
     private val scope = CoroutineScope(coroutineContext)
     private val elections = java.util.concurrent.atomic.AtomicLong(0)
+
+    // In-process, so exactly one participant exists: elections are uncontested and can run in
+    // milliseconds, and there is no follower elsewhere for an idle leader to reassure.
+    override val tailPollDuration = 10.milliseconds
+
+    override val electionConfig =
+        ElectionConfig(
+            electionTimeoutMin = JDuration.ofMillis(50),
+            electionTimeoutMax = JDuration.ofMillis(150),
+            claimTimeout = JDuration.ofMillis(400),
+            assertionInterval = null,
+        )
+
     companion object {
         private fun messageSizeBytes(size: Int) = 1 + INT_BYTES + LONG_BYTES + size + LONG_BYTES
 
@@ -310,10 +324,14 @@ class LocalLog<M> @JvmOverloads constructor(
         }
 
         while (isActive) {
-            val msg = withTimeoutOrNull(1.minutes) {
-                ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
-            }
-            if (msg != null) processor.processRecords(listOf(msg))
+            // A closed channel is not a read that found nothing: reported as one it would tell the
+            // reader its log was quiet, indefinitely and without ever suspending, from a tail that has
+            // in fact stopped. Reachable without teardown — the collector above turns an interrupt into
+            // cancellation, and a cancelled child leaves this loop running.
+            val read = withTimeoutOrNull(tailPollDuration) { ch.receiveCatching() }
+            if (read?.isClosed == true) break
+
+            processor.processRecords(listOfNotNull(read?.getOrThrow()))
         }
     }
 

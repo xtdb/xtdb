@@ -22,7 +22,7 @@ import java.nio.file.WatchKey
 import kotlin.coroutines.CoroutineContext
 import kotlin.io.path.exists
 import kotlin.io.path.name
-import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.Int.Companion.SIZE_BYTES as INT_BYTES
 import kotlin.Long.Companion.SIZE_BYTES as LONG_BYTES
@@ -45,6 +45,9 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
 
     private val scope = CoroutineScope(coroutineContext)
     private val elections = java.util.concurrent.atomic.AtomicLong(0)
+
+    // In-process, matching LocalLog — though a read-only node never claims leadership anyway.
+    override val tailPollDuration = 10.milliseconds
 
     companion object {
         private fun messageSizeBytes(size: Int) = 1 + INT_BYTES + LONG_BYTES + size + LONG_BYTES
@@ -193,10 +196,11 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
         }
 
         while (isActive) {
-            val msg = withTimeoutOrNull(1.minutes) {
-                ch.receiveCatching().let { if (it.isClosed) null else it.getOrThrow() }
-            }
-            if (msg != null) processor.processRecords(listOf(msg))
+            // A closed channel is not a read that found nothing — see LocalLog.tailAll.
+            val read = withTimeoutOrNull(tailPollDuration) { ch.receiveCatching() }
+            if (read?.isClosed == true) break
+
+            processor.processRecords(listOfNotNull(read?.getOrThrow()))
         }
     }
 
