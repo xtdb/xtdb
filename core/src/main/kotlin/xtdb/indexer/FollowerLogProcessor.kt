@@ -269,7 +269,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     // awaits, and buffering here would advance the read without advancing that.
     private val inbound = Channel<List<Log.Record<ReplicaMessage>>>()
 
-    /** Hand a batch read off the replica log to whoever is driving this follower. */
     suspend fun queueRecords(records: List<Log.Record<ReplicaMessage>>) = inbound.send(records)
 
     fun SelectBuilder<Unit>.selectWork() {

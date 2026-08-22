@@ -67,7 +67,6 @@ internal class SourceLogProcessor(
     // the select clause is gated on `pausedBatch != null` (and, by the term, on the block having landed).
     private val resumeCh = Channel<Unit>(Channel.CONFLATED)
 
-    /** The block a cut was waiting on has landed, so anything stashed behind it may run on. */
     fun blockUploaded() {
         resumeCh.trySend(Unit)
     }
