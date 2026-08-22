@@ -62,7 +62,7 @@
 --          - FENCE BY TERM. A record whose term is GREATER than the leader's own term
 --            means a newer leader has superseded us → the leader RESIGNS (its
 --            unconfirmed writes are never acknowledged; the transport re-follows on
---            the next rebalance). A record with a LOWER term is discarded (still
+--            returns to following). A record with a LOWER term is discarded (still
 --            advancing the consume cursor). An EQUAL-term record is our own — terms
 --            are unique per leader.
 --          - For our own ResolvedTx: import from the QUEUE HEAD (we still hold its
@@ -703,7 +703,7 @@ rule ApplyRecord {
     --   - term GREATER than ours: a newer leader has superseded us → RESIGN. Modelled
     --     as LeaderSuperseded; the leader term fails (its unconfirmed staged txs are
     --     failed by the fail-pending leg, see FailPendingHandles), and the transport
-    --     re-follows on the next rebalance. This is EXPECTED — not a query-facing fault,
+    --     returns to following. This is EXPECTED — not a query-facing fault,
     --     so it does NOT poison the watchers.
     --   - term LOWER than ours: shouldn't appear past our replay target; discarded
     --     defensively, still advancing the consume cursor (RecordDiscarded).
