@@ -26,41 +26,12 @@
 --      only on reading it back at its own term. Reading back a HIGHER term means it
 --      has been superseded, so it resigns.
 --
--- == Why there is no vote ==
---
---   Election needs the competing claims placed in one agreed order. A quorum
---   protocol has to synthesise that order, because its participants share no
---   sequence to appeal to. Here they share the replica log -- so a claim is just a
---   record in it, and every reader computes the same winner from the same prefix.
---
---   - What a vote would otherwise buy comes free.
---     A vote establishes that the new leader holds everything its predecessors
---     wrote. A claimant cannot reach a verdict without reading its own claim back,
---     and by then it has read every record before it -- so adjudicating and
---     catching up are one act, not two (AConferredClaimantHoldsThePrefix).
---   - What no quorum can buy, we go without.
---     Nothing here can refuse a claim that should not have been made. The defences
---     are local -- a participant claims only if it is eligible to lead, and only a
---     participant whose reads are arriving can claim at all -- and the residual is a
---     needless change of leader: liveness, never safety, and cheap, because a
---     resigning leader keeps the state it built. What bounds the damage a
---     persistently mistaken claimant can do is that it cannot claim faster than it
---     abandons (ALoserCannotStarveTheElection, section 5).
---
 -- == One stopwatch ==
 --
 --   Everything timed here is timed off a single quantity: how long this participant
---   has been reading its log and finding nothing (quiet_for, section 2). Three
---   thresholds read it -- claim, give up on a claim, resign -- and each is a named
---   predicate over it rather than a clock of its own.
---   That is deliberate. A timeout measured against the passing of time instead of
---   against reads turns the participant's own slowness into a conclusion about
---   somebody else's health, whichever direction it is pointed
---   (QuietIsMeasuredByLookingNotByWaiting, section 5).
---   It is also what lets the log off having to describe its own extent. A participant
---   that is not being delivered to cannot advance any of the three thresholds, so
---   being unfed is not a route to claiming, and no guard has to ask how far the log
---   reaches beyond what it handed over (NothingHereNeedsATailPosition, section 1).
+--   has been reading its log and finding nothing (quiet_for, section 2).
+--   Three thresholds read it -- claim, give up on a claim, resign -- and each is a named predicate over it rather than a clock of its own (QuietIsMeasuredAcrossReads, section 5).
+--   A participant that is not being delivered to cannot advance any of the three thresholds, so being unfed is not a route to claiming.
 --
 -- == Sections ==
 --
@@ -106,12 +77,10 @@ external entity ReplicaRecord {
 
     -- Derived: this record, read as a claim, conferred leadership -- no record before
     -- it carries its term or higher.
-    --   At-or-above, not above: two nodes claiming the same term are settled by
-    --   position, and the earliest wins. This is the whole adjudication, and it is a
-    --   property of the log rather than of any reader, which is why every reader
-    --   reaches the same verdict and no vote is needed.
-    --   No participant evaluates it in this form; it would have to retain the terms of
-    --   records it read long ago. See TheLocalTestDecidesTheSameVerdict.
+    --   At-or-above, not above: two nodes claiming the same term are settled by position, and the earliest wins.
+    --   This is the whole adjudication, and it is a property of the log rather than of any reader, so every reader reaches the same verdict.
+    --   No participant evaluates it in this form; it would have to retain the terms of records it read long ago.
+    --   See TheLocalTestDecidesTheSameVerdict.
     confers: not log.records.any(r =>
         r.position.offset < position.offset and r.term >= term)
 }
@@ -150,29 +119,10 @@ contract DurableTotalOrder {
     @invariant DeliveryFollowsPositionOrder
         -- A reader is delivered records in position order, and reaching a position
         -- means having been delivered everything before it.
-        --   OneOrderSeenByEveryReader fixes where each record sits; this fixes the
-        --   order a reader meets them in, and the two are independent. Without it,
-        --   reading one's own claim back is no longer evidence of holding the prefix,
-        --   and AConferredClaimantHoldsThePrefix -- the theorem that stands in for the
-        --   vote -- has nothing under it.
-        --   A read that would skip a position has to fail rather than proceed. A
-        --   claimant silently handed a gap finds its own claim unopposed and concludes
-        --   it won an election it lost.
-
-    @invariant NothingHereNeedsATailPosition
-        -- A participant is never asked how far the log extends beyond what it has been
-        -- delivered, only whether a read brought anything back.
-        --   Deliberate, and the alternative was tried: a claim guard requiring the
-        --   claimant to be at the log's end. No log can answer it honestly. Not every
-        --   position a writer is assigned is one a reader is delivered -- a log whose
-        --   end position counts the undeliverable ones leaves every reader permanently
-        --   short of it, so the guard stops being a filter and becomes a veto on all
-        --   election. See: db.allium, which records the same distinction for a leader's
-        --   own catch-up.
-        --   What the guard was thought to protect is covered without it, by the shape
-        --   of the stopwatch: it advances only across reads, so a participant that is
-        --   not being delivered to cannot reach its timeout at all
-        --   (QuietIsMeasuredByLookingNotByWaiting, section 5).
+        --   OneOrderSeenByEveryReader fixes where each record sits; this fixes the order a reader meets them in, and the two are independent.
+        --   Without it, reading one's own claim back is no longer evidence of holding the prefix, and AConferredClaimantHoldsThePrefix has nothing under it.
+        --   A read that would skip a position has to fail rather than proceed.
+        --   A claimant silently handed a gap finds its own claim unopposed and concludes it won an election it lost.
 
     @invariant QuietIsReported
         -- A read that found nothing says so, rather than blocking until something
@@ -188,7 +138,7 @@ contract DurableTotalOrder {
         --   Ordinarily a durability property; here a safety one, because withdrawing
         --   a claim after another node has read it would let two nodes reach opposite
         --   verdicts on the same election. The deployment has to be configured for it
-        --   and not merely trusted -- see DurabilityIsConfiguredNotHoped.
+        --   and not merely trusted -- see DurabilityComesFromDeployedConfiguration.
 
     @invariant RetentionKeepsEverythingAboveTheBoundary
         -- Records at or after the persisted boundary's position are retained;
@@ -231,11 +181,8 @@ surface ReplicaLogBoundary {
     @guarantee ElectionNeedsNothingBeyondAnOrderedLog
         -- Append, be told the append's own position, and read forward in order --
         -- including being told when a read found nothing. That is all.
-        --   No membership protocol, no coordination service, no counter kept anywhere
-        --   but in the records, and nothing a log has to know about its own extent
-        --   beyond what it hands over (NothingHereNeedsATailPosition, section 1). So
-        --   any durable ordered log can back leadership, whether or not it offers an
-        --   election mechanism of its own.
+        --   A participant is never asked how far the log extends beyond what it has been delivered, only whether a read brought anything back.
+        --   So any durable ordered log can back leadership, whether or not it offers an election mechanism of its own.
 
     @guarantee TheLogDoesNotInitiateRoleChanges
         -- The log never asks a participant to lead or to stand down, and is told
@@ -275,9 +222,8 @@ external entity Database {
 external entity FollowerPipeline {
     -- A running follower: consumes the replica log to build local queryable state,
     -- and is the sole replica-log consumer for its node. See: live-index.allium.
-    --   Where it starts, not where it has got to. The participant is the authority for
-    --   how far its node has read (replica_position, below): a pipeline is replaced on
-    --   every role change, so a read position held on one would regress.
+    --   Where it starts, not where it has got to.
+    --   The participant is the authority for how far its node has read (replica_position, below).
     resume_from: Position
 }
 
@@ -314,22 +260,17 @@ entity Participant {
     }
 
     -- The highest term this participant has seen in its log. See section 4.
-    --   Belongs to the participant rather than to its pipeline. Pipelines are replaced
-    --   on every role change and resume from a position ahead of the records that
-    --   taught the participant its term, so a term held on one would regress to the
-    --   persisted boundary each time the role changed -- silently, and only under
-    --   contention.
+    --   Held for the participant's whole life: seeded once from the persisted boundary, and raised as records are read, whichever role reads them.
     highest_term_seen: Integer
 
     -- How far this node has read its replica log, whichever role it held while doing
-    -- so. Held here for the same reason as the term, and it is the same reader: one
-    -- per node, one position, surviving every role change.
+    -- so. One reader per node, one position, surviving every role change.
     replica_position: Position
 
     -- When this participant last finished reading its log, and when it last found a
     -- record there. The gap between them is how long the LOG has been quiet, which is
     -- the only thing any of this spec's timing may rest on -- see
-    -- QuietIsMeasuredByLookingNotByWaiting.
+    -- QuietIsMeasuredAcrossReads.
     last_read_at: Timestamp
     last_record_at: Timestamp
 
@@ -377,8 +318,7 @@ entity Participant {
 
 invariant ARoleIsBackedByItsPipeline {
     -- Whatever role the participant holds, it holds the matching pipeline.
-    --   The structural half of NoRoleWithoutALivePipeline (section 6); that the
-    --   pipeline is RUNNING is temporal and stays prose there.
+    --   The structural half of NoRoleWithoutALivePipeline (section 6): that the pipeline is RUNNING is temporal, and lives there.
     for p in Participants:
         (p.state in {following, claiming} implies p.follower != null)
         and (p.state = claiming implies p.claim != null)
@@ -500,13 +440,9 @@ value Claim {
 invariant ConferringRecordsAreTermOrdered {
     -- Read along a log, the records that conferred leadership carry strictly
     -- increasing terms.
-    --   Follows from the adjudication: a later record only confers if nothing before
-    --   it held its term or higher. Two claims at the same term therefore cannot both
-    --   confer, which is the case a scheme comparing terms without positions would get
-    --   wrong.
-    --   This is what lets a leader treat a higher term read back as proof it has been
-    --   superseded. Stated over records rather than over live claims because it has to
-    --   hold of claims whose authors are long gone.
+    --   Follows from the adjudication: a later record only confers if nothing before it held its term or higher, so two claims at the same term cannot both confer.
+    --   This is what lets a leader treat a higher term read back as proof it has been superseded.
+    --   Stated over records rather than over live claims, so it holds of claims whose authors are long gone.
     for a in ReplicaRecords:
         for b in ReplicaRecords:
             a.log = b.log and a.confers and b.confers
@@ -519,15 +455,9 @@ contract ClaimDiscipline {
         -- A claimant decides the adjudication from the highest term it had seen
         -- immediately before reading its own claim back: it won iff that term is below
         -- its claim's.
-        --   Equivalent to the positional rule (ReplicaRecord.confers), not an
-        --   approximation of it. The records before the claim divide into those the
-        --   claimant had read when it appended -- all below its term, since it claimed
-        --   one above the highest it had seen -- and those it read in between, which
-        --   this test examines directly.
-        --   Stating it this way is what makes the rule implementable, and the
-        --   difference between the two available mistakes is one character. A test
-        --   against a running highest-term-seen that has already absorbed the
-        --   claimant's own record finds every same-term rival conferring, or none.
+        --   Equivalent to the positional rule (ReplicaRecord.confers), not an approximation of it.
+        --   The records before the claim divide into those the claimant had read when it appended -- all below its term, since it claimed one above the highest it had seen -- and those it read in between, which this test examines directly.
+        --   A test against a running highest-term-seen that has already absorbed the claimant's own record finds every same-term rival conferring, or none.
 
     @invariant AConferredClaimantHoldsThePrefix
         -- A claimant that has reached a verdict has read every record before its
@@ -542,29 +472,19 @@ contract ClaimDiscipline {
         --   of the claim to read; a log with a backlog defers the election instead of
         --   producing a claim, because every record read resets the clock.
 
-    @invariant ALostClaimIsNotAFailure
-        -- Losing an election is an ordinary outcome, not a fault.
-        --   The participant returns to following and stays available for reads and for
-        --   a later claim. Contested elections are expected, so treating a lost claim
-        --   as a failure of the database would turn a race into an outage.
+    @invariant ALostClaimReturnsToFollowing
+        -- A participant whose claim lost returns to following, available for reads and
+        -- for a later claim.
+        --   Contested elections are ordinary; the database stays available through one.
 
-    @invariant QuietIsMeasuredByLookingNotByWaiting
-        -- Every timeout here measures the LOG being quiet, never the participant being
-        -- busy.
-        --   All three advance only across reads that came back with nothing. Time
-        --   spent processing a record teaches a participant nothing about anyone's
-        --   health, so its own slowness must not turn into a conclusion.
-        --   Getting this wrong inverts the mechanism, and it inverts in both
-        --   directions. A follower timing on wall-clock claims because it was slow, and
-        --   wins, since its claim carries a higher term and evicts a leader that was
-        --   healthy throughout -- so the node least able to lead is the one that takes
-        --   over, more readily the busier it gets. A leader timing on wall-clock
-        --   resigns because it was slow, discarding writes the log had accepted, and a
-        --   single pause becomes a write outage.
-        --   It carries a second load, which is why no claim guard consults the log's
-        --   extent (NothingHereNeedsATailPosition, section 1): a participant that is
-        --   not being delivered to cannot reach any of the three thresholds, because
-        --   nothing advances them. Being unfed is therefore not a route to claiming.
+    @invariant QuietIsMeasuredAcrossReads
+        -- Every timeout here measures the LOG being quiet, across the participant's
+        -- own reads, never the participant being busy.
+        --   All three thresholds advance only across reads that came back with nothing.
+        --   Time spent processing a record teaches a participant nothing about anyone's health, so its own slowness must not turn into a conclusion.
+        --   A follower timing on wall-clock instead claims because it was slow, and wins, since its claim carries a higher term and evicts a leader that was healthy throughout -- the node least able to lead takes over, more readily the busier it gets.
+        --   A leader timing on wall-clock resigns because it was slow, discarding writes the log had accepted, and a single pause becomes a write outage.
+        --   A participant that is not being delivered to cannot reach any of the three thresholds, because nothing advances them -- so being unfed is not a route to claiming.
 
     @invariant ALoserCannotStarveTheElection
         -- A participant that keeps claiming and never wins cannot stop the others
@@ -600,10 +520,7 @@ config {
     -- How long a claimant keeps reading for its own claim before giving up on it.
     --   Generous relative to the election timeout: the claim is one record on a log
     --   that had been quiet, so the ordinary case is immediate.
-    --   It MUST exceed election_timeout_max, and that relation is load-bearing rather
-    --   than merely comfortable: it is what stops a claimant whose reads are not
-    --   arriving from resetting its peers' stopwatches faster than they can run down
-    --   (ALoserCannotStarveTheElection, above).
+    --   It MUST exceed election_timeout_max: that relation is what stops a claimant whose reads are not arriving from resetting its peers' stopwatches faster than they can run down (ALoserCannotStarveTheElection, above).
     claim_timeout: Duration = 30.seconds
 
     -- How far the election-timeout range widens after a claim is abandoned.
@@ -615,7 +532,7 @@ config {
 
 rule ClaimLeadership {
     -- The log has been quiet long enough, and this node may lead and is caught up.
-    --   No candidates to canvass and no votes to collect, so claiming is one append.
+    --   Claiming is one append.
     when: participant: Participant.quiet_long_enough
 
     -- Also guards re-firing: the participant leaves `following` as it claims, and
@@ -668,7 +585,7 @@ invariant OnlyEligibleParticipantsLead {
 }
 
 rule AbandonLostClaim {
-    -- Another node's claim got in first (ALostClaimIsNotAFailure).
+    -- Another node's claim got in first (ALostClaimReturnsToFollowing).
     --   The follower never stopped, so there is nothing to rebuild and reads are
     --   served throughout. A freshly drawn timeout before the next attempt is what
     --   stops a contested election repeating itself.
@@ -817,15 +734,11 @@ rule RecoverFollowerOnFailedTakeover {
 contract LeadingDiscipline {
     @invariant ExactlyOneLeaderIsEverAcknowledged
         -- At most one leader's writes are ever acknowledged per database.
-        --   Two nodes may briefly both believe they lead, and both append. Only the
-        --   higher term's writes are acknowledged, because acknowledgement waits on
-        --   reading the write back at the leader's own term -- and the superseded
-        --   leader meets the higher-term record first. The lower-term records it left
-        --   behind are discarded by every reader.
-        --
-        --   So the fence is the term stamp plus the read-back check, and nothing else:
-        --   no write-time rejection, no token held against the log. See
-        --   live-index.allium, which owns the acknowledgement itself.
+        --   Two nodes may briefly both believe they lead, and both append.
+        --   Only the higher term's writes are acknowledged, because acknowledgement waits on reading the write back at the leader's own term -- and the superseded leader meets the higher-term record first.
+        --   The lower-term records it left behind are discarded by every reader.
+        --   The fence is the term stamp plus the read-back check.
+        --   See live-index.allium, which owns the acknowledgement itself.
 
     @invariant AcknowledgementFollowsLogOrder
         -- A leader acknowledges its writes in log order.
@@ -835,13 +748,10 @@ contract LeadingDiscipline {
 
     @invariant AssertionOutpacesTheElectionTimeout
         -- A healthy leader's silence never reaches a follower's election timeout.
-        --   By a margin that absorbs ordinary scheduling and delivery delay. Any append
-        --   is an implicit assertion, so this only binds on an idle log.
-        --   It binds on a BUSY leader too, and that is the harder half: the assertion
-        --   must not queue behind the leader's own indexing work, or a leader falls
-        --   silent exactly while it is doing the most, and followers read its silence
-        --   as absence. The mirror of QuietIsMeasuredByLookingNotByWaiting -- neither
-        --   side may let its own load look like the other's failure.
+        --   By a margin that absorbs ordinary scheduling and delivery delay.
+        --   Any append is an implicit assertion, so this only binds on an idle log.
+        --   It binds on a BUSY leader too: the assertion must not queue behind the leader's own indexing work, or a leader falls silent exactly while it is doing the most, and followers read its silence as absence.
+        --   The mirror of QuietIsMeasuredAcrossReads -- neither side may let its own load look like the other's failure.
 }
 
 config {
@@ -896,10 +806,8 @@ rule ResignOnReadBackStall {
     --   displace it, so it stands down and lets the election run.
     --   A leader reads its own assertions back as well as its client writes, so on any
     --   healthy leader this stopwatch is reset every assertion interval, whether or not
-    --   there is any traffic. That is why the rule needs no separate notion of writes
-    --   outstanding -- and why a leader must never measure this against the clock,
-    --   which would resign it for its own slowness
-    --   (QuietIsMeasuredByLookingNotByWaiting).
+    --   there is any traffic.
+    --   Measured across the leader's own reads, never against the clock, which would resign it for its own slowness (QuietIsMeasuredAcrossReads).
     when: participant: Participant.read_back_stalled
 
     requires: participant.state = leading
@@ -1004,12 +912,8 @@ surface LeadershipRole {
 
     @guarantee LeadershipChangesWithoutARebuild
         -- A change of leader costs a change of role, never a re-read of the log.
-        --   Every pipeline this spec opens resumes from the position the participant
-        --   had already reached, in both directions, so neither resigning nor taking
-        --   over re-reads anything. What local state survives the swap beyond that
-        --   position is live-index.allium's to say; what this spec guarantees is that
-        --   nothing has to be re-read to reconstruct it. This is what makes a needless
-        --   failover tolerable.
+        --   Every pipeline this spec opens resumes from the position the participant had already reached, in both directions, so neither resigning nor taking over re-reads anything.
+        --   What local state survives the swap beyond that position is live-index.allium's to say; what this spec guarantees is that nothing has to be re-read to reconstruct it.
 }
 
 rule OpenParticipant {
@@ -1059,7 +963,7 @@ surface DeploymentPolicy {
     exposes:
         participant.database.may_lead
 
-    @guarantee DurabilityIsConfiguredNotHoped
+    @guarantee DurabilityComesFromDeployedConfiguration
         -- AcceptedRecordsAreNeverWithdrawn has to hold in the DEPLOYED configuration.
         --   Settings that let an accepted append be lost -- acknowledging before the
         --   record is replicated widely enough to survive a failure, or letting a
@@ -1103,6 +1007,6 @@ open question "Election granularity beyond the database. This spec elects one le
 
 open question "A leader that cannot make progress but reads and appends happily. Every self-eviction here turns on the leader's own reads and appends, so a leader partitioned from its source of work still asserts leadership, no follower times out, no election runs, and no client transaction gets through. The same shape covers a leader whose block flush fails permanently: it reads its own writes back, asserts on time, and cannot be displaced by anyone. Should a leader that cannot complete a cycle of work stand down, whatever the reason -- and how is that distinguished from a genuinely idle database?"
 
-open question "A participant whose reads succeed but bring back nothing that exists. The stopwatch stops a participant that is not being read to from claiming, because nothing advances it -- but not one whose reads complete and are served nothing while records are in fact being appended: a lost partition assignment, a subscription to the wrong part of the log, a visibility split that reaches the reader and not the writer. Such a participant claims on a current term, evicts a healthy leader, then cannot read its own claim back and abandons, so the cost is a needless failover roughly every claim_timeout for as long as it stays broken -- bounded (ALoserCannotStarveTheElection) rather than prevented. The mechanism that would prevent it is a probe: a fresh reader started at the claimant's own position, an empty first read being the only honest answer to whether anything deliverable follows, and immune to the accounting that made a tail position unusable (NothingHereNeedsATailPosition). Not built, because the residual is narrow and a reader per election attempt buys little. What would tell us it had started to bite, given that a needless failover and a legitimate one look the same from every node?"
+open question "A participant whose reads succeed but bring back nothing that exists. The stopwatch stops a participant that is not being read to from claiming, because nothing advances it -- but not one whose reads complete and are served nothing while records are in fact being appended: a lost partition assignment, a subscription to the wrong part of the log, a visibility split that reaches the reader and not the writer. Such a participant claims on a current term, evicts a healthy leader, then cannot read its own claim back and abandons, so the cost is a needless failover roughly every claim_timeout for as long as it stays broken -- bounded (ALoserCannotStarveTheElection) rather than prevented. The mechanism that would prevent it is a probe: a fresh reader started at the claimant's own position, an empty first read being the only honest answer to whether anything deliverable follows — it asks delivery about delivery, where a log's end position also counts positions a reader is never delivered. Not built, because the residual is narrow and a reader per election attempt buys little. What would tell us it had started to bite, given that a needless failover and a legitimate one look the same from every node?"
 
 open question "Observing that a database has no leader. Every leaderless failure presents identically from outside -- every participant in following -- and that is also what a healthy database looks like from any node that is not its leader. So no node can tell locally whether the role is vacant, and none of AtLeastOneNodeMayLead unmet, a claimant whose reads have stopped, or a reader that has stopped reporting empty reads is visible as an absence of leadership. What should carry that signal: the log's own quiet, aggregated across nodes, or something a leader publishes whose absence is the alarm?"
