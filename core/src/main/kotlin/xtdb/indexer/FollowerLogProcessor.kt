@@ -276,9 +276,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
         inbound.onReceive { records -> processRecords(records) }
     }
 
-    // `processRecords` has already logged and notified by the time it throws.
-    override fun workFailed(cause: Throwable) = Unit
-
     override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         for (record in records) {
             try {

@@ -95,6 +95,7 @@ class LeaderLogProcessorTest {
     private fun CoroutineScope.startTerm(
         partitionStorage: PartitionStorage,
         replicaAppender: ReplicaLogAppender,
+        watchers: Watchers,
         proc: LeaderLogProcessor,
     ) =
         proc.also {
@@ -105,11 +106,9 @@ class LeaderLogProcessorTest {
                         records.forEach { proc.queueReplicaMessage(it) }
                     }
                 }
-                launch { proc.drive() }
                 launch { proc.gc.runGc() }
                 proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
-                launch { replicaAppender.run(proc::workFailed) }
-                proc.runTerm()
+                runLeaderTerm("test", watchers, proc, replicaAppender)
             }
         }
 
@@ -145,7 +144,7 @@ class LeaderLogProcessorTest {
         val replicaAppender = ReplicaLogAppender(driver)
 
         return termScope.startTerm(
-            partitionStorage, replicaAppender,
+            partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender, extSource,
@@ -224,7 +223,7 @@ class LeaderLogProcessorTest {
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
         val replicaAppender = ReplicaLogAppender(driver)
         val lp = termScope.startTerm(
-            partitionStorage, replicaAppender,
+            partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
@@ -303,7 +302,7 @@ class LeaderLogProcessorTest {
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
         val replicaAppender = ReplicaLogAppender(driver)
         val lp = termScope.startTerm(
-            partitionStorage, replicaAppender,
+            partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,
@@ -539,7 +538,7 @@ class LeaderLogProcessorTest {
         // txs 1-4: submitted while the append is in-flight; they pipeline behind it — resolution and the
         // append pump are decoupled, so a stalled append doesn't block subsequent submitTx from resolving
         // and staging. Launched so the test body doesn't block on the cap-1 channel send.
-        repeat(4) { backgroundScope.launch { lp.extSrcProc!!.submitTx(null) { TxIndexer.TxResult.Committed() } } }
+        repeat(4) { backgroundScope.launch { lp.extSrcProc.submitTx(null) { TxIndexer.TxResult.Committed() } } }
 
         testScheduler.advanceUntilIdle()
 
@@ -683,7 +682,7 @@ class LeaderLogProcessorTest {
         val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
         val replicaAppender = ReplicaLogAppender(driver)
         val lp = termScope.startTerm(
-            partitionStorage, replicaAppender,
+            partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
                 partitionState, "test", driver, watchers, replicaAppender,

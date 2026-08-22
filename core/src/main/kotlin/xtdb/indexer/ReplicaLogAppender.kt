@@ -45,18 +45,9 @@ internal class ReplicaLogAppender(private val driver: LeaderDriver) {
      *
      * Plain, non-transactional appends: the sole fence on a zombie leader is the term its records carry,
      * checked when it reads them back — a higher term means it has been superseded, and it resigns (#5817).
-     *
-     * A fault goes to [termFailed] rather than up, because it has to reach the term's own sweep as the
-     * cause: whatever is staged should fail with the append fault and not a bare cancellation.
      */
-    suspend fun run(termFailed: (Throwable) -> Unit) {
-        try {
-            for (item in queue) driver.appendToReplica(item.toReplicaMessage())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            termFailed(e)
-        }
+    suspend fun run() {
+        for (item in queue) driver.appendToReplica(item.toReplicaMessage())
     }
 
     /**
