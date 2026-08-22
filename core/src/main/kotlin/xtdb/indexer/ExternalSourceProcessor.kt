@@ -91,6 +91,11 @@ internal class ExternalSourceProcessor(
             extSource.onPartitionAssigned(partition, watchers.externalSourceToken, this)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: LeaderSupersededException) {
+            // The adapter learned the term ended by having its own transaction abandoned with the
+            // supersession as its cause (Task.abandon), which is what it wants to see. Reporting it as an
+            // ingestion fault would fail the database over this node merely no longer being the leader —
+            // and `Failed` is absorbing, so nothing would recover it.
         } catch (e: Throwable) {
             watchers.notifyError(e)
         }

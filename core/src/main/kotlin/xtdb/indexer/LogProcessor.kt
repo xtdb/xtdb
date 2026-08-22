@@ -243,11 +243,11 @@ class LogProcessor(
                 // current value, which has already absorbed the claim's own term and would find every
                 // same-term rival conferring.
                 if (termBefore < s.claim.term) {
-                    LOG.info("[$dbName] claim at term ${LeaderTerm.format(s.claim.term)} conferred leadership; taking over")
+                    LOG.info("[$dbName] claim at term ${s.claim.term} conferred leadership; taking over")
                     state = TakingOver(s.proc, s.job)
                     scope.launch { takeOver(s.proc, s.job, s.claim.term) }
                 } else {
-                    LOG.info("[$dbName] lost the election at term ${LeaderTerm.format(s.claim.term)}; following")
+                    LOG.info("[$dbName] lost the election at term ${s.claim.term}; following")
                     stopwatch.restartWait()
                     state = Following(s.proc, s.job)
                 }
@@ -264,7 +264,7 @@ class LogProcessor(
                     // Our reader is not delivering, so no verdict can be reached; holding the claim open
                     // on the strength of a prefix we are no longer being given helps nobody, least of all
                     // a deployment where we are the only eligible node.
-                    LOG.warn("[$dbName] claim at term ${LeaderTerm.format(s.claim.term)} not read back; abandoning")
+                    LOG.warn("[$dbName] claim at term ${s.claim.term} not read back; abandoning")
                     stopwatch.backOff()
                     state = Following(s.proc, s.job)
                 }
@@ -289,7 +289,7 @@ class LogProcessor(
             return
         }
 
-        LOG.info("[$dbName] claimed leadership at term ${LeaderTerm.format(term)} (claim at ${claim.msgId})")
+        LOG.info("[$dbName] claimed leadership at term ${term} (claim at ${claim.msgId})")
         state = Claiming(following.proc, following.job, claim)
     }
 

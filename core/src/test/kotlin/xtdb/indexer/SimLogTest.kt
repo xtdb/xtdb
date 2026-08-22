@@ -19,7 +19,13 @@ class SimLogTest : SimulationTestBase() {
                 SimLog<String>("test", rand).use { log ->
                     launchSimLog(log)
 
-                    launch { log.tailAll(partition = 0, afterMsgId = -1) { _ -> error("plainConsumer failure") } }
+                    // Guarded on a non-empty batch, because the behaviour under test is that a failure
+                    // while *delivering a record* propagates — unguarded, the first empty tick satisfies it.
+                    launch {
+                        log.tailAll(partition = 0, afterMsgId = -1) { records ->
+                            if (records.isNotEmpty()) error("plainConsumer failure")
+                        }
+                    }
 
                     log.appendMessage("trigger")
                 }

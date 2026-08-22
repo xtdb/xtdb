@@ -11,8 +11,5 @@ message KafkaLogConfig {
     string replica_cluster_alias = 4;
     string replica_topic = 5;
     reserved 6; // was group_id, now on the cluster
-
-    // declares that the consumer group backing leader election has been reset, so terms from
-    // before the reset order below terms from after it. See #5817.
-    int32 term_epoch = 7;
+    reserved 7; // was term_epoch; a term is derived from the replica log and cannot regress
 }

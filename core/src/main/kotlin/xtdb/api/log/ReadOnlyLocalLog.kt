@@ -37,14 +37,12 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
     private val rootPath: Path,
     private val codec: MessageCodec<M>,
     override val epoch: Int,
-    private val termEpoch: Int = 0,
     coroutineContext: CoroutineContext = Dispatchers.Default,
     private val baseFileName: String = "LOG",
     val partitions: Int = 1,
 ) : Log<M> {
 
     private val scope = CoroutineScope(coroutineContext)
-    private val elections = java.util.concurrent.atomic.AtomicLong(0)
 
     // In-process, matching LocalLog — though a read-only node never claims leadership anyway.
     override val tailPollDuration = 10.milliseconds
@@ -201,20 +199,6 @@ class ReadOnlyLocalLog<M> @JvmOverloads constructor(
             if (read?.isClosed == true) break
 
             processor.processRecords(listOfNotNull(read?.getOrThrow()))
-        }
-    }
-
-    override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) = coroutineScope {
-        for (p in 0 until partitions) {
-            launch {
-                try {
-                    listener.launchTransition(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    val spec = listener.commitLeader(p)
-                    tailAll(p, spec.afterMsgId, spec.processor)
-                } finally {
-                    withContext(NonCancellable) { listener.demoteLeader(p) }
-                }
-            }
         }
     }
 

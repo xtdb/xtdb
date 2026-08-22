@@ -142,12 +142,12 @@ class LogProcessorTest {
     fun `a claim lands one term above everything already on the log`() = runTest {
         fixture().use { fixture ->
             // a previous leader reached 0.9; whatever elects next must claim above it
-            fixture.replicaLog.appendMessage(ReplicaMessage.NoOp(termId = LeaderTerm.of(0, 9)))
+            fixture.replicaLog.appendMessage(ReplicaMessage.NoOp(termId = 9L))
 
             fixture.awaitLeaderProcessing()
 
             assertEquals(
-                LeaderTerm.of(0, 10), fixture.partitionState.termFence.highest,
+                10L, fixture.partitionState.termFence.highest,
                 "the claim is adjudicated against a prefix that cannot already contain its term"
             )
         }
@@ -179,7 +179,7 @@ class LogProcessorTest {
             fixture.awaitLeaderProcessing()
 
             assertTrue(
-                fixture.partitionState.termFence.highest >= LeaderTerm.of(0, 2),
+                fixture.partitionState.termFence.highest >= 2L,
                 "the winning claim sits above the term the rival took"
             )
         }

@@ -2,7 +2,6 @@
 
 package xtdb.api.log
 
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.UseSerializers
 import kotlinx.serialization.modules.PolymorphicModuleBuilder
@@ -59,13 +58,9 @@ interface Log<M> : AutoCloseable {
 
             internal fun fromProto(config: DatabaseConfig): Factory =
                 when (config.logCase) {
-                    IN_MEMORY_LOG -> config.inMemoryLog.let {
-                        inMemoryLog.epoch(it.epoch).termEpoch(it.termEpoch)
-                    }
+                    IN_MEMORY_LOG -> config.inMemoryLog.let { inMemoryLog.epoch(it.epoch) }
 
-                    LOCAL_LOG -> config.localLog.let {
-                        localLog(it.path.asPath).epoch(it.epoch).termEpoch(it.termEpoch)
-                    }
+                    LOCAL_LOG -> config.localLog.let { localLog(it.path.asPath).epoch(it.epoch) }
 
                     OTHER_LOG -> config.otherLog.let {
                         (otherLogs[it.typeUrl] ?: error("unknown log")).fromProto(it)
@@ -164,27 +159,6 @@ interface Log<M> : AutoCloseable {
     fun readRecords(partition: Int, fromMsgId: MessageId, toMsgId: MessageId): Sequence<Record<M>>
 
     suspend fun tailAll(partition: Int, afterMsgId: MessageId, processor: RecordProcessor<M>)
-    suspend fun openGroupSubscription(listener: SubscriptionListener<M>)
-
-    /**
-     * The transport's handle on one partition's leader election, driven as a three-step state
-     * machine (follower → prepared → leading). See allium/log-processor-lifecycle.allium.
-     *
-     * [launchTransition] launches the follower→leader transition on the listener's *own* scope and
-     * returns its [Deferred] — it builds the leader term but does NOT commit the role, so it runs off the
-     * transport's thread (which joins/cancels the handle) and, because it runs under the listener's
-     * scope, is torn down by that scope's cancellation on shutdown. [commitLeader] installs the prepared
-     * leader and hands back the offset to resume from and the processor to feed; it (and [demoteLeader])
-     * are the only committers, run at the transport's serialization point. This split keeps the
-     * committed role single-writer while the unbounded catch-up runs off the poll thread.
-     */
-    interface SubscriptionListener<M> {
-        fun launchTransition(partition: Int, termId: Long): Deferred<Unit>
-        fun commitLeader(partition: Int): TailSpec<M>
-        suspend fun demoteLeader(partition: Int)
-    }
-
-    data class TailSpec<M>(val afterMsgId: MessageId, val processor: RecordProcessor<M>)
 
     class Record<out M>(
         val epoch: Int,

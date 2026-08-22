@@ -48,14 +48,12 @@ class LocalLog<M> @JvmOverloads constructor(
     private val codec: MessageCodec<M>,
     private val instantSource: InstantSource,
     override val epoch: Int,
-    private val termEpoch: Int = 0,
     val useInstantSourceForNonTx: Boolean,
     coroutineContext: CoroutineContext = Dispatchers.IO,
     private val baseFileName: String = "LOG",
     val partitions: Int = 1,
 ) : Log<M> {
     private val scope = CoroutineScope(coroutineContext)
-    private val elections = java.util.concurrent.atomic.AtomicLong(0)
 
     // In-process, so exactly one participant exists: elections are uncontested and can run in
     // milliseconds, and there is no follower elsewhere for an idle leader to reassure.
@@ -335,20 +333,6 @@ class LocalLog<M> @JvmOverloads constructor(
         }
     }
 
-    override suspend fun openGroupSubscription(listener: SubscriptionListener<M>) = coroutineScope {
-        for (p in 0 until partitions) {
-            launch {
-                try {
-                    listener.launchTransition(p, LeaderTerm.of(termEpoch, elections.incrementAndGet())).await()
-                    val spec = listener.commitLeader(p)
-                    tailAll(p, spec.afterMsgId, spec.processor)
-                } finally {
-                    withContext(NonCancellable) { listener.demoteLeader(p) }
-                }
-            }
-        }
-    }
-
     override fun close() {
         runBlocking { withTimeout(5.seconds) { scope.coroutineContext.job.cancelAndJoin() } }
         for (ps in partitionStates) ps.logFileChannel.close()
@@ -375,13 +359,6 @@ class LocalLog<M> @JvmOverloads constructor(
         val path: Path,
         @Transient var instantSource: InstantSource = InstantSource.system(),
         var epoch: Int = 0,
-        /**
-         * Declares that the leader-election counter behind this log has been reset, so that terms
-         * from before the reset still order below terms from after it. Bump it — never lower it —
-         * whenever that happens; a node that finds its own term already fenced on the replica log
-         * refuses to lead and names this setting. See [LeaderTerm].
-         */
-        var termEpoch: Int = 0,
         var useInstantSourceForNonTx: Boolean = false,
         @Transient var coroutineContext: CoroutineContext = Dispatchers.IO
     ) : Log.Factory {
@@ -389,27 +366,25 @@ class LocalLog<M> @JvmOverloads constructor(
         @Suppress("unused")
         fun instantSource(instantSource: InstantSource) = apply { this.instantSource = instantSource }
         fun epoch(epoch: Int) = apply { this.epoch = epoch }
-        fun termEpoch(termEpoch: Int) = apply { this.termEpoch = termEpoch }
         fun useInstantSourceForNonTx() = apply { this.useInstantSourceForNonTx = true }
         fun coroutineContext(coroutineContext: CoroutineContext) = apply { this.coroutineContext = coroutineContext }
 
         override fun openSourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            LocalLog(path, SourceMessage.Codec, instantSource, epoch, termEpoch, useInstantSourceForNonTx, coroutineContext, partitions = partitions)
+            LocalLog(path, SourceMessage.Codec, instantSource, epoch, useInstantSourceForNonTx, coroutineContext, partitions = partitions)
 
         override fun openReadOnlySourceLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            ReadOnlyLocalLog(path, SourceMessage.Codec, epoch, termEpoch, coroutineContext, partitions = partitions)
+            ReadOnlyLocalLog(path, SourceMessage.Codec, epoch, coroutineContext, partitions = partitions)
 
         override fun openReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            LocalLog(path, ReplicaMessage.Codec, instantSource, epoch, termEpoch, useInstantSourceForNonTx, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
+            LocalLog(path, ReplicaMessage.Codec, instantSource, epoch, useInstantSourceForNonTx, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
 
         override fun openReadOnlyReplicaLog(remotes: Map<RemoteAlias, Remote>, partitions: Int) =
-            ReadOnlyLocalLog(path, ReplicaMessage.Codec, epoch, termEpoch, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
+            ReadOnlyLocalLog(path, ReplicaMessage.Codec, epoch, coroutineContext, baseFileName = "REPLICA_LOG", partitions = partitions)
 
         override fun writeTo(dbConfig: DatabaseConfig.Builder) {
             dbConfig.localLog = localLog {
                 this.path = this@Factory.path.toString()
                 this.epoch = this@Factory.epoch
-                this.termEpoch = this@Factory.termEpoch
             }
         }
     }

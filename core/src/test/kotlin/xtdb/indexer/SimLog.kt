@@ -121,9 +121,6 @@ internal class SimLog<M>(private val name: String, private val rand: Random) : L
         }
     }
 
-    override suspend fun openGroupSubscription(listener: Log.SubscriptionListener<M>) =
-        error("$name: the sims elect through the log, not a consumer group")
-
     /** Every active plain consumer has been delivered everything currently on the topic. */
     val allDelivered get() = plainConsumers.all { !it.job.isActive || it.nextOffset >= topic.size }
 

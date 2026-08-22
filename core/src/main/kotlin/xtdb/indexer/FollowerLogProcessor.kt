@@ -275,7 +275,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     // so a transition catch-up can't hang on a fenced no-op.
                     LOG.debug {
                         "[$dbName] follower: discarding fenced record ${record.msgId} " +
-                                "(term ${LeaderTerm.format(term)} < ${LeaderTerm.format(termFence.highest)})"
+                                "(term $term < ${termFence.highest})"
                     }
                     watchers.notifyApplied(record.msgId)
                 }
