@@ -4,6 +4,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.apache.arrow.memory.BufferAllocator
@@ -24,7 +25,6 @@ import xtdb.api.IndexerConfig
 import xtdb.api.TableRef
 import xtdb.api.TransactionResult
 import xtdb.api.log.InMemoryLog
-import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.SourceMessage
@@ -110,32 +110,52 @@ class LeaderDriverSimTest : SimulationTestBase() {
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val proc = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),
-            partitionState, "test-db",
-            wrapDriver(
-                RecordingDriver(
-                    RealLeaderDriver(
-                        partitionStorage, partitionState,
-                        BlockUploader(
-                            partitionStorage, partitionState, "xtdb", mockk<Compactor.ForDatabase>(relaxed = true),
-                            null, null, scope, uploadDispatcher = dispatcher
-                        )
+        private val driver = wrapDriver(
+            RecordingDriver(
+                RealLeaderDriver(
+                    partitionStorage, partitionState,
+                    BlockUploader(
+                        partitionStorage, partitionState, "xtdb", mockk<Compactor.ForDatabase>(relaxed = true),
+                        null, null, scope, uploadDispatcher = dispatcher
                     )
                 )
-            ),
-            watchers, extSource = null, skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = afterReplicaMsgId,
+            )
+        )
+
+        private val replicaAppender = ReplicaLogAppender(driver)
+
+        val proc = LeaderLogProcessor(
+            allocator, nodeBase, partitionStorage, CrashLogger(allocator, bufferPool, "sim-$name"),
+            partitionState, "test-db", driver, watchers, replicaAppender,
+            // The sim submits through the processor rather than driving an adapter, so the source only has
+            // to exist for the processor to.
+            extSource = mockk(relaxed = true),
+            skipTxs = emptySet(), dbCatalog = null,
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.
             leaderTerm = termId,
             flushTimeout = indexerConfig.flushDuration,
-            scope = scope, gcDispatcher = dispatcher,
+            gcDispatcher = dispatcher,
         )
+
+        init {
+            scope.launch {
+                // From the claim record rather than the start of the log: a sim leader begins with empty
+                // catalogs and never replays, so anything before its claim is not its to apply.
+                launch {
+                    partitionStorage.replicaLog.tailAll(afterReplicaMsgId) { records ->
+                        records.forEach { proc.queueReplicaMessage(it) }
+                    }
+                }
+                launch { proc.gc.runGc() }
+                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                runLeaderTerm("test-db", watchers, proc, replicaAppender)
+            }
+        }
 
         /** Fire-and-forget: the returned handle completes only once the tx is durably replicated. */
         suspend fun submitRows(rows: List<UUID>): Deferred<TransactionResult> =
-            proc.submitTx(null) { openTx ->
+            proc.extSrcProc!!.submitTx(null) { openTx ->
                 val table = openTx.table(docsTable)
                 for (id in rows) table.writePut(mapOf("_id" to id, "tx_id" to openTx.txKey.txId))
                 TxResult.Committed()

@@ -18,7 +18,7 @@ We tear these down in two explicit phases:
 
 Phase 1 (stop)::
 Cancel-and-join the unit's Job.
-At the database level this is a single `job.cancelAndJoin()` over the whole tree (every term, the compactor and the source-log subscription run under that one `job`); at the term level it is a scoped cancel of just that term's `SupervisorJob` (used on Kafka rebalance).
+At the database level this is a single `job.cancelAndJoin()` over the whole tree (every term, the compactor and the source-log subscription run under that one `job`); at the role level it is a scoped cancel of just that role's Job (used on Kafka rebalance).
 
 Phase 2 (free)::
 Call a synchronous `AutoCloseable.close()` on each unit, freeing its standing resources in allocator-parentage order — children before parents, which Arrow requires.
@@ -46,7 +46,38 @@ Implementation rules that keep this safe:
 * `close()` MUST stay non-suspend, so a rebalance callback that closes a term mid-flight completes within the joined coroutine frame rather than suspending.
 * Standing resources are acquired before the loop and freed by `close()`.
   Resources a coroutine acquires *itself* mid-flight still belong in `.use`/`try-finally` inside the body — they are not standing resources and are not Phase 2's concern.
-* A term is modelled as `(job, closeable)` (`LogProcessor.SubSystem`) so that a job-less or unfreeable term is unrepresentable.
+* A role is modelled as `(job, closeable)` (`LogProcessor.State`) so that a job-less or unfreeable role is unrepresentable.
+
+=== Who launches a unit's coroutines
+
+Two-phase teardown says a unit's `close()` runs after its Job is joined.
+It doesn't say who launched that Job, and the answer follows from whose lifetime the unit has.
+
+A unit whose lifetime is strictly *inside* its owner's exposes a `run`/`runTerm` suspend function that the owner launches, and the owner holds the Job::
+An indexer term is the case.
+Several come and go over one partition's life, and it is the transport, through the owner, that decides when one ends — at a moment the term itself doesn't choose.
+So the owner needs a handle in order to stop it, and that handle is what `LogProcessor.State` pairs with the processor to free.
+
+A unit whose lifetime *is* its owner's launches from its own initialiser, and takes the scope as a constructor parameter::
+`LogProcessor` is the case.
+One per partition, created and closed with the database, and stopped only by the database's job tree being cancelled.
+There is no moment at which the owner stops this one thing and keeps the rest, so a handle buys nothing — and the scope it would be launched on is the same scope its constructor is handed.
+
+Splitting construction from starting where the two lifetimes coincide invents a state, "constructed but not started", that nothing else needs.
+The tells are a `lateinit` scope, a "not yet running" variant bolted onto an otherwise-total state machine, and a `check` to keep callers out of it.
+
+Two arguments look like reasons to split and aren't:
+
+* *Proving the unit is ready.*
+  A constructor returning is exactly as strong a proof as a `launch` returning — in both cases nothing can hold the object before its work exists.
+  Reach for a start method because the owner needs a handle, never to make readiness provable.
+* *Keeping `this` out of the constructor.*
+  An initialiser only publishes a half-built object when the launched body needs `this` — a unit that is its own record processor, say.
+  Where the body touches only an already-constructed collaborator, a field initialiser is safe.
+
+A fresh `SupervisorJob` marks a boundary a failure must not cross, which is a separate question from who launched the unit and from how many coroutines it runs.
+That boundary is the database scope: its Job is a supervisor and its handler is `watchers.notifyError`, so a role's fault is reported without cancelling the source-log subscription beside it.
+Within a role, a plain `scope.launch` is what you want, because a role's coroutines are meant to fail together — the leader's replica-log reader is a child of the term's Job precisely so that a read that fails ends the term.
 
 === Accepted behaviour: resources of a self-crashed unit are freed lazily
 

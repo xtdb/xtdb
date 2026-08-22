@@ -8,9 +8,15 @@ import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -46,6 +52,7 @@ import java.time.Instant
 import java.time.InstantSource
 import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
+import xtdb.api.tx.ExternalSource
 import xtdb.api.tx.TxIndexer
 
 class LeaderLogProcessorTest {
@@ -81,6 +88,30 @@ class LeaderLogProcessorTest {
             configure()
         }
 
+    /**
+     * Start a term the way [LogProcessor] does: the term and the partition's replica-log reader launched
+     * into the term's own job, so cancelling that job is what stops it, and freed once the test has joined it.
+     */
+    private fun CoroutineScope.startTerm(
+        partitionStorage: PartitionStorage,
+        replicaAppender: ReplicaLogAppender,
+        watchers: Watchers,
+        proc: LeaderLogProcessor,
+    ) =
+        proc.also {
+            leadersToClose += it
+            launch {
+                launch {
+                    partitionStorage.replicaLog.tailAll(-1) { records ->
+                        records.forEach { proc.queueReplicaMessage(it) }
+                    }
+                }
+                launch { proc.gc.runGc() }
+                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                runLeaderTerm("test", watchers, proc, replicaAppender)
+            }
+        }
+
     private fun TestScope.leaderProc(
         uploadDispatcher: CoroutineDispatcher,
         sourceLog: InMemoryLog<SourceMessage> = InMemoryLog(InstantSource.system(), 0),
@@ -91,9 +122,13 @@ class LeaderLogProcessorTest {
         trieCatalog: TrieCatalog = mockk(relaxed = true),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
+        // These tests submit through the processor rather than driving an adapter, so the source only has
+        // to exist for the processor to.
+        extSource: ExternalSource = mockk(relaxed = true),
         skipTxs: Set<MessageId> = emptySet(),
         leaderTerm: Long = 1,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
+        termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
         val tableCatalog = mockk<TableCatalog>(relaxed = true)
         val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
@@ -105,16 +140,19 @@ class LeaderLogProcessorTest {
             )
         )
 
-        return LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = skipTxs, dbCatalog = null,
-            afterReplicaMsgId = -1,
-            leaderTerm = leaderTerm,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + termJob
+        val replicaAppender = ReplicaLogAppender(driver)
+
+        return termScope.startTerm(
+            partitionStorage, replicaAppender, watchers,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers, replicaAppender, extSource,
+                skipTxs = skipTxs, dbCatalog = null,
+                leaderTerm = leaderTerm,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
     }
 
     // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
@@ -148,7 +186,7 @@ class LeaderLogProcessorTest {
         )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.TriesAdded(Storage.VERSION, 0, tries))
         ))
         watchers.awaitSource(0)
@@ -182,18 +220,21 @@ class LeaderLogProcessorTest {
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val replicaAppender = ReplicaLogAppender(driver)
+        val lp = termScope.startTerm(
+            partitionStorage, replicaAppender, watchers,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers, replicaAppender,
+                extSource = null,
+                skipTxs = emptySet(), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(0)
@@ -211,7 +252,7 @@ class LeaderLogProcessorTest {
         val lp = leaderProc(StandardTestDispatcher(testScheduler), liveIndex = liveIndex, watchers = watchers)
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(5))
         ))
         watchers.awaitSource(0)
@@ -258,18 +299,21 @@ class LeaderLogProcessorTest {
         )
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val replicaAppender = ReplicaLogAppender(driver)
+        val lp = termScope.startTerm(
+            partitionStorage, replicaAppender, watchers,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers, replicaAppender,
+                extSource = null,
+                skipTxs = emptySet(), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val now = Instant.now()
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(0)
@@ -316,7 +360,7 @@ class LeaderLogProcessorTest {
 
         // Resolution is decoupled from the append pump: the whole batch resolves and processRecords returns
         // even though the append is still stalled on the gate — reaching the assertions below is the proof.
-        lp.processRecords(records)
+        lp.srcLogProc.processRecords(records)
         appendStarted.await()
         assertFalse(gate.isCompleted, "sanity: nothing opened the append gate")
 
@@ -343,7 +387,7 @@ class LeaderLogProcessorTest {
         )
 
         // launch the executeTx so we can observe its completion state without blocking the test
-        val txJob = backgroundScope.async { lp.executeTx(null) { TxIndexer.TxResult.Committed() } }
+        val txJob = backgroundScope.async { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
 
         appendStarted.await()
 
@@ -364,16 +408,18 @@ class LeaderLogProcessorTest {
         val gate = CompletableDeferred<Unit>()
         val appendStarted = CompletableDeferred<Unit>()
 
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
         val lp = leaderProc(
             StandardTestDispatcher(testScheduler), replicaLog = replicaLog, watchers = watchers,
             wrapDriver = { gatedDriver(it, gate, appendStarted) },
+            termJob = termJob,
         )
 
         // Capture the executeTx failure; the runTest timeout guards against a hang if it never completes.
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
             try {
-                lp.executeTx(null) { TxIndexer.TxResult.Committed() }
+                lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() }
             } catch (e: CancellationException) {
                 thrown.complete(e)
                 throw e
@@ -386,7 +432,7 @@ class LeaderLogProcessorTest {
 
         // Cancel the leader term — the gate will never open, so without term-close propagation
         // executeTx would hang until the runTest timeout.
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // If executeTx hangs, thrown never completes and runTest's timeout fires — that's the hang guard.
         thrown.await()
@@ -397,18 +443,19 @@ class LeaderLogProcessorTest {
         val writerEntered = CompletableDeferred<Unit>()
         val writerGate = CompletableDeferred<Unit>()
 
-        val lp = leaderProc(StandardTestDispatcher(testScheduler))
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), termJob = termJob)
 
         // t1 parks the persister inside its writer, so t2's task sits buffered in the channel —
         // never received, so never staged: only the exit drain can unblock its caller.
         val t1 = backgroundScope.async {
-            lp.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
+            lp.extSrcProc!!.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
         }
         writerEntered.await()
-        val t2 = backgroundScope.async { lp.executeTx(null) { TxIndexer.TxResult.Committed() } }
+        val t2 = backgroundScope.async { lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() } }
         testScheduler.advanceUntilIdle()
 
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // t1 fails via the pre-stage catch (cancelled mid-writer); t2 via the buffered-task drain.
         // A hang on either fires runTest's timeout.
@@ -422,13 +469,14 @@ class LeaderLogProcessorTest {
         val writerGate = CompletableDeferred<Unit>()
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers)
+        val termJob = SupervisorJob(backgroundScope.coroutineContext.job)
+        val lp = leaderProc(StandardTestDispatcher(testScheduler), watchers = watchers, termJob = termJob)
 
         // Park the persister inside an ext-source writer, so the source batch below lands in sourceLogCh's
         // buffer and is never received.
         backgroundScope.launch {
             runCatching {
-                lp.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
+                lp.extSrcProc!!.executeTx(null) { writerEntered.complete(Unit); writerGate.await(); TxIndexer.TxResult.Committed() }
             }
         }
         writerEntered.await()
@@ -439,7 +487,7 @@ class LeaderLogProcessorTest {
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
             try {
-                lp.processRecords(listOf(
+                lp.srcLogProc.processRecords(listOf(
                     Log.Record(0, 0, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
                 ))
                 thrown.complete(AssertionError("processRecords returned normally"))
@@ -451,7 +499,7 @@ class LeaderLogProcessorTest {
         }
         testScheduler.advanceUntilIdle()
 
-        lp.cancelAndJoin()
+        termJob.cancelAndJoin()
 
         // A hang here fires runTest's timeout — that's the regression guard.
         val e = thrown.await()
@@ -484,13 +532,13 @@ class LeaderLogProcessorTest {
         )
 
         // tx 0: stages an ext-source tx and kicks the gated append
-        lp.submitTx(null) { TxIndexer.TxResult.Committed() }
+        lp.extSrcProc!!.submitTx(null) { TxIndexer.TxResult.Committed() }
         appendStarted.await()
 
         // txs 1-4: submitted while the append is in-flight; they pipeline behind it — resolution and the
         // append pump are decoupled, so a stalled append doesn't block subsequent submitTx from resolving
         // and staging. Launched so the test body doesn't block on the cap-1 channel send.
-        repeat(4) { backgroundScope.launch { lp.submitTx(null) { TxIndexer.TxResult.Committed() } } }
+        repeat(4) { backgroundScope.launch { lp.extSrcProc.submitTx(null) { TxIndexer.TxResult.Committed() } } }
 
         testScheduler.advanceUntilIdle()
 
@@ -529,7 +577,7 @@ class LeaderLogProcessorTest {
         val thrown = CompletableDeferred<Throwable>()
         backgroundScope.launch {
             try {
-                lp.executeTx(null) { TxIndexer.TxResult.Committed() }
+                lp.extSrcProc!!.executeTx(null) { TxIndexer.TxResult.Committed() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -574,7 +622,7 @@ class LeaderLogProcessorTest {
         fun pollThread(msgId: Long) = CompletableDeferred<Throwable>().also { outcome ->
             backgroundScope.launch {
                 try {
-                    lp.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
+                    lp.srcLogProc.processRecords(listOf(Log.Record(0, msgId, Instant.now(), SourceMessage.FlushBlock(-1))))
                     outcome.complete(AssertionError("processRecords returned normally"))
                 } catch (e: Throwable) {
                     outcome.complete(e)
@@ -631,32 +679,35 @@ class LeaderLogProcessorTest {
             partitionStorage, partitionState, blockUploader
         )
 
-        val lp = LeaderLogProcessor(
-            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-            partitionState, "test", driver, watchers,
-            extSource = null,
-            skipTxs = setOf(10), dbCatalog = null,
-            afterReplicaMsgId = -1,
-            flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope,
-        ).also(leadersToClose::add)
+        val termScope = backgroundScope + SupervisorJob(backgroundScope.coroutineContext.job)
+        val replicaAppender = ReplicaLogAppender(driver)
+        val lp = termScope.startTerm(
+            partitionStorage, replicaAppender, watchers,
+            LeaderLogProcessor(
+                allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+                partitionState, "test", driver, watchers, replicaAppender,
+                extSource = mockk(relaxed = true),
+                skipTxs = setOf(10), dbCatalog = null,
+                flushTimeout = IndexerConfig().flushDuration,
+            )
+        )
 
         val token = byteArrayOf(1, 2, 3)
 
         // The ext-source tx carries the CDC resume token; awaiting its durability (txId 0) pins the
         // ordering — it resolves and applies before the token-less source-log tx that follows.
-        lp.submitTx(token) { TxIndexer.TxResult.Committed() }
+        lp.extSrcProc!!.submitTx(token) { TxIndexer.TxResult.Committed() }
         watchers.awaitTx(0)
 
         // A token-less source-log tx (msgId 10; skipTxs covers it, so no Arrow payload needed, and its
         // txId must exceed the ext tx's for watchers' monotonicity). It resolves behind the ext tx.
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 10, Instant.now(), SourceMessage.Tx(ByteArray(0), null, ZoneId.of("UTC"), null, null))
         ))
 
         // Force the cut with a FlushBlock: the block's last tx is the token-less source-log tx, so the
         // boundary must carry the earlier ext tx's token (the last non-null token seen), not a null one.
-        lp.processRecords(listOf(
+        lp.srcLogProc.processRecords(listOf(
             Log.Record(0, 11, Instant.now(), SourceMessage.FlushBlock(-1))
         ))
         watchers.awaitSource(11)

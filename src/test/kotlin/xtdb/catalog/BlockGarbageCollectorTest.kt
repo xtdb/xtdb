@@ -66,7 +66,6 @@ class BlockGarbageCollectorTest {
                 val blockCat = BlockCatalog(bufferPool.latestBlock)
 
                 val gc = BlockGarbageCollector(
-                    backgroundScope,
                     bufferPool, blockCat,
                     blocksToKeep = 3,
                     enabled = false,
@@ -111,7 +110,6 @@ class BlockGarbageCollectorTest {
                     }
 
                     val gc = BlockGarbageCollector(
-                        backgroundScope,
                         p0, BlockCatalog(p0.latestBlock),
                         blocksToKeep = 3,
                         enabled = false,
