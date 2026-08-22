@@ -1,8 +1,10 @@
 package xtdb.indexer
 
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.error.Incorrect
@@ -28,107 +30,109 @@ class ElectionTest {
         claimTimeout = Duration.ofSeconds(30),
     )
 
-    private fun stopwatch(clock: TestClock, seed: Int = 0) =
-        QuietStopwatch(config, clock, Random(seed))
+    private fun driver(clock: TestClock, seed: Int = 0) = QuietDriver(config, clock, Random(seed))
+
+    /** What the participant's loop would take off the driver's arm right now, or null if nothing is armed. */
+    private fun ElectionDriver.fired(): Quiet? {
+        val arm = onTimeout
+        return runBlocking { withTimeoutOrNull(1) { select { arm { it } } } }
+    }
 
     @Test
     fun `a fresh participant does not claim on its first read`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock).apply { await(Quiet.ELECTION) }
 
-        sw.onEmptyRead()
+        driver.onEmptyRead()
 
-        assertFalse(sw.quietLongEnough, "a cold-started node claiming immediately is every node claiming at once")
+        assertNull(driver.fired(), "a cold-started node claiming immediately is every node claiming at once")
     }
 
     @Test
     fun `quiet is observed by reading, so time alone advances nothing`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock).apply { await(Quiet.ELECTION) }
 
         clock.advance(Duration.ofMinutes(5))
 
-        assertEquals(Duration.ZERO, sw.quietFor, "no read has happened, so nothing has been observed")
-        assertFalse(sw.quietLongEnough)
-        assertFalse(sw.claimOverdue)
+        assertNull(driver.fired(), "no read has happened, so nothing has been observed")
 
-        sw.onEmptyRead()
+        driver.onEmptyRead()
 
-        assertTrue(sw.quietLongEnough, "the read is what makes the silence observable")
+        assertEquals(Quiet.ELECTION, driver.fired(), "the read is what makes the silence observable")
     }
 
     @Test
     fun `a record read defers the election however long the log had been quiet`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock).apply { await(Quiet.ELECTION) }
 
         clock.advance(Duration.ofMinutes(5))
-        sw.onEmptyRead()
-        assertTrue(sw.quietLongEnough)
+        driver.onRecord()
+        driver.onEmptyRead()
 
-        sw.onRecord()
+        assertNull(driver.fired(), "any record at all is an assertion that somebody is leading")
+    }
 
-        assertEquals(Duration.ZERO, sw.quietFor)
-        assertFalse(sw.quietLongEnough, "any record at all is an assertion that somebody is leading")
+    @Test
+    fun `a record withdraws a timeout the loop has not yet answered`() {
+        val clock = TestClock()
+        val driver = driver(clock).apply { await(Quiet.ELECTION) }
+
+        clock.advance(Duration.ofMinutes(5))
+        driver.onEmptyRead()
+        driver.onRecord()
+
+        assertNull(driver.fired(), "acting on it would claim against a leader we have just heard from")
     }
 
     @Test
     fun `time spent processing a record is not quiet`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock).apply { await(Quiet.ELECTION) }
 
         // The record arrived here, and took longer to process than any election timeout.
         clock.advance(Duration.ofMinutes(1))
-        sw.onRecord()
+        driver.onRecord()
 
-        sw.onEmptyRead()
+        driver.onEmptyRead()
 
-        assertEquals(
-            Duration.ZERO, sw.quietFor,
-            "stamping the record on arrival instead would have this follower claim for being slow"
-        )
-        assertFalse(sw.quietLongEnough)
+        assertNull(driver.fired(), "stamping the record on arrival instead would have this follower claim for being slow")
     }
 
     @Test
-    fun `the claim timeout is a longer wait than any election timeout`() {
+    fun `waiting on a claim outlasts any election timeout`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock).apply { await(Quiet.CLAIM_VERDICT) }
 
         clock.advance(Duration.ofSeconds(13))
-        sw.onEmptyRead()
+        driver.onEmptyRead()
 
-        assertTrue(sw.quietLongEnough, "past the election-timeout maximum")
-        assertFalse(sw.claimOverdue, "but nowhere near giving up on a claim")
+        assertNull(driver.fired(), "past the election-timeout maximum, but nowhere near giving up on a claim")
 
         clock.advance(Duration.ofSeconds(20))
-        sw.onEmptyRead()
+        driver.onEmptyRead()
 
-        assertTrue(sw.claimOverdue)
+        assertEquals(Quiet.CLAIM_VERDICT, driver.fired())
     }
 
     @Test
     fun `an abandoned claim widens the wait, and a verdict narrows it back`() {
         val clock = TestClock()
-        val sw = stopwatch(clock)
+        val driver = driver(clock)
 
-        sw.backOff()
-        assertEquals(1, sw.abandonedClaims)
+        driver.backOff()
 
         // One abandonment scales the range by 1 + 2*1 = 3, so the floor is 18s rather than 6s.
         clock.advance(Duration.ofSeconds(17))
-        sw.onEmptyRead()
-        assertFalse(sw.quietLongEnough, "backed off, so the previous floor is no longer enough")
+        driver.onEmptyRead()
+        assertNull(driver.fired(), "backed off, so the previous floor is no longer enough")
 
-        sw.backOff()
-        assertEquals(2, sw.abandonedClaims)
-
-        sw.restartWait()
-        assertEquals(0, sw.abandonedClaims, "a claim that reached a verdict is evidence reads are arriving")
+        driver.await(Quiet.ELECTION)
 
         clock.advance(Duration.ofSeconds(13))
-        sw.onEmptyRead()
-        assertTrue(sw.quietLongEnough, "back to the unscaled range")
+        driver.onEmptyRead()
+        assertEquals(Quiet.ELECTION, driver.fired(), "a claim that reached a verdict is evidence reads are arriving")
     }
 
     @Test
@@ -136,17 +140,28 @@ class ElectionTest {
         // Every draw lands in [6s, 12s], so 5s of quiet is never enough and 12s always is.
         for (seed in 0 until 200) {
             val shortClock = TestClock()
-            val short = stopwatch(shortClock, seed)
+            val short = driver(shortClock, seed).apply { await(Quiet.ELECTION) }
             shortClock.advance(Duration.ofSeconds(5))
             short.onEmptyRead()
-            assertFalse(short.quietLongEnough, "seed $seed drew below the configured minimum")
+            assertNull(short.fired(), "seed $seed drew below the configured minimum")
 
             val longClock = TestClock()
-            val long = stopwatch(longClock, seed)
+            val long = driver(longClock, seed).apply { await(Quiet.ELECTION) }
             longClock.advance(Duration.ofSeconds(12))
             long.onEmptyRead()
-            assertTrue(long.quietLongEnough, "seed $seed drew above the configured maximum")
+            assertEquals(Quiet.ELECTION, long.fired(), "seed $seed drew above the configured maximum")
         }
+    }
+
+    @Test
+    fun `an idle driver concludes nothing however long the log stays quiet`() {
+        val clock = TestClock()
+        val driver = driver(clock).apply { idle() }
+
+        clock.advance(Duration.ofHours(1))
+        driver.onEmptyRead()
+
+        assertNull(driver.fired(), "a node that may not lead is entitled to conclude nothing from silence")
     }
 
     @Test

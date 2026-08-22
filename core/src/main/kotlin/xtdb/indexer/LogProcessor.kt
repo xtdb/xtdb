@@ -158,10 +158,16 @@ internal suspend fun runLeaderTerm(
  *
  * A failure is already logged and on the watchers by the time it arrives — `FollowerLogProcessor` applies
  * records inside `processRecords`, which reports before it throws — so there is nothing left to decide.
+ *
+ * [selectElection] arms whatever the follower's owner concludes from quiet, on this loop rather than a
+ * loop of its own, so a conclusion and the record that would have withdrawn it cannot be acted on at once.
  */
-internal suspend fun runFollower(follower: FollowerLogProcessor) {
+internal suspend fun runFollower(
+    follower: FollowerLogProcessor,
+    selectElection: SelectBuilder<Unit>.() -> Unit,
+) {
     try {
-        while (true) selectUnbiased { with(follower) { selectWork() } }
+        while (true) selectUnbiased { with(follower) { selectWork() }; selectElection() }
     } catch (e: CancellationException) {
         throw e
     } catch (_: Throwable) {
@@ -188,6 +194,7 @@ class LogProcessor(
     private val flushTimeout: Duration,
     private val instantSource: InstantSource = InstantSource.system(),
     electionRandom: Random = Random.Default,
+    private val driver: ElectionDriver = QuietDriver(electionConfig, instantSource, electionRandom),
     private val gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AutoCloseable {
 
@@ -226,15 +233,11 @@ class LogProcessor(
 
     private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : State
 
-    // How long this partition has been reading its replica log and finding nothing — the one quantity
-    // every election decision is timed off. Touched only by whichever loop is live (the follower's work
-    // coroutine, or the coroutine retiring it), never concurrently: role changes join the old loop
-    // before the next one starts.
-    private val stopwatch = QuietStopwatch(electionConfig, instantSource, electionRandom)
-
+    // The elector reports reads and draws the one conclusion a *record* supports — a claim's verdict.
+    // Everything a stretch of quiet supports is the driver's to raise, and arrives at [onQuiet].
     private val elector = object : Elector {
         override suspend fun onRecord(termBefore: Long, msgId: MessageId) {
-            stopwatch.onRecord()
+            driver.onRecord()
 
             val s = state
             if (s is Claiming && msgId >= s.claim.msgId) {
@@ -244,33 +247,36 @@ class LogProcessor(
                 // same-term rival conferring.
                 if (termBefore < s.claim.term) {
                     LOG.info("[$dbName] claim at term ${s.claim.term} conferred leadership; taking over")
+                    driver.idle()
                     state = TakingOver(s.proc, s.job)
                     scope.launch { takeOver(s.proc, s.job, s.claim.term) }
                 } else {
                     LOG.info("[$dbName] lost the election at term ${s.claim.term}; following")
-                    stopwatch.restartWait()
+                    driver.await(Quiet.ELECTION)
                     state = Following(s.proc, s.job)
                 }
             }
         }
 
-        override suspend fun onEmptyRead() {
-            stopwatch.onEmptyRead()
+        override suspend fun onEmptyRead() = driver.onEmptyRead()
+    }
 
-            when (val s = state) {
-                is Following -> if (mayLead && stopwatch.quietLongEnough) claim(s)
+    /** The log stayed quiet for as long as this state was waiting on, so act on what the state was for. */
+    private suspend fun onQuiet() {
+        when (val s = state) {
+            is Following -> claim(s)
 
-                is Claiming -> if (stopwatch.claimOverdue) {
-                    // Our reader is not delivering, so no verdict can be reached; holding the claim open
-                    // on the strength of a prefix we are no longer being given helps nobody, least of all
-                    // a deployment where we are the only eligible node.
-                    LOG.warn("[$dbName] claim at term ${s.claim.term} not read back; abandoning")
-                    stopwatch.backOff()
-                    state = Following(s.proc, s.job)
-                }
-
-                is TakingOver, is Leading -> {}
+            is Claiming -> {
+                // Our reader is not delivering, so no verdict can be reached; holding the claim open on
+                // the strength of a prefix we are no longer being given helps nobody, least of all a
+                // deployment where we are the only eligible node.
+                LOG.warn("[$dbName] claim at term ${s.claim.term} not read back; abandoning")
+                driver.backOff()
+                state = Following(s.proc, s.job)
             }
+
+            // Neither waits on quiet, so neither can be here.
+            is TakingOver, is Leading -> {}
         }
     }
 
@@ -285,11 +291,12 @@ class LogProcessor(
             // A refused append wrote nothing, so there is nothing to adjudicate: wait afresh, so we
             // don't re-claim on every read for as long as appends are refused.
             LOG.warn(e, "[$dbName] claim append refused; holding off")
-            stopwatch.restartWait()
+            driver.await(Quiet.ELECTION)
             return
         }
 
         LOG.info("[$dbName] claimed leadership at term ${term} (claim at ${claim.msgId})")
+        driver.await(Quiet.CLAIM_VERDICT)
         state = Claiming(following.proc, following.job, claim)
     }
 
@@ -328,7 +335,6 @@ class LogProcessor(
             state = openLeader(termId, watchers.latestSourceMsgId)
         } catch (e: Throwable) {
             state = openFollower(pendingBlock)
-            stopwatch.restartWait()
             if (!e.isShutdownSignal) {
                 LOG.error(e, "[$dbName] takeover: failed to build leader")
                 watchers.notifyError(e)
@@ -402,7 +408,6 @@ class LogProcessor(
     private fun resignToFollower(proc: LeaderLogProcessor) {
         LOG.info("[$dbName] leader term over; following")
         proc.close()
-        stopwatch.restartWait()
         state = openFollower(proc.pendingBlock)
     }
 
@@ -455,9 +460,13 @@ class LogProcessor(
             meterRegistry = base.meterRegistry,
         )
 
+        // Eligibility decides whether quiet means anything here at all: an ineligible node reads its log
+        // like any other follower, and there is no length of silence it is entitled to conclude from.
+        if (mayLead) driver.await(Quiet.ELECTION) else driver.idle()
+
         return Following(proc, scope.launch {
             launch { tailReplica(proc::queueRecords) }
-            runFollower(proc)
+            runFollower(proc) { driver.onTimeout { onQuiet() } }
         })
     }
 
