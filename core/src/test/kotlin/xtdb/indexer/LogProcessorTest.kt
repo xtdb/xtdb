@@ -18,7 +18,7 @@ import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.api.log.*
-import xtdb.catalog.BlockCatalog
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -52,9 +52,8 @@ class LogProcessorTest {
 
     private fun newPartitionState(name: String = "test-db", liveIndex: LiveIndex = mockk(relaxed = true)) =
         PartitionState(
-            BlockCatalog(null),
-            mockk<TableCatalog>(relaxed = true),
-            mockk<TrieCatalog>(relaxed = true),
+            TableCatalog(mockBufferPool()),
+            createTrieCatalog(),
             liveIndex
         )
 

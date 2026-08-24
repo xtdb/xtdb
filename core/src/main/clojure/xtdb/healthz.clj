@@ -25,7 +25,7 @@
   (.getIngestionError db))
 
 (defn- ->block-lag [^Database db]
-  (let [current-block (.getCurrentBlockIndex (.getBlockCatalog db))
+  (let [current-block (.getCurrentBlockIndex (.getTableCatalog db))
         latest-available (BufferPoolKt/latestAvailableBlockIndex (.getBufferPool db) current-block)]
     (max 0 (- (or latest-available -1)
               (or current-block -1)))))
@@ -133,7 +133,7 @@
                                                              (all-databases db-cat))]
                                                    (try
                                                      (doseq [^Database db dbs]
-                                                       (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getBlockCatalog db)) -1))]
+                                                       (let [flush-msg (SourceMessage$FlushBlock. (or (.getCurrentBlockIndex (.getTableCatalog db)) -1))]
                                                          (.appendMessageBlocking (.getSourceLog db) flush-msg 0)))
                                                      {:status 200,
                                                       :body (format "Block flush message sent to %d database(s)." (count dbs))}

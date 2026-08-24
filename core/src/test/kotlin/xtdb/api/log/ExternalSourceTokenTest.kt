@@ -1,9 +1,11 @@
 package xtdb.api.log
 
+import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import xtdb.block.proto.Block
-import xtdb.catalog.BlockCatalog
+import xtdb.catalog.TableCatalog
+import xtdb.storage.BufferPool
 
 class ExternalSourceTokenTest {
 
@@ -58,9 +60,9 @@ class ExternalSourceTokenTest {
 
     @Test
     fun `Block proto round-trips external source token`() {
-        val blockCatalog = BlockCatalog(null)
+        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
 
-        val block = blockCatalog.buildBlock(
+        val block = tableCatalog.buildBlock(
             blockIndex = 0,
             latestCompletedTx = null,
             latestProcessedMsgId = 100,
@@ -76,12 +78,12 @@ class ExternalSourceTokenTest {
     }
 
     @Test
-    fun `BlockCatalog externalSourceToken reads from latest block`() {
-        val blockCatalog = BlockCatalog(null)
+    fun `TableCatalog externalSourceToken reads from latest block`() {
+        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
 
-        assertNull(blockCatalog.externalSourceToken)
+        assertNull(tableCatalog.externalSourceToken)
 
-        val block = blockCatalog.buildBlock(
+        val block = tableCatalog.buildBlock(
             blockIndex = 0,
             latestCompletedTx = null,
             latestProcessedMsgId = 100,
@@ -90,16 +92,16 @@ class ExternalSourceTokenTest {
             secondaryDatabases = null,
             externalSourceToken = testToken
         )
-        blockCatalog.refresh(block)
+        tableCatalog.refresh(block)
 
-        assertArrayEquals(testToken, blockCatalog.externalSourceToken)
+        assertArrayEquals(testToken, tableCatalog.externalSourceToken)
     }
 
     @Test
-    fun `BlockCatalog externalSourceToken returns null when no token`() {
-        val blockCatalog = BlockCatalog(null)
+    fun `TableCatalog externalSourceToken returns null when no token`() {
+        val tableCatalog = TableCatalog(mockk<BufferPool>(relaxed = true))
 
-        val block = blockCatalog.buildBlock(
+        val block = tableCatalog.buildBlock(
             blockIndex = 0,
             latestCompletedTx = null,
             latestProcessedMsgId = 100,
@@ -107,8 +109,8 @@ class ExternalSourceTokenTest {
             tables = emptySet(),
             secondaryDatabases = null
         )
-        blockCatalog.refresh(block)
+        tableCatalog.refresh(block)
 
-        assertNull(blockCatalog.externalSourceToken)
+        assertNull(tableCatalog.externalSourceToken)
     }
 }

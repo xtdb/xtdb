@@ -201,12 +201,12 @@ class IngestNodeIntegrationTest {
                         val ingestDb = checkNotNull(ingestNode.database("events"))
                         ingestDb.sendFlushBlockMessage()
                         eventually(30.seconds) {
-                            assertTrue(ingestDb.blockCatalog.currentBlockIndex == 0L, "ingest node cuts the block")
+                            assertTrue(ingestDb.tableCatalog.currentBlockIndex == 0L, "ingest node cuts the block")
                         }
 
                         val followerDb = (queryNode as XtdbInternal).dbCatalog["events"]
                         eventually(30.seconds) {
-                            assertTrue(followerDb?.blockCatalog?.currentBlockIndex == 0L, "read-only attach processes the flushed block")
+                            assertTrue(followerDb?.tableCatalog?.currentBlockIndex == 0L, "read-only attach processes the flushed block")
                         }
 
                         assertEquals(

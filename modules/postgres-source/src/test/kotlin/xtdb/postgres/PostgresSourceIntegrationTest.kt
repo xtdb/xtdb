@@ -298,7 +298,7 @@ class PostgresSourceIntegrationTest {
             awaitTxs(node, 2, db = "cdc")
 
             val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
-            assertNull(cdc.blockCatalog.currentBlockIndex, "test precondition: no block cut")
+            assertNull(cdc.tableCatalog.currentBlockIndex, "test precondition: no block cut")
 
             val atAttach = pgSlotConfirmedFlushLsn(slotName)
 
@@ -335,8 +335,8 @@ class PostgresSourceIntegrationTest {
             val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
 
             cdc.sendFlushBlockMessage()
-            eventually(30.seconds) { assertTrue(cdc.blockCatalog.currentBlockIndex != null, "first block persisted") }
-            val blockLsn = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+            eventually(30.seconds) { assertTrue(cdc.tableCatalog.currentBlockIndex != null, "first block persisted") }
+            val blockLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
 
             pgExecute(
                 "INSERT INTO pg_confirm (_id, name) VALUES (2, 'streamed-two')",
@@ -361,7 +361,7 @@ class PostgresSourceIntegrationTest {
 
             cdc.sendFlushBlockMessage()
             eventually(30.seconds) {
-                val persisted = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+                val persisted = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
                 assertTrue(persisted > blockLsn, "second block's token covers the streamed rows")
             }
 
@@ -430,8 +430,8 @@ class PostgresSourceIntegrationTest {
                 }
 
                 cdc.sendFlushBlockMessage()
-                eventually(30.seconds) { assertNotNull(cdc.blockCatalog.currentBlockIndex, "block persisted for cdc") }
-                val durableLsn = PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn
+                eventually(30.seconds) { assertNotNull(cdc.tableCatalog.currentBlockIndex, "block persisted for cdc") }
+                val durableLsn = PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn
 
                 // Writing inside the poll, not a batch up front: the received position rides on the
                 // walsender's keepalives, which it sends as it works through new WAL, so a single
@@ -456,7 +456,7 @@ class PostgresSourceIntegrationTest {
 
                 assertEquals(
                     durableLsn,
-                    PostgresSourceToken.parseFrom(cdc.blockCatalog.externalSourceToken!!).latestCommittedLsn,
+                    PostgresSourceToken.parseFrom(cdc.tableCatalog.externalSourceToken!!).latestCommittedLsn,
                     "test precondition: no block covers the unflushed row, so the replica log and the live index are its only copies",
                 )
 
@@ -476,7 +476,7 @@ class PostgresSourceIntegrationTest {
                 assertEquals(
                     durableLsn,
                     PostgresSourceToken.parseFrom(
-                        (node as XtdbInternal).dbCatalog["cdc"]!!.blockCatalog.externalSourceToken!!
+                        (node as XtdbInternal).dbCatalog["cdc"]!!.tableCatalog.externalSourceToken!!
                     ).latestCommittedLsn,
                     "resumed from the block cut before the restart — a block flushed on shutdown would make the unflushed row durable and void everything below",
                 )
@@ -642,10 +642,10 @@ class PostgresSourceIntegrationTest {
                 val cdc = (node as XtdbInternal).dbCatalog["cdc"]!!
                 cdc.sendFlushBlockMessage()
                 eventually(30.seconds) {
-                    assertTrue(cdc.blockCatalog.currentBlockIndex != null, "block persisted for cdc")
+                    assertTrue(cdc.tableCatalog.currentBlockIndex != null, "block persisted for cdc")
                 }
 
-                val txId = cdc.blockCatalog.latestCompletedTx!!.txId
+                val txId = cdc.tableCatalog.latestCompletedTx!!.txId
                 val sourceOffset = cdc.sourceLog.latestSubmittedOffset()
                 assertTrue(
                     txId > sourceOffset,
@@ -706,7 +706,7 @@ class PostgresSourceIntegrationTest {
 
                 cdc.sendFlushBlockMessage()
                 eventually(30.seconds) {
-                    assertNotNull(cdc.blockCatalog.currentBlockIndex, "block persisted for cdc")
+                    assertNotNull(cdc.tableCatalog.currentBlockIndex, "block persisted for cdc")
                 }
 
                 // the boundary carries cdc's source-log watermark, which stays low while the CDC

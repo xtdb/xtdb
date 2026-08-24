@@ -1,7 +1,6 @@
 package xtdb.database
 
 import xtdb.api.log.Watchers
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.indexer.LiveIndex
@@ -23,7 +22,6 @@ class DatabasePartition(
     // the storage view owns the partition index; delegate rather than store a second copy so the two can't disagree
     val partition: Int get() = storage.partition
 
-    val blockCatalog: BlockCatalog get() = state.blockCatalog
     val tableCatalog: TableCatalog get() = state.tableCatalog
     val trieCatalog: TrieCatalog get() = state.trieCatalog
     val liveIndex: LiveIndex get() = state.liveIndex

@@ -175,7 +175,7 @@ external entity TrieCatalogSnap {}
 external entity TableCatalogSnap {}
     -- Frozen per-table metadata for everything already flushed: each table's
     -- column types and its count of rows ever written. The historical half of
-    -- a column's declared type. See: xtdb.catalog.TableCatalog.Snap.
+    -- a column's declared type. See: xtdb.catalog.TableCatalog.State.
 
 -- A per-tx durability handle: a deferred completed with the tx's result once the tx
 -- has been CONSUMED BACK and imported into the durable live tables (durably replicated

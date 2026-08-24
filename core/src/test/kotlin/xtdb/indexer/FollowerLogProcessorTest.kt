@@ -13,12 +13,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.block.proto.block
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.PartitionState
@@ -38,7 +38,6 @@ class FollowerLogProcessorTest {
     private lateinit var liveIndex: LiveIndex
     private lateinit var compactor: Compactor.ForDatabase
     private lateinit var watchers: Watchers
-    private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var partitionState: PartitionState
@@ -53,10 +52,9 @@ class FollowerLogProcessorTest {
         bufferPool = mockk(relaxed = true)
         liveIndex = mockk(relaxed = true)
         compactor = mockk(relaxed = true)
-        blockCatalog = BlockCatalog(null)
-        tableCatalog = mockk(relaxed = true)
-        trieCatalog = mockk(relaxed = true)
-        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        tableCatalog = TableCatalog(bufferPool)
+        trieCatalog = createTrieCatalog()
+        partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         every { bufferPool.epoch } returns 1
@@ -166,8 +164,8 @@ class FollowerLogProcessorTest {
     fun `refuses a leader term the persisted boundary has moved past`() = runTest {
         // the election counter is back to 1 — a Kafka group deleted while the cluster was down, or a
         // local log's process restarting — while the last block was cut at 9
-        blockCatalog = BlockCatalog(block { blockIndex = 0; termId = LeaderTerm.of(0, 9) })
-        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        tableCatalog = TableCatalog(bufferPool, block { blockIndex = 0; termId = LeaderTerm.of(0, 9) })
+        partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val proc = makeProcessor()
 
         assertThrows<Incorrect> { proc.checkTermUnfenced(LeaderTerm.of(0, 1)) }
@@ -193,8 +191,8 @@ class FollowerLogProcessorTest {
         // replaying a replica log that has old SW-era messages.
         // block catalog starts at block 5 (simulating startup from latest block).
         val startBlock = block { blockIndex = 5 }
-        blockCatalog = BlockCatalog(startBlock)
-        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        tableCatalog = TableCatalog(bufferPool, startBlock)
+        partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = 1000, latestSourceMsgId = 1000, latestReplicaMsgId = -1)
         val proc = makeProcessor()
 
@@ -221,9 +219,9 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor()
 
         val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+        every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
-        assertNull(blockCatalog.currentBlockIndex, "no block before processing")
+        assertNull(tableCatalog.currentBlockIndex, "no block before processing")
 
         val txId = 100L
         proc.processRecords(listOf(
@@ -232,7 +230,7 @@ class FollowerLogProcessorTest {
             record(2, ReplicaMessage.BlockUploaded(Storage.VERSION, 1, 0, txId, emptyList())),
         ))
 
-        assertEquals(0L, blockCatalog.currentBlockIndex,
+        assertEquals(0L, tableCatalog.currentBlockIndex,
             "block catalog should advance to block 0 even when BlockBoundary.latestProcessedMsgId == last txId")
     }
 
@@ -262,7 +260,7 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(hasExternalSource = true)
 
         val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+        every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
         val extTx = ReplicaMessage.ResolvedTx(0, Instant.now(), true, null, emptyMap(), srcMsgId = null)
         proc.processRecords(listOf(
@@ -274,7 +272,7 @@ class FollowerLogProcessorTest {
         verify { liveIndex.commitTx(match { it.txId == extTx.txId }, any()) }
         assertEquals(-1L, watchers.latestSourceMsgId,
             "ext-source ResolvedTx must not bump latestSourceMsgId")
-        assertEquals(0L, blockCatalog.currentBlockIndex)
+        assertEquals(0L, tableCatalog.currentBlockIndex)
     }
 
     @Test
@@ -300,7 +298,7 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(meterRegistry = registry)
 
         val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+        every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
         proc.processRecords(listOf(
             record(0, ReplicaMessage.ResolvedTx(1, Instant.now(), true, null, emptyMap())),
@@ -334,7 +332,7 @@ class FollowerLogProcessorTest {
         val proc = makeProcessor(meterRegistry = registry)
 
         val blockProto = block { blockIndex = 0 }.toByteArray()
-        every { bufferPool.getByteArray(BlockCatalog.blockFilePath(0)) } returns blockProto
+        every { bufferPool.getByteArray(TableCatalog.blockFilePath(0)) } returns blockProto
 
         proc.processRecords(listOf(
             record(0, ReplicaMessage.BlockBoundary(0, 0)),

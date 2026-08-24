@@ -8,7 +8,6 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.ReplicaMessage
 import xtdb.arrow.Relation
 import xtdb.arrow.RelationReader
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.finishBlock
 import xtdb.storage.BufferPool
@@ -229,7 +228,7 @@ class LiveIndex private constructor(
         @JvmOverloads
         @JvmName("open")
         fun open(
-            allocator: BufferAllocator, blockCatalog: BlockCatalog, tableCatalog: TableCatalog,
+            allocator: BufferAllocator, tableCatalog: TableCatalog,
             trieCatalog: TrieCatalog, indexerConfig: IndexerConfig = IndexerConfig(),
             /**
              * Dispatcher for the per-table block-write fan-out. Sims inject the seeded dispatcher so the
@@ -240,8 +239,8 @@ class LiveIndex private constructor(
             LiveIndex(
                 open { allocator.newChildAllocator("live-index", 0, Long.MAX_VALUE) },
                 tableCatalog, trieCatalog,
-                blockCatalog.latestCompletedTx,
-                (blockCatalog.currentBlockIndex ?: -1L) + 1L,
+                tableCatalog.latestCompletedTx,
+                (tableCatalog.currentBlockIndex ?: -1L) + 1L,
                 indexerConfig,
                 ioDispatcher,
             ).also { it.refreshSnap() }

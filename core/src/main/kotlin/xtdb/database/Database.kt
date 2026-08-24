@@ -24,7 +24,6 @@ import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.api.storage.Storage.applyStorage
 import xtdb.arrow.VectorType
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.proto.DatabaseConfig
@@ -96,7 +95,6 @@ class Database(
     /** This database's read basis right now — latest-completed system-time per partition, in partition-index order. */
     fun currentBasis(): List<Instant?> = partitions.map { it.liveIndex.latestCompletedTx?.systemTime }
 
-    val blockCatalog: BlockCatalog get() = partition0.blockCatalog
     val tableCatalog: TableCatalog get() = partition0.tableCatalog
 
     internal fun getColumnTypes(table: TableRef): Map<ColumnName, VectorType>? {
@@ -178,7 +176,7 @@ class Database(
     }
 
     fun sendFlushBlockMessage(): Log.MessageMetadata = runBlocking {
-        sourceLog.appendMessage(SourceMessage.FlushBlock(blockCatalog.currentBlockIndex ?: -1))
+        sourceLog.appendMessage(SourceMessage.FlushBlock(tableCatalog.currentBlockIndex ?: -1))
     }
 
     fun sendAttachDbMessage(dbName: DatabaseName, config: Config): Log.MessageMetadata = runBlocking {
@@ -294,9 +292,9 @@ class Database(
 
             val storage = PartitionStorage(logs, bufferPool, metadataManager, partition = 0)
             val state = open { PartitionState.open(allocator, storage, indexerConfig) }
-            val blockCatalog = state.blockCatalog
+            val tableCatalog = state.tableCatalog
             val sourceMsgId = maxOf(
-                blockCatalog.latestProcessedMsgId ?: -1,
+                tableCatalog.latestProcessedMsgId ?: -1,
                 offsetToMsgId(logs.sourceLog.epoch, -1)
             )
             // tx-id and source-msg-id can diverge under ext-source — seed them independently:
@@ -306,13 +304,13 @@ class Database(
 
             // Catch log/storage divergence (rotated/truncated/wrong topic) before we wire up
             // the indexer — see /ops/backup-and-restore/out-of-sync-log.
-            validateOffsets(dbName, logs.sourceLog, blockCatalog.latestProcessedMsgId)
+            validateOffsets(dbName, logs.sourceLog, tableCatalog.latestProcessedMsgId)
 
             val watchers = Watchers(
                 latestTxId = txId,
                 latestSourceMsgId = sourceMsgId,
-                latestReplicaMsgId = blockCatalog.boundaryReplicaMsgId ?: -1,
-                externalSourceToken = blockCatalog.externalSourceToken,
+                latestReplicaMsgId = tableCatalog.boundaryReplicaMsgId ?: -1,
+                externalSourceToken = tableCatalog.externalSourceToken,
             )
 
             val crashLogger = CrashLogger(allocator, storage.bufferPool, base.config.nodeId)

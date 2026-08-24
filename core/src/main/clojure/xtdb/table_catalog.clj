@@ -10,7 +10,7 @@
            [java.nio.file Path]
            (org.apache.arrow.vector.types.pojo Field Schema)
            (xtdb.block.proto TableBlock Partition)
-           (xtdb.catalog BlockCatalog)
+           (xtdb.catalog TableCatalog)
            xtdb.storage.BufferPool
            xtdb.api.TableRef
            xtdb.trie.Trie
@@ -80,9 +80,9 @@
                (update-vals #(-> (.toByteArray ^ByteString %) HyperLogLog/toHLL)))
      :partitions (into [] (map <-partition) (.getPartitionsList table-block))}))
 
-(defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^BlockCatalog block-cat]
-  (when-let [block-idx (.getCurrentBlockIndex block-cat)]
-    (let [tables (.getAllTables block-cat)]
+(defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
+  (when-let [block-idx (.getCurrentBlockIndex table-cat)]
+    (let [tables (.getAllTables table-cat)]
       (->> (for [^TableRef table tables
                  :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
                        {:keys [fields] :as tb} (-> (.getByteArray buffer-pool table-block-path)

@@ -7,7 +7,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
-import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
+import xtdb.catalog.TableCatalog.Companion.blockFromLatest
 import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
@@ -70,7 +70,7 @@ class TrieGarbageCollector(
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
-    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
 
     // [signal] is fire-and-forget; bursts coalesce into one upcoming cycle.
@@ -137,7 +137,7 @@ class TrieGarbageCollector(
         LOGGER.debug("Garbage collecting tries older than $asOf")
 
         supervisorScope {
-            for (tableName in blockCatalog.allTables) {
+            for (tableName in tableCatalog.allTables) {
                 launch(tableDispatcher) {
                     try {
                         garbageCollectTable(tableName, asOf)

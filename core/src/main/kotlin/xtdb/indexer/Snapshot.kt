@@ -30,7 +30,7 @@ import xtdb.api.tx.OpenTx
 class Snapshot(
     val txBasis: TransactionKey?,
     val trieCatSnap: TrieCatalog.Snap,
-    val tableCatSnap: TableCatalog.Snap,
+    val tableCatSnap: TableCatalog.State,
     // A table already has several of these on a transaction snapshot - the live-index segment, one
     // per staged tx that touched it, and the tx's own writes. Those are all tx-visibility layers,
     // so an external snapshot still sees one segment per table. Dual-slot LiveTable (#4495) is what
@@ -98,7 +98,7 @@ class Snapshot(
     companion object {
         /** Column *names* only - [tableInfo] answers which columns a table has; [columnTypes] answers their types. */
         @JvmStatic
-        private fun TableCatalog.Snap.buildTableInfo(
+        private fun TableCatalog.State.buildTableInfo(
             liveColumnNames: Map<TableRef, Set<ColumnName>>
         ): Map<TableRef, Set<ColumnName>> {
             val tableInfo = HashMap<TableRef, MutableSet<ColumnName>>()
@@ -170,7 +170,7 @@ class Snapshot(
             // Captured after the trie-cat and the live tables, deliberately: the type view must not lag the
             // data view. A declared type narrower than the rows being scanned is unsound; a wider one is
             // always safe, so a catalog read that's newer than the tries it covers errs in the safe direction.
-            val tableCatSnap = tableCat.snapshot()
+            val tableCatSnap = tableCat.snap()
 
             val tableInfo = tableCatSnap.buildTableInfo(liveColumnNames)
 

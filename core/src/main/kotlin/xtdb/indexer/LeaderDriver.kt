@@ -78,7 +78,7 @@ internal interface SourceBatches {
  *
  * Deliberately narrow. In-memory state mutations that happen to sit on the leader's path —
  * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do reads of
- * in-memory state (`liveIndex.isFull()`, `blockCatalog.currentBlockIndex`). A mock holds real state
+ * in-memory state (`liveIndex.isFull()`, `tableCatalog.currentBlockIndex`). A mock holds real state
  * objects, so those reads stay consistent with what the driver has applied.
  */
 internal interface LeaderDriver : AutoCloseable {

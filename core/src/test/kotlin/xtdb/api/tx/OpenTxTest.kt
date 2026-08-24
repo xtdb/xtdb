@@ -15,7 +15,6 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
@@ -44,12 +43,11 @@ class OpenTxTest {
 
     private fun <R> withOpenTx(dbName: String, f: (OpenTx) -> R): R =
         MemoryStorage(allocator, epoch = 0).use { bp ->
-            val blockCatalog = BlockCatalog(null)
             val tableCatalog = TableCatalog(bp)
             val trieCatalog = createTrieCatalog()
-            val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
+            val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
 
-            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex).use { partitionState ->
+            PartitionState(tableCatalog, trieCatalog, liveIndex).use { partitionState ->
                 val storage = PartitionStorage(
                     DatabaseLogs(
                         InMemoryLog<SourceMessage>(InstantSource.system(), 0),

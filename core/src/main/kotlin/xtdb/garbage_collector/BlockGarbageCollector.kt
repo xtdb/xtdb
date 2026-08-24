@@ -7,9 +7,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
-import xtdb.catalog.BlockCatalog
-import xtdb.catalog.BlockCatalog.Companion.allBlockFiles
-import xtdb.catalog.BlockCatalog.Companion.tableBlocks
+import xtdb.catalog.TableCatalog
+import xtdb.catalog.TableCatalog.Companion.allBlockFiles
+import xtdb.catalog.TableCatalog.Companion.tableBlocks
 import xtdb.storage.BufferPool
 import xtdb.api.DatabaseName
 import xtdb.util.StringUtil.fromLexHex
@@ -37,7 +37,7 @@ private const val DEFAULT_DELETE_PARALLELISM = 64
 @OptIn(ExperimentalCoroutinesApi::class)
 class BlockGarbageCollector(
     private val bufferPool: BufferPool,
-    private val blockCatalog: BlockCatalog,
+    private val tableCatalog: TableCatalog,
     private val blocksToKeep: Int,
     /** Gates the auto-signal from the leader's block-boundary path; direct `awaitNoGarbage()` is unaffected. */
     val enabled: Boolean,
@@ -129,7 +129,7 @@ class BlockGarbageCollector(
     suspend fun garbageCollectBlocks() {
         LOGGER.debug("Garbage collecting blocks, keeping $blocksToKeep blocks")
 
-        val latestBlockIndex = blockCatalog.currentBlockIndex ?: return
+        val latestBlockIndex = tableCatalog.currentBlockIndex ?: return
 
         fun Path.isGarbage(): Boolean =
             parseBlockIndex()?.let { it != latestBlockIndex && it <= latestBlockIndex - blocksToKeep } ?: false
@@ -153,7 +153,7 @@ class BlockGarbageCollector(
         }
 
         supervisorScope {
-            for (table in blockCatalog.allTables) {
+            for (table in tableCatalog.allTables) {
                 launch(tableDispatcher) {
                     deleteGarbage(bufferPool.tableBlocks(table).asSequence().map { it.key }, tableBlockDeleteTimer)
                 }

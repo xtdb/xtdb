@@ -108,10 +108,10 @@
       (let [port (.getHealthzPort node)
             db (db/primary-db node)
             bp (.getBufferPool db)
-            block-cat (.getBlockCatalog db)]
+            table-cat (.getTableCatalog db)]
 
         (t/testing "no blocks yet"
-          (t/is (nil? (.getCurrentBlockIndex block-cat)))
+          (t/is (nil? (.getCurrentBlockIndex table-cat)))
           (t/is (nil? (BufferPoolKt/latestAvailableBlockIndex bp nil)))
           (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
             (t/is (= 200 (:status resp)))))
@@ -120,7 +120,7 @@
         (tu/flush-block! node)
 
         (t/testing "after first block, block-lag is zero"
-          (t/is (= 0 (.getCurrentBlockIndex block-cat)))
+          (t/is (= 0 (.getCurrentBlockIndex table-cat)))
           (t/is (= 0 (BufferPoolKt/latestAvailableBlockIndex bp 0)))
           (let [resp (clj-http/get (->healthz-url port "alive") {:throw-exceptions false})]
             (t/is (= 200 (:status resp)))))
@@ -131,7 +131,7 @@
         (t/testing "after second block, listAfter from first finds it"
           ;; invalidate cache to simulate TTL expiry — otherwise we'd get stale cached values
           (BufferPoolKt/invalidateLatestAvailableBlockCache bp)
-          (t/is (= 1 (.getCurrentBlockIndex block-cat)))
+          (t/is (= 1 (.getCurrentBlockIndex table-cat)))
           (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 0))
                 "listing after block 0 finds block 1")
           (t/is (= 1 (BufferPoolKt/latestAvailableBlockIndex bp 1))
@@ -143,14 +143,14 @@
   (util/with-tmp-dirs #{local-path}
     (with-open [node (tu/->local-node {:node-dir local-path})]
       (let [port (.getHealthzPort node)
-            block-cat (.getBlockCatalog (db/primary-db node))]
+            table-cat (.getTableCatalog (db/primary-db node))]
 
         (t/testing "no latest completed tx"
           (clj-http/post (->system-url port "finish-block") {:throw-exceptions false}))
 
         (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-        (t/is (= nil (:tx-id (.getLatestCompletedTx block-cat))))
+        (t/is (= nil (:tx-id (.getLatestCompletedTx table-cat))))
 
         (let [first-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]
                                                               [:put-docs :bar {:xt/id "bar2"}]
@@ -162,7 +162,7 @@
 
           (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-          (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))
+          (t/is (= first-latest-tx-id (:tx-id (.getLatestCompletedTx table-cat)))))
 
         (let [second-latest-tx-id (:tx-id (xt/execute-tx node [[:put-docs :bar {:xt/id "bar7"}]
                                                                [:put-docs :bar {:xt/id "bar8"}]
@@ -174,7 +174,7 @@
 
           (xt/execute-tx node [[:put-docs :bar {:xt/id "bar1"}]])
 
-          (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx block-cat)))))))))
+          (t/is (= second-latest-tx-id (:tx-id (.getLatestCompletedTx table-cat)))))))))
 
 ;; --- multi-db tests ---
 

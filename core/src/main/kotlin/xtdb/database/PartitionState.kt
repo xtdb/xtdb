@@ -3,9 +3,8 @@ package xtdb.database
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.IndexerConfig
 import xtdb.api.log.LeaderTerm
-import xtdb.catalog.BlockCatalog
-import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.catalog.TableCatalog
+import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.TermFence
 import xtdb.api.TableRef
@@ -14,12 +13,10 @@ import xtdb.util.requiringResolve
 import xtdb.util.safelyOpening
 
 class PartitionState(
-    val blockCatalogOrNull: BlockCatalog?,
     val tableCatalogOrNull: TableCatalog?,
     val trieCatalogOrNull: TrieCatalog?,
     val liveIndexOrNull: LiveIndex?,
 ) : AutoCloseable {
-    val blockCatalog: BlockCatalog get() = blockCatalogOrNull ?: error("no block-catalog")
     val tableCatalog: TableCatalog get() = tableCatalogOrNull ?: error("no table-catalog")
     val trieCatalog: TrieCatalog get() = trieCatalogOrNull ?: error("no trie-catalog")
     val liveIndex: LiveIndex get() = liveIndexOrNull ?: error("no live-index")
@@ -28,7 +25,7 @@ class PartitionState(
      * Seeded from the persisted block boundary, then only ever raised — so it outlives every role
      * change on this partition. See [TermFence].
      */
-    val termFence = TermFence(blockCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
+    val termFence = TermFence(tableCatalogOrNull?.boundaryTermId ?: LeaderTerm.NONE)
 
     override fun close() {
         liveIndexOrNull?.close()
@@ -47,10 +44,8 @@ class PartitionState(
         ): PartitionState = safelyOpening {
             val bufferPool = storage.bufferPool
 
-            val blockCatalog = BlockCatalog(bufferPool.latestBlock)
-
-            val tableCatalog = TableCatalog(bufferPool).also {
-                it.refresh(blockCatalog)
+            val tableCatalog = TableCatalog(bufferPool, bufferPool.latestBlock).also {
+                it.loadTables()
                 // xt.txs and xt.role_membership are data-backed, so they're absent from the catalog
                 // until the first transaction / GRANT. Seed them (as empty CREATE TABLEs) so they're
                 // always resolvable - the columns mirror `OpenTx.writeTxRow` / the GRANT path. On a node
@@ -59,11 +54,11 @@ class PartitionState(
                 it.seedTable(TableRef("xt", "role_membership"), listOf("user", "role"))
             }
 
-            val trieCatalog = trieCatalogFactory.open(bufferPool, blockCatalog)
+            val trieCatalog = trieCatalogFactory.open(bufferPool, tableCatalog)
 
-            val liveIndex = open { LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig) }
+            val liveIndex = open { LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig) }
 
-            PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+            PartitionState(tableCatalog, trieCatalog, liveIndex)
         }
     }
 }

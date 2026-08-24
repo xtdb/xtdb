@@ -36,7 +36,7 @@ import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.block.proto.TableBlock
-import xtdb.catalog.BlockCatalog
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -46,6 +46,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
 import xtdb.table.fromSchemaAndTable
+import xtdb.trie.Trie
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
 import java.time.Instant
@@ -118,8 +119,7 @@ class LeaderLogProcessorTest {
         replicaLog: InMemoryLog<ReplicaMessage> = InMemoryLog(InstantSource.system(), 0),
         bufferPool: BufferPool = mockk(relaxed = true) { every { epoch } returns 0 },
         liveIndex: LiveIndex = liveIndexMock(),
-        blockCatalog: BlockCatalog = BlockCatalog(null),
-        trieCatalog: TrieCatalog = mockk(relaxed = true),
+        trieCatalog: TrieCatalog = createTrieCatalog(),
         compactor: Compactor.ForDatabase = mockk(relaxed = true),
         watchers: Watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         // These tests submit through the processor rather than driving an adapter, so the source only has
@@ -130,8 +130,8 @@ class LeaderLogProcessorTest {
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
-        val tableCatalog = mockk<TableCatalog>(relaxed = true)
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val tableCatalog = TableCatalog(bufferPool)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, uploadDispatcher)
         val driver = wrapDriver(
@@ -172,14 +172,17 @@ class LeaderLogProcessorTest {
     @Test
     fun `TriesAdded forwarded to replica log`() = runTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
-        val trieCatalog = mockk<TrieCatalog>(relaxed = true)
+        val trieCatalog = createTrieCatalog()
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
         val lp = leaderProc(StandardTestDispatcher(testScheduler), replicaLog = replicaLog, trieCatalog = trieCatalog, watchers = watchers)
+
+        // the catalog silently drops a trie whose key it can't parse, so this has to be a real one
+        val trieKey = Trie.l0Key(0).toString()
 
         val tries = listOf(
             TrieDetails.newBuilder()
                 .setTableName("public/foo")
-                .setTrieKey("trie-key-1")
+                .setTrieKey(trieKey)
                 .setDataFileSize(100)
                 .setTrieMetadata(trieMetadata {})
                 .build()
@@ -191,7 +194,10 @@ class LeaderLogProcessorTest {
         ))
         watchers.awaitSource(0)
 
-        verify { trieCatalog.addTries(any(), any(), any()) }
+        assertEquals(
+            listOf(trieKey), trieCatalog.listAllTrieKeys(fromSchemaAndTable("public/foo")),
+            "the trie is in the catalog"
+        )
         assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have received a message")
     }
 
@@ -209,7 +215,7 @@ class LeaderLogProcessorTest {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
         val partitionState =
-            PartitionState(BlockCatalog(null), mockk(relaxed = true), mockk(relaxed = true), liveIndexMock())
+            PartitionState(TableCatalog(bufferPool), createTrieCatalog(), liveIndexMock())
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(
             partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
@@ -275,17 +281,12 @@ class LeaderLogProcessorTest {
             coEvery { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
-        val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
-            every { getPartitions(any()) } returns emptyList()
-        }
-        val tableCatalog = mockk<TableCatalog>(relaxed = true) {
-            every { finishBlock(any(), any(), any()) } returns emptyMap()
-        }
+        val trieCatalog = createTrieCatalog()
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog(null)
+        val tableCatalog = TableCatalog(bufferPool)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
@@ -352,19 +353,12 @@ class LeaderLogProcessorTest {
             coEvery { finishBlock(any(), any()) } returns mapOf(tableRef to finishedBlock)
             every { latestCompletedTx } returns null
         }
-        val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
-            every { getPartitions(any()) } returns emptyList()
-        }
-        val tableCatalog = mockk<TableCatalog>(relaxed = true) {
-            every { finishBlock(any(), any(), any()) } returns mapOf(
-                tableRef to TableBlock.getDefaultInstance()
-            )
-        }
+        val trieCatalog = createTrieCatalog()
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog(null)
+        val tableCatalog = TableCatalog(bufferPool)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(
@@ -733,19 +727,14 @@ class LeaderLogProcessorTest {
             coEvery { finishBlock(any(), any()) } returns emptyMap()
             every { latestCompletedTx } returns null
         }
-        val trieCatalog = mockk<TrieCatalog>(relaxed = true) {
-            every { getPartitions(any()) } returns emptyList()
-        }
-        val tableCatalog = mockk<TableCatalog>(relaxed = true) {
-            every { finishBlock(any(), any(), any()) } returns emptyMap()
-        }
+        val trieCatalog = createTrieCatalog()
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
-        val blockCatalog = BlockCatalog(null)
+        val tableCatalog = TableCatalog(bufferPool)
         val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope, StandardTestDispatcher(testScheduler))
         val driver = RealLeaderDriver(

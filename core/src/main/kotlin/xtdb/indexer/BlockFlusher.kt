@@ -1,7 +1,7 @@
 package xtdb.indexer
 
 import xtdb.types.MessageId
-import xtdb.catalog.BlockCatalog
+import xtdb.catalog.TableCatalog
 import java.time.Duration
 import java.time.Instant
 
@@ -21,10 +21,10 @@ data class BlockFlusher(
     var previousBlockTxId: MessageId,
 ) {
     constructor(
-        flushTimeout: Duration, blockCatalog: BlockCatalog
+        flushTimeout: Duration, tableCatalog: TableCatalog
     ) : this(
         flushTimeout, Instant.now(),
-        previousBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1
+        previousBlockTxId = tableCatalog.latestCompletedTx?.txId ?: -1
     )
 
     fun checkBlockTimeout(now: Instant, currentBlockTxId: MessageId): Boolean =
@@ -45,6 +45,6 @@ data class BlockFlusher(
             }
         }
 
-    fun checkBlockTimeout(blockCatalog: BlockCatalog) =
-        checkBlockTimeout(Instant.now(), currentBlockTxId = blockCatalog.latestCompletedTx?.txId ?: -1)
+    fun checkBlockTimeout(tableCatalog: TableCatalog) =
+        checkBlockTimeout(Instant.now(), currentBlockTxId = tableCatalog.latestCompletedTx?.txId ?: -1)
 }

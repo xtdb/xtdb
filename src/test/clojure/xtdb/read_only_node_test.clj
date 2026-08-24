@@ -145,6 +145,6 @@
                  (set (xt/q ro-node "SELECT * FROM foo")))
               "ro node sees all data after isFull()-triggered block")
 
-        (let [ro-block-cat (.getBlockCatalog (db/primary-db ro-node))]
-          (t/is (= 0 (.getCurrentBlockIndex ro-block-cat))
+        (let [ro-table-cat (.getTableCatalog (db/primary-db ro-node))]
+          (t/is (= 0 (.getCurrentBlockIndex ro-table-cat))
                 "follower's block catalog should advance after isFull()-triggered block"))))))

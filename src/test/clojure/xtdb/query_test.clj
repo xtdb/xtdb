@@ -38,7 +38,7 @@
     (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
-    (let [block-cat (.getBlockCatalog (db/primary-db node))]
+    (let [table-cat (.getTableCatalog (db/primary-db node))]
       (letfn [(test-query-ivan [expected]
                 (t/is (= expected
                          (set (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [_id name {ordinal (> ordinal 1)}]}]
@@ -48,7 +48,7 @@
                          (set (tu/query-ra '[:scan {:db-name "xtdb", :table #xt/table xt_docs, :columns [_id name {ordinal (> ordinal ?ordinal)}]}]
                                            {:node node, :args {:ordinal 1}})))))]
 
-        (t/is (= 1 (.getCurrentBlockIndex block-cat)))
+        (t/is (= 1 (.getCurrentBlockIndex table-cat)))
 
         (util/with-open [args (tu/open-args {:ordinal 1})]
           (t/testing "only needs to scan block 1, page 1"
@@ -101,8 +101,8 @@
     (tu/flush-block! node)
     (c/compact-all! node #xt/duration "PT1S")
 
-    (let [block-cat (.getBlockCatalog (db/primary-db node))]
-      (t/is (= 1 (.getCurrentBlockIndex block-cat)))
+    (let [table-cat (.getTableCatalog (db/primary-db node))]
+      (t/is (= 1 (.getCurrentBlockIndex table-cat)))
 
       (t/testing "only needs to scan block 1, page 1"
         (util/with-open [args (tu/open-args {:name "Ivan"})]

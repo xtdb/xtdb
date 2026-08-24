@@ -34,7 +34,7 @@ use "./db.allium" as db
 given {
     database: db/Database
     log_processor: db/LogProcessor
-    block_catalog: db/BlockCatalog
+    table_catalog: db/TableCatalog
     trie_gc: TrieGarbageCollector
 }
 
@@ -252,7 +252,7 @@ rule TrieGcLoopRunsCycle {
 }
 
 rule GarbageCollectTries {
-    -- Run one cycle: collect garbage from every table in the block catalog.
+    -- Run one cycle: collect garbage from every table in the table catalog.
     -- Tables are processed concurrently up to `tableParallelism`, with DELETE
     -- operations bounded across the cycle by `deleteParallelism`. Both bounds
     -- are out-of-spec implementation parameters (see TrieGarbageCollector.kt).
@@ -268,7 +268,7 @@ rule GarbageCollectTries {
     requires: as_of != null
 
     ensures:
-        for table in block_catalog.all_tables:
+        for table in table_catalog.all_tables:
             GarbageCollectTable(table, as_of)
 }
 

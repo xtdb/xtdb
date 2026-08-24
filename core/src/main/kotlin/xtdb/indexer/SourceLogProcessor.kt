@@ -51,10 +51,10 @@ internal class SourceLogProcessor(
 ) : Log.RecordProcessor<SourceMessage> {
 
     private val bufferPool = partitionStorage.bufferPool
-    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
 
-    private val blockFlusher = BlockFlusher(flushTimeout, blockCatalog)
+    private val blockFlusher = BlockFlusher(flushTimeout, tableCatalog)
 
     // A source batch paused mid-way by a block cut: the task, and where to pick it up again. At most one —
     // the poll thread awaits each batch before sending the next, so only one is ever in flight; a nullable
@@ -84,7 +84,7 @@ internal class SourceLogProcessor(
 
             is SourceMessage.FlushBlock -> {
                 val expectedBlockIdx = msg.expectedBlockIdx
-                val cut = expectedBlockIdx != null && expectedBlockIdx == (blockCatalog.currentBlockIndex ?: -1L)
+                val cut = expectedBlockIdx != null && expectedBlockIdx == (tableCatalog.currentBlockIndex ?: -1L)
 
                 if (cut) cutBlock(msgId)
                 // see #5680
@@ -196,8 +196,8 @@ internal class SourceLogProcessor(
     }
 
     private suspend fun maybeFlushBlock() {
-        if (blockFlusher.checkBlockTimeout(blockCatalog))
-            driver.requestFlushBlock(blockCatalog.currentBlockIndex ?: -1)
+        if (blockFlusher.checkBlockTimeout(tableCatalog))
+            driver.requestFlushBlock(tableCatalog.currentBlockIndex ?: -1)
     }
 
     /** The transport's edge: hand a poll batch over and await its resolution. */

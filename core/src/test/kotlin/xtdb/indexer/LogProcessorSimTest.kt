@@ -22,7 +22,6 @@ import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.IndexerConfig
 import xtdb.api.Xtdb
 import xtdb.api.log.*
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -159,13 +158,12 @@ class LogProcessorSimTest : SimulationTestBase() {
         private val simExtSource: SimExtSource,
     ) : AutoCloseable {
 
-        val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
         val liveIndex =
-            LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
+            LiveIndex.open(allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher)
 
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
 
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
             .also { simExtSource.watch(it) }
@@ -205,7 +203,7 @@ class LogProcessorSimTest : SimulationTestBase() {
             val blockIdx = upload.blockIndex
 
             assertTrue(
-                BlockCatalog.blockFilePath(blockIdx) in storedPaths,
+                TableCatalog.blockFilePath(blockIdx) in storedPaths,
                 "block file missing for b$blockIdx"
             )
 
@@ -225,7 +223,7 @@ class LogProcessorSimTest : SimulationTestBase() {
 
             for (table in tables) {
                 assertTrue(
-                    BlockCatalog.tableBlockPath(table, blockIdx) in storedPaths,
+                    TableCatalog.tableBlockPath(table, blockIdx) in storedPaths,
                     "table-block file missing for ${table.schemaAndTable}/b$blockIdx"
                 )
             }
@@ -346,7 +344,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                             .maxOfOrNull { it.blockIndex }
 
                     assertEquals(
-                        expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                        expectedBlockIndex, node.tableCatalog.currentBlockIndex,
                         "block catalog should match latest uploaded block"
                     )
 
@@ -428,22 +426,22 @@ class LogProcessorSimTest : SimulationTestBase() {
                                     .maxOfOrNull { it.blockIndex }
                             for (node in nodes) {
                                 assertEquals(
-                                    expectedBlockIndex, node.blockCatalog.currentBlockIndex,
+                                    expectedBlockIndex, node.tableCatalog.currentBlockIndex,
                                     "block catalog should match latest uploaded block"
                                 )
                             }
 
                             val expectedLatestCompletedTx = leader.liveIndex.latestCompletedTx
-                            val expectedBlockCatalogTx = leader.blockCatalog.latestCompletedTx
-                            val expectedProcessedMsgId = leader.blockCatalog.latestProcessedMsgId
+                            val expectedTableCatalogTx = leader.tableCatalog.latestCompletedTx
+                            val expectedProcessedMsgId = leader.tableCatalog.latestProcessedMsgId
 
                             for (node in nodes) {
                                 assertEquals(
-                                    expectedProcessedMsgId, node.blockCatalog.latestProcessedMsgId,
+                                    expectedProcessedMsgId, node.tableCatalog.latestProcessedMsgId,
                                     "all nodes should agree on latestProcessedMsgId"
                                 )
                                 assertEquals(
-                                    expectedBlockCatalogTx, node.blockCatalog.latestCompletedTx,
+                                    expectedTableCatalogTx, node.tableCatalog.latestCompletedTx,
                                     "all nodes should agree on block catalog's latestCompletedTx"
                                 )
                                 assertEquals(
@@ -524,21 +522,21 @@ class LogProcessorSimTest : SimulationTestBase() {
                             .maxOfOrNull { it.blockIndex }
 
                         assertEquals(
-                            expectedBlockIndex, nodeA.blockCatalog.currentBlockIndex,
+                            expectedBlockIndex, nodeA.tableCatalog.currentBlockIndex,
                             "node A block catalog should match latest uploaded block"
                         )
                         assertEquals(
-                            expectedBlockIndex, nodeB.blockCatalog.currentBlockIndex,
+                            expectedBlockIndex, nodeB.tableCatalog.currentBlockIndex,
                             "node B block catalog should match latest uploaded block"
                         )
 
                         assertEquals(
-                            nodeA.blockCatalog.latestProcessedMsgId, nodeB.blockCatalog.latestProcessedMsgId,
+                            nodeA.tableCatalog.latestProcessedMsgId, nodeB.tableCatalog.latestProcessedMsgId,
                             "both nodes should agree on latestProcessedMsgId"
                         )
 
                         assertEquals(
-                            nodeA.blockCatalog.latestCompletedTx, nodeB.blockCatalog.latestCompletedTx,
+                            nodeA.tableCatalog.latestCompletedTx, nodeB.tableCatalog.latestCompletedTx,
                             "both nodes should agree on block catalog's latestCompletedTx"
                         )
 

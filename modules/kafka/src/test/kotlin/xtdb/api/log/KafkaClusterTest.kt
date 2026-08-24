@@ -667,11 +667,11 @@ class KafkaClusterTest {
             }
 
             // one row is far short of rowsPerBlock, so the row-count path can't cut this block
-            val blockCatalog = (node as XtdbInternal).dbCatalog.primary.blockCatalog
+            val tableCatalog = (node as XtdbInternal).dbCatalog.primary.tableCatalog
 
             assertNotNull(
                 withTimeoutOrNull(30.seconds) {
-                    while (blockCatalog.currentBlockIndex == null) delay(100.milliseconds)
+                    while (tableCatalog.currentBlockIndex == null) delay(100.milliseconds)
                 },
                 "flush timeout cuts a block",
             )
@@ -1103,23 +1103,23 @@ class KafkaClusterTest {
                 }
             }
 
-            val blockCat = (node as XtdbInternal).dbCatalog.primary.blockCatalog
+            val tableCat = (node as XtdbInternal).dbCatalog.primary.tableCatalog
             val deadline = System.currentTimeMillis() + 120_000
 
-            while (blockCat.boundaryReplicaMsgId == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
-            assertNotNull(blockCat.boundaryReplicaMsgId, "the flush timeout must have cut a block")
-            val src0 = blockCat.latestProcessedMsgId!!
-            val replica0 = blockCat.boundaryReplicaMsgId!!
+            while (tableCat.boundaryReplicaMsgId == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
+            assertNotNull(tableCat.boundaryReplicaMsgId, "the flush timeout must have cut a block")
+            val src0 = tableCat.latestProcessedMsgId!!
+            val replica0 = tableCat.boundaryReplicaMsgId!!
 
             // Not another write from here — only the flush timeout can move these on. This is what
             // makes a finite `retention.ms` safe on a database nobody is writing to: the anchors stay
             // near the head of both logs, so retention only ever reclaims what a block already covers.
             while (System.currentTimeMillis() < deadline &&
-                (blockCat.latestProcessedMsgId!! <= src0 || blockCat.boundaryReplicaMsgId!! <= replica0)
+                (tableCat.latestProcessedMsgId!! <= src0 || tableCat.boundaryReplicaMsgId!! <= replica0)
             ) Thread.sleep(100)
 
-            val src1 = blockCat.latestProcessedMsgId!!
-            val replica1 = blockCat.boundaryReplicaMsgId!!
+            val src1 = tableCat.latestProcessedMsgId!!
+            val replica1 = tableCat.boundaryReplicaMsgId!!
             assertTrue(src1 > src0, "idle source anchor must keep advancing (was $src0, now $src1)")
             assertTrue(replica1 > replica0, "idle replica anchor must keep advancing (was $replica0, now $replica1)")
 

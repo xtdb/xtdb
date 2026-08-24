@@ -58,7 +58,7 @@ internal class LeaderLogProcessor(
     private val partition = partitionStorage.partition
     private val liveIndex = partitionState.liveIndex
 
-    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
 
     // Resolves each source-log / attach-detach / ext-source tx and holds it — with every other
     // resolved-but-not-yet-applied tx — until we've read it back off our own replica log and committed it
@@ -127,7 +127,7 @@ internal class LeaderLogProcessor(
     // stop, so the processor is handed the append alone.
     val extSrcProc =
         extSource?.let { source ->
-            ExternalSourceProcessor(source, partition, blockCatalog, watchers, txResolver) { appendTx(it) }
+            ExternalSourceProcessor(source, partition, tableCatalog, watchers, txResolver) { appendTx(it) }
         }
 
     // Records read back off the replica log, awaiting application. The partition's reader fills it
@@ -225,7 +225,7 @@ internal class LeaderLogProcessor(
     // the next block's) and pause resolution until it is read back and uploaded.
     private suspend fun cutBlock(latestProcessedMsgId: MessageId) {
         val boundary = BlockBoundary(
-            (blockCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, txResolver.resolvedExtToken,
+            (tableCatalog.currentBlockIndex ?: -1) + 1, latestProcessedMsgId, txResolver.resolvedExtToken,
             termId = leaderTerm
         )
         replicaAppender.append(ControlItem(boundary))

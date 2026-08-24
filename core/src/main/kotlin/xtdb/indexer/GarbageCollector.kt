@@ -30,12 +30,12 @@ internal class GarbageCollector(
 ) {
 
     private val bufferPool = partitionStorage.bufferPool
-    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
 
     private val blockGc = nodeBase.config.garbageCollector.let { cfg ->
         BlockGarbageCollector(
-            bufferPool, blockCatalog,
+            bufferPool, tableCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
             meterRegistry = nodeBase.meterRegistry,

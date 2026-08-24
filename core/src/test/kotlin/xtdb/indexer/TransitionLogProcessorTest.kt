@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
-import xtdb.catalog.BlockCatalog
+import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
@@ -24,7 +24,6 @@ class TransitionLogProcessorTest {
     private lateinit var liveIndex: LiveIndex
     private lateinit var blockUploader: BlockUploader
     private lateinit var watchers: Watchers
-    private lateinit var blockCatalog: BlockCatalog
     private lateinit var tableCatalog: TableCatalog
     private lateinit var trieCatalog: TrieCatalog
     private lateinit var partitionState: PartitionState
@@ -35,10 +34,9 @@ class TransitionLogProcessorTest {
         bufferPool = mockk(relaxed = true)
         liveIndex = mockk(relaxed = true)
         blockUploader = mockk(relaxed = true)
-        blockCatalog = BlockCatalog(null)
-        tableCatalog = mockk(relaxed = true)
-        trieCatalog = mockk(relaxed = true)
-        partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        tableCatalog = TableCatalog(bufferPool)
+        trieCatalog = createTrieCatalog()
+        partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 
         every { bufferPool.epoch } returns 1

@@ -15,8 +15,8 @@ import xtdb.SimulationTestUtils.Companion.prefix
 import xtdb.SimulationTestUtils.Companion.setLogLevel
 import xtdb.api.TransactionKey
 import xtdb.api.log.Watchers
-import xtdb.catalog.BlockCatalog
-import xtdb.catalog.BlockCatalog.Companion.latestBlock
+import xtdb.catalog.TableCatalog
+import xtdb.catalog.TableCatalog.Companion.latestBlock
 import xtdb.compactor.Compactor
 import xtdb.compactor.CompactorDriverConfig
 import xtdb.compactor.CompactorMockDriverFactory
@@ -48,7 +48,7 @@ data class MockDatabase(
     val allocator: BufferAllocator,
     val bufferPool: BufferPool,
     val trieCatalog: TrieCatalog,
-    val blockCatalog: BlockCatalog,
+    val tableCatalog: TableCatalog,
     val compactor: Compactor,
     val compactorForDb: Compactor.ForDatabase,
     val garbageCollector: TrieGarbageCollector,
@@ -114,13 +114,13 @@ class NodeSimulationTest : SimulationTestBase() {
 
         dbs = List(numberOfSystems) {
             val trieCatalog = createTrieCatalog()
-            val blockCatalog = BlockCatalog(sharedBufferPool.latestBlock)
+            val tableCatalog = TableCatalog(sharedBufferPool, sharedBufferPool.latestBlock)
             val compactor = Compactor.Impl(
                 compactorDriverFactory, null, jobCalculator, false, 2,
                 dispatcher = dispatcher, ioDispatcher = dispatcher
             )
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
-            val partitionState = PartitionState(blockCatalog, null, trieCatalog, null)
+            val partitionState = PartitionState(tableCatalog, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
@@ -136,7 +136,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 enabled = false,
                 dispatcher = dispatcher,
             ).also { gcScope.launch { it.run() } }
-            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
+            MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, tableCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
         }
     }
 
@@ -166,7 +166,7 @@ class NodeSimulationTest : SimulationTestBase() {
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(4).toList()
         val db = dbs[0]
-        val blockCatalog = db.blockCatalog
+        val tableCatalog = db.tableCatalog
         val trieCatalog = db.trieCatalog
         val compactorForDb = db.compactorForDb
         val garbageCollector = db.garbageCollector
@@ -178,7 +178,7 @@ class NodeSimulationTest : SimulationTestBase() {
         )
 
         for (blockIndex in 1L..3L) {
-            val block = blockCatalog.buildBlock(
+            val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
@@ -186,8 +186,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            blockCatalog.refresh(block)
+            sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            tableCatalog.refresh(block)
         }
 
         assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "l1s present in trie catalog")
@@ -219,7 +219,7 @@ class NodeSimulationTest : SimulationTestBase() {
         val defaultFileTarget = 100L * 1024L * 1024L
         val l1Tries = L1TrieKeys.take(8).toList()
         val db = dbs[0]
-        val blockCatalog = db.blockCatalog
+        val tableCatalog = db.tableCatalog
         val trieCatalog = db.trieCatalog
         val compactorForDb = db.compactorForDb
         val garbageCollector = db.garbageCollector
@@ -236,7 +236,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         // Finish blocks so GC can consider tries for collection
         for (blockIndex in 5L..7L) {
-            val block = blockCatalog.buildBlock(
+            val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
@@ -244,8 +244,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            blockCatalog.refresh(block)
+            sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            tableCatalog.refresh(block)
         }
 
         assertEquals(l1Tries, trieCatalog.listAllTrieKeys(table), "l1s present initially")
@@ -286,7 +286,7 @@ class NodeSimulationTest : SimulationTestBase() {
         val table = TableRef("public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
-        val blockCatalog = db.blockCatalog
+        val tableCatalog = db.tableCatalog
         val trieCatalog = db.trieCatalog
         val compactorForDb = db.compactorForDb
         val garbageCollector = db.garbageCollector
@@ -313,7 +313,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         // Finish blocks so GC can consider tries for collection
         for (blockIndex in 5L..7L) {
-            val block = blockCatalog.buildBlock(
+            val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
@@ -321,8 +321,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            blockCatalog.refresh(block)
+            sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            tableCatalog.refresh(block)
         }
 
         val expectedNewL2Tries = listOf("l02-rc-p0-b07", "l02-rc-p1-b07", "l02-rc-p2-b07", "l02-rc-p3-b07")
@@ -384,7 +384,7 @@ class NodeSimulationTest : SimulationTestBase() {
         // Finish blocks so GC can consider tries for collection
         dbs.forEach { db ->
             for (blockIndex in 5L..7L) {
-                val block = db.blockCatalog.buildBlock(
+                val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
@@ -392,8 +392,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.blockCatalog.refresh(block)
+                sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                db.tableCatalog.refresh(block)
             }
         }
 
@@ -456,7 +456,7 @@ class NodeSimulationTest : SimulationTestBase() {
         // Finish blocks so compaction can proceed
         dbs.forEach { db ->
             for (blockIndex in 5L..7L) {
-                val block = db.blockCatalog.buildBlock(
+                val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
@@ -464,8 +464,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.blockCatalog.refresh(block)
+                sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                db.tableCatalog.refresh(block)
             }
         }
 
@@ -537,7 +537,7 @@ class NodeSimulationTest : SimulationTestBase() {
         val table = TableRef("public", "docs")
         val defaultFileTarget = 100L * 1024L * 1024L
         val db = dbs[0]
-        val blockCatalog = db.blockCatalog
+        val tableCatalog = db.tableCatalog
         val trieCatalog = db.trieCatalog
         val compactorForDb = db.compactorForDb
         val garbageCollector = db.garbageCollector
@@ -551,7 +551,7 @@ class NodeSimulationTest : SimulationTestBase() {
         )
 
         for (blockIndex in 1L..15L) {
-            val block = blockCatalog.buildBlock(
+            val block = tableCatalog.buildBlock(
                 blockIndex = blockIndex,
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
@@ -559,8 +559,8 @@ class NodeSimulationTest : SimulationTestBase() {
                 tables = listOf(table),
                 secondaryDatabases = null
             )
-            sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-            blockCatalog.refresh(block)
+            sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+            tableCatalog.refresh(block)
         }
 
         compactorForDb.compactAllSync(null)
@@ -602,7 +602,7 @@ class NodeSimulationTest : SimulationTestBase() {
         // Finish blocks to enable compaction
         dbs.forEach { db ->
             for (blockIndex in 1L..15L) {
-                val block = db.blockCatalog.buildBlock(
+                val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
@@ -610,8 +610,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.blockCatalog.refresh(block)
+                sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                db.tableCatalog.refresh(block)
             }
         }
 
@@ -692,7 +692,7 @@ class NodeSimulationTest : SimulationTestBase() {
 
         dbs.forEach { db ->
             for (blockIndex in 0L..13L) {
-                val block = db.blockCatalog.buildBlock(
+                val block = db.tableCatalog.buildBlock(
                     blockIndex = blockIndex,
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
@@ -700,8 +700,8 @@ class NodeSimulationTest : SimulationTestBase() {
                     tables = listOf(table),
                     secondaryDatabases = null
                 )
-                sharedBufferPool.putObjectSync(BlockCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
-                db.blockCatalog.refresh(block)
+                sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
+                db.tableCatalog.refresh(block)
             }
         }
 

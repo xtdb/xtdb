@@ -12,7 +12,7 @@ import xtdb.api.TransactionResult
 import xtdb.api.log.*
 import xtdb.api.storage.Storage
 import xtdb.block.proto.Block.parseFrom
-import xtdb.catalog.BlockCatalog.Companion.blockFilePath
+import xtdb.catalog.TableCatalog.Companion.blockFilePath
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
@@ -91,7 +91,6 @@ class FollowerLogProcessor @JvmOverloads constructor(
     var pendingBlock: PendingBlock? = pendingBlock
         private set
 
-    private val blockCatalog = partitionState.blockCatalog
     private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
     private val liveIndex = partitionState.liveIndex
@@ -140,8 +139,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
             when (this) {
                 is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
                 is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
-                is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-                is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+                is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
+                is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
                 is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
                 // `trieCatalog.deleteTries` is set-removal — idempotent — so replay is always safe.
                 is ReplicaMessage.TriesDeleted -> false
@@ -236,8 +235,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
 
                     addTries(msg.tries, record.logTimestamp)
-                    blockCatalog.refresh(block)
-                    tableCatalog.updateFromBlockMetadata(blockCatalog.currentBlockIndex, liveIndex.blockMetadata())
+                    tableCatalog.refresh(block, liveIndex.blockMetadata())
                     liveIndex.nextBlock()
                     compactor.signalBlock()
 

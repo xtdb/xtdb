@@ -30,7 +30,6 @@ import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.SourceMessage
 import xtdb.api.log.Watchers
 import xtdb.api.tx.TxIndexer.TxResult
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
@@ -98,15 +97,14 @@ class LeaderDriverSimTest : SimulationTestBase() {
 
         private val indexerConfig = IndexerConfig(rowsPerBlock = rowsPerBlock)
 
-        val blockCatalog = BlockCatalog(null)
         val tableCatalog = TableCatalog(bufferPool)
         val trieCatalog = createTrieCatalog()
         val liveIndex =
             LiveIndex.open(
-                allocator, blockCatalog, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher
+                allocator, tableCatalog, trieCatalog, indexerConfig, ioDispatcher = dispatcher
             )
 
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
 

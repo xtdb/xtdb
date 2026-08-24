@@ -1,27 +1,76 @@
 package xtdb.catalog
 
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import org.apache.arrow.vector.types.pojo.Schema
+import xtdb.api.TableRef
+import xtdb.api.TransactionKey
+import xtdb.api.log.LeaderTerm
+import xtdb.api.storage.ObjectStore
+import xtdb.api.tx.BlockDetails
+import xtdb.api.tx.ExternalSourceToken
 import xtdb.arrow.MergeTypes.Companion.joinContributions
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.field
+import xtdb.block.proto.Block
 import xtdb.block.proto.Partition
 import xtdb.block.proto.TableBlock
+import xtdb.block.proto.block
+import xtdb.block.proto.txKey
+import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
-import xtdb.api.TableRef
+import xtdb.table.fromSchemaAndTable
+import xtdb.time.InstantUtil.asMicros
+import xtdb.time.microsAsInstant
+import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
+import xtdb.trie.Trie.tablePath
+import xtdb.types.MessageId
 import xtdb.util.HLL
+import xtdb.util.StringUtil.asLexHex
+import xtdb.util.asPath
 import xtdb.util.combine
 import xtdb.util.deserializeMessageAsSchemaInterruptibly
 import xtdb.util.serializeAsMessageInterruptibly
 import xtdb.util.toHLL
 import java.nio.ByteBuffer
+import java.nio.file.Path
+import kotlin.io.path.extension
 
-class TableCatalog(
-    private val bufferPool: BufferPool
-) {
+// The proto is the storage format, so this is the only place that reads its presence flags: everything
+// downstream sees ordinary Kotlin nullability.
+private fun Block.asBlockDetails() = BlockDetails(
+    blockIndex = blockIndex,
+    latestCompletedTx = takeIf { it.hasLatestCompletedTx() }?.latestCompletedTx
+        ?.let { TransactionKey(it.txId, it.systemTime.microsAsInstant) },
+    latestProcessedMsgId = latestProcessedMsgId.takeIf { hasLatestProcessedMsgId() },
+    boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
+    termId = termId,
+    externalSourceToken = takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
+    tableNames = tableNamesList.map { fromSchemaAndTable(it) },
+    secondaryDatabases = secondaryDatabasesMap,
+)
+
+private fun <T, R> StateFlow<T>.mapState(f: (T) -> R): StateFlow<R> = object : StateFlow<R> {
+    override val value get() = f(this@mapState.value)
+    override val replayCache get() = listOf(value)
+
+    override suspend fun collect(collector: FlowCollector<R>): Nothing {
+        this@mapState.map(f).distinctUntilChanged().collect(collector)
+        error("a StateFlow never completes")
+    }
+}
+
+/** What one database partition knows about its tables, and the block that knowledge is current to. */
+class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = null) {
 
     internal data class TableMeta(
         val vecTypes: Map<ColumnName, VectorType>,
@@ -32,28 +81,19 @@ class TableCatalog(
         val absentContribution by lazy { VectorType.absentContribution(vecTypes) }
     }
 
-    private data class State(
-        val blockIdx: Long?,
-        val tables: Map<TableRef, TableMeta>
-    )
-
-    @Volatile
-    private var state = State(null, emptyMap())
-
-    fun rowCount(table: TableRef): Long? = state.tables[table]?.rowCount
-
     /**
-     * A pinned read surface over one version of the per-table metadata.
+     * One version of the catalog, and the unit every write replaces wholesale.
      *
-     * The freezing is the map's doing, not the [Snap]'s: `state` is replaced wholesale on every write and the
-     * map it holds is immutable, so this is a single reference copy and later writes cannot affect it. What
-     * [Snap] adds is one `state` read rather than one per accessor call, so two reads a query apart cannot
-     * see two versions - which is the guarantee its callers actually need.
+     * Reading through a [State] rather than through the accessors below is what stops two reads a query
+     * apart seeing two versions — the value is immutable, so a later write cannot reach one already handed
+     * out.
      */
-    fun snapshot(): Snap = Snap(state.tables)
+    data class State internal constructor(
+        val block: BlockDetails?,
+        internal val tables: Map<TableRef, TableMeta>,
+    ) {
+        val blockIdx: BlockIndex? get() = block?.blockIndex
 
-    /** @see snapshot */
-    class Snap internal constructor(private val tables: Map<TableRef, TableMeta>) {
         // Copies the outer map on each read - the per-table maps are shared references, not copies. Cheap
         // where it is used: `buildTableInfo` reads it once per `Snapshot.open`. Worth knowing before
         // reaching for it per column.
@@ -67,73 +107,154 @@ class TableCatalog(
             tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing
     }
 
+    private val _state = MutableStateFlow(State(initialBlock?.asBlockDetails(), emptyMap()))
+
+    fun snap(): State = _state.value
+
+    /**
+     * The latest block this catalog knows to be in object storage, advancing on [refresh] — which the
+     * leader calls once the block file has landed, and a follower once it has read the block back.
+     *
+     * A collector is therefore observing durability, not resolution: anything this emits is recoverable
+     * from storage alone. That is what lets an external source use the emitted `externalSourceToken` as
+     * the furthest position it may confirm upstream.
+     */
+    val latestBlock: StateFlow<BlockDetails?> = _state.mapState { it.block }
+
+    val currentBlockIndex: BlockIndex? get() = snap().blockIdx
+
+    val latestCompletedTx: TransactionKey? get() = snap().block?.latestCompletedTx
+
+    val latestProcessedMsgId: MessageId?
+        get() = snap().block.let { it?.latestProcessedMsgId ?: it?.latestCompletedTx?.txId }
+
+    val boundaryReplicaMsgId: MessageId? get() = snap().block?.boundaryReplicaMsgId
+
+    // the leader term that produced the latest block's boundary; a follower seeds its read-side term
+    // fence from here. Default 0 (plain scalar) for blocks written before term-fencing. See #5817.
+    val boundaryTermId: Long get() = snap().block?.termId ?: LeaderTerm.NONE
+
+    val externalSourceToken: ExternalSourceToken? get() = snap().block?.externalSourceToken
+
+    val allTables: List<TableRef> get() = snap().block?.tableNames.orEmpty()
+
+    val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
+
+    fun rowCount(table: TableRef): Long? = snap().rowCount(table)
+
     /**
      * Seeds a data-backed system table (e.g. `xt.txs`) so it's present from startup, as if an empty
      * `CREATE TABLE` had run: columns are declared but dataless (`Nothing`), so the first real write
      * sets their types (`Nothing ⊔ X = X`). No-op if the table was already loaded from storage.
      */
     fun seedTable(table: TableRef, colNames: List<ColumnName>) {
-        if (state.tables.containsKey(table)) return
         val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
-        state = State(state.blockIdx, state.tables + (table to meta))
+
+        _state.update {
+            if (it.tables.containsKey(table)) it else it.copy(tables = it.tables + (table to meta))
+        }
     }
 
     /**
-     * Reloads table metadata from storage, replacing the in-memory state wholesale. Called once, at
-     * open, *before* [seedTable] - a second call would drop any seeds not yet persisted to storage.
+     * Loads table metadata from storage for the block this catalog opened at, replacing the in-memory
+     * tables wholesale. Called once, at open, *before* [seedTable] - a second call would drop any seeds
+     * not yet persisted to storage.
      */
-    fun refresh(blockCatalog: BlockCatalog) {
-        val blockIndex = blockCatalog.currentBlockIndex ?: return
+    fun loadTables() {
+        val snap = snap()
+        val blockIndex = snap.blockIdx ?: return
+        val tables = loadTablesFromStorage(bufferPool, snap.block?.tableNames.orEmpty(), blockIndex)
 
-        if (state.blockIdx?.let { blockIndex <= it } ?: false) return
-
-        state = State(
-            blockIdx = blockIndex,
-            tables = loadTablesFromStorage(bufferPool, blockCatalog)
-        )
+        _state.update { it.copy(tables = tables) }
     }
 
-    fun updateFromBlockMetadata(blockIndex: Long?, metadata: Map<TableRef, LiveTable.BlockMetadata>) {
-        val oldTables = state.tables
+    /**
+     * Advances to a newly durable block, folding that block's per-table metadata in with it.
+     *
+     * A re-delivered block leaves the block half alone but still folds the metadata.
+     */
+    fun refresh(block: Block?, metadata: Map<TableRef, LiveTable.BlockMetadata> = emptyMap()) {
+        val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
 
-        val deltaByTable = metadata.mapValues { (_, bm) ->
-            TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas)
+        _state.update { cur ->
+            State(
+                block = if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails(),
+                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta)
+            )
         }
-
-        val allTableRefs = oldTables.keys + deltaByTable.keys
-        val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
-
-        state = State(
-            blockIdx = blockIndex,
-            tables = newTables
-        )
     }
 
     fun finishBlock(
-        blockIndex: Long?,
         tableMetadata: Map<TableRef, LiveTable.FinishedBlock>,
         tablePartitions: Map<TableRef, List<Partition>>
     ): Map<TableRef, TableBlock> {
-        val oldTables = state.tables
+        val delta = tableMetadata.mapValues { (_, fb) -> TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas) }
 
-        val deltaByTable = tableMetadata.mapValues { (_, fb) ->
-            TableMeta(fb.vecTypes, fb.rowCount.toLong(), fb.hllDeltas)
+        return _state.updateAndGet { it.copy(tables = it.tables.foldIn(delta)) }
+            .tables
+            .mapValues { (table, meta) ->
+                buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
+            }
+    }
+
+    fun buildBlock(
+        blockIndex: BlockIndex,
+        latestCompletedTx: TransactionKey?,
+        latestProcessedMsgId: MessageId,
+        boundaryReplicaMsgId: MessageId?,
+        tables: Collection<TableRef>,
+        secondaryDatabases: Map<String, DatabaseConfig>?,
+        externalSourceToken: ExternalSourceToken? = null,
+        termId: Long = LeaderTerm.NONE,
+    ): Block {
+        val currentBlockIndex = this.currentBlockIndex
+        check(currentBlockIndex == null || currentBlockIndex < blockIndex) {
+            "Cannot finish block $blockIndex when current block is $currentBlockIndex"
         }
 
-        val allTableRefs = oldTables.keys + deltaByTable.keys
-        val newTables = allTableRefs.associateWith { mergeTables(oldTables[it], deltaByTable[it]) }
-
-        state = State(
-            blockIdx = blockIndex,
-            tables = newTables
-        )
-
-        return newTables.mapValues { (table, meta) ->
-            buildTableBlock(meta.vecTypes, meta.rowCount, tablePartitions[table].orEmpty(), meta.hlls)
+        return block {
+            this.blockIndex = blockIndex
+            latestCompletedTx?.also { tx ->
+                this.latestCompletedTx = txKey {
+                    txId = tx.txId
+                    systemTime = tx.systemTime.asMicros
+                }
+            }
+            this.latestProcessedMsgId = latestProcessedMsgId
+            boundaryReplicaMsgId?.let { this.boundaryReplicaMsgId = it }
+            this.tableNames.addAll(tables.map { it.sym.toString() })
+            secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
+            externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
+            this.termId = termId
         }
     }
 
     companion object {
+        private val blocksPath = "blocks".asPath
+
+        @JvmStatic
+        fun blockFilePath(blockIndex: BlockIndex): Path =
+            blocksPath.resolve("b${blockIndex.asLexHex}.binpb")
+
+        @JvmStatic
+        fun tableBlockPath(table: TableRef, blockIndex: BlockIndex): Path =
+            table.tablePath.resolve(blocksPath).resolve("b${blockIndex.asLexHex}.binpb")
+
+        val BufferPool.allBlockFiles: Iterable<ObjectStore.StoredObject>
+            get() = listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
+
+        fun BufferPool.tableBlocks(table: TableRef): Iterable<ObjectStore.StoredObject> =
+            listAllObjects(table.tablePath.resolve(blocksPath))
+
+        @JvmStatic
+        val BufferPool.latestBlock: Block?
+            get() = allBlockFiles.lastOrNull()?.key
+                ?.let { blockKey -> Block.parseFrom(getByteArray(blockKey)) }
+
+        fun BufferPool.blockFromLatest(distance: Int): Block? =
+            allBlockFiles.toList().dropLast(maxOf(0, distance - 1)).lastOrNull()?.key
+                ?.let { blockKey -> Block.parseFrom(getByteArray(blockKey)) }
+
         private fun parseTableBlock(tableBlock: TableBlock) =
             TableMeta(
                 tableBlock.arrowSchema.toByteArray()
@@ -144,15 +265,15 @@ class TableCatalog(
             )
 
         internal fun loadTablesFromStorage(
-            bufferPool: BufferPool,
-            blockCatalog: BlockCatalog
-        ): Map<TableRef, TableMeta> {
-            val blockIndex = blockCatalog.currentBlockIndex ?: return emptyMap()
-            return blockCatalog.allTables.associateWith { table ->
-                val path = BlockCatalog.tableBlockPath(table, blockIndex)
-                parseTableBlock(TableBlock.parseFrom(bufferPool.getByteArray(path)))
+            bufferPool: BufferPool, tables: List<TableRef>, blockIndex: BlockIndex
+        ): Map<TableRef, TableMeta> =
+            tables.associateWith { table ->
+                parseTableBlock(TableBlock.parseFrom(bufferPool.getByteArray(tableBlockPath(table, blockIndex))))
             }
-        }
+
+        /** Folds a block's per-table deltas into the accumulated catalog. */
+        private fun Map<TableRef, TableMeta>.foldIn(delta: Map<TableRef, TableMeta>) =
+            (keys + delta.keys).associateWith { mergeTables(this[it], delta[it]) }
 
         /**
          * Folds a block's types into the accumulated catalog.

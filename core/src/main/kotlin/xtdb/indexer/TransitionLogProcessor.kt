@@ -34,7 +34,7 @@ class TransitionLogProcessor(
     private val termId: Long = 0,
 ) : AutoCloseable {
 
-    private val blockCatalog = partitionState.blockCatalog
+    private val tableCatalog = partitionState.tableCatalog
     private val trieCatalog = partitionState.trieCatalog
 
     private val allocator = allocator.newChildAllocator("transition-log-processor", 0, Long.MAX_VALUE)
@@ -43,8 +43,8 @@ class TransitionLogProcessor(
         when (this) {
             is ReplicaMessage.ResolvedTx -> txId <= watchers.latestTxId
             is ReplicaMessage.TriesAdded -> sourceMsgId <= watchers.latestSourceMsgId
-            is ReplicaMessage.BlockBoundary -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
-            is ReplicaMessage.BlockUploaded -> blockIndex <= (blockCatalog.currentBlockIndex ?: -1)
+            is ReplicaMessage.BlockBoundary -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
+            is ReplicaMessage.BlockUploaded -> blockIndex <= (tableCatalog.currentBlockIndex ?: -1)
             is ReplicaMessage.NoOp -> srcMsgId != null && srcMsgId <= watchers.latestSourceMsgId
             is ReplicaMessage.TriesDeleted -> false
         }

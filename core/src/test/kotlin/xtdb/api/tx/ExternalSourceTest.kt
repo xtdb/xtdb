@@ -18,7 +18,6 @@ import xtdb.NodeBase
 import xtdb.NodeBase.Companion.openBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.log.*
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.compactor.Compactor
@@ -61,10 +60,9 @@ class ExternalSourceTest {
         nodeBase = openBase()
         bufferPool = MemoryStorage(allocator, 0)
 
-        val blockCatalog = BlockCatalog(null)
-        val tableCatalog = TableCatalog(bufferPool).also { it.refresh(blockCatalog) }
+        val tableCatalog = TableCatalog(bufferPool)
         val trieCatalog = createTrieCatalog()
-        liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
+        liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
     }
 
     @AfterEach
@@ -114,10 +112,9 @@ class ExternalSourceTest {
         afterToken: ExternalSourceToken? = null,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
     ): LeaderLogProcessor {
-        val blockCatalog = BlockCatalog(null)
-        val trieCatalog = mockk<xtdb.trie.TrieCatalog>(relaxed = true)
-        val tableCatalog = mockk<xtdb.catalog.TableCatalog>(relaxed = true)
-        val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val tableCatalog = TableCatalog(bufferPool)
+        val trieCatalog = createTrieCatalog()
+        val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
         val compactor = mockk<Compactor.ForDatabase>(relaxed = true)
         val blockUploader = BlockUploader(partitionStorage, partitionState, "xtdb", compactor, null, null, backgroundScope)
@@ -411,7 +408,7 @@ class ExternalSourceTest {
         // note: not .use — Database.close() would close `allocator`, which @AfterEach also closes
         val partition = DatabasePartition(
             storage = PartitionStorage(DatabaseLogs(null, null), null, null),
-            state = PartitionState(null, null, null, null),
+            state = PartitionState(null, null, null),
             watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1),
         )
         val db = Database(

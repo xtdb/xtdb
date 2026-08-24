@@ -57,7 +57,7 @@ class MockDb(
     val compactor: Compactor,
 ) {
     val partitionStorage: PartitionStorage get() = PartitionStorage(DatabaseLogs(null, null), bufferPool, null)
-    val partitionState: PartitionState get() = PartitionState(null, null, trieCatalog, null)
+    val partitionState: PartitionState get() = PartitionState(null, trieCatalog, null)
 }
 
 private val LOGGER = CompactorMockDriverFactory::class.logger

@@ -11,7 +11,7 @@ import xtdb.api.tx.ExternalSourceToken
 import xtdb.api.tx.OpenTx
 import xtdb.api.tx.TxIndexer
 import xtdb.api.tx.TxIndexer.TxResult
-import xtdb.catalog.BlockCatalog
+import xtdb.catalog.TableCatalog
 import java.time.Instant
 
 /**
@@ -24,13 +24,13 @@ import java.time.Instant
 internal class ExternalSourceProcessor(
     private val extSource: ExternalSource,
     private val partition: Int,
-    private val blockCatalog: BlockCatalog,
+    private val tableCatalog: TableCatalog,
     private val watchers: Watchers,
     private val txResolver: TxResolver,
     private val appendTx: suspend (ResolvedTx) -> Unit,
 ) : TxIndexer, AutoCloseable {
 
-    override val latestBlock get() = blockCatalog.latestBlock
+    override val latestBlock get() = tableCatalog.latestBlock
 
     class Task(val msg: ExtSourceMessage) {
         val onComplete = CompletableDeferred<Unit>()

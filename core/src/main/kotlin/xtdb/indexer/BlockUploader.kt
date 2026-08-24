@@ -17,7 +17,7 @@ import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.api.log.ReplicaMessage.BlockUploaded
 import xtdb.api.log.SourceMessage
 import xtdb.api.storage.Storage
-import xtdb.catalog.BlockCatalog
+import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
 import xtdb.database.Database
 import xtdb.database.PartitionState
@@ -49,7 +49,6 @@ class BlockUploader(
     private val replicaLog = partitionStorage.replicaLog
     private val bufferPool = partitionStorage.bufferPool
     private val liveIndex = partitionState.liveIndex
-    private val blockCatalog = partitionState.blockCatalog
     private val trieCatalog = partitionState.trieCatalog
     private val tableCatalog = partitionState.tableCatalog
     private val blockUploadTimer: Timer? = meterRegistry?.let {
@@ -104,15 +103,15 @@ class BlockUploader(
                 trieDetails
             }
 
-        val allTables = finishedBlocks.keys + blockCatalog.allTables
+        val allTables = finishedBlocks.keys + tableCatalog.allTables
         val tablePartitions = allTables.associateWith { trieCatalog.getPartitions(it) }
 
-        val tableBlocks = tableCatalog.finishBlock(blockCatalog.currentBlockIndex, finishedBlocks, tablePartitions)
+        val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
 
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
                 launch(uploadDispatcher) {
-                    val path = BlockCatalog.tableBlockPath(table, blockIdx)
+                    val path = TableCatalog.tableBlockPath(table, blockIdx)
                     bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
                 }
             }
@@ -122,14 +121,14 @@ class BlockUploader(
 
         val externalSourceToken = boundary.externalSourceToken
 
-        val block = blockCatalog.buildBlock(
+        val block = tableCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
             boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock,
             externalSourceToken, termId
         )
 
-        bufferPool.putObject(BlockCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
-        blockCatalog.refresh(block)
+        bufferPool.putObject(TableCatalog.blockFilePath(blockIdx), ByteBuffer.wrap(block.toByteArray()))
+        tableCatalog.refresh(block)
         lastUploadEpochSeconds.set(Instant.now().epochSecond)
 
         // Now signal followers that the block is available.

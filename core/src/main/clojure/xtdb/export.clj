@@ -10,7 +10,7 @@
            (java.time Duration Instant ZoneId)
            (java.time.format DateTimeFormatter)
            java.time.temporal.ChronoUnit
-           xtdb.catalog.BlockCatalog
+           xtdb.catalog.TableCatalog
            (xtdb.database Database)
            xtdb.api.storage.Storage
            xtdb.api.TableRef
@@ -50,12 +50,12 @@
                                                     (format "Database not found: '%s'" db-name)
                                                     {:db-name db-name})))
              buffer-pool (.getBufferPool db)
-             block-cat (.getBlockCatalog db)
+             table-cat (.getTableCatalog db)
              trie-cat (.getTrieCatalog db)
-             
+
              start-time (Instant/now)]
 
-         (when-let [block-idx (or (.getCurrentBlockIndex block-cat)
+         (when-let [block-idx (or (.getCurrentBlockIndex table-cat)
                                   (log/warn "No completed blocks found - aborting."))]
 
            (let [export-dir (export-dir-path block-idx start-time)
@@ -69,7 +69,7 @@
              (log/infof "Export directory: %s" export-dir)
              (log/infof "Found %d tables to export" (count tables))
 
-             (let [block-files [(BlockCatalog/blockFilePath block-idx)]
+             (let [block-files [(TableCatalog/blockFilePath block-idx)]
                    table-block-files (for [^TableRef table tables]
                                        (-> (Trie/getTablePath table)
                                            (table-cat/->table-block-metadata-obj-key block-idx)))

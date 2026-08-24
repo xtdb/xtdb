@@ -32,7 +32,7 @@ Storage - the I/O layer::
 `BufferPool` (`xtdb.storage`, with `RemoteBufferPool`/`LocalStorage`/`MemoryStorage` behind it), `ObjectStore` (`xtdb.api.storage`), `Log<M>` (`xtdb.api.log`), and `PageMetadata` (`xtdb.metadata`) - a read-through cache over the buffer pool.
 
 State - in-memory state holders::
-`BlockCatalog` and `TableCatalog` (`xtdb.catalog`), `TrieCatalog` (interface in `xtdb.trie`, implemented in `xtdb.trie-catalog`), and `LiveIndex` (`xtdb.indexer`).
+`TableCatalog` (`xtdb.catalog`), `TrieCatalog` (interface in `xtdb.trie`, implemented in `xtdb.trie-catalog`), and `LiveIndex` (`xtdb.indexer`).
 
 Services - orchestration::
 `LogProcessor` and its three role implementations, `BlockUploader` and `CrashLogger` (`xtdb.indexer`); `Compactor` (`xtdb.compactor`); `BlockGarbageCollector` and `TrieGarbageCollector` (`xtdb.garbage-collector`); and `DatabaseCatalog` (`xtdb.database` - a service despite the name, managing database attach/detach and lifecycle).
@@ -41,14 +41,14 @@ Dependencies flow inward: services depend on state and on storage; state depends
 State components *yield* data and the service does the I/O - `LiveIndex.finishBlock` takes a `BufferPool` as a call parameter rather than holding one, and it's `BlockUploader` (which does hold one) that supplies it and writes the resulting files.
 That's 'functional core, imperative shell' in OO vocabulary.
 
-`PartitionState` and `PartitionStorage` (`xtdb.database`) state the split most explicitly: the former bundles the four state holders, the latter the buffer pool, the source/replica logs and the page-metadata factory.
+`PartitionState` and `PartitionStorage` (`xtdb.database`) state the split most explicitly: the former bundles the three state holders, the latter the buffer pool, the source/replica logs and the page-metadata factory.
 
 Two caveats, so you don't read more into this than is there:
 
 * *It isn't a package boundary.*
   `xtdb.catalog`, `xtdb.compactor` and `xtdb.garbage-collector` are clean, but `xtdb.indexer` holds `LiveIndex` (state) alongside the log processors and `BlockUploader` (services), and `xtdb.trie` holds the `TrieCatalog` interface alongside the trie/data/metadata file writers.
-* *`TableCatalog` keeps a `BufferPool` for its lifetime*, unlike `BlockCatalog` (which takes none) and `TrieCatalog` (whose I/O sits in the factory).
-  It's only used by `refresh`, called once from `PartitionState.open` at startup - so 'state does no runtime I/O' holds here by convention rather than by construction.
+* *`TableCatalog` keeps a `BufferPool` for its lifetime*, unlike `TrieCatalog` (whose I/O sits in the factory).
+  It's only used by `loadTables`, called once from `PartitionState.open` at startup - so 'state does no runtime I/O' holds here by convention rather than by construction.
 
 == The lifecycle of a transaction
 

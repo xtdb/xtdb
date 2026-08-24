@@ -1,7 +1,7 @@
 package xtdb.trie
 
 import xtdb.block.proto.Partition
-import xtdb.catalog.BlockCatalog
+import xtdb.catalog.TableCatalog
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
@@ -45,6 +45,6 @@ interface TrieCatalog {
     }
 
     fun interface Factory {
-        fun open(bufferPool: BufferPool, blockCatalog: BlockCatalog): TrieCatalog
+        fun open(bufferPool: BufferPool, tableCatalog: TableCatalog): TrieCatalog
     }
 }

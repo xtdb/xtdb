@@ -195,7 +195,7 @@ class DatabaseCatalog @JvmOverloads constructor(
 
                 catalog.attach("xtdb", xtdbDbConfig)
 
-                val secondaryDbs = catalog.primary.blockCatalog.secondaryDatabases
+                val secondaryDbs = catalog.primary.tableCatalog.secondaryDatabases
                 for ((dbName, dbProtoConfig) in secondaryDbs) {
                     if (dbName == "xtdb") continue
                     val dbConfig = Database.Config.fromProto(dbProtoConfig)

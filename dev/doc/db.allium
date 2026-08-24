@@ -77,7 +77,6 @@ given {
     tx_resolver: TxResolver?           -- leader-only (persister-owned); absent in follower/transition modes
     live_index: LiveIndex              -- shared across leader/follower modes
     watchers: Watchers                 -- single instance: correlates source msg_ids and tx_ids with client futures
-    block_catalog: BlockCatalog
     table_catalog: TableCatalog
     block_uploader: BlockUploader      -- shared by leader, transition processor
     compactor: Compactor.ForDatabase   -- peer of log_processor at db-system level
@@ -236,7 +235,7 @@ variant Follower : LogProcessor {
     pending_block: PendingBlock?
 
     -- READ-SIDE TERM FENCE: the highest leader term seen so far, seeded from the last
-    -- persisted block boundary (block_catalog.boundary_term_id) so it survives restart.
+    -- persisted block boundary (table_catalog.boundary_term_id) so it survives restart.
     -- A record BELOW this was written by a superseded leader and is discarded. See the
     -- Fencing section.
     max_leader_term: Integer
@@ -281,20 +280,19 @@ entity TxResolver {
     -- checked rather than assumed (see LeaderAppliesOwnTx).
 }
 
-entity BlockCatalog {
-    -- See: catalog/BlockCatalog.kt
+entity TableCatalog {
+    -- What one database partition knows about its tables, and the block that knowledge is
+    -- current to. The two are one value, replaced wholesale, so a reader sees a block index
+    -- against that block's table metadata and never against the previous block's.
+    -- See: catalog/TableCatalog.kt, table_catalog.clj
     latest_block: Block?
+    table_metadata: Map<trie_cat/TableRef, TableMetadata>
 
     -- Derived
     current_block_index: latest_block?.block_index
     boundary_replica_msg_id: latest_block?.boundary_replica_msg_id
     -- Seeds a follower's max_leader_term, which is what makes the fence survive restart.
     boundary_term_id: latest_block?.term_id ?? 0
-}
-
-entity TableCatalog {
-    -- See: catalog/TableCatalog.kt, table_catalog.clj
-    table_metadata: Map<trie_cat/TableRef, TableMetadata>
 }
 
 entity Watchers {
@@ -339,7 +337,7 @@ entity BlockUploader {
     --      sweep depends on this (block-gc.allium, EveryTableBlockAtCurrentIndex)
     --   4. Builds and persists the block file — carrying termId, which is what seeds a
     --      restarted follower's fence
-    --   5. Refreshes the block catalog, then appends BlockUploaded to the replica log
+    --   5. Refreshes the table catalog, then appends BlockUploaded to the replica log
     --      (a PLAIN, term-stamped append — there is no producer)
     --   6. Calls liveIndex.nextBlock()
     --   7. Off this coroutine, and in this order: posts the L0 tries to the SOURCE log as
@@ -426,7 +424,7 @@ value Block {
     -- leader claiming a regressed election counter is refused rather than silently ignored
     -- (see log-processor-lifecycle.allium step 2a).
     term_id: Integer
-    -- See: catalog/BlockCatalog.kt, block/proto/block.proto
+    -- See: catalog/TableCatalog.kt, block/proto/block.proto
 }
 
 value PendingBlock {
@@ -707,7 +705,7 @@ config {
 -- == Leader Startup ==
 --
 -- A new leader can always reconstruct correct state from:
---   1. The last persisted block (from block catalog)
+--   1. The last persisted block (from the table catalog)
 --   2. The follower's in-memory state (which has been processing replica messages)
 --
 -- The NoOp + awaitReplicaMsgId sequence ensures the follower has fully caught up before
@@ -725,8 +723,8 @@ config {
 -- records its effect, rather than against a single source-log position:
 --   ResolvedTx:     stale if tx_id <= watchers.latest_tx_id
 --   TriesAdded:     stale if source_msg_id <= watchers.latest_source_msg_id
---   BlockBoundary:  stale if block_index <= block_catalog.current_block_index
---   BlockUploaded:  stale if block_index <= block_catalog.current_block_index
+--   BlockBoundary:  stale if block_index <= table_catalog.current_block_index
+--   BlockUploaded:  stale if block_index <= table_catalog.current_block_index
 --   NoOp:           stale if it carries a src_msg_id at or behind
 --                   watchers.latest_source_msg_id; a bare marker NoOp is never stale
 --   TriesDeleted:   never stale — deleteTries is set-removal, so replay is a no-op
@@ -848,7 +846,7 @@ rule TransitionToFollower {
         log_processor.mode = Follower.created(
             latest_replica_msg_id: log_processor.latest_replica_msg_id,
             pending_block: log_processor.pending_block,
-            max_leader_term: block_catalog.boundary_term_id
+            max_leader_term: table_catalog.boundary_term_id
         )
 }
 
@@ -982,8 +980,8 @@ rule LeaderCutsBlock {
     --
     -- The same event as live-index.allium's CutBlock, from the db side: this is where the
     -- boundary MESSAGE is built, because its fields come from here (the next block index
-    -- off the block catalog, the resolve-side source watermark, the resume token) —
-    -- live-index knows nothing of block catalogs or external sources.
+    -- off the table catalog, the resolve-side source watermark, the resume token) —
+    -- live-index holds neither the resolve-side watermark nor the external source.
     --
     -- One rule, not one per leader flavour: the token is whatever the resolve side last
     -- saw (null throughout for a client-driven leader), so there is nothing to branch on.
@@ -993,7 +991,7 @@ rule LeaderCutsBlock {
 
     requires: log_processor.mode = Leader
 
-    let block_index = (block_catalog.current_block_index ?? -1) + 1
+    let block_index = (table_catalog.current_block_index ?? -1) + 1
 
     ensures:
         AppendReplicaMessage(BlockBoundaryMessage.created(
@@ -1013,7 +1011,7 @@ rule LeaderProcessesFlushBlock {
     ensures:
         -- CAS check: only cut the block if the expected index matches.
         if msg.expected_block_idx != null
-           and msg.expected_block_idx = (block_catalog.current_block_index ?? -1):
+           and msg.expected_block_idx = (table_catalog.current_block_index ?? -1):
             LeaderCutsBlock(msg.msg_id, log_processor.last_resolved_ext_token)
         else:
             -- Stale FlushBlock (or a null expected index): nothing to cut, but the source
@@ -1244,7 +1242,7 @@ rule LeaderFlushTimeout {
 
     ensures:
         FlushBlockMessage.created(
-            expected_block_idx: block_catalog.current_block_index ?? -1
+            expected_block_idx: table_catalog.current_block_index ?? -1
         ) appended to database.source_log
 }
 
@@ -1418,8 +1416,7 @@ rule FollowerHandlesBlockUploaded {
 
         -- Read the block file from the object store.
         let block = Block.parseFrom(buffer_pool.getByteArray(blockFilePath(msg.block_index)))
-        block_catalog.refresh(block)
-        table_catalog.updateFromBlockMetadata(block_catalog.current_block_index, live_index.blockMetadata())
+        table_catalog.refresh(block, live_index.blockMetadata())
         live_index.nextBlock()
         CompactorSignalled()
 

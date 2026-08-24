@@ -13,7 +13,7 @@
            (xtdb.api ICursor)
            (xtdb.arrow Relation RelationReader VectorReader)
            (xtdb.block.proto Block TableBlock)
-           (xtdb.catalog BlockCatalog)
+           (xtdb.catalog TableCatalog)
            (xtdb.database Database)
            (xtdb.log.proto TrieDetails)
            (xtdb.operator SelectionSpec)
@@ -121,7 +121,7 @@
   "Attempts to read a block file at the given index. Returns a row map or nil."
   [^BufferPool buffer-pool ^long block-idx]
   (try
-    (let [path (BlockCatalog/blockFilePath block-idx)
+    (let [path (TableCatalog/blockFilePath block-idx)
           ^bytes ba (.getByteArray buffer-pool path)
           block (Block/parseFrom ba)]
       (block->row block (alength ba)))

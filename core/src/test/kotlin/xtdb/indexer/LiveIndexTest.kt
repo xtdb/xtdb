@@ -23,7 +23,6 @@ import xtdb.api.TransactionKey
 import xtdb.api.log.InMemoryLog
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.SourceMessage
-import xtdb.catalog.BlockCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
@@ -64,11 +63,10 @@ class LiveIndexTest {
 
     private inner class TestDb(private val dbName: String = "xtdb") : AutoCloseable {
         val bp = MemoryStorage(allocator, epoch = 0)
-        private val blockCatalog = BlockCatalog(null)
         private val tableCatalog = TableCatalog(bp)
         val trieCatalog = createTrieCatalog()
-        val liveIndex = LiveIndex.open(allocator, blockCatalog, tableCatalog, trieCatalog)
-        private val partitionState = PartitionState(blockCatalog, tableCatalog, trieCatalog, liveIndex)
+        val liveIndex = LiveIndex.open(allocator, tableCatalog, trieCatalog)
+        private val partitionState = PartitionState(tableCatalog, trieCatalog, liveIndex)
         private val partitionStorage = PartitionStorage(
             DatabaseLogs(
                 InMemoryLog<SourceMessage>(InstantSource.system(), 0),

@@ -7,7 +7,7 @@
 -- Block files (`blocks/b{idx}.binpb`) and per-table block files
 -- (`tables/{table}/blocks/b{idx}.binpb`) are snapshots of catalog state at a
 -- given block index. They are consumed only at node startup or catch-up, to
--- hydrate the in-memory catalogs (BlockCatalog.open, load-tries in
+-- hydrate the in-memory catalogs (TableCatalog.open, load-tries in
 -- trie_catalog.clj). Followers do not reference them during online query
 -- execution, so a concurrent delete by the leader cannot break a running
 -- read path. As a result this collector needs NO replica-log coordination —
@@ -33,7 +33,7 @@ use "./db.allium" as db
 given {
     database: db/Database
     log_processor: db/LogProcessor
-    block_catalog: db/BlockCatalog
+    table_catalog: db/TableCatalog
     block_gc: BlockGarbageCollector
 }
 
@@ -191,7 +191,7 @@ rule GarbageCollectBlocks {
     -- (DELETEs in flight across the cycle); these are out-of-spec
     -- implementation parameters (see BlockGarbageCollector.kt).
     --
-    -- The currently active block (block_catalog.current_block_index) is never
+    -- The currently active block (table_catalog.current_block_index) is never
     -- deleted — preserved by `is_garbage`'s `it != latestBlockIndex` clause.
     --
     -- A `blocks_to_keep = 0` configuration is treated as a programming error.
@@ -203,7 +203,7 @@ rule GarbageCollectBlocks {
     when: GarbageCollectBlocks()
 
     -- If the leader has never produced a block, there's nothing to GC.
-    requires: block_catalog.current_block_index != null
+    requires: table_catalog.current_block_index != null
 
     ensures:
         DeleteGarbage(top_level_block_files())
@@ -211,7 +211,7 @@ rule GarbageCollectBlocks {
         -- Misconfig surface. The top-level sweep above has already run.
         require_or_fail(config.blocks_to_keep >= 1)
 
-        for table in block_catalog.all_tables:
+        for table in table_catalog.all_tables:
             DeleteGarbage(table_block_files(table))
 }
 
@@ -226,7 +226,7 @@ rule DeleteGarbageRule {
     -- only under BlockGcLeaderOnly's EveryTableBlockAtCurrentIndex.
     when: DeleteGarbage(paths)
 
-    let latest_block_index = block_catalog.current_block_index
+    let latest_block_index = table_catalog.current_block_index
 
     ensures:
         for path in paths
@@ -251,12 +251,12 @@ contract BlockGcLeaderOnly {
         -- never DELETE block files.
 
     @invariant CurrentBlockNeverDeleted
-        -- The block at block_catalog.current_block_index is never DELETEd by
+        -- The block at table_catalog.current_block_index is never DELETEd by
         -- this collector, even if `blocks_to_keep` is misconfigured.
 
     @invariant EveryTableBlockAtCurrentIndex
-        -- Every table in block_catalog.all_tables has a per-table block file
-        -- at block_catalog.current_block_index. The block upload writes one
+        -- Every table in table_catalog.all_tables has a per-table block file
+        -- at table_catalog.current_block_index. The block upload writes one
         -- per known table rather than only for the tables that took rows in
         -- that block (db.allium, uploadBlock step 3), so a table's newest
         -- per-table block file never lags the database's current index.
@@ -334,4 +334,4 @@ surface BlockGcAdmin {
 
 open question "Per-table sweep enumerates ObjectStore directories per table. On a database with thousands of tables this scales linearly with table count per cycle. Earlier versions sampled at most 100 tables per cycle (randomised) — that cap is gone in the current implementation. Fine for now; revisit if table counts grow."
 
-open question "Block GC has no replica-log coordination on the assumption that block files are consumed only at startup/catch-up. If a future feature ever causes a follower to read a block file online (e.g. for cross-block range scans, or for some new replication mode), this assumption breaks silently. Worth marking the assumption load-bearing in BlockCatalog/BufferPool so a future change can spot it."
+open question "Block GC has no replica-log coordination on the assumption that block files are consumed only at startup/catch-up. If a future feature ever causes a follower to read a block file online (e.g. for cross-block range scans, or for some new replication mode), this assumption breaks silently. Worth marking the assumption load-bearing in TableCatalog/BufferPool so a future change can spot it."
