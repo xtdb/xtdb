@@ -15,7 +15,6 @@ import xtdb.api.log.ReplicaMessage.TriesAdded
 import xtdb.api.storage.Storage
 import xtdb.database.*
 import xtdb.api.error.Anomaly
-import xtdb.api.error.Interrupted
 import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.api.tx.TxIndexer.TxResult
@@ -583,20 +582,12 @@ internal class LeaderLogProcessor(
             }
 
             when (work) {
-                // The apply loop is where a supersession fails the term; let it propagate (interrupts too).
+                // supersession fails the term, not the database — rationale on the outer ladder
                 is Apply ->
                     try {
                         applyRecord(work.record)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: LeaderSupersededException) {
-                        throw e
-                    } catch (e: InterruptedException) {
-                        throw e
-                    } catch (e: Interrupted) {
-                        throw e
                     } catch (e: Throwable) {
-                        watchers.notifyError(e)
+                        if (!e.isShutdownSignal && e !is LeaderSupersededException) watchers.notifyError(e)
                         throw e
                     }
 
@@ -640,16 +631,12 @@ internal class LeaderLogProcessor(
         } catch (e: CancellationException) {
             if (!onComplete.isCompleted) onComplete.cancel(e)
             throw e
-        } catch (e: InterruptedException) {
-            if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
-            throw e
-        } catch (e: Interrupted) {
-            if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
-            throw e
         } catch (e: Throwable) {
-            watchers.notifyError(e)
+            if (!e.isShutdownSignal) {
+                watchers.notifyError(e)
+                extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
+            }
             if (!onComplete.isCompleted) onComplete.completeExceptionally(e)
-            extResult?.let { if (!it.isCompleted) it.completeExceptionally(e) }
             throw e
         }
     }

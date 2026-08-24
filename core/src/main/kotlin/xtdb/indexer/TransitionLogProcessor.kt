@@ -10,7 +10,6 @@ import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.Watchers
 import xtdb.api.storage.Storage
 import xtdb.api.error.Anomaly
-import xtdb.api.error.Interrupted
 import xtdb.database.Database
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
@@ -137,16 +136,14 @@ class TransitionLogProcessor(
 
             try {
                 if (!record.message.stale) processRecord(record)
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Interrupted) {
-                throw e
             } catch (e: Throwable) {
-                LOG.error(
-                    e,
-                    "[$dbName] transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
-                )
-                watchers.notifyError(e)
+                if (!e.isShutdownSignal) {
+                    LOG.error(
+                        e,
+                        "[$dbName] transition: failed to process log record with msgId $msgId (${record.message::class.simpleName})"
+                    )
+                    watchers.notifyError(e)
+                }
                 throw e
             }
         }

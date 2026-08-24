@@ -1,18 +1,26 @@
 package xtdb.kafka.connectsrc
 
 import clojure.lang.Keyword
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.apache.kafka.connect.data.Schema
 import org.apache.kafka.connect.data.SchemaBuilder
 import org.apache.kafka.connect.data.Struct
 import org.apache.kafka.connect.data.Timestamp as ConnectTimestamp
 import org.apache.kafka.connect.sink.SinkRecord
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Incorrect
 import xtdb.api.TableRef
+import xtdb.api.tx.OpenTx
+import xtdb.api.tx.TxIndexer
+import xtdb.api.tx.TxIndexer.TxResult
 import java.time.Instant
 import java.util.Date
 
@@ -91,5 +99,27 @@ class DocsIndexerTest {
 
         assertEquals(Keyword.intern("xtdb.kafka-connect-source", "docs-no-key"), e.errorCode)
         assertTrue(e.message!!.contains("no usable key"), "message shouldn't claim the key is absent, got: ${e.message}")
+    }
+
+    // an Interrupted would reach the leader's `runTaskGuarded` as an ingestion fault and fail the database
+    @Test
+    fun `an interrupt while writing propagates instead of becoming an anomaly`() {
+        val interrupt = InterruptedException("stopping")
+
+        val openTx = mockk<OpenTx>()
+        every { openTx.table(any(), any()) } throws interrupt
+
+        val txIndexer = mockk<TxIndexer>()
+        coEvery { txIndexer.submitTx(any(), any(), any()) } coAnswers {
+            @Suppress("UNCHECKED_CAST")
+            (arg<Any>(2) as suspend (OpenTx) -> TxResult)(openTx)
+            error("writer should have thrown")
+        }
+
+        val indexer = DocsIndexer.Factory(table = "events").open() as DocsIndexer
+
+        assertSame(interrupt, assertThrows<InterruptedException> {
+            runBlocking { indexer.indexRecords(listOf(recWithKey("k1")), txIndexer) }
+        })
     }
 }

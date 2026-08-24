@@ -187,9 +187,13 @@
   Throwable
   (->anomaly [ex data] (fault ::unknown (ex-message ex) (into {::cause ex} data))))
 
+;; the interrupt arms mirror `Anomaly/wrapAnomaly`, whose kdoc has the why
 (defmacro wrap-anomaly ^{:style/indent 1} [ctx & body]
   `(try
      ~@body
+     (catch InterruptedException e# (throw e#))
+     (catch ClosedByInterruptException e#
+       (throw (doto (InterruptedException. (ex-message e#)) (.initCause e#))))
      (catch Throwable e#
        (throw (->anomaly e# ~ctx)))))
 

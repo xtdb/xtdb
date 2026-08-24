@@ -80,6 +80,8 @@ class DocsIndexer(internal val table: TableRef) : RecordIndexer {
                     TxResult.Committed()
                 } catch (e: CancellationException) {
                     throw e
+                } catch (e: InterruptedException) {
+                    throw e
                 } catch (e: Throwable) {
                     throw e.toAnomaly(coordsFor(rec))
                 }

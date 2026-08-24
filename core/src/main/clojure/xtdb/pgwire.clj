@@ -38,7 +38,7 @@
            (xtdb.arrow Relation Relation$ILoader VectorType)
            xtdb.arrow.RelationReader
            xtdb.database.Database$Config
-           (xtdb.api.error Incorrect Interrupted)
+           (xtdb.api.error Incorrect)
            xtdb.api.ResultCursor
            (xtdb.pgwire PgType PgTypes)
            xtdb.JsonSerde
@@ -822,6 +822,7 @@
                  (visitSetTimeZone [_ _] (create-parsed))
                  (visitOther [_ _] stmt)))
 
+      (catch InterruptedException e (throw e))
       (catch IllegalArgumentException e
         (log/debug e "Error preparing statement")
         (throw e))
@@ -849,7 +850,7 @@
 
       (pgio/cmd-write-msg conn pgio/msg-parse-complete))
 
-    (catch Interrupted e (throw e))
+    (catch InterruptedException e (throw e))
     (catch Exception e
       (when (.isTxReadWrite ^Xtdb$Connection (:node-conn @conn-state))
         (metrics/inc-counter! tx-error-counter))
@@ -1378,7 +1379,6 @@
               (finally
                 (util/close (:cursor portal))))))
 
-        (catch Interrupted e (throw e))
         (catch InterruptedException e (throw e))
         (catch Exception e
           (let [^Xtdb$Connection node-conn (:node-conn @conn-state)]
@@ -1396,7 +1396,6 @@
           (cmd-commit conn))))
 
     ;; here we catch explicitly because we need to send the error, then a ready message
-    (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
     (catch Throwable e
       (send-ex conn e)))
@@ -1533,7 +1532,6 @@
       (log/trace "Skipping msg until next sync due to error in extended protocol" {:cid cid, :msg msg})
       (handle-msg* conn msg))
 
-    (catch Interrupted e (throw e))
     (catch InterruptedException e (throw e))
 
     (catch Throwable e
@@ -1654,7 +1652,6 @@
       (catch IOException e
         (log/warn e "IOException in connection" {:port port, :cid cid}))
 
-      (catch Interrupted _)
       (catch InterruptedException _)
 
       (finally
@@ -1708,7 +1705,6 @@
               (log/warn e "Accept IO exception")))
           (recur))))
 
-    (catch Interrupted _)
     (catch InterruptedException _)
 
     (finally

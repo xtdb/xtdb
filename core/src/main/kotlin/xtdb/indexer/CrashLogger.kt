@@ -11,7 +11,6 @@ import xtdb.arrow.VectorReader
 import xtdb.api.error.Anomaly
 import xtdb.api.error.Anomaly.Companion.wrapAnomaly
 import xtdb.storage.BufferPool
-import xtdb.api.error.Interrupted
 import xtdb.api.TableRef
 import xtdb.util.asPath
 import java.nio.file.Path
@@ -125,8 +124,6 @@ class CrashLogger @JvmOverloads constructor(
     ): R {
         try {
             return wrapAnomaly(data, block)
-        } catch (e: Interrupted) {
-            throw e
         } catch (e: Anomaly.Caller) {
             throw e
         } catch (e: Anomaly) {

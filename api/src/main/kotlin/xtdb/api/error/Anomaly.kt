@@ -71,6 +71,7 @@ sealed class Anomaly(
                 ctx + ("date-time" to parsedString),
                 this,
             )
+            // `XtdbProducer.asFlightException` turns this category into `CallStatus.CANCELLED`
             is ClosedByInterruptException ->
                 Interrupted(message ?: "Interrupted", "xtdb.error/interrupted", ctx, this)
             is InterruptedException -> Interrupted(message, "xtdb.error/interrupted", ctx, this)
@@ -84,9 +85,18 @@ sealed class Anomaly(
         /**
          * Run [block], catching any [Throwable] and rethrowing as the appropriate [Anomaly]
          * with [ctx] merged into its data. Mirrors `xtdb.error/wrap-anomaly`.
+         *
+         * An interrupt propagates as an [InterruptedException] instead: it's a request to stop,
+         * not an error report, and [Interrupted] isn't a [Caller] — so classifying one here
+         * tells the ingestion path to fail the database over a clean shutdown.
          */
         inline fun <R> wrapAnomaly(ctx: Map<String, *> = emptyMap<String, Any?>(), block: () -> R): R = try {
             block()
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: ClosedByInterruptException) {
+            // the blocking boundaries convert this themselves; this is in case one is missed
+            throw InterruptedException(e.message).apply { initCause(e) }
         } catch (e: Throwable) {
             throw e.toAnomaly(ctx)
         }
