@@ -19,6 +19,24 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 
 The rest of this document is the mechanics behind those four.
 
+## A comment-only change needs a compile, not a test run
+
+"Rerun after every change, however trivial" is about changes that can alter behaviour.
+A change confined to comments, KDoc or Javadoc cannot, so a clean `./gradlew :testClasses` (plus `:xtdb-core:testClasses` for a core change) is the whole of the verification it needs, and you MUST NOT spend a suite run on it.
+
+The carve-out is narrow, and these are the ways a "comment change" turns out not to be one:
+
+- **An annotation is not a comment.**
+  `@Test`, `@Tag`, `@OptIn`, `@JvmStatic`, `@Suppress` all change what the compiler or the runner does.
+- **A Clojure `;;` line is a comment; `(comment ...)` and `#_` are not.**
+  Both are read by the reader, and `#_` elides the *next form* — moving one changes what compiles.
+- **A docstring is a value, not a comment.**
+  Editing one changes the compiled var, which is why it takes the same care as code even though nothing observable usually depends on it.
+- **A doc file the build reads is not a comment either.**
+  `.allium`, `.adoc` and `README`s are outside the build; anything on the test resource path is not.
+
+Where a diff is comments *plus* code, it is a code change — run the tests.
+
 ## Delegating to `gradle-tests`
 
 Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure included.
