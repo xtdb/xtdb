@@ -133,9 +133,11 @@ internal suspend fun runLeaderTerm(
     } catch (t: Throwable) {
         // A genuine term fault (e.g. an append fault) surfaces to queries as a failed term. Idempotent —
         // the apply arm may already have notified for its own faults.
-        LOG.error(t) { "[$dbName] leader term failed" }
+        if (!t.isShutdownSignal) {
+            LOG.error(t) { "[$dbName] leader term failed" }
+            watchers.notifyError(t)
+        }
         cause = t
-        watchers.notifyError(t)
     } finally {
         term.shutdown(cause ?: CancellationException("leader term closed"))
     }

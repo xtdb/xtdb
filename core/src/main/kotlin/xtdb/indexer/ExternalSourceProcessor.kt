@@ -92,7 +92,7 @@ internal class ExternalSourceProcessor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            watchers.notifyError(e)
+            if (!e.isShutdownSignal) watchers.notifyError(e)
         }
     }
 

@@ -195,6 +195,79 @@ class LeaderLogProcessorTest {
         assertTrue(replicaLog.latestSubmittedOffset() >= 0, "replica log should have received a message")
     }
 
+    /**
+     * A term wired up but not started, so a test can drive [runLeaderTerm] or one of its components
+     * directly and have it return. [leaderProc] launches the term into a scope instead, where the only
+     * handle on its completion is scheduler advancement.
+     */
+    private fun TestScope.unstartedTerm(
+        watchers: Watchers,
+        driver: (LeaderDriver) -> LeaderDriver = { it },
+        extSource: ExternalSource? = null,
+    ): Pair<LeaderLogProcessor, ReplicaLogAppender> {
+        val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val bufferPool = mockk<BufferPool>(relaxed = true) { every { epoch } returns 0 }
+        val partitionState =
+            PartitionState(BlockCatalog(null), mockk(relaxed = true), mockk(relaxed = true), liveIndexMock())
+        val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), bufferPool, null)
+        val blockUploader = BlockUploader(
+            partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null,
+            backgroundScope, StandardTestDispatcher(testScheduler)
+        )
+        val leaderDriver = driver(RealLeaderDriver(partitionStorage, partitionState, blockUploader))
+        val appender = ReplicaLogAppender(leaderDriver)
+
+        val proc = LeaderLogProcessor(
+            allocator, nodeBase, partitionStorage, mockk(relaxed = true),
+            partitionState, "test", leaderDriver, watchers, appender, extSource,
+            skipTxs = emptySet(), dbCatalog = null,
+            leaderTerm = 1,
+            flushTimeout = IndexerConfig().flushDuration,
+        )
+        leadersToClose += proc
+        return proc to appender
+    }
+
+    @Test
+    fun `an interrupt on the append path leaves the database queryable`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val (proc, appender) = unstartedTerm(watchers, driver = { inner ->
+            object : LeaderDriver by inner {
+                // LocalStorage converts a ClosedByInterruptException into this on both its write paths
+                override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
+                    throw InterruptedException("interrupted writing to storage")
+            }
+        })
+
+        appender.append(ControlItem(ReplicaMessage.NoOp(termId = 1)))
+
+        // returns once the pump's failure has ended the term
+        runLeaderTerm("test", watchers, proc, appender)
+
+        assertNull(
+            watchers.exception,
+            "an interrupt ends the term without failing the database"
+        )
+    }
+
+    @Test
+    fun `an interrupt in the external source leaves the database queryable`() = runTest {
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+        val extSource = mockk<ExternalSource>(relaxed = true) {
+            coEvery { onPartitionAssigned(any(), any(), any()) } throws InterruptedException("interrupted")
+        }
+
+        val (proc, _) = unstartedTerm(watchers, extSource = extSource)
+        proc.extSrcProc!!.run()
+
+        assertNull(
+            watchers.exception,
+            "an interrupt ends the term without failing the database"
+        )
+    }
+
     @Test
     fun `FlushBlock triggers block finish when CAS matches`() = runTest(timeout = 5.seconds) {
         val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
