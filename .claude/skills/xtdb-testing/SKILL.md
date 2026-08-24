@@ -16,6 +16,7 @@ Interpret MUST, MUST NOT, SHOULD, SHOULD NOT, MAY per RFC 2119.
 2. You MUST NOT edit files the build compiles while a run in that worktree is still compiling them — see [The build phase is what is frozen](#the-build-phase-is-what-is-frozen).
 3. You MUST tell `gradle-tests`, in every invocation, not to modify any source file.
 4. A test that fails after your change is a test *you* broke — see [When a test fails](#when-a-test-fails).
+5. You MUST stop a run the moment you know you'll re-run it, rather than letting it finish — see [A run you already know you'll redo is waste](#a-run-you-already-know-youll-redo-is-waste).
 
 The rest of this document is the mechanics behind those four.
 
@@ -50,6 +51,19 @@ Use the `gradle-tests` agent via the Task tool for *all* test runs, Clojure incl
 - You MUST NOT launch more than one `gradle-tests` agent concurrently.
   Combine every namespace you want covered into a single invocation and let the agent choose how to run them; Gradle parallelises internally.
 - You SHOULD run the relevant tests proactively after a code change rather than waiting to be asked.
+
+## A run you already know you'll redo is waste
+
+A run only ever describes the tree it compiled.
+So the moment you decide on a material change — a bug you spotted reviewing the diff, a fix for a failure the run has already reported, anything at all that touches a file the build reads — that run's verdict is void, and every remaining minute of it buys nothing.
+
+Stop it and re-run with the change in.
+
+- You MUST NOT let a run you have already invalidated play out on the grounds that its remaining results might still be worth having.
+  They are not reportable: you cannot claim a namespace passed in a tree you are about to change, and sorting the failures that survive your edit from the ones that don't costs more than the re-run.
+- Reading the diff while a run is in flight is the right use of the wait, and finding something is the expected outcome.
+  A finding is a reason to stop the run — not something to sit on until it finishes.
+- Stopping the run is also what lifts the edit freeze, so the order is: stop it, confirm no test worker is still up, then edit.
 
 ## The build phase is what is frozen
 
