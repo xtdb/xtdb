@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-class WalLagGaugeTest {
+class PostgresSourceMetricsTest {
 
     private class StubDriver(private val lagBytes: () -> Long?) : PostgresDriver {
         override fun openSnapshot(): PostgresDriver.SnapshotReader = error("unused")
@@ -17,6 +17,9 @@ class WalLagGaugeTest {
 
     private fun SimpleMeterRegistry.walLag() =
         get("xtdb.postgres_source.wal_lag_bytes").gauge().value()
+
+    private fun SimpleMeterRegistry.sourceMeterNames() =
+        meters.map { it.id.name }.filter { it.startsWith("xtdb.postgres_source.") }.sorted()
 
     private fun openSource(reg: SimpleMeterRegistry, lagBytes: () -> Long?) =
         PostgresSource("xtdb", StubDriver(lagBytes), "test_slot", DirectMirror(), reg)
@@ -51,5 +54,41 @@ class WalLagGaugeTest {
             refuseConnection = true
             assertTrue(reg.walLag().isNaN(), "failed read — unknown, not caught up")
         }
+    }
+
+    @Test
+    fun `the gauge reads the source that is running, not the one that has been replaced`() {
+        val reg = SimpleMeterRegistry()
+
+        openSource(reg) { 1024 }.use { assertEquals(1024.0, reg.walLag()) }
+
+        openSource(reg) { 4096 }.use {
+            assertEquals(4096.0, reg.walLag(), "the live source's slot, not the closed source's")
+        }
+    }
+
+    @Test
+    fun `a closed source leaves no meters behind`() {
+        val reg = SimpleMeterRegistry()
+
+        openSource(reg) { 1024 }.use {
+            assertTrue(
+                reg.sourceMeterNames().containsAll(
+                    listOf(
+                        "xtdb.postgres_source.commit_lag_seconds",
+                        "xtdb.postgres_source.commits.total",
+                        "xtdb.postgres_source.connection_state",
+                        "xtdb.postgres_source.events.total",
+                        "xtdb.postgres_source.last_event_time",
+                        "xtdb.postgres_source.wal_lag_bytes",
+                    )
+                ),
+                "a running source reports all six, was: ${reg.sourceMeterNames()}",
+            )
+        }
+
+        // The `.percentile` gauges the commit-lag summary publishes are meters in their own right, so an
+        // empty list here is the assertion that removal reaches those too.
+        assertEquals(emptyList<String>(), reg.sourceMeterNames())
     }
 }

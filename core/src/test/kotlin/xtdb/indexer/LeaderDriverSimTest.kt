@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import xtdb.NodeBase
+import xtdb.garbage_collector.GcMetrics
 import xtdb.NodeBase.Companion.openBase
 import xtdb.RepeatableSimulationTest
 import xtdb.SimulationTestBase
@@ -134,6 +135,7 @@ class LeaderDriverSimTest : SimulationTestBase() {
             // Never left at the default: two leaders sharing term 0 would each read the other's records
             // back as its own, and the term is exactly what tells them apart.
             leaderTerm = termId,
+            gcMetrics = GcMetrics(null, "test-db"),
             flushTimeout = indexerConfig.flushDuration,
             gcDispatcher = dispatcher,
         )

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import xtdb.NodeBase
+import xtdb.garbage_collector.GcMetrics
 import xtdb.NodeBase.Companion.openBase
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.api.log.*
@@ -134,6 +135,7 @@ class ExternalSourceTest {
             allocator, nodeBase, partitionStorage, crashLogger,
             partitionState, "test", driver, watchers, replicaAppender, extSource,
             skipTxs = emptySet(), dbCatalog = null,
+            gcMetrics = GcMetrics(null, "test"),
             flushTimeout = IndexerConfig().flushDuration,
         ).also { proc ->
             leadersToClose += proc

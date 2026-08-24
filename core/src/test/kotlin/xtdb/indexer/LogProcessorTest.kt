@@ -1,5 +1,6 @@
 package xtdb.indexer
 
+import io.micrometer.core.instrument.MeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -64,6 +65,8 @@ class LogProcessorTest {
         watchers: Watchers,
         blockUploader: BlockUploader,
         scope: CoroutineScope,
+        nodeBase: NodeBase = this.nodeBase,
+        allocator: BufferAllocator = this.allocator,
     ) = LogProcessor(
         allocator, nodeBase, mockk(relaxed = true),
         partitionStorage, partitionState, "test-db", watchers, blockUploader,
@@ -278,5 +281,60 @@ class LogProcessorTest {
         logProc.close()
         sourceLog.close()
         replicaLog.close()
+    }
+
+    // Names rather than meters: `xtdb.replica.process.timer` appears once per message type.
+    private val roleIndependentMeters = setOf(
+        "xtdb.log.leader",
+        "xtdb.replica.process.timer",
+        "xtdb.replica.block.buffer.timer",
+        "xtdb.replica.block.buffered.records",
+        "xtdb.gc.tries.delete.timer",
+        "xtdb.gc.block_files.delete.timer",
+        "xtdb.gc.table_block_files.delete.timer",
+    )
+
+    private fun MeterRegistry.roleIndependentNames() =
+        meters.map { it.id.name }.filter { it in roleIndependentMeters }.toSet()
+
+    // Wider than the above: a percentile-publishing timer registers `<name>.percentile` gauges as meters
+    // in their own right, and those have to go when their parent does or they read a removed meter.
+    private fun MeterRegistry.namesUnderRoleIndependent() =
+        meters.map { it.id.name }
+            .filter { name -> roleIndependentMeters.any { name == it || name.startsWith("$it.") } }
+            .toSet()
+
+    @Test
+    fun `a database reports its meters before it has led, and none once it closes`() = runTest {
+        openBase(openMeterRegistry = true).use { meteredBase ->
+            val registry = meteredBase.meterRegistry!!
+
+            meteredBase.allocator.newChildAllocator("metrics", 0, Long.MAX_VALUE).use { allocator ->
+                val sourceLog = InMemoryLog<SourceMessage>(InstantSource.system(), 0)
+                val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+                val partitionState = newPartitionState()
+                val partitionStorage = PartitionStorage(DatabaseLogs(sourceLog, replicaLog), mockBufferPool(), null)
+                val blockUploader =
+                    BlockUploader(partitionStorage, partitionState, "test-db", mockk(relaxed = true), null, null, backgroundScope)
+                val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+                val scope = CoroutineScope(SupervisorJob())
+
+                // No group subscription, so this database never elects — the meters are the database's
+                // rather than a term's or a follower's, or there would be nothing here to find.
+                val logProc =
+                    logProcessor(partitionStorage, partitionState, watchers, blockUploader, scope, meteredBase, allocator)
+
+                assertEquals(roleIndependentMeters, registry.roleIndependentNames())
+
+                scope.coroutineContext.job.cancelAndJoin()
+                logProc.close()
+
+                assertEquals(emptySet<String>(), registry.namesUnderRoleIndependent())
+
+                sourceLog.close()
+                replicaLog.close()
+            }
+        }
     }
 }

@@ -29,6 +29,7 @@ import xtdb.database.DatabaseLogs
 import xtdb.database.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.garbage_collector.GcMetrics
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
@@ -125,7 +126,7 @@ class NodeSimulationTest : SimulationTestBase() {
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
-                sharedBufferPool, partitionState, "xtdb",
+                sharedBufferPool, partitionState,
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
                     // simulation's view of the catalog still converges as the test asserts.
@@ -134,6 +135,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 blocksToKeep = 2,
                 garbageLifetime = garbageLifetime,
                 enabled = false,
+                metrics = GcMetrics(null, "xtdb"),
                 dispatcher = dispatcher,
             ).also { gcScope.launch { it.run() } }
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)

@@ -12,6 +12,7 @@ import xtdb.api.DatabaseName
 import xtdb.api.log.*
 import xtdb.api.log.ReplicaMessage.BlockBoundary
 import xtdb.database.*
+import xtdb.garbage_collector.GcMetrics
 import xtdb.api.log.ReplicaMessage
 import xtdb.util.*
 import java.time.*
@@ -43,6 +44,7 @@ internal class LeaderLogProcessor(
     skipTxs: Set<MessageId>,
     private val dbCatalog: Database.Catalog?,
     private val leaderTerm: Long = 0,
+    gcMetrics: GcMetrics,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
@@ -115,7 +117,7 @@ internal class LeaderLogProcessor(
     private val rowsPerBlock = liveIndex.rowsPerBlock
 
     val gc = GarbageCollector(
-        nodeBase, partitionStorage, partitionState, dbName, leaderTerm, replicaAppender, gcDispatcher
+        nodeBase, partitionStorage, partitionState, leaderTerm, replicaAppender, gcMetrics, gcDispatcher
     )
 
     val srcLogProc = SourceLogProcessor(

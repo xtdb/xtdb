@@ -13,6 +13,7 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.subclass
 import org.postgresql.replication.LogSequenceNumber
 import org.postgresql.util.PSQLException
+import xtdb.Meters
 import xtdb.api.tx.TxIndexer
 import xtdb.api.Remote
 import xtdb.api.RemoteAlias
@@ -50,27 +51,29 @@ class PostgresSource(
         Tag.of("source_type", "postgres"),
     )
 
-    private val eventsCounter: Counter? = meterRegistry?.let {
+    private val meters = Meters(meterRegistry)
+
+    private val eventsCounter: Counter? = meters.register { reg ->
         Counter.builder("xtdb.postgres_source.events.total")
             .description("pgoutput insert/update/delete events ingested")
             .tags(tags)
-            .register(it)
+            .register(reg)
     }
 
-    private val commitsCounter: Counter? = meterRegistry?.let {
+    private val commitsCounter: Counter? = meters.register { reg ->
         Counter.builder("xtdb.postgres_source.commits.total")
             .description("source transactions committed")
             .tags(tags)
-            .register(it)
+            .register(reg)
     }
 
-    private val commitLag: DistributionSummary? = meterRegistry?.let {
+    private val commitLag: DistributionSummary? = meters.register { reg ->
         DistributionSummary.builder("xtdb.postgres_source.commit_lag_seconds")
             .description("wall-clock seconds between source commit and apply")
             .baseUnit("seconds")
             .publishPercentiles(0.5, 0.95, 0.99)
             .tags(tags)
-            .register(it)
+            .register(reg)
     }
 
     // epoch seconds of the latest applied commit; 0 until the first event
@@ -88,18 +91,22 @@ class PostgresSource(
         }
 
     init {
-        meterRegistry?.let { reg ->
+        meters.register { reg ->
             Gauge.builder("xtdb.postgres_source.last_event_time", lastEventEpochSeconds) { it.get().toDouble() }
                 .description("epoch seconds of the most recently applied source commit")
                 .baseUnit("seconds")
                 .tags(tags)
                 .register(reg)
+        }
 
+        meters.register { reg ->
             Gauge.builder("xtdb.postgres_source.connection_state", connectionState) { it.get().toDouble() }
                 .description("1 if a replication stream is currently open, 0 otherwise")
                 .tags(tags)
                 .register(reg)
+        }
 
+        meters.register { reg ->
             Gauge.builder("xtdb.postgres_source.wal_lag_bytes", this) { it.walLagBytes() }
                 .description("WAL bytes between pg_current_wal_lsn and our slot's confirmed_flush_lsn; NaN if we can't read it")
                 .baseUnit("bytes")
@@ -374,6 +381,7 @@ class PostgresSource(
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
+        meters.close()
         runCatching { indexer.close() }
         driver.close()
     }

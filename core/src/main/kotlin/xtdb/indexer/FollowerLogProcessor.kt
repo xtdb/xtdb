@@ -1,7 +1,5 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.DistributionSummary
-import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.SelectBuilder
@@ -42,45 +40,15 @@ class FollowerLogProcessor @JvmOverloads constructor(
     private val dbCatalog: Database.Catalog?,
     pendingBlock: PendingBlock?,
     private val hasExternalSource: Boolean,
-    private val meterRegistry: MeterRegistry? = null,
+    private val metrics: ReplicaMetrics,
     private val maxBufferedRecords: Int = 1024,
 ) : AutoCloseable {
-
-    private fun processTimer(msgType: String): Timer? = meterRegistry?.let {
-        Timer.builder("xtdb.replica.process.timer")
-            .description("Time spent processing replica log records, by message type")
-            .tag("db", dbName)
-            .tag("msg.type", msgType)
-            .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
-            .register(it)
-    }
-
-    private val resolvedTxTimer = processTimer("ResolvedTx")
-    private val triesAddedTimer = processTimer("TriesAdded")
-    private val blockBoundaryTimer = processTimer("BlockBoundary")
-    private val blockUploadedTimer = processTimer("BlockUploaded")
-    private val triesDeletedTimer = processTimer("TriesDeleted")
-
-    private val blockBufferTimer: Timer? = meterRegistry?.let {
-        Timer.builder("xtdb.replica.block.buffer.timer")
-            .description("Time the follower spends buffering records between BlockBoundary and BlockUploaded")
-            .tag("db", dbName)
-            .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
-            .register(it)
-    }
-
-    private val bufferedRecordsSummary: DistributionSummary? = meterRegistry?.let {
-        DistributionSummary.builder("xtdb.replica.block.buffered.records")
-            .description("Number of records buffered while a follower waits for BlockUploaded")
-            .tag("db", dbName)
-            .register(it)
-    }
 
     private var blockBufferStartSample: Timer.Sample? = null
 
     private inline fun <R> Timer?.timed(block: () -> R): R {
         if (this == null) return block()
-        val sample = Timer.start(meterRegistry!!)
+        val sample = Timer.start()
         try {
             return block()
         } finally {
@@ -149,7 +117,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
     private suspend fun processRecord(record: Log.Record<ReplicaMessage>, replicaMsgId: MessageId?) {
         when (val msg = record.message) {
-            is ReplicaMessage.ResolvedTx -> resolvedTxTimer.timed {
+            is ReplicaMessage.ResolvedTx -> metrics.resolvedTx.timed {
                 val systemTime = msg.systemTime
                 val txKey = TransactionKey(msg.txId, systemTime)
 
@@ -192,18 +160,18 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 watchers.notifyApplied(replicaMsgId, effectiveSrcMsgId, result, msg.externalSourceToken)
             }
 
-            is ReplicaMessage.TriesAdded -> triesAddedTimer.timed {
+            is ReplicaMessage.TriesAdded -> metrics.triesAdded.timed {
                 if (msg.storageVersion == Storage.VERSION && msg.storageEpoch == bufferPool.epoch)
                     addTries(msg.tries, record.logTimestamp)
 
                 watchers.notifyApplied(replicaMsgId, msg.sourceMsgId)
             }
 
-            is ReplicaMessage.BlockBoundary -> blockBoundaryTimer.timed {
+            is ReplicaMessage.BlockBoundary -> metrics.blockBoundary.timed {
                 pendingBlock = PendingBlock(record.msgId, msg, maxBufferedRecords)
                 LOG.debug("[$dbName] block boundary b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} — waiting for BlockUploaded...")
                 watchers.notifyApplied(replicaMsgId, msg.latestProcessedMsgId)
-                blockBufferStartSample = meterRegistry?.let { Timer.start(it) }
+                blockBufferStartSample = metrics.blockBuffer?.let { Timer.start() }
             }
 
             is ReplicaMessage.BlockUploaded -> error(
@@ -212,7 +180,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
 
             is ReplicaMessage.NoOp -> watchers.notifyApplied(replicaMsgId, msg.srcMsgId)
 
-            is ReplicaMessage.TriesDeleted -> triesDeletedTimer.timed {
+            is ReplicaMessage.TriesDeleted -> metrics.triesDeleted.timed {
                 trieCatalog.deleteTries(fromSchemaAndTable(msg.tableName), msg.trieKeys)
                 watchers.notifyApplied(replicaMsgId)
             }
@@ -232,7 +200,7 @@ class FollowerLogProcessor @JvmOverloads constructor(
                 && msg.storageEpoch == bufferPool.epoch
             ) {
                 LOG.debug("[$dbName] block uploaded b${msg.blockIndex.asLexHex}: source=${msg.latestProcessedMsgId}, replica=${record.msgId} (${pendingBlock.bufferedRecords.size} buffered)")
-                val bufferedRecords = blockUploadedTimer.timed {
+                val bufferedRecords = metrics.blockUploaded.timed {
                     val block = parseFrom(bufferPool.getByteArray(blockFilePath(pendingBlockIdx)))
 
                     addTries(msg.tries, record.logTimestamp)
@@ -242,8 +210,8 @@ class FollowerLogProcessor @JvmOverloads constructor(
                     compactor.signalBlock()
 
                     val bufferedRecords = pendingBlock.bufferedRecords
-                    bufferedRecordsSummary?.record(bufferedRecords.size.toDouble())
-                    blockBufferTimer?.let { blockBufferStartSample?.stop(it) }
+                    metrics.bufferedRecords?.record(bufferedRecords.size.toDouble())
+                    metrics.blockBuffer?.let { blockBufferStartSample?.stop(it) }
                     blockBufferStartSample = null
                     this.pendingBlock = null
                     bufferedRecords

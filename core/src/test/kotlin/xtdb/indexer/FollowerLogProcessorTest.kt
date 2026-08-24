@@ -77,7 +77,7 @@ class FollowerLogProcessorTest {
             allocator, bufferPool, partitionState, "test", compactor,
             watchers, null, null,
             hasExternalSource = hasExternalSource,
-            meterRegistry = meterRegistry,
+            metrics = ReplicaMetrics(meterRegistry, "test"),
             maxBufferedRecords = maxBufferedRecords,
         ).also(followersToClose::add)
 

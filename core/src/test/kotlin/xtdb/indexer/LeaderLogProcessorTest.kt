@@ -42,6 +42,7 @@ import xtdb.compactor.Compactor
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
+import xtdb.garbage_collector.GcMetrics
 import xtdb.log.proto.TrieDetails
 import xtdb.log.proto.trieMetadata
 import xtdb.storage.BufferPool
@@ -150,6 +151,7 @@ class LeaderLogProcessorTest {
                 partitionState, "test", driver, watchers, replicaAppender, extSource,
                 skipTxs = skipTxs, dbCatalog = null,
                 leaderTerm = leaderTerm,
+                gcMetrics = GcMetrics(null, "test"),
                 flushTimeout = IndexerConfig().flushDuration,
             )
         )
@@ -223,6 +225,7 @@ class LeaderLogProcessorTest {
             partitionState, "test", leaderDriver, watchers, appender, extSource,
             skipTxs = emptySet(), dbCatalog = null,
             leaderTerm = 1,
+            gcMetrics = GcMetrics(null, "test"),
             flushTimeout = IndexerConfig().flushDuration,
         )
         leadersToClose += proc
@@ -302,6 +305,7 @@ class LeaderLogProcessorTest {
                 partitionState, "test", driver, watchers, replicaAppender,
                 extSource = null,
                 skipTxs = emptySet(), dbCatalog = null,
+                gcMetrics = GcMetrics(null, "test"),
                 flushTimeout = IndexerConfig().flushDuration,
             )
         )
@@ -381,6 +385,7 @@ class LeaderLogProcessorTest {
                 partitionState, "test", driver, watchers, replicaAppender,
                 extSource = null,
                 skipTxs = emptySet(), dbCatalog = null,
+                gcMetrics = GcMetrics(null, "test"),
                 flushTimeout = IndexerConfig().flushDuration,
             )
         )
@@ -761,6 +766,7 @@ class LeaderLogProcessorTest {
                 partitionState, "test", driver, watchers, replicaAppender,
                 extSource = mockk(relaxed = true),
                 skipTxs = setOf(10), dbCatalog = null,
+                gcMetrics = GcMetrics(null, "test"),
                 flushTimeout = IndexerConfig().flushDuration,
             )
         )

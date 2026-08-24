@@ -1,6 +1,5 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.Timer
 import io.micrometer.tracing.Tracer
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.Metrics.withSpan
@@ -59,12 +58,7 @@ internal class SourceLogTxIndexer(
     private val tracer: Tracer? =
         if (base.config.tracer.transactionTracing) base.tracer else null
 
-    private val txTimer: Timer? = base.meterRegistry?.let { reg ->
-        Timer.builder("tx.op.timer")
-            .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
-            .description("indicates the timing and number of transactions")
-            .register(reg)
-    }
+    private val txTimer = base.txOpTimer
 
     internal data class TxOpts(
         val txKey: TransactionKey,

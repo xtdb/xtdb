@@ -1,6 +1,5 @@
 package xtdb.garbage_collector
 
-import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -8,7 +7,6 @@ import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.selects.select
 import xtdb.catalog.BlockCatalog.Companion.blockFromLatest
-import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
@@ -53,7 +51,6 @@ private const val TRIES_DELETED_CHUNK_SIZE = 1024
 class TrieGarbageCollector(
     private val bufferPool: BufferPool,
     partitionState: PartitionState,
-    dbName: DatabaseName,
     /**
      * Publishes a `TriesDeleted` to the replica log AND removes the keys from the local trie catalog — atomically, in a single Persister task on the leader.
      * The Persister channel is the sole ordering point, so no other replica-log write interleaves between the two.
@@ -63,7 +60,7 @@ class TrieGarbageCollector(
     private val blocksToKeep: Int,
     private val garbageLifetime: Duration,
     val enabled: Boolean,
-    private val meterRegistry: MeterRegistry? = null,
+    private val metrics: GcMetrics,
     tableParallelism: Int = DEFAULT_TABLE_PARALLELISM,
     deleteParallelism: Int = DEFAULT_DELETE_PARALLELISM,
     /** Base for the parallel delete fan-out pools; the loop itself runs on its caller's thread. Sims inject the seeded dispatcher so deletes stay on the simulation's thread. */
@@ -80,13 +77,6 @@ class TrieGarbageCollector(
     private val tableDispatcher = dispatcher.limitedParallelism(tableParallelism)
     private val deleteDispatcher = dispatcher.limitedParallelism(deleteParallelism)
 
-    private val deleteTimer: Timer? = meterRegistry?.let {
-        Timer.builder("xtdb.gc.tries.delete.timer")
-            .publishPercentiles(0.75, 0.95, 0.99)
-            .tag("db", dbName)
-            .register(it)
-    }
-    
     /** Collect on every trigger until cancelled. Nothing is serviced until this is running: [signal] queues, and [awaitNoGarbage] suspends. */
     suspend fun run(): Unit = coroutineScope {
         LOGGER.debug("Starting TrieGarbageCollector (enabled=$enabled, blocksToKeep=$blocksToKeep, garbageLifetime=$garbageLifetime)")
@@ -174,10 +164,10 @@ class TrieGarbageCollector(
                         "L0 trie keys must never reach GC deletion: $trieKey"
                     }
                     launch(deleteDispatcher) {
-                        val timer = meterRegistry?.let { Timer.start(it) }
+                        val sample = metrics.trieDelete?.let { Timer.start() }
                         bufferPool.deleteIfExists(tableName.dataFilePath(trieKey))
                         bufferPool.deleteIfExists(tableName.metaFilePath(trieKey))
-                        deleteTimer?.let { timer?.stop(it) }
+                        metrics.trieDelete?.let { sample?.stop(it) }
                     }
                 }
             }

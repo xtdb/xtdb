@@ -19,6 +19,7 @@ import kotlinx.coroutines.selects.SelectBuilder
 import kotlinx.coroutines.selects.selectUnbiased
 import kotlinx.coroutines.withContext
 import org.apache.arrow.memory.BufferAllocator
+import xtdb.Meters
 import xtdb.NodeBase
 import xtdb.api.TransactionResult
 import xtdb.api.log.*
@@ -31,6 +32,8 @@ import xtdb.api.tx.ExternalSource
 import xtdb.api.error.Fault
 import xtdb.api.error.Interrupted
 import xtdb.types.MessageId
+import xtdb.garbage_collector.GcMetrics
+import xtdb.util.closeAll
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
@@ -180,6 +183,11 @@ class LogProcessor(
     private val replicaLog = partitionStorage.replicaLog
     private val hasExternalSource = externalSourceFactory != null
 
+    // Declared ahead of `state`, whose initialiser opens the first follower and reads them.
+    private val replicaMetrics = ReplicaMetrics(base.meterRegistry, dbName)
+    private val gcMetrics = GcMetrics(base.meterRegistry, dbName)
+    private val meters = Meters(base.meterRegistry)
+
     // The committed-role state machine — see allium/log-processor-lifecycle.allium.
     // `state` is written from two places: the transport's serialization point (commitLeader /
     // demoteLeader) and the off-thread transition coroutine (cutoverToLeader → Prepared, or its catch
@@ -219,6 +227,7 @@ class LogProcessor(
             externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
             skipTxs, dbCatalog,
             leaderTerm = termId,
+            gcMetrics = gcMetrics,
             flushTimeout = flushTimeout,
             gcDispatcher = gcDispatcher,
         )
@@ -272,7 +281,7 @@ class LogProcessor(
             allocator, partitionStorage.bufferPool, partitionState, dbName, compactor, watchers,
             dbCatalog, pendingBlock,
             hasExternalSource = hasExternalSource,
-            meterRegistry = base.meterRegistry,
+            metrics = replicaMetrics,
         )
 
         return Following(proc, scope.launch {
@@ -285,7 +294,7 @@ class LogProcessor(
     private var state: State = openFollower()
 
     init {
-        base.meterRegistry?.let { reg ->
+        meters.register { reg ->
             Gauge.builder("xtdb.log.leader", this) { if (it.state is Leading) 1.0 else 0.0 }
                 .description("1 if this node is the log leader, 0 if follower")
                 .tag("db", dbName)
@@ -403,7 +412,15 @@ class LogProcessor(
         state = openFollower(leader.proc.pendingBlock)
     }
 
-    override fun close() = state.proc.close()
+    // Removal ahead of the processor, and in a `finally`: its allocator throws on a leaked buffer, which
+    // would otherwise leave the leader gauge holding this dead LogProcessor for the life of the node.
+    override fun close() {
+        try {
+            listOf(meters, replicaMetrics, gcMetrics).closeAll()
+        } finally {
+            state.proc.close()
+        }
+    }
 
     /**
      * Run one cycle of every garbage collector owned by the leader (block + trie) and wait for

@@ -8,12 +8,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import xtdb.NodeBase
-import xtdb.api.DatabaseName
 import xtdb.api.TableRef
 import xtdb.api.log.ReplicaMessage.TriesDeleted
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.garbage_collector.BlockGarbageCollector
+import xtdb.garbage_collector.GcMetrics
 import xtdb.garbage_collector.TrieGarbageCollector
 import xtdb.trie.TrieKey
 
@@ -21,9 +21,9 @@ internal class GarbageCollector(
     private val nodeBase: NodeBase,
     partitionStorage: PartitionStorage,
     private val partitionState: PartitionState,
-    private val dbName: DatabaseName,
     private val leaderTerm: Long,
     private val replicaAppender: ReplicaLogAppender,
+    private val metrics: GcMetrics,
 
     // Base for the GCs' delete fan-out; defaults to IO in prod, sims inject the seeded dispatcher.
     gcDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -38,9 +38,8 @@ internal class GarbageCollector(
             bufferPool, blockCatalog,
             blocksToKeep = cfg.blocksToKeep,
             enabled = cfg.enabled,
-            meterRegistry = nodeBase.meterRegistry,
+            metrics = metrics,
             dispatcher = gcDispatcher,
-            dbName = dbName
         )
     }
 
@@ -62,10 +61,10 @@ internal class GarbageCollector(
         }
 
         TrieGarbageCollector(
-            bufferPool, partitionState, dbName,
+            bufferPool, partitionState,
             commitTriesDeleted, cfg.blocksToKeep, cfg.garbageLifetime,
             cfg.enabled,
-            nodeBase.meterRegistry,
+            metrics,
             dispatcher = gcDispatcher,
         )
     }

@@ -12,6 +12,7 @@ import xtdb.block.proto.txKey
 import xtdb.cache.MemoryCache
 import xtdb.catalog.BlockCatalog.Companion.latestBlock
 import xtdb.garbage_collector.BlockGarbageCollector
+import xtdb.garbage_collector.GcMetrics
 import xtdb.storage.BufferPool
 import xtdb.test.AllocatorResolver
 import xtdb.time.InstantUtil.asMicros
@@ -69,7 +70,7 @@ class BlockGarbageCollectorTest {
                     bufferPool, blockCat,
                     blocksToKeep = 3,
                     enabled = false,
-                    dbName = "xtdb",
+                    metrics = GcMetrics(null, "xtdb"),
                 )
 
                 // Validate that the latest block is correct
@@ -113,7 +114,7 @@ class BlockGarbageCollectorTest {
                         p0, BlockCatalog(p0.latestBlock),
                         blocksToKeep = 3,
                         enabled = false,
-                        dbName = "xtdb",
+                        metrics = GcMetrics(null, "xtdb"),
                     )
 
                     gc.garbageCollectBlocks()

@@ -1,6 +1,7 @@
 package xtdb
 
 import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.Meter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tag
 import io.micrometer.core.instrument.binder.jvm.*
@@ -131,5 +132,44 @@ object Metrics {
             scope?.close()
             span?.end()
         }
+    }
+}
+
+/**
+ * The meters one object owns — registered through [register], and removed from the registry by [close].
+ *
+ * Micrometer keeps the first registration for a meter ID and discards every later one, so a meter left
+ * behind by a dead owner shadows its replacement. For a gauge bound to an object that means reading the
+ * dead owner's state for the rest of the node's life, rather than the live owner's.
+ */
+class Meters(private val registry: MeterRegistry?) : AutoCloseable {
+
+    private val owned = mutableListOf<Meter>()
+
+    fun <M : Meter> register(build: (MeterRegistry) -> M): M? =
+        registry?.let { reg ->
+            val incumbents = reg.meters.toSet()
+
+            // `build` hands back an incumbent rather than registering ours where the ID is taken — a meter
+            // some owner didn't get to remove. Evicting it and building again is what stops one leak
+            // shadowing every later owner: what we return has to be the meter the registry now holds.
+            build(reg)
+                .let { if (it in incumbents) { reg.removeWithDerived(it); build(reg) } else it }
+                .also(owned::add)
+        }
+
+    override fun close() {
+        registry?.let { reg -> owned.forEach { reg.removeWithDerived(it) } }
+        owned.clear()
+    }
+
+    // A percentile-publishing timer or summary also registers a `<name>.percentile` gauge per phi, as
+    // meters in their own right that `remove` doesn't reach — and they read the parent being removed. The
+    // tag check keeps the sweep off another database's meters.
+    private fun MeterRegistry.removeWithDerived(meter: Meter) {
+        remove(meter)
+
+        meters.filter { it.id.name.startsWith("${meter.id.name}.") && it.id.tags.containsAll(meter.id.tags) }
+            .forEach { remove(it) }
     }
 }

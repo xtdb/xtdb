@@ -1,6 +1,7 @@
 package xtdb
 
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import io.micrometer.tracing.otel.bridge.OtelTracer
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.memory.RootAllocator
@@ -27,6 +28,9 @@ class NodeBase(
     val remotes: Map<RemoteAlias, Remote>,
     val compactor: Compactor,
     val querySource: IQuerySource,
+
+    /** Untagged, so node-scoped: a per-database owner would collide on the single meter ID. */
+    val txOpTimer: Timer?,
 ) : AutoCloseable {
 
     override fun close() {
@@ -100,6 +104,12 @@ class NodeBase(
                     remotes = remotes,
                     compactor = compactor,
                     querySource = querySource,
+                    txOpTimer = meterReg?.let { reg ->
+                        Timer.builder("tx.op.timer")
+                            .publishPercentiles(0.75, 0.85, 0.95, 0.98, 0.99, 0.999)
+                            .description("indicates the timing and number of transactions")
+                            .register(reg)
+                    },
                 )
             }
     }
