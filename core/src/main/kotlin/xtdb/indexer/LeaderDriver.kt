@@ -23,7 +23,7 @@ import xtdb.types.MessageId
  * CancellationException unwinds `processRecords` as cancellation, while anything else reaches the Database
  * scope's `CoroutineExceptionHandler`, which calls `watchers.notifyError`.
  */
-private fun Throwable?.asCancellation(): CancellationException =
+internal fun Throwable?.asCancellation(): CancellationException =
     this as? CancellationException
         ?: CancellationException("leader term closed").also { c -> this?.let { c.initCause(it) } }
 
@@ -72,19 +72,14 @@ internal interface SourceBatches {
 /**
  * The leader term's observable external effects, behind one seam.
  *
- * The [LeaderLogProcessor] keeps the concurrency that drives these — the persister select loop, the
- * background append, the staging resolver — and reaches the outside world only through here. That
- * makes the leader simulable: a mock driver can stall an upload, fail an append, or feed back a
- * record from a newer term, none of which the real logs express in memory.
+ * These are driven from the log processor's work loop, and reach the outside world only through
+ * here. That makes a leader simulable: a mock driver can stall an upload or fail an append, neither
+ * of which the real logs express in memory.
  *
  * Deliberately narrow. In-memory state mutations that happen to sit on the leader's path —
  * `trieCatalog`, `dbCatalog`, `watchers`, the GC signals — stay on the processor, as do reads of
  * in-memory state (`liveIndex.isFull()`, `blockCatalog.currentBlockIndex`). A mock holds real state
  * objects, so those reads stay consistent with what the driver has applied.
- *
- * The replica-log tail ([tailReplica]) is here despite being a read: since #5817 it is how the leader
- * learns its own writes landed, and where the term fence bites, so a sim has to be able to feed it a
- * superseding record that the real in-memory log would never produce on its own.
  */
 internal interface LeaderDriver : AutoCloseable {
 
@@ -98,13 +93,6 @@ internal interface LeaderDriver : AutoCloseable {
      * an append that fails.
      */
     suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata
-
-    /**
-     * Tail our own replica log from [afterMsgId], handing each batch of records back for application.
-     * Suspends until cancelled — a plain tail, independent of the source-log group subscription that
-     * drives leader election.
-     */
-    suspend fun tailReplica(afterMsgId: MessageId, process: suspend (List<Log.Record<ReplicaMessage>>) -> Unit)
 
     /** Commit a resolved tx's writes into the durable live index. */
     suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>)
@@ -157,10 +145,6 @@ internal class RealLeaderDriver(
 
     override suspend fun appendToReplica(msg: ReplicaMessage): Log.MessageMetadata =
         replicaLog.appendMessage(msg)
-
-    override suspend fun tailReplica(
-        afterMsgId: MessageId, process: suspend (List<Log.Record<ReplicaMessage>>) -> Unit,
-    ) = replicaLog.tailAll(afterMsgId) { records -> process(records) }
 
     override suspend fun applyTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) =
         liveIndex.commitTx(txKey, tables)

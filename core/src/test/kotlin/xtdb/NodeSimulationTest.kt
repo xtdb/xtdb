@@ -125,7 +125,6 @@ class NodeSimulationTest : SimulationTestBase() {
             val compactorForDb = compactor.openForDatabase(compactorScope, allocator, partitionStorage, partitionState, Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1))
             val gcScope = CoroutineScope(dispatcher)
             val garbageCollector = TrieGarbageCollector(
-                gcScope,
                 sharedBufferPool, partitionState, "xtdb",
                 commitTriesDeleted = { tableName, trieKeys ->
                     // No replica log in the mock — apply the catalog mutation directly so the
@@ -136,7 +135,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 garbageLifetime = garbageLifetime,
                 enabled = false,
                 dispatcher = dispatcher,
-            )
+            ).also { gcScope.launch { it.run() } }
             MockDatabase("xtdb", allocator, sharedBufferPool, trieCatalog, blockCatalog, compactor, compactorForDb, garbageCollector, gcScope, compactorScope)
         }
     }

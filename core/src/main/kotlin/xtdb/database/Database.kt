@@ -195,7 +195,7 @@ class Database(
      * Intended for tests and manual admin pokes; bypasses the `enabled` flag.
      */
     fun gcAll() {
-        partitions.forEach { it.logProcessor?.gcAll() }
+        partitions.forEach { it.logProcessor?.awaitNoGarbageBlocking() }
     }
 
     companion object {

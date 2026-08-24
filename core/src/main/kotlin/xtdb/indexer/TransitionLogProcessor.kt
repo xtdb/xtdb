@@ -32,7 +32,7 @@ class TransitionLogProcessor(
     private val dbCatalog: Database.Catalog?,
     private val hasExternalSource: Boolean,
     private val termId: Long = 0,
-) : LogProcessor.Processor<ReplicaMessage> {
+) : AutoCloseable {
 
     private val blockCatalog = partitionState.blockCatalog
     private val trieCatalog = partitionState.trieCatalog
@@ -127,7 +127,7 @@ class TransitionLogProcessor(
         }
     }
 
-    override suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
+    suspend fun processRecords(records: List<Log.Record<ReplicaMessage>>) {
         LOG.debug("[$dbName] transition: processing ${records.size} records")
 
         for (record in records) {

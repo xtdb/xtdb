@@ -35,6 +35,8 @@ import xtdb.indexer.LeaderDriver
 import xtdb.indexer.LeaderLogProcessor
 import xtdb.indexer.LiveIndex
 import xtdb.indexer.RealLeaderDriver
+import xtdb.indexer.ReplicaLogAppender
+import xtdb.indexer.runLeaderTerm
 import xtdb.storage.MemoryStorage
 import xtdb.tx.TxOpts
 import xtdb.util.closeAll
@@ -126,15 +128,26 @@ class ExternalSourceTest {
         )
 
         val crashLogger = mockk<CrashLogger>(relaxed = true)
+        val replicaAppender = ReplicaLogAppender(driver)
 
         return LeaderLogProcessor(
             allocator, nodeBase, partitionStorage, crashLogger,
-            partitionState, "test", driver, watchers, extSource,
+            partitionState, "test", driver, watchers, replicaAppender, extSource,
             skipTxs = emptySet(), dbCatalog = null,
-            afterReplicaMsgId = -1,
             flushTimeout = IndexerConfig().flushDuration,
-            scope = backgroundScope
-        ).also(leadersToClose::add)
+        ).also { proc ->
+            leadersToClose += proc
+            backgroundScope.launch {
+                launch {
+                    partitionStorage.replicaLog.tailAll(-1) { records ->
+                        records.forEach { proc.queueReplicaMessage(it) }
+                    }
+                }
+                launch { proc.gc.runGc() }
+                proc.extSrcProc?.let { extSrcProc -> launch { extSrcProc.run() } }
+                runLeaderTerm("test", watchers, proc, replicaAppender)
+            }
+        }
     }
 
     @Test
@@ -197,7 +210,7 @@ class ExternalSourceTest {
 
         val now = Instant.now()
 
-        lp.processRecords(
+        lp.srcLogProc.processRecords(
             listOf(
                 Log.Record(0, 0, now, SourceMessage.FlushBlock(-1))
             )
