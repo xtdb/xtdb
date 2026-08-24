@@ -160,10 +160,15 @@ interface Compactor : AutoCloseable {
         private val jobCalculator: JobCalculator,
         private val ignoreSignalBlock: Boolean,
         threadCount: Int,
-        private val dispatcher: CoroutineDispatcher = Dispatchers.Default
+        private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO
     ) : Compactor {
 
-        private val jobsDispatcher = dispatcher.limitedParallelism(threadCount, "compactor")
+        // The IO in a job isn't a trailing write that could be hoisted out — segment reads, merge
+        // spills, trie writes and the publishing append run throughout, interleaved with the merge's
+        // CPU work too finely to separate — so the whole job goes on the IO pool, and only the
+        // orchestration loop stays on [dispatcher].
+        private val jobsDispatcher = ioDispatcher.limitedParallelism(threadCount, "compactor")
         private val jobsSemaphore = Semaphore(threadCount)
 
         override fun openForDatabase(scope: CoroutineScope, allocator: BufferAllocator, partitionStorage: PartitionStorage, partitionState: PartitionState, watchers: Watchers) = object : ForDatabase {

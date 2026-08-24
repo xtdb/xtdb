@@ -115,7 +115,10 @@ class NodeSimulationTest : SimulationTestBase() {
         dbs = List(numberOfSystems) {
             val trieCatalog = createTrieCatalog()
             val blockCatalog = BlockCatalog(sharedBufferPool.latestBlock)
-            val compactor = Compactor.Impl(compactorDriverFactory, null, jobCalculator, false, 2, dispatcher)
+            val compactor = Compactor.Impl(
+                compactorDriverFactory, null, jobCalculator, false, 2,
+                dispatcher = dispatcher, ioDispatcher = dispatcher
+            )
             val partitionStorage = PartitionStorage(DatabaseLogs(null, null), sharedBufferPool, null)
             val partitionState = PartitionState(blockCatalog, null, trieCatalog, null)
             val compactorScope = CoroutineScope(dispatcher)

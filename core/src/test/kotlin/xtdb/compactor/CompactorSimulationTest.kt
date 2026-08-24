@@ -303,7 +303,10 @@ class CompactorSimulationTest : SimulationTestBase() {
                 name = "xtdb",
                 trieCatalog = createTrieCatalog(),
                 bufferPool = sharedBufferPool,
-                compactor = Compactor.Impl(mockDriverFactory, null, jobCalculator, false, 2, dispatcher),
+                compactor = Compactor.Impl(
+                    mockDriverFactory, null, jobCalculator, false, 2,
+                    dispatcher = dispatcher, ioDispatcher = dispatcher
+                ),
             )
         }
     }
