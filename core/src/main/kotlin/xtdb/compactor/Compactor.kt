@@ -81,6 +81,7 @@ interface Compactor : AutoCloseable {
                         private val log = partitionStorage.sourceLog
                         private val bp = partitionStorage.bufferPool
                         private val mm = partitionStorage.metadataManager
+                        private val tableCat = partitionState.tableCatalog
 
                         private val trieWriter = PageTrieWriter(al, bp, calculateBlooms = true)
                         private val segMerge = SegmentMerge(al)
@@ -99,7 +100,9 @@ interface Compactor : AutoCloseable {
 
                         override suspend fun executeJob(job: Job): TriesAdded =
                             try {
-                                job.trieKeys.map { BufferPoolSegment(al, bp, mm, job.table, it) }.useAll { segs ->
+                                val slug = tableCat.slug(job.table)
+
+                                job.trieKeys.map { BufferPoolSegment(al, bp, mm, slug, it) }.useAll { segs ->
                                     val recencyPartitioning =
                                         if (job.partitionedByRecency) SegmentMerge.RecencyPartitioning.Partition
                                         else SegmentMerge.RecencyPartitioning.Preserve(job.outputTrieKey.recency)
@@ -115,7 +118,7 @@ interface Compactor : AutoCloseable {
 
                                                             val (dataFileSize, trieMetadata) =
                                                                 trieWriter.writePageTree(
-                                                                    job.table, trieKey,
+                                                                    slug, trieKey,
                                                                     loader, it.leaves.asTree,
                                                                     pageSize
                                                                 )

@@ -5,8 +5,7 @@ import xtdb.log.proto.TrieDetails
 import xtdb.storage.BufferPool
 import xtdb.trie.TrieCatalog
 import xtdb.api.TableRef
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
+import xtdb.table.TableSlug
 import xtdb.trie.TrieKey
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.requiringResolve
@@ -25,8 +24,8 @@ class SimulationTestUtils {
         fun addTriesToBufferPool(bufferPool: BufferPool, tableRef: TableRef, tries: List<TrieDetails>) {
             tries.forEach { trie ->
                 val trieKey = trie.trieKey
-                bufferPool.putObjectSync(tableRef.dataFilePath(trieKey), ByteBuffer.allocate(1))
-                bufferPool.putObjectSync(tableRef.metaFilePath(trieKey), ByteBuffer.allocate(1))
+                bufferPool.putObjectSync(TableSlug.of(tableRef).dataFilePath(trieKey), ByteBuffer.allocate(1))
+                bufferPool.putObjectSync(TableSlug.of(tableRef).metaFilePath(trieKey), ByteBuffer.allocate(1))
             }
         }
 

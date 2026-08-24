@@ -132,7 +132,9 @@ class LiveIndex private constructor(
             for ((ref, rel) in tables) {
                 val liveTable =
                     this@LiveIndex.tables.getOrPut(ref) {
-                        LiveTable(allocator, ref, blockIdx, rowCounter, liveTrieFactory)
+                        // Pinned at creation, so the L0 trie this table writes at the block boundary lands
+                        // under the same slug `BlockUploader` then records for it.
+                        LiveTable(allocator, ref, tableCatalog.slug(ref), blockIdx, rowCounter, liveTrieFactory)
                     }
                 liveTable.importData(rel)
             }

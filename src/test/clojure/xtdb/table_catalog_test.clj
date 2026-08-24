@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.object-store :as os]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -13,8 +14,11 @@
            [java.time Instant]
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb.block.proto TableBlock)
+           (xtdb.block.proto Block TableBlock)
+           (xtdb.catalog TableCatalog)
            (xtdb.log.proto TrieDetails)
+           (xtdb.storage BufferPool)
+           (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
@@ -40,7 +44,7 @@
 
         (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4353)
                   (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4435)]
-                 (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
+                 (.listAllObjects bp (table-cat/->table-block-dir (TableSlug/of #xt/table foo)))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
                                                    TableBlock/parseFrom
@@ -214,3 +218,46 @@
                                       (update partition
                                               :tries (partial map (comp :trie-key trie/<-trie-details))))
                                     partitions))))))))))
+
+(deftest a-block-carrying-names-alone-resolves-the-registry-its-files-are-already-under
+  (let [names ["public/docs" "public/foo" "xt/txs"]
+        entries (map-indexed (fn [idx nm] (TableEntry/mint (inc idx) (table/->ref nm)))
+                             (sort names))
+
+        ;; UNUSED throws on every storage call, so this also pins that resolving the registry reads nothing back.
+        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. BufferPool/UNUSED block)))))]
+
+    (t/is (= ["public$docs" "public$foo" "xt$txs"]
+             (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
+          "a minted slug is the escaped table name, so nothing already on disk moves")
+
+    (t/is (= entries
+             (->entries (-> (Block/newBuilder) (.addAllTableNames names) (.build))))
+          "names alone resolve to slugs and to oids ordered by name")
+
+    (t/is (= entries
+             (->entries (-> (Block/newBuilder)
+                            (.addAllTableNames names)
+                            (.addAllTables (map #(.toProto ^TableEntry %) entries))
+                            (.build))))
+          "a recorded registry resolves to the same entries")))
+
+(deftest resolving-a-registry-less-block-depends-on-nothing-but-that-block
+  (let [->block (fn [block-idx names]
+                  (-> (Block/newBuilder) (.setBlockIndex block-idx) (.addAllTableNames names) (.build)))
+        ->oids (fn [^TableCatalog cat]
+                 (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
+                       (.getEntries (.snap cat))))
+
+        b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
+
+        ;; started before `orders` existed, then caught up
+        caught-up (doto (TableCatalog. BufferPool/UNUSED (->block 10 ["public/docs" "xt/txs"]))
+                    (.refresh b11 {}))
+
+        started-at-b11 (TableCatalog. BufferPool/UNUSED b11)]
+
+    (t/is (= {"public/docs" 1, "public/orders" 2, "xt/txs" 3} (->oids started-at-b11)))
+
+    (t/is (= (->oids started-at-b11) (->oids caught-up))
+          "two nodes reading one registry-less block agree, whatever each of them read before it")))

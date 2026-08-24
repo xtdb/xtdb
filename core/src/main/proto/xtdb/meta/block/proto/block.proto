@@ -33,10 +33,21 @@ message TxKey {
     int64 system_time = 2;
 }
 
+message TableEntry {
+    uint32 oid = 1;
+    string schema_name = 2;
+    string table_name = 3;
+    // The directory under `tables/` holding this table's files, frozen when the table is first
+    // recorded — renaming the table does not move them. A table already on disk before this field
+    // existed takes its escaped name, which is what keeps its existing files reachable. See #4037.
+    string slug = 4;
+}
+
 message Block {
     int64 block_index = 1;
     TxKey latest_completed_tx = 2;
     int64 latest_processed_msg_id = 4;
+    // Superseded by `tables`, and still written for readers that predate it. See #4037.
     repeated string table_names = 3;
 
     // present iff it's the cluster's primary ('xtdb') database
@@ -51,4 +62,6 @@ message Block {
     // the leader term that produced this block's boundary; followers seed their
     // read-side term fence from it. Default 0 for blocks written before this field. See #5817.
     int64 term_id = 8;
+
+    repeated TableEntry tables = 9;
 }

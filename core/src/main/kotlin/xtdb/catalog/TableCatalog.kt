@@ -27,12 +27,13 @@ import xtdb.block.proto.txKey
 import xtdb.database.proto.DatabaseConfig
 import xtdb.indexer.LiveTable
 import xtdb.storage.BufferPool
+import xtdb.table.TableEntry
+import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
 import xtdb.time.InstantUtil.asMicros
 import xtdb.time.microsAsInstant
 import xtdb.trie.BlockIndex
 import xtdb.trie.ColumnName
-import xtdb.trie.Trie.tablePath
 import xtdb.types.MessageId
 import xtdb.util.HLL
 import xtdb.util.StringUtil.asLexHex
@@ -45,6 +46,17 @@ import java.nio.ByteBuffer
 import java.nio.file.Path
 import kotlin.io.path.extension
 
+/**
+ * A block written before the registry existed carries names alone, and every table in it is on disk under
+ * its escaped name — so that is the slug each takes, and their files stay where they are.
+ *
+ * Oids come from the sorted names rather than from list order: the proto's order comes from a Set, so it
+ * isn't stable, and every node has to derive the same registry from the same bytes.
+ */
+private fun Block.tableEntries(): List<TableEntry> =
+    tablesList.takeIf { it.isNotEmpty() }?.map { TableEntry.fromProto(it) }
+        ?: tableNamesList.sorted().mapIndexed { idx, name -> TableEntry.mint(idx + 1L, fromSchemaAndTable(name)) }
+
 // The proto is the storage format, so this is the only place that reads its presence flags: everything
 // downstream sees ordinary Kotlin nullability.
 private fun Block.asBlockDetails() = BlockDetails(
@@ -55,7 +67,7 @@ private fun Block.asBlockDetails() = BlockDetails(
     boundaryReplicaMsgId = boundaryReplicaMsgId.takeIf { hasBoundaryReplicaMsgId() },
     termId = termId,
     externalSourceToken = takeIf { it.hasExternalSourceToken() }?.externalSourceToken?.toByteArray(),
-    tableNames = tableNamesList.map { fromSchemaAndTable(it) },
+    tables = tableEntries(),
     secondaryDatabases = secondaryDatabasesMap,
 )
 
@@ -105,6 +117,23 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         /** The historical half's contribution — an unknown table has written nothing. */
         fun contributedType(table: TableRef, col: ColumnName): VectorType =
             tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing
+
+        val entries: List<TableEntry> get() = block?.tables.orEmpty()
+
+        private val entriesByTable by lazy { entries.associateBy { it.table } }
+
+        fun entry(table: TableRef): TableEntry? = entriesByTable[table]
+
+        /**
+         * Where [table]'s files live.
+         *
+         * Resolving through a pinned [State] is what keeps a query's paths consistent with the trie state it
+         * planned against: the block it read is the block whose slugs it uses.
+         *
+         * A table the registry doesn't hold has yet to reach a block, so nothing of it is on disk under any
+         * other name and the derived slug is the one its first write will record.
+         */
+        fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
     }
 
     private val _state = MutableStateFlow(State(initialBlock?.asBlockDetails(), emptyMap()))
@@ -136,7 +165,30 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
 
     val externalSourceToken: ExternalSourceToken? get() = snap().block?.externalSourceToken
 
-    val allTables: List<TableRef> get() = snap().block?.tableNames.orEmpty()
+    val allTables: List<TableRef> get() = snap().entries.map { it.table }
+
+    fun slug(table: TableRef): TableSlug = snap().slug(table)
+
+    /**
+     * The registry for a block covering [tables]: the entry this catalog already holds for each, carried
+     * forward verbatim, and a freshly minted one for each table it doesn't.
+     *
+     * Carrying forward rather than recomputing is what freezes a slug for the table's lifetime. A leader
+     * that re-derived them would move every path the moment the minting algorithm changed, orphaning
+     * everything already written.
+     *
+     * Sorted, so that the same table set yields the same block bytes whichever node wrote it.
+     */
+    fun resolveTables(tables: Collection<TableRef>): List<TableEntry> {
+        val existing = snap().entries.associateBy { it.table }
+        val nextOid = (existing.values.maxOfOrNull { it.oid } ?: 0L) + 1
+
+        val minted = tables.filterNot { it in existing }.sortedBy { it.schemaAndTable }
+            .mapIndexed { idx, table -> TableEntry.mint(nextOid + idx, table) }
+            .associateBy { it.table }
+
+        return tables.sortedBy { it.schemaAndTable }.map { existing[it] ?: minted.getValue(it) }
+    }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
 
@@ -163,7 +215,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     fun loadTables() {
         val snap = snap()
         val blockIndex = snap.blockIdx ?: return
-        val tables = loadTablesFromStorage(bufferPool, snap.block?.tableNames.orEmpty(), blockIndex)
+        val tables = loadTablesFromStorage(bufferPool, snap.entries, blockIndex)
 
         _state.update { it.copy(tables = tables) }
     }
@@ -202,7 +254,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         latestCompletedTx: TransactionKey?,
         latestProcessedMsgId: MessageId,
         boundaryReplicaMsgId: MessageId?,
-        tables: Collection<TableRef>,
+        tables: Collection<TableEntry>,
         secondaryDatabases: Map<String, DatabaseConfig>?,
         externalSourceToken: ExternalSourceToken? = null,
         termId: Long = LeaderTerm.NONE,
@@ -222,7 +274,10 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             }
             this.latestProcessedMsgId = latestProcessedMsgId
             boundaryReplicaMsgId?.let { this.boundaryReplicaMsgId = it }
-            this.tableNames.addAll(tables.map { it.sym.toString() })
+            // table_names is how a reader predating the registry finds the tables, so it keeps being
+            // written. See #4037.
+            this.tableNames.addAll(tables.map { it.table.sym.toString() })
+            this.tables.addAll(tables.map { it.toProto() })
             secondaryDatabases?.let { this.secondaryDatabases.putAll(it) }
             externalSourceToken?.let { this.externalSourceToken = ByteString.copyFrom(it) }
             this.termId = termId
@@ -237,13 +292,13 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             blocksPath.resolve("b${blockIndex.asLexHex}.binpb")
 
         @JvmStatic
-        fun tableBlockPath(table: TableRef, blockIndex: BlockIndex): Path =
+        fun tableBlockPath(table: TableSlug, blockIndex: BlockIndex): Path =
             table.tablePath.resolve(blocksPath).resolve("b${blockIndex.asLexHex}.binpb")
 
         val BufferPool.allBlockFiles: Iterable<ObjectStore.StoredObject>
             get() = listAllObjects(blocksPath).filter { it.key.fileName.extension == "binpb" }
 
-        fun BufferPool.tableBlocks(table: TableRef): Iterable<ObjectStore.StoredObject> =
+        fun BufferPool.tableBlocks(table: TableSlug): Iterable<ObjectStore.StoredObject> =
             listAllObjects(table.tablePath.resolve(blocksPath))
 
         @JvmStatic
@@ -265,10 +320,13 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
             )
 
         internal fun loadTablesFromStorage(
-            bufferPool: BufferPool, tables: List<TableRef>, blockIndex: BlockIndex
+            bufferPool: BufferPool, entries: List<TableEntry>, blockIndex: BlockIndex
         ): Map<TableRef, TableMeta> =
-            tables.associateWith { table ->
-                parseTableBlock(TableBlock.parseFrom(bufferPool.getByteArray(tableBlockPath(table, blockIndex))))
+            entries.associate { entry ->
+                entry.table to
+                        parseTableBlock(
+                            TableBlock.parseFrom(bufferPool.getByteArray(tableBlockPath(entry.slug, blockIndex)))
+                        )
             }
 
         /** Folds a block's per-table deltas into the accumulated catalog. */

@@ -71,14 +71,15 @@
 
              (let [block-files [(TableCatalog/blockFilePath block-idx)]
                    table-block-files (for [^TableRef table tables]
-                                       (-> (Trie/getTablePath table)
+                                       (-> (.getTablePath (.slug table-cat table))
                                            (table-cat/->table-block-metadata-obj-key block-idx)))
                    trie-files (for [^TableRef table tables
                                     :let [trie-keys (all-trie-keys trie-cat table)
-                                          _ (log/infof "Table %s: %d active trie files" (pr-str table) (count trie-keys))]
+                                          _ (log/infof "Table %s: %d active trie files" (pr-str table) (count trie-keys))
+                                          slug (.slug table-cat table)]
                                     ^String trie-key trie-keys
-                                    path [(Trie/metaFilePath table trie-key)
-                                          (Trie/dataFilePath table trie-key)]]
+                                    path [(.metaFilePath slug trie-key)
+                                          (.dataFilePath slug trie-key)]]
                                 path)
                    files-to-copy (vec (concat block-files table-block-files trie-files))]
 

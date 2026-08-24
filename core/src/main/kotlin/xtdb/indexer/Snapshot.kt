@@ -42,6 +42,13 @@ class Snapshot(
     private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
+
+    /**
+     * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
+     * in the block whose trie state it planned against.
+     */
+    fun slug(table: TableRef) = tableCatSnap.slug(table)
+
     interface Source {
         fun openSnapshot(minSystemTime: Instant?): Snapshot
     }

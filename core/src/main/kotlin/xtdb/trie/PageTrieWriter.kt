@@ -7,7 +7,7 @@ import xtdb.arrow.Relation
 import xtdb.arrow.VectorReader
 import xtdb.compactor.PageTree
 import xtdb.log.proto.TrieMetadata
-import xtdb.api.TableRef
+import xtdb.table.TableSlug
 
 private typealias Selection = IntArray
 
@@ -50,7 +50,7 @@ class PageTrieWriter(
     }
 
     suspend fun writePageTree(
-        table: TableRef, trieKey: TrieKey,
+        table: TableSlug, trieKey: TrieKey,
         loader: Relation.Loader, pageTree: PageTree?,
         pageSize: Int
     ): Pair<FileSize, TrieMetadata?> =

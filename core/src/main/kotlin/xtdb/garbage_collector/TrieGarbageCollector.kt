@@ -12,10 +12,9 @@ import xtdb.api.DatabaseName
 import xtdb.database.PartitionState
 import xtdb.storage.BufferPool
 import xtdb.api.TableRef
+import xtdb.table.TableEntry
 import xtdb.time.microsAsInstant
 import xtdb.trie.Trie
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.TrieKey
 import xtdb.util.debug
 import xtdb.util.logger
@@ -137,21 +136,22 @@ class TrieGarbageCollector(
         LOGGER.debug("Garbage collecting tries older than $asOf")
 
         supervisorScope {
-            for (tableName in tableCatalog.allTables) {
+            for (entry in tableCatalog.snap().entries) {
                 launch(tableDispatcher) {
                     try {
-                        garbageCollectTable(tableName, asOf)
+                        garbageCollectTable(entry, asOf)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        LOGGER.warn(e, "Trie GC failed for table $tableName")
+                        LOGGER.warn(e, "Trie GC failed for table ${entry.table}")
                     }
                 }
             }
         }
     }
 
-    private suspend fun garbageCollectTable(tableName: TableRef, asOf: Instant) {
+    private suspend fun garbageCollectTable(entry: TableEntry, asOf: Instant) {
+        val tableName = entry.table
         val garbageTries = trieCatalog.garbageTries(tableName, asOf)
         if (garbageTries.isEmpty()) return
 
@@ -175,8 +175,8 @@ class TrieGarbageCollector(
                     }
                     launch(deleteDispatcher) {
                         val timer = meterRegistry?.let { Timer.start(it) }
-                        bufferPool.deleteIfExists(tableName.dataFilePath(trieKey))
-                        bufferPool.deleteIfExists(tableName.metaFilePath(trieKey))
+                        bufferPool.deleteIfExists(entry.slug.dataFilePath(trieKey))
+                        bufferPool.deleteIfExists(entry.slug.metaFilePath(trieKey))
                         deleteTimer?.let { timer?.stop(it) }
                     }
                 }

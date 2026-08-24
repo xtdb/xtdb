@@ -1,8 +1,8 @@
 package xtdb.api.tx
 
-import xtdb.api.TableRef
 import xtdb.api.TransactionKey
 import xtdb.database.proto.DatabaseConfig
+import xtdb.table.TableEntry
 import xtdb.trie.BlockIndex
 import xtdb.types.MessageId
 
@@ -22,6 +22,6 @@ data class BlockDetails(
     // term-fencing (see #5817)
     val termId: Long,
     val externalSourceToken: ExternalSourceToken?,
-    val tableNames: List<TableRef>,
+    val tables: List<TableEntry>,
     val secondaryDatabases: Map<String, DatabaseConfig>,
 )

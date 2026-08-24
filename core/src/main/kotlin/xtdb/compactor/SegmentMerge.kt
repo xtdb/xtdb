@@ -20,13 +20,12 @@ import xtdb.segment.MergeTask
 import xtdb.segment.Segment
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.api.TableRef
+import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.EventRowPointer
 import xtdb.trie.Trie
-import xtdb.trie.Trie.dataFilePath
 import xtdb.trie.Trie.dataRelSchema
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
 import xtdb.arrow.withName
@@ -241,11 +240,11 @@ internal class SegmentMerge(private val al: BufferAllocator) : AutoCloseable {
  */
 
 private class LocalSegment(
-    private val al: BufferAllocator, table: TableRef, dir: Path, trieKey: TrieKey,
+    private val al: BufferAllocator, slug: TableSlug, dir: Path, trieKey: TrieKey,
 ) : Segment<ArrowHashTrie.Leaf>, AutoCloseable {
 
-    private val dataFile = dir.resolve(table.dataFilePath(trieKey))
-    private val metaFile = dir.resolve(table.metaFilePath(trieKey))
+    private val dataFile = dir.resolve(slug.dataFilePath(trieKey))
+    private val metaFile = dir.resolve(slug.metaFilePath(trieKey))
     private val parsedTrieKey = Trie.parseKey(trieKey)
     private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
 
@@ -280,14 +279,14 @@ private class LocalSegment(
 
 internal fun main() {
     val dir = "/tmp/downloads/compactor-error".asPath
-    val table = fromSchemaAndTable("foo")
+    val slug = TableSlug.of(fromSchemaAndTable("foo"))
     val trieKeys = listOf("l01-rc-b2c74", "l00-rc-b2c75")
 
     try {
         RootAllocator().use { al ->
             SegmentMerge(al).use { segMerge ->
                 trieKeys
-                    .safeMap { trieKey -> LocalSegment(al, table, dir, trieKey) }
+                    .safeMap { trieKey -> LocalSegment(al, slug, dir, trieKey) }
                     .useAll { segments ->
                         segMerge.mergeSegmentsSync(
                             segments, null, SegmentMerge.RecencyPartitioning.Partition

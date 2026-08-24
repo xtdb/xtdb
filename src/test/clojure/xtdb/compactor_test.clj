@@ -11,6 +11,7 @@
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.object-store :as os]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.table-catalog-test :as table-test]
             [xtdb.test-util :as tu]
@@ -23,15 +24,16 @@
            [xtdb.block.proto TableBlock]
            (xtdb.compactor RecencyPartition)
            xtdb.segment.BufferPoolSegment
+           (xtdb.table TableSlug)
            xtdb.storage.LocalStorage))
 
 (t/use-fixtures :each tu/with-allocator tu/with-mock-clock tu/with-node)
 
-(defn table-path ^java.nio.file.Path [node table]
-  (-> (db/primary-db node)
-      ^LocalStorage (.getBufferPool)
-      (.getRootPath)
-      (.resolve (str "tables/" table))))
+(defn table-path ^java.nio.file.Path [node table-name]
+  (let [db (db/primary-db node)]
+    (-> ^LocalStorage (.getBufferPool db)
+        (.getRootPath)
+        (.resolve (.getTablePath (.slug (.getTableCatalog db) (table/->ref table-name)))))))
 
 (t/deftest test-l1-compaction
   (let [node-dir (util/->path "target/compactor/test-l1-compaction")]
@@ -72,7 +74,7 @@
           (t/is (= (range 500) (q)))
 
           (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction")))
-                                   (table-path node "public$foo")
+                                   (table-path node "public/foo")
                                    #"l01-rc-(.+)\.arrow"))))))
 
 (t/deftest test-l1-compaction-by-recency
@@ -121,10 +123,10 @@
         (t/is (= [{:row-count 200}] (xt/q node "SELECT COUNT(*) row_count FROM prices FOR ALL VALID_TIME")))
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/readings")))
-                                 (table-path node "public$readings") #"l01-(.+)\.arrow")
+                                 (table-path node "public/readings") #"l01-(.+)\.arrow")
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l1-compaction-by-recency/prices")))
-                                 (table-path node "public$prices") #"l01-(.+)\.arrow")))))
+                                 (table-path node "public/prices") #"l01-(.+)\.arrow")))))
 
 (t/deftest test-l2+-compaction
   (let [node-dir (util/->path "target/compactor/test-l2+-compaction")]
@@ -165,7 +167,7 @@
           (t/is (= (set (range 2000)) (set (q))))
 
           (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction")))
-                                   (table-path node "public$foo")
+                                   (table-path node "public/foo")
                                    #"l(?!00|01)\d\d-(.+)\.arrow"))))))
 
 (t/deftest test-l2+-compaction-by-recency
@@ -196,11 +198,11 @@
         (c/compact-all! node #xt/duration "PT5S")
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/readings")))
-                                 (table-path node "public$readings")
+                                 (table-path node "public/readings")
                                  #"l(?!00|01)(.+)\.arrow")
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-l2+-compaction-by-recency/prices")))
-                                 (table-path node "public$prices")
+                                 (table-path node "public/prices")
                                  #"l(?!00|01)(.+)\.arrow")))))
 
 (defn bad-uuid-seq
@@ -231,13 +233,13 @@
             (xt-log/sync-node node #xt/duration "PT5S")
             (c/compact-all! node (Duration/ofSeconds 5))
 
-            (let [^String table-name "foo"
-                  meta-files (->> (.listAllObjects bp (trie/->table-meta-dir table-name))
+            (let [slug (TableSlug/of #xt/table foo)
+                  meta-files (->> (.listAllObjects bp (.metaFileDir slug))
                                   (mapv (comp :key os/<-StoredObject)))]
 
-              #_ ; TODO this doseq seems to return nothing, so nothing gets tested?
+              #_ ; TODO discarded — enabling it needs the doseq's assertions checked over
               (doseq [{:keys [^String trie-key]} (map trie/parse-trie-file-path meta-files)]
-                (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr table-name trie-key nil)
+                (util/with-open [seg (BufferPoolSegment. tu/*allocator* bp meta-mgr slug trie-key nil)
                                  seg-meta (.openMetadataSync seg)]
                   (doseq [leaf (.getLeaves (.getTrie seg-meta))
                           :let [page (.page seg-meta leaf)
@@ -305,7 +307,7 @@
                                   GROUP BY _id"))))
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/lose-data-on-compaction")))
-                                 (table-path node "public$docs")
+                                 (table-path node "public/docs")
                                  #"(.+)\.arrow")))))
 
 (t/deftest test-compaction-promotion-bug-3673
@@ -395,7 +397,7 @@
                    (set (xt/q node "SELECT _id FROM foo FOR ALL VALID_TIME FOR ALL SYSTEM_TIME")))))
 
         (aet/check-arrow-edn-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/compaction-with-erase")))
-                                 (table-path node "public$foo")
+                                 (table-path node "public/foo")
                                  #"l01-rc-(.+)\.arrow")))))
 
 (t/deftest compactor-trie-metadata

@@ -1,7 +1,9 @@
 (ns xtdb.trie-catalog-test
   (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.block-catalog :as block-cat]
             [xtdb.compactor :as c]
             [xtdb.db-catalog :as db]
             [xtdb.node :as xtn]
@@ -10,12 +12,14 @@
             [xtdb.trie :as trie]
             [xtdb.trie-catalog :as cat]
             [xtdb.util :as util])
-  (:import [java.nio.file Path]
+  (:import (java.io File)
+           [java.nio.file Path]
            (java.time Duration Instant)
            (java.util.concurrent ConcurrentHashMap)
            (xtdb.api.storage ObjectStore$StoredObject)
+           (xtdb.block.proto Block)
            (xtdb.log.proto TemporalMetadata TrieMetadata)
-           (xtdb.trie Trie)
+           (xtdb.table TableSlug)
            (xtdb.trie_catalog TrieCatalog)
            (xtdb.api TableRef)))
 
@@ -712,15 +716,38 @@
   ;; GCing - and hence trie states in the TrieDetails message
   ;; Addition of the Partition message - TrieDetails got moved from TableBlock into Partition
   (binding [cat/*file-size-target* 1024]
-    (letfn [(resource->path [p] (util/->path (io/as-file (io/resource p))))]
+    (letfn [(resource->path [p] (util/->path (io/as-file (io/resource p))))
+            (dir-names [^Path dir] (into #{} (map #(.getName ^File %)) (.listFiles (.toFile dir))))
+            (latest-block [^Path blocks-dir]
+              (with-open [in (io/input-stream (->> (.listFiles (.toFile blocks-dir))
+                                                   (sort-by #(.getName ^File %))
+                                                   last))]
+                (block-cat/<-Block (Block/parseFrom in))))]
       (doseq [^Path node-root (map resource->path ["xtdb/trie-catalog-test/node-2.0.0"
                                                    "xtdb/trie-catalog-test/node-fcb7714ea"])]
-        (let [tmp-dir (util/tmp-dir "test-protobuf-addtions")]
-          (util/copy-dir node-root tmp-dir)
+        (let [tmp-dir (util/tmp-dir "test-protobuf-addtions")
+              _ (util/copy-dir node-root tmp-dir)
+              storage-dir (.resolve tmp-dir "objects/v06")
+              slugs-on-disk (dir-names (.resolve storage-dir "tables"))]
           (with-open [node (xtn/start-node {:log [:local {:path (.resolve tmp-dir "log")}]
                                             :storage [:local {:path (.resolve tmp-dir "objects")}]})]
             (t/is (= [{:cnt 8000}]
-                     (xt/q node "SELECT COUNT(*) AS CNT FROM docs FOR VALID_TIME ALL")))))))))
+                     (xt/q node "SELECT COUNT(*) AS CNT FROM docs FOR VALID_TIME ALL")))
+            (tu/flush-block! node))
+
+          ;; a modern node seeds system tables the fixture predates, so the directory set grows —
+          ;; what must not change is where the tables already on disk live.
+          (let [slugs-after (dir-names (.resolve storage-dir "tables"))
+                recorded (into #{} (map :slug) (:tables (latest-block (.resolve storage-dir "blocks"))))]
+
+            (t/is (set/subset? slugs-on-disk slugs-after)
+                  "no table's directory disappears")
+
+            (t/is (set/subset? slugs-on-disk recorded)
+                  "each directory the fixture arrived with is the slug recorded for its table")
+
+            (t/is (set/subset? recorded slugs-after)
+                  "every recorded slug is a directory that exists")))))))
 
 (t/deftest partitions->max-block-idx-test
   (t/is (= {[0 nil []] {:max-block-idx 0}, [1 nil []] {:max-block-idx 0}}
@@ -853,7 +880,7 @@
 
         ;; Simulate what reset.clj does: list L0 meta files from the object store, parse keys,
         ;; build minimal entries, hand them to reset->l0!.
-        (let [meta-dir (Trie/metaFileDir #xt/table foo)
+        (let [meta-dir (.metaFileDir (TableSlug/of #xt/table foo))
               l0-entries (->> (.listAllObjects bp meta-dir)
                               (keep (fn [^ObjectStore$StoredObject obj]
                                       (let [name (str (.getFileName ^Path (.getKey obj)))

@@ -92,12 +92,6 @@
     (catch IllegalArgumentException _)
     (catch IllegalStateException _)))
 
-(defn table-name->table-path ^java.nio.file.Path [^String table-name]
-  (Trie/getTablePath table-name))
-
-(defn ->table-meta-dir ^java.nio.file.Path [^String table-name]
-  (Trie/metaFileDir table-name))
-
 (defn ->live-trie ^MemoryHashTrie [log-limit page-limit iid-rdr]
   (-> (doto (MemoryHashTrie/builder iid-rdr)
         (.setLogLimit log-limit)

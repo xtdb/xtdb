@@ -13,13 +13,13 @@
            (xtdb.catalog TableCatalog)
            xtdb.storage.BufferPool
            xtdb.api.TableRef
-           xtdb.trie.Trie
+           (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
 
 (def ^java.nio.file.Path block-table-metadata-path (util/->path "blocks"))
 
-(defn ->table-block-dir ^java.nio.file.Path [^TableRef table]
-  (-> (Trie/getTablePath table)
+(defn ->table-block-dir ^java.nio.file.Path [^TableSlug slug]
+  (-> (.getTablePath slug)
       (.resolve block-table-metadata-path)))
 
 (defn ->table-block-metadata-obj-key ^java.nio.file.Path [^Path table-path block-idx]
@@ -82,9 +82,10 @@
 
 (defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
   (when-let [block-idx (.getCurrentBlockIndex table-cat)]
-    (let [tables (.getAllTables table-cat)]
-      (->> (for [^TableRef table tables
-                 :let [table-block-path (->table-block-metadata-obj-key (Trie/getTablePath table) block-idx)
+    (let [entries (.getEntries (.snap table-cat))]
+      (->> (for [^TableEntry entry entries
+                 :let [table (.getTable entry)
+                       table-block-path (->table-block-metadata-obj-key (.getTablePath (.getSlug entry)) block-idx)
                        {:keys [fields] :as tb} (-> (.getByteArray buffer-pool table-block-path)
                                                    (TableBlock/parseFrom)
                                                    (<-table-block))]]

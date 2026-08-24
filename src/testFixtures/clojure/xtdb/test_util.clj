@@ -39,6 +39,7 @@
            xtdb.database.Database$Catalog
            (xtdb.api.tx OpenTx)
            (xtdb.indexer LiveTable)
+           (xtdb.table TableSlug)
            (xtdb.trie Trie)
            (xtdb.log.proto TemporalMetadata TemporalMetadata$Builder)
            (xtdb.api.query PrepareOpts QueryOpts)
@@ -364,7 +365,7 @@
      (.build builder))))
 
 (defn open-live-table ^xtdb.indexer.LiveTable [table]
-  (LiveTable. *allocator* table 0 (RowCounter.)))
+  (LiveTable. *allocator* table (TableSlug/of table) 0 (RowCounter.)))
 
 (defn serialize-tx-ops ^bytes [^BufferAllocator allocator tx-ops
                                {:keys [^Instant system-time, default-tz user-metadata], {:keys [user]} :authn, :as opts}]
