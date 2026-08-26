@@ -35,7 +35,10 @@ class ScanCursor(
     override val childCursors get() = emptyList<ICursor>()
     override val cursorAttributes get() = metrics.toMap()
 
-    private fun openResolver(): EntityResolver = PolygonResolver(temporalBounds, clampValidTime)
+    private fun openResolver(): EntityResolver =
+        if (temporalBounds.validTime.isPoint && temporalBounds.systemTime.isPoint)
+            AsOfResolver(temporalBounds, clampValidTime)
+        else PolygonResolver(temporalBounds, clampValidTime)
 
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
         when (iidPred) {

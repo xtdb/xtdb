@@ -11,6 +11,9 @@ data class TemporalDimension(
     fun intersects(other: TemporalDimension) = intersects(other.lower, other.upper)
     fun intersects(lower: Long, upper: Long) = this.lower < upper && lower < this.upper
 
+    /** True where this dimension spans a single chronon — an `AS OF`, or a `BETWEEN t AND t`. */
+    val isPoint get() = upper - lower == 1L
+
     override fun toString(): String {
         val l = Instant.ofEpochMilli(lower / 1000)
         val u = Instant.ofEpochMilli(upper / 1000)

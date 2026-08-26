@@ -33,6 +33,10 @@ internal class EntityMerge(pointers: List<LeafPointer>) : EntityEvents {
 
     /** Advances to the next entity, returning false once the task's pages are exhausted. */
     fun nextEntity(): Boolean {
+        // a resolver that stopped early leaves its entity's pointers queued, and `nextEvent` polls
+        // without an iid check, so they'd be served as this entity's events
+        skipEntity()
+
         val firstOfIid = iidQueue.poll() ?: return false
 
         iidHigh = firstOfIid.evPtr.iidHigh
@@ -53,6 +57,20 @@ internal class EntityMerge(pointers: List<LeafPointer>) : EntityEvents {
         }
 
         return eventQueue.poll()?.also { current = it }
+    }
+
+    private fun skipEntity() {
+        current?.let { leafPtr ->
+            current = null
+            leafPtr.evPtr.skipToNextIid()
+            requeue(leafPtr)
+        }
+
+        while (true) {
+            val leafPtr = eventQueue.poll() ?: break
+            leafPtr.evPtr.skipToNextIid()
+            requeue(leafPtr)
+        }
     }
 
     private fun requeue(leafPtr: LeafPointer) {
