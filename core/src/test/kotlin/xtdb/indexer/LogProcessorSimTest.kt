@@ -31,9 +31,8 @@ import xtdb.indexer.SimLog.Companion.launchSimLog
 import xtdb.api.tx.TxIndexer.TxResult
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
+import xtdb.table.TableSlug
 import xtdb.table.fromSchemaAndTable
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.util.debug
 import xtdb.util.logger
 import java.nio.ByteBuffer
@@ -199,20 +198,20 @@ class LogProcessorSimTest : SimulationTestBase() {
             val tables = upload.tries.map { fromSchemaAndTable(it.tableName) }.toSet()
 
             for (trie in upload.tries) {
-                val table = fromSchemaAndTable(trie.tableName)
+                val slug = TableSlug.of(fromSchemaAndTable(trie.tableName))
                 assertTrue(
-                    table.dataFilePath(trie.trieKey) in storedPaths,
+                    slug.dataFilePath(trie.trieKey) in storedPaths,
                     "data file missing for ${trie.tableName}/${trie.trieKey}"
                 )
                 assertTrue(
-                    table.metaFilePath(trie.trieKey) in storedPaths,
+                    slug.metaFilePath(trie.trieKey) in storedPaths,
                     "meta file missing for ${trie.tableName}/${trie.trieKey}"
                 )
             }
 
             for (table in tables) {
                 assertTrue(
-                    TableCatalog.tableBlockPath(table, blockIdx) in storedPaths,
+                    TableCatalog.tableBlockPath(TableSlug.of(table), blockIdx) in storedPaths,
                     "table-block file missing for ${table.schemaAndTable}/b$blockIdx"
                 )
             }

@@ -7,6 +7,7 @@ import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.logRelTypes
 import xtdb.api.TableRef
+import xtdb.table.Oid
 import xtdb.trie.ColumnName
 import xtdb.trie.TrieCatalog
 import xtdb.util.closeAll
@@ -42,6 +43,16 @@ class Snapshot(
     private val supersededLiveTypes: Map<TableRef, Map<ColumnName, VectorType>>,
     val tableInfo: Map<TableRef, Set<ColumnName>>,
 ) : AutoCloseable {
+
+    /**
+     * Where [table]'s files live, as of this snapshot — so the slugs a scan reads by are the ones recorded
+     * in the block whose trie state it planned against.
+     */
+    fun slug(table: TableRef) = tableCatSnap.slug(table)
+
+    /** Each table's oid, whether or not a block has recorded it yet. */
+    val tableOids: Map<TableRef, Oid> get() = tableCatSnap.entries.associate { it.table to it.oid }
+
     interface Source {
         fun openSnapshot(minSystemTime: Instant?): Snapshot
     }

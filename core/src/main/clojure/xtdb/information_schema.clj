@@ -24,10 +24,19 @@
            xtdb.operator.SelectionSpec
            (xtdb.query IQuerySource IQuerySource$QueryCatalog IQuerySource$QueryDatabase)
            xtdb.api.TableRef
+           xtdb.table.TableEntry
            xtdb.trie.TrieCatalog))
 
 (defn name->oid [s]
   (Math/abs ^Integer (hash s)))
+
+(defn table-oid
+  "The oid `pg_class` reports for a table, given the one its block records — or nil where no block does.
+
+   The virtual catalog relations never reach a block, so they have no allocated oid and keep a hash of
+   their name. `::regclass` resolves through here too, so both populations agree across the join."
+  [oid table]
+  (int (or oid (name->oid (table/ref->schema+table table)))))
 
 (defn- map->vec-types [m]
   (update-vals m types/->type))
@@ -249,9 +258,9 @@
      :tableowner "xtdb"
      :tablespace nil}))
 
-(defn pg-class [table-refs]
+(defn pg-class [oid-by-table table-refs]
   (for [^TableRef table table-refs]
-    {:oid (name->oid (table/ref->schema+table table))
+    {:oid (table-oid (get oid-by-table table) table)
      :relname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (.getTableName table))
      :relnamespace (name->oid (.getSchemaName table))
      :relowner (name->oid "xtdb")
@@ -325,11 +334,11 @@
      :is-identity "NO"
      :is-generated "NEVER"}))
 
-(defn pg-attribute [col-rows]
+(defn pg-attribute [oid-by-table col-rows]
   (for [{:keys [idx table name ^VectorType vec-type]} col-rows
         :let [^PgType pg-type (PgType/fromVectorType vec-type)
               ^PgType pg-type (if (or (nil? pg-type) (identical? pg-type PgType/PG_DEFAULT)) PgType/PG_JSON pg-type)]]
-    {:attrelid (name->oid (table/ref->schema+table table))
+    {:attrelid (table-oid (get oid-by-table table) table)
      :attname (.denormalize ^IKeyFn (identity #xt/key-fn :snake-case-string) (str name))
      :atttypid (.getOid pg-type)
      :attlen (int (or (.getTyplen pg-type) -1))
@@ -376,9 +385,9 @@
      :datallowconn true
      :datistemplate false}))
 
-(defn pg-stat-user-tables [table-refs]
+(defn pg-stat-user-tables [oid-by-table table-refs]
   (for [^TableRef table table-refs]
-    {:relid (name->oid (table/ref->schema+table table))
+    {:relid (table-oid (get oid-by-table table) table)
      :relname (.getTableName table)
      :schemaname (.getSchemaName table)
      :n-live-tup 0}))
@@ -529,6 +538,9 @@
                              (map table/->ref)
                              (keys meta-table-schemas))
 
+            oid-by-table (->> (.getEntries (.getTableCatSnap ^Snapshot snap))
+                              (into {} (map (juxt #(.getTable ^TableEntry %) #(.getOid ^TableEntry %)))))
+
             ;; delayed: only `columns` and `pg_attribute` need types, and this is bound ahead of the
             ;; dispatch — eagerly, the other 32 tables would each derive every column of every table.
             ;; Values stay as the Kotlin maps `allColumnTypes` returns; every consumer reads them as
@@ -549,15 +561,15 @@
                                      information_schema/constraint_column_usage nil
                                      pg_catalog/pg_tables (pg-tables table-refs)
                                      pg_catalog/pg_type (pg-type)
-                                     pg_catalog/pg_class (pg-class table-refs)
+                                     pg_catalog/pg_class (pg-class oid-by-table table-refs)
                                      pg_catalog/pg_description nil
                                      pg_catalog/pg_views nil
                                      pg_catalog/pg_matviews nil
-                                     pg_catalog/pg_attribute (pg-attribute (schema-info->col-rows @schema-info))
+                                     pg_catalog/pg_attribute (pg-attribute oid-by-table (schema-info->col-rows @schema-info))
                                      pg_catalog/pg_namespace (pg-namespace)
                                      pg_catalog/pg_proc (pg-proc)
                                      pg_catalog/pg_database (pg-database (.getDatabaseNames db-cat))
-                                     pg_catalog/pg_stat_user_tables (pg-stat-user-tables table-refs)
+                                     pg_catalog/pg_stat_user_tables (pg-stat-user-tables oid-by-table table-refs)
                                      pg_catalog/pg_settings (pg-settings)
                                      pg_catalog/pg_range (pg-range)
                                      pg_catalog/pg_am (pg-am)

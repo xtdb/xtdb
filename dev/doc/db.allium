@@ -425,7 +425,17 @@ value Block {
     -- leader claiming a regressed election counter is refused rather than silently ignored
     -- (see log-processor-lifecycle.allium step 2a).
     term_id: Integer
+    -- Every table this block covers, and where each one's files live. See contract TableEntries.
+    tables: List<TableEntry>
     -- See: catalog/TableCatalog.kt, block/proto/block.proto
+}
+
+value TableEntry {
+    -- A table's identity, and the directory under `tables/` holding its files.
+    -- See: table/TableEntry.kt, table/TableSlug.kt, block/proto/block.proto (TableEntry)
+    oid: Integer
+    table: trie_cat/TableRef
+    slug: String
 }
 
 value PendingBlock {
@@ -1559,6 +1569,38 @@ rule ProcessingErrorHaltsNode {
 }
 
 ---- Contracts
+
+contract TableEntries {
+    -- Obligations on the entries a Block carries: each table's identity, and where its files live.
+    -- These are about an entry's history across successive blocks, so they cannot be expressed as single-snapshot invariants over entity state.
+
+    @invariant SlugFixedWhenFirstRecorded
+        -- A table's slug is chosen once, by the first block that records the table, and every later block carries it forward unchanged.
+
+    @invariant OidFixedWhenTheTableIsFirstSeen
+        -- A table's oid is allocated when the catalog first learns of the table, and every later block carries it forward unchanged.
+        -- - The catalog learns of a table when a transaction writes to it, which is earlier than the block that first records it.
+
+    @invariant EveryNodeAllocatesTheSameOid
+        -- Two nodes reach the same oid for a table without it passing between them.
+        -- - Allocation follows the order tables first appear in the log, and the tables of one transaction are allocated in name order, so replaying the same log is enough to agree.
+
+    @invariant EveryTableTheBlockNamesHasAnEntry
+        -- A block records an entry for each table it names, taking the entry from the preceding block wherever that block held one.
+
+    @invariant UnrecordedTableTakesItsEscapedName
+        -- A table a block does not record takes the escaped form of its name as its slug.
+        -- - This is what a block carrying names alone resolves to, so the files its tables have already written stay where they are.
+        -- - Oids for those tables are derived in name order, so every node resolving the same block resolves the same entries.
+
+    @invariant SlugPrecedesTheFirstWrite
+        -- A table's slug is fixed before anything is written under its path.
+        -- - A live table takes its entry when the live index creates it, so the L0 trie it writes at the block boundary lands under the slug the block then records for it.
+
+    @invariant OnlyARecordedTableHasABlockFile
+        -- A per-table block file exists for exactly the tables the block records.
+        -- - A table allocated but not yet written has an entry and no file.
+}
 
 contract ExternalSourceConfirmation {
     -- Obligations on an ExternalSource that confirms progress upstream. These are about the

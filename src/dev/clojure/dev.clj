@@ -7,6 +7,7 @@
             [xtdb.log :as xt-log]
             [xtdb.node :as xtn]
             [xtdb.pgwire :as pgw]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -21,6 +22,7 @@
            (xtdb.arrow Relation Vector)
            (xtdb.block.proto TableBlock)
            (xtdb.log.proto TrieDetails)
+           (xtdb.table TableSlug)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$IidBranch ArrowHashTrie$Leaf ArrowHashTrie$Node)
            [xtdb.api.log SourceMessage]))
 
@@ -169,7 +171,7 @@
 
 (defn read-table-block-file [store-path table-name block-idx]
   (with-open [in (io/input-stream (.toFile (-> (util/->path store-path)
-                                               (.resolve (trie/table-name->table-path table-name))
+                                               (.resolve (.getTablePath (TableSlug/of (table/->ref table-name))))
                                                (table-cat/->table-block-metadata-obj-key block-idx))))]
     (-> (TableBlock/parseFrom in)
         (table-cat/<-table-block)

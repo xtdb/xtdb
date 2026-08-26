@@ -108,10 +108,14 @@ class BlockUploader(
 
         val tableBlocks = tableCatalog.finishBlock(finishedBlocks, tablePartitions)
 
+        // A table new in this block has already written its L0 trie by now, under the slug its LiveTable was
+        // created with — the same one minted here, because both resolve through `State.slug`.
+        val entries = tableCatalog.resolveTables(tableBlocks.keys).associateBy { it.table }
+
         coroutineScope {
             tableBlocks.forEach { (table, tableBlock) ->
                 launch(uploadDispatcher) {
-                    val path = TableCatalog.tableBlockPath(table, blockIdx)
+                    val path = TableCatalog.tableBlockPath(entries.getValue(table).slug, blockIdx)
                     bufferPool.putObject(path, ByteBuffer.wrap(tableBlock.toByteArray()))
                 }
             }
@@ -123,7 +127,7 @@ class BlockUploader(
 
         val block = tableCatalog.buildBlock(
             blockIdx, liveIndex.latestCompletedTx, latestProcessedMsgId,
-            boundaryReplicaMsgId, tableBlocks.keys, secondaryDatabasesForBlock,
+            boundaryReplicaMsgId, entries.values, secondaryDatabasesForBlock,
             externalSourceToken, termId
         )
 

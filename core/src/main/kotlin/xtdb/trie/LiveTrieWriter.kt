@@ -3,13 +3,13 @@ package xtdb.trie
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.storage.BufferPool
 import xtdb.arrow.RelationReader
-import xtdb.api.TableRef
+import xtdb.table.TableSlug
 
 class LiveTrieWriter(
     private val al: BufferAllocator, private val bp: BufferPool,
     private val calculateBlooms: Boolean
 ) {
-    suspend fun writeLiveTrie(table: TableRef, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: RelationReader): FileSize =
+    suspend fun writeLiveTrie(table: TableSlug, trieKey: TrieKey, trie: MemoryHashTrie, dataRel: RelationReader): FileSize =
         DataFileWriter(al, bp, table, trieKey, dataRel.schema).use { dataFileWriter ->
             MetadataFileWriter(al, bp, table, trieKey, dataFileWriter.dataRel, calculateBlooms, false)
                 .use { metaFileWriter ->

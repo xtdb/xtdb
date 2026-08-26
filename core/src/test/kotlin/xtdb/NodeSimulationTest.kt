@@ -183,7 +183,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
-                tables = listOf(table),
+                tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -241,7 +241,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
-                tables = listOf(table),
+                tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -318,7 +318,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
-                tables = listOf(table),
+                tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -389,7 +389,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
-                    tables = listOf(table),
+                    tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -461,7 +461,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
-                    tables = listOf(table),
+                    tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -556,7 +556,7 @@ class NodeSimulationTest : SimulationTestBase() {
                 latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                 latestProcessedMsgId = blockIndex,
                 boundaryReplicaMsgId = null,
-                tables = listOf(table),
+                tables = tableCatalog.resolveTables(listOf(table)),
                 secondaryDatabases = null
             )
             sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -607,7 +607,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
-                    tables = listOf(table),
+                    tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))
@@ -697,7 +697,7 @@ class NodeSimulationTest : SimulationTestBase() {
                     latestCompletedTx = TransactionKey(txId = blockIndex, systemTime = Instant.now()),
                     latestProcessedMsgId = blockIndex,
                     boundaryReplicaMsgId = null,
-                    tables = listOf(table),
+                    tables = db.tableCatalog.resolveTables(listOf(table)),
                     secondaryDatabases = null
                 )
                 sharedBufferPool.putObjectSync(TableCatalog.blockFilePath(blockIndex), ByteBuffer.wrap(block.toByteArray()))

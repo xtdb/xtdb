@@ -3,6 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.db-catalog :as db]
             [xtdb.object-store :as os]
+            [xtdb.table :as table]
             [xtdb.table-catalog :as table-cat]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
@@ -13,8 +14,11 @@
            [java.time Instant]
            [java.util Map]
            (org.apache.arrow.vector.types.pojo Schema)
-           (xtdb.block.proto TableBlock)
+           (xtdb.block.proto Block TableBlock)
+           (xtdb.catalog TableCatalog)
            (xtdb.log.proto TrieDetails)
+           (xtdb.storage BufferPool)
+           (xtdb.table TableEntry TableSlug)
            (xtdb.util HyperLogLog)))
 
 (defn trie-details->edn [^TrieDetails trie]
@@ -40,7 +44,7 @@
 
         (t/is (= [(os/->StoredObject "tables/public$foo/blocks/b00.binpb" 4353)
                   (os/->StoredObject "tables/public$foo/blocks/b01.binpb" 4435)]
-                 (.listAllObjects bp (table-cat/->table-block-dir #xt/table foo))))
+                 (.listAllObjects bp (table-cat/->table-block-dir (TableSlug/of #xt/table foo)))))
 
         (let [{hlls1 :hlls :as _table-block1} (->> (.getByteArray bp (util/->path "tables/public$foo/blocks/b00.binpb"))
                                                    TableBlock/parseFrom
@@ -214,3 +218,77 @@
                                       (update partition
                                               :tries (partial map (comp :trie-key trie/<-trie-details))))
                                     partitions))))))))))
+
+(deftest a-block-carrying-names-alone-resolves-to-the-entries-its-files-are-already-under
+  (let [names ["public/docs" "public/foo" "xt/txs"]
+        entries (map-indexed (fn [idx nm] (TableEntry/mint (+ TableEntry/FIRST_OID idx) (table/->ref nm)))
+                             (sort names))
+
+        ;; UNUSED throws on every storage call, so this also pins that resolving the entries reads nothing back.
+        ->entries (fn [^Block block] (vec (.getEntries (.snap (TableCatalog. BufferPool/UNUSED block)))))]
+
+    (t/is (= ["public$docs" "public$foo" "xt$txs"]
+             (mapv #(.getSlug (.getSlug ^TableEntry %)) entries))
+          "a minted slug is the escaped table name, so nothing already on disk moves")
+
+    (t/is (= entries
+             (->entries (-> (Block/newBuilder) (.addAllTableNames names) (.build))))
+          "names alone resolve to slugs and to oids ordered by name")
+
+    (t/is (= entries
+             (->entries (-> (Block/newBuilder)
+                            (.addAllTableNames names)
+                            (.addAllTables (map #(.toProto ^TableEntry %) entries))
+                            (.build))))
+          "recorded entries resolve to themselves")))
+
+(deftest resolving-a-block-with-no-entries-depends-on-nothing-but-that-block
+  (let [->block (fn [block-idx names]
+                  (-> (Block/newBuilder) (.setBlockIndex block-idx) (.addAllTableNames names) (.build)))
+        ->oids (fn [^TableCatalog cat]
+                 (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
+                       (.getEntries (.snap cat))))
+
+        b11 (->block 11 ["public/docs" "public/orders" "xt/txs"])
+
+        ;; started before `orders` existed, then caught up
+        caught-up (doto (TableCatalog. BufferPool/UNUSED (->block 10 ["public/docs" "xt/txs"]))
+                    (.refresh b11 {}))
+
+        started-at-b11 (TableCatalog. BufferPool/UNUSED b11)]
+
+    (t/is (= {"public/docs" 16384, "public/orders" 16385, "xt/txs" 16386} (->oids started-at-b11)))
+
+    (t/is (= (->oids started-at-b11) (->oids caught-up))
+          "two nodes reading one entry-less block agree, whatever each of them read before it")))
+
+(defn- ->oids [^TableCatalog cat]
+  (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
+        (.getEntries (.snap cat))))
+
+(defn- register-txs ^TableCatalog [txs]
+  (let [cat (TableCatalog. BufferPool/UNUSED nil)]
+    (doseq [tx txs]
+      (.registerTables cat (mapv table/->ref tx)))
+    cat))
+
+(deftest two-nodes-replaying-one-log-allocate-the-same-oids
+  ;; a leader learns of a table as it resolves the tx that writes it, a follower as it applies the same
+  ;; tx — and within one tx the tables arrive as an unordered map, so the two see them in different orders
+  (t/is (= (->oids (register-txs [["public/docs"] ["public/orders" "public/audit"]]))
+           (->oids (register-txs [["public/docs"] ["public/audit" "public/orders"]])))
+        "the oid never travels between them, so both have to derive it")
+
+  (t/is (not= (->oids (register-txs [["public/docs"] ["public/orders"]]))
+              (->oids (register-txs [["public/orders"] ["public/docs"]])))
+        "across txs the log order is the allocation order, and it is the same order on every node"))
+
+(deftest a-block-records-the-oid-the-catalog-has-already-published
+  (let [tables ["public/docs" "public/orders" "xt/txs"]
+        cat (register-txs [tables])
+        published (->oids cat)
+        recorded (into {} (map (juxt #(str (.getSym (.getTable ^TableEntry %))) #(.getOid ^TableEntry %)))
+                       (.resolveTables cat (mapv table/->ref tables)))]
+
+    (t/is (= published recorded)
+          "a table's oid is fixed when the catalog learns of it, so its first block changes nothing")))

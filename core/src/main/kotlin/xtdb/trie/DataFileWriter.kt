@@ -5,17 +5,16 @@ import org.apache.arrow.vector.types.pojo.Schema
 import xtdb.ArrowWriter
 import xtdb.storage.BufferPool
 import xtdb.arrow.Relation
-import xtdb.api.TableRef
-import xtdb.trie.Trie.dataFilePath
+import xtdb.table.TableSlug
 
 class DataFileWriter(
     al: BufferAllocator, private val bp: BufferPool,
-    private val table: TableRef, private val trieKey: TrieKey, dataSchema: Schema,
+    private val slug: TableSlug, private val trieKey: TrieKey, dataSchema: Schema,
 ) : AutoCloseable {
     val dataRel: Relation = Relation(al, dataSchema)
 
     private val dataFileWriter: ArrowWriter =
-        runCatching { bp.openArrowWriter(table.dataFilePath(trieKey), dataRel) }
+        runCatching { bp.openArrowWriter(slug.dataFilePath(trieKey), dataRel) }
             .onFailure { dataRel.close() }
             .getOrThrow()
 

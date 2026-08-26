@@ -9,6 +9,7 @@
   (:import (java.nio ByteBuffer)
            (org.apache.arrow.memory RootAllocator)
            (xtdb.indexer LiveTable)
+           (xtdb.table TableSlug)
            (xtdb.util RowCounter)))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
@@ -31,7 +32,8 @@
         (util/with-open [node (tu/->local-node {:node-dir path, :compactor-threads 0})
                          bp (.getBufferPool (db/primary-db node))
                          allocator (RootAllocator.)
-                         live-table (LiveTable. allocator #xt/table foo 0 (RowCounter.) (partial trie/->live-trie 2 4))]
+                         live-table (LiveTable. allocator #xt/table foo (TableSlug/of #xt/table foo) 0 (RowCounter.)
+                                                (partial trie/->live-trie 2 4))]
           (util/with-open [rel (tu/open-put-log-rel allocator 0 (->max-depth-puts uuid n))]
             (.importData live-table rel))
 

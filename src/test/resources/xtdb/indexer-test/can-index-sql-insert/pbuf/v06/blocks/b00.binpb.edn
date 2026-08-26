@@ -3,4 +3,14 @@
  {:tx-id 0, :system-time #xt/instant "2020-01-01T00:00:00Z"},
  :latest-processed-msg-id 2047,
  :table-names #{"xt/txs" "xt/role_membership" "public/table"},
+ :tables
+ [{:oid 16386,
+   :schema-name "public",
+   :table-name "table",
+   :slug "public$table"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "role_membership",
+   :slug "xt$role_membership"}
+  {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

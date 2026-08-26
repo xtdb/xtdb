@@ -11,6 +11,7 @@ import xtdb.arrow.*
 import xtdb.arrow.VectorType.Mono
 import xtdb.log.proto.TrieMetadata
 import xtdb.storage.BufferPool
+import xtdb.table.TableSlug
 import xtdb.api.TableRef
 import xtdb.trie.*
 import xtdb.util.HLL
@@ -19,6 +20,7 @@ import xtdb.util.RowCounter
 class LiveTable @JvmOverloads constructor(
     private val al: BufferAllocator,
     val table: TableRef,
+    val slug: TableSlug,
     val blockIdx: Long,
     private val rowCounter: RowCounter,
     liveTrieFactory: LiveTrieFactory = LiveTrieFactory { MemoryHashTrie.emptyTrie(it) }
@@ -104,7 +106,7 @@ class LiveTable @JvmOverloads constructor(
 
         return liveRelation.openDirectSlice(al).use { dataRel ->
             val trieWriter = LiveTrieWriter(al, bp, calculateBlooms = false)
-            val dataFileSize = trieWriter.writeLiveTrie(table, trieKey, liveTrie, dataRel)
+            val dataFileSize = trieWriter.writeLiveTrie(slug, trieKey, liveTrie, dataRel)
             FinishedBlock(
                 vecTypes = vecTypes,
                 rowCount = rowCount,

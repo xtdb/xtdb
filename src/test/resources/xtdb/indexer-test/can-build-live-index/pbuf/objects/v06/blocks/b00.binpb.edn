@@ -8,4 +8,22 @@
    "public/world"
    "xt/role_membership"
    "public/hello"},
+ :tables
+ [{:oid 16388,
+   :schema-name "public",
+   :table-name "foo",
+   :slug "public$foo"}
+  {:oid 16386,
+   :schema-name "public",
+   :table-name "hello",
+   :slug "public$hello"}
+  {:oid 16387,
+   :schema-name "public",
+   :table-name "world",
+   :slug "public$world"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "role_membership",
+   :slug "xt$role_membership"}
+  {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

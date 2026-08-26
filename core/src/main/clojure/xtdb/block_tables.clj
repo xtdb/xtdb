@@ -171,10 +171,13 @@
    "partition_count" (int (count partitions))})
 
 (defn- resolve-table-block
-  "Resolves a table-block file given table name and block idx. Returns parsed map or nil."
-  [^BufferPool buffer-pool ^String table-name ^long block-idx]
+  "Resolves a table-block file given table name and block idx. Returns parsed map or nil.
+
+  Takes the slug from the current registry rather than from block-idx's own. The two agree for as long as
+  a slug can't change; once renaming lands, this has to read the registry out of the block it's looking at."
+  [^BufferPool buffer-pool ^TableCatalog table-cat ^String table-name ^long block-idx]
   (let [table-ref (table/->ref table-name)
-        table-path (Trie/getTablePath table-ref)
+        table-path (.getTablePath (.slug table-cat table-ref))
         obj-key (table-cat/->table-block-metadata-obj-key table-path block-idx)]
     (try
       (-> (.getByteArray buffer-pool obj-key)
@@ -198,7 +201,7 @@
 
     (let [^BufferPool buffer-pool (.getBufferPool db)
           block-idx (<-lex-hex (str block-idx))
-          table-block (resolve-table-block buffer-pool (str table-name) block-idx)
+          table-block (resolve-table-block buffer-pool (.getTableCatalog db) (str table-name) block-idx)
           rows (if table-block
                  [(table-block->row (str table-name) block-idx table-block)]
                  [])
@@ -253,7 +256,7 @@
     (let [^BufferPool buffer-pool (.getBufferPool db)
           block-idx-hex (str block-idx)
           block-idx (<-lex-hex block-idx-hex)
-          table-block (resolve-table-block buffer-pool (str table-name) block-idx)
+          table-block (resolve-table-block buffer-pool (.getTableCatalog db) (str table-name) block-idx)
           rows (if table-block
                  (trie-details->rows (str table-name) block-idx-hex (:partitions table-block))
                  [])

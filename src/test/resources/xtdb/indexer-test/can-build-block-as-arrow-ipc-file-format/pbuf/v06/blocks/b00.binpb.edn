@@ -7,4 +7,18 @@
    "public/device_info"
    "xt/role_membership"
    "public/device_readings"},
+ :tables
+ [{:oid 16386,
+   :schema-name "public",
+   :table-name "device_info",
+   :slug "public$device_info"}
+  {:oid 16387,
+   :schema-name "public",
+   :table-name "device_readings",
+   :slug "public$device_readings"}
+  {:oid 16385,
+   :schema-name "xt",
+   :table-name "role_membership",
+   :slug "xt$role_membership"}
+  {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

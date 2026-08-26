@@ -220,8 +220,9 @@
                    (long (- (count current-tries) (count filtered-tries)))
                    (long (count filtered-tries)))
 
-        (doseq [{:keys [^String trie-key]} filtered-tries]
-          (.add !segments (BufferPoolSegment. allocator buffer-pool metadata-mgr table trie-key metadata-pred)))
+        (let [slug (.slug snapshot table)]
+          (doseq [{:keys [^String trie-key]} filtered-tries]
+            (.add !segments (BufferPoolSegment. allocator buffer-pool metadata-mgr slug trie-key metadata-pred))))
 
         (doseq [^TableSnapshot live-table-snap (.table snapshot table)]
           (.add !segments (.getSegment live-table-snap)))

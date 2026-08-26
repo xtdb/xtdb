@@ -812,29 +812,34 @@ VALUES(1, OBJECT (foo: OBJECT(bibble: true), bar: OBJECT(baz: 1001)))"]])
 (deftest test-schema-ee-entry-points
   ;;test is using regclass to verify that expected EE entrypoints have access
   ;;to the new schema variable
-  (xt/submit-tx tu/*node* [[:put-docs :bar {:xt/id 1, :col 904292726}]
-                           [:put-docs :bar {:xt/id 2, :col 1111}]])
+  ;; bar's oid is allocated when the catalog first sees the table, so it can only be read back once
+  ;; bar exists - hence the seed tx ahead of the rows that carry the oid as data
+  (xt/execute-tx tu/*node* [[:put-docs :bar {:xt/id 0, :col 0}]])
 
+  (let [oid (-> (xt/q tu/*node* "SELECT oid FROM pg_catalog.pg_class WHERE relname = 'bar'")
+                first :oid)]
+    (xt/execute-tx tu/*node* [[:put-docs :bar {:xt/id 1, :col oid}]
+                              [:put-docs :bar {:xt/id 2, :col 1111}]])
 
-  (t/is (= [{:v (RegClass. 904292726)}]
-           (tu/query-ra
-            '[:project {:projections [{v (cast "bar" #xt/type :regclass)}]}
-              [:table {:rows [{}]}]]
-            {:node tu/*node*}))
-        "project")
+    (t/is (= [{:v (RegClass. oid)}]
+             (tu/query-ra
+              '[:project {:projections [{v (cast "bar" #xt/type :regclass)}]}
+                [:table {:rows [{}]}]]
+              {:node tu/*node*}))
+          "project")
 
-  (t/is (= [{:v 904292726}]
-           (tu/query-ra
-            '[:select {:predicate (== (cast "bar" #xt/type :regclass) v)}
-              [:table {:rows [{v 904292726} {v 111}]}]]
-            {:node tu/*node*}))
-        "select")
+    (t/is (= [{:v oid}]
+             (tu/query-ra
+              [:select {:predicate '(== (cast "bar" #xt/type :regclass) v)}
+               [:table {:rows [{'v oid} {'v 111}]}]]
+              {:node tu/*node*}))
+          "select")
 
-  (t/is (= [{:col 904292726}]
-           (tu/query-ra
-            '[:scan {:db-name "xtdb", :table #xt/table bar, :columns [{col (== col (cast "bar" #xt/type :regclass))}]}]
-            {:node tu/*node*}))
-        "scan pred"))
+    (t/is (= [{:col oid}]
+             (tu/query-ra
+              '[:scan {:db-name "xtdb", :table #xt/table bar, :columns [{col (== col (cast "bar" #xt/type :regclass))}]}]
+              {:node tu/*node*}))
+          "scan pred")))
 
 (t/deftest copes-with-log-time-going-backwards-3864
   (with-open [node (xtn/start-node {:log [:in-memory {:instant-src (tu/->mock-clock [#inst "2020" #inst "2019" #inst "2021"])}]})]

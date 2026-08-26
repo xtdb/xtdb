@@ -15,7 +15,8 @@ import xtdb.garbage_collector.BlockGarbageCollector
 import xtdb.storage.BufferPool
 import xtdb.test.AllocatorResolver
 import xtdb.time.InstantUtil.asMicros
-import xtdb.trie.Trie.tablePath
+import xtdb.api.TableRef
+import xtdb.table.TableSlug
 import xtdb.util.StringUtil.asLexHex
 import xtdb.util.asPath
 import java.nio.ByteBuffer
@@ -49,8 +50,8 @@ class BlockGarbageCollectorTest {
             Storage.local(tempDir).open(al, memoryCache, null, "xtdb").use { bufferPool ->
                 // Write dummy blocks and table blocks
                 val blocksPath = "blocks".asPath
-                val table1BlockPath = "public/foo".tablePath.resolve(blocksPath)
-                val table2BlockPath = "public/bar".tablePath.resolve(blocksPath)
+                val table1BlockPath = TableSlug.of(TableRef("public", "foo")).tablePath.resolve(blocksPath)
+                val table2BlockPath = TableSlug.of(TableRef("public", "bar")).tablePath.resolve(blocksPath)
 
                 (1L..10L).forEach { index ->
                     writeBlock(
@@ -101,7 +102,7 @@ class BlockGarbageCollectorTest {
             Storage.local(tempDir).open(al, memoryCache, null, "xtdb", 0, 2).use { p0 ->
                 Storage.local(tempDir).open(al, memoryCache, null, "xtdb", 1, 2).use { p1 ->
                     val blocksPath = "blocks".asPath
-                    val tableBlockPath = "public/foo".tablePath.resolve(blocksPath)
+                    val tableBlockPath = TableSlug.of(TableRef("public", "foo")).tablePath.resolve(blocksPath)
 
                     for (pool in listOf(p0, p1)) {
                         (1L..10L).forEach { index ->

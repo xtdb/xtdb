@@ -79,38 +79,6 @@ object Trie {
     }
 
     @JvmStatic
-    val tablesDir = "tables".asPath
-
-    @JvmStatic
-    val TableName.tablePath: Path get() = tablesDir.resolve(replace(Regex("[./]"), "\\$"))
-
-    @JvmStatic
-    fun TableName.metaFileDir(): Path = tablePath.resolve("meta")
-
-    @JvmStatic
-    fun TableName.metaFilePath(trieKey: TrieKey): Path =
-        metaFileDir().resolve("$trieKey.arrow")
-
-    @JvmStatic
-    val TableRef.tablePath: Path
-        get() =
-            tablesDir.resolve("$schemaName$$tableName".replace(Regex("[./]"), "\\$"))
-
-    @JvmStatic
-    fun TableRef.dataFileDir(): Path = tablePath.resolve("data")
-
-    @JvmStatic
-    fun TableRef.dataFilePath(trieKey: TrieKey): Path =
-        dataFileDir().resolve("$trieKey.arrow")
-
-    @JvmStatic
-    fun TableRef.metaFileDir(): Path = tablePath.resolve("meta")
-
-    @JvmStatic
-    fun TableRef.metaFilePath(trieKey: TrieKey): Path =
-        metaFileDir().resolve("$trieKey.arrow")
-
-    @JvmStatic
     fun dataRelSchema(putDocField: Field?): Schema =
         schema(
             "_iid" ofType IID,

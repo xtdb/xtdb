@@ -153,9 +153,9 @@ class BlockGarbageCollector(
         }
 
         supervisorScope {
-            for (table in tableCatalog.allTables) {
+            for (entry in tableCatalog.snap().entries) {
                 launch(tableDispatcher) {
-                    deleteGarbage(bufferPool.tableBlocks(table).asSequence().map { it.key }, tableBlockDeleteTimer)
+                    deleteGarbage(bufferPool.tableBlocks(entry.slug).asSequence().map { it.key }, tableBlockDeleteTimer)
                 }
             }
         }

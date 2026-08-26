@@ -12,10 +12,11 @@
             [xtdb.trie-catalog :as trie-cat])
   (:import (java.nio.file Path)
            (xtdb.api.storage ObjectStore$StoredObject)
+           (xtdb.catalog TableCatalog)
            (xtdb.database Database)
            (xtdb.storage BufferPool)
-           xtdb.api.TableRef
-           (xtdb.trie Trie)))
+           (xtdb.table TableSlug)
+           xtdb.api.TableRef))
 
 (defn- meta-file->trie-key
   "\"…/meta/l00-rc-b00.arrow\" → \"l00-rc-b00\"."
@@ -26,10 +27,10 @@
 
 (defn- list-data-file-sizes
   "Build a `trie-key → data-file-size` lookup from the table's data dir."
-  [^BufferPool bp ^TableRef table]
+  [^BufferPool bp ^TableSlug slug]
   (into {} (map (fn [^ObjectStore$StoredObject obj]
                   [(meta-file->trie-key (.getKey obj)) (.getSize obj)]))
-        (.listAllObjects bp (Trie/dataFileDir table))))
+        (.listAllObjects bp (.dataFileDir slug))))
 
 (defn- list-l0-entries
   "Enumerate the L0 trie files for a table directly from the object store.
@@ -39,9 +40,9 @@
    half-written tries that the GC's data-then-meta deletion order leaves transiently visible.
    `:trie-metadata` is left absent — the post-reset `CatalogEntry.getTemporalMetadata` fallback
    handles that until the next compaction re-derives it."
-  [^BufferPool bp ^TableRef table]
-  (let [data-sizes (list-data-file-sizes bp table)]
-    (->> (.listAllObjects bp (Trie/metaFileDir table))
+  [^BufferPool bp ^TableSlug slug]
+  (let [data-sizes (list-data-file-sizes bp slug)]
+    (->> (.listAllObjects bp (.metaFileDir slug))
          (keep (fn [^ObjectStore$StoredObject obj]
                  (let [trie-key (meta-file->trie-key (.getKey obj))]
                    (when-some [parsed (trie/parse-trie-key trie-key)]
@@ -49,9 +50,9 @@
                                                 (data-sizes trie-key))]
                        (assoc parsed :data-file-size data-size)))))))))
 
-(defn- enumerate-l0s [^BufferPool bp tables]
+(defn- enumerate-l0s [^BufferPool bp ^TableCatalog table-cat tables]
   (into {} (for [^TableRef table tables]
-             [table (vec (list-l0-entries bp table))])))
+             [table (vec (list-l0-entries bp (.slug table-cat table)))])))
 
 (defn reset-compactor! [node-opts ^String db-name {:keys [dry-run?]}]
   (let [config (doto (xtn/->config node-opts)
@@ -71,19 +72,21 @@
 
         (let [bp (.getBufferPool db)
               trie-cat (.getTrieCatalog db)
+              table-cat (.getTableCatalog db)
               live-idx (.getLiveIndex db)
               tables (.getTables trie-cat)
               compacted-file-keys (vec (for [^TableRef table tables
+                                             :let [slug (.slug table-cat table)]
                                              ^String trie-key (trie-cat/compacted-trie-keys (trie-cat/trie-state trie-cat table))
 
                                              ;; meta file first, as it's the marker
-                                             file-key [(Trie/metaFilePath table trie-key)
-                                                       (Trie/dataFilePath table trie-key)]]
+                                             file-key [(.metaFilePath slug trie-key)
+                                                       (.dataFilePath slug trie-key)]]
                                          file-key))
               ;; Source of truth for L0 is the object store, not the catalog: catalog L0s
               ;; are dropped on supersession, so by the time we get here the catalog will be
               ;; missing every L0 that's already been consumed by an L1C we're about to wipe.
-              table->l0-entries (enumerate-l0s bp tables)]
+              table->l0-entries (enumerate-l0s bp table-cat tables)]
           (cond
             dry-run?
             (do

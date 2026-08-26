@@ -8,6 +8,7 @@ import xtdb.arrow.STRUCT_TYPE
 import xtdb.arrow.VectorType.Companion.I64
 import xtdb.storage.MemoryStorage
 import xtdb.api.TableRef
+import xtdb.table.TableSlug
 import xtdb.trie.MemoryHashTrie
 import xtdb.trie.Trie
 import xtdb.util.RowCounter
@@ -16,13 +17,15 @@ import java.util.UUID
 
 class LiveTableTest {
 
+    private val DOCS = TableRef("public", "docs")
+
     @Test
     fun `importData appends rows to liveRelation and updates trie`() {
         RootAllocator().use { allocator ->
             val table = TableRef("public", "docs")
             val rowCounter = RowCounter()
 
-            LiveTable(allocator, table, 0L, rowCounter).use { liveTable ->
+            LiveTable(allocator, table, TableSlug.of(table), 0L, rowCounter).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     sourceRel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     sourceRel["_system_from"].writeLong(1000L)
@@ -62,7 +65,7 @@ class LiveTableTest {
             val table = TableRef("public", "docs")
             val rowCounter = RowCounter()
 
-            LiveTable(allocator, table, 0L, rowCounter).use { liveTable ->
+            LiveTable(allocator, table, TableSlug.of(table), 0L, rowCounter).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { rel ->
                     rel["_iid"].writeBytes(ByteBuffer.wrap(ByteArray(16)))
                     rel["_system_from"].writeLong(1000L)
@@ -119,7 +122,7 @@ class LiveTableTest {
         val uuid = UUID.fromString("7fffffff-ffff-ffff-4fff-ffffffffffff")
 
         RootAllocator().use { allocator ->
-            LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter(), liveTrieFactory).use { liveTable ->
+            LiveTable(allocator, DOCS, TableSlug.of(DOCS), 0L, RowCounter(), liveTrieFactory).use { liveTable ->
                 Trie.openLogDataWriter(allocator).use { sourceRel ->
                     val iid = uuid.toIidBytes()
                     repeat(n) { writePut(sourceRel, iid, 0, 0, 0) }
@@ -166,7 +169,7 @@ class LiveTableTest {
 
         RootAllocator().use { allocator ->
             MemoryStorage(allocator, epoch = 0).use { bp ->
-                LiveTable(allocator, TableRef("public", "docs"), 0L, RowCounter()).use { liveTable ->
+                LiveTable(allocator, DOCS, TableSlug.of(DOCS), 0L, RowCounter()).use { liveTable ->
 
                     Trie.openLogDataWriter(allocator).use { sourceRel ->
                         writePut(sourceRel, uuid.toIidBytes(), 0, 0, 0)

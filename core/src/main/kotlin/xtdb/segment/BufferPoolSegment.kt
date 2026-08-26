@@ -10,20 +10,18 @@ import xtdb.metadata.PageMetadata
 import xtdb.segment.Segment.PageMeta
 import xtdb.segment.Segment.PageMeta.Companion.pageMeta
 import xtdb.storage.BufferPool
-import xtdb.api.TableRef
+import xtdb.table.TableSlug
 import xtdb.trie.ArrowHashTrie
 import xtdb.trie.Trie
-import xtdb.trie.Trie.dataFilePath
-import xtdb.trie.Trie.metaFilePath
 import xtdb.trie.RecencyMicros
 import xtdb.trie.TrieKey
 import xtdb.time.LocalDateTimeUtil.asMicros
 
 class BufferPoolSegment(
     al: BufferAllocator, private val bp: BufferPool, private val mm: PageMetadata.Factory,
-    val table: TableRef, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate? = null,
+    val slug: TableSlug, val trieKey: TrieKey, val metadataPredicate: MetadataPredicate? = null,
 ) : Segment<ArrowHashTrie.Leaf> {
-    val dataFilePath = table.dataFilePath(trieKey)
+    val dataFilePath = slug.dataFilePath(trieKey)
     private val parsedTrieKey = Trie.parseKey(trieKey)
     private val resolveSameSystemTimeEvents = parsedTrieKey.level == 0L
     private val recency: RecencyMicros = parsedTrieKey.recency?.atStartOfDay()?.asMicros ?: Long.MAX_VALUE
@@ -60,7 +58,7 @@ class BufferPoolSegment(
         override fun close() = pageMetadata.close()
     }
 
-    override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(table.metaFilePath(trieKey)))
+    override suspend fun openMetadata(): Metadata = Metadata(mm.openPageMetadata(slug.metaFilePath(trieKey)))
 
     override suspend fun loadDataPage(al: BufferAllocator, leaf: ArrowHashTrie.Leaf): RelationReader =
         if (currentDataPageIndex == leaf.dataPageIndex) dataRel
