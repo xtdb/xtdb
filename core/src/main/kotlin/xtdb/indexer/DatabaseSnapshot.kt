@@ -3,6 +3,8 @@ package xtdb.indexer
 import xtdb.api.TransactionKey
 import xtdb.api.TableRef
 import xtdb.trie.ColumnName
+import xtdb.table.Oid
+import xtdb.database.Database
 import xtdb.util.closeAll
 import java.time.Instant
 
@@ -34,6 +36,17 @@ class DatabaseSnapshot(val partitions: List<Snapshot>) : AutoCloseable {
                 a + (table to (a[table].orEmpty() + cols))
             }
         }
+
+    /**
+     * Each table's oid, union across [partitions].
+     *
+     * Each partition allocates independently, so partitions could in principle disagree about a table's
+     * oid and the lowest-indexed one wins here. #5557 has to settle whether an oid is per-database or
+     * per-partition before `partitions > 1` is enabled — today [Database] rejects it outright.
+     */
+    fun tableOids(): Map<TableRef, Oid> =
+        if (partitions.size == 1) partitions[0].tableOids
+        else partitions.fold(emptyMap()) { acc, snap -> snap.tableOids + acc }
 
     /** One [TransactionKey] per partition, in partition-index order. */
     val txBasis: List<TransactionKey?> get() = partitions.map { it.txBasis }

@@ -126,8 +126,8 @@
 
           ;; sizes include the block boundary's term_id (=1 for a fresh leader, added in #5817 level 1)
           ;; and the table registry each block carries (#4037)
-          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 161)
-                    (os/->StoredObject (util/->path "blocks/b01.binpb") 162)]
+          (t/is (= [(os/->StoredObject (util/->path "blocks/b00.binpb") 167)
+                    (os/->StoredObject (util/->path "blocks/b01.binpb") 168)]
                    (.listAllObjects bp (util/->path "blocks")))))))))
 
 (t/deftest staged-empty-create-table-visible-across-a-batch-5507

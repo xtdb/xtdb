@@ -9,21 +9,21 @@
    "xt/role_membership"
    "public/hello"},
  :tables
- [{:oid 1,
+ [{:oid 16388,
    :schema-name "public",
    :table-name "foo",
    :slug "public$foo"}
-  {:oid 2,
+  {:oid 16386,
    :schema-name "public",
    :table-name "hello",
    :slug "public$hello"}
-  {:oid 3,
+  {:oid 16387,
    :schema-name "public",
    :table-name "world",
    :slug "public$world"}
-  {:oid 4,
+  {:oid 16385,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}
-  {:oid 5, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
+  {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

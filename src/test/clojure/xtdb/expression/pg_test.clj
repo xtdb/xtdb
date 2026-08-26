@@ -7,6 +7,13 @@
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
+(defn- ->table-oid
+  "The oid pg_class reports for a table. Resolved rather than hardcoded: it is allocated when the
+   catalog first sees the table, so a literal would pin the order the tests happened to create them in."
+  [relname]
+  (-> (xt/q tu/*node* (format "SELECT oid FROM pg_catalog.pg_class WHERE relname = '%s'" relname))
+      first :oid))
+
 (t/deftest test-oid
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
@@ -18,7 +25,7 @@
            (xt/q tu/*node* "SELECT 12345::oid::int v"))
         "oid -> int")
 
-  (t/is (= [{:v (Oid. 357712798)}]
+  (t/is (= [{:v (Oid. (->table-oid "foo"))}]
            (xt/q tu/*node* "SELECT 'foo'::regclass::oid v"))
         "regclass -> oid")
 
@@ -42,7 +49,7 @@
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (_id) VALUES (1)"]])
 
   (t/testing "regclass uses search path to resolve unqualified names"
-    (t/is (= [{:v (RegClass. 357712798)}]
+    (t/is (= [{:v (RegClass. (->table-oid "foo"))}]
              (xt/q tu/*node* "SELECT 'public.foo'::regclass v")
              (xt/q tu/*node* "SELECT 'foo'::regclass v"))
           "text -> regclass"))
@@ -56,7 +63,7 @@
              (xt/q tu/*node* "SELECT 'information_schema.columns'::regclass::varchar v"))
           "text -> regclass -> text"))
 
-  (t/is (= [{:v 357712798}]
+  (t/is (= [{:v (->table-oid "foo")}]
            (xt/q tu/*node* "SELECT 'public.foo'::regclass::int v"))
         "text -> regclass -> int")
 
@@ -78,13 +85,13 @@
                 (mapv (comp symbol :attname)))))
 
   (t/is (= [{:v true}]
-           (xt/q tu/*node* "SELECT 357712798::regclass = 'foo'::regclass v"))
+           (xt/q tu/*node* (format "SELECT %s::regclass = 'foo'::regclass v" (->table-oid "foo"))))
         "regclass with identical oid are equal")
 
   (t/testing "testing non-literal cast"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO bar RECORDS {_id: 1, tn: 'foo'}"]])
 
-    (t/is (= [{:v (RegClass. 357712798)}]
+    (t/is (= [{:v (RegClass. (->table-oid "foo"))}]
              (xt/q tu/*node* "SELECT tn::regclass v FROM bar"))
           "text -> regclass")))
 
@@ -93,7 +100,7 @@
                            [:sql "INSERT INTO bar RECORDS {_id: 2}"]])
 
   (t/is (= [{:xt/id 2} {:xt/id 1}]
-           (xt/q tu/*node* "SELECT _id FROM bar WHERE 'bar'::regclass = 904292726"))))
+           (xt/q tu/*node* (format "SELECT _id FROM bar WHERE 'bar'::regclass = %s" (->table-oid "bar"))))))
 
 (t/deftest test-regproc
   (t/is (= [{:v (RegProc. 1989914641)}]

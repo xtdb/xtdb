@@ -22,6 +22,7 @@ data class BlockDetails(
     // term-fencing (see #5817)
     val termId: Long,
     val externalSourceToken: ExternalSourceToken?,
+    /** The tables this block records — so, the tables with a per-table block file beside it. */
     val tables: List<TableEntry>,
     val secondaryDatabases: Map<String, DatabaseConfig>,
 )

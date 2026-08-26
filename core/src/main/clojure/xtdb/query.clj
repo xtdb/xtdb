@@ -361,6 +361,8 @@
                     (.put !snaps db-name (.openSnapshot db (get min-basis db-name))))
                   (into {} !snaps)))
 
+              ;; `{[db-name table-ref] {:cols #{…}, :oid n}}` — the oid read from the same snapshot as
+              ;; the columns, so `::regclass` and the planner can't disagree about which tables exist.
               (->table-info [min-basis]
                 ;; TODO this, too, gets the schema for *every* db in the catalog
                 (->> (.getDatabaseNames db-cat)
@@ -368,11 +370,13 @@
                                         ;; same detach race as open-snaps above
                                         (when-let [db (.databaseOrNull db-cat db-name)]
                                           (util/with-open [^DatabaseSnapshot snap (.openSnapshot db (get min-basis db-name))]
-                                            (->> (.tableInfo snap)
-                                                 (map (fn [[table-ref cols]] [[db-name table-ref] (set cols)]))))))))))
+                                            (let [oids (.tableOids snap)]
+                                              (->> (.tableInfo snap)
+                                                   (map (fn [[table-ref cols]]
+                                                          [[db-name table-ref] {:cols (set cols), :oid (get oids table-ref)}])))))))))))
 
               (plan-query* [table-info]
-                (-plan-query this parsed-query query-opts table-info))]
+                (-plan-query this parsed-query query-opts (update-vals table-info :cols)))]
 
         (let [!table-info (atom (->table-info prepare-min-basis))]
 

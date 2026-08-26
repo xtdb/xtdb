@@ -4,13 +4,13 @@
  :latest-processed-msg-id 2047,
  :table-names #{"xt/txs" "xt/role_membership" "public/table"},
  :tables
- [{:oid 1,
+ [{:oid 16386,
    :schema-name "public",
    :table-name "table",
    :slug "public$table"}
-  {:oid 2,
+  {:oid 16385,
    :schema-name "xt",
    :table-name "role_membership",
    :slug "xt$role_membership"}
-  {:oid 3, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
+  {:oid 16384, :schema-name "xt", :table-name "txs", :slug "xt$txs"}],
  :secondary-dbs {}}

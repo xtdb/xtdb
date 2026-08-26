@@ -82,7 +82,8 @@
 
 (defn load-tables-to-metadata ^java.util.Map [^BufferPool buffer-pool, ^TableCatalog table-cat]
   (when-let [block-idx (.getCurrentBlockIndex table-cat)]
-    (let [entries (.getEntries (.snap table-cat))]
+    ;; recorded, not all: a table allocated but not yet written has no block file to read
+    (let [entries (.getRecordedEntries (.snap table-cat))]
       (->> (for [^TableEntry entry entries
                  :let [table (.getTable entry)
                        table-block-path (->table-block-metadata-obj-key (.getTablePath (.getSlug entry)) block-idx)

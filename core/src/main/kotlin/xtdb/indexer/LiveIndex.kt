@@ -129,6 +129,10 @@ class LiveIndex private constructor(
     fun commitTx(txKey: TransactionKey, tables: Map<TableRef, RelationReader>) {
         val stamp = snapLock.writeLock()
         try {
+            // Inside the lock, so a table's identity and its rows reach readers together — snapshot
+            // capture brackets itself with the same lock. Whole batch at once, per `registerTables`.
+            tableCatalog.registerTables(tables.keys)
+
             for ((ref, rel) in tables) {
                 val liveTable =
                     this@LiveIndex.tables.getOrPut(ref) {

@@ -102,32 +102,40 @@
       (t/is (= seeded (txs-data-cols))
             "a real transaction writes exactly the seeded columns - no drift between seed and writeTxRow"))))
 
+(defn- ->table-oids
+  "`{relname oid}` as pg_class reports it — resolved rather than hardcoded, because an allocated oid
+   depends on the order tables were first seen, and a new seeded system table would shift every literal."
+  []
+  (into {} (map (juxt :relname :oid))
+        (xt/q tu/*node* "SELECT relname, oid FROM pg_catalog.pg_class")))
+
 (deftest test-pg-attribute
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[127091884 "_id" 1 11111 -1]
-                                                                  [127091884 "_system_from" 2 1184 8]
-                                                                  [127091884 "_system_to" 3 1184 8]
-                                                                  [127091884 "_valid_from" 4 1184 8]
-                                                                  [127091884 "_valid_to" 5 1184 8]
-                                                                  [127091884 "col1" 6 114 -1]
+  (let [{beanie "beanie", baseball "baseball", txs "txs"} (->table-oids)]
+    (t/is (= (set (for [[attrelid attname attnum atttypeid attlen] [[beanie "_id" 1 11111 -1]
+                                                                  [beanie "_system_from" 2 1184 8]
+                                                                  [beanie "_system_to" 3 1184 8]
+                                                                  [beanie "_valid_from" 4 1184 8]
+                                                                  [beanie "_valid_to" 5 1184 8]
+                                                                  [beanie "col1" 6 114 -1]
 
-                                                                  [732573471 "_id" 1 11111 -1]
-                                                                  [732573471 "_system_from" 2 1184 8]
-                                                                  [732573471 "_system_to" 3 1184 8]
-                                                                  [732573471 "_valid_from" 4 1184 8]
-                                                                  [732573471 "_valid_to" 5 1184 8]
-                                                                  [732573471 "col1" 6 20 8]
-                                                                  [732573471 "col2" 7 20 8]
+                                                                  [baseball "_id" 1 11111 -1]
+                                                                  [baseball "_system_from" 2 1184 8]
+                                                                  [baseball "_system_to" 3 1184 8]
+                                                                  [baseball "_valid_from" 4 1184 8]
+                                                                  [baseball "_valid_to" 5 1184 8]
+                                                                  [baseball "col1" 6 20 8]
+                                                                  [baseball "col2" 7 20 8]
 
-                                                                  [598393539 "_id" 1 20 8]
-                                                                  [598393539 "_system_from" 2 1184 8]
-                                                                  [598393539 "_system_to" 3 1184 8]
-                                                                  [598393539 "_valid_from" 4 1184 8]
-                                                                  [598393539 "_valid_to" 5 1184 8]
-                                                                  [598393539 "committed" 6 16 1]
-                                                                  [598393539 "error" 7 16384 -1]
-                                                                  [598393539 "system_time" 8 1184 8]]]
+                                                                  [txs "_id" 1 20 8]
+                                                                  [txs "_system_from" 2 1184 8]
+                                                                  [txs "_system_to" 3 1184 8]
+                                                                  [txs "_valid_from" 4 1184 8]
+                                                                  [txs "_valid_to" 5 1184 8]
+                                                                  [txs "committed" 6 16 1]
+                                                                  [txs "error" 7 16384 -1]
+                                                                  [txs "system_time" 8 1184 8]]]
                   {:atttypmod -1,
                    :attrelid attrelid,
                    :attidentity "",
@@ -144,7 +152,7 @@
                               attnotnull, atttypmod, attidentity, attgenerated
                        FROM pg_catalog.pg_attribute
                        WHERE attname IN ('_id', '_valid_from', '_valid_to', '_system_from', '_system_to',
-                                         'col1', 'col2', 'error', 'system_time', 'committed')")))))
+                                         'col1', 'col2', 'error', 'system_time', 'committed')"))))))
 
 (deftest test-pg-tables
   (xt/submit-tx tu/*node* test-data)
@@ -169,9 +177,10 @@
 (deftest test-pg-class
   (xt/submit-tx tu/*node* test-data)
 
-  (t/is (= #{{:relkind "r",
+  (let [{beanie "beanie", baseball "baseball", txs "txs"} (->table-oids)]
+    (t/is (= #{{:relkind "r",
               :relnamespace 1106696632,
-              :oid 732573471,
+              :oid baseball,
               :relname "baseball",
               :relam 2,
               :relchecks 0,
@@ -188,7 +197,7 @@
               :reltoastrelid 0}
              {:relkind "r",
               :relnamespace 683075021,
-              :oid 598393539,
+              :oid txs,
               :relname "txs",
               :relam 2,
               :relchecks 0,
@@ -205,7 +214,7 @@
               :reltoastrelid 0}
              {:relkind "r",
               :relnamespace 1106696632,
-              :oid 127091884,
+              :oid beanie,
               :relname "beanie",
               :relam 2,
               :relchecks 0,
@@ -223,7 +232,7 @@
            (set (xt/q tu/*node*
                       "SELECT reltablespace, reloftype, relhastriggers, relchecks, relpersistence, relhasrules, relispartition, relname, relforcerowsecurity, oid, relnamespace, relreplident, relhasindex, reltoastrelid, relkind, relam, relrowsecurity
                        FROM pg_catalog.pg_class
-                       WHERE relname IN ('beanie', 'baseball', 'txs')")))))
+                       WHERE relname IN ('beanie', 'baseball', 'txs')"))))))
 
 (deftest test-pg-type
   (xt/submit-tx tu/*node* test-data)
@@ -289,7 +298,7 @@
   (t/is (= [{:column-name "_id"}]
            (xt/q tu/*node* "SELECT column_name FROM information_schema.columns ORDER BY column_name LIMIT 1")))
 
-  (t/is (= [{:attname "_id", :attrelid 127091884}]
+  (t/is (= [{:attname "_id", :attrelid (apply min (vals (->table-oids)))}]
            (xt/q tu/*node* "SELECT attname, attrelid FROM pg_attribute ORDER BY attname, attrelid LIMIT 1")))
 
   (t/is (= [{:table-name "baseball",
@@ -605,3 +614,17 @@
             (t/is (= [{:table-catalog "new-db", :table-schema "public", :table-name "foo", :column-name "_id", :data-type ":keyword"}]
                      (xt/q xt-conn "SELECT table_catalog, table_schema, table_name, column_name, data_type FROM \"new-db\".information_schema.columns WHERE table_schema = 'public' AND column_name = '_id'"))
                   "query other db's information_schema from xtdb connection")))))))
+
+(deftest a-tables-oid-does-not-change-when-its-first-block-is-written
+  (xt/execute-tx tu/*node* [[:put-docs :docs {:xt/id 1}]])
+
+  (let [->oid #(-> (xt/q tu/*node* "SELECT oid FROM pg_catalog.pg_class WHERE relname = 'docs'")
+                   first :oid)
+        before (->oid)]
+    (t/is (not= (i-s/name->oid 'public/docs) before)
+          "pg_class reports the allocated oid, not a hash of the name, before any block records it")
+
+    (tu/flush-block! tu/*node*)
+    (xt/execute-tx tu/*node* [[:put-docs :unrelated {:xt/id 1}]])
+
+    (t/is (= before (->oid)))))

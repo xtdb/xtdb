@@ -18,14 +18,23 @@
   ;; table-info / schema keys are `[db-name table-ref]` qualified pairs; tolerate a bare ref/symbol too
   (table/ref->schema+table (if (vector? k) (second k) k)))
 
-(defn tables [schema]
-  (into #{} (map schema-key->table)
-        (concat (keys (info/table-info "xtdb")) (keys schema))))
+(defn table-oids
+  "Every relation the query can see, as `{schema-qualified-symbol oid}`.
+
+   The oid is the one the table's block records, resolved through `info/table-oid` so that a
+   `::regclass` and the `pg_class` row for the same table come out equal — pgjdbc and Metabase resolve
+   a name through the cast and then join on `pg_class.oid`."
+  ;; TODO multi-db - a name present in two databases resolves to whichever the map happened to hold
+  [schema]
+  (-> (into {} (map (fn [k] (let [table (schema-key->table k)]
+                              [table (info/table-oid nil table)])))
+            (keys (info/table-info "xtdb")))
+      (into (map (fn [[k {:keys [oid]}]] (let [table (schema-key->table k)]
+                                           [table (info/table-oid oid table)])))
+            schema)))
 
 (defn find-table [schema table-name]
-  ;; TODO multi-db
-  (or (some-> (some (tables schema) (symbol-names table-name))
-              (info/name->oid))
+  (or (some (table-oids schema) (symbol-names table-name))
       (throw (err/incorrect ::unknown-relation (format "Relation %s does not exist" table-name)))))
 
 (defmethod expr/codegen-cast [:utf8 :regclass] [_]
@@ -34,9 +43,8 @@
                   `(find-table ~expr/schema-sym (expr/buf->str ~utf8-code)))})
 
 (defn oid->table [schema oid]
-  (->> (tables schema)
-       (filter #(= oid (info/name->oid (table/ref->schema+table %))))
-       (first)))
+  (->> (table-oids schema)
+       (some (fn [[table oid']] (when (= oid oid') table)))))
 
 (defn string-name [fq-name]
   (when fq-name

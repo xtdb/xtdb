@@ -47,15 +47,16 @@ import java.nio.file.Path
 import kotlin.io.path.extension
 
 /**
- * A block written before the registry existed carries names alone, and every table in it is on disk under
- * its escaped name — so that is the slug each takes, and their files stay where they are.
+ * A block that records no entries carries names alone, and every table in it is on disk under its escaped
+ * name — so that is the slug each takes, and their files stay where they are.
  *
  * Oids come from the sorted names rather than from list order: the proto's order comes from a Set, so it
- * isn't stable, and every node has to derive the same registry from the same bytes.
+ * isn't stable, and every node has to derive the same entries from the same bytes.
  */
 private fun Block.tableEntries(): List<TableEntry> =
     tablesList.takeIf { it.isNotEmpty() }?.map { TableEntry.fromProto(it) }
-        ?: tableNamesList.sorted().mapIndexed { idx, name -> TableEntry.mint(idx + 1L, fromSchemaAndTable(name)) }
+        ?: tableNamesList.sorted()
+            .mapIndexed { idx, name -> TableEntry.mint(TableEntry.FIRST_OID + idx, fromSchemaAndTable(name)) }
 
 // The proto is the storage format, so this is the only place that reads its presence flags: everything
 // downstream sees ordinary Kotlin nullability.
@@ -103,6 +104,14 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     data class State internal constructor(
         val block: BlockDetails?,
         internal val tables: Map<TableRef, TableMeta>,
+        /**
+         * Every table this catalog can name, whether or not a block has recorded it yet.
+         *
+         * Allocation follows the order tables first appear in the log, which every node replays
+         * identically — so a follower reaches the same oid as the leader without it ever travelling on
+         * the wire.
+         */
+        internal val entriesByTable: Map<TableRef, TableEntry>,
     ) {
         val blockIdx: BlockIndex? get() = block?.blockIndex
 
@@ -118,11 +127,29 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         fun contributedType(table: TableRef, col: ColumnName): VectorType =
             tables[table]?.let { it.vecTypes[col] ?: it.absentContribution } ?: VectorType.Nothing
 
-        val entries: List<TableEntry> get() = block?.tables.orEmpty()
+        /**
+         * The entries the current block records, and so the only tables with a per-table block file to
+         * read. Distinct from [entries], which also holds tables allocated but not yet written.
+         */
+        val recordedEntries: List<TableEntry> get() = block?.tables.orEmpty()
 
-        private val entriesByTable by lazy { entries.associateBy { it.table } }
+        /** Every table this catalog can name, recorded or not. */
+        val entries: Collection<TableEntry> get() = entriesByTable.values
 
         fun entry(table: TableRef): TableEntry? = entriesByTable[table]
+
+        /** [this], plus an entry for each of [tables] that hasn't one. */
+        internal fun withEntriesFor(tables: Collection<TableRef>): State {
+            val fresh = tables.filterNot { it in entriesByTable }.sortedBy { it.schemaAndTable }
+            if (fresh.isEmpty()) return this
+
+            val firstOid = entries.maxOfOrNull { it.oid + 1 } ?: TableEntry.FIRST_OID
+
+            return copy(
+                entriesByTable = entriesByTable +
+                        fresh.mapIndexed { idx, table -> table to TableEntry.mint(firstOid + idx, table) }
+            )
+        }
 
         /**
          * Where [table]'s files live.
@@ -130,13 +157,15 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
          * Resolving through a pinned [State] is what keeps a query's paths consistent with the trie state it
          * planned against: the block it read is the block whose slugs it uses.
          *
-         * A table the registry doesn't hold has yet to reach a block, so nothing of it is on disk under any
-         * other name and the derived slug is the one its first write will record.
+         * Every table the catalog knows of has an entry, so the derived fallback is for one it has never
+         * been told about — a query naming a table that does not exist.
          */
         fun slug(table: TableRef): TableSlug = entry(table)?.slug ?: TableSlug.of(table)
     }
 
-    private val _state = MutableStateFlow(State(initialBlock?.asBlockDetails(), emptyMap()))
+    private val _state = initialBlock?.asBlockDetails().let { block ->
+        MutableStateFlow(State(block, emptyMap(), block?.tables.orEmpty().associateBy { it.table }))
+    }
 
     fun snap(): State = _state.value
 
@@ -180,15 +209,21 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
      * Sorted, so that the same table set yields the same block bytes whichever node wrote it.
      */
     fun resolveTables(tables: Collection<TableRef>): List<TableEntry> {
-        val existing = snap().entries.associateBy { it.table }
-        val nextOid = (existing.values.maxOfOrNull { it.oid } ?: 0L) + 1
+        registerTables(tables)
+        val known = snap().entriesByTable
 
-        val minted = tables.filterNot { it in existing }.sortedBy { it.schemaAndTable }
-            .mapIndexed { idx, table -> TableEntry.mint(nextOid + idx, table) }
-            .associateBy { it.table }
-
-        return tables.sortedBy { it.schemaAndTable }.map { existing[it] ?: minted.getValue(it) }
+        return tables.sortedBy { it.schemaAndTable }.map { known.getValue(it) }
     }
+
+    /**
+     * Gives an entry to each of [tables] that hasn't one, so that a table has its identity from the moment
+     * the catalog learns of it rather than from its first block.
+     *
+     * Allocating in name order is what lets a follower agree with the leader: a transaction's tables reach
+     * this as an unordered map, so arrival order within one transaction differs between them, while the
+     * order transactions themselves arrive does not.
+     */
+    fun registerTables(tables: Collection<TableRef>) = _state.update { it.withEntriesFor(tables) }
 
     val secondaryDatabases: Map<String, DatabaseConfig> get() = snap().block?.secondaryDatabases.orEmpty()
 
@@ -202,8 +237,9 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     fun seedTable(table: TableRef, colNames: List<ColumnName>) {
         val meta = TableMeta(colNames.associateWith { VectorType.Nothing }, 0, emptyMap())
 
-        _state.update {
-            if (it.tables.containsKey(table)) it else it.copy(tables = it.tables + (table to meta))
+        _state.update { cur ->
+            cur.copy(tables = if (cur.tables.containsKey(table)) cur.tables else cur.tables + (table to meta))
+                .withEntriesFor(listOf(table))
         }
     }
 
@@ -215,7 +251,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
     fun loadTables() {
         val snap = snap()
         val blockIndex = snap.blockIdx ?: return
-        val tables = loadTablesFromStorage(bufferPool, snap.entries, blockIndex)
+        val tables = loadTablesFromStorage(bufferPool, snap.recordedEntries, blockIndex)
 
         _state.update { it.copy(tables = tables) }
     }
@@ -229,9 +265,16 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
         val delta = metadata.mapValues { (_, bm) -> TableMeta(bm.vecTypes, bm.rowCount.toLong(), bm.hllDeltas) }
 
         _state.update { cur ->
+            val newBlock =
+                if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails()
+
             State(
-                block = if (block != null && block.blockIndex == cur.blockIdx) cur.block else block?.asBlockDetails(),
-                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta)
+                block = newBlock,
+                tables = if (delta.isEmpty()) cur.tables else cur.tables.foldIn(delta),
+                // The block wins over what we allocated: ordinarily the two agree, but a block written
+                // before entries were recorded resolves to derived ones, and those are what every other
+                // node reading it will use.
+                entriesByTable = cur.entriesByTable + newBlock?.tables.orEmpty().associateBy { it.table }
             )
         }
     }
