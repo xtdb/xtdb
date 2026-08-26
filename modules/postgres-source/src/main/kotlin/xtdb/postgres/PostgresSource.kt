@@ -26,10 +26,11 @@ import xtdb.postgres.proto.PostgresSourceConfig
 import xtdb.postgres.proto.PostgresSourceToken
 import xtdb.postgres.proto.postgresSourceConfig
 import xtdb.postgres.proto.postgresSourceToken
+import xtdb.postgres.PostgresSource.Assignment.Assigned
+import xtdb.postgres.PostgresSource.Assignment.Unassigned
 import xtdb.util.*
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import com.google.protobuf.Any as ProtoAny
 
 private val LOG = PostgresSource::class.logger
@@ -41,7 +42,7 @@ class PostgresSource(
     private val driver: PostgresDriver,
     private val slotName: String,
     private val indexer: PgIndexer,
-    meterRegistry: MeterRegistry? = null,
+    private val meterRegistry: MeterRegistry? = null,
 ) : ExternalSource {
 
     private val tags = listOf(
@@ -73,40 +74,66 @@ class PostgresSource(
             .register(it)
     }
 
-    // epoch seconds of the latest applied commit; 0 until the first event
-    private val lastEventEpochSeconds = AtomicLong(0)
+    /**
+     * Whether a partition is assigned to this node, and if so everything that assignment accumulates.
+     *
+     * The whole of the per-assignment state lives on [Assigned], so a new assignment is one swap that
+     * starts all of it from scratch — nothing can carry the previous term's readings into this one.
+     * [Assigned] is mutated in place by the poll loop that owns it, which is the sole writer.
+     */
+    private sealed interface Assignment {
 
-    // 1 while a replication stream is open, 0 otherwise
-    private val connectionState = AtomicInteger(0)
+        /** Another node holds the partition, so this one has no business querying the slot. */
+        data object Unassigned : Assignment
 
+        data class Assigned(
+            /** True for the length of the replication stream; false while snapshotting. */
+            @Volatile var streaming: Boolean = false,
+            /** Epoch seconds of the latest applied commit; 0 until this assignment's first event. */
+            @Volatile var lastEventEpochSeconds: Long = 0,
+        ) : Assignment
+    }
+
+    private val assignment = AtomicReference<Assignment>(Unassigned)
+
+    // Assigned-but-not-streaming still reports the lag: the slot stops advancing during the initial
+    // snapshot, so a long snapshot is exactly when WAL piling up upstream matters.
     private fun walLagBytes(): Double =
-        try {
-            driver.queryWalLagBytes()?.toDouble() ?: Double.NaN
-        } catch (e: Exception) {
-            LOG.debug(e) { "[$dbName] Failed to query WAL lag" }
-            Double.NaN
+        when (assignment.get()) {
+            Unassigned -> Double.NaN
+            is Assigned ->
+                try {
+                    driver.queryWalLagBytes()?.toDouble() ?: Double.NaN
+                } catch (e: Exception) {
+                    LOG.debug(e) { "[$dbName] Failed to query WAL lag" }
+                    Double.NaN
+                }
         }
 
-    init {
-        meterRegistry?.let { reg ->
-            Gauge.builder("xtdb.postgres_source.last_event_time", lastEventEpochSeconds) { it.get().toDouble() }
+    private val gauges: List<Gauge> = meterRegistry?.let { reg ->
+        listOf(
+            Gauge.builder("xtdb.postgres_source.last_event_time", assignment) {
+                (it.get() as? Assigned)?.lastEventEpochSeconds?.toDouble() ?: 0.0
+            }
                 .description("epoch seconds of the most recently applied source commit")
                 .baseUnit("seconds")
                 .tags(tags)
-                .register(reg)
+                .register(reg),
 
-            Gauge.builder("xtdb.postgres_source.connection_state", connectionState) { it.get().toDouble() }
+            Gauge.builder("xtdb.postgres_source.connection_state", assignment) {
+                if ((it.get() as? Assigned)?.streaming == true) 1.0 else 0.0
+            }
                 .description("1 if a replication stream is currently open, 0 otherwise")
                 .tags(tags)
-                .register(reg)
+                .register(reg),
 
             Gauge.builder("xtdb.postgres_source.wal_lag_bytes", this) { it.walLagBytes() }
                 .description("WAL bytes between pg_current_wal_lsn and our slot's confirmed_flush_lsn; NaN if we can't read it")
                 .baseUnit("bytes")
                 .tags(tags)
-                .register(reg)
-        }
-    }
+                .register(reg),
+        )
+    }.orEmpty()
 
     @Serializable
     @SerialName("!Postgres")
@@ -199,6 +226,7 @@ class PostgresSource(
             )
         }
 
+        val assigned = Assigned().also { assignment.set(it) }
         try {
             when {
                 token != null && !token.snapshotCompleted ->
@@ -213,13 +241,13 @@ class PostgresSource(
                     )
                 token != null && token.snapshotCompleted -> {
                     LOG.info("[$dbName] Resuming streaming from LSN ${LogSequenceNumber.valueOf(token.latestCommittedLsn)}")
-                    streamChanges(txIndexer, token.latestCommittedLsn)
+                    streamChanges(txIndexer, token.latestCommittedLsn, assigned)
                 }
                 else -> {
                     LOG.info("[$dbName] Starting initial snapshot")
                     val slotLsn = initialSnapshot(txIndexer)
                     LOG.info("[$dbName] Snapshot complete, switching to streaming from LSN ${LogSequenceNumber.valueOf(slotLsn)}")
-                    streamChanges(txIndexer, slotLsn)
+                    streamChanges(txIndexer, slotLsn, assigned)
                 }
             }
         } catch (e: PSQLException) {
@@ -232,6 +260,8 @@ class PostgresSource(
         } catch (e: Exception) {
             LOG.error(e, "[$dbName] External source failed")
             throw e
+        } finally {
+            assignment.set(Unassigned)
         }
     }
 
@@ -288,9 +318,9 @@ class PostgresSource(
         }
     }
 
-    private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long) {
+    private suspend fun streamChanges(txIndexer: TxIndexer, startLsn: Long, assigned: Assigned) {
         driver.openStream(startLsn).use { stream ->
-            connectionState.set(1)
+            assigned.streaming = true
 
             // Transactions submitted to the indexer but not yet known durable, in submission (= LSN) order. We
             // read + submit ahead of durability so back-to-back CDC txs pipeline through the double-buffered
@@ -331,7 +361,7 @@ class PostgresSource(
                     handle.await()
                     eventsCounter?.increment(tx.ops.size.toDouble())
                     commitsCounter?.increment()
-                    lastEventEpochSeconds.set(tx.commitTime.epochSecond)
+                    assigned.lastEventEpochSeconds = tx.commitTime.epochSecond
                     commitLag?.record(
                         (Instant.now().toEpochMilli() - tx.commitTime.toEpochMilli()) / 1000.0,
                     )
@@ -367,13 +397,17 @@ class PostgresSource(
                     drainApplied()
                 }
             } finally {
-                connectionState.set(0)
+                assigned.streaming = false
             }
         }
     }
 
     override fun close() {
         LOG.info("[$dbName] Closing external source")
+        // Before the driver goes: wal_lag_bytes queries it on scrape.
+        meterRegistry?.let { reg ->
+            (gauges + listOfNotNull(eventsCounter, commitsCounter, commitLag)).forEach { reg.remove(it) }
+        }
         runCatching { indexer.close() }
         driver.close()
     }
