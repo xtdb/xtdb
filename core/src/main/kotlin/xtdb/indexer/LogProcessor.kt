@@ -170,7 +170,7 @@ class LogProcessor(
     private val blockUploader: BlockUploader,
     private val compactor: Compactor.ForDatabase,
     private val dbCatalog: Database.Catalog?,
-    private val externalSourceFactory: ExternalSource.Factory?,
+    private val externalSource: ExternalSource?,
     private val scope: CoroutineScope,
     private val skipTxs: Set<MessageId> = emptySet(),
     private val flushTimeout: Duration,
@@ -178,7 +178,7 @@ class LogProcessor(
 ) : Log.SubscriptionListener<SourceMessage>, AutoCloseable {
 
     private val replicaLog = partitionStorage.replicaLog
-    private val hasExternalSource = externalSourceFactory != null
+    private val hasExternalSource = externalSource != null
 
     // The committed-role state machine — see allium/log-processor-lifecycle.allium.
     // `state` is written from two places: the transport's serialization point (commitLeader /
@@ -209,14 +209,14 @@ class LogProcessor(
     private class Leading(override val proc: LeaderLogProcessor, override val job: Job) : Leader
 
     private fun openLeader(termId: Long, resumeAfterMsgId: MessageId): Prepared {
-        // The leader term owns (and frees) its driver and its ext source.
+        // The leader term owns (and frees) its driver; the ext source it borrows outlives every term.
         val driver = RealLeaderDriver(partitionStorage, partitionState, blockUploader)
         val replicaAppender = ReplicaLogAppender(driver)
 
         val proc = LeaderLogProcessor(
             allocator, base, partitionStorage, crashLogger, partitionState, dbName, driver, watchers,
             replicaAppender,
-            externalSourceFactory?.open(dbName, base.remotes, base.meterRegistry),
+            externalSource,
             skipTxs, dbCatalog,
             leaderTerm = termId,
             flushTimeout = flushTimeout,

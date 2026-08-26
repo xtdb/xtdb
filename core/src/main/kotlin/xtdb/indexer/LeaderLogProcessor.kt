@@ -290,7 +290,6 @@ internal class LeaderLogProcessor(
     }
 
     override fun close() {
-        extSrcProc?.close()
         driver.close()
         // Frees every resolved-but-not-applied tx — safe only once the term's job has been joined, so the
         // persister and the pumps are gone.

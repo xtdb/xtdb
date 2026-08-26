@@ -349,6 +349,15 @@ class Database(
                 watchers.notifyError(e)
             })
 
+            // One per database, outliving every leader term: the partition frees it after the processor that
+            // borrows it, and the `open` registration covers only an open that fails before we get there.
+            // Gated exactly as the group subscription below is — only a node that can lead has any use for a
+            // source, so a read-only or non-indexing node opens none and validates no source config.
+            val extSource =
+                if (indexerConfig.enabled && !readOnly)
+                    open { dbConfig.externalSource?.open(dbName, base.remotes, base.meterRegistry) }
+                else null
+
             val logProcessor = if (indexerConfig.enabled) {
                 val blockUploader = BlockUploader(storage, state, dbName, compactorForDb, dbCatalog, base.meterRegistry, scope)
 
@@ -356,7 +365,7 @@ class Database(
                     allocator, base, crashLogger,
                     storage, state, dbName, watchers, blockUploader,
                     compactorForDb, dbCatalog,
-                    externalSourceFactory = dbConfig.externalSource,
+                    externalSource = extSource,
                     scope = scope,
                     skipTxs = indexerConfig.skipTxs.toSet(),
                     flushTimeout = indexerConfig.flushDuration,
@@ -396,6 +405,7 @@ class Database(
                 watchers = watchers,
                 compactorOrNull = compactorForDb,
                 logProcessor = logProcessor,
+                externalSource = extSource,
             )
 
             val db = Database(
