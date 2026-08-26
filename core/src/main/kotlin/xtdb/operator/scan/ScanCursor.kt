@@ -6,7 +6,6 @@ import kotlinx.coroutines.runBlocking
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.ICursor
 import xtdb.arrow.RelationReader
-import xtdb.bitemporal.PolygonCalculator
 import xtdb.operator.SelectionSpec
 import xtdb.segment.MergeTask
 import xtdb.segment.Segment
@@ -16,10 +15,7 @@ import xtdb.util.TemporalBounds
 import xtdb.util.closeAll
 import xtdb.util.safeMap
 import java.util.*
-import java.util.Comparator.comparing
 import java.util.function.Consumer
-import kotlin.math.max
-import kotlin.math.min
 
 class ScanCursor(
     private val al: BufferAllocator,
@@ -35,14 +31,14 @@ class ScanCursor(
     private val metrics: ScanMetrics
 ) : ICursor {
 
-    private val vtLower = temporalBounds.validTime.lower
-    private val vtUpper = temporalBounds.validTime.upper
-
     override val cursorType get() = "scan"
     override val childCursors get() = emptyList<ICursor>()
     override val cursorAttributes get() = metrics.toMap()
 
-    private class LeafPointer(val evPtr: EventRowPointer, val relIdx: Int)
+    private fun openResolver(): EntityResolver =
+        if (temporalBounds.validTime.isPoint && temporalBounds.systemTime.isPoint)
+            AsOfResolver(temporalBounds, clampValidTime)
+        else PolygonResolver(temporalBounds, clampValidTime)
 
     private fun RelationReader.maybeSelect(iidPred: SelectionSpec?, path: ByteArray) =
         when (iidPred) {
@@ -63,11 +59,7 @@ class ScanCursor(
         while (mergeTasks.hasNext()) {
             val task = mergeTasks.next()
             val taskPath = task.path
-            // outer: one entry per page, ordered by the iid that page is currently on.
-            // inner: the pages sitting on the entity being resolved, newest system-time first.
-            val iidQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.iidComparator()))
-            val eventQueue = PriorityQueue<LeafPointer>(comparing({ it.evPtr }, EventRowPointer.systemFromComparator()))
-            val polygonCalculator = PolygonCalculator(temporalBounds)
+            val resolver = openResolver()
 
             // we're not in coroutine land here, so it's a good boundary for runBlocking
             val loadedPages = runBlocking { task.pages.map { async { it.loadDataPage(al) } }.awaitAll() }
@@ -78,56 +70,15 @@ class ScanCursor(
 
             val leafReaders = loadedPages.map { it.maybeSelect(iidPred, taskPath) }
 
-            leafReaders.forEachIndexed { idx, leafReader ->
-                val evPtr = EventRowPointer(leafReader, taskPath)
-                if (!evPtr.isValid()) return@forEachIndexed
-                iidQueue.add(LeafPointer(evPtr, idx))
+            val pointers = leafReaders.mapIndexedNotNull { idx, leafReader ->
+                EventRowPointer(leafReader, taskPath).takeIf { it.isValid() }?.let { LeafPointer(it, idx) }
             }
 
             BitemporalConsumer.open(al, leafReaders, colNames).use { bitemporalConsumer ->
-                while (true) {
-                    val firstOfIid = iidQueue.poll() ?: break
+                val merge = EntityMerge(pointers)
 
-                    // the entity we're resolving, captured before its own pointer advances past it
-                    val iidHigh = firstOfIid.evPtr.iidHigh
-                    val iidLow = firstOfIid.evPtr.iidLow
-
-                    eventQueue.add(firstOfIid)
-                    while (iidQueue.peek()?.evPtr?.sameIidAs(iidHigh, iidLow) == true)
-                        eventQueue.add(iidQueue.poll())
-
-                    while (true) {
-                        val leafPtr = eventQueue.poll() ?: break
-                        val evPtr = leafPtr.evPtr
-
-                        polygonCalculator.calculate(evPtr)
-                            ?.takeIf { evPtr.op == "put" }
-                            ?.let { polygon ->
-                                val sysFrom = evPtr.systemFrom
-                                val idx = evPtr.index
-
-                                repeat(polygon.validTimeRangeCount) { i ->
-                                    val validFrom = polygon.getValidFrom(i)
-                                    val validTo = polygon.getValidTo(i)
-                                    val sysTo = polygon.getSystemTo(i)
-
-                                    if (
-                                        temporalBounds.intersects(validFrom, validTo, sysFrom, sysTo)
-                                        && validFrom != validTo && sysFrom != sysTo
-                                    ) {
-                                        val outValidFrom = if (clampValidTime) max(validFrom, vtLower) else validFrom
-                                        val outValidTo = if (clampValidTime) min(validTo, vtUpper) else validTo
-                                        bitemporalConsumer.accept(leafPtr.relIdx, idx, outValidFrom, outValidTo, sysFrom, sysTo)
-                                    }
-                                }
-                            }
-
-                        evPtr.nextIndex()
-
-                        if (evPtr.isValid())
-                            (if (evPtr.sameIidAs(iidHigh, iidLow)) eventQueue else iidQueue).add(leafPtr)
-                    }
-                }
+                while (merge.nextEntity())
+                    resolver.resolveEntity(merge, bitemporalConsumer)
 
                 val colPreds = colPreds.entries
                     .filterNot { it.key == "_iid" }
