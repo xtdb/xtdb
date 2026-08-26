@@ -19,9 +19,9 @@
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Decimal)
            (org.apache.commons.codec.binary Hex)
-           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
+           (xtdb.arrow ListValueReader RelationReader ValueBox ValueReader Vector VectorMask VectorReader VectorType VectorType$Listy VectorType$Mono VectorType$Nothing VectorType$Poly VectorType$Struct)
            (xtdb.expression PgFormat)
-           (xtdb.operator ProjectionSpec SelectionSpec)
+           (xtdb.operator MaskSpec ProjectionSpec SelectionSpec)
            xtdb.time.Interval
            (xtdb.util StringUtil)))
 
@@ -2482,13 +2482,20 @@
 
             out-vec))))))
 
-(defn ->expression-selection-spec ^SelectionSpec [expr input-types]
+(defn ->expression-mask-spec ^MaskSpec [expr input-types]
   (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
+    (reify MaskSpec
+      (mask [_ al in-rel schema args]
+        (with-open [selection (.project projector al in-rel schema args)]
+          (VectorMask/open al (.getRowCount in-rel) selection))))))
+
+(defn ->expression-selection-spec ^SelectionSpec [expr input-types]
+  (let [mask-spec (->expression-mask-spec expr input-types)]
     (reify SelectionSpec
       (select [_ al in-rel schema args]
-        (with-open [selection (.project projector al in-rel schema args)]
+        (with-open [mask (.mask mask-spec al in-rel schema args)]
           (let [res (IntStream/builder)]
-            (dotimes [idx (.getValueCount selection)]
-              (when (.getBoolean selection idx)
+            (dotimes [idx (.getRowCount in-rel)]
+              (when (.isSet mask idx)
                 (.add res idx)))
             (.toArray (.build res))))))))
