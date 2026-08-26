@@ -50,6 +50,25 @@ sealed class VectorType {
 
     abstract val legs: Iterable<Mono>
 
+    /**
+     * The legs a *read* of this type can yield, as against [legs], which is the lattice's answer. The two
+     * differ only at [Nothing], which has no legs and reads as null - it is backed by a valueless
+     * `NullVector`, whose `isNull` is unconditionally true.
+     *
+     * MUST NOT be substituted for [legs] when *constructing* a type: `fromLegs([Nothing, I64])` over this
+     * gives `Maybe(I64)` where the lattice law demands `I64`.
+     */
+    val readsAs: Iterable<Mono>
+        get() =
+            // not `else -> legs`: a new direct subclass of VectorType has no known reading, and should stop
+            // this compiling until someone picks one
+            when (this) {
+                is Mono -> legs
+                is Maybe -> legs
+                is Poly -> legs
+                Nothing -> listOf(Null)
+            }
+
     @get:JvmName("asMono")
     val asMono get() = this as Mono
 

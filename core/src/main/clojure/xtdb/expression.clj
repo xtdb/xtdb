@@ -432,7 +432,7 @@
 (defn- continue-read [f ^VectorType vec-type reader-sym & args]
   (if (instance? VectorType$Mono vec-type)
     (f vec-type (apply read-value-code vec-type reader-sym args))
-    (continue-read-union f (set (.getLegs vec-type)) reader-sym args)))
+    (continue-read-union f (set (.getReadsAs vec-type)) reader-sym args)))
 
 (def ^:dynamic ^String *snapshot-token* nil)
 (def ^:dynamic ^String *await-token* nil)
