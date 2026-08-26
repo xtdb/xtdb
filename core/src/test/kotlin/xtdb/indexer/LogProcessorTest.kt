@@ -67,7 +67,7 @@ class LogProcessorTest {
         allocator, nodeBase, mockk(relaxed = true),
         partitionStorage, partitionState, "test-db", watchers, blockUploader,
         mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
-        externalSourceFactory = null,
+        externalSource = null,
         scope = scope,
         flushTimeout = IndexerConfig().flushDuration,
     )

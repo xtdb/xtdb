@@ -20,6 +20,9 @@ import java.time.Instant
  *
  * Appending stays with the term, via [appendTx] — the row gauge it feeds and the block boundary it may cut
  * are shared with the source log, and ordering between the two is what the term is for.
+ *
+ * [extSource] is borrowed, not owned — it is one-per-database and outlives every term, so nothing here
+ * closes it.
  */
 internal class ExternalSourceProcessor(
     private val extSource: ExternalSource,
@@ -28,7 +31,7 @@ internal class ExternalSourceProcessor(
     private val watchers: Watchers,
     private val txResolver: TxResolver,
     private val appendTx: suspend (ResolvedTx) -> Unit,
-) : TxIndexer, AutoCloseable {
+) : TxIndexer {
 
     override val latestBlock get() = tableCatalog.latestBlock
 
@@ -110,9 +113,5 @@ internal class ExternalSourceProcessor(
     fun shutdown(cause: Throwable) {
         tasks.close(cause)
         while (true) (tasks.tryReceive().getOrNull() ?: break).abandon(cause)
-    }
-
-    override fun close() {
-        extSource.close()
     }
 }

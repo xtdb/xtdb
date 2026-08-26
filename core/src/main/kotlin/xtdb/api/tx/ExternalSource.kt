@@ -23,6 +23,14 @@ typealias ExternalSourceToken = ByteArray
  * XTDB drives the source via [onPartitionAssigned] and persists the per-tx [ExternalSourceToken]
  * so the source can resume after the last indexed event.
  *
+ * One instance per database on each node that could lead it, opened and closed with the database there. A
+ * node that indexes nothing, or holds the database read-only, can never lead and so opens no source at all.
+ *
+ * That instance spans every leader term the node serves, so [onPartitionAssigned] may be called repeatedly
+ * (sequentially, never concurrently). State belonging to one assignment therefore MUST live inside that
+ * call, not in a field: the upstream connection is torn down on cancellation and there is no [close] in
+ * between to reset anything.
+ *
  * A source that also *confirms* progress upstream — advancing a Postgres replication slot, committing a
  * consumer-group offset — must gate that on [TxIndexer.latestBlock] rather than on a transaction's own
  * durability handle. Confirmation tells the upstream it may discard everything behind the confirmed
@@ -44,7 +52,9 @@ interface ExternalSource : AutoCloseable {
     suspend fun onPartitionAssigned(partition: Int, afterToken: ExternalSourceToken?, txIndexer: TxIndexer)
 
     /**
-     * Opens an [ExternalSource] for a database, from the source config.
+     * Opens an [ExternalSource] for a database, from the source config. Called once per database open, and a
+     * throw here fails that open — so validation that needs nothing from the upstream belongs here, where a
+     * misconfiguration surfaces on the node whose config carries it.
      *
      * See [Registration] to make an external source implementation available through `ATTACH DATABASE`.
      */

@@ -1,10 +1,7 @@
 package xtdb.indexer
 
-import io.micrometer.core.instrument.MeterRegistry
 import io.mockk.mockk
 import kotlinx.coroutines.*
-import xtdb.api.Remote
-import xtdb.api.RemoteAlias
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -95,8 +92,6 @@ class LogProcessorSimTest : SimulationTestBase() {
      * A single instance is shared across all `SimNode`s in a test. Leadership transitions
      * surface as fresh `onPartitionAssigned` invocations on the same instance — the iterator
      * is shared, so the next leader resumes draining from where the previous left off.
-     * `close()` is a no-op so the per-`LeaderLogProcessor` `extSource.close()` doesn't tear
-     * down the shared instance.
      *
      * Putting `execute` inside `onPartitionAssigned` (rather than calling it from the test
      * driver against a stale `TxIndexer` reference) is what keeps the leader's allocator
@@ -178,13 +173,7 @@ class LogProcessorSimTest : SimulationTestBase() {
                 partitionStorage, partitionState, dbName, watchers,
                 BlockUploader(partitionStorage, partitionState, "xtdb", mockk(relaxed = true), null, null, scope, uploadDispatcher = dispatcher),
                 mockk<Compactor.ForDatabase>(relaxed = true), dbCatalog = null,
-                externalSourceFactory = object : ExternalSource.Factory {
-                    override fun open(
-                        dbName: String,
-                        remotes: Map<RemoteAlias, Remote>,
-                        meterRegistry: MeterRegistry?,
-                    ) = simExtSource
-                },
+                externalSource = simExtSource,
                 scope = scope,
                 flushTimeout = indexerConfig.flushDuration,
                 gcDispatcher = dispatcher,

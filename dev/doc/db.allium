@@ -148,9 +148,10 @@ entity Database {
     source_log: Log
     replica_log: Log
 
-    -- Configured external source, if any. This — not the local processor's mode — is
-    -- what rejects a client submitTx: the source log is shared, so any node's submit
-    -- path has to make the same decision whether or not it happens to be the leader.
+    -- Configured external source, if any.
+    -- This — not the local processor's mode — is what rejects a client submitTx: the source log is shared, so any node's submit path has to make the same decision whether or not it happens to be the leader.
+    -- Opened and closed with the database, on each node that could lead it, so one instance spans every leader term that node serves.
+    -- A node that indexes nothing, or holds the database read-only, can never lead and opens no source.
     external_source: ExternalSource?
 
     invariant DistinctLogs {
@@ -796,9 +797,7 @@ rule TransitionToLeader {
         -- block gauge from the rows already in the open block, so it cuts this block where
         -- the previous leader would have.
         log_processor.mode = Leader.created(
-            -- Opened per term from the database's configured source, so this leader is
-            -- CDC-fed iff the database is. Explicit rather than defaulted: it is what
-            -- decides where transactions enter.
+            -- The database's own source, borrowed for the length of this term, so this leader is CDC-fed iff the database is.
             external_source: database.external_source,
             leader_term: term,
             latest_replica_msg_id: replay_target,
@@ -1261,6 +1260,7 @@ rule ExternalSourceAssigned {
     -- token to start after, then begins streaming txs. The token comes from
     -- watchers.external_source_token, which reflects the replay of the replica log and so
     -- may be ahead of the last persisted block.
+    -- A node that leads, is demoted, then leads again is assigned again on the same source instance, so state belonging to one assignment lives inside the call rather than on the source.
     when: PartitionsAssigned(database)
     requires: log_processor.mode = Leader
     requires: database.external_source != null

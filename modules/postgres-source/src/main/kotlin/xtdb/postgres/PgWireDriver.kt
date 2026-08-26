@@ -14,6 +14,7 @@ import xtdb.api.error.Conflict
 import xtdb.api.error.Fault
 import xtdb.api.error.Incorrect
 import xtdb.pgwire.PgType
+import xtdb.util.closeOnCatch
 import xtdb.util.debug
 import xtdb.util.error
 import xtdb.util.info
@@ -231,16 +232,18 @@ class PgWireDriver(
 
     override suspend fun openStream(startLsn: Long): PostgresDriver.ChangeStream {
         LOG.debug { "[$dbName] Opening replication connection for streaming" }
-        val replConn = openReplicationConnection()
-        val pgReplConn = replConn.unwrap(PGConnection::class.java)
+        // startReplicationStream backs off around a slot the previous leader still holds, so its delay is a
+        // cancellation point — and a demotion there would otherwise strand the connection upstream.
+        return openReplicationConnection().closeOnCatch { replConn ->
+            val pgReplConn = replConn.unwrap(PGConnection::class.java)
 
-        // pgoutput inherits the WAL sender's IntervalStyle; must be set before start().
-        replConn.createStatement().use { it.execute("SET IntervalStyle = 'iso_8601'") }
+            // pgoutput inherits the WAL sender's IntervalStyle; must be set before start().
+            replConn.createStatement().use { it.execute("SET IntervalStyle = 'iso_8601'") }
 
-        LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
+            LOG.info("[$dbName] Starting replication stream from LSN ${LogSequenceNumber.valueOf(startLsn)} on slot '$slotName'")
 
-        val stream = startReplicationStream(pgReplConn, startLsn)
-        return PgWireChangeStream(replConn, stream)
+            PgWireChangeStream(replConn, startReplicationStream(pgReplConn, startLsn))
+        }
     }
 
     private inner class PgWireChangeStream(
