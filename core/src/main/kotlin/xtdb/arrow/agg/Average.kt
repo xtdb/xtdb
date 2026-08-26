@@ -28,9 +28,9 @@ class Average(val fromName: FieldName, fromType: VectorType, override val colNam
         private val sumAgg = Sum(fromName, "sum", sumOutType, hasZeroRow).build(al, args)
         private val countAgg = Count(fromName, "count", hasZeroRow).build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
-            sumAgg.aggregate(inRel, groupMapping)
-            countAgg.aggregate(inRel, groupMapping)
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
+            sumAgg.aggregate(inRel, groupMapping, mask)
+            countAgg.aggregate(inRel, groupMapping, mask)
         }
 
         override fun openFinishedVector(): Vector =

@@ -6,8 +6,29 @@ Aggregate functions can be used within `SELECT` clause.
 
 In line with the SQL spec:
 
-- Except in the case of `COUNT(*)`, null values in the column are removed before the aggregate is calculated.
+- Null values in the column are removed before the aggregate is calculated, except in `COUNT(*)`, which counts rows, and `ARRAY_AGG`, which keeps them.
 - Without grouping columns, aggregate functions will always return exactly one row - if the input column is empty (after nulls have been removed), the result will be a single row containing a null value.
+
+## `FILTER` (v2.2+)
+
+Any aggregate function may be followed by `FILTER (WHERE <condition>)`, restricting that aggregate to the rows where the condition is true.
+Rows where the condition is false or null are excluded.
+
+Filtered and unfiltered aggregates can appear alongside each other over the same groups:
+
+```sql
+SELECT dept,
+       COUNT(*) AS headcount,
+       COUNT(*) FILTER (WHERE status = 'active') AS active,
+       SUM(salary) FILTER (WHERE status = 'active') AS active_payroll
+FROM employees
+GROUP BY dept
+```
+
+The condition may reference any column of the input, whether or not it is selected or grouped.
+It may not contain another aggregate function.
+
+For a group where no row passes the filter, `COUNT` returns 0 and every other aggregate returns null — the same answers those functions give over an empty input.
 
 ## Numeric aggregate functions
 

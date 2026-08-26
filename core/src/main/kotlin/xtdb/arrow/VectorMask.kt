@@ -7,6 +7,13 @@ interface VectorMask : AutoCloseable {
 
     override fun close() {}
 
+    interface Builder : AutoCloseable {
+        fun set(idx: Int)
+
+        /** transfers the underlying buffer to the returned mask, which the caller then owns */
+        fun build(): VectorMask
+    }
+
     companion object {
         @JvmField
         val ALL: VectorMask = AllOnesMask
@@ -24,6 +31,9 @@ interface VectorMask : AutoCloseable {
             return BitBufferMask(bitBuffer)
         }
 
+        @JvmStatic
+        fun openBuilder(al: BufferAllocator, rowCount: Int): Builder = BuilderImpl(BitBuffer(al, rowCount))
+
         internal object AllOnesMask : VectorMask {
             override fun isSet(idx: Int) = true
         }
@@ -31,6 +41,20 @@ interface VectorMask : AutoCloseable {
         internal class BitBufferMask(private val bitBuffer: BitBuffer) : VectorMask {
             override fun isSet(idx: Int) = bitBuffer.getBoolean(idx)
             override fun close() = bitBuffer.close()
+        }
+
+        internal class BuilderImpl(private val bitBuffer: BitBuffer) : Builder {
+            private var built = false
+
+            override fun set(idx: Int) {
+                bitBuffer.setBit(idx, 1)
+            }
+
+            override fun build(): VectorMask = BitBufferMask(bitBuffer).also { built = true }
+
+            override fun close() {
+                if (!built) bitBuffer.close()
+            }
         }
     }
 }
