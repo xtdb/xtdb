@@ -15,7 +15,7 @@
            (java.time Duration Instant InstantSource LocalDate LocalDateTime LocalTime Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            org.apache.arrow.vector.types.TimeUnit
-           (xtdb.arrow RelationReader Vector VectorReader VectorType VectorType$Nothing)
+           (xtdb.arrow RelationReader Vector VectorReader)
            (xtdb.time Interval)
            (xtdb.util StringUtil)))
 
@@ -1745,7 +1745,7 @@
 
 (t/deftest a-column-of-empty-lists-compares-as-a-literal-does-5948
   (with-open [rel (tu/open-rel {:xs [[] []]})]
-    (t/is (= (types/->type [:list VectorType$Nothing/INSTANCE])
+    (t/is (= #xt/type [:list :nothing]
              (.getType (.vectorForOrNull rel "xs")))
           "the column's element type is the lattice bottom, which is what makes this test cover anything")
 
@@ -1758,12 +1758,12 @@
 
   (t/testing "an element written as null heals to `Null`, an empty list does not"
     (with-open [rel (tu/open-rel {:xs [[nil]]})]
-      (t/is (= (types/->type [:list :null]) (.getType (.vectorForOrNull rel "xs"))))
+      (t/is (= #xt/type [:list :null] (.getType (.vectorForOrNull rel "xs"))))
       (t/is (= [nil] (:res (run-projection rel '(== xs [nil])))))))
 
   (t/testing "a null list leaves the element type at the bottom"
     (with-open [rel (tu/open-rel {:xs [nil []]})]
-      (t/is (= (VectorType/maybe (types/->type [:list VectorType$Nothing/INSTANCE]))
+      (t/is (= #xt/type [:? :list :nothing]
                (.getType (.vectorForOrNull rel "xs"))))
       (t/is (= [nil true] (:res (run-projection rel '(== xs []))))))))
 

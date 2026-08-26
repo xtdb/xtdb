@@ -434,6 +434,7 @@
     (keyword? type-spec) (case type-spec
                            :tstz-range VectorType/TSTZ_RANGE
                            :null VectorType$Null/INSTANCE
+                           :nothing VectorType$Nothing/INSTANCE
                            (VectorType/scalar (->arrow-type type-spec)))
 
     (set? type-spec) (VectorType/fromLegs (into #{} (map ->type) type-spec))

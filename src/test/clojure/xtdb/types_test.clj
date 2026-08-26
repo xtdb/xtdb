@@ -92,7 +92,13 @@
   (t/is (thrown? xtdb.api.error.Fault (types/merge-types nil)))
   (t/is (thrown? xtdb.api.error.Fault (types/merge-types #xt/type :i64 nil)))
 
-  ;; `#xt/type :nothing` doesn't read - `render-type` emits `:nothing` but the reader has no clause for it
   (t/testing "the lattice bottom is how a source says it has nothing to contribute"
     (t/is (= #xt/type :i64
-             (types/merge-types #xt/type :i64 xtdb.arrow.VectorType$Nothing/INSTANCE)))))
+             (types/merge-types #xt/type :i64 #xt/type :nothing)))))
+
+(t/deftest the-lattice-bottom-round-trips-through-the-reader
+  (t/are [type-spec] (= type-spec (st/render-type (st/->type type-spec)))
+    :nothing
+    [:list :nothing]
+    [:? :list :nothing]
+    [:struct {"a" :nothing}]))
