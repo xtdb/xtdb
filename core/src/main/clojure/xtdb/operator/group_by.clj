@@ -397,11 +397,14 @@
       (.append acc-col in-vec)
 
       (dotimes [idx row-count]
-        ;; nulls excluded from ordered-set aggregates per SQL standard
-        (when-not (.isNull in-vec idx)
-          (let [group-idx (.getInt group-mapping idx)]
-            (while (<= (.size group-idxmaps) group-idx)
-              (.add group-idxmaps (IntStream/builder)))
+        (let [group-idx (.getInt group-mapping idx)]
+          ;; every group needs its slot even if nothing lands in it - `group-idxmaps` is what
+          ;; `openFinishedVector` iterates, so a short one leaves the last groups off the column
+          (while (<= (.size group-idxmaps) group-idx)
+            (.add group-idxmaps (IntStream/builder)))
+
+          ;; nulls excluded from ordered-set aggregates per SQL standard
+          (when-not (.isNull in-vec idx)
             (.add ^IntStream$Builder (.get group-idxmaps group-idx)
                   (+ base-idx idx)))))
 

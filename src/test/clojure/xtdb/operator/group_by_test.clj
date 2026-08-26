@@ -647,3 +647,14 @@
              (tu/query-ra '[:group-by {:columns [{avg-dur (avg dur)}]}
                             [:table {:rows []}]]))
           "avg of empty duration set")))
+
+(t/deftest test-ordered-set-agg-emits-a-row-for-a-group-with-no-values
+  ;; the validity buffer doubles from 128 bytes, so an unwritten trailing slot only falls outside
+  ;; it when the groups that did get written exactly fill a power of two
+  (let [group-count 1024
+        rows (conj (vec (for [g (range group-count), _ [1 2]] {:a g, :b 20}))
+                   {:a group-count, :b nil})
+        res (tu/query-ra [:group-by {:columns ['a {'med (list 'percentile_cont 0.5 ['b {:direction :asc}])}]}
+                          [:table {:rows rows}]])]
+    (t/is (= (inc group-count) (count res)))
+    (t/is (nil? (:med (first (filter #(= group-count (:a %)) res)))))))
