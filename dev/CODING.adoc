@@ -37,6 +37,29 @@ Four smells travel together; spot one and go looking for the other three:
 * Reaching into another object's fields to decide what to do to it -> move the behaviour onto that object; pass the event in and let it extract what it needs.
 --
 
+Related state SHOULD be updated atomically::
++
+State that belongs to one thing SHOULD live in one value, so that starting, replacing or ending that thing is a single swap.
+Spread across several fields, "all of it moved together" becomes an invariant maintained by hand at every write — and the field somebody forgot is the one that keeps reporting the previous occupant's value.
++
+This is the concurrency-facing half of _Make illegal states unrepresentable_: there, the illegal state is one the types admit; here, it is one an interleaving admits.
+Both are fixed by making the valid combinations the only representable ones.
++
+The shape is a sealed hierarchy in an `AtomicReference`, with each variant holding exactly the state that variant has.
+Arming it is one `set`; a variant that accumulates as it runs holds `@Volatile var` fields and is mutated in place by whichever coroutine owns it, so the reader that races it sees a consistent generation rather than a mixture of two.
++
+--
+*Worked example* - the Postgres source's assignment (`modules/postgres-source/src/main/kotlin/xtdb/postgres/PostgresSource.kt`).
+`Unassigned | Assigned(streaming, lastEventEpochSeconds)` replaced an enum plus a separate `AtomicLong`.
+Both fields are per-assignment, but only the enum was swapped when an assignment ended - so after a demotion the `last_event_time` gauge went on reporting the previous leader term's last event indefinitely.
+Collapsing them means a new assignment is `assignment.set(Assigned())`, and there is nowhere for a stale reading to survive.
+
+Two questions locate the state that wants collapsing:
+
+* *What is the lifetime of this field?* Two fields with the same lifetime, held separately, are one value waiting to be written.
+* *What resets it?* A field that nothing resets, alongside one that something does, is the asymmetry that produces a stale read.
+--
+
 Tidy first::
 +
 We develop using https://tidyfirst.substack.com/[tidy-first] methodology — separate equivalence changes (refactorings that don't affect runtime behaviour, changes that increase our options) from changes that advance behaviour.
