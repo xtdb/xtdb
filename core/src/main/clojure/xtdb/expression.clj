@@ -515,9 +515,9 @@
                                     :or {extract-vecs-from-rel? true}}]
   (let [return-type (or (get var-types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
-        ;; `Nothing` is the catalog's lattice bottom for a declared-but-valueless column; when such a
-        ;; column is read in a query its rows are simply null, so the EE treats it as `:null` and never
-        ;; needs `:nothing` call definitions (Nothing's empty legs would otherwise collapse codegen).
+        ;; `readsAs` handles the read wherever legs are dispatched on, so this looks redundant - it is not.
+        ;; `:return-type` flows outward into writer allocation and the merges above, where the bottom would
+        ;; declare a column that has no values while the emitted code writes nulls into it.
         return-type (if (= return-type VectorType$Nothing/INSTANCE) #xt/type :null return-type)
         var-rdr-sym (gensym (util/symbol->normal-form-symbol variable))]
 
