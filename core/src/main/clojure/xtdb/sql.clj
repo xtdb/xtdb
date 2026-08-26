@@ -1278,6 +1278,11 @@
   ;; Set XTDB_GENERATE_SERIES_END_EXCLUSIVE=true to keep that behaviour while migrating queries to RANGE.
   (some-> (System/getenv "XTDB_GENERATE_SERIES_END_EXCLUSIVE") Boolean/parseBoolean))
 
+(defn- plan-agg-filter [this scope ctx]
+  (when-let [filter-ctx (.aggregateFilterClause ctx)]
+    (-> (.expr filter-ctx)
+        (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))))
+
 (defrecord ExprPlanVisitor [env scope]
   SqlVisitor
   (visitSearchCondition [this ctx] (list* 'and (mapv (partial accept-visitor this) (.expr ctx))))
@@ -1979,10 +1984,12 @@
       (add-err! env (->AggregatesDisallowed))
       (-> (.aggregateFunction ctx) (.accept (assoc this :!subqs !agg-subqs)))))
 
-  (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs]} _ctx]
+  (visitCountStarFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
     (let [agg-sym (-> (->col-sym (str "_row_count_" (swap! !id-count inc)))
-                      (vary-meta assoc :agg-out-sym? true))]
-      (.put !aggs agg-sym {:agg-expr '(row-count)})
+                      (vary-meta assoc :agg-out-sym? true))
+          filter-expr (plan-agg-filter this scope ctx)]
+      (.put !aggs agg-sym {:agg-expr (apply list (cond-> ['row-count]
+                                                   filter-expr (conj {:filter filter-expr})))})
       agg-sym))
 
   (visitArrayAggFunction [{{:keys [!id-count]} :env, :keys [^Map !aggs], :as this} ctx]
@@ -1992,13 +1999,16 @@
       (let [agg-sym (-> (->col-sym (str "_array_agg_out" (swap! !id-count inc)))
                         (vary-meta assoc :agg-out-sym? true))
             expr (-> (.expr ctx)
-                     (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))]
+                     (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
+            filter-expr (plan-agg-filter this scope ctx)]
         (.put !aggs agg-sym
               (if (:column? (meta expr))
-                {:agg-expr (list 'array-agg expr)}
+                {:agg-expr (apply list (cond-> ['array-agg expr]
+                                         filter-expr (conj {:filter filter-expr})))}
                 (let [in-sym (-> (->col-sym (str "_array_agg_in" (swap! !id-count inc)))
                                  (vary-meta assoc :agg-in-sym? true))]
-                  {:agg-expr (list 'array-agg in-sym)
+                  {:agg-expr (apply list (cond-> ['array-agg in-sym]
+                                           filter-expr (conj {:filter filter-expr})))
                    :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
 
         agg-sym)))
@@ -2010,14 +2020,17 @@
           agg-sym (-> (->col-sym (str "_" set-fn "_out_" (swap! !id-count inc)))
                       (vary-meta assoc :agg-out-sym? true))
           expr (-> (.expr ctx)
-                   (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))]
+                   (.accept (assoc this :!aggs nil, :scope (assoc scope :!implied-gicrs nil))))
+          filter-expr (plan-agg-filter this scope ctx)]
       (.put !aggs agg-sym
             (if (:column? (meta expr))
-              {:agg-expr (list set-fn expr)}
+              {:agg-expr (apply list (cond-> [set-fn expr]
+                                       filter-expr (conj {:filter filter-expr})))}
 
               (let [in-sym (-> (->col-sym (str "_" set-fn "_in_" (swap! !id-count inc)))
                                (vary-meta assoc :agg-in-sym? true))]
-                {:agg-expr (list set-fn in-sym)
+                {:agg-expr (apply list (cond-> [set-fn in-sym]
+                                         filter-expr (conj {:filter filter-expr})))
                  :in-projection (->ProjectedCol {in-sym expr} in-sym)})))
 
       agg-sym))
@@ -2042,10 +2055,13 @@
             [sort-expr nil]
             (let [in-sym (-> (->col-sym (str "_" set-fn "_sort_" (swap! !id-count inc)))
                              (vary-meta assoc :agg-in-sym? true))]
-              [in-sym {in-sym sort-expr}]))]
+              [in-sym {in-sym sort-expr}]))
+
+          filter-expr (plan-agg-filter this scope ctx)]
 
       (.put !aggs agg-sym
-            (cond-> {:agg-expr (list set-fn fraction-expr [sort-sym sort-opts])}
+            (cond-> {:agg-expr (apply list (cond-> [set-fn fraction-expr [sort-sym sort-opts]]
+                                             filter-expr (conj {:filter filter-expr})))}
               sort-in (assoc :in-projection (->ProjectedCol sort-in (first (keys sort-in))))))
 
       agg-sym))

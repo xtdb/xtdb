@@ -17,9 +17,10 @@
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.api ICursor)
-           (xtdb.arrow MonoVector RelationReader Vector VectorReader VectorType VectorWriter)
+           (xtdb.arrow MonoVector RelationReader Vector VectorMask VectorMask$Builder VectorReader VectorType VectorWriter)
            (xtdb.arrow.agg AggregateSpec AggregateSpec$Factory Average Count GroupMapper GroupMapper$Mapper GroupMapper$Null RowCount StdDevPop StdDevSamp Sum VarWidthMinMax VariancePop VarianceSamp)
            (xtdb.expression.map RelationMapBuilder)
+           xtdb.operator.MaskSpec
            xtdb.operator.distinct.DistinctRelationMap
            xtdb.types.LeastUpperBound))
 
@@ -28,16 +29,22 @@
 
 (s/def ::fraction (s/or :literal number?, :param ::lp/param))
 
+(s/def ::filter ::lp/expression)
+(s/def ::agg-opts (s/keys :opt-un [::filter]))
+
 (s/def ::aggregate-expr
-  (s/or :nullary (s/cat :f simple-symbol?)
+  (s/or :nullary (s/cat :f simple-symbol?
+                        :opts (s/? ::agg-opts))
         :unary (s/cat :f simple-symbol?
-                      :from-column ::lp/column)
+                      :from-column ::lp/column
+                      :opts (s/? ::agg-opts))
         :binary (s/cat :f simple-symbol?
                        :left-column ::lp/column
                        :right-column ::lp/column)
         :ordered-set (s/cat :f simple-symbol?
                             :fraction ::fraction
-                            :sort-spec (s/spec ::sort-spec))))
+                            :sort-spec (s/spec ::sort-spec)
+                            :opts (s/? ::agg-opts))))
 
 (s/def ::aggregate
   (s/map-of ::lp/column ::aggregate-expr :conform-keys true :count 1))
@@ -88,6 +95,8 @@
 (def ^:private acc-local (gensym 'acc_local))
 (def ^:private val-local (gensym 'val_local))
 
+(def ^:private mask-sym (gensym 'mask))
+
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
         (let [group-mapping-sym (gensym 'group-mapping)
@@ -107,14 +116,16 @@
 
           {:eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag MonoVector))
                                ~(-> expr/rel-sym (expr/with-tag RelationReader))
-                               ~(-> group-mapping-sym (expr/with-tag VectorReader))]
+                               ~(-> group-mapping-sym (expr/with-tag VectorReader))
+                               ~(-> mask-sym (expr/with-tag VectorMask))]
                             (let [~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.getRowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.getInt ~group-mapping-sym ~expr/idx-sym)]
                                   (.ensureCapacity ~acc-sym (inc ~group-idx-sym))
 
-                                  ~(continue (fn [acc-type acc-code]
-                                               (expr/set-value-code acc-type acc-sym group-idx-sym acc-code)))))))
+                                  (when (.isSet ~mask-sym ~expr/idx-sym)
+                                    ~(continue (fn [acc-type acc-code]
+                                                 (expr/set-value-code acc-type acc-sym group-idx-sym acc-code))))))))
                          #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
       (util/lru-memoize))) ;; <<no-commit>>
@@ -130,13 +141,13 @@
         (let [out-vec (Vector/open al (.getColName this) (.getType this))]
           (reify
             AggregateSpec
-            (aggregate [_ in-rel group-mapping]
+            (aggregate [_ in-rel group-mapping mask]
               (let [input-opts {:var-types (->> in-rel
                                                 (into {acc-sym to-type}
                                                       (map (juxt #(symbol (.getName ^VectorReader %))
                                                                  #(.getType ^VectorReader %)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
-                (eval-agg out-vec in-rel group-mapping)))
+                (eval-agg out-vec in-rel group-mapping mask)))
 
             (openFinishedVector [_]
               (when (and zero-row? (zero? (.getValueCount out-vec)))
@@ -226,30 +237,31 @@
             rel-maps (ArrayList.)]
         (reify
           AggregateSpec
-          (aggregate [_ in-rel group-mapping]
+          (aggregate [_ in-rel group-mapping mask]
             (let [in-vec (.vectorForOrNull in-rel (str from-name))
-                  builders (ArrayList. (.size rel-maps))
-                  distinct-idxs (IntStream/builder)]
-              (dotimes [idx (.getValueCount in-vec)]
-                (let [group-idx (.getInt group-mapping idx)]
-                  (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (distinct/->relation-map al {:build-vec-types {from-name from-type}
-                                                                :build-key-col-names [from-name]})))
-                  (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
-                    (while (<= (.size builders) group-idx)
-                      (.add builders nil))
+                  row-count (.getValueCount in-vec)
+                  builders (ArrayList. (.size rel-maps))]
+              (util/with-open [^VectorMask$Builder mask-builder (VectorMask/openBuilder al row-count)]
+                (dotimes [idx row-count]
+                  (when (.isSet mask idx)
+                    (let [group-idx (.getInt group-mapping idx)]
+                      (while (<= (.size rel-maps) group-idx)
+                        (.add rel-maps (distinct/->relation-map al {:build-vec-types {from-name from-type}
+                                                                    :build-key-col-names [from-name]})))
+                      (let [^DistinctRelationMap rel-map (nth rel-maps group-idx)]
+                        (while (<= (.size builders) group-idx)
+                          (.add builders nil))
 
-                    (let [^RelationMapBuilder
-                          builder (or (nth builders group-idx)
-                                      (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
-                                        (.set builders group-idx builder)
-                                        builder))]
-                      (when (neg? (.addIfNotPresent builder idx))
-                        (.add distinct-idxs idx))))))
-              (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                (.aggregate agg-spec
-                            (.select in-rel distinct-idxs)
-                            (.select group-mapping distinct-idxs)))))
+                        (let [^RelationMapBuilder
+                              builder (or (nth builders group-idx)
+                                          (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
+                                            (.set builders group-idx builder)
+                                            builder))]
+                          (when (neg? (.addIfNotPresent builder idx))
+                            (.set mask-builder idx)))))))
+
+                (util/with-open [distinct-mask (.build mask-builder)]
+                  (.aggregate agg-spec in-rel group-mapping distinct-mask)))))
 
           (openFinishedVector [_] (.openFinishedVector agg-spec))
 
@@ -286,7 +298,7 @@
                                 ^List group-idxmaps
                                 on-empty]
   AggregateSpec
-  (aggregate [this in-rel group-mapping]
+  (aggregate [this in-rel group-mapping mask]
     (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
       (.append acc-col in-vec)
@@ -295,8 +307,9 @@
         (let [group-idx (.getInt group-mapping idx)]
           (while (<= (.size group-idxmaps) group-idx)
             (.add group-idxmaps (IntStream/builder)))
-          (.add ^IntStream$Builder (.get group-idxmaps group-idx)
-                (+ base-idx idx))))
+          (when (.isSet mask idx)
+            (.add ^IntStream$Builder (.get group-idxmaps group-idx)
+                  (+ base-idx idx)))))
 
       (set! (.base-idx this) (+ base-idx row-count))))
 
@@ -305,10 +318,12 @@
       (let [el-writer (.getListElements out-vec)
             row-copier (.rowCopier acc-col el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
-          (.forEach (.build isb)
-                    (fn [^long idx]
-                      (.copyRow row-copier idx)))
-          (.endList out-vec))
+          (let [idxs (.toArray (.build isb))]
+            (if (zero? (alength idxs))
+              (.writeNull out-vec)
+              (do
+                (.copyRows row-copier idxs)
+                (.endList out-vec)))))
 
         (let [value-count (.size group-idxmaps)]
           (when (zero? value-count)
@@ -391,7 +406,7 @@
                                   percentile-mode
                                   zero-row?]
   AggregateSpec
-  (aggregate [this in-rel group-mapping]
+  (aggregate [this in-rel group-mapping mask]
     (let [in-vec (.vectorForOrNull in-rel (str from-name))
           row-count (.getValueCount in-vec)]
       (.append acc-col in-vec)
@@ -404,7 +419,7 @@
             (.add group-idxmaps (IntStream/builder)))
 
           ;; nulls excluded from ordered-set aggregates per SQL standard
-          (when-not (.isNull in-vec idx)
+          (when (and (.isSet mask idx) (not (.isNull in-vec idx)))
             (.add ^IntStream$Builder (.get group-idxmaps group-idx)
                   (+ base-idx idx)))))
 
@@ -497,7 +512,7 @@
                           (fn [^RelationReader in-rel]
                             (let [group-mapping (.groupMapping group-mapper in-rel)]
                               (doseq [^AggregateSpec agg-spec aggregate-specs]
-                                (.aggregate agg-spec in-rel group-mapping)))))
+                                (.aggregate agg-spec in-rel group-mapping VectorMask/ALL)))))
 
        (util/with-open [agg-cols (map #(.openFinishedVector ^AggregateSpec %) aggregate-specs)]
          (let [gm-rel (.finish group-mapper)
@@ -517,39 +532,61 @@
     (util/close in-cursor)
     (util/close group-mapper)))
 
-(defmethod lp/emit-expr :group-by [{:keys [opts relation]} args]
+(defn- wrap-filter [^AggregateSpec inner, ^MaskSpec mask-spec, ^BufferAllocator allocator, schema, args]
+  (reify AggregateSpec
+    ;; the incoming mask is always `VectorMask/ALL` - this is only ever applied outermost, so that
+    ;; `COUNT(DISTINCT x) FILTER (...)` takes distinct values of the rows that passed the filter.
+    (aggregate [_ in-rel group-mapping _mask]
+      (util/with-open [mask (.mask mask-spec allocator in-rel schema args)]
+        (.aggregate inner in-rel group-mapping mask)))
+
+    (openFinishedVector [_] (.openFinishedVector inner))
+
+    Closeable
+    (close [_] (util/close inner))))
+
+(defmethod lp/emit-expr :group-by [{:keys [opts relation]} {:keys [param-types] :as args}]
   (let [{:keys [columns]} opts
         {group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
       (fn [{:keys [vec-types], :as inner-rel}]
-        (let [agg-factories (for [[_ agg] aggs]
-                              (let [[to-column agg-form] (first agg)]
-                                (->aggregate-factory (into {:to-name to-column
-                                                            :zero-row? (empty? group-cols)}
-                                                           (zmatch agg-form
-                                                             [:nullary agg-opts]
-                                                             (select-keys agg-opts [:f])
+        (let [input-types {:var-types vec-types, :param-types param-types}
+              agg-infos (for [[_ agg] aggs]
+                          (let [[to-column agg-form] (first agg)
+                                [factory-opts filter-form]
+                                (zmatch agg-form
+                                  [:nullary agg-opts]
+                                  [(select-keys agg-opts [:f]) (:filter (:opts agg-opts))]
 
-                                                             [:unary agg-opts]
-                                                             (let [{:keys [f from-column]} agg-opts
-                                                                   from-type (get vec-types from-column #xt/type :null)]
-                                                               {:f f
-                                                                :from-name from-column
-                                                                :from-type from-type})
+                                  [:unary agg-opts]
+                                  (let [{:keys [f from-column opts]} agg-opts
+                                        from-type (get vec-types from-column #xt/type :null)]
+                                    [{:f f
+                                      :from-name from-column
+                                      :from-type from-type}
+                                     (:filter opts)])
 
-                                                             [:ordered-set agg-opts]
-                                                             (let [{:keys [f fraction sort-spec]} agg-opts
-                                                                   {:keys [column opts]} sort-spec
-                                                                   from-type (get vec-types column #xt/type :null)]
-                                                               {:f f
-                                                                :from-name column
-                                                                :from-type from-type
-                                                                :fraction fraction
-                                                                :sort-opts opts}))))))
+                                  [:ordered-set agg-opts]
+                                  (let [{:keys [f fraction sort-spec], filter-opts :opts} agg-opts
+                                        {:keys [column opts]} sort-spec
+                                        from-type (get vec-types column #xt/type :null)]
+                                    [{:f f
+                                      :from-name column
+                                      :from-type from-type
+                                      :fraction fraction
+                                      :sort-opts opts}
+                                     (:filter filter-opts)]))]
+                            {:factory (->aggregate-factory (into {:to-name to-column
+                                                                  :zero-row? (empty? group-cols)}
+                                                                 factory-opts))
+                             :mask-spec (when filter-form
+                                          (expr/->expression-mask-spec (expr/form->expr filter-form input-types)
+                                                                       input-types))}))
               out-vec-types (into (->> group-cols
                                          (into {} (map (juxt identity vec-types))))
-                                    (->> agg-factories
+                                    (->> agg-infos
+                                         (map :factory)
                                          (into {} (map (juxt #(symbol (.getColName ^AggregateSpec$Factory %))
                                                              #(.getType ^AggregateSpec$Factory %))))))]
           {:op :group-by
@@ -561,10 +598,14 @@
                                                 [(str to-column) (pr-str agg-form)]))))}
            :vec-types out-vec-types
 
-           :->cursor (fn [{:keys [allocator args explain-analyze? tracer query-span]} in-cursor]
+           :->cursor (fn [{:keys [allocator args schema explain-analyze? tracer query-span]} in-cursor]
                        (cond-> (util/with-close-on-catch [agg-specs (LinkedList.)]
-                                 (doseq [^AggregateSpec$Factory factory agg-factories]
-                                   (.add agg-specs (.build factory allocator (or args vw/empty-args))))
+                                 (doseq [{:keys [^AggregateSpec$Factory factory mask-spec]} agg-infos]
+                                   (let [built (.build factory allocator (or args vw/empty-args))]
+                                     (.add agg-specs
+                                           (if mask-spec
+                                             (wrap-filter built mask-spec allocator schema (or args vw/empty-args))
+                                             built))))
 
                                  (GroupByCursor. allocator in-cursor
                                                  (->group-mapper allocator (select-keys vec-types group-cols))

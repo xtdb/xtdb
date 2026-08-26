@@ -13,8 +13,8 @@ sealed class StdDev(override val colName: FieldName, private val varianceFactory
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val varianceAgg = varianceFactory.build(al, args)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) =
-            varianceAgg.aggregate(inRel, groupMapping)
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) =
+            varianceAgg.aggregate(inRel, groupMapping, mask)
 
         override fun openFinishedVector(): Vector =
             DoubleVector(al, colName, nullable = true).closeOnCatch { outVec ->

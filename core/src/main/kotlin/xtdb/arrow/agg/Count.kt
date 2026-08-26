@@ -7,6 +7,7 @@ import xtdb.arrow.MonoVector
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.I64
 
@@ -21,7 +22,7 @@ class Count(
         val outVec = LongVector(al, colName, nullable = false)
         return object : AggregateSpec {
 
-            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
+            override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
                 val inCol = inRel.vectorForOrNull(fromColName) ?: return
 
                 repeat(inRel.rowCount) { idx ->
@@ -30,7 +31,7 @@ class Count(
                     if (outVec.valueCount == groupIdx)
                         outVec.writeLong(0L)
 
-                    if (!inCol.isNull(idx)) {
+                    if (mask.isSet(idx) && !inCol.isNull(idx)) {
                         val currentCount = if (!outVec.isNull(groupIdx)) outVec.getLong(groupIdx) else 0L
                         outVec.setLong(groupIdx, currentCount + 1)
                     }

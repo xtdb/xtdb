@@ -151,6 +151,7 @@ identifier
         | 'URI' | 'OID'
         | 'COPY' | 'FORMAT'
         | 'ATTACH' | 'DETACH' | 'DATABASE' | 'LEVEL'
+        | 'FILTER'
         | 'TABLE'
         | METADATA
         | SYNC
@@ -753,11 +754,13 @@ searchCondition : expr? (',' expr?)* ;
 /// §10.9 <aggregate function>
 
 aggregateFunction
-    : 'COUNT' '(' ASTERISK ')' # CountStarFunction
-    | 'ARRAY_AGG' '(' expr ('ORDER' 'BY' sortSpecificationList)? ')' # ArrayAggFunction
-    | setFunctionType '(' setQuantifier? expr ')' # SetFunction
-    | orderedSetFunctionType '(' percentileFraction ')' 'WITHIN' 'GROUP' '(' 'ORDER' 'BY' sortSpecification ')' # OrderedSetFunction
+    : 'COUNT' '(' ASTERISK ')' aggregateFilterClause? # CountStarFunction
+    | 'ARRAY_AGG' '(' expr ('ORDER' 'BY' sortSpecificationList)? ')' aggregateFilterClause? # ArrayAggFunction
+    | setFunctionType '(' setQuantifier? expr ')' aggregateFilterClause? # SetFunction
+    | orderedSetFunctionType '(' percentileFraction ')' 'WITHIN' 'GROUP' '(' 'ORDER' 'BY' sortSpecification ')' aggregateFilterClause? # OrderedSetFunction
     ;
+
+aggregateFilterClause : 'FILTER' '(' 'WHERE' expr ')' ;
 
 percentileFraction
     : literal              # PercentileFractionLiteral

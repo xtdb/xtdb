@@ -5,6 +5,7 @@ import xtdb.arrow.FieldName
 import xtdb.arrow.RelationReader
 import xtdb.arrow.Vector
 import xtdb.arrow.Vector.Companion.openVector
+import xtdb.arrow.VectorMask
 import xtdb.arrow.VectorType
 import xtdb.api.error.Incorrect
 import xtdb.types.leastUpperBound
@@ -22,10 +23,18 @@ class Sum(
     override fun build(al: BufferAllocator, args: RelationReader) = object : AggregateSpec {
         private val outVec = al.openVector(colName, type)
 
-        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping) {
+        override fun aggregate(inRel: RelationReader, groupMapping: GroupMapping, mask: VectorMask) {
             val inVec = inRel.vectorForOrNull(fromName) ?: return
             val summer = inVec.sumInto(outVec)
-            repeat(inRel.rowCount) { idx -> summer.sumRow(idx, groupMapping.getInt(idx)) }
+
+            repeat(inRel.rowCount) { idx ->
+                val groupIdx = groupMapping.getInt(idx)
+                // a group entirely excluded by the filter never reaches `summer.sumRow`, whose own
+                // `ensureCapacity` is otherwise this loop's only padding
+                while (outVec.valueCount <= groupIdx) outVec.writeNull()
+
+                if (mask.isSet(idx)) summer.sumRow(idx, groupIdx)
+            }
         }
 
         override fun openFinishedVector(): Vector {

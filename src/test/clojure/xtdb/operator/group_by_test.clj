@@ -6,7 +6,7 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [xtdb.arrow Vector]))
+  (:import [xtdb.arrow Vector VectorMask]))
 
 (t/use-fixtures :each tu/with-allocator tu/with-node)
 
@@ -130,8 +130,8 @@
       (t/is (= #xt/type [:? :f64] (.getType sum-factory)))
       (try
 
-        (.aggregate sum-spec v0 gm)
-        (.aggregate sum-spec v1 gm)
+        (.aggregate sum-spec v0 gm VectorMask/ALL)
+        (.aggregate sum-spec v1 gm VectorMask/ALL)
         (with-open [res (.openFinishedVector sum-spec)]
           (t/is (= [12.0] (.getAsList res))))
         (finally
@@ -332,8 +332,8 @@
       (util/with-open [agg-spec (.build agg-factory tu/*allocator* vw/empty-args)]
         (t/is (= #xt/type [:? :list :i64] (.getType agg-factory)))
 
-        (.aggregate agg-spec (vr/rel-reader [k0]) gm0)
-        (.aggregate agg-spec (vr/rel-reader [k1]) gm1)
+        (.aggregate agg-spec (vr/rel-reader [k0]) gm0 VectorMask/ALL)
+        (.aggregate agg-spec (vr/rel-reader [k1]) gm1 VectorMask/ALL)
 
         (with-open [res (.openFinishedVector agg-spec)]
           (t/is (= [[1 3 6] [2 4] [5]] (.getAsList res))))))))
@@ -658,3 +658,62 @@
                           [:table {:rows rows}]])]
     (t/is (= (inc group-count) (count res)))
     (t/is (nil? (:med (first (filter #(= group-count (:a %)) res)))))))
+
+(t/deftest test-aggregate-filter
+  (t/testing "filtered and unfiltered aggregates side by side"
+    (t/is (= #{{:a 1, :total 3, :active 2, :active-sum 50}
+               {:a 2, :total 2, :active 1, :active-sum 40}}
+             (set (tu/query-ra '[:group-by {:columns [a
+                                             {total (count b)}
+                                             {active (count b {:filter (> b 15)})}
+                                             {active-sum (sum b {:filter (> b 15)})}]}
+                                 [:table {:rows [{:a 1 :b 10}
+                                                 {:a 1 :b 20}
+                                                 {:a 1 :b 30}
+                                                 {:a 2 :b 5}
+                                                 {:a 2 :b 40}]}]])))))
+
+  (t/testing "a group where no row passes the filter"
+    (t/is (= #{{:a 1, :cnt 0}
+               {:a 2, :cnt 2, :sm 50, :mn 20, :mx 30, :av 25.0}}
+             (set (tu/query-ra '[:group-by {:columns [a
+                                             {cnt (count b {:filter (> b 15)})}
+                                             {sm (sum b {:filter (> b 15)})}
+                                             {mn (min b {:filter (> b 15)})}
+                                             {mx (max b {:filter (> b 15)})}
+                                             {av (avg b {:filter (> b 15)})}]}
+                                 [:table {:rows [{:a 1 :b 5}
+                                                 {:a 1 :b 8}
+                                                 {:a 2 :b 20}
+                                                 {:a 2 :b 30}]}]])))))
+
+  (t/testing "COUNT(DISTINCT x) FILTER counts distinct values among the rows that passed"
+    (t/is (= [{:cnt-distinct 2}]
+             (tu/query-ra '[:group-by {:columns [{cnt-distinct (count-distinct b {:filter (> b 15)})}]}
+                            [:table {:rows [{:b 10} {:b 20} {:b 20} {:b 30} {:b 5}]}]]))))
+
+  (t/testing "array-agg keeps a null from a row that passes the filter"
+    (t/is (= [{:vs [nil 30]}]
+             (tu/query-ra '[:group-by {:columns [{vs (array-agg b {:filter (> a 0)})}]}
+                            [:table {:rows [{:a 1 :b nil} {:a 1 :b 30} {:a -1 :b 99}]}]]))))
+
+  (t/testing "array-agg over a fully-filtered group is NULL, not an empty list"
+    (t/is (= [{}]
+             (tu/query-ra '[:group-by {:columns [{vs (array-agg b {:filter (> a 0)})}]}
+                            [:table {:rows [{:a -1 :b 1} {:a -1 :b 2}]}]]))))
+
+  (t/testing "filter with no GROUP BY at all"
+    (t/is (= [{:cnt 2, :sm 50}]
+             (tu/query-ra '[:group-by {:columns [{cnt (count b {:filter (> b 15)})}
+                                        {sm (sum b {:filter (> b 15)})}]}
+                            [:table {:rows [{:b 10} {:b 20} {:b 30}]}]]))))
+
+  (t/testing "an ordered-set aggregate still emits a row for a trailing group the filter empties"
+    (t/is (= #{{:a 1, :med 20.0} {:a 2}}
+             (set (tu/query-ra '[:group-by {:columns [a {med (percentile_cont 0.5 [b {:direction :asc}] {:filter (> b 15)})}]}
+                                 [:table {:rows [{:a 1 :b 20} {:a 1 :b 20} {:a 2 :b 5}]}]])))))
+
+  (t/testing "filter predicate over a column not otherwise projected"
+    (t/is (= [{:sm 20}]
+             (tu/query-ra '[:group-by {:columns [{sm (sum b {:filter (== c "yes")})}]}
+                            [:table {:rows [{:b 10 :c "no"} {:b 20 :c "yes"}]}]])))))

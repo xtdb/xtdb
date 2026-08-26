@@ -1062,6 +1062,85 @@
          (sql/plan "SELECT PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY amount DESC) FROM t"
                    {:table-info {#xt/table t #{"amount"}}}))))
 
+(t/deftest test-aggregate-filter
+  (xt/execute-tx tu/*node* [[:sql "INSERT INTO docs RECORDS
+                               {_id: 1, dept: 'a', status: 'active', salary: 10},
+                               {_id: 2, dept: 'a', status: 'inactive', salary: 20},
+                               {_id: 3, dept: 'a', status: 'active', salary: 30},
+                               {_id: 4, dept: 'b', status: 'inactive', salary: 40},
+                               {_id: 5, dept: 'b', status: 'inactive', salary: 50}"]])
+
+  (t/testing "filtered and unfiltered aggregates side by side, and a fully-filtered group"
+    (t/is (= #{{:dept "a", :total 3, :active 2, :activesum 40}
+               {:dept "b", :total 2, :active 0}}
+             (set (xt/q tu/*node* "SELECT dept, COUNT(*) AS total,
+                                          COUNT(*) FILTER (WHERE status = 'active') AS active,
+                                          SUM(salary) FILTER (WHERE status = 'active') AS activesum
+                                   FROM docs GROUP BY dept")))))
+
+  (t/testing "MIN, MAX and AVG with a filter, including a group where no row passes"
+    (t/is (= #{{:dept "a", :mn 10, :mx 30, :av 20.0}
+               {:dept "b"}}
+             (set (xt/q tu/*node* "SELECT dept,
+                                          MIN(salary) FILTER (WHERE status = 'active') AS mn,
+                                          MAX(salary) FILTER (WHERE status = 'active') AS mx,
+                                          AVG(salary) FILTER (WHERE status = 'active') AS av
+                                   FROM docs GROUP BY dept")))))
+
+  (t/testing "EVERY and BOOL_OR with a filter"
+    (t/is (= [{:allactive false, :anyactive true}]
+             (xt/q tu/*node* "SELECT EVERY(status = 'active') FILTER (WHERE salary > 15) AS allactive,
+                                     BOOL_OR(status = 'active') FILTER (WHERE salary > 15) AS anyactive
+                              FROM docs"))))
+
+  (t/testing "COUNT(DISTINCT x) FILTER counts distinct values among the rows that passed"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO nums RECORDS
+                                 {_id: 1, v: 10, active: false},
+                                 {_id: 2, v: 20, active: true},
+                                 {_id: 3, v: 20, active: true},
+                                 {_id: 4, v: 30, active: true},
+                                 {_id: 5, v: 5, active: false}"]])
+    (t/is (= [{:cnt 2}]
+             (xt/q tu/*node* "SELECT COUNT(DISTINCT v) FILTER (WHERE active) AS cnt FROM nums"))))
+
+  (t/testing "ARRAY_AGG FILTER keeps a null from a row that passes"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO tagged RECORDS
+                                 {_id: 1, active: true, tag: NULL},
+                                 {_id: 2, active: true, tag: 'x'},
+                                 {_id: 3, active: false, tag: 'y'}"]])
+    (let [tags (-> (xt/q tu/*node* "SELECT ARRAY_AGG(tag) FILTER (WHERE active) AS tags FROM tagged")
+                   first :tags)]
+      (t/is (= 2 (count tags)))
+      (t/is (= #{nil "x"} (set tags)))))
+
+  (t/testing "PERCENTILE_CONT with a filter"
+    (t/is (= [{:pc 20.0}]
+             (xt/q tu/*node* "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary)
+                                     FILTER (WHERE status = 'active') AS pc
+                              FROM docs"))))
+
+  (t/testing "a filter with no GROUP BY at all"
+    (t/is (= [{:total 5, :active 2}]
+             (xt/q tu/*node* "SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE status = 'active') AS active FROM docs"))))
+
+  (t/testing "filter predicate over a column not otherwise selected"
+    (t/is (= [{:activesum 40}]
+             (xt/q tu/*node* "SELECT SUM(salary) FILTER (WHERE status = 'active') AS activesum FROM docs"))))
+
+  (t/testing "an aggregate nested inside a FILTER predicate is a planning error"
+    (t/is (thrown-with-msg? Exception #"Aggregates are not allowed in this context"
+                            (xt/q tu/*node* "SELECT SUM(salary) FILTER (WHERE COUNT(*) > 0) FROM docs"))))
+
+  (t/testing "`filter` is still usable as an ordinary identifier"
+    (xt/execute-tx tu/*node* [[:sql "INSERT INTO filtertest RECORDS {_id: 1, filter: 'kept'}"]])
+    (t/is (= [{:filter "kept"}]
+             (xt/q tu/*node* "SELECT filter FROM filtertest"))
+          "as a column reference")
+
+    (t/is (= [{:filter 10}]
+             (xt/q tu/*node* "SELECT salary filter FROM docs WHERE _id = 1"))
+          "as a column alias without AS")))
+
 (t/deftest test-window-functions
   (t/is (=plan-file
          "test-window-with-partition-and-order-by"
