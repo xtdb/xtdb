@@ -262,16 +262,7 @@ class Database(
             val indexerConfig = base.config.indexer
             val readOnly = dbConfig.isReadOnly
 
-            // Attach-time gate: the type signatures admit N throughout, but TableCatalog wrappers +
-            // UNION-at-scan (#5835) and xt.txs_$partition naming (#5836) haven't landed. Lifting
-            // this gate is #5837.
-            if (dbConfig.partitions > 1)
-                throw Incorrect(
-                    "multi-partition external-source databases are not yet enabled " +
-                            "(config declared partitions=${dbConfig.partitions})",
-                    "xtdb/multi-partition-not-yet-enabled",
-                    mapOf("db-name" to dbName, "partitions" to dbConfig.partitions)
-                )
+            dbConfig.checkValid(dbName)
 
             val allocator = open { base.allocator.newChildAllocator("database/$dbName", 0, Long.MAX_VALUE) }
 
@@ -480,6 +471,25 @@ class Database(
 
         val isReadOnly: Boolean get() = mode == Mode.READ_ONLY
 
+        /**
+         * Throw if this config can be rejected without opening anything.
+         *
+         * Attach decides a transaction's outcome from this, so it must reach the same verdict on every
+         * node: whether a database's storage or log can actually be reached is local to the node that
+         * tries, and a database the cluster agrees exists is one this node may still fail to open.
+         */
+        fun checkValid(dbName: DatabaseName) {
+            // The type signatures admit N throughout, but TableCatalog wrappers + UNION-at-scan (#5835)
+            // and xt.txs_$partition naming (#5836) haven't landed. Lifting this gate is #5837.
+            if (partitions > 1)
+                throw Incorrect(
+                    "multi-partition external-source databases are not yet enabled " +
+                            "(config declared partitions=$partitions)",
+                    "xtdb/multi-partition-not-yet-enabled",
+                    mapOf("db-name" to dbName, "partitions" to partitions)
+                )
+        }
+
         val serializedConfig: DatabaseConfig
             get() = DatabaseConfig.newBuilder()
                 .also { dbConfig ->
@@ -545,6 +555,12 @@ class Database(
 
                 override fun databaseOrNull(dbName: DatabaseName) = null
 
+                override fun checkCanAttach(dbName: DatabaseName, config: Config): Unit =
+                    error("can't attach database to empty db-cat")
+
+                override fun checkCanDetach(dbName: DatabaseName): Unit =
+                    error("can't detach database from empty db-cat")
+
                 override fun attach(dbName: DatabaseName, config: Config?): Unit =
                     error("can't attach database to empty db-cat")
 
@@ -589,6 +605,17 @@ class Database(
                     dbName to db.partitions.indices.map { db.sourceLog.latestSubmittedMsgId(it) }
                 }
             }.toMap()
+
+        /**
+         * Throw whatever [attach] would throw before it opens anything, leaving the catalog untouched.
+         *
+         * The leader resolves an attach into a committed or aborted tx and only mutates its own catalog
+         * when it reads that tx back, so the verdict has to be reachable without the mutation.
+         */
+        fun checkCanAttach(dbName: DatabaseName, config: Config)
+
+        /** [checkCanAttach]'s mirror. */
+        fun checkCanDetach(dbName: DatabaseName)
 
         fun attach(dbName: DatabaseName, config: Config?)
         fun detach(dbName: DatabaseName)

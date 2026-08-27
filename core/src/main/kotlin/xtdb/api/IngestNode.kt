@@ -73,6 +73,12 @@ class IngestNode internal constructor(
         override val txScoped = false
         override fun databaseOrNull(dbName: DatabaseName) = dbs[dbName]
 
+        override fun checkCanAttach(dbName: DatabaseName, config: Database.Config): Unit =
+            error("can't attach a database to an ingest node")
+
+        override fun checkCanDetach(dbName: DatabaseName): Unit =
+            error("can't detach a database from an ingest node")
+
         override fun attach(dbName: DatabaseName, config: Database.Config?): Unit =
             error("can't attach a database to an ingest node")
 

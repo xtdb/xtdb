@@ -7,6 +7,8 @@ import kotlinx.coroutines.selects.SelectBuilder
 import xtdb.api.DatabaseName
 import xtdb.api.TransactionResult
 import xtdb.api.error.Anomaly
+import xtdb.api.error.Conflict
+import xtdb.api.error.NotFound
 import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
@@ -92,6 +94,28 @@ internal class SourceLogProcessor(
         resumeCh.trySend(Unit)
     }
 
+    /**
+     * Ask whether a dbOp will be accepted, without performing it — null if it will.
+     *
+     * A caller fault resolves as an aborted tx carrying that error, so the log records the refusal and
+     * every node reaches the same verdict from it. Anything else is ours, and fails the term.
+     */
+    // The catalog is mutated when a record is read back, so it shows the state before every dbOp this
+    // term has queued. The last one queued for a name says what will be there when this op applies; with
+    // none, the catalog's own state stands. Same layering as `resolvedTxs`, read for the catalog.
+    private inline fun checkDbOp(
+        msgId: MessageId, op: String, opDbName: DatabaseName, check: (Database.Catalog) -> Unit,
+    ): Anomaly.Caller? =
+        dbCatalog?.let { dbCatalog ->
+            try {
+                check(dbCatalog)
+                null
+            } catch (e: Anomaly.Caller) {
+                LOG.debug(e) { "[$dbName] leader: $op database '$opDbName' refused at $msgId" }
+                e
+            }
+        }
+
     // Resolve one source-log record, answering whether it cut a block.
     private suspend fun handleRecord(record: Log.Record<SourceMessage>): Boolean {
         val msgId = record.msgId
@@ -116,15 +140,19 @@ internal class SourceLogProcessor(
             }
 
             is SourceMessage.AttachDatabase -> {
-                val error = if (dbCatalog != null) {
-                    try {
-                        dbCatalog.attach(msg.dbName, msg.config)
-                        null
-                    } catch (e: Anomaly.Caller) {
-                        LOG.debug(e) { "[$dbName] leader: attach database '${msg.dbName}' failed at $msgId" }
-                        e
+                val error = checkDbOp(msgId, "attach", msg.dbName) {
+                    when (txResolver.stagedDbOp(msg.dbName)) {
+                        is DbOp.Attach ->
+                            throw Conflict("Database already exists", "xtdb/db-exists", mapOf("db-name" to msg.dbName))
+
+                        is DbOp.Detach -> throw Conflict(
+                            "Database is still being detached — retry once the previous detach has completed",
+                            "xtdb/db-being-detached", mapOf("db-name" to msg.dbName)
+                        )
+
+                        null -> it.checkCanAttach(msg.dbName, msg.config)
                     }
-                } else null
+                }
 
                 appendTx(
                     if (error == null)
@@ -135,15 +163,18 @@ internal class SourceLogProcessor(
             }
 
             is SourceMessage.DetachDatabase -> {
-                val error = if (dbCatalog != null) {
-                    try {
-                        dbCatalog.detach(msg.dbName)
-                        null
-                    } catch (e: Anomaly.Caller) {
-                        LOG.debug(e) { "[$dbName] leader: detach database '${msg.dbName}' failed at $msgId" }
-                        e
+                val error = checkDbOp(msgId, "detach", msg.dbName) {
+                    when (txResolver.stagedDbOp(msg.dbName)) {
+                        // The primary is always held, so it never has one of these; anything that does
+                        // will be there to detach by the time this op is applied.
+                        is DbOp.Attach -> {}
+
+                        is DbOp.Detach ->
+                            throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to msg.dbName))
+
+                        null -> it.checkCanDetach(msg.dbName)
                     }
-                } else null
+                }
 
                 appendTx(
                     if (error == null)

@@ -132,6 +132,15 @@ internal class TxResolver(
     /** Queued predecessors for resolution layering (read-your-writes), oldest→newest. */
     private val resolvedTxs: List<ResolvedTx> get() = queue.toList()
 
+    /**
+     * The last dbOp queued against [dbName], if any — the same layering as [resolvedTxs], read for the
+     * database catalog rather than for tables.
+     *
+     * The catalog is mutated when a record is read back, so it still shows the state before everything
+     * queued here, and a resolving dbOp that consulted it alone would not see the term's own.
+     */
+    fun stagedDbOp(dbName: DatabaseName): DbOp? = queue.lastOrNull { it.dbOp?.dbName == dbName }?.dbOp
+
     /** Remove and return the head (oldest) tx; ownership passes to the caller, which imports then closes it. */
     fun removeHead(): ResolvedTx = queue.removeFirst()
 

@@ -46,7 +46,7 @@ class ResolvedTx private constructor(
     val txResult: TransactionResult,
     val externalSourceToken: ExternalSourceToken?,
     val pending: CompletableDeferred<TransactionResult>?,
-    private val dbOp: DbOp?,
+    val dbOp: DbOp?,
     private val tables: Map<TableRef, Table>,
 ) : AutoCloseable {
 

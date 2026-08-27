@@ -76,7 +76,7 @@ class DatabaseCatalog @JvmOverloads constructor(
 
     private val skipDbs: Set<String> get() = base.config.skipDbs
 
-    override fun attach(dbName: DatabaseName, config: Database.Config?) {
+    override fun checkCanAttach(dbName: DatabaseName, config: Database.Config) {
         when (entries[dbName]) {
             is Entry.Detaching -> throw Conflict(
                 "Database is still being detached — retry once the previous detach has completed",
@@ -90,7 +90,24 @@ class DatabaseCatalog @JvmOverloads constructor(
             null -> {}
         }
 
+        config.checkValid(dbName)
+    }
+
+    override fun checkCanDetach(dbName: DatabaseName) {
+        if (dbName == "xtdb")
+            throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to dbName))
+
+        when (entries[dbName]) {
+            is Entry.Open, is Entry.Skipped -> {}
+
+            is Entry.Detaching, null ->
+                throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))
+        }
+    }
+
+    override fun attach(dbName: DatabaseName, config: Database.Config?) {
         val dbConfig = config ?: Database.Config()
+        checkCanAttach(dbName, dbConfig)
 
         if (dbName in skipDbs) {
             LOG.warn { "Skipping database '$dbName' (XTDB_SKIP_DBS) — database is dormant. Remove from XTDB_SKIP_DBS and restart to re-enable, or DETACH DATABASE to remove permanently." }
@@ -115,8 +132,7 @@ class DatabaseCatalog @JvmOverloads constructor(
     }
 
     override fun detach(dbName: DatabaseName) {
-        if (dbName == "xtdb")
-            throw Incorrect("Cannot detach the primary 'xtdb' database", "xtdb/cannot-detach-primary", mapOf("db-name" to dbName))
+        checkCanDetach(dbName)
 
         fun noSuchDb(): Nothing =
             throw NotFound("Database does not exist", "xtdb/no-such-db", mapOf("db-name" to dbName))

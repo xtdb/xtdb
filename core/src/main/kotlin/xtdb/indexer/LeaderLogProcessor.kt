@@ -6,6 +6,9 @@ import kotlinx.coroutines.channels.Channel
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.NodeBase
 import xtdb.api.DatabaseName
+import xtdb.api.error.Anomaly
+import xtdb.api.error.Fault
+import xtdb.api.log.DbOp
 import xtdb.api.log.Log
 import xtdb.api.log.ReplicaMessage
 import xtdb.api.log.ReplicaMessage.BlockBoundary
@@ -16,6 +19,7 @@ import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
 import xtdb.types.MessageId
 import xtdb.util.debug
+import xtdb.util.error
 import xtdb.util.logger
 import java.time.Duration
 import java.time.InstantSource
@@ -43,7 +47,7 @@ internal class LeaderLogProcessor(
 
     extSource: ExternalSource?,
     skipTxs: Set<MessageId>,
-    dbCatalog: Database.Catalog?,
+    private val dbCatalog: Database.Catalog?,
     private val leaderTerm: Long = 0,
     instantSource: InstantSource = InstantSource.system(),
     flushTimeout: Duration,
@@ -179,8 +183,11 @@ internal class LeaderLogProcessor(
                         "[$dbName] queue head ${head.txKey.txId} != consumed tx ${msg.txId}"
                     }
                     driver.applyTx(head.txKey, head.allTables.associate { it.ref to it.relation })
-                    // dbOp (attach/detach) was already applied on the resolve side (it had to run to
-                    // produce the tx result); the follower/transition apply it on consume-back, we don't.
+
+                    // Before the handle completes, so a caller that submitted an attach can use the
+                    // database as soon as its transaction returns.
+                    if (msg.committed) applyDbOp(msg.dbOp)
+
                     watchers.notifyApplied(record.msgId, head.srcMsgId, head.txResult, head.externalSourceToken)
                     head.pending?.complete(head.txResult)
                 } catch (e: Throwable) {
@@ -218,6 +225,37 @@ internal class LeaderLogProcessor(
 
             // Catalog already updated on the resolve side (see GarbageCollector.handleTask); nothing to do.
             is ReplicaMessage.TriesDeleted -> watchers.notifyApplied(record.msgId)
+        }
+    }
+
+    private fun applyDbOp(dbOp: DbOp?) {
+        // Only the primary carries a catalog, and a secondary's log can hold dbOps all the same: it was
+        // some other cluster's primary before it was attached here, and those are that cluster's to apply.
+        val dbCatalog = dbCatalog ?: return
+
+        try {
+            when (dbOp) {
+                is DbOp.Attach -> dbCatalog.attach(dbOp.dbName, dbOp.config)
+                is DbOp.Detach -> dbCatalog.detach(dbOp.dbName)
+                null -> {}
+            }
+        } catch (e: Anomaly.Caller) {
+            // A caller fault at resolution belongs to whoever submitted the attach, and aborts their
+            // transaction. The same failure here belongs to nobody: the transaction has committed, no
+            // caller is left to act on it, and nothing re-reads the instruction. So it is this node's
+            // fault, and it stops the database rather than being reported.
+            //
+            // Every refusal reaching here says this node disagrees with the log — including one that
+            // names a database it already holds, because holding the name says nothing about holding
+            // it under the config the log just carried.
+            //
+            // Carrying on is the worse option, not the safer one: a block records the whole secondary
+            // list and replaces the previous one, so the next boundary would erase a database this node
+            // merely failed to open, for the entire cluster.
+            throw Fault(
+                "[$dbName] could not apply $dbOp", "xtdb/db-op-not-applied",
+                mapOf("db-name" to dbName, "db-op" to dbOp.toString()), e
+            )
         }
     }
 

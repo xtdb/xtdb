@@ -925,16 +925,24 @@ rule LeaderProcessesTx {
 }
 
 rule LeaderProcessesAttachDb {
-    -- The catalog mutation happens EAGERLY, here on the resolve side, because it has to
-    -- run to produce the tx result at all. A caller-fault failure is resolved as a FAILED
-    -- dbOp tx rather than propagating: the transaction aborts with that error, and the log
-    -- carries the abort. The leader then SKIPS the dbOp on its own consume-back (the
-    -- catalog is already mutated); followers and the transition processor apply it there.
+    -- The leader asks whether the attach would be refused, and brings its own set into line
+    -- when it reads the record back, as every other node does. A term superseded between
+    -- resolving an attach and consuming it back has therefore attached nothing.
+    --
+    -- The verdict accounts for what this term has already resolved as well as for the
+    -- catalog, which shows the state before every dbOp still queued on the resolver. The
+    -- last one queued for a name says what will be there when this attach applies; with
+    -- none, the catalog's own state stands. This is the layering a resolving transaction
+    -- reads its own queued predecessors through, turned on the catalog rather than on
+    -- tables.
+    --
+    -- A caller fault is resolved as a FAILED dbOp tx rather than propagating: the
+    -- transaction aborts with that error, and the log carries the abort.
     when: SourceAttachDbMessageReceived(msg)
     requires: log_processor.mode = Leader
 
     ensures:
-        let error = ApplyAttachToCatalog(msg.db_name, msg.config)
+        let error = CheckCanAttach(msg.db_name, msg.config)
         let resolved =
             if error = null:
                 ResolveDbOp(tx_resolver, msg, Attach{db_name: msg.db_name, config: msg.config})
@@ -949,7 +957,7 @@ rule LeaderProcessesDetachDb {
     requires: log_processor.mode = Leader
 
     ensures:
-        let error = ApplyDetachToCatalog(msg.db_name)
+        let error = CheckCanDetach(msg.db_name)
         let resolved =
             if error = null:
                 ResolveDbOp(tx_resolver, msg, Detach{db_name: msg.db_name})
@@ -1157,9 +1165,9 @@ rule LeaderAppliesOwnTx {
     -- watchers are notified here, and an external-source caller's durability handle
     -- completes here — after, not before, the tx is durable.
     --
-    -- The dbOp (attach/detach) is NOT applied here: it was applied eagerly on the resolve
-    -- side, because it had to run to produce the tx result. Followers and the transition
-    -- processor do apply it on their consume-back.
+    -- The dbOp (attach/detach) it carries is applied here, as a follower applies it on its
+    -- own consume-back — before the durability handle completes, so a caller that submitted
+    -- an attach can use the database the moment its transaction returns.
     when: ApplyOwnRecord(record)
     requires: record.kind = ResolvedTxMessage
 
@@ -1176,6 +1184,8 @@ rule LeaderAppliesOwnTx {
         -- needs no re-materialisation. The two agree by construction — the head is what was
         -- stamped onto the record at append time.
         ApplyResolvedTx(tx_resolver, head)
+        if record.committed and record.db_op != null:
+            ApplyDbOpToCatalog(database.catalog, record.db_op)
         watchers.notifyTx(head.tx_result, head.src_msg_id, head.external_source_token)
 }
 
@@ -1683,16 +1693,25 @@ deferred ResolveExternalSourceTx     -- tx_resolver.indexTx(msg, srcMsgId): assi
                                      -- greater than the previous tx's, run the caller's writer against a
                                      -- fresh OpenTx, and stage the result with the caller's durability
                                      -- handle. See: live-index.allium CommitTransaction
-deferred ResolveDbOp                 -- tx_resolver.indexDbOp: resolve an attach/detach whose catalog
-                                     -- mutation has already succeeded, as a ResolvedTx carrying the dbOp
-deferred ResolveFailedDbOp           -- tx_resolver.indexFailedDbOp: resolve an attach/detach whose catalog
-                                     -- mutation failed with a caller fault, as an ABORTED ResolvedTx
-                                     -- carrying that error
-deferred ApplyAttachToCatalog        -- dbCatalog.attach(dbName, config), returning the caller fault if it
-                                     -- failed. Runs on the resolve side, before the tx is resolved.
-                                     -- See: database-lifecycle.allium AdmitInstructionCreatesEntry
-deferred ApplyDetachToCatalog        -- dbCatalog.detach(dbName), as above.
-                                     -- See: database-lifecycle.allium RemoveBeginsTeardown
+deferred ResolveDbOp
+  -- Resolve an attach or detach as a ResolvedTx carrying the dbOp, for the catalog to be brought into
+  -- line with when the record is read back.
+deferred ResolveFailedDbOp
+  -- Resolve an attach or detach that would be refused, as an ABORTED ResolvedTx carrying the caller
+  -- fault that refused it.
+deferred CheckCanAttach
+  -- Whether an attach would be refused, and with which caller fault.
+  -- Answered from the catalog's own records folded together with the dbOps the resolver still holds:
+  -- the last one queued for a name says what will be there when this attach applies, and with none the
+  -- catalog's own records stand.
+  -- Reaches its verdict without changing anything.
+deferred CheckCanDetach
+  -- Whether a detach would be refused, answered the same way.
+deferred ApplyDbOpToCatalog
+  -- Bring the catalog into line with a committed dbOp, swallowing a caller fault: the transaction has
+  -- already committed, so a node that cannot carry the instruction out holds none of a database the
+  -- cluster agrees exists.
+  -- See: database-lifecycle.allium AdmitInstructionCreatesEntry, RemoveBeginsTeardown
 deferred TakeResolvedHead            -- tx_resolver.removeHead(): remove and return the OLDEST staged tx,
                                      -- passing ownership to the caller — which must then import it and
                                      -- close it, or fail its durability handle and free it, on every path.

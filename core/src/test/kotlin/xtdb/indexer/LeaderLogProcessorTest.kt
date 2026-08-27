@@ -39,6 +39,8 @@ import xtdb.block.proto.TableBlock
 import xtdb.SimulationTestUtils.Companion.createTrieCatalog
 import xtdb.catalog.TableCatalog
 import xtdb.compactor.Compactor
+import xtdb.api.DatabaseName
+import xtdb.database.Database
 import xtdb.database.DatabaseLogs
 import xtdb.database.PartitionState
 import xtdb.database.PartitionStorage
@@ -127,6 +129,8 @@ class LeaderLogProcessorTest {
         extSource: ExternalSource = mockk(relaxed = true),
         skipTxs: Set<MessageId> = emptySet(),
         leaderTerm: Long = 1,
+        // A leader may only hold one if it is the primary's, so supplying one names this database 'xtdb'.
+        dbCatalog: Database.Catalog? = null,
         wrapDriver: (LeaderDriver) -> LeaderDriver = { it },
         termJob: Job = SupervisorJob(backgroundScope.coroutineContext.job),
     ): LeaderLogProcessor {
@@ -147,12 +151,175 @@ class LeaderLogProcessorTest {
             partitionStorage, replicaAppender, watchers,
             LeaderLogProcessor(
                 allocator, nodeBase, partitionStorage, mockk(relaxed = true),
-                partitionState, "test", driver, watchers, replicaAppender, extSource,
-                skipTxs = skipTxs, dbCatalog = null,
+                partitionState, if (dbCatalog != null) "xtdb" else "test",
+                driver, watchers, replicaAppender, extSource,
+                skipTxs = skipTxs, dbCatalog = dbCatalog,
                 leaderTerm = leaderTerm,
                 flushTimeout = IndexerConfig().flushDuration,
             )
         )
+    }
+
+    // Records what was asked of it, so a test can ask what this node's set holds rather than what was
+    // called. Nothing here opens a database, so a name is attached the moment it is asked for.
+    private class RecordingDbCatalog : Database.Catalog {
+        val attached = mutableListOf<DatabaseName>()
+
+        override val databaseNames get() = attached.toSet()
+        override val txScoped = false
+        override fun databaseOrNull(dbName: DatabaseName): Database? = null
+
+        override fun checkCanAttach(dbName: DatabaseName, config: Database.Config) {}
+        override fun checkCanDetach(dbName: DatabaseName) {}
+
+        override fun attach(dbName: DatabaseName, config: Database.Config?) {
+            attached += dbName
+        }
+
+        override fun detach(dbName: DatabaseName) {
+            attached -= dbName
+        }
+    }
+
+    @Test
+    fun `an attach is applied when its record is read back, not when it resolves`() = runTest(timeout = 5.seconds) {
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val dbCatalog = RecordingDbCatalog()
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler),
+            watchers = watchers,
+            dbCatalog = dbCatalog,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        backgroundScope.launch {
+            lp.srcLogProc.processRecords(
+                listOf(
+                    Log.Record(
+                        0, 0, Instant.now(),
+                        SourceMessage.AttachDatabase("new_db", Database.Config())
+                    )
+                )
+            )
+        }
+
+        appendStarted.await()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(
+            emptyList<DatabaseName>(), dbCatalog.attached,
+            "resolved but not yet durable — a term that is superseded here must not have attached anything"
+        )
+
+        gate.complete(Unit)
+        watchers.awaitTx(0)
+
+        assertEquals(listOf("new_db"), dbCatalog.attached, "consume-back is what attaches it")
+    }
+
+    @Test
+    fun `a second attach resolved before the first is read back is refused`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        // Refuses nothing, so a refusal here can only have come from the resolver's own queued dbOps.
+        val dbCatalog = RecordingDbCatalog()
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler),
+            replicaLog = replicaLog, watchers = watchers, dbCatalog = dbCatalog,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        backgroundScope.launch {
+            lp.srcLogProc.processRecords(
+                (0L..1L).map {
+                    Log.Record(0, it, Instant.now(), SourceMessage.AttachDatabase("new_db", Database.Config()))
+                }
+            )
+        }
+
+        appendStarted.await()
+        testScheduler.advanceUntilIdle()
+
+        gate.complete(Unit)
+        watchers.awaitTx(1)
+
+        val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+            .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
+
+        assertEquals(listOf(true, false), resolvedTxs.map { it.committed })
+        assertEquals(listOf("new_db"), dbCatalog.attached, "only the first attach reaches the catalog")
+    }
+
+    @Test
+    fun `a detach of a name attached but not yet read back is allowed`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val dbCatalog = RecordingDbCatalog()
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler),
+            replicaLog = replicaLog, watchers = watchers, dbCatalog = dbCatalog,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        backgroundScope.launch {
+            lp.srcLogProc.processRecords(
+                listOf(
+                    Log.Record(0, 0, Instant.now(), SourceMessage.AttachDatabase("new_db", Database.Config())),
+                    Log.Record(0, 1, Instant.now(), SourceMessage.DetachDatabase("new_db")),
+                )
+            )
+        }
+
+        appendStarted.await()
+        gate.complete(Unit)
+        watchers.awaitTx(1)
+
+        val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+            .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
+
+        assertEquals(listOf(true, true), resolvedTxs.map { it.committed })
+        assertEquals(emptyList<DatabaseName>(), dbCatalog.attached, "attached, then detached")
+    }
+
+    @Test
+    fun `a second detach resolved before the first is read back is refused`() = runTest(timeout = 5.seconds) {
+        val replicaLog = InMemoryLog<ReplicaMessage>(InstantSource.system(), 0)
+        val gate = CompletableDeferred<Unit>()
+        val appendStarted = CompletableDeferred<Unit>()
+        val dbCatalog = RecordingDbCatalog()
+        val watchers = Watchers(latestTxId = -1, latestSourceMsgId = -1, latestReplicaMsgId = -1)
+
+        val lp = leaderProc(
+            StandardTestDispatcher(testScheduler),
+            replicaLog = replicaLog, watchers = watchers, dbCatalog = dbCatalog,
+            wrapDriver = { gatedDriver(it, gate, appendStarted) },
+        )
+
+        backgroundScope.launch {
+            lp.srcLogProc.processRecords(
+                (0L..1L).map {
+                    Log.Record(0, it, Instant.now(), SourceMessage.DetachDatabase("new_db"))
+                }
+            )
+        }
+
+        appendStarted.await()
+        gate.complete(Unit)
+        watchers.awaitTx(1)
+
+        val resolvedTxs = replicaLog.readRecords(0, 0, replicaLog.latestSubmittedMsgId() + 1)
+            .mapNotNull { it.message as? ReplicaMessage.ResolvedTx }.toList()
+
+        assertEquals(listOf(true, false), resolvedTxs.map { it.committed })
     }
 
     // Decorate a driver so its replica-log append blocks on [gate] before the message lands, completing
