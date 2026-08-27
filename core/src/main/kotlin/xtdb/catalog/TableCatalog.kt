@@ -15,7 +15,7 @@ import xtdb.api.log.LeaderTerm
 import xtdb.api.storage.ObjectStore
 import xtdb.api.tx.BlockDetails
 import xtdb.api.tx.ExternalSourceToken
-import xtdb.arrow.MergeTypes.Companion.joinContributions
+import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.arrow.VectorType.Companion.asType
 import xtdb.arrow.VectorType.Companion.field
@@ -396,7 +396,7 @@ class TableCatalog(private val bufferPool: BufferPool, initialBlock: Block? = nu
                     val newAbsent = VectorType.absentContribution(new)
 
                     (old.keys + new.keys).associateWith { col ->
-                        joinContributions(listOf(old[col] ?: oldAbsent, new[col] ?: newAbsent))
+                        mergeTypes(listOf(old[col] ?: oldAbsent, new[col] ?: newAbsent))
                     }
                 }
             }

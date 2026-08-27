@@ -56,7 +56,8 @@ data class MergeTypes(
             val listyTypes = listyTypes .map { (arrowType, el) -> Listy(arrowType, el.asType) }
             val structType = structKeys?.let { structOf(it.mapValues { e -> e.value.asType }) }
 
-            return fromLegs(scalars + listyTypes + listOfNotNull(structType, nullType))
+            val legs = scalars + listyTypes + listOfNotNull(structType, nullType)
+            return if (legs.isEmpty()) Nothing else fromLegs(legs)
         }
 
     companion object {
@@ -66,19 +67,6 @@ data class MergeTypes(
         private val cache = Caffeine.newBuilder()
             .maximumSize(4096)
             .build<Set<VectorType>, VectorType> { mergeTypes0(it) }
-
-        /**
-         * [mergeTypes] with `Nothing` restored as the identity.
-         *
-         * `⊔` is not idempotent at the bottom today - `mergeTypes(Nothing, Nothing)` returns `Null` (#5871) -
-         * so a join over sources that all have nothing to say reports a dataless column as nullable. Both the
-         * read path and the block merge need the law to hold, hence one repair rather than a copy at each.
-         *
-         * Delete this and call [mergeTypes] directly once `fromLegs(∅)` returns the bottom.
-         */
-        @JvmStatic
-        fun joinContributions(types: Collection<VectorType>): VectorType =
-            if (types.all { it == Nothing }) Nothing else mergeTypes(types)
 
         /**
          * A source with nothing to say contributes [VectorType.Nothing], the lattice bottom - never a Kotlin

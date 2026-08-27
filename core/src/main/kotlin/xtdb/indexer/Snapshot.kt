@@ -2,7 +2,7 @@ package xtdb.indexer
 
 import org.apache.arrow.memory.BufferAllocator
 import xtdb.api.TransactionKey
-import xtdb.arrow.MergeTypes.Companion.joinContributions
+import xtdb.arrow.MergeTypes.Companion.mergeTypes
 import xtdb.arrow.VectorType
 import xtdb.catalog.TableCatalog
 import xtdb.indexer.LiveTable.Companion.logRelTypes
@@ -80,7 +80,7 @@ class Snapshot(
         val supersededAbsent = superseded?.let { VectorType.absentContribution(it) } ?: VectorType.Nothing
 
         return cols.associateWith { col ->
-            joinContributions(
+            mergeTypes(
                 liveSnaps.map { it.contributedType(col) }
                         + (superseded?.get(col) ?: supersededAbsent)
                         + tableCatSnap.contributedType(table, col)

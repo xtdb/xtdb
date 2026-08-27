@@ -1040,9 +1040,8 @@ class InProcessAdbcTest {
     }
 
     /**
-     * `[:list :null]` rather than the more accurate `[:list :nothing]` is #5871 — `mergeTypes` rewrites a
-     * nested lattice bottom. What this pins is that all three surfaces say the *same* thing; the value they
-     * agree on gets more accurate when that lands.
+     * All three surfaces say the same thing, and it is the accurate one: an empty list constrains its
+     * element type not at all, so `[:list :nothing]` rather than `[:list :null]`.
      */
     @Test
     fun `an empty list column reports the same type on every surface`() {
@@ -1059,7 +1058,7 @@ class InProcessAdbcTest {
             }
         }
 
-        assertEquals("[:list :null]", infoSchema, "information_schema must agree with both")
+        assertEquals("[:list :nothing]", infoSchema, "information_schema must agree with both")
     }
 
     @Test

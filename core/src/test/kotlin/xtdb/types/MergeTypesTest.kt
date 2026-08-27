@@ -24,7 +24,7 @@ class MergeTypesTest {
 
     @Test
     fun `test basic mergeTypes`() {
-        assertEquals(Null, mergeTypes())
+        assertEquals(Nothing, mergeTypes())
 
         assertEquals(UTF8, mergeTypes(UTF8, UTF8), "Same types merge ofType themselves")
 
@@ -185,7 +185,7 @@ class MergeTypesTest {
     fun `test Nothing is the lattice bottom`() {
         assertEquals(I64, mergeTypes(Nothing, I64), "Nothing widens to the first type it meets - I64, not Maybe(I64)")
         assertEquals(Null, mergeTypes(Nothing, Null), "Nothing merged with Null is Null")
-        assertEquals(Null, mergeTypes(Nothing), "Nothing alone collapses like an empty merge")
+        assertEquals(Nothing, mergeTypes(Nothing), "Nothing alone is the identity")
         assertEquals(I64, mergeTypes(Nothing, I64, Nothing), "Nothing is absorbed regardless of position")
 
         assertEquals(Null, maybe(Nothing), "making the bottom nullable yields Null")
