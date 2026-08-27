@@ -26,6 +26,10 @@ class NullVector(
     // from polluting to Maybe on its first insert: Nothing ⊔ I64 = I64, whereas Null ⊔ I64 = Maybe(I64).
     override val type get() = if (nullable) Null else Nothing
 
+    /**
+     * Answers for the `Null` reading. A `Nothing`-typed vector (see [type]) has no defined cells, so this
+     * is vacuous there rather than a claim that reading the bottom yields null - the bottom is not read.
+     */
     override fun isNull(idx: Int) = true
 
     override fun writeUndefined() {
